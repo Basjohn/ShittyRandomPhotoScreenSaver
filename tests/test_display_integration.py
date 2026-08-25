@@ -105,7 +105,6 @@ def _bootstrap_spotify_display(
         return (
             isinstance(getattr(widget, "media_widget", None), MediaWidget)
             and getattr(widget, "spotify_visualizer_widget", None) is not None
-            and getattr(widget, "spotify_volume_widget", None) is not None
         )
 
     qtbot.waitUntil(_spotify_ready, timeout=5000)
@@ -1071,7 +1070,7 @@ class TestDisplayManagerSync:
 
 
 class TestSpotifyWidgetIntegration:
-    """Regression tests for Spotify visualizer/volume wiring."""
+    """Regression tests for the Media-anchor/Visualizer wiring."""
 
     @pytest.mark.qt
     def test_spotify_widgets_bind_to_display_widget(
@@ -1085,16 +1084,13 @@ class TestSpotifyWidgetIntegration:
 
         media = display.media_widget
         vis = display.spotify_visualizer_widget
-        vol = display.spotify_volume_widget
 
         try:
             assert isinstance(media, MediaWidget)
             assert vis is not None
-            assert vol is not None
             assert display.spotify_visualizer_widget is vis
-            assert display.spotify_volume_widget is vol
             assert getattr(vis, "_anchor_media", None) is media
-            assert getattr(vol, "_anchor_media", None) is media
+            assert media._volume_runtime_service is not None
         finally:
             display.close()
 
@@ -1110,35 +1106,23 @@ class TestSpotifyWidgetIntegration:
         display = _bootstrap_spotify_display(qt_app, qtbot, settings_manager, thread_manager)
         media = display.media_widget
         vis = display.spotify_visualizer_widget
-        vol = display.spotify_volume_widget
 
         try:
-            assert media is not None and vis is not None and vol is not None
+            assert media is not None and vis is not None
             pre_vis = vis.isVisible()
-            pre_vol = vol.isVisible()
 
             vis_fades: list[int] = []
-            vol_fades: list[int] = []
 
             monkeypatch.setattr(
                 vis,
                 "_start_widget_fade_in",
                 lambda duration=1500: (vis_fades.append(duration), vis.show()),
             )
-            monkeypatch.setattr(
-                vol,
-                "_start_widget_fade_in",
-                lambda duration=1500: (vol_fades.append(duration), vol.show()),
-            )
-
             media.show()
             qt_app.processEvents()
             monkeypatch.setattr(media, "isVisible", lambda: True, raising=False)
             vis._enabled = True
             vis._startup_secondary_stage_pending = False
-            vol._enabled = True
-            vol._spotify_secondary_stage_registered = False
-            vol._spotify_secondary_stage_started = True
             display._overlay_fade_started = True
             display._spotify_secondary_not_before_ts = 0.0
             media._notify_spotify_widgets_visibility()
@@ -1146,10 +1130,6 @@ class TestSpotifyWidgetIntegration:
             if not pre_vis:
                 qtbot.waitUntil(lambda: vis.isVisible(), timeout=2000)
                 assert vis_fades == [1500]
-            if not pre_vol:
-                qtbot.waitUntil(lambda: vol.isVisible(), timeout=2000)
-                assert vol_fades == [1500]
-
             media.media_updated.emit({"state": mc.MediaPlaybackState.PLAYING.value})
             qt_app.processEvents()
             assert getattr(vis, "_spotify_playing", False) is True

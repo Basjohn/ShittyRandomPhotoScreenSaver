@@ -145,18 +145,6 @@ def compute_expected_overlays(
     media_monitor = media_settings.get('monitor', 'ALL')
     if media_enabled and resolve_monitor_visibility(media_monitor, screen_index):
         expected.add("media")
-        # Spotify dependents remain positioned with media, but they intentionally
-        # do not join the primary compositor fade wave. They are started through
-        # the Spotify secondary stage after the media card can act as anchor.
-        spotify_volume_enabled = SettingsManager.to_bool(
-            media_settings.get('spotify_volume_enabled', True), True
-        )
-        if spotify_volume_enabled:
-            logger.debug(
-                "[FADE_SYNC] spotify_volume excluded from primary expected overlays; "
-                "startup is staged via Spotify secondary fades"
-            )
-
         # Visualizers remain positioned with media, but they intentionally do
         # not join the primary compositor fade wave. Their startup is handled
         # as a Spotify secondary stage so engine reset, timer start, and GL

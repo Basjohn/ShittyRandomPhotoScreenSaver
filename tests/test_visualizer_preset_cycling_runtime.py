@@ -352,11 +352,7 @@ def test_input_handler_routes_visualizer_middle_click_only_on_hit():
         event,
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        vis,
+        spotify_visualizer_widget=vis,
     )
 
     assert handled is True
@@ -371,11 +367,7 @@ def test_input_handler_routes_visualizer_middle_click_only_on_hit():
         event,
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        vis,
+        spotify_visualizer_widget=vis,
     )
 
     assert handled is False
@@ -398,11 +390,7 @@ def test_input_handler_routes_visualizer_back_button():
         event,
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        vis,
+        spotify_visualizer_widget=vis,
     )
 
     assert handled is True

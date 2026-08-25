@@ -1,186 +1,39 @@
-"""Media Widget Layout - Extracted from media_widget.py.
-
-Contains controls layout computation and position update logic.
-All functions accept the widget instance as the first parameter.
-"""
+"""Geometry for the non-painting Media/Visualizer compatibility anchor."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from PySide6.QtCore import QRect
-from PySide6.QtGui import QFont, QFontMetrics
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
-from widgets.base_overlay_widget import OverlayPosition, BaseOverlayWidget
+from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.media_widget import MediaPosition
-
-if TYPE_CHECKING:
-    pass
 
 logger = get_logger(__name__)
 
 
-def _controls_compact_scale(widget) -> float:
-    """Return a card-size scale factor for controls-row compaction."""
-    width = max(1, int(widget.width()))
-    height = max(1, int(widget.height()))
-    width_scale = min(1.0, width / 600.0)
-    height_scale = min(1.0, height / 290.0)
-    compact = min(width_scale, height_scale)
-    return max(0.72, compact)
-
-
 def _defer_update_position(widget) -> None:
-    """Retry position update on the next tick if the widget still exists."""
-
     def _retry() -> None:
         try:
-            if Shiboken is not None and not Shiboken.isValid(widget):
+            if not Shiboken.isValid(widget):
                 return
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            return
-        try:
             widget._update_position()
         except RuntimeError:
             return
+        except Exception:
+            logger.debug("[MEDIA_WIDGET] Deferred anchor positioning failed", exc_info=True)
 
-    _retry._srpss_runtime_generation = getattr(
-        widget,
-        "_runtime_generation",
-        None,
-    )
-
+    _retry._srpss_runtime_generation = getattr(widget, "_runtime_generation", None)
     ThreadManager.single_shot(16, _retry)
 
 
-def compute_controls_layout(widget):
-    """Compute geometry for the transport controls row."""
-    if not widget._show_controls:
-        widget._controls_layout_cache = None
-        return None
-
-    width = widget.width()
-    height = widget.height()
-    if width <= 0 or height <= 0:
-        widget._controls_layout_cache = None
-        return None
-
-    margins = widget.contentsMargins()
-    content_left = margins.left()
-    content_right = width - margins.right()
-    content_width = content_right - content_left
-    if content_width <= 60:
-        widget._controls_layout_cache = None
-        return None
-
-    compact_scale = _controls_compact_scale(widget)
-    controls_font_pt = max(8, int((widget._font_size - 2) * 0.9 * compact_scale))
-    font = QFont("Segoe UI", controls_font_pt, QFont.Weight.Medium)
-    fm = QFontMetrics(font)
-    row_height = max(widget._controls_row_min_height(), int((fm.height() + 10) * 0.85))
-
-    progress_enabled = bool(getattr(widget, "_playback_progress_enabled", False))
-
-    cache_key = (
-        width,
-        height,
-        margins.left(),
-        margins.top(),
-        margins.right(),
-        margins.bottom(),
-        controls_font_pt,
-        round(compact_scale, 3),
-        progress_enabled,
-        int(getattr(widget, "_playback_progress_height", 0) or 0),
-    )
-    cached = widget._controls_layout_cache
-    if cached is not None and cached.get("_cache_key") == cache_key:
-        return cached
-
-    base_row_top = height - margins.bottom() - row_height - 5  # Shift up 5px for 3D depth effect
-    min_row_top = margins.top()
-    row_top = max(min_row_top, base_row_top)
-    if row_top + row_height > height - margins.bottom():
-        row_top = max(margins.top(), height - margins.bottom() - row_height)
-    if row_top < margins.top():
-        row_top = margins.top()
-
-    row_rect = QRect(
-        int(content_left),
-        int(row_top),
-        int(content_width),
-        int(row_height),
-    )
-
-    progress_rect = QRect()
-    if progress_enabled:
-        progress_height = max(
-            3,
-            min(18, int(getattr(widget, "_playback_progress_height", 6) or 6)),
-        )
-        progress_gap = max(8, progress_height // 2 + 4)
-        progress_top = row_rect.top() - progress_gap - progress_height
-        minimum_top = margins.top()
-        horizontal_inset = max(14, int(content_width * 0.08))
-        progress_width = content_width - horizontal_inset * 2
-        if progress_top >= minimum_top and progress_width >= 40:
-            progress_rect = QRect(
-                int(content_left + horizontal_inset),
-                int(progress_top),
-                int(progress_width),
-                int(progress_height),
-            )
-
-    slot_width = content_width / 3.0
-    inner_pad_x = max(4.0, slot_width * (0.06 if compact_scale < 0.9 else 0.07))
-    inner_pad_y = max(2.0, row_height * (0.14 if compact_scale < 0.9 else 0.16))
-    hit_slop = max(8, int(row_height * 0.28))
-
-    button_rects = {}
-    hit_rects = {}
-    for index, key in enumerate(("prev", "play", "next")):
-        slot_left = content_left + slot_width * index
-        rect = QRect(
-            int(slot_left + inner_pad_x),
-            int(row_top + inner_pad_y),
-            int(slot_width - inner_pad_x * 2),
-            int(row_height - inner_pad_y * 2),
-        )
-        button_rects[key] = rect
-        hit_rects[key] = rect.adjusted(-hit_slop, -hit_slop, hit_slop, hit_slop)
-
-    layout = {
-        "font": font,
-        "row_rect": row_rect,
-        "progress_rect": progress_rect,
-        "button_rects": button_rects,
-        "hit_rects": hit_rects,
-    }
-    layout["_cache_key"] = cache_key
-    widget._controls_layout_cache = layout
-    return layout
-
 def update_position(widget) -> None:
-    """Update widget position using centralized base class logic.
-    
-    Delegates to BaseOverlayWidget._update_position() which handles:
-    - Margin-based positioning for all 9 anchor positions
-    - Visual padding offsets (when background is disabled)
-    - Pixel shift and stack offset application
-    - Bounds clamping to prevent off-screen drift
-    
-    This ensures consistent margin alignment across all overlay widgets.
-    """
-    # Guard against positioning before widget has valid size
+    """Position the retained-card anchor and its Visualizer dependent."""
+
     if widget.width() <= 0 or widget.height() <= 0:
         _defer_update_position(widget)
         return
-    
-    # Sync MediaPosition to OverlayPosition for base class
+
     position_map = {
         MediaPosition.TOP_LEFT: OverlayPosition.TOP_LEFT,
         MediaPosition.TOP_CENTER: OverlayPosition.TOP_CENTER,
@@ -192,29 +45,15 @@ def update_position(widget) -> None:
         MediaPosition.BOTTOM_CENTER: OverlayPosition.BOTTOM_CENTER,
         MediaPosition.BOTTOM_RIGHT: OverlayPosition.BOTTOM_RIGHT,
     }
-    
-    # Update base class position
-    widget._position = position_map.get(widget._media_position, OverlayPosition.BOTTOM_LEFT)
-    
-    # Delegate to base class for centralized margin/positioning logic
+    widget._position = position_map.get(
+        widget._media_position, OverlayPosition.BOTTOM_LEFT
+    )
     BaseOverlayWidget._update_position(widget)
 
-    # Keep Spotify-related overlays anchored to the card
     parent = widget.parent()
-    if parent is not None:
-        if hasattr(parent, "_position_spotify_visualizer"):
-            try:
-                parent._position_spotify_visualizer()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        if hasattr(parent, "_position_spotify_volume"):
-            try:
-                parent._position_spotify_volume()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        if hasattr(parent, "_position_mute_button"):
-            try:
-                parent._position_mute_button()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-
+    position_visualizer = getattr(parent, "_position_spotify_visualizer", None)
+    if callable(position_visualizer):
+        try:
+            position_visualizer()
+        except Exception:
+            logger.debug("[MEDIA_WIDGET] Visualizer positioning failed", exc_info=True)

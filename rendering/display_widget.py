@@ -68,7 +68,6 @@ if TYPE_CHECKING:
     from widgets.reddit_widget import RedditWidget
     from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
     from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-    from widgets.spotify_volume_widget import SpotifyVolumeWidget
 
 
 logger = get_logger(__name__)
@@ -279,7 +278,6 @@ class DisplayWidget(QWidget):
         self.weather_widget: Optional[Any] = None
         self.media_widget: Optional["MediaWidget"] = None
         self.spotify_visualizer_widget: Optional["SpotifyVisualizerWidget"] = None
-        self.spotify_volume_widget: Optional["SpotifyVolumeWidget"] = None
         self._spotify_bars_overlay: Optional["SpotifyBarsGLOverlay"] = None
         self.reddit_widget: Optional["RedditWidget"] = None
         self.reddit2_widget: Optional["RedditWidget"] = None
@@ -1148,25 +1146,6 @@ class DisplayWidget(QWidget):
                 self.width(), self.height()
             )
 
-    def _position_spotify_volume(self) -> None:
-        """Position Spotify volume slider - delegates to WidgetManager."""
-        if self._widget_manager is not None:
-            self._widget_manager.position_spotify_volume(
-                getattr(self, "spotify_volume_widget", None),
-                getattr(self, "media_widget", None),
-                self.width(), self.height()
-            )
-
-    def _position_mute_button(self) -> None:
-        """Position mute button relative to media widget."""
-        mute_btn = getattr(self, "mute_button_widget", None)
-        if mute_btn is not None and hasattr(mute_btn, 'update_position'):
-            try:
-                mute_btn.sync_visibility_with_anchor()
-                mute_btn.update_position()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
     def push_spotify_visualizer_frame(self, **kwargs):
         """Delegates to rendering.display_image_ops."""
         from rendering.display_image_ops import push_spotify_visualizer_frame
@@ -1207,10 +1186,6 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         try:
             self._position_spotify_visualizer()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        try:
-            self._position_spotify_volume()
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         try:
@@ -1641,33 +1616,8 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Cross-display media widget lookup failed", exc_info=True)
         return None
 
-    def _resolve_volume_widget_for_hotkeys(self) -> Optional["SpotifyVolumeWidget"]:
-        """Return the best Spotify volume widget candidate across active displays."""
-        volume_widget = getattr(self, "spotify_volume_widget", None)
-        if volume_widget is not None:
-            return volume_widget
-        widget_manager = getattr(self, "_widget_manager", None)
-        if widget_manager is not None:
-            try:
-                volume_widget = (
-                    widget_manager.get_widget("spotify_volume")
-                    or widget_manager.get_widget("spotify_volume_widget")
-                )
-            except Exception:
-                logger.debug("[DISPLAY_WIDGET] Volume widget lookup via WidgetManager failed", exc_info=True)
-            if volume_widget is not None:
-                return volume_widget
-        try:
-            for widget in self.get_all_instances():
-                candidate = getattr(widget, "spotify_volume_widget", None)
-                if candidate is not None:
-                    return candidate
-        except Exception:
-            logger.debug("[DISPLAY_WIDGET] Cross-display volume widget lookup failed", exc_info=True)
-        return None
-
-    def _resolve_mute_button_for_system_audio(self):
-        """Return a live mute projection across all participating displays."""
+    def _resolve_system_audio_owner(self):
+        """Return a live neutral system-audio owner across displays."""
 
         candidates = []
         seen: set[int] = set()
@@ -1678,26 +1628,26 @@ class DisplayWidget(QWidget):
             seen.add(id(candidate))
             candidates.append(candidate)
 
-        _remember(getattr(self, "mute_button_widget", None))
+        _remember(getattr(self, "media_widget", None))
         widget_manager = getattr(self, "_widget_manager", None)
         if widget_manager is not None:
             try:
-                _remember(widget_manager.get_widget("mute_button"))
+                _remember(widget_manager.get_widget("media"))
             except Exception:
                 logger.debug(
-                    "[DISPLAY_WIDGET] Mute-button lookup via WidgetManager failed",
+                    "[DISPLAY_WIDGET] System-audio owner lookup via WidgetManager failed",
                     exc_info=True,
                 )
         try:
             for widget in self.get_all_instances():
-                _remember(getattr(widget, "mute_button_widget", None))
+                _remember(getattr(widget, "media_widget", None))
                 remote_manager = getattr(widget, "_widget_manager", None)
                 if remote_manager is not None:
                     try:
-                        _remember(remote_manager.get_widget("mute_button"))
+                        _remember(remote_manager.get_widget("media"))
                     except Exception:
                         logger.debug(
-                            "[DISPLAY_WIDGET] Remote mute-button manager lookup failed",
+                            "[DISPLAY_WIDGET] Remote system-audio owner lookup failed",
                             exc_info=True,
                         )
         except Exception:
@@ -1714,7 +1664,7 @@ class DisplayWidget(QWidget):
                     return candidate
             except Exception:
                 logger.debug(
-                    "[DISPLAY_WIDGET] Mute-button liveness check failed",
+                    "[DISPLAY_WIDGET] System-audio owner liveness check failed",
                     exc_info=True,
                 )
         return None
@@ -1794,20 +1744,20 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Next-track hotkey was not handled by media widget")
 
     def _on_slider_volume_up_requested(self) -> None:
-        """Route focused slider-volume-up through the Spotify volume widget contract."""
+        """Route focused app-volume-up through the neutral Media owner."""
         self._handle_slider_volume_step(+1, source="keyboard_up")
 
     def _on_slider_volume_down_requested(self) -> None:
-        """Route focused slider-volume-down through the Spotify volume widget contract."""
+        """Route focused app-volume-down through the neutral Media owner."""
         self._handle_slider_volume_step(-1, source="keyboard_down")
 
     def _handle_slider_volume_step(self, direction: int, *, source: str) -> None:
-        volume_widget = self._resolve_volume_widget_for_hotkeys()
-        if volume_widget is None:
-            logger.debug("[DISPLAY_WIDGET] Slider-volume hotkey ignored (%s, no volume widget)", source)
+        media_owner = self._resolve_media_widget_for_transport()
+        if media_owner is None:
+            logger.debug("[DISPLAY_WIDGET] App-volume hotkey ignored (%s, no Media owner)", source)
             return
         try:
-            handled = bool(volume_widget.handle_step(direction))
+            handled = bool(media_owner.request_app_volume_step(direction))
         except Exception:
             logger.debug("[DISPLAY_WIDGET] Slider-volume hotkey dispatch failed", exc_info=True)
             handled = False
@@ -1825,12 +1775,12 @@ class DisplayWidget(QWidget):
         self._handle_global_volume_step(-0.05, source="keyboard_pagedown")
 
     def _handle_global_volume_step(self, delta: float, *, source: str) -> None:
-        mute_button = DisplayWidget._resolve_mute_button_for_system_audio(self)
-        if mute_button is not None and hasattr(
-            mute_button, "handle_system_volume_step"
+        audio_owner = DisplayWidget._resolve_system_audio_owner(self)
+        if audio_owner is not None and hasattr(
+            audio_owner, "request_system_volume_step"
         ):
             try:
-                result = mute_button.handle_system_volume_step(delta)
+                result = audio_owner.request_system_volume_step(delta)
             except Exception:
                 logger.debug(
                     "[DISPLAY_WIDGET] Global volume owner dispatch failed",
@@ -1862,21 +1812,21 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Global volume hotkey ignored (%s)", source)
             return
         logger.info("[DISPLAY_WIDGET] Global volume hotkey handled successfully (%s -> %.3f)", source, result)
-        self._refresh_mute_button_after_system_audio_change()
+        self._refresh_system_audio_state_after_direct_action()
 
     def _on_global_mute_toggle_requested(self) -> None:
         """Toggle system mute through the mute-button/system-audio contract."""
-        mute_button = DisplayWidget._resolve_mute_button_for_system_audio(self)
-        if mute_button is not None:
+        audio_owner = DisplayWidget._resolve_system_audio_owner(self)
+        if audio_owner is not None:
             try:
-                handled = bool(mute_button.handle_click())
+                handled = bool(audio_owner.request_system_mute_toggle())
             except Exception:
-                logger.debug("[DISPLAY_WIDGET] Global mute hotkey dispatch failed via mute button", exc_info=True)
+                logger.debug("[DISPLAY_WIDGET] Global mute hotkey dispatch failed via shared owner", exc_info=True)
                 # A presenter exception may occur after a synchronous toggle;
                 # never risk immediately applying the opposite toggle again.
                 return
             if handled:
-                logger.info("[DISPLAY_WIDGET] Global mute hotkey handled via mute button")
+                logger.info("[DISPLAY_WIDGET] Global mute hotkey handled via shared owner")
                 return
         try:
             result = _load_system_audio_backend().toggle_mute()
@@ -1887,17 +1837,17 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Global mute hotkey ignored")
             return
         logger.info("[DISPLAY_WIDGET] Global mute hotkey handled directly")
-        self._refresh_mute_button_after_system_audio_change()
+        self._refresh_system_audio_state_after_direct_action()
 
-    def _refresh_mute_button_after_system_audio_change(self) -> None:
-        """Refresh mute-button UI after keyboard-driven system audio changes."""
-        mute_button = DisplayWidget._resolve_mute_button_for_system_audio(self)
-        if mute_button is None:
+    def _refresh_system_audio_state_after_direct_action(self) -> None:
+        """Refresh accepted system-audio state after a direct backend action."""
+        audio_owner = DisplayWidget._resolve_system_audio_owner(self)
+        if audio_owner is None:
             return
         try:
-            mute_button.poll_mute_state()
+            audio_owner.request_system_mute_refresh(force=True, source="hotkey")
         except Exception:
-            logger.debug("[DISPLAY_WIDGET] Failed to refresh mute button after system audio change", exc_info=True)
+            logger.debug("[DISPLAY_WIDGET] Failed to refresh system-audio state", exc_info=True)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle key press - delegate to InputHandler."""
@@ -2022,7 +1972,7 @@ class DisplayWidget(QWidget):
         handle_mouseMoveEvent(self, event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        """Handle mouse release; end Spotify volume drags in interaction mode."""
+        """Handle mouse release outside retained Quick pointer actions."""
         if self._should_suppress_runtime_pointer_input("mouseReleaseEvent"):
             event.accept()
             return
@@ -2031,35 +1981,17 @@ class DisplayWidget(QWidget):
             return
         ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
         if self._is_interaction_mode_enabled() or ctrl_mode_active:
-            if self._input_handler is not None:
-                self._input_handler.route_volume_release(getattr(self, "spotify_volume_widget", None))
             event.accept()
             return
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event: QWheelEvent) -> None:
-        """Route wheel scrolling to Spotify volume widget in interaction mode."""
+        """Keep legacy surface wheel input inert in interaction mode."""
         if self._custom_layout_edit_active:
             event.accept()
             return
         ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
         if self._is_interaction_mode_enabled() or ctrl_mode_active:
-            # Delegate to InputHandler
-            if self._input_handler is not None:
-                try:
-                    pos = event.position().toPoint()
-                    delta_y = int(event.angleDelta().y())
-                    if self._input_handler.route_wheel_event(
-                        pos, delta_y,
-                        getattr(self, "spotify_volume_widget", None),
-                        getattr(self, "media_widget", None),
-                        getattr(self, "spotify_visualizer_widget", None),
-                    ):
-                        event.accept()
-                        return
-                except Exception:
-                    logger.debug("[WHEEL] routing failed", exc_info=True)
-            # In interaction mode, wheel should never exit
             event.accept()
             return
         super().wheelEvent(event)

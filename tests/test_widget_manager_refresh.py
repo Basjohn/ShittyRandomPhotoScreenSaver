@@ -123,6 +123,8 @@ class _StubMediaWidget(_BaseStubWidget):
         self.background_border = None
         self.background_opacity = None
         self.provider_runtime = []
+        self._volume_runtime_service = None
+        self._system_mute_runtime_service = None
 
     def set_thread_manager(self, thread_manager):
         self.thread_manager = thread_manager
@@ -136,6 +138,18 @@ class _StubMediaWidget(_BaseStubWidget):
         if self.thread_manager is not None:
             service.set_thread_manager(self.thread_manager)
         service.attach_consumer(self)
+
+    def set_volume_runtime_service(self, service):
+        self._volume_runtime_service = service
+
+    def set_system_mute_runtime_service(self, service):
+        self._system_mute_runtime_service = service
+
+    def clear_volume_runtime_service(self):
+        self._volume_runtime_service = None
+
+    def clear_system_mute_runtime_service(self):
+        self._system_mute_runtime_service = None
 
     def is_media_consumer_alive(self):
         return True
@@ -269,11 +283,6 @@ def _patch_widget_classes(monkeypatch):
     monkeypatch.setattr("widgets.reddit_widget.RedditWidget", _StubRedditWidget)
     monkeypatch.setattr(
         WidgetManager,
-        "create_spotify_volume_widget",
-        lambda self, *args, **kwargs: None,
-    )
-    monkeypatch.setattr(
-        WidgetManager,
         "create_spotify_visualizer_widget",
         lambda self, *args, **kwargs: None,
     )
@@ -339,18 +348,11 @@ def test_media_widget_creation_handles_prefixed_positions():
     assert isinstance(widget, _StubMediaWidget)
     assert widget.position == MediaPosition.TOP_CENTER
     assert widget.margin == 15
-    assert widget.show_controls is False
-    assert widget.playback_progress == {
-        "enabled": True,
-        "height": 9,
-        "fill_color": ((12, 130, 240, 220), None),
-        "shadow_enabled": True,
-        "glow_enabled": True,
-        "glow_color": ((40, 180, 255, 170), None),
-    }
-    assert widget.background_border[0] >= 1
-    assert widget.background_border[1] == (tuple([5, 6, 7, 128]), 0.5)
-    assert widget.shadow_config == widgets_config["shadows"]
+    assert widget.artwork_size == 180
+    assert widget.show_controls is None
+    assert widget.playback_progress is None
+    assert widget.background_border is None
+    assert widget.shadow_config is None
     assert widget.raised is True
     assert widget.started is True
     assert widget.build_default_runtime is False

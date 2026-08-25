@@ -2281,7 +2281,7 @@ class SpotifyVolLogFilter(logging.Filter):
         if "[SPOTIFY_VOL]" in msg:
             return True
         name = str(getattr(record, "name", ""))
-        return "spotify_volume" in name
+        return "spotify_volume" in name or "media_volume_runtime" in name
 
 
 def get_log_dir() -> Path:

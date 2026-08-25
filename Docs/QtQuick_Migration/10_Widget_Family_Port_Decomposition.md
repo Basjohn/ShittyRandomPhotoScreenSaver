@@ -1,6 +1,6 @@
 # 10 — Ordinary Widget Family Port Decomposition
 
-Status: **Phase F ACTIVE — F1/F2/F3 CLOSED; F4 Media controls ACTIVE**
+Status: **Phase F ACTIVE — F1/F2/F3/F4 CLOSED; F5 Reddit ACTIVE**
 Last updated: 2026-08-25
 
 This file begins at current/future Phase-F work. Completed F0/F0.5 implementation history does not live
@@ -26,8 +26,8 @@ F0.5              closed
 F1                Clock / Clock2 / Clock3 — CLOSED
 F2                Weather — CLOSED
 F3                Media core — CLOSED
-F4                Media controls / volume / mute / progress — ACTIVE
-F5                Reddit / Reddit2
+F4                Media controls / volume / mute / progress — CLOSED
+F5                Reddit / Reddit2 — ACTIVE
 F6                Gmail
 F7                Achievement Pulse
 F8                Abandonment Issues
@@ -44,7 +44,7 @@ inspect old family reference
 -> extract/reuse neutral logic
 -> build retained Quick family
 -> focused tests + eyes-on as required
--> independent GREEN
+-> required GREEN review/self-audit
 -> caller proof
 -> delete old family pixel presenter/presentation-only tests
 -> next family
@@ -239,8 +239,8 @@ controller, poll cadence, accepted revision and decoded `QImage`; the Quick prov
 serves immutable images by the runtime artwork key. Focused gates cover real runtime-manager injection,
 ordinary-widget-host activation/retirement, unchanged-artwork identity, stale-revision rejection and
 in-place settings/style mutation. Caller proof removed the old QWidget header, metadata, artwork,
-artwork-cache/fade lifecycle and their presentation-only tests. The narrowed QWidget anchor remains only
-for F4 controls, progress, input feedback and geometry until those pixels are retired in F4.
+artwork-cache/fade lifecycle and their presentation-only tests. F4 subsequently removed the remaining
+control/progress pixels; the temporary QWidget is now a transparent runtime/Visualizer anchor only.
 
 F3 is CLOSED.
 
@@ -258,23 +258,20 @@ Quick progress interpolation may be visual only; it does not become playback tru
 
 No cardinality increase per display/item.
 
-The first retained F4 checkpoint adds capability-gated previous/play-pause/next controls and accepted
+The first retained F4 checkpoint added capability-gated previous/play-pause/next controls and accepted
 progress to the existing `MediaPresentation.qml`. QML emits semantic actions; Python routes them to the
 existing `MediaRuntimeService`. Primitive Ctrl/Interaction state is resolved in Python before enabling
-pointer actions. No second model/item/runtime is introduced. App-volume and system-mute presenters are
-the next F4 slices and remain under their already-separated neutral owners.
+pointer actions. No second model/item/runtime was introduced.
 
-The second retained F4 checkpoint projects the already-separated `MediaVolumeRuntimeService` lease into
+The second retained F4 checkpoint projected the already-separated `MediaVolumeRuntimeService` lease into
 that same Media model/item. Accepted capability/level revisions drive one inline vertical slider; QML
 emits semantic levels and Python routes them to the owner. The existing controller target, optimistic
 projection, read/write generations and debounce remain unchanged. No second Media model/item is added.
-System mute is the next F4 slice.
 
-The third retained F4 checkpoint projects the separate `SystemMuteRuntimeService` lease into the same
+The third retained F4 checkpoint projected the separate `SystemMuteRuntimeService` lease into the same
 Media model/item and places its bounded button inside the existing controls band. Accepted mute
 revisions drive the icon; QML emits a semantic toggle and owns only pressed/flash feedback. Endpoint
-acquisition, polling, toggle/global-volume actions and generation fencing remain Python-owned. Caller
-proof and retirement of the remaining QWidget F4 pixels/input are next.
+acquisition, polling, toggle/global-volume actions and generation fencing remain Python-owned.
 
 The retained progress correction adds `can_seek` to the accepted Media track snapshot and sends an
 invisible track click/release as one clamped semantic fraction through the existing shared runtime and
@@ -283,6 +280,12 @@ fraction to WinRT ticks; QML never changes the displayed fraction itself. Unsupp
 requests are inert. The old solid enlarged glow rectangle is replaced by one cached, bounded
 `RectangularShadow` around the retained fill, with the configured enable and colour semantics intact.
 The real-Quick matrix carries an explicit glow-off comparison at effective DPR 1.0, 1.5 and 2.25.
+
+Caller proof removed the old Media control/progress painters, volume and mute QWidgets, factories,
+descriptors, pointer-hit routing and presentation-only tests. `MediaWidget` remains temporarily as a
+non-painting accepted-state/runtime owner and Visualizer geometry/visibility anchor until the physical
+host cutover in H. App-volume and system-mute services are injected into that neutral owner; retained
+QML remains the only Media pixel/action presenter. F4 is CLOSED.
 
 ---
 

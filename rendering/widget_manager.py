@@ -63,7 +63,6 @@ if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
     from widgets.media_widget import MediaWidget
     from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-    from widgets.spotify_volume_widget import SpotifyVolumeWidget
 
 logger = get_logger(__name__)
 
@@ -1241,7 +1240,7 @@ class WidgetManager:
         self._apply_media_card_style_to_visualizer(vis, media_cfg)
 
     def _refresh_media_config(self, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
-        """Apply latest media settings to the live media widget (colors/volume flag)."""
+        """Refresh neutral Media owners and the surviving Visualizer anchor."""
         media_widget = self._widgets.get('media_widget') or self._widgets.get('media')
         if media_widget is None:
             return
@@ -1262,54 +1261,24 @@ class WidgetManager:
         self._sync_media_provider_runtime(model.provider)
 
         try:
-            if hasattr(media_widget, 'set_font_family'):
-                media_widget.set_font_family(str(model.font_family))
-            if hasattr(media_widget, 'set_font_size'):
-                media_widget.set_font_size(int(model.font_size))
-            if hasattr(media_widget, 'set_artwork_size'):
-                media_widget.set_artwork_size(int(model.artwork_size))
-            if hasattr(media_widget, 'set_rounded_artwork_border'):
-                media_widget.set_rounded_artwork_border(SettingsManager.to_bool(model.rounded_artwork_border, True))
+            media_widget.set_artwork_size(int(model.artwork_size))
         except Exception:
-            logger.debug("[WIDGET_MANAGER] Failed to reapply media typography/artwork", exc_info=True)
+            logger.debug("[WIDGET_MANAGER] Failed to reapply Media anchor size", exc_info=True)
 
         try:
-            if hasattr(media_widget, 'set_text_color'):
-                media_widget.set_text_color(parse_color_to_qcolor(model.color))
-        except Exception:
-            logger.debug("[WIDGET_MANAGER] Failed to reapply media text color", exc_info=True)
+            from rendering.widget_setup_all import _setup_media_owned_spotify_dependents
 
-        try:
-            if hasattr(media_widget, 'set_background_color'):
-                media_widget.set_background_color(parse_color_to_qcolor(model.bg_color))
-            if hasattr(media_widget, 'set_background_opacity'):
-                media_widget.set_background_opacity(float(model.background_opacity))
-            if hasattr(media_widget, 'set_background_border'):
-                border_qcolor = parse_color_to_qcolor(model.border_color, opacity_override=model.border_opacity)
-                if border_qcolor:
-                    current_width = getattr(media_widget, '_bg_border_width', None)
-                    media_widget.set_background_border(current_width if current_width is not None else media_widget.get_global_border_width(), border_qcolor)
+            _setup_media_owned_spotify_dependents(
+                self,
+                {},
+                dict(cfg),
+                {},
+                int(getattr(self._parent, "_screen_index", 0) or 0),
+                getattr(self._parent, "_thread_manager", None),
+                media_widget,
+            )
         except Exception:
-            logger.debug("[WIDGET_MANAGER] Failed to reapply media background/border", exc_info=True)
-
-        try:
-            if hasattr(media_widget, 'set_show_controls'):
-                media_widget.set_show_controls(SettingsManager.to_bool(model.show_controls, True))
-            if hasattr(media_widget, 'set_playback_progress_config'):
-                progress_fill = parse_color_to_qcolor(model.playback_progress_fill_color)
-                progress_glow = parse_color_to_qcolor(model.playback_progress_glow_color)
-                media_widget.set_playback_progress_config(
-                    enabled=SettingsManager.to_bool(model.playback_progress_enabled, False),
-                    height=int(model.playback_progress_height),
-                    fill_color=progress_fill or parse_color_to_qcolor([255, 255, 255, 230]),
-                    shadow_enabled=SettingsManager.to_bool(model.playback_progress_shadow_enabled, False),
-                    glow_enabled=SettingsManager.to_bool(model.playback_progress_glow_enabled, False),
-                    glow_color=progress_glow or parse_color_to_qcolor([255, 255, 255, 180]),
-                )
-            if hasattr(media_widget, 'set_show_header_frame'):
-                media_widget.set_show_header_frame(SettingsManager.to_bool(model.show_header_frame, True))
-        except Exception:
-            logger.debug("[WIDGET_MANAGER] Failed to reapply media controls/header", exc_info=True)
+            logger.debug("[WIDGET_MANAGER] Failed to refresh Media action leases", exc_info=True)
 
         vis_widget = self._widgets.get('spotify_visualizer') or self._widgets.get('spotify_visualizer_widget')
         if vis_widget is not None:
@@ -1327,35 +1296,6 @@ class WidgetManager:
             except Exception:
                 logger.debug("[WIDGET_MANAGER] Failed to sync media provider runtime", exc_info=True)
 
-        volume_widget = self._widgets.get('spotify_volume') or self._widgets.get('spotify_volume_widget')
-        if volume_widget is not None and hasattr(volume_widget, 'set_provider_runtime'):
-            try:
-                volume_widget.set_provider_runtime(normalized)
-            except Exception:
-                logger.debug("[WIDGET_MANAGER] Failed to sync volume provider runtime", exc_info=True)
-
-    def sync_media_volume_runtime_target(
-        self,
-        provider: object,
-        source_app_user_model_id: object,
-    ) -> None:
-        """Route one accepted GSMTC source to the volume widget without persistence."""
-
-        volume_widget = self._widgets.get('spotify_volume') or self._widgets.get(
-            'spotify_volume_widget'
-        )
-        if volume_widget is None or not hasattr(volume_widget, 'set_runtime_volume_source'):
-            return
-        try:
-            volume_widget.set_runtime_volume_source(
-                provider,
-                source_app_user_model_id,
-            )
-        except Exception:
-            logger.debug(
-                "[WIDGET_MANAGER] Failed to sync media volume runtime target",
-                exc_info=True,
-            )
 
     def handle_media_provider_failover(self, provider: object, *, source: str = "runtime") -> None:
         """Persist a runtime media-provider auto-fallback through the shared settings path."""
@@ -1672,82 +1612,6 @@ class WidgetManager:
             # NOT registered with PixelShiftManager.  The card is positioned
             # relative to the media widget (which handles pixel shift via
             # BaseOverlayWidget), so it inherits the shift automatically.
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-    def position_spotify_volume(self, vol_widget, media_widget, parent_width: int, parent_height: int) -> None:
-        """Position Spotify volume slider beside media widget."""
-        if vol_widget is None:
-            return
-        try:
-            def _resolve_authored_size() -> tuple[int, int]:
-                width = max(vol_widget.minimumWidth(), 32)
-                if media_widget is None:
-                    height = max(vol_widget.minimumHeight(), vol_widget.height())
-                    return width, height
-                media_geom = media_widget.geometry()
-                card_height = media_geom.height()
-                height = max(vol_widget.minimumHeight(), card_height - 8)
-                height = min(height, card_height)
-                return width, height
-
-            widgets_config: Mapping[str, Any] | None = None
-            if self._settings_manager is not None:
-                candidate = self._settings_manager.get_widgets_map() or {}
-                if isinstance(candidate, Mapping):
-                    widgets_config = candidate
-
-            custom_rect = getattr(vol_widget, "_custom_layout_local_rect", None)
-            if (
-                isinstance(custom_rect, QRect)
-                and custom_rect.width() > 0
-                and custom_rect.height() > 0
-            ):
-                width = max(24, int(custom_rect.width()))
-                height = max(120, int(custom_rect.height()))
-                x = max(0, min(int(custom_rect.x()), max(0, parent_width - width)))
-                y = max(0, min(int(custom_rect.y()), max(0, parent_height - height)))
-                vol_widget.setGeometry(x, y, width, height)
-                if vol_widget.isVisible():
-                    vol_widget.raise_()
-                return
-
-            if media_widget is None:
-                return
-
-            media_geom = media_widget.geometry()
-            if media_geom.width() <= 0 or media_geom.height() <= 0:
-                return
-            
-            gap = 16
-            width, height = _resolve_authored_size()
-            card_height = media_geom.height()
-            
-            space_left = max(0, media_geom.left())
-            space_right = max(0, parent_width - media_geom.right())
-            
-            if space_right >= space_left:
-                x = media_geom.right() + gap
-                if x + width > parent_width:
-                    x = max(0, parent_width - width)
-            else:
-                x = media_geom.left() - gap - width
-                x = max(0, x)
-            
-            y = media_geom.top() + max(0, (card_height - height) // 2)
-            y = max(0, min(y, max(0, parent_height - height)))
-            
-            vol_widget.setGeometry(x, y, width, height)
-            if vol_widget.isVisible():
-                vol_widget.raise_()
-            if is_perf_metrics_enabled():
-                logger.info(
-                    "[SPOTIFY_VOL] Positioned volume widget geom=(%d,%d,%d,%d)",
-                    x,
-                    y,
-                    width,
-                    height,
-                )
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
@@ -2686,7 +2550,7 @@ class WidgetManager:
 
         seen: set[int] = set()
         for instance in instances:
-            for attr_name in ("spotify_visualizer_widget", "spotify_volume_widget", "mute_button_widget"):
+            for attr_name in ("spotify_visualizer_widget",):
                 widget = getattr(instance, attr_name, None)
                 if widget is None or id(widget) in seen:
                     continue
@@ -2885,8 +2749,8 @@ class WidgetManager:
     # =========================================================================
 
     # NOTE: old create_* methods have been removed. setup_all_widgets() uses
-    # the WidgetFactoryRegistry for surviving QWidget families. Spotify widgets still use
-    # direct methods below due to complex media widget anchoring logic.
+    # the WidgetFactoryRegistry for surviving QWidget families. The Visualizer
+    # still uses a direct method because of its Media anchor relationship.
 
     def setup_all_widgets(
         self,
@@ -2897,20 +2761,6 @@ class WidgetManager:
         """Delegates to rendering.widget_setup_all."""
         from rendering.widget_setup_all import setup_all_widgets
         return setup_all_widgets(self, settings_manager, screen_index, thread_manager)
-
-    def create_spotify_volume_widget(
-        self,
-        widgets_config: dict,
-        shadows_config: dict,
-        screen_index: int,
-        thread_manager: Optional["ThreadManager"] = None,
-        media_widget: Optional[MediaWidget] = None,
-    ) -> Optional[SpotifyVolumeWidget]:
-        """Delegates to rendering.spotify_widget_creators."""
-        from rendering.spotify_widget_creators import create_spotify_volume_widget
-        return create_spotify_volume_widget(
-            self, widgets_config, shadows_config, screen_index, thread_manager, media_widget,
-        )
 
     def create_spotify_visualizer_widget(
         self,
@@ -2924,17 +2774,4 @@ class WidgetManager:
         from rendering.spotify_widget_creators import create_spotify_visualizer_widget
         return create_spotify_visualizer_widget(
             self, widgets_config, shadows_config, screen_index, thread_manager, media_widget,
-        )
-
-    def create_mute_button_widget(
-        self,
-        widgets_config: dict,
-        screen_index: int,
-        thread_manager: Optional["ThreadManager"] = None,
-        media_widget: Optional[MediaWidget] = None,
-    ):
-        """Delegates to rendering.spotify_widget_creators."""
-        from rendering.spotify_widget_creators import create_mute_button_widget
-        return create_mute_button_widget(
-            self, widgets_config, screen_index, thread_manager, media_widget,
         )

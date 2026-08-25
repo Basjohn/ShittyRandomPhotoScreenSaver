@@ -5,8 +5,8 @@ Last updated: 2026-08-25
 Reviewed source basis:
 
 ```text
-test-inventory basis = F4 retained Media system-mute implementation
-Phase F0/F0.5/F1/F2/F3 CLOSED; 360 test modules; F4 Media controls active
+test-inventory basis = F4 retained Media caller-proof and legacy-pixel retirement
+Phase F0/F0.5/F1/F2/F3/F4 CLOSED; 353 test modules; F5 Reddit active
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -91,9 +91,15 @@ interaction admission, and retained seek-area/glow identity without recreation. 
 intentionally absent. `tools/qtquick_media_smoke.py` includes glow-on and glow-off retained comparisons
 at effective DPR 1.0, 1.5 and 2.25 so the soft falloff is directly inspectable.
 
+F4 caller proof deletes the old Media controls/progress painters, separate volume/mute QWidgets and
+their presentation-only tests. `tests/test_media_widget_runtime_methods.py` now protects only the
+temporary non-painting accepted-state/runtime/Visualizer anchor and its neutral auxiliary-service
+action/lifecycle seams. The retained Media suite owns all pixel and pointer-action assertions; neutral
+Media/app-volume/system-mute suites keep controller, cadence, generation and recovery authority.
+
 At the reviewed checkpoint the repository contains:
 
-- **360 test-module files**: 359 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **353 test-module files**: 352 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -104,7 +110,9 @@ Inventory status is **not an execution result**. `KEEP` does not mean a test was
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 359 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
+This is deliberately **not** a claim that every assertion in all 352 top-level modules was manually
+read line-by-line or executed during this review. The inventory is complete; semantic inspection was
+concentrated where migration status could change whether a test remains authority.
 
 ### Status vocabulary
 
@@ -287,7 +295,7 @@ Permanent E4 coverage protects: one canonical eight-direction authority; all eig
 
 The E4 host test necessarily injected already-resolved signed offsets before a real family was Quick-presented. F1 Clock subsequently supplied the end-to-end proof that an actual family projection reads the canonical direction plus the two canonical user buckets, applies the deliberate destination card/text base-distance policy in Python, and updates retained properties without presentation or runtime-owner recreation. Do not resurrect sidecar-era `text_large`/header tuning profiles.
 
-### F — widget family ports — ACTIVE; F1 Clock/F2 Weather/F3 Media core CLOSED, F4 Media controls ACTIVE
+### F — widget family ports — ACTIVE; F1 Clock/F2 Weather/F3 Media core/F4 Media controls CLOSED, F5 Reddit ACTIVE
 
 F0 deleted deprecated Imgur instead of porting it. F0.5 is the bounded QWidget Settings slice that completes the canonical global shadow controls before F1 Clock. For each later family, preserve provider/model/behavior/settings tests and rehome direct QWidget presentation assertions to retained Quick items.
 
@@ -490,7 +498,6 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_diffuse_transition.py` | **WILL BE OBSOLETE — H/I** | Delete with legacy presenter after Quick cutover/parity confirmation. |
 | `tests/test_gl_compositor_transition_lifecycle.py` | **WILL BE OBSOLETE — H/I** | Delete with legacy presenter after Quick cutover/parity confirmation. |
 | `tests/test_gl_compositor_transitions.py` | **WILL BE OBSOLETE — H/I** | Delete with legacy presenter after Quick cutover/parity confirmation. |
-| `tests/test_media_transition_deferral.py` | **MIGRATION-CRITICAL — F4** | Temporary QWidget transport-feedback behavior during transitions; retire with the F4 presenter path. |
 | `tests/test_micro_wobble_math.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_slide_jitter.py` | **WILL BE OBSOLETE — H/I** | Delete with legacy presenter after Quick cutover/parity confirmation. |
 | `tests/test_slide_transition.py` | **WILL BE OBSOLETE — H/I** | Delete with legacy presenter after Quick cutover/parity confirmation. |
@@ -587,21 +594,17 @@ The inventory below accounts for every executable test file present at the revie
 | --- | --- | --- |
 | `tests/test_audio_capture_block_size.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_media_command_ingress.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_media_dependent_visibility.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
-| `tests/test_media_display_update.py` | **MIGRATION-CRITICAL — F4** | Temporary QWidget controls/progress state projection only; retire after semantic actions land in retained Media. |
 | `tests/test_media_keys.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_media_provider_registry.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_media_provider_runtime.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_qtquick_media_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Media core plus transport/progress/app-volume/system-mute/input admission, separate neutral-owner injection, real runtime-owner/host lifecycle and no-recreation destination coverage; retain through cutover. |
 | `tests/test_media_runtime_artwork.py` | **KEEP — PERMANENT** | Presentation-neutral artwork decode, stable key and unchanged-payload deduplication contract. |
 | `tests/test_media_runtime_state.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_media_runtime.py` | **MIGRATION-CRITICAL — F** | Shared Media owner/lease/controller/poll/state/artwork/generation contract; preserve neutral owner and rehome only presenter integration. |
-| `tests/test_media_volume_runtime.py` | **MIGRATION-CRITICAL — F** | Shared app-volume owner/lease/read-write generation/coalescing contract; preserve through Quick port. |
-| `tests/test_system_mute_runtime.py` | **MIGRATION-CRITICAL — F** | Shared system-mute endpoint/poll/action/lease contract; preserve through Quick port. |
-| `tests/test_media_widget_runtime_methods.py` | **MIGRATION-CRITICAL — F4** | Temporary controls/progress/runtime-anchor, interaction and geometry behavior; retire or rehome during F4. |
-| `tests/test_mute_button_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
-| `tests/test_spotify_volume.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
-| `tests/test_spotify_volume_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
+| `tests/test_media_runtime.py` | **KEEP — PERMANENT** | Shared Media owner/lease/controller/poll/state/artwork/generation contract; presentation-neutral after F4. |
+| `tests/test_media_volume_runtime.py` | **KEEP — PERMANENT** | Shared app-volume owner/lease/read-write generation/coalescing plus neutral Media-anchor injection contract. |
+| `tests/test_system_mute_runtime.py` | **KEEP — PERMANENT** | Shared system-audio endpoint/poll/action/lease plus neutral Media-anchor injection contract. |
+| `tests/test_media_widget_runtime_methods.py` | **MIGRATION-CRITICAL — H** | Temporary non-painting accepted-state/runtime/Visualizer anchor, geometry and neutral auxiliary-action lifecycle; retire/rehome with physical host cutover. |
+| `tests/test_spotify_volume.py` | **KEEP — PERMANENT** | Presentation-neutral app-volume controller/backend contract. |
 
 ### 10.7 Gmail
 
@@ -727,7 +730,6 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_p2_gate2_mode_switch_presents.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_p2_gate6_gate9_ownership.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_p2_gate7_pause_play_identity.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
-| `tests/test_p2_gate7b_feedback_repaint_cost.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_p2_idle_mode_switch_edge.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_p2_live_source_to_reveal.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_p2_logical_present_delivery.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
@@ -743,7 +745,6 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_p2_single_surface.py` | **MIGRATION-CRITICAL — H/I** | Important one-surface intent, but harness imports legacy GLCompositor/SpotifyBarsGLOverlay. Quick successor must inherit intent before deletion. |
 | `tests/test_p2_single_surface_gl_render.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_p2_slicek_nonblocking_transport.py` | **WILL BE OBSOLETE — H/I** | Delete with legacy presenter after Quick cutover/parity confirmation. |
-| `tests/test_p2_slicel_feedback_paint_ownership.py` | **MIGRATION-CRITICAL — F4** | Temporary QWidget feedback-only repaint ownership for controls/progress; retire with the F4 presenter path. |
 | `tests/test_p2_slow_tick_diagnostic.py` | **WILL BE OBSOLETE — H/I** | Delete with legacy presenter after Quick cutover/parity confirmation. |
 | `tests/test_p2_spectrum_idle_presentation.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_p2_spectrum_idle_reachability.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |

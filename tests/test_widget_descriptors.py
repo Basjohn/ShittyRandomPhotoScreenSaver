@@ -338,17 +338,6 @@ def test_widget_runtime_descriptor_monitor_settings_key_defaults_to_widget_id():
     assert clock2.get_effective_monitor_settings_key() == "clock2"
 
 
-def test_spotify_volume_participates_in_custom_layout_via_media_contract():
-    descriptors = get_layout_edit_runtime_descriptors()
-    volume = next(item for item in descriptors if item.widget_id == "spotify_volume")
-
-    assert volume.supports_layout_edit_mode is True
-    assert volume.get_effective_position_settings_key() == "media"
-    assert volume.get_effective_monitor_settings_key() == "media"
-    assert volume.supports_layout_resize_edit is True
-    assert volume.custom_layout_resize_mode == "volume_scale"
-
-
 def test_spotify_visualizer_uses_media_routing_outside_custom():
     from rendering.widget_descriptors import (
         get_effective_monitor_settings_key_for_widget,
@@ -752,13 +741,6 @@ def test_widget_position_option_labels_follow_runtime_descriptor_contract():
         "Bottom Center",
         "Bottom Right",
     )
-
-
-def test_media_owned_dependents_only_write_shared_custom_position_key():
-    assert widget_writes_custom_position_key("spotify_visualizer") is True
-    assert widget_writes_custom_monitor_key("spotify_visualizer") is True
-    assert widget_writes_custom_position_key("spotify_volume") is True
-    assert widget_writes_custom_monitor_key("spotify_volume") is False
 
 
 def test_custom_position_contract_helpers_follow_runtime_descriptor_metadata():
