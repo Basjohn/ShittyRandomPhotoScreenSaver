@@ -7,8 +7,8 @@ Last updated: 2026-08-25
 Exact main inspected through:
 
 ```text
-3d2fee62783c718d33e24426d6129b27a832d1b7
-Phase F4 retained Media app volume
+492f14f084e4cb802b1e5b73b889f3305a068caa
+Phase F4 retained Media system mute
 ```
 
 F1 implementation basis:
@@ -47,6 +47,10 @@ Required implementation:
 - extend the existing stable retained Media model/QML; do not create a second Media presenter/model;
 - keep shared controller, app-volume and system-mute polling/state/action ownership Python-owned;
 - project playback progress and control availability from coherent accepted state;
+- capability-gate semantic seek through the shared Media owner; the invisible retained track maps
+  click/release position to a fraction while accepted runtime snapshots remain playback truth;
+- render configured progress glow as one cached, bounded retained Quick shadow rather than a solid
+  enlarged halo rectangle;
 - emit semantic transport/volume/mute actions from QML and route them to the existing owners;
 - preserve current interaction gating, keyboard/media-key ingress, Visualizer/dependent visibility and
   optimistic playback-state behavior;
@@ -61,7 +65,8 @@ Validation:
 - shared Media/app-volume/system-mute owner and stale-generation/recovery gates;
 - interaction gating, keyboard/media-key ingress, dependent visibility and Visualizer relationship;
 - repeated state/settings/action mutation without item/model/runtime/engine/window recreation;
-- practical DPR eyes-on controls/progress/volume/mute states and interaction feedback;
+- effective DPR 1.0, 1.5 and 2.25 eyes-on controls/progress/glow-on/glow-off/volume/mute states and
+  interaction feedback;
 - compile/import/static checks as relevant;
 - caller scans, full diff/status and `git diff --check`.
 
@@ -71,6 +76,7 @@ Current F4 sequence:
 retained transport controls + accepted-state progress + pointer admission  -> implementation GREEN
 app-volume presenter under existing MediaVolumeRuntimeService              -> implementation GREEN
 system-mute presenter under existing SystemMuteRuntimeService              -> implementation GREEN
+capability-gated seek + retained soft progress glow correction              -> implementation GREEN
 caller proof + remaining QWidget F4 pixel/input retirement                 -> NEXT
 ```
 
@@ -84,6 +90,11 @@ writes and debounce remain owned by `MediaVolumeRuntimeService`.
 The third checkpoint projects the existing system-mute lease into the same retained Media item. The
 fixed-footprint button emits a semantic toggle only; endpoint acquisition, accepted revisions, polling,
 toggle/global-volume actions and generation fencing remain owned by `SystemMuteRuntimeService`.
+
+The correction checkpoint adds `can_seek` to the accepted neutral Media snapshot, routes one clamped
+fraction through the existing shared controller to GSMTC timeline ticks, and never mutates displayed
+progress optimistically. The retained track has no visible handle. Its configured glow is a cached
+`RectangularShadow`; the smoke matrix includes a glow-off reference at effective DPR 1.0, 1.5 and 2.25.
 
 F3 closure evidence:
 

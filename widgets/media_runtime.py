@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import hashlib
+import math
 import time
 import weakref
 from typing import Any, Callable, Iterable, Optional
@@ -112,6 +113,7 @@ def _clone_track_info(
         can_play_pause=info.can_play_pause,
         can_next=info.can_next,
         can_previous=info.can_previous,
+        can_seek=info.can_seek,
         artwork=bytes(info.artwork) if info.artwork is not None else None,
         source_app_user_model_id=info.source_app_user_model_id,
         position_ms=info.position_ms,
@@ -1052,6 +1054,33 @@ class _SharedMediaRuntimeOwner:
     def previous_track(self, *, execute: bool = True) -> bool:
         return self._transport_without_optimistic("previous", execute=execute)
 
+    def seek_fraction(self, fraction: float, *, execute: bool = True) -> bool:
+        """Route a semantic seek without projecting unaccepted timeline state."""
+
+        if self._retired or not self._running:
+            return False
+        info = self._current_info
+        if info is None or not info.can_seek or not info.duration_ms:
+            return False
+        try:
+            parsed_fraction = float(fraction)
+        except (TypeError, ValueError):
+            return False
+        if not math.isfinite(parsed_fraction):
+            return False
+        bounded_fraction = max(0.0, min(1.0, parsed_fraction))
+        controller = self._ensure_controller()
+        if execute:
+            try:
+                controller.seek_fraction(bounded_fraction)
+            except Exception:
+                logger.debug("[MEDIA_RUNTIME] seek failed", exc_info=True)
+                return False
+        # The accepted provider snapshot remains authoritative; seeking does
+        # not optimistically rewrite the displayed position.
+        self.refresh(bust_cache=True)
+        return True
+
     def _transport_without_optimistic(self, action: str, *, execute: bool) -> bool:
         if self._retired or not self._running:
             return False
@@ -1358,3 +1387,10 @@ class MediaRuntimeService:
     def previous_track(self, *, execute: bool = True) -> bool:
         owner = self._owner
         return bool(owner is not None and owner.previous_track(execute=execute))
+
+    def seek_fraction(self, fraction: float, *, execute: bool = True) -> bool:
+        owner = self._owner
+        return bool(
+            owner is not None
+            and owner.seek_fraction(fraction, execute=execute)
+        )

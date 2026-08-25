@@ -98,8 +98,9 @@ class TestCommandIsFireAndForget:
         ctrl.play_pause()
         ctrl.next()
         ctrl.previous()
+        ctrl.seek_fraction(0.5)
 
-        assert calls == ["play_pause", "next", "previous"], (
+        assert calls == ["play_pause", "next", "previous", "seek"], (
             "a transport action still uses the blocking controller path"
         )
 

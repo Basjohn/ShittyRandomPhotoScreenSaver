@@ -12,11 +12,18 @@ OverlayWidget {
     signal nextRequested()
     signal appVolumeLevelRequested(real level)
     signal systemMuteToggleRequested()
+    signal seekFractionRequested(real fraction)
 
     function appVolumeLevelAt(y, height) {
         if (height <= 0.0)
             return 0.0
         return Math.max(0.0, Math.min(1.0, 1.0 - y / height))
+    }
+
+    function seekFractionAt(x, width) {
+        if (width <= 0.0)
+            return 0.0
+        return Math.max(0.0, Math.min(1.0, x / width))
     }
 
     readonly property int visibleSectionCount: 1
@@ -257,14 +264,17 @@ OverlayWidget {
                     z: -2
                 }
 
-                Rectangle {
+                RectangularShadow {
+                    objectName: "mediaProgressGlow"
                     visible: mediaRoot.mediaModel.progressGlowEnabled
                         && progressFill.width > 0.0
                     anchors.fill: progressFill
-                    anchors.margins: -3.0
-                    radius: height / 2.0
+                    blur: Math.max(9.0, mediaRoot.mediaModel.progressHeight * 2.0)
+                    spread: Math.max(1.0, mediaRoot.mediaModel.progressHeight * 0.35)
+                    radius: progressFill.radius
                     color: mediaRoot.mediaModel.progressGlowColor
-                    opacity: 0.38
+                    offset: Qt.vector2d(0.0, 0.0)
+                    cached: true
                     z: -1
                 }
 
@@ -277,6 +287,20 @@ OverlayWidget {
                     height: parent.height
                     radius: Math.min(width, height) / 2.0
                     color: mediaRoot.mediaModel.progressFillColor
+                }
+
+                MouseArea {
+                    id: progressSeekArea
+                    objectName: "mediaProgressSeekArea"
+                    anchors.fill: parent
+                    enabled: mediaRoot.mediaModel.interactionEnabled
+                        && mediaRoot.mediaModel.canSeek
+                    acceptedButtons: Qt.LeftButton
+                    onReleased: function(mouse) {
+                        mediaRoot.seekFractionRequested(
+                            mediaRoot.seekFractionAt(mouse.x, width)
+                        )
+                    }
                 }
             }
         }

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 from pathlib import Path
 import subprocess
@@ -114,6 +114,7 @@ class _Controller:
         self.play_pause_calls = 0
         self.next_calls = 0
         self.previous_calls = 0
+        self.seek_calls: list[float] = []
         self.retire_calls = 0
 
     def set_thread_manager(self, thread_manager) -> None:
@@ -143,6 +144,9 @@ class _Controller:
 
     def previous(self) -> None:
         self.previous_calls += 1
+
+    def seek_fraction(self, fraction: float) -> None:
+        self.seek_calls.append(float(fraction))
 
     def is_app_process_running(self) -> bool:
         return True
@@ -211,6 +215,7 @@ def _track(
         can_play_pause=True,
         can_next=True,
         can_previous=True,
+        can_seek=True,
         artwork=artwork,
         source_app_user_model_id=source_id,
         position_ms=1200,
@@ -627,6 +632,30 @@ def test_optimistic_playback_epoch_is_shared_and_pins_contradictory_result(
     assert first_consumer.snapshots[-1].info.state == MediaPlaybackState.PLAYING
     assert second_consumer.snapshots[-1].info.state == MediaPlaybackState.PLAYING
     assert owner.expected_playback_state is None
+
+
+def test_seek_routes_clamped_fraction_without_optimistic_timeline_authority() -> None:
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track()})
+    consumer = _Consumer(tm)
+    service = _lease(consumer, factory)
+    service.start()
+    tm.complete()
+    accepted_position = consumer.snapshots[-1].info.position_ms
+
+    assert service.seek_fraction(1.5) is True
+    assert factory.controllers[0][1].seek_calls == [1.0]
+    assert consumer.snapshots[-1].info.position_ms == accepted_position
+    assert len(tm.jobs) == 1
+    assert service.seek_fraction(float("nan")) is False
+    assert factory.controllers[0][1].seek_calls == [1.0]
+
+    service.shared_owner._current_info = replace(
+        service.shared_owner._current_info,
+        can_seek=False,
+    )
+    assert service.seek_fraction(0.25) is False
+    assert factory.controllers[0][1].seek_calls == [1.0]
 
 
 def test_failover_persists_once_and_syncs_every_display_volume_target() -> None:

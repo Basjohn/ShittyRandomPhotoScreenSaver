@@ -17,6 +17,7 @@ def test_retained_display_snapshot_downgrades_to_paused() -> None:
         artist="Artist",
         album="Album",
         state=MediaPlaybackState.PLAYING,
+        can_seek=True,
         artwork=b"art",
         source_app_user_model_id="firefox.exe",
         position_ms=42_000,
@@ -34,6 +35,7 @@ def test_retained_display_snapshot_downgrades_to_paused() -> None:
     assert retained.source_app_user_model_id == "firefox.exe"
     assert retained.position_ms == 42_000
     assert retained.duration_ms == 180_000
+    assert retained.can_seek is True
 
 
 def test_provider_probe_cooldown() -> None:

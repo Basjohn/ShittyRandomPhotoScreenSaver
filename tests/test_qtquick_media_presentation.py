@@ -51,7 +51,9 @@ class _FakeMediaRuntime:
         self.refresh_calls: list[bool] = []
         self.provider_calls: list[tuple[str, str]] = []
         self.transport_calls: list[str] = []
+        self.seek_calls: list[float] = []
         self.transport_result = True
+        self.seek_result = True
 
     def set_thread_manager(self, thread_manager) -> None:
         self.thread_manager = thread_manager
@@ -95,6 +97,11 @@ class _FakeMediaRuntime:
         assert execute is True
         self.transport_calls.append("next")
         return self.transport_result
+
+    def seek_fraction(self, fraction: float, *, execute: bool = True) -> bool:
+        assert execute is True
+        self.seek_calls.append(float(fraction))
+        return self.seek_result
 
     def publish(self, snapshot: MediaRuntimeSnapshot) -> None:
         if self.consumer is not None:
@@ -338,6 +345,7 @@ def _info(**overrides) -> MediaTrackInfo:
         "can_play_pause": True,
         "can_next": True,
         "can_previous": True,
+        "can_seek": True,
         "position_ms": 45_000,
         "duration_ms": 240_000,
     }
@@ -578,6 +586,7 @@ def test_media_model_publishes_coherent_revisions_without_unchanged_artwork_repu
     assert model.album == "Hurry Up, We're Dreaming"
     assert model.playbackState == "playing"
     assert model.progressFraction == pytest.approx(0.1875)
+    assert model.canSeek is True
     assert model.controlsAvailable is True
     assert model.progressAvailable is True
     assert source.startswith("image://mediaartwork/")
@@ -671,6 +680,32 @@ def test_media_model_routes_capability_gated_transport_to_existing_owner() -> No
     assert runtime.refresh_calls == [True]
     model.retire()
     assert model.request_transport("play") is False
+
+
+def test_media_model_routes_capability_gated_seek_without_mutating_progress() -> None:
+    model, runtime, _provider = _model()
+    model.activate(object())
+    runtime.publish(_snapshot(1, image=_image()))
+    accepted_fraction = model.progressFraction
+
+    assert model.request_seek(1.4) is True
+    assert runtime.seek_calls == [1.0]
+    assert model.progressFraction == accepted_fraction
+    assert model.request_seek(float("nan")) is False
+    assert runtime.seek_calls == [1.0]
+
+    runtime.publish(_snapshot(2, image=None, info=_info(can_seek=False)))
+    assert model.canSeek is False
+    assert model.request_seek(0.25) is False
+    assert runtime.seek_calls == [1.0]
+
+    runtime.publish(_snapshot(3, image=None, info=_info(duration_ms=0)))
+    assert model.canSeek is True
+    assert model.progressAvailable is False
+    assert model.request_seek(0.5) is False
+    assert runtime.seek_calls == [1.0]
+    model.retire()
+    assert model.request_seek(0.5) is False
 
 
 def test_media_interaction_admission_mutates_model_without_runtime_work() -> None:
@@ -853,6 +888,13 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         assert item.findChild(QQuickItem, "mediaArtworkFrame") is not None
         assert item.findChild(QQuickItem, "mediaControlsRow") is not None
         assert item.findChild(QQuickItem, "mediaProgressFill") is not None
+        progress_glow = item.findChild(QQuickItem, "mediaProgressGlow")
+        progress_seek_area = item.findChild(QQuickItem, "mediaProgressSeekArea")
+        assert progress_glow is not None
+        assert progress_seek_area is not None
+        assert item.seekFractionAt(-5.0, 100.0) == pytest.approx(0.0)
+        assert item.seekFractionAt(45.0, 100.0) == pytest.approx(0.45)
+        assert item.seekFractionAt(120.0, 100.0) == pytest.approx(1.0)
         assert item.findChild(QQuickItem, "mediaAppVolumeSlider") is not None
         assert item.findChild(QQuickItem, "mediaAppVolumeFill") is not None
         assert item.findChild(QQuickItem, "mediaSystemMuteButton") is not None
@@ -865,9 +907,11 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         item.playPauseRequested.emit()
         item.appVolumeLevelRequested.emit(0.7)
         item.systemMuteToggleRequested.emit()
+        item.seekFractionRequested.emit(0.6)
         assert runtime.transport_calls == []
         assert volume_runtime.level_calls == []
         assert mute_runtime.toggle_calls == 0
+        assert runtime.seek_calls == []
         assert presentation.apply_input_state(
             QuickInputState(
                 screen_index=0,
@@ -880,9 +924,11 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         item.nextRequested.emit()
         item.appVolumeLevelRequested.emit(0.25)
         item.systemMuteToggleRequested.emit()
+        item.seekFractionRequested.emit(0.6)
         assert runtime.transport_calls == ["play", "previous", "next"]
         assert volume_runtime.level_calls == [pytest.approx(0.25)]
         assert mute_runtime.toggle_calls == 1
+        assert runtime.seek_calls == [pytest.approx(0.6)]
         assert model.systemMuted is True
 
         assert presentation.apply_input_state(
@@ -895,9 +941,11 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         item.nextRequested.emit()
         item.appVolumeLevelRequested.emit(0.8)
         item.systemMuteToggleRequested.emit()
+        item.seekFractionRequested.emit(0.2)
         assert runtime.transport_calls == ["play", "previous", "next"]
         assert volume_runtime.level_calls == [pytest.approx(0.25)]
         assert mute_runtime.toggle_calls == 1
+        assert runtime.seek_calls == [pytest.approx(0.6)]
 
         next_config = replace(
             model.config,
@@ -913,6 +961,8 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
 
         assert presentation.item is item
         assert presentation.model is model
+        assert item.findChild(QQuickItem, "mediaProgressGlow") is progress_glow
+        assert item.findChild(QQuickItem, "mediaProgressSeekArea") is progress_seek_area
         assert QQmlEngine.contextForObject(item).engine() is engine
         assert model.fontSize == 27.0
         assert model.artworkSize == 140.0
@@ -949,12 +999,19 @@ def test_media_qml_and_registry_keep_actions_static_and_python_owned() -> None:
         "signal previousRequested()",
         "signal appVolumeLevelRequested(real level)",
         "signal systemMuteToggleRequested()",
+        "signal seekFractionRequested(real fraction)",
         "mediaModel.interactionEnabled",
         "mediaModel.progressFraction",
         "mediaModel.appVolumeLevel",
         "mediaModel.systemMuted",
+        "mediaModel.canSeek",
+        'objectName: "mediaProgressGlow"',
+        'objectName: "mediaProgressSeekArea"',
+        "cached: true",
     ):
         assert marker in qml
+    assert "anchors.margins: -3.0" not in qml
+    assert "mediaProgressSeekHandle" not in qml
     assert "MediaPresentation 1.0 MediaPresentation.qml" in (
         QML_ROOT / "qmldir"
     ).read_text(encoding="utf-8")

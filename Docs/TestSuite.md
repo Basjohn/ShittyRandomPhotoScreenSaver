@@ -85,6 +85,12 @@ and failed-start lifecycle gates, retained button/item identity, and real thread
 effective DPR 1.0, 1.5 and 2.25. The shared owner/poll/generation suite remains authoritative for the
 Windows endpoint; QML owns no endpoint or cadence.
 
+The F4 progress correction adds provider capability extraction and exact fraction-to-GSMTC-tick tests,
+shared-owner capability/action routing, clamping and no-optimistic-position coverage, QML/Python
+interaction admission, and retained seek-area/glow identity without recreation. The seek handle is
+intentionally absent. `tools/qtquick_media_smoke.py` includes glow-on and glow-off retained comparisons
+at effective DPR 1.0, 1.5 and 2.25 so the soft falloff is directly inspectable.
+
 At the reviewed checkpoint the repository contains:
 
 - **360 test-module files**: 359 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
