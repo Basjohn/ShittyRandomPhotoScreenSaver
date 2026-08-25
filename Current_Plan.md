@@ -1,121 +1,49 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-24
+Last updated: 2026-08-25
 
 ## Current checkpoint
 
 Reviewed pushed implementation basis:
 
 ```text
-84b2cfb1f00d0f1fe362024c913e25a0903178ef
-documentation reconciliation + first F0.5 audit correction applied
-Independent audit: YELLOW
+8c9fd46871738cb66707467d19782a18f6e9e748
+final F0.5 sidecar-only shadow behavior correction pushed
+Independent audit: YELLOW — correction checkpoint awaiting audit
 ```
 
-F0.5's canonical Settings/model work is sound, and the first correction correctly removed the generic
-painted-card profile from `BaseOverlayWidget`/Clock/old visualizer card paths.
-
-One bounded correction still remains before F1: current production source still carries values copied
-directly from the retired global `shadowtuning.json` sections and labels them local/family-authored
-reference. Current remaining provenance is in:
-
-```text
-widgets/shadow_utils.py          -> text / text_large / header / icon
-widgets/weather_components.py    -> icon
-widgets/media/painting.py        -> control
-widgets/mute_button_widget.py    -> control
-widgets/spotify_volume_widget.py -> volume_slider
-```
-
-Those profiles were globally sidecar-authored. They are not family-authored simply because the old
-widget consumes them.
+F0.5's canonical Settings/model/direction-picker/save work remains intact. The bounded implementation
+correction is complete at the pushed checkpoint above. Do not begin F1 until independent audit marks
+F0.5 GREEN.
 
 Source outranks this plan if a later checkpoint has landed.
 
 ## Immediate work
 
-### F0.5 final audit correction — ACTIVE
+### F0.5 independent audit — ACTIVE
 
 Do only this before F1.
 
-Remove or simplify the **remaining** production shadow behavior whose numeric/style authority came only
-from the retired global `shadowtuning.json` profiles:
+Read:
 
-```text
-text
-text_large
-header
-icon
-control
-volume_slider
-```
+- `Docs/Custom_Style_Implementation.md` — F0.5 shadow authority;
+- `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md` — phase order;
+- `Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md` — protected family-authored behavior.
 
-The current known production-source sites are:
+Audit checklist:
 
-```text
-widgets/shadow_utils.py
-widgets/weather_components.py
-widgets/media/painting.py
-widgets/mute_button_widget.py
-widgets/spotify_volume_widget.py
-```
+- [ ] inspect exact pushed source at `8c9fd46871738cb66707467d19782a18f6e9e748`;
+- [ ] confirm canonical Settings/model/default/direction-picker/save behavior remains intact;
+- [ ] confirm no loader/file/local constants retain retired `card`, `text`, `text_large`, `header`,
+  `icon`, `control`, or `volume_slider` numeric/style authority;
+- [ ] confirm no replacement compatibility tuning or hidden/shared profile exists;
+- [ ] confirm generic shadow-only tests were retired without weakening content/runtime/interaction
+  coverage;
+- [ ] confirm Clock analogue ring/marker, Roman-numeral, hand and `analog_face_shadow` behavior remains
+  independently authored and unchanged;
+- [ ] record any precise blocker, or mark F0.5 GREEN.
 
-The previous correction already removed the generic painted-card profile. Do not redo completed
-Settings/model/picker/save work.
-
-### Family-authored reference definition
-
-A visual relationship is family-authored only when that family itself owned the relationship/geometry
-independently of the retired global sidecar.
-
-```text
-KEEP AS REFERENCE UNTIL FAMILY GREEN:
-Clock analogue ring/marker hard-shadow geometry
-Clock Roman-numeral two-pass shadow relationship
-Clock hand-shadow geometry
-other independently-authored family layout/animation/interaction
-
-NOT FAMILY-AUTHORED:
-sidecar card profile
-sidecar text / text_large / header profile
-sidecar icon profile
-sidecar control profile
-sidecar volume_slider profile
-```
-
-A sidecar value does not become family-authored because it was copied into a family module.
-
-### Correction behavior
-
-For the remaining sidecar-derived paths:
-
-- remove the copied tuning constants/profile values;
-- remove/simplify legacy shadow-only branches and caches when they have no independent product meaning;
-- preserve visible widget content, interaction, provider/runtime behavior and genuinely family-authored
-  visual structure;
-- do not build a new compatibility shadow layer;
-- do not translate the old values into canonical Quick settings;
-- do not preserve the half-migrated QWidget look merely for temporary parity.
-
-It is acceptable for an unported QWidget widget to temporarily lose a generic sidecar-driven text/icon/
-control/volume drop shadow. The retained Quick family will establish destination presentation from the
-canonical shadow controls.
-
-Protect the analogue Clock contract in
-`Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md`.
-
-### Gate
-
-- no `shadowtuning.json` loader/file authority;
-- no production local constants/comments retaining the retired `text`, `text_large`, `header`, `icon`,
-  `control`, or `volume_slider` profile as migrated authority;
-- no replacement hidden/shared tuning table;
-- no resurrection of old `widgets.shadows.offset`, Intense mode or Text Blur;
-- canonical F0.5 picker/model/default/save tests remain green;
-- legacy shadow-only tests are retired/updated rather than forcing old rendering back in;
-- `Docs/TestSuite.md` changes only if test ownership/module inventory actually changes.
-
-Push and STOP for independent audit.
+Do not modify or begin F1 as part of this checkpoint. STOP after the independent audit decision.
 
 After GREEN: **F1 Clock becomes active immediately.**
 
@@ -125,7 +53,7 @@ After GREEN: **F1 Clock becomes active immediately.**
 
 ```text
 F0    Imgur removal                              CLOSED
-F0.5  shadow authority + General controls        YELLOW — final correction active
+F0.5  shadow authority + General controls        YELLOW — independent audit pending
 F1    Clock / Clock2 / Clock3                    NEXT
 F2    Weather
 F3    Media core

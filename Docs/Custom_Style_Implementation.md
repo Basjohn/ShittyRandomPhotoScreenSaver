@@ -1,6 +1,6 @@
 # Custom Style Implementation
 
-Last updated: 2026-08-24
+Last updated: 2026-08-25
 
 Current Settings/runtime-style guidance during the Quick migration.
 
@@ -10,7 +10,7 @@ Settings remains QWidget-based.
 
 Do not rewrite Settings in QML because runtime pixels migrate.
 
-## F0.5 shadow controls — LANDED, YELLOW correction pending
+## F0.5 shadow controls — LANDED, YELLOW independent audit pending
 
 Widgets → General → Appearance owns:
 
@@ -45,8 +45,8 @@ General save must merge into the existing `widgets.shadows` mapping so unrelated
 
 `shadowtuning.json` is retired and must not survive by relocation.
 
-The first correction removed the old generic painted-card profile. The remaining known production
-relocations are now explicitly:
+The old generic painted-card profile and the remaining known production relocations have been removed
+or simplified at pushed checkpoint `8c9fd468`:
 
 ```text
 widgets/shadow_utils.py          -> text / text_large / header / icon
@@ -56,7 +56,7 @@ widgets/mute_button_widget.py    -> control
 widgets/spotify_volume_widget.py -> volume_slider
 ```
 
-These remaining copies must be removed/simplified before F1.
+Independent audit must confirm those profiles remain absent before F1 becomes active.
 
 It is acceptable for the temporary QWidget presenter to lose those generic sidecar-driven shadows.
 Preserve the real content/interaction/layout and independently-authored family behavior; do not create a

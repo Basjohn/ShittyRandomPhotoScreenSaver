@@ -13,8 +13,8 @@ exact current source
 -> tests/evidence for the claim
 ```
 
-Current migration state: **Phase F active; F0.5 is YELLOW pending removal of the remaining relocated
-sidecar-only text/icon/control/volume shadow profiles; F1 Clock follows after GREEN.**
+Current migration state: **Phase F active; the F0.5 correction is pushed and YELLOW pending independent
+audit; F1 Clock follows only after GREEN.**
 
 Do not read the whole history tree by default.
 
