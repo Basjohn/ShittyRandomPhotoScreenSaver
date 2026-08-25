@@ -65,6 +65,18 @@ Validation:
 - compile/import/static checks as relevant;
 - caller scans, full diff/status and `git diff --check`.
 
+Current F4 sequence:
+
+```text
+retained transport controls + accepted-state progress + pointer admission  -> implementation GREEN
+app-volume presenter under existing MediaVolumeRuntimeService              -> NEXT
+system-mute presenter under existing SystemMuteRuntimeService              -> pending
+caller proof + remaining QWidget F4 pixel/input retirement                 -> pending
+```
+
+The first checkpoint extends the existing Media model/item only. It does not create a second Media
+presenter or change app-volume/system-mute runtime ownership.
+
 F3 closure evidence:
 
 ```text

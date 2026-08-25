@@ -83,6 +83,13 @@ def _config(**overrides) -> MediaPresentationConfig:
         "show_header_frame": True,
         "artwork_size": 210,
         "rounded_artwork_border": True,
+        "show_controls": True,
+        "playback_progress_enabled": True,
+        "playback_progress_height": 7,
+        "playback_progress_fill_color": [50, 205, 255, 235],
+        "playback_progress_shadow_enabled": True,
+        "playback_progress_glow_enabled": True,
+        "playback_progress_glow_color": [50, 205, 255, 180],
     }
     values.update(overrides)
     return MediaPresentationConfig.from_mapping(values)

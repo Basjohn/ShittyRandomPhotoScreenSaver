@@ -1,4 +1,4 @@
-"""Stable retained Media-core presentation model and artwork projection."""
+"""Stable retained Media presentation model, artwork and transport projection."""
 
 from __future__ import annotations
 
@@ -113,6 +113,11 @@ class MediaPresentationConfig:
     rounded_artwork_border: bool = True
     show_controls: bool = True
     playback_progress_enabled: bool = False
+    playback_progress_height: int = 6
+    playback_progress_fill_color: tuple[int, int, int, int] = (255, 255, 255, 230)
+    playback_progress_shadow_enabled: bool = False
+    playback_progress_glow_enabled: bool = False
+    playback_progress_glow_color: tuple[int, int, int, int] = (255, 255, 255, 180)
 
     @classmethod
     def from_mapping(
@@ -138,6 +143,23 @@ class MediaPresentationConfig:
             show_controls=_as_bool(values.get("show_controls"), True),
             playback_progress_enabled=_as_bool(
                 values.get("playback_progress_enabled"), False
+            ),
+            playback_progress_height=_bounded_int(
+                values.get("playback_progress_height"), 6, 3, 18
+            ),
+            playback_progress_fill_color=_rgba(
+                values.get("playback_progress_fill_color"),
+                (255, 255, 255, 230),
+            ),
+            playback_progress_shadow_enabled=_as_bool(
+                values.get("playback_progress_shadow_enabled"), False
+            ),
+            playback_progress_glow_enabled=_as_bool(
+                values.get("playback_progress_glow_enabled"), False
+            ),
+            playback_progress_glow_color=_rgba(
+                values.get("playback_progress_glow_color"),
+                (255, 255, 255, 180),
             ),
         )
 
@@ -236,6 +258,7 @@ class MediaPresentationSnapshot:
     position_ms: int = 0
     duration_ms: int = 0
     artwork_source: str = ""
+    interaction_enabled: bool = False
 
 
 class MediaPresentationModel(QObject):
@@ -359,6 +382,36 @@ class MediaPresentationModel(QObject):
             and self._runtime_service is not None
             and self._runtime_service.refresh(bust_cache=True)
         )
+
+    def set_interaction_enabled(self, enabled: bool) -> bool:
+        """Project the display-local Ctrl/Interaction admission fact."""
+
+        normalized = bool(enabled)
+        if normalized == self._snapshot.interaction_enabled:
+            return False
+        self._replace_snapshot(
+            replace(self._snapshot, interaction_enabled=normalized)
+        )
+        return True
+
+    def request_transport(self, key: str) -> bool:
+        """Route one admitted semantic transport action to the existing owner."""
+
+        normalized = str(key or "").strip().lower()
+        service = self._runtime_service
+        if not self.is_active or service is None:
+            return False
+        if normalized == "play" and self.canPlayPause:
+            handled = bool(service.play_pause(execute=True))
+        elif normalized == "previous" and self.canPrevious:
+            handled = bool(service.previous_track(execute=True))
+        elif normalized == "next" and self.canNext:
+            handled = bool(service.next_track(execute=True))
+        else:
+            return False
+        if not handled:
+            self.request_refresh()
+        return handled
 
     def is_media_consumer_alive(self) -> bool:
         return self.is_active
@@ -534,6 +587,37 @@ class MediaPresentationModel(QObject):
         duration = self._snapshot.duration_ms
         return 0.0 if duration <= 0 else self._snapshot.position_ms / duration
 
+    @Property(bool, notify=stateChanged)
+    def interactionEnabled(self) -> bool:
+        return self._snapshot.interaction_enabled
+
+    @Property(float, notify=stateChanged)
+    def progressHeight(self) -> float:
+        return float(self.config.playback_progress_height)
+
+    @Property(QColor, notify=stateChanged)
+    def progressFillColor(self) -> QColor:
+        return QColor(*self.config.playback_progress_fill_color)
+
+    @Property(bool, notify=stateChanged)
+    def progressShadowEnabled(self) -> bool:
+        return self.config.playback_progress_shadow_enabled
+
+    @Property(bool, notify=stateChanged)
+    def progressGlowEnabled(self) -> bool:
+        return self.config.playback_progress_glow_enabled
+
+    @Property(QColor, notify=stateChanged)
+    def progressGlowColor(self) -> QColor:
+        return QColor(*self.config.playback_progress_glow_color)
+
+    @Property(QColor, notify=stateChanged)
+    def controlsSurfaceColor(self) -> QColor:
+        color = QColor(*self.config.background_color)
+        alpha = int(round(150 + 85 * self.config.background_opacity))
+        color.setAlpha(max(150, min(235, alpha)))
+        return color
+
     @Property(str, notify=stateChanged)
     def fontFamily(self) -> str:
         return self.config.font_family
@@ -619,6 +703,16 @@ class RetainedMediaPresentation:
         refresh = getattr(self._retained.item, "refreshRequested", None)
         if refresh is not None and hasattr(refresh, "connect"):
             refresh.connect(model.request_refresh)
+        for signal_name, key in (
+            ("playPauseRequested", "play"),
+            ("previousRequested", "previous"),
+            ("nextRequested", "next"),
+        ):
+            signal = getattr(self._retained.item, signal_name, None)
+            if signal is not None and hasattr(signal, "connect"):
+                signal.connect(
+                    lambda _key=key: self._handle_transport_requested(_key)
+                )
 
     @property
     def item(self):
@@ -637,6 +731,26 @@ class RetainedMediaPresentation:
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)
 
+    def set_interaction_enabled(self, enabled: bool) -> bool:
+        return self._model.set_interaction_enabled(enabled)
+
+    def apply_input_state(self, input_state: object) -> bool:
+        """Resolve primitive display input facts into pointer-action admission."""
+
+        if isinstance(input_state, Mapping):
+            value = input_state.get
+        else:
+            value = lambda name, default: getattr(input_state, name, default)
+        enabled = (
+            bool(value("admission_open", True))
+            and not bool(value("exiting", False))
+            and (
+                bool(value("interaction_mode_enabled", False))
+                or bool(value("ctrl_held", False))
+            )
+        )
+        return self._model.set_interaction_enabled(enabled)
+
     def apply_config(
         self,
         config: MediaPresentationConfig,
@@ -650,6 +764,11 @@ class RetainedMediaPresentation:
         )
         self._model.apply_style(style)
         self._retained.set_card_style(style.card_style)
+
+    def _handle_transport_requested(self, key: str) -> bool:
+        if not self._model.interactionEnabled:
+            return False
+        return self._model.request_transport(key)
 
     def retire(self) -> bool:
         return self._host.retire_widget(self._retained)
