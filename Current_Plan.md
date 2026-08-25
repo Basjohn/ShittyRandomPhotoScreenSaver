@@ -7,8 +7,8 @@ Last updated: 2026-08-25
 Exact main inspected through:
 
 ```text
-bce5c64d9efae45d1039133687890f5b0ba142ea
-Tests: restore Bubble tick cadence harness
+e291a6ad
+5.0.0 - Phase F1 Green & Current Plan Updated
 ```
 
 F1 implementation basis:
@@ -23,10 +23,7 @@ F1 visual acceptance matrix + retained multi-instance/toggle gates
 Independent source/architecture audit: GREEN
 ```
 
-The retained Clock implementation is accepted.
-
-F1 is not yet CLOSED because the family-retirement contract still requires caller proof and deletion of
-the old Clock pixel presenter/presentation-only tests after GREEN. That bounded closure step is active.
+The retained Clock implementation, caller proof and old pixel retirement are complete. F1 is CLOSED.
 
 Source outranks this plan if a later checkpoint has landed.
 
@@ -34,55 +31,50 @@ Source outranks this plan if a later checkpoint has landed.
 
 ## Immediate work
 
-### F1 caller proof + old Clock pixel retirement — ACTIVE
-
-Do this before F2.
+### F2 Weather — ACTIVE
 
 Read only the focused current owners needed for the slice:
 
 - `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md`
 - `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
-- `Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md`
-- current Clock caller/runtime source and focused tests
+- current `WeatherRuntimeService`, provider/cache/request-generation ownership and focused tests
+- current Weather presentation source/components as temporary visual and behavior reference
 
-Required closure:
+Required implementation:
 
-- caller-proof the retained `ClockPresentationModel` / `ClockPresentation.qml` path for Clock,
-  Clock2 and Clock3 through the current Quick ordinary-widget host;
-- preserve `GlobalClockTicker` as the sole one-second cadence owner;
-- preserve settings/config/timezone/formatting and semantic mode-toggle behavior without exposing
-  `SettingsManager`, QWidget or persistence objects to QML;
-- prove the caller feeds canonical Card/Text shadow settings and Python-resolved direction into the
-  retained model/style path;
-- prove Clock/Clock2/Clock3 remain independent while sharing the existing process engine/window and
-  ticker owner;
-- caller-proof every old Clock pixel/presentation-only path before deletion;
-- delete the old Clock QWidget pixel presenter and presentation-only tests once no destination behavior
-  depends on them;
-- do not delete shared neutral/runtime helpers still required by another family;
-- do not retain an old Clock selectable/fallback presenter merely for safety.
+- keep provider, cache, refresh cadence, request generation and recovery Python-owned;
+- build one stable detached Weather presentation model covering location, condition, temperature,
+  forecast, icon identity, loading, error, missing-location and style state;
+- instantiate the family through the existing process engine and per-display ordinary-widget host;
+- feed final Card/Text shadow values and Python-resolved direction to QML without exposing
+  `SettingsManager`, providers, QWidget or persistence objects;
+- use packaged/static icon identities where current behavior permits; do not build general dynamic
+  artwork infrastructure for Weather icons;
+- publish coherent state and mutate retained items/models in place without provider/runtime, engine or
+  window recreation;
+- use offline synthetic state coverage for normal, loading, error, missing-location and forecast modes;
+- preserve current settings and runtime behavior; do not redesign provider policy during the port;
+- after GREEN and caller proof, delete old Weather QWidget pixels/presentation-only tests while retaining
+  neutral runtime/provider/cache helpers still used.
 
 Validation:
 
-- focused Clock + retained-Quick tests;
-- caller/runtime integration tests;
-- exact digital -> analogue -> digital geometry round-trip;
-- repeated settings/direction/mode mutation without item/model/ticker/engine/window recreation;
-- `tools/qtquick_clock_smoke.py` at practical scale/DPR values before old-pixel deletion if that matrix
-  has not actually been run on the current implementation;
-- eyes-on digital/analogue, card on/off, calendar/timezone, separator, analogue shadow toggles,
-  several directions/sizes and busy background;
+- focused Weather runtime/provider/cache + retained-Quick tests;
+- caller/runtime integration and stale-generation/recovery gates;
+- repeated state/settings/direction mutation without item/model/runtime/engine/window recreation;
+- practical DPR Weather smoke with eyes-on normal/loading/error/missing-location, card on/off, forecast,
+  icons, several directions/sizes and busy background;
 - compile/import/static checks as relevant;
 - caller scans, full diff/status and `git diff --check`.
 
-After a clean post-push self-audit of this bounded retirement checkpoint:
+After a clean post-push self-audit of Weather implementation and retirement:
 
 ```text
-F1 -> CLOSED
-F2 Weather -> ACTIVE immediately
+F2 -> CLOSED
+F3 Media core -> ACTIVE immediately
 ```
 
-Do not stop solely to wait for another external reviewer unless this retirement uncovers a real
+Do not stop solely to wait for another external reviewer unless this work uncovers a real
 architecture/lifecycle issue or unresolved YELLOW evidence.
 
 ---
@@ -92,8 +84,8 @@ architecture/lifecycle issue or unresolved YELLOW evidence.
 ```text
 F0    Imgur removal                              CLOSED
 F0.5  shadow authority + General controls        CLOSED
-F1    Clock / Clock2 / Clock3                    GREEN implementation; retirement ACTIVE
-F2    Weather                                    NEXT after F1 caller-proof retirement
+F1    Clock / Clock2 / Clock3                    CLOSED
+F2    Weather                                    ACTIVE
 F3    Media core
 F4    Media controls / volume / mute / progress
 F5    Reddit / Reddit2
@@ -235,8 +227,11 @@ Independent source/architecture review found the retained implementation GREEN:
 - Clock QML introduces no Timer, MultiEffect, layer capture, QWidget, SettingsManager or
   QGraphicsEffect choreography.
 
-Remaining F1 work is caller proof + legacy pixel retirement, not reimplementation of the accepted
-retained Clock family.
+Caller proof now crosses the current `QuickSceneController` ordinary-widget host with Clock/Clock2/
+Clock3 settings projection, canonical shadow direction/style input, independent models and the shared
+engine/ticker. The old `ClockWidgetFactory`, factory descriptors, QWidget presenter and its
+presentation-only tests are deleted. Neutral settings, `GlobalClockTicker` and current CUSTOM metadata
+remain for their destination owners. F1 is CLOSED.
 
 ---
 
@@ -358,15 +353,11 @@ comments and missed utilities.
 
 ## Current evidence / acceptance debt
 
-Independent review inspected exact pushed F1 source, QML, focused tests, current contracts and main
-through `bce5c64d`.
-
-The reviewer did **not** execute the Windows/PySide Qt suite or independently view generated
-`qtquick_clock_smoke.py` PNGs in this environment. Runtime/test/eyes-on execution results from the
-implementation agent remain attributed to that agent.
-
-Before old Clock pixel deletion, ensure the real Quick smoke matrix has actually been run on the current
-implementation at practical scale/DPR values and visually accepted.
+F1 independent review is GREEN. The caller-proof retirement checkpoint executed the focused retained
+Clock/Quick gates and the affected legacy-owner suite. The real-OpenGL threaded
+`qtquick_clock_smoke.py` matrix passed at Qt scale factors 1 and 1.5 (effective DPR 1.5 and 2.25), and
+the generated digital/analogue, card/no-card and busy-background cases were visually accepted before
+old Clock pixel deletion.
 
 The unrelated Bubble cadence harness debt from the visualizer card-surface cleanup was repaired at
 `bce5c64d` using the real `VisualizerRuntimeController`/Bubble runtime fixture and removed from
@@ -375,5 +366,5 @@ The unrelated Bubble cadence harness debt from the visualizer card-surface clean
 Settings-GUI shadow polish is separate from runtime widget shadow authority and is not a migration
 sequencing blocker.
 
-`Docs/TestSuite.md` remains the canonical 359-module inventory. Its phase-status prose does not override
+`Docs/TestSuite.md` remains the canonical 358-module inventory. Its phase-status prose does not override
 this plan's sequencing.

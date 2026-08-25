@@ -23,7 +23,6 @@ from engine.runtime_destruction import (
 from rendering.custom_layout_manager import CustomLayoutManager
 from rendering.widget_manager import WidgetManager
 from widgets.clock_ticker import GlobalClockTicker
-from widgets.clock_widget import ClockWidget
 
 
 class _EmptyResourceManager:
@@ -535,15 +534,6 @@ def test_barrier_uses_unbounded_clock_generation_counts(qt_app, qtbot):
     ticker.unsubscribe(retired_callback)
     qtbot.waitUntil(lambda: completed == [True], timeout=1000)
     GlobalClockTicker.reset()
-
-
-def test_clock_cleanup_does_not_construct_global_ticker(qt_app):
-    GlobalClockTicker.reset()
-    owner = SimpleNamespace(_update_time=lambda: None)
-
-    ClockWidget._deactivate_impl(owner)
-
-    assert GlobalClockTicker._instance is None
 
 
 def test_five_alternating_recreation_cycles_reach_zero_retired_ownership(

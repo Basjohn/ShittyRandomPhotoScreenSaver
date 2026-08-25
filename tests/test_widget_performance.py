@@ -4,7 +4,6 @@ These tests verify that widget paint operations stay within acceptable
 time budgets to maintain smooth UI performance.
 
 Expected performance targets (from WidgetRefactorPlan.md):
-- Clock paint time <2ms (analog), <0.5ms (digital)
 - Weather paint time <0.5ms
 - Media paint time <2ms
 - Reddit paint time <1ms (cached)
@@ -54,54 +53,6 @@ def _measure_paint_time(widget, iterations: int = 10) -> tuple[float, float]:
         paint_times.append((time.perf_counter() - start) * 1000)
     
     return sum(paint_times) / len(paint_times), max(paint_times)
-
-
-class TestClockWidgetPerformance:
-    """Performance tests for clock widget paint times."""
-
-    def test_analog_clock_paint_under_threshold(self, mock_parent, qtbot):
-        """Verify analog clock paint time is under threshold."""
-        from widgets.clock_widget import ClockWidget, ClockPosition
-        
-        widget = ClockWidget(mock_parent, position=ClockPosition.TOP_RIGHT)
-        qtbot.addWidget(widget)
-        widget.resize(300, 300)
-        widget.set_display_mode("analog")
-        widget.show()
-        qtbot.waitExposed(widget)
-        
-        # Warm up - first paint generates cache
-        widget.repaint()
-        qtbot.wait(50)
-        
-        # Measure paint time directly
-        avg_time, max_time = _measure_paint_time(widget, iterations=10)
-        
-        # Analog clock should paint under 5ms on average in test environment
-        # Production target is 2ms but test overhead adds ~2-3ms
-        assert avg_time < 10.0, f"Analog clock avg paint time {avg_time:.2f}ms exceeds 10ms threshold"
-        assert max_time < 20.0, f"Analog clock max paint time {max_time:.2f}ms exceeds 20ms threshold"
-
-    def test_digital_clock_paint_under_threshold(self, mock_parent, qtbot):
-        """Verify digital clock paint time is under threshold."""
-        from widgets.clock_widget import ClockWidget, ClockPosition
-        
-        widget = ClockWidget(mock_parent, position=ClockPosition.TOP_RIGHT)
-        qtbot.addWidget(widget)
-        widget.resize(200, 80)
-        widget.set_display_mode("digital")
-        widget.show()
-        qtbot.waitExposed(widget)
-        
-        # Warm up
-        widget.repaint()
-        qtbot.wait(50)
-        
-        # Measure paint time directly
-        avg_time, _ = _measure_paint_time(widget, iterations=10)
-        
-        # Digital clock should be fast (QLabel text rendering)
-        assert avg_time < 5.0, f"Digital clock avg paint time {avg_time:.2f}ms exceeds 5ms threshold"
 
 
 class TestWeatherWidgetPerformance:
@@ -203,34 +154,3 @@ class TestRedditWidgetPerformance:
         
         # Cached Reddit paint should be fast
         assert avg_time < 5.0, f"Reddit cached avg paint time {avg_time:.2f}ms exceeds 5ms threshold"
-
-
-class TestClockCachePerformance:
-    """Tests for clock widget cache performance improvement."""
-
-    def test_cached_analog_faster_than_uncached(self, mock_parent, qtbot):
-        """Verify cached analog clock paints are faster than uncached."""
-        from widgets.clock_widget import ClockWidget, ClockPosition
-        from PySide6.QtCore import QRect
-        
-        widget = ClockWidget(mock_parent, position=ClockPosition.TOP_RIGHT)
-        qtbot.addWidget(widget)
-        widget.resize(300, 300)
-        widget.set_display_mode("analog")
-        widget.show()
-        qtbot.waitExposed(widget)
-        
-        # Force cache regeneration and measure uncached paint
-        widget._invalidate_clock_face_cache()
-        event = QPaintEvent(QRect(0, 0, widget.width(), widget.height()))
-        start = time.perf_counter()
-        widget.paintEvent(event)
-        uncached_time = (time.perf_counter() - start) * 1000
-        
-        # Measure cached paints
-        avg_cached, _ = _measure_paint_time(widget, iterations=5)
-        
-        # Cached should generally be faster (or at least not significantly slower)
-        # Main goal is to verify caching doesn't break anything
-        assert avg_cached <= uncached_time * 3, \
-            f"Cached paint ({avg_cached:.2f}ms) significantly slower than uncached ({uncached_time:.2f}ms)"

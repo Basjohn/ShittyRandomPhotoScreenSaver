@@ -2880,13 +2880,12 @@ class WidgetManager:
     # =========================================================================
     # Widget Factory Methods (Phase 2 - Jan 2026)
     # Legacy create_*_widget methods removed - now using WidgetFactoryRegistry
-    # See rendering/widget_factories.py for ClockWidgetFactory, WeatherWidgetFactory,
-    # MediaWidgetFactory, RedditWidgetFactory implementations
+    # See rendering/widget_factories.py for WeatherWidgetFactory,
+    # MediaWidgetFactory and RedditWidgetFactory implementations.
     # =========================================================================
 
-    # NOTE: create_clock_widget, create_weather_widget, create_media_widget,
-    # create_reddit_widget have been removed. setup_all_widgets() now uses
-    # the WidgetFactoryRegistry for these widgets. Spotify widgets still use
+    # NOTE: old create_* methods have been removed. setup_all_widgets() uses
+    # the WidgetFactoryRegistry for surviving QWidget families. Spotify widgets still use
     # direct methods below due to complex media widget anchoring logic.
 
     def setup_all_widgets(

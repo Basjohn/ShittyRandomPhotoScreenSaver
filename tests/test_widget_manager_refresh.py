@@ -10,7 +10,6 @@ from core.resources.manager import ResourceManager
 from rendering import display_setup
 from rendering.widget_manager import WidgetManager
 from widgets.media_widget import MediaPosition
-from widgets.clock_widget import ClockPosition
 from widgets.weather_widget import WeatherPosition
 from widgets.reddit_widget import RedditPosition
 from rendering.widget_descriptors import get_factory_widget_descriptors
@@ -186,78 +185,6 @@ class _StubMediaWidget(_BaseStubWidget):
         self.provider = value
 
 
-class _StubClockWidget(_BaseStubWidget):
-    def __init__(
-        self,
-        parent,
-        time_format,
-        position,
-        show_seconds,
-        timezone_str=None,
-        show_timezone=False,
-        **_kwargs,
-    ):
-        super().__init__()
-        self.parent = parent
-        self.time_format = time_format
-        self.position = position
-        self.show_seconds = show_seconds
-        self.timezone = timezone_str
-        self.show_timezone = show_timezone
-        self.font_family = None
-        self.font_size = None
-        self.margin = None
-        self.text_color = None
-        self.background_color = None
-        self.background_border = None
-        self.show_background = None
-        self.background_opacity = None
-        self.display_mode = None
-        self.show_numerals = None
-        self.analog_face_shadow = None
-        self.overlay_name = None
-        self.thread_manager = None
-
-    def set_font_family(self, value):
-        self.font_family = value
-
-    def set_font_size(self, value):
-        self.font_size = value
-
-    def set_margin(self, value):
-        self.margin = value
-
-    def set_text_color(self, value):
-        self.text_color = value
-
-    def set_background_color(self, value):
-        self.background_color = value
-
-    def set_background_border(self, width, color):
-        self.background_border = (width, color)
-
-    def set_show_background(self, value):
-        self.show_background = value
-
-    def set_background_opacity(self, value):
-        self.background_opacity = value
-
-    def set_display_mode(self, value):
-        self.display_mode = value
-
-    def set_show_numerals(self, value):
-        self.show_numerals = value
-
-    def set_analog_face_shadow(self, value):
-        self.analog_face_shadow = value
-
-    def set_overlay_name(self, value):
-        self.overlay_name = value
-
-    def set_thread_manager(self, manager):
-        self.thread_manager = manager
-
-
 class _StubWeatherWidget(_BaseStubWidget):
     def __init__(self, parent, location, position, build_default_runtime=True):
         super().__init__()
@@ -402,7 +329,6 @@ def _patch_widget_classes(monkeypatch):
     monkeypatch.setattr("rendering.widget_manager.parse_color_to_qcolor", _fake_qcolor)
     monkeypatch.setattr("rendering.widget_factories.parse_color_to_qcolor", _fake_qcolor)
     monkeypatch.setattr("widgets.media_widget.MediaWidget", _StubMediaWidget)
-    monkeypatch.setattr("widgets.clock_widget.ClockWidget", _StubClockWidget)
     monkeypatch.setattr("widgets.weather_widget.WeatherWidget", _StubWeatherWidget)
     monkeypatch.setattr("widgets.reddit_widget.RedditWidget", _StubRedditWidget)
     monkeypatch.setattr(
@@ -544,41 +470,6 @@ def test_existing_media_widget_rebinds_thread_manager():
     assert existing.thread_manager is new_tm
 
 
-def test_clock_widget_creation_handles_prefixed_positions():
-    widgets_config = {
-        "clock": {
-            "enabled": True,
-            "monitor": "ALL",
-            "position": "WidgetPosition.BOTTOM_CENTER",
-            "font_family": "Segoe UI",
-            "font_size": 60,
-            "margin": 25,
-            "color": [1, 2, 3, 255],
-            "bg_color": [9, 9, 9, 255],
-            "border_color": [4, 4, 4, 255],
-            "border_opacity": 0.7,
-            "show_background": True,
-            "bg_opacity": 0.85,
-            "display_mode": "analog",
-            "show_numerals": False,
-            "analog_face_shadow": True,
-            "timezone": "UTC",
-        },
-        "shadows": {"enabled": True},
-    }
-
-    _manager, created = _setup_widgets(widgets_config)
-    widget = created['clock_widget']
-
-    assert isinstance(widget, _StubClockWidget)
-    assert widget.position == ClockPosition.BOTTOM_CENTER
-    assert widget.font_family == "Segoe UI"
-    assert widget.font_size == 60
-    assert widget.margin == 25
-    assert widget.display_mode == "analog"
-    assert widget.show_numerals is False
-
-
 def test_weather_widget_creation_handles_prefixed_positions():
     widgets_config = {
         "weather": {
@@ -673,46 +564,6 @@ def test_weather_fails_closed_when_runtime_service_build_fails(monkeypatch):
     assert "weather_widget" not in created
     assert manager.get_widget("weather") is None
     assert manager._runtime_manager.get_widget_service("weather") is None
-
-
-def _clock_config(**family_activation):
-    config = {
-        "clock": {
-            "enabled": True,
-            "monitor": "ALL",
-            "position": "WidgetPosition.BOTTOM_CENTER",
-            "font_family": "Segoe UI",
-            "font_size": 60,
-            "margin": 25,
-            "color": [1, 2, 3, 255],
-            "bg_color": [9, 9, 9, 255],
-            "border_color": [4, 4, 4, 255],
-            "border_opacity": 0.7,
-            "show_background": True,
-            "bg_opacity": 0.85,
-            "display_mode": "analog",
-            "show_numerals": False,
-            "analog_face_shadow": True,
-            "timezone": "UTC",
-        },
-        "shadows": {"enabled": True},
-    }
-    if family_activation:
-        config["family_activation"] = dict(family_activation)
-    return config
-
-
-def test_activated_widget_family_is_created_by_default():
-    # No family_activation key -> family activated -> widget created (control).
-    _manager, created = _setup_widgets(_clock_config())
-    assert "clock_widget" in created
-
-
-def test_deactivated_widget_family_is_not_created():
-    # Family capability deactivated: the family owns no runtime widget even
-    # though the per-instance 'enabled' checkbox is True.
-    _manager, created = _setup_widgets(_clock_config(clocks=False))
-    assert "clock_widget" not in created
 
 
 def test_deactivating_one_family_does_not_affect_another():
@@ -896,9 +747,6 @@ def test_factory_widget_descriptors_cover_factory_backed_widget_families():
     descriptor_names = [descriptor.settings_key for descriptor in descriptors]
 
     expected = [
-        "clock",
-        "clock2",
-        "clock3",
         "weather",
         "media",
         "reddit",
@@ -912,13 +760,10 @@ def test_factory_widget_descriptors_cover_factory_backed_widget_families():
 
     gmail = next(descriptor for descriptor in descriptors if descriptor.settings_key == "gmail")
     reddit2 = next(descriptor for descriptor in descriptors if descriptor.settings_key == "reddit2")
-    clock2 = next(descriptor for descriptor in descriptors if descriptor.settings_key == "clock2")
 
     assert gmail.inject_shadows_into_config is True
     assert reddit2.base_settings_key == "reddit"
     assert reddit2.base_settings_kwarg == "base_reddit_settings"
-    assert clock2.base_settings_key == "clock"
-    assert clock2.overlay_name == "clock2"
 
 
 def test_setup_all_widgets_routes_gmail_through_descriptor_shadow_injection(monkeypatch):

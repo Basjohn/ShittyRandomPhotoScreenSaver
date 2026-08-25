@@ -194,7 +194,7 @@ def estimate_clock_size(
     
     if display_mode == "analogue" or display_mode == "analog":
         # Analogue clocks are square, sized based on font_size as a scaling factor
-        # Matches clock_widget.py: base_side = max(160, int(self._font_size * 4.5))
+        # Clock analogue preview contract: scale the square face from font size.
         clock_diameter = max(160, int(font_size * 4.5))
         width = clock_diameter + 20
         height = clock_diameter + 20

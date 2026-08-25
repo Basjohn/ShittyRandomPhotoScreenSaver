@@ -5,8 +5,8 @@ Last updated: 2026-08-25
 Reviewed source basis:
 
 ```text
-test-inventory basis = F1 retained Clock family seam
-Phase F0/F0.5 CLOSED; 359 test modules; F1 Clock implementation awaiting independent audit
+test-inventory basis = F1 retained Clock family closure
+Phase F0/F0.5/F1 CLOSED; 358 test modules; F2 Weather ACTIVE
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -42,9 +42,13 @@ three differently configured Clock instances sharing one engine/ticker owner. Th
 eyes-on harness is `tools/qtquick_clock_smoke.py`; run it with `--output-dir <path>` and repeat under a
 second practical Qt scale factor when validating DPR behavior.
 
+F1 closure caller-proofs Clock/Clock2/Clock3 through the current ordinary-widget host and deletes the
+old `tests/test_clock_widget.py` presentation suite with its QWidget pixel owner. Destination Clock
+coverage remains in `tests/test_qtquick_clock_presentation.py`.
+
 At the reviewed checkpoint the repository contains:
 
-- **359 test-module files**: 358 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **358 test-module files**: 357 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -55,7 +59,7 @@ Inventory status is **not an execution result**. `KEEP` does not mean a test was
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 359 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
+This is deliberately **not** a claim that every assertion in all 358 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
 
 ### Status vocabulary
 
@@ -78,7 +82,7 @@ This is deliberately **not** a claim that every assertion in all 359 modules was
 | `KEEP — MIGRATION PERMANENT` | 89 |
 | `MIGRATION-CRITICAL — H/I` | 47 |
 | `WILL BE OBSOLETE — H/I` | 23 |
-| `MIGRATION-CRITICAL — F` | 39 |
+| `MIGRATION-CRITICAL — F` | 38 |
 | `MIGRATION-CRITICAL — G/H` | 16 |
 | `MIGRATION-CRITICAL — G` | 12 |
 | `KEEP — PERMANENT` | 5 |
@@ -87,7 +91,7 @@ This is deliberately **not** a claim that every assertion in all 359 modules was
 | `WILL BE OBSOLETE — E4/F` | 2 |
 | `OBSOLETE NOW` | 2 |
 | `MIGRATION-CRITICAL — E3/F` | 1 |
-| **Total** | **359** |
+| **Total** | **358** |
 
 ## 2. Standard commands and evidence levels
 
@@ -236,9 +240,9 @@ unclipped signed offsets, and no second engine/window. Preserve it across cutove
 
 Permanent E4 coverage protects: one canonical eight-direction authority; all eight sign mappings and axis-only zeroing; deterministic malformed-token fallback to SE; canonical settings/model/default plumbing; QML consuming signed offsets without parsing settings/direction; cached retained card shadows; ordinary text shadows as duplicate retained glyphs with no MultiEffect/layer/text blur; root fade that does not rewrite shadow style; and retained-item offset mutation without a new item/engine/window. Preserve these bars through the family ports.
 
-The E4 host test necessarily injects already-resolved signed offsets because no real family is Quick-presented yet. F1 Clock is the first required end-to-end proof that an actual family projection reads the canonical direction plus the two canonical user buckets, applies the deliberate destination card/text base-distance policy in Python, and updates retained properties without presentation or runtime-owner recreation. Do not resurrect sidecar-era `text_large`/header tuning profiles to satisfy this gate.
+The E4 host test necessarily injected already-resolved signed offsets before a real family was Quick-presented. F1 Clock subsequently supplied the end-to-end proof that an actual family projection reads the canonical direction plus the two canonical user buckets, applies the deliberate destination card/text base-distance policy in Python, and updates retained properties without presentation or runtime-owner recreation. Do not resurrect sidecar-era `text_large`/header tuning profiles.
 
-### F — widget family ports — ACTIVE; F1 Clock audit pending
+### F — widget family ports — ACTIVE; F1 Clock CLOSED, F2 Weather ACTIVE
 
 F0 deleted deprecated Imgur instead of porting it. F0.5 is the bounded QWidget Settings slice that completes the canonical global shadow controls before F1 Clock. For each later family, preserve provider/model/behavior/settings tests and rehome direct QWidget presentation assertions to retained Quick items.
 
@@ -247,9 +251,9 @@ its surviving contracts must already be covered by destination tests; then retir
 QWidget/painter-only tests with that family's old pixel presenter before the next family. Git/history,
 not executable dead tests, becomes the old-pixel reference.
 
-Do not port QWidget-era effect carriers, dummy shadow widgets, `QGraphicsOpacityEffect`/`ShadowFadeProfile` staged shadow attachment, or equivalent wrapper choreography into Quick. Whole-widget family fade is the retained presentation-root opacity and composites the card, cached card shadow, text-shadow glyphs and content together. Intermediate Quick `Item`s require a real layout/transform/clipping/z/input/lifecycle purpose, not an old one-effect-per-QWidget workaround. F1 Clock must explicitly prove this rule and the real E4 settings→Python resolver→retained-family wiring.
+Do not port QWidget-era effect carriers, dummy shadow widgets, `QGraphicsOpacityEffect`/`ShadowFadeProfile` staged shadow attachment, or equivalent wrapper choreography into Quick. Whole-widget family fade is the retained presentation-root opacity and composites the card, cached card shadow, text-shadow glyphs and content together. Intermediate Quick `Item`s require a real layout/transform/clipping/z/input/lifecycle purpose, not an old one-effect-per-QWidget workaround. F1 Clock explicitly proved this rule and the real E4 settings→Python resolver→retained-family wiring.
 
-F0.5 permanent Settings regressions must protect: complete removal of the `shadowtuning.json` loader/path/profile-copy authority and old `widgets.shadows.offset`; `ShadowSettings` fallback/default parity; all eight direction selections and inert center; default/reset/fallback `SE`; existing shadow enable toggles; Card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset canonical persistence; no negative Extra Offset; no Intense keys/UI; no text blur; and, critically, General-section save **merging/preservation** so a partial edit cannot erase unedited canonical or unknown-future `widgets.shadows` keys. Do not add tests that require legacy QWidget shadow visual parity. F0.5 deleted `test_shadow_tuning_paths.py` and `test_base_overlay_shadow_cache.py` (358 top-level modules) and added `tests/test_f0_5_shadow_controls.py` (359 total), which covers these regressions.
+F0.5 permanent Settings regressions must protect: complete removal of the `shadowtuning.json` loader/path/profile-copy authority and old `widgets.shadows.offset`; `ShadowSettings` fallback/default parity; all eight direction selections and inert center; default/reset/fallback `SE`; existing shadow enable toggles; Card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset canonical persistence; no negative Extra Offset; no Intense keys/UI; no text blur; and, critically, General-section save **merging/preservation** so a partial edit cannot erase unedited canonical or unknown-future `widgets.shadows` keys. Do not add tests that require legacy QWidget shadow visual parity. F0.5 deleted `test_shadow_tuning_paths.py` and `test_base_overlay_shadow_cache.py` and added `tests/test_f0_5_shadow_controls.py`, which covers these regressions. The later F1 retirement brings the current inventory to 358 modules.
 
 `tests/test_qtquick_clock_presentation.py` is the permanent F1 destination regression. It protects one
 stable model per Clock instance, one existing `GlobalClockTicker`, creation under the process engine and
@@ -459,7 +463,6 @@ The inventory below accounts for every executable test file present at the revie
 
 | File | Status | Note |
 | --- | --- | --- |
-| `tests/test_clock_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_custom_layout_contract.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
 | `tests/test_custom_layout_manager.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
 | `tests/test_dimming_and_interaction_fixes.py` | **MIGRATION-CRITICAL — G/H** | Rehome display/input/topology behavior to Quick runtime. |

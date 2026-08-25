@@ -13,7 +13,6 @@ from unittest.mock import Mock, patch
 import pytest
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QImage, QImageReader, QPixmap, QColor
-from PySide6.QtWidgets import QLabel
 
 from rendering.display_widget import DisplayWidget
 from rendering.display_modes import DisplayMode
@@ -26,7 +25,6 @@ from core.settings import SettingsManager
 from ui.settings_dialog import SettingsDialog
 from ui.tabs.sources_tab import SourcesTab
 from ui.tabs.widgets_tab import WidgetsTab
-from widgets.clock_widget import ClockWidget
 from widgets.weather_widget import WeatherWidget, WeatherPosition
 from widgets.media_widget import MediaWidget
 from core.media import media_controller as mc
@@ -1629,88 +1627,6 @@ class TestSettingsSignals:
         assert not handler.called
 
 
-# ---------------------------------------------------------------------------
-# Clock widget regression tests
-# ---------------------------------------------------------------------------
-
-class TestClockWidgetIntegration:
-    """Regression suite for ClockWidget integration bugs."""
-
-    def _enable_clock(self, widget: DisplayWidget, **kwargs):
-        cfg = {
-            "clock": {
-                "enabled": True,
-                **kwargs,
-            }
-        }
-        widget.settings_manager.set("widgets", cfg)
-
-    def test_clock_widget_created(self, display_widget):
-        self._enable_clock(display_widget, position="Top Right")
-        display_widget._setup_widgets()
-        assert isinstance(display_widget.clock_widget, ClockWidget)
-
-    def test_clock_color_array_conversion(self, display_widget):
-        self._enable_clock(display_widget, color=[255, 128, 64, 200])
-        display_widget._setup_widgets()
-        assert isinstance(display_widget.clock_widget, ClockWidget)
-
-    def test_clock_z_order_raise(self, display_widget):
-        self._enable_clock(display_widget)
-        display_widget._setup_widgets()
-        image_label = QLabel(display_widget)
-        image_label.resize(800, 600)
-        image_label.show()
-        assert display_widget.clock_widget.parent() == display_widget
-
-    def test_clock_boolean_conversion(self, display_widget):
-        self._enable_clock(display_widget, enabled=True)
-        display_widget._setup_widgets()
-        assert display_widget.clock_widget is not None
-        display_widget.clock_widget.deleteLater()
-        display_widget.clock_widget = None
-        display_widget.settings_manager.set("widgets", {"clock": {"enabled": False}})
-        display_widget._setup_widgets()
-        assert display_widget.clock_widget is None
-
-    def test_clock_position_and_format_strings(self, display_widget):
-        positions = [
-            "Top Left",
-            "Top Right",
-            "Top Center",
-            "Bottom Left",
-            "Bottom Right",
-            "Bottom Center",
-        ]
-        for pos in positions:
-            self._enable_clock(display_widget, position=pos)
-            display_widget._setup_widgets()
-            assert display_widget.clock_widget is not None
-            display_widget.clock_widget.deleteLater()
-            display_widget.clock_widget = None
-
-    def test_clock_widget_size_and_position(self, display_widget):
-        self._enable_clock(display_widget, position="Top Right", font_size=48, margin=20)
-        display_widget._setup_widgets()
-        size = display_widget.clock_widget.size()
-        assert size.width() > 0 and size.height() > 0
-
-    def test_clock_complete_integration(self, display_widget):
-        self._enable_clock(
-            display_widget,
-            format="24h",
-            position="Top Right",
-            show_seconds=False,
-            font_size=48,
-            margin=20,
-            color=[255, 255, 255, 230],
-        )
-        display_widget._setup_widgets()
-        assert isinstance(display_widget.clock_widget, ClockWidget)
-        size = display_widget.clock_widget.size()
-        assert size.width() > 0
-
-
 class TestWidgetRouting:
     """WidgetsTab persistence + per-monitor routing."""
 
@@ -1749,9 +1665,7 @@ class TestWidgetRouting:
         qtbot.addWidget(widget)
         widget.resize(800, 600)
         widget._setup_widgets()
-        assert isinstance(widget.clock_widget, ClockWidget)
-        assert widget.clock_widget._show_seconds is True
-        assert widget.clock_widget._enabled is True
+        assert widget.clock_widget is None
         assert widget.weather_widget is not None
         assert widget.weather_widget._enabled is True
 
@@ -1759,13 +1673,9 @@ class TestWidgetRouting:
     def test_display_widget_respects_widget_monitor_selection(
         self, qt_app, settings_manager, thread_manager, qtbot, monkeypatch
     ):
-        def fake_clock_start(self):
-            self._enabled = True
-
         def fake_weather_start(self):
             self._enabled = True
 
-        monkeypatch.setattr(ClockWidget, "start", fake_clock_start, raising=False)
         monkeypatch.setattr(WeatherWidget, "start", fake_weather_start, raising=False)
 
         settings_manager.set(
@@ -1799,7 +1709,7 @@ class TestWidgetRouting:
         qtbot.addWidget(w0)
         w0.resize(800, 600)
         w0._setup_widgets()
-        assert w0.clock_widget is not None
+        assert w0.clock_widget is None
         assert w0.clock2_widget is None
         assert w0.weather_widget is None
 
@@ -1813,7 +1723,7 @@ class TestWidgetRouting:
         w1.resize(800, 600)
         w1._setup_widgets()
         assert w1.clock_widget is None
-        assert isinstance(w1.clock2_widget, ClockWidget)
+        assert w1.clock2_widget is None
         assert w1.weather_widget is not None
         assert getattr(w1.weather_widget._position, "value", None) == WeatherPosition.BOTTOM_LEFT.value
         assert w1.weather_widget._location == "Johannesburg"

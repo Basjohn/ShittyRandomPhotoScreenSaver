@@ -181,6 +181,87 @@ class ClockPresentationConfig:
             analog_face_shadow=_as_bool(values.get("analog_face_shadow"), True),
         )
 
+    @classmethod
+    def from_widgets_mapping(
+        cls,
+        widget_id: str,
+        widgets: Mapping[str, object],
+        *,
+        display_signature: str | None = None,
+    ) -> "ClockPresentationConfig":
+        """Project canonical Clock-family settings into detached presentation state.
+
+        Secondary clocks retain the established base-Clock style inheritance while
+        keeping their own timezone and per-display mode override.  The caller feeds
+        plain resolved mappings only; no SettingsManager or persistence owner crosses
+        the presentation boundary.
+        """
+
+        normalized_id = str(widget_id or "clock")
+        if normalized_id not in {"clock", "clock2", "clock3"}:
+            raise ValueError(f"unsupported Clock widget id: {normalized_id}")
+
+        from core.settings.defaults import get_default_settings
+
+        defaults = get_default_settings().get("widgets", {})
+        values = widgets.get(normalized_id, {})
+        base_values = widgets.get("clock", {})
+        canonical = defaults.get(normalized_id, {})
+        base_canonical = defaults.get("clock", {})
+        if not isinstance(values, Mapping):
+            values = {}
+        if not isinstance(base_values, Mapping):
+            base_values = {}
+        if not isinstance(canonical, Mapping):
+            canonical = {}
+        if not isinstance(base_canonical, Mapping):
+            base_canonical = {}
+
+        def inherited(key: str, fallback: object = None) -> object:
+            canonical_value = canonical.get(
+                key,
+                base_canonical.get(key, fallback),
+            )
+            if normalized_id == "clock":
+                return values.get(key, canonical_value)
+            if key in base_values:
+                return base_values.get(key, canonical_value)
+            return values.get(key, canonical_value)
+
+        projected = {
+            key: inherited(key)
+            for key in (
+                "format",
+                "show_seconds",
+                "show_timezone",
+                "show_day_of_week",
+                "show_date",
+                "show_digital_separator",
+                "calendar_layout",
+                "calendar_font_size",
+                "font_family",
+                "font_size",
+                "color",
+                "show_background",
+                "bg_color",
+                "bg_opacity",
+                "border_color",
+                "border_opacity",
+                "display_mode",
+                "show_numerals",
+                "analog_face_shadow",
+            )
+        }
+        projected["timezone"] = values.get("timezone", "local")
+
+        overrides = values.get("display_mode_overrides", {})
+        if display_signature and isinstance(overrides, Mapping):
+            projected["display_mode"] = overrides.get(
+                display_signature,
+                projected["display_mode"],
+            )
+        return cls.from_mapping(normalized_id, projected)
+
 
 @dataclass(frozen=True)
 class ClockPresentationStyle:

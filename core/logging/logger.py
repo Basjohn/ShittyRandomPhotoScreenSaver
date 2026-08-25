@@ -3035,7 +3035,6 @@ def setup_logging(
         # Widget spam
         "widgets.reddit_widget",
         "widgets.media_widget",
-        "widgets.clock_widget",
         "widgets.weather_widget",
         # Windows diagnostics - very noisy during cleanup
         "win_diag",

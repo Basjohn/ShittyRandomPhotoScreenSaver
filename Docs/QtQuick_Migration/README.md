@@ -1,6 +1,6 @@
 # Qt Quick Production Migration — Technical Index
 
-Last updated: 2026-08-24
+Last updated: 2026-08-25
 
 Sequence/work admission comes only from `Current_Plan.md`.
 
@@ -8,8 +8,9 @@ Current state:
 
 ```text
 Phase F active
-F0.5 implemented -> independent YELLOW -> narrow sidecar-relocation correction active
-F1 Clock next after GREEN
+F0.5 closed
+F1 Clock closed
+F2 Weather active
 ```
 
 Closed A–E history is intentionally not repeated here.
@@ -20,7 +21,7 @@ Closed A–E history is intentionally not repeated here.
 | --- | --- |
 | `04_Widget_Runtime_Presentation.md` | retained ordinary-widget architecture/style |
 | `09_Widget_Quick_Presentation_Bridge.md` | state/model/action/image family bridge |
-| `10_Widget_Family_Port_Decomposition.md` | F1–F10 order/contracts |
+| `10_Widget_Family_Port_Decomposition.md` | F1–F8 order/contracts |
 | `11_Clock_Analogue_Shadow_Contract.md` | mandatory F1 analogue shadow fidelity |
 | `05_Custom_Layout_Input_Interaction.md` | Phase-G CUSTOM/input |
 | `06_Build_Tooling_Validation.md` | final/installed/build validation |

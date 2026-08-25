@@ -1,6 +1,6 @@
 # 10 — Ordinary Widget Family Port Decomposition
 
-Status: **Phase F ACTIVE — F1 implementation pushed; independent audit pending**
+Status: **Phase F ACTIVE — F1 CLOSED; F2 Weather ACTIVE**
 Last updated: 2026-08-25
 
 This file begins at current/future Phase-F work. Completed F0/F0.5 implementation history does not live
@@ -23,8 +23,8 @@ neutral runtime/model
 
 ```text
 F0.5              closed
-F1                Clock / Clock2 / Clock3 — implementation pushed, audit pending
-F2                Weather
+F1                Clock / Clock2 / Clock3 — CLOSED
+F2                Weather — ACTIVE
 F3                Media core
 F4                Media controls / volume / mute / progress
 F5                Reddit / Reddit2
@@ -190,7 +190,9 @@ Eyes-on:
 - repeated mode switching;
 - multiple differently configured clocks.
 
-After independent GREEN, delete old Clock pixels after caller proof.
+F1 is independently GREEN and caller-proven through the current ordinary-widget host. The old Clock
+factory/descriptors, QWidget pixel presenter and presentation-only tests are deleted; neutral settings,
+geometry metadata and `GlobalClockTicker` remain with their destination owners.
 
 ---
 
