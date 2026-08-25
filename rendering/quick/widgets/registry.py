@@ -35,6 +35,11 @@ ORDINARY_WIDGET_FAMILY_COMPONENTS: tuple[OrdinaryWidgetFamilyComponent, ...] = (
         qml_filename="MediaPresentation.qml",
         presentation_model_kind="MediaPresentationModel",
     ),
+    OrdinaryWidgetFamilyComponent(
+        family_id="reddit",
+        qml_filename="RedditPresentation.qml",
+        presentation_model_kind="RedditPresentationModel",
+    ),
 )
 
 

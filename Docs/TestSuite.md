@@ -5,8 +5,8 @@ Last updated: 2026-08-25
 Reviewed source basis:
 
 ```text
-test-inventory basis = F4 retained Media caller-proof and legacy-pixel retirement
-Phase F0/F0.5/F1/F2/F3/F4 CLOSED; 353 test modules; F5 Reddit active
+test-inventory basis = F5 retained Reddit family presentation checkpoint
+Phase F0/F0.5/F1/F2/F3/F4 CLOSED; 354 test modules; F5 Reddit active
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -97,9 +97,17 @@ temporary non-painting accepted-state/runtime/Visualizer anchor and its neutral 
 action/lifecycle seams. The retained Media suite owns all pixel and pointer-action assertions; neutral
 Media/app-volume/system-mute suites keep controller, cadence, generation and recovery authority.
 
+The first F5 checkpoint adds `tests/test_qtquick_reddit_presentation.py` and
+`tools/qtquick_reddit_smoke.py`. Destination coverage protects one static family component for Reddit
+and Reddit2, Python-resolved style inheritance, independent feed/list-model identity, bounded stable
+rows, coherent synthetic feed states, in-place row/style mutation, semantic open/refresh admission and
+no item/model/list-model/engine recreation. The real Quick matrix covers card/no-card, ready,
+cached-error and empty states at effective DPR 1.0, 1.5 and 2.25. Provider/cache/cadence extraction is
+still pending, so old QWidget runtime/pixel suites remain migration-critical.
+
 At the reviewed checkpoint the repository contains:
 
-- **353 test-module files**: 352 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **354 test-module files**: 353 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -110,7 +118,7 @@ Inventory status is **not an execution result**. `KEEP` does not mean a test was
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 352 top-level modules was manually
+This is deliberately **not** a claim that every assertion in all 353 top-level modules was manually
 read line-by-line or executed during this review. The inventory is complete; semantic inspection was
 concentrated where migration status could change whether a test remains authority.
 
@@ -629,6 +637,7 @@ The inventory below accounts for every executable test file present at the revie
 | File | Status | Note |
 | --- | --- | --- |
 | `tests/test_main_reddit_helper_preload.py` | **KEEP** | Retain; no migration-specific retirement identified. |
+| `tests/test_qtquick_reddit_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Reddit/Reddit2 config/style/row/state/action and no-recreation destination coverage. |
 | `tests/test_reddit_exit_logic.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_reddit_helper_recovery.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_reddit_helper_runtime.py` | **KEEP** | Retain; no migration-specific retirement identified. |
