@@ -38,7 +38,6 @@ from widgets.spotify_visualizer_widget import (
     _AudioFrame,
 )
 from widgets.spotify_visualizer.audio_worker import VisualizerMode
-from widgets.spotify_visualizer.logical_runtime import LatestStateMailbox as _LatestStateMailbox
 from widgets.spotify_visualizer.beat_engine import BeatEngineRegistry, _SpotifyBeatEngine
 import widgets.spotify_visualizer_widget as vis_mod
 from PySide6.QtGui import QColor
@@ -503,9 +502,23 @@ def test_update_timer_interval_sets_exact_stable_interval_for_target():
 
 
 def test_on_tick_does_not_double_throttle_when_timer_already_paces(monkeypatch):
+    from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
+    from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
+
     consume_calls: list[float] = []
+    runtime_controller = VisualizerRuntimeController(
+        runtime_generation=1,
+        bar_count=8,
+        initial_mode="bubble",
+    )
+    bubble_runtime = BubbleFrameRuntime()
+    assert runtime_controller.resolve_logical_mode_state(
+        "bubble",
+        lambda: bubble_runtime,
+    ) is bubble_runtime
 
     widget = SimpleNamespace(
+        runtime_controller=runtime_controller,
         _enabled=True,
         _bars_timer=None,
         _waiting_for_fresh_engine_frame=False,
@@ -529,7 +542,7 @@ def test_on_tick_does_not_double_throttle_when_timer_already_paces(monkeypatch):
         # Required presentation handoff: `_publish_logical_state()` uses it
         # directly rather than through an optional lookup, so a harness missing
         # it fails loudly instead of silently producing zero frames.
-        _logical_mailbox=_LatestStateMailbox(),
+        _logical_mailbox=runtime_controller.logical_mailbox,
         _logical_runtime=None,
         _logical_present_pending=False,
         _runtime_generation=1,
