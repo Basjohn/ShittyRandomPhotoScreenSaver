@@ -10,7 +10,6 @@ from core.resources.manager import ResourceManager
 from rendering import display_setup
 from rendering.widget_manager import WidgetManager
 from widgets.media_widget import MediaPosition
-from widgets.reddit_widget import RedditPosition
 from rendering.widget_descriptors import get_factory_widget_descriptors
 
 
@@ -198,88 +197,6 @@ class _StubMediaWidget(_BaseStubWidget):
         self.provider = value
 
 
-class _StubRedditWidget(_BaseStubWidget):
-    def __init__(self, parent, position, build_default_provider=True):
-        super().__init__()
-        self.parent = parent
-        self.position = position
-        # Mirror the runtime-managed contract: when the owner will inject the
-        # provider, do not carry a default; otherwise keep a sentinel default.
-        self.post_provider = object() if build_default_provider else None
-        self.thread_manager = None
-        self.font_family = None
-        self.font_size = None
-        self.margin = None
-        self.header_logo_px_adjust = None
-        self.text_color = None
-        self.show_background = None
-        self.show_separators = None
-        self.show_refresh_spiral = None
-        self.background_color = None
-        self.background_opacity = None
-        self.background_border = None
-        self.item_limit = None
-        self.limit = None
-        self.overlay_name = None
-        self.subreddit = None
-
-    def set_thread_manager(self, manager):
-        self.thread_manager = manager
-
-    def set_font_family(self, value):
-        self.font_family = value
-
-    def set_font_size(self, value):
-        self.font_size = value
-
-    def set_margin(self, value):
-        self.margin = value
-
-    def set_header_logo_px_adjust(self, value):
-        self.header_logo_px_adjust = value
-
-    def set_text_color(self, value):
-        self.text_color = value
-
-    def set_show_background(self, value):
-        self.show_background = value
-
-    def set_show_separators(self, value):
-        self.show_separators = value
-
-    def set_show_refresh_spiral(self, value):
-        self.show_refresh_spiral = value
-
-    def set_background_color(self, value):
-        self.background_color = value
-
-    def set_background_opacity(self, value):
-        self.background_opacity = value
-
-    def set_background_border(self, width, color):
-        self.background_border = (width, color)
-
-    def set_item_limit(self, value):
-        self.item_limit = value
-        self.limit = value
-
-    def set_overlay_name(self, value):
-        self.overlay_name = value
-
-    def set_subreddit(self, value):
-        self.subreddit = value
-
-    def set_post_provider(self, provider):
-        self.post_provider = provider
-
-    def set_runtime_service(self, service):
-        self.runtime_service = service
-        service.attach_consumer(self)
-
-    def is_reddit_consumer_alive(self):
-        return bool(getattr(self, "active", False))
-
-
 @pytest.fixture(autouse=True)
 def _patch_widget_classes(monkeypatch):
     """Route factory-created widgets to our recording stubs."""
@@ -287,7 +204,6 @@ def _patch_widget_classes(monkeypatch):
     monkeypatch.setattr("rendering.widget_manager.parse_color_to_qcolor", _fake_qcolor)
     monkeypatch.setattr("rendering.widget_factories.parse_color_to_qcolor", _fake_qcolor)
     monkeypatch.setattr("widgets.media_widget.MediaWidget", _StubMediaWidget)
-    monkeypatch.setattr("widgets.reddit_widget.RedditWidget", _StubRedditWidget)
     monkeypatch.setattr(
         WidgetManager,
         "create_spotify_visualizer_widget",
@@ -451,170 +367,12 @@ def test_deactivating_clock_family_does_not_affect_media():
     assert "media_widget" in created
 
 
-def _reddit_config(*, enabled=True, provider="public_json", **family_activation):
-    config = {
-        "reddit": {
-            "enabled": enabled,
-            "monitor": "ALL",
-            "position": "WidgetPosition.TOP_RIGHT",
-            "provider": provider,
-            "subreddit": "games",
-            "limit": 5,
-        },
-        "shadows": {"enabled": True},
-    }
-    if family_activation:
-        config["family_activation"] = dict(family_activation)
-    return config
-
-
-def test_reddit_runtime_lifetime_owned_by_runtime_manager():
-    # F5: the complete Reddit runtime is built from canonical settings during
-    # setup and exists independently of QWidget pixel ownership.
-    manager, created = _setup_widgets(_reddit_config(provider="public_json"))
-    assert "reddit_widget" in created
-    service = manager._runtime_manager.get_widget_service("reddit")
-    assert service is not None
-    assert getattr(service.provider, "provider_id", None) == "public_json"
-    assert service.config.subreddit == "games"
-    assert service.is_running() is False
-
-
-def test_repeated_setup_preserves_hoisted_owner_and_service_edge():
-    # E1 slice 10 hoist: the neutral owner is held above the presenter and is
-    # never reconstructed by setup. A second setup_all_widgets() on the same
-    # manager must keep the identical owner (accessor and transitional private
-    # alias in agreement) and still expose exactly one live reddit provider
-    # service. The presenter replacing its widget is allowed to retire the stale
-    # detached owner and build a fresh one (the reuse_is_valid contract); what
-    # the hoist must guarantee is that no second neutral owner appears and the
-    # owner/service edge stays live rather than leaking or duplicating.
-    manager = _create_manager()
-    settings = _StubSettingsManager(_reddit_config(provider="public_json"))
-
-    manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
-    owner_first = manager.runtime_manager
-    service_first = owner_first.get_widget_service("reddit")
-    assert service_first is not None
-
-    manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
-    owner_second = manager.runtime_manager
-    service_second = owner_second.get_widget_service("reddit")
-
-    assert owner_second is owner_first
-    assert manager._runtime_manager is owner_first
-    assert service_second is not None
-
-
-def test_deactivated_reddit_family_owns_no_provider():
-    # Family capability deactivated: no widget AND no owned provider lifetime.
-    manager, created = _setup_widgets(_reddit_config(reddit=False))
-    assert "reddit_widget" not in created
-    assert manager._runtime_manager.get_widget_service("reddit") is None
-
-
-def test_disabled_reddit_instance_is_not_family_deactivation():
-    # Ordinary instance enabled=False (family still activated) is distinct from
-    # family deactivation: the enabled member is created and its provider owned;
-    # the disabled member is simply absent, without deactivating the family.
-    config = _reddit_config(enabled=True, provider="public_json")
-    config["reddit2"] = {
-        "enabled": False,
-        "monitor": "ALL",
-        "position": "WidgetPosition.TOP_LEFT",
-        "subreddit": "python",
-        "limit": 5,
-    }
-    manager, created = _setup_widgets(config)
-    assert "reddit_widget" in created
-    assert "reddit2_widget" not in created
-    assert manager._runtime_manager.get_widget_service("reddit") is not None
-    assert manager._runtime_manager.get_widget_service("reddit2") is None
-
-
-def test_reddit_fails_closed_when_runtime_service_build_fails(monkeypatch):
-    # E1 slice 2 correction: if the required neutral provider cannot be built, the
-    # creation path must FAIL CLOSED — the widget is not created/registered/started
-    # and owns no service (no fail-open to a QWidget-owned default provider).
-    import core.reddit_post_provider as rpp
-
-    def _boom(*_args, **_kwargs):
-        raise RuntimeError("provider build failed")
-
-    monkeypatch.setattr(rpp, "build_reddit_post_provider", _boom)
-
-    manager, created = _setup_widgets(_reddit_config(provider="public_json"))
-    assert "reddit_widget" not in created
-    assert manager.get_widget("reddit") is None
-    assert manager._runtime_manager.get_widget_service("reddit") is None
-
-
-def test_reddit_widgets_support_inheritance_and_limit():
-    widgets_config = {
-        "reddit": {
-            "enabled": True,
-            "monitor": "ALL",
-            "position": "WidgetPosition.TOP_LEFT",
-            "subreddit": "all",
-            "font_family": "Inter",
-            "font_size": 18,
-            "margin": 12,
-            "header_logo_px_adjust": 5,
-            "color": [255, 255, 255, 255],
-            "bg_color": [0, 0, 0, 255],
-            "border_color": [50, 50, 50, 255],
-            "border_opacity": 0.5,
-            "show_background": True,
-            "show_separators": True,
-            "show_refresh_spiral": False,
-            "limit": 9,
-        },
-        "reddit2": {
-            "enabled": True,
-            "monitor": "ALL",
-            "position": "WidgetPosition.BOTTOM_RIGHT",
-            "subreddit": "python",
-            "limit": 4,
-        },
-        "shadows": {"enabled": True},
-    }
-
-    _manager, created = _setup_widgets(widgets_config)
-    widget = created['reddit_widget']
-    widget2 = created['reddit2_widget']
-
-    assert isinstance(widget, _StubRedditWidget)
-    assert widget.position == RedditPosition.TOP_LEFT
-    assert widget.subreddit == "all"
-    assert widget.font_size == 18
-    assert widget.margin == 12
-    assert widget.header_logo_px_adjust == 5
-    assert widget.show_refresh_spiral is False
-    assert widget.item_limit == 9
-    assert widget.raised is True
-    assert widget.started is True
-
-    assert isinstance(widget2, _StubRedditWidget)
-    assert widget2.position == RedditPosition.BOTTOM_RIGHT
-    assert widget2.subreddit == "python"
-    assert widget2.item_limit == 5
-    # inherits styling from reddit1
-    assert widget2.font_family == "Inter"
-    assert widget2.header_logo_px_adjust == 5
-    assert widget2.show_refresh_spiral is False
-    assert widget2.text_color == (tuple([255, 255, 255, 255]), None)
-    assert widget2.raised is True
-    assert widget2.started is True
-
-
 def test_factory_widget_descriptors_cover_factory_backed_widget_families():
     descriptors = get_factory_widget_descriptors()
     descriptor_names = [descriptor.settings_key for descriptor in descriptors]
 
     expected = [
         "media",
-        "reddit",
-        "reddit2",
         "gmail",
         "achievement_pulse",
         "abandonment_issues",
@@ -623,11 +381,8 @@ def test_factory_widget_descriptors_cover_factory_backed_widget_families():
     assert descriptor_names == expected
 
     gmail = next(descriptor for descriptor in descriptors if descriptor.settings_key == "gmail")
-    reddit2 = next(descriptor for descriptor in descriptors if descriptor.settings_key == "reddit2")
 
     assert gmail.inject_shadows_into_config is True
-    assert reddit2.base_settings_key == "reddit"
-    assert reddit2.base_settings_kwarg == "base_reddit_settings"
 
 
 def test_setup_all_widgets_routes_gmail_through_descriptor_shadow_injection(monkeypatch):

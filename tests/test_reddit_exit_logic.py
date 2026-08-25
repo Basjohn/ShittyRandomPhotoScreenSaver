@@ -9,10 +9,10 @@ cache corruption issue. The logic is:
 See: audits/PHASE_E_ROOT_CAUSE_ANALYSIS.md
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-from PySide6.QtCore import QPoint, QRect, QObject, QPointF, QEvent, Qt
+from PySide6.QtCore import QPointF, QEvent, Qt
 from PySide6.QtGui import QMouseEvent
 
 import engine.display_manager as display_manager_module
@@ -59,115 +59,6 @@ class TestRedditExitLogic:
         primary_is_covered = this_is_primary or primary_widget_exists
         
         assert primary_is_covered is False
-
-
-class TestRedditClickRouting:
-    """Test that Reddit clicks are properly routed through InputHandler."""
-    
-    class _DummyParent(QObject):
-        def __init__(self):
-            super().__init__()
-            self.settings_manager = MagicMock()
-            self.settings_manager.get.return_value = False
-            self._coordinator = MagicMock()
-            self._coordinator.ctrl_held = False
-    
-    @pytest.mark.qt
-    def test_reddit_click_returns_handled_tuple(self, qt_app, qtbot):
-        """route_widget_click should return (handled, reddit_handled) tuple."""
-        from rendering.input_handler import InputHandler
-        from widgets.reddit_widget import RedditWidget
-        
-        handler = InputHandler(self._DummyParent())
-        
-        # Create a Reddit widget
-        widget = RedditWidget()
-        qtbot.addWidget(widget)
-        widget.show()
-        widget.setGeometry(0, 0, 300, 200)
-        
-        # Inject a hit rect
-        widget._row_hit_rects = [
-            (QRect(0, 20, 100, 20), "https://example.com/post", "Test Title"),
-        ]
-        
-        # Create a mock mouse event at the hit rect location
-        event = MagicMock()
-        event.pos.return_value = QPoint(10, 30)
-        event.button.return_value = Qt.MouseButton.LeftButton
-        
-        # Mock openUrl to prevent actual browser opening
-        with patch('widgets.reddit_widget.QDesktopServices.openUrl', return_value=True):
-            handled, reddit_handled, _ = handler.route_widget_click(
-                event,
-                widget,  # reddit_widget
-                None,  # reddit2_widget
-            )
-        
-        assert handled is True
-        assert reddit_handled is True
-
-    @pytest.mark.qt
-    def test_reddit_click_returns_deferred_url(self, qt_app, qtbot):
-        """route_widget_click should include the resolved Reddit URL."""
-        from rendering.input_handler import InputHandler
-        from widgets.reddit_widget import RedditWidget
-
-        handler = InputHandler(self._DummyParent())
-
-        widget = RedditWidget()
-        qtbot.addWidget(widget)
-        widget.show()
-        widget.setGeometry(0, 0, 300, 200)
-
-        url = "https://example.com/deferred"
-        widget._row_hit_rects = [
-            (QRect(0, 20, 100, 20), url, "Deferred Title"),
-        ]
-
-        event = MagicMock()
-        event.pos.return_value = QPoint(10, 30)
-        event.button.return_value = Qt.MouseButton.LeftButton
-
-        handled, reddit_handled, reddit_url = handler.route_widget_click(
-            event,
-            widget,
-            None,
-        )
-
-        assert handled is True
-        assert reddit_handled is True
-        assert reddit_url == url
-
-    @pytest.mark.qt
-    def test_reddit_refresh_control_does_not_request_link_exit(self, qt_app, qtbot):
-        """A handled Reddit non-link control click must not look like a URL click."""
-        from rendering.input_handler import InputHandler
-        from widgets.reddit_widget import RedditWidget
-
-        handler = InputHandler(self._DummyParent())
-
-        widget = RedditWidget()
-        qtbot.addWidget(widget)
-        widget.show()
-        widget.setGeometry(0, 0, 300, 200)
-        widget._show_refresh_spiral = True
-        widget._refresh_hit_rect = QRect(250, 10, 22, 22)
-        widget._trigger_manual_refresh = lambda: True  # type: ignore[method-assign]
-
-        event = MagicMock()
-        event.pos.return_value = QPoint(260, 20)
-        event.button.return_value = Qt.MouseButton.LeftButton
-
-        handled, reddit_handled, reddit_url = handler.route_widget_click(
-            event,
-            widget,
-            None,
-        )
-
-        assert handled is True
-        assert reddit_handled is False
-        assert reddit_url is None
 
 
 class TestCacheInvalidationMitigation:

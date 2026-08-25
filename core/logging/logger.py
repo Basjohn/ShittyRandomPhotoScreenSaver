@@ -3033,7 +3033,6 @@ def setup_logging(
         # Image queue - logs every image selection
         "engine.image_queue",
         # Widget spam
-        "widgets.reddit_widget",
         "widgets.media_widget",
         # Windows diagnostics - very noisy during cleanup
         "win_diag",

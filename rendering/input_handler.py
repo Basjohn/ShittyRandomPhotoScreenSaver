@@ -11,7 +11,6 @@ deterministic effect invalidation ordering.
 from __future__ import annotations
 
 import logging
-import time
 from typing import Optional, TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QPoint
@@ -401,8 +400,6 @@ class InputHandler(RuntimeInputOwner):
     def route_widget_click(
         self,
         event: QMouseEvent,
-        reddit_widget,
-        reddit2_widget,
         gmail_widget=None,
         spotify_visualizer_widget=None,
         steam_widgets=(),
@@ -474,40 +471,6 @@ class InputHandler(RuntimeInputOwner):
                         self.settings_requested.emit()
             except Exception:
                 logger.debug("[INPUT] Weather click routing failed", exc_info=True)
-        
-        # Reddit widgets
-        for rw in [reddit_widget, reddit2_widget]:
-            if handled or rw is None:
-                continue
-            try:
-                if rw.isVisible() and rw.geometry().contains(pos):
-                    geom = rw.geometry()
-                    local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
-                    url = None
-                    if hasattr(rw, "resolve_click_target"):
-                        try:
-                            url = rw.resolve_click_target(local_pos)
-                        except Exception:
-                            logger.debug("[INPUT] resolve_click_target failed", exc_info=True)
-                    if not url and hasattr(rw, "handle_click"):
-                        result = rw.handle_click(local_pos)
-                        logger.debug("[INPUT] Reddit fallback handle_click returned: %s", result)
-                        if isinstance(result, str) and result:
-                            url = result
-                        elif result:
-                            # Non-link Reddit controls, such as the refresh
-                            # spiral, can consume the click without producing
-                            # a URL. Do not mark these as reddit_handled or
-                            # the main build will exit as though a link was
-                            # clicked.
-                            handled = True
-                            break
-                    if url:
-                        handled = True
-                        reddit_handled = True
-                        reddit_url = url
-            except Exception:
-                logger.debug("[INPUT] Reddit click routing failed", exc_info=True)
         
         # Gmail widget
         if not handled and gmail_widget is not None:

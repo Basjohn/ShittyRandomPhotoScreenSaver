@@ -15,7 +15,6 @@ from PySide6.QtWidgets import QApplication, QWidget
 from rendering.widget_factories import (
     WidgetFactory,
     MediaWidgetFactory,
-    RedditWidgetFactory,
     SpotifyVisualizerFactory,
     WidgetFactoryRegistry,
 )
@@ -145,28 +144,6 @@ class TestMediaWidgetFactory:
 
 
 # ---------------------------------------------------------------------------
-# Reddit Widget Factory Tests
-# ---------------------------------------------------------------------------
-
-class TestRedditWidgetFactory:
-    """Test RedditWidgetFactory."""
-    
-    def test_get_widget_name(self, mock_settings):
-        """Test factory returns correct widget name."""
-        factory = RedditWidgetFactory(mock_settings)
-        assert factory.get_widget_name() == "reddit"
-    
-    def test_create_disabled_returns_none(self, mock_settings, parent_widget):
-        """Test disabled widget returns None."""
-        factory = RedditWidgetFactory(mock_settings)
-        config = {"enabled": False}
-        
-        widget = factory.create(parent_widget, config)
-        
-        assert widget is None
-
-
-# ---------------------------------------------------------------------------
 # Spotify Visualizer Factory Tests
 # ---------------------------------------------------------------------------
 
@@ -202,7 +179,7 @@ class TestWidgetFactoryRegistry:
         assert registry.get_factory("clock") is None
         assert registry.get_factory("weather") is None
         assert registry.get_factory("media") is not None
-        assert registry.get_factory("reddit") is not None
+        assert registry.get_factory("reddit") is None
         assert registry.get_factory("spotify_visualizer") is not None
         assert registry.get_factory("spotify_volume") is None
     
@@ -215,7 +192,7 @@ class TestWidgetFactoryRegistry:
         assert "clock" not in names
         assert "weather" not in names
         assert "media" in names
-        assert "reddit" in names
+        assert "reddit" not in names
         assert "spotify_visualizer" in names
         assert "spotify_volume" not in names
     

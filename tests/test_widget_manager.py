@@ -1806,30 +1806,13 @@ class TestSettingsRouting:
         parent = MagicMock()
         manager = WidgetManager(parent)
         manager._refresh_media_config = MagicMock()
-        manager._refresh_reddit_configs = MagicMock()
         manager._refresh_spotify_visualizer_config = MagicMock()
 
         payload = {"media": {"enabled": True}}
         manager._handle_settings_changed("widgets", payload)
 
         manager._refresh_media_config.assert_called_once_with(payload)
-        manager._refresh_reddit_configs.assert_called_once_with(payload)
         manager._refresh_spotify_visualizer_config.assert_called_once_with(payload)
-
-    def test_handle_settings_changed_routes_reddit2_through_shared_reddit_refresh(self):
-        from rendering.widget_manager import WidgetManager
-
-        parent = MagicMock()
-        manager = WidgetManager(parent)
-        manager._refresh_media_config = MagicMock()
-        manager._refresh_reddit_configs = MagicMock()
-        manager._refresh_spotify_visualizer_config = MagicMock()
-
-        manager._handle_settings_changed("widgets.reddit2.limit", 7)
-
-        manager._refresh_reddit_configs.assert_called_once_with()
-        manager._refresh_media_config.assert_not_called()
-        manager._refresh_spotify_visualizer_config.assert_not_called()
 
     def test_handle_settings_changed_routes_visualizer_mode_without_refreshing_media(self):
         from rendering.widget_manager import WidgetManager
@@ -1837,14 +1820,12 @@ class TestSettingsRouting:
         parent = MagicMock()
         manager = WidgetManager(parent)
         manager._refresh_media_config = MagicMock()
-        manager._refresh_reddit_configs = MagicMock()
         manager._refresh_spotify_visualizer_config = MagicMock()
 
         manager._handle_settings_changed("widgets.spotify_visualizer.mode", "bubble")
 
         manager._refresh_spotify_visualizer_config.assert_called_once_with()
         manager._refresh_media_config.assert_not_called()
-        manager._refresh_reddit_configs.assert_not_called()
         parent._apply_saved_custom_layouts.assert_not_called()
 
     def test_handle_settings_changed_reapplies_custom_layouts_for_widget_route_change(self):
@@ -1853,7 +1834,6 @@ class TestSettingsRouting:
         parent = MagicMock()
         manager = WidgetManager(parent)
         manager._refresh_media_config = MagicMock()
-        manager._refresh_reddit_configs = MagicMock()
         manager._refresh_spotify_visualizer_config = MagicMock()
 
         manager._handle_settings_changed("widgets.media.position", "custom")
@@ -1867,14 +1847,11 @@ class TestSettingsRouting:
         parent._custom_layout_runtime_reload_pending = True
         manager = WidgetManager(parent)
         manager._refresh_media_config = MagicMock()
-        manager._refresh_reddit_configs = MagicMock()
         manager._refresh_spotify_visualizer_config = MagicMock()
 
         manager._handle_settings_changed("widgets", {"media": {"enabled": True}})
-        manager._handle_settings_changed("widgets.reddit.limit", 7)
 
         manager._refresh_media_config.assert_not_called()
-        manager._refresh_reddit_configs.assert_not_called()
         manager._refresh_spotify_visualizer_config.assert_not_called()
         parent._apply_saved_custom_layouts.assert_not_called()
 

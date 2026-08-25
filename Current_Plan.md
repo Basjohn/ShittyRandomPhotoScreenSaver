@@ -7,8 +7,8 @@ Last updated: 2026-08-25
 Exact main inspected through:
 
 ```text
-7dd064b2b8172094e2e1ffc8ac24519528e3fd94
-Phase F4 caller proof and legacy Media pixel retirement
+1b605991a95d094be7d4f09ddde9fadbfbbb8dbd
+Phase F5 retained Reddit runtime-chain caller proof
 ```
 
 F1 implementation basis:
@@ -23,8 +23,8 @@ F1 visual acceptance matrix + retained multi-instance/toggle gates
 Independent source/architecture audit: GREEN
 ```
 
-The retained Clock, Weather and complete Media family implementations, caller proofs and bounded old
-pixel retirements are complete. F1, F2, F3 and F4 are CLOSED.
+The retained Clock, Weather, complete Media and Reddit family implementations, caller proofs and bounded
+old pixel retirements are complete. F1 through F5 are CLOSED.
 
 Source outranks this plan if a later checkpoint has landed.
 
@@ -32,68 +32,69 @@ Source outranks this plan if a later checkpoint has landed.
 
 ## Immediate work
 
-### F5 Reddit / Reddit2 — ACTIVE
+### F6 Gmail — ACTIVE
 
 Read only the focused current owners needed for the slice:
 
 - `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md`
 - `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
-- `core/reddit_preparation.py`, `core/reddit_post_provider.py`, `core/reddit_rate_limiter.py` and current
-  runtime-service injection
-- `widgets/reddit_widget.py` / `widgets/reddit_components.py` as temporary behavior and visual reference
-- current Reddit/Reddit2 factory, refresh, input and CUSTOM-height callers
-- focused provider, preparation, progressive-loading, click/action, cache and paint tests
+- `widgets/gmail_runtime.py`, `core/gmail/gmail_preparation.py` and current backend/runtime-service injection
+- `widgets/gmail_widget.py` / `widgets/gmail_components.py` as temporary behavior and visual reference
+- current Gmail factory, refresh, input, action-menu, sound/notification and CUSTOM-height callers
+- focused runtime, preparation, retiring-runtime, settings, action, cache and presentation tests
 
 Required implementation:
 
-- inspect and separate the current neutral provider/preparation/cache/cadence ownership from QWidget
-  presentation state before moving pixels;
-- introduce one retained Reddit family component and stable presentation model contract; Reddit2 is a
-  configured family instance, not a duplicate provider or QML implementation;
-- project bounded posts with stable identities and coherent loading/ready/cached/error state;
-- preserve provider selection/inheritance, helper recovery, request/rate-limit policy, startup cache,
-  progressive loading and stale-generation safety under Python ownership;
-- emit semantic open-post/manual-refresh actions from QML; QML must not own URLs, fetch cadence,
-  provider selection, persistence or rate limiting;
-- preserve current configured capacity, dynamic content height, card/header/row styling and ordinary
+- inspect and separate Gmail backend/preparation/cache/cadence/notification ownership from QWidget
+  presentation and action-menu state before moving pixels;
+- introduce one retained Gmail component and stable presentation model with bounded, stable message
+  identities and coherent loading/ready/cached/error state;
+- preserve backend selection, account-slot/settings semantics, sender/subject cleanup and grouping,
+  startup cache, stale-generation safety, notification detection and sound under Python ownership;
+- emit semantic open-message/manual-refresh/action-menu requests from QML; QML must not own URLs,
+  backend work, mutation authority, persistence, cadence or notification side effects;
+- preserve configured capacity, dynamic content height, header/row/boundary styling and ordinary
   interaction gating without porting QWidget pixmap caches or effect choreography;
-- reuse the process Quick image-delivery seam only if current Reddit content needs it and the existing
-  ownership/lifetime contract is compatible;
-- mutate retained rows/model/style in place without item/runtime/engine/window/provider recreation;
-- after GREEN and caller proof, delete the old Reddit/Reddit2 QWidget pixels and presentation-only tests
-  while preserving neutral provider/runtime contracts.
+- mutate retained rows/model/style in place without item/runtime/engine/window/backend recreation;
+- after GREEN and caller proof, delete the old Gmail QWidget pixels and presentation-only tests while
+  preserving neutral runtime/preparation/settings/notification contracts.
 
 Validation:
 
-- focused retained Reddit family model/state/action/identity tests;
-- provider/preparation/cache/rate-limit/helper recovery and stale-generation gates;
-- Reddit/Reddit2 provider/style inheritance and independent feed identity;
-- interaction gating, open-link/manual-refresh routing and CUSTOM-height behavior;
-- repeated feed/settings mutation without item/model/runtime/engine/window/provider recreation;
-- practical multi-DPR eyes-on matrix for Reddit and Reddit2, loading/ready/cached/error, long text and
+- focused retained Gmail model/state/action/identity tests;
+- backend/preparation/cache/grouping/notification/sound and stale-generation gates;
+- account-slot/backend/settings behavior and stable message identity;
+- interaction gating, open-link/manual-refresh/action-menu routing and CUSTOM-height behavior;
+- repeated feed/settings mutation without item/model/runtime/engine/window/backend recreation;
+- practical multi-DPR eyes-on matrix for loading/ready/cached/error, grouped messages, long text and
   configured row capacities;
 - compile/import/static checks as relevant;
 - caller scans, full diff/status and `git diff --check`.
 
-Current F5 sequence:
+Current F6 sequence:
 
 ```text
-retained Reddit/Reddit2 config + stable row model + static QML + semantic signals -> implementation GREEN
-neutral cache/cadence/fetch runtime extraction + real owner injection             -> implementation GREEN
-runtime-shaped state/action/geometry gates + caller proof                         -> GREEN
-old Reddit QWidget pixel/cache/input retirement                                   -> NEXT
+neutral Gmail runtime/preparation/notification ownership audit     -> NEXT
+retained config + stable message model + static QML + actions      -> pending
+real owner injection + runtime-shaped state/action/geometry gates  -> pending
+caller proof + old Gmail QWidget pixel/cache/input retirement      -> pending
 ```
 
-The retained checkpoint uses one `RedditPresentationModel`/`RedditPresentation.qml` component for both
-members, keeps one stable `QAbstractListModel` per feed, and mutates existing retained delegates for
-same-cardinality updates. `RedditRuntimeService` now owns each member's configured provider, startup
-snapshot, accepted candidate window, periodic/manual cadence, blocked-gate persistence, request
-generation and retirement. `WidgetRuntimeManager` injects that same neutral contract into either the
-temporary QWidget consumer or retained model; the service is inert until activation. The next slice
-proves the real `WidgetRuntimeManager -> RedditRuntimeService -> RedditPresentationModel -> current
-Quick scene host` chain, semantic refresh/open admission, accepted-state publication, in-place geometry
-and settings mutation, and retirement without item/engine/service recreation. Caller proof now permits
-deleting the old QWidget pixels, paint caches, hit regions and standalone runtime path.
+Start by identifying the exact accepted Gmail runtime state and semantic action surface. Keep the
+existing backend/runtime owner intact where it is already presentation-neutral; do not invent a second
+service or move notification/sound authority into QML.
+
+F5 closure evidence:
+
+```text
+one retained RedditPresentationModel/RedditPresentation.qml for Reddit + Reddit2: GREEN
+independent manager-owned RedditRuntimeService leases and accepted feed identity: GREEN
+cached-first/live-refresh/open/manual-refresh/geometry/style/no-recreation caller proof: GREEN
+effective DPR 1.0, 1.5 and 2.25 threaded-OpenGL eyes-on matrix: GREEN
+old Reddit QWidget factory/pixels/caches/hit routing/hover and presentation tests: deleted
+provider/preparation/cache/rate-limit/helper/deferred-URL contracts: retained
+post-implementation ownership/lifecycle self-audit: GREEN
+```
 
 F4 closure evidence:
 
@@ -139,8 +140,8 @@ F1    Clock / Clock2 / Clock3                    CLOSED
 F2    Weather                                    CLOSED
 F3    Media core                                 CLOSED
 F4    Media controls / volume / mute / progress  CLOSED
-F5    Reddit / Reddit2                           ACTIVE
-F6    Gmail
+F5    Reddit / Reddit2                           CLOSED
+F6    Gmail                                      ACTIVE
 F7    Achievement Pulse
 F8    Abandonment Issues
 G     CUSTOM/input/auxiliary pixels

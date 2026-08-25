@@ -44,8 +44,6 @@ from rendering.widget_descriptors import (
     restore_widget_family_to_authored_layout,
     resolve_widget_section_index_from_view_state,
     sync_custom_layout_restore_routes,
-    widget_writes_custom_monitor_key,
-    widget_writes_custom_position_key,
 )
 from PySide6.QtWidgets import QButtonGroup
 from core.dev_gates import force_gate, is_steam_enabled
@@ -680,7 +678,7 @@ def test_widget_runtime_descriptors_capture_capability_and_refresh_ownership():
     assert visualizer.anchor_dependent is True
     assert visualizer.live_refresh_handler == "_refresh_spotify_visualizer_config"
     assert reddit2.settings_section_id == "reddit"
-    assert reddit2.live_refresh_handler == "_refresh_reddit_configs"
+    assert reddit2.live_refresh_handler is None
     assert gmail.service_backed is True
     assert gmail.supports_layout_edit_mode is True
     assert gmail.supports_custom_position_slot is True
@@ -975,12 +973,9 @@ def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkey
 def test_live_refresh_handlers_follow_runtime_descriptors():
     assert get_live_refresh_handlers() == (
         "_refresh_media_config",
-        "_refresh_reddit_configs",
         "_refresh_spotify_visualizer_config",
     )
-    assert get_live_refresh_handlers_for_settings_key("widgets.reddit2.limit") == (
-        "_refresh_reddit_configs",
-    )
+    assert get_live_refresh_handlers_for_settings_key("widgets.reddit2.limit") == ()
 
 
 def test_stack_preview_descriptors_capture_live_widgets_tab_preview_contract():

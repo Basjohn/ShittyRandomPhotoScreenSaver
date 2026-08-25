@@ -360,8 +360,6 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
             try:
                 handled, reddit_handled, reddit_url = widget._input_handler.route_widget_click(
                     event,
-                    getattr(widget, "reddit_widget", None),
-                    getattr(widget, "reddit2_widget", None),
                     getattr(widget, "gmail_widget", None),
                     getattr(widget, "spotify_visualizer_widget", None),
                     (

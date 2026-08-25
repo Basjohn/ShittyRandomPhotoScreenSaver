@@ -3,9 +3,8 @@
 These tests verify that widget paint operations stay within acceptable
 time budgets to maintain smooth UI performance.
 
-Expected performance targets (from WidgetRefactorPlan.md):
+Expected performance target (from WidgetRefactorPlan.md):
 - Media paint time <2ms
-- Reddit paint time <1ms (cached)
 
 Note: Test environment has higher overhead than production. Thresholds are
 relaxed to account for test framework overhead while still catching regressions.
@@ -90,42 +89,3 @@ class TestMediaWidgetPerformance:
         
         # Media widget should paint reasonably fast
         assert avg_time < 10.0, f"Media avg paint time {avg_time:.2f}ms exceeds 10ms threshold"
-
-
-class TestRedditWidgetPerformance:
-    """Performance tests for Reddit widget paint times."""
-
-    def test_reddit_cached_paint_under_threshold(self, mock_parent, qtbot):
-        """Verify Reddit widget cached paint time is under threshold."""
-        from widgets.reddit_widget import RedditWidget, RedditPost
-        
-        widget = RedditWidget(mock_parent)
-        qtbot.addWidget(widget)
-        widget.resize(400, 300)
-        
-        # Set up with post data
-        widget._enabled = True
-        widget._subreddit = "test"
-        now = time.time()
-        widget._posts = [
-            RedditPost(title=f"Post {i}", url=f"https://example.com/{i}", 
-                      score=i * 100, created_utc=now - i * 3600)
-            for i in range(5)
-        ]
-        
-        widget.show()
-        qtbot.waitExposed(widget)
-        
-        # First paint generates cache
-        widget._cache_invalidated = True
-        widget.repaint()
-        qtbot.wait(50)
-        
-        # Subsequent paints should use cache
-        widget._cache_invalidated = False
-        
-        # Measure paint time directly
-        avg_time, _ = _measure_paint_time(widget, iterations=10)
-        
-        # Cached Reddit paint should be fast
-        assert avg_time < 5.0, f"Reddit cached avg paint time {avg_time:.2f}ms exceeds 5ms threshold"

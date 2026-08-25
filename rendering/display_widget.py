@@ -65,7 +65,6 @@ if TYPE_CHECKING:
     from widgets.cursor_halo import CursorHaloWidget
     from widgets.media_widget import MediaWidget
     from widgets.pixel_shift_manager import PixelShiftManager
-    from widgets.reddit_widget import RedditWidget
     from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
     from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 
@@ -279,8 +278,8 @@ class DisplayWidget(QWidget):
         self.media_widget: Optional["MediaWidget"] = None
         self.spotify_visualizer_widget: Optional["SpotifyVisualizerWidget"] = None
         self._spotify_bars_overlay: Optional["SpotifyBarsGLOverlay"] = None
-        self.reddit_widget: Optional["RedditWidget"] = None
-        self.reddit2_widget: Optional["RedditWidget"] = None
+        self.reddit_widget: Optional[Any] = None
+        self.reddit2_widget: Optional[Any] = None
         self._pixel_shift_manager: Optional["PixelShiftManager"] = None
         self._current_transition: Optional[BaseTransition] = None
         self._current_transition_overlay_key: Optional[str] = None
@@ -1063,9 +1062,8 @@ class DisplayWidget(QWidget):
         # transition start, while has_transition_work_pending() remains true
         # through the active animation. Notify interested widgets again after the
         # transition object has been cleared so transition-deferred widget work
-        # can commit once. Media performs an all-display idle gate; Reddit uses
-        # the same terminal notification for one coalesced static-cache build.
-        for attr_name in ("reddit_widget", "reddit2_widget", "media_widget"):
+        # can commit once. Media performs an all-display idle gate.
+        for attr_name in ("media_widget",):
             widget = getattr(self, attr_name, None)
             callback = getattr(widget, "on_parent_transition_work_pending", None)
             if callable(callback):
@@ -2177,8 +2175,6 @@ class DisplayWidget(QWidget):
         self._transition_work_pending = pending
         for attr_name in (
             "gmail_widget",
-            "reddit_widget",
-            "reddit2_widget",
             "media_widget",
         ):
             widget = getattr(self, attr_name, None)

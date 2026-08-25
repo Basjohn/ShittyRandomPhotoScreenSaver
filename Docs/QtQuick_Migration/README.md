@@ -13,7 +13,8 @@ F1 Clock closed
 F2 Weather closed
 F3 Media core closed
 F4 Media controls closed
-F5 Reddit active
+F5 Reddit closed
+F6 Gmail active
 ```
 
 Closed A–E history is intentionally not repeated here.
