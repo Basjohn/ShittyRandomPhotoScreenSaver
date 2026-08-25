@@ -233,6 +233,15 @@ stable identity, legal threading, bounded cache/lifetime and no unchanged upload
 
 Audit separately if asset delivery changes process/display resource ownership.
 
+The retained implementation now uses `MediaPresentationModel` plus static `MediaPresentation.qml` and
+one process-engine `MediaArtworkImageProvider`. The existing shared Media runtime still owns provider,
+controller, poll cadence, accepted revision and decoded `QImage`; the Quick provider only detaches and
+serves immutable images by the runtime artwork key. Focused gates cover real runtime-manager injection,
+ordinary-widget-host activation/retirement, unchanged-artwork identity, stale-revision rejection and
+in-place settings/style mutation. The mixed old Media QWidget remains only while its F4-owned controls,
+volume, mute and progress paths are still live; F3 closure must retire only separable Media-core pixels
+and presentation tests.
+
 ---
 
 # F4 — Media controls

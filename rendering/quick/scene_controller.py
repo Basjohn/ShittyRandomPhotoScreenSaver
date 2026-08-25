@@ -20,6 +20,7 @@ from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentati
 
 from .bootstrap import quick_qml_root
 from .image_state import PresentationImage
+from .media_artwork import MediaArtworkImageProvider
 from .render import BackgroundRenderItem, RenderNodeTelemetry
 from .state import QuickSceneReadiness
 from .transitions.state import TransitionRun
@@ -43,6 +44,11 @@ class QuickSceneFactory(QObject):
         )
         self._engine = QQmlEngine(self)
         self._engine.addImportPath(str(self._qml_root))
+        self._media_artwork_provider = MediaArtworkImageProvider()
+        self._engine.addImageProvider(
+            self._media_artwork_provider.provider_id,
+            self._media_artwork_provider,
+        )
         self._component = QQmlComponent(self._engine, self._qml_url)
         if self._component.status() != QQmlComponent.Status.Ready:
             raise RuntimeError(self._component_error("DisplayScene.qml failed to load"))
@@ -90,6 +96,10 @@ class QuickSceneFactory(QObject):
     @property
     def is_ready(self) -> bool:
         return self._component.status() == QQmlComponent.Status.Ready
+
+    @property
+    def media_artwork_provider(self) -> MediaArtworkImageProvider:
+        return self._media_artwork_provider
 
     def create_display_root(
         self,

@@ -71,6 +71,8 @@ def test_scene_controller_is_the_narrow_quick_item_owner():
     assert "window.update" not in source
     assert "afterRendering" not in source
     assert "afterFrameEnd" not in source
+    assert source.count("MediaArtworkImageProvider()") == 1
+    assert source.count("addImageProvider(") == 1
     for forbidden in (
         "QWidget",
         "QQuickWidget",
@@ -78,7 +80,9 @@ def test_scene_controller_is_the_narrow_quick_item_owner():
         "WidgetManager",
         "GLCompositorWidget",
         "SettingsManager",
-        "provider",
+        "provider_runtime",
+        "set_provider_runtime",
+        "MediaRuntimeService",
     ):
         assert forbidden not in source
 

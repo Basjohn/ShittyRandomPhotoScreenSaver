@@ -7,8 +7,8 @@ Last updated: 2026-08-25
 Exact main inspected through:
 
 ```text
-a6f15a5e
-Phase F2 retained Weather implementation
+a716cac0903833168c7088fbaf1a2d67e83298ba
+Phase F2 Weather caller proof and legacy pixel retirement
 ```
 
 F1 implementation basis:
@@ -69,9 +69,9 @@ Validation:
 - compile/import/static checks as relevant;
 - caller scans, full diff/status and `git diff --check`.
 
-If F3 introduces a new shared asset/resource ownership seam, stop for the independent audit required by
-the Phase-F policy after the implementation checkpoint. Otherwise continue under the normal self-audit
-policy.
+For the F3 shared artwork seam, the latest operator direction replaces the independent-review stop with
+a fresh post-push ownership/lifecycle self-audit. Escalate only if that audit finds a real unresolved
+resource issue or deterministic and eyes-on evidence disagree.
 
 After F3 implementation is GREEN, complete caller proof and bounded old Media-core retirement before F4.
 
@@ -82,6 +82,19 @@ F4 Media controls / volume / mute / progress -> ACTIVE
 
 Do not stop solely because the work is dynamic or artwork-bearing; stop only at the explicit audit
 boundary above or for a real unresolved lifecycle/resource issue.
+
+F3 retained implementation checkpoint evidence:
+
+```text
+stable MediaPresentationModel + static MediaPresentation.qml: GREEN
+one process-engine MediaArtworkImageProvider with stable identity/bounded cache: GREEN
+real WidgetRuntimeManager lease -> ordinary-widget host activation/retirement: GREEN
+focused Media/runtime/host gate + two-DPR threaded-OpenGL eyes-on matrix: GREEN
+```
+
+The old mixed Media QWidget presenter still owns F4 controls/volume/mute/progress paths. Do not delete
+that class wholesale during the F3 implementation checkpoint. The next F3 action remains caller-proofed,
+presentation-only Media-core retirement that does not pre-empt F4.
 
 F2 closure evidence:
 
