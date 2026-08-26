@@ -1,132 +1,81 @@
 # Future Cleanup — Migration Deletion Ledger
 
-Last updated: 2026-08-25
+Last updated: 2026-08-26
 
-This file tracks caller-proven deletion/retirement work. It does not admit work ahead of
-`Current_Plan.md`.
+This tracks deferred/caller-proven deletion work and does not admit work ahead of `Current_Plan.md`.
 
 ## Rule
 
-Delete obsolete presentation with its replacement owner as soon as safe. Do not accumulate everything
-until I.
-
 ```text
-family replacement GREEN -> family pixel deletion
-G replacement GREEN      -> old CUSTOM/edit pixel deletion
-H cutover GREEN          -> old physical presenter/backend deletion
-I                        -> residue only
+family replacement GREEN + caller proof -> family pixel deletion
+G replacement GREEN                     -> old CUSTOM/edit pixel deletion
+H cutover GREEN                         -> old physical presenter/backend deletion
+I                                       -> residue only
 ```
 
-Real product resilience is not migration debris.
+Family GREEN follows current audit policy; an external reviewer is not mechanically required for every
+ordinary family checkpoint. Real product resilience is not migration debris.
 
 ## Unrelated focused-test debt
 
 - `tests/test_logging_config.py::test_diagnostic_build_enables_every_family_beside_frozen_executable`
-  fails on exact main because the diagnostic output set includes at least one `RotatingFileHandler`
-  whose `maxBytes` is not the test's blanket 1 MiB expectation. The failure reproduces alone and is
-  unrelated to F1 Clock ownership; determine whether the handler profile or the assertion is stale in
-  a dedicated logging checkpoint.
-- Reddit helper recovery/installer/watcher tests have stale source contracts on exact main and fail
-  independently of the F5 Reddit feed runtime: `test_reddit_helper_recovery.py` expects removed
-  `_SPOOL_LAST_PROBE` state (2 failed/4 passed), `test_reddit_helper_task_harness.py` expects that state
-  plus installer ACL/comment markers absent from `SRPSS_Installer.iss` (3 failed/2 passed/1 skipped),
-  and three `test_reddit_helper_watcher.py` cases see the singleton as already active (3 failed/22
-  passed). Reconcile the helper tests/harness with the live helper and installer contract in a separate
-  helper checkpoint; do not couple it to the Reddit feed presenter/runtime migration.
+  reproduces independently of active widget migration because at least one diagnostic
+  `RotatingFileHandler` does not match the test's blanket 1 MiB expectation. Resolve handler policy vs
+  stale assertion in a dedicated logging checkpoint.
+- Reddit helper recovery/installer/watcher tests contain stale helper-era expectations (`_SPOOL_LAST_PROBE`,
+  installer markers and singleton-state assumptions). Reconcile helper tests against current helper/
+  installer contract separately from retained Reddit feed migration.
 
 ## Phase-F family retirement
 
-After each F1–F8 family is independently GREEN:
+After each substantive F1–F8 family is GREEN and caller-proofed:
 
-- prove old family pixel callers absent;
-- delete old QWidget/QPainter family pixel presenter;
+- delete old QWidget/QPainter family pixels;
 - delete/rehome presentation-only tests/helpers;
-- retain presentation-neutral provider/model/business/settings code still used;
-- retain a shared old helper only while another unported family genuinely requires it.
+- retain presentation-neutral provider/model/business/settings/runtime code still used;
+- retain shared old helpers only while a live destination/unported owner genuinely needs them.
 
-Git is historical pixel reference after deletion.
+Git becomes historical pixel reference after deletion.
 
+## Transition legacy
 
-## Transition legacy — caller-proof early cleanup
+All canonical transition implementations are Quick-owned. Old transition-only presentation
+(`TransitionFactory` pixel construction, `gl_compositor_*_transition.py`, old presentation tests/helpers)
+may retire before H as soon as exact caller proof permits.
 
-All canonical transition implementations already exist in Quick.
+Preserve canonical registry/settings, activation/admission, request/run lifecycle, authored math/shaders used
+by Quick and deterministic recovery. A seam inseparable from old physical host may wait for H; do not invent
+compatibility architecture.
 
-Old transition-only presentation such as:
+## Visualizer legacy
 
-- `rendering/transition_factory.py` where it exists solely for old pixel construction;
-- `transitions/gl_compositor_*_transition.py`;
-- old compositor-transition presentation tests/helpers
+Do not delete by path/name alone. Preserve destination-used `VisualizerLogicalRuntime`, mode frame runtimes/
+authored algorithms, BeatEngine/source ownership, immutable render state, snapshot bridge/adapters and
+shaders/math used by Quick.
 
-may retire **before H** as soon as exact caller proof shows Quick no longer depends on them.
-
-Preserve:
-
-- canonical transition registry/settings;
-- activation/admission;
-- request/run lifecycle;
-- authored math/shaders genuinely reused by Quick;
-- deterministic recovery behavior.
-
-If a final old transition seam is inseparable from the old physical `DisplayWidget` host, delete that
-piece at H rather than creating compatibility architecture.
-
-## Visualizer legacy — caller-proof early cleanup
-
-Do not delete by path/name alone.
-
-Preserve anything currently feeding the destination Quick visualizer, including:
-
-- `VisualizerLogicalRuntime`;
-- mode frame runtimes/authored algorithms;
-- BeatEngine/source ownership;
-- immutable render state;
-- snapshot bridge/adapters;
-- shaders/math reused by Quick.
-
-Delete caller-proven compositor-only/old-pixel owners as soon as safe, including old overlay/card hosts
-that no longer feed Quick.
-
-Pieces inseparable from the physical old presenter may wait for H.
+Delete caller-proven old compositor-only/card/overlay pixel owners as soon as safe. Physical-host pieces may
+wait for H.
 
 ## Phase G
 
-After Quick CUSTOM/input/edit presentation is GREEN:
+After Quick CUSTOM/input/edit presentation GREEN, delete old QWidget edit/grid/pixel owners, preserve
+committed geometry/session semantics under destination owners, and preserve real non-pixel Settings controls.
 
-- delete old QWidget edit/grid/pixel owners no longer called;
-- preserve committed geometry/session semantics rehomed to Quick owners;
-- preserve real non-pixel Settings controls where still current.
+## Phase H
 
-## Phase H — physical cutover + deletion
+H removes old physical presentation in the same audited cutover boundary: `DisplayWidget`, QRhiWidget /
+`GLCompositorWidget`, old compositor scheduling/presentation glue, software/backend-demotion fallback,
+render-backend selection used only by that fallback, obsolete `hw_accel`/fallback-overlay policy, remaining
+physical-host transition/visualizer debris, temporary legacy anchors after destination ownership, and obsolete
+presentation compatibility settings.
 
-H removes the old physical presentation stack in the same audited cutover boundary:
+No production switch back.
 
-- `DisplayWidget`;
-- QRhiWidget / `GLCompositorWidget`;
-- old compositor scheduling/presentation glue;
-- software renderer/backend demotion fallback;
-- `display.render_backend_mode` when it exists only for old fallback selection;
-- obsolete `hw_accel`/fallback overlay policy;
-- remaining physical-host transition/visualizer debris;
-- obsolete presentation compatibility settings in the new Quick settings epoch.
+## Phase I
 
-No production switch back to the old presenter.
-
-## Phase I — residual sweep
-
-I should be small.
-
-Remove only leftovers that could not safely leave with their owner:
-
-- expired migration adapters;
-- compatibility aliases;
-- stale old-presenter utilities;
-- obsolete tests/tools/comments;
-- abandoned spike code.
-
-Preserve product-neutral logic, real diagnostics and real resilience.
+I should be small: expired adapters, compatibility aliases, stale old-presenter utilities, obsolete tests/
+tools/comments and abandoned spike code. Preserve product-neutral logic, diagnostics and resilience.
 
 ## Phase J
 
 Archive/remove migration-only harnesses/planning material only after final validation evidence exists.
-
-Historical evidence may remain under historical/evidence directories.

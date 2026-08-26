@@ -1,156 +1,97 @@
 # 09 — Ordinary Widget Quick Presentation Bridge
 
-Status: **Phase-F current state/model/action/asset bridge**  
-Last updated: 2026-08-24
+Status: **landed state/model/action/image bridge**  
+Last updated: 2026-08-26
 
 ## Destination
 
 ```text
 provider/backend/runtime owner
--> normalized current state
+-> coherent accepted current state
 -> stable presentation model
--> family Quick component
--> shared retained shell
+-> retained family QML
+-> shared ordinary-widget host/shell
 ```
 
-Quick consumes presentation state and emits semantic actions.
+Quick consumes presentation state and emits semantic actions. It does not own credentials, providers, cache
+policy, refresh cadence, SettingsManager, persistence or business side effects.
 
-Quick does not own credentials, providers, cache policy, refresh cadence, SettingsManager, persistence
-or business side effects.
+## Static family component registry
 
-## Family component registry
+Registry is presentation metadata: family ID, QML filename, presentation model kind. Canonical product
+membership/activation remains neutral capability catalog. No family if/elif dispatch in DisplayScene,
+QuickSceneController or WidgetRuntimeManager.
 
-The first family may establish a small static presentation registry:
-
-```text
-family id
-QML component path
-expected presentation model kind
-```
-
-Use the existing process-level Quick engine/component cache.
-
-Do not put family `if/elif` dispatch into `DisplayScene.qml`, `QuickSceneController` or
-`WidgetRuntimeManager`.
+Registry/package remains import-light: static metadata may load eagerly; family implementation modules are
+not dragged in by common Quick scene/host import.
 
 ## Presentation models
 
-Prefer stable explicit models/properties.
+Stable explicit QObject/list models with bounded config/style, coherent accepted revision, semantic scalar
+properties, stable item/model/list-model identity and no raw SettingsManager/provider/QWidget/CUSTOM
+persistence in QML.
 
-Clock candidate:
+Clock proves scalar/geometry/angle state; Weather runtime status/icon state; Media coherent metadata/control/
+artwork; Reddit bounded stable rows; Gmail extends row/action pattern.
 
-```text
-timeText
-calendar text/lines
-timezoneText
-displayMode
-hour/minute/second angles
-showSeconds
-showNumerals
-showSeparator
-style
-geometryVariant
-```
+## Lists / atomicity
 
-Do not expose Clock QWidget, SettingsManager, ticker/provider objects or raw CUSTOM persistence to QML.
+Repeating content uses bounded semantic IDs and coherent updates. Correct bounded resets are fine; no heavy
+universal diff framework without need. Delegate index is presentation position, not identity.
 
-## Lists
-
-Reddit/Gmail/Steam repeating content uses bounded stable semantic IDs and coherent update transactions.
-
-Correct bounded resets are fine; do not invent heavyweight generic diff frameworks without need.
-
-## State atomicity
-
-Publish coherent current state. Avoid new title + old artwork + new playback + old provider mixtures.
-
-Identical state should be a no-op where practical.
+Avoid mixed revisions (new title + old artwork, new provider + old capabilities). Identical state no-op where
+practical. Reject stale revision/request/generation before presentation mutation.
 
 ## Actions
 
 ```text
 QML semantic action
--> Python action owner
--> business/external side effect
--> new current state
--> presentation model
+-> Python presentation/action admission
+-> neutral business owner
+-> accepted state
+-> presentation update
 ```
 
-QML does not persist settings or directly call providers.
+QML does not persist settings/call providers directly. Transient visual press/menu feedback may be local;
+accepted business state stays Python truth.
 
-## Dynamic images
+## Dynamic images — landed Media pattern
 
 ```text
-provider/worker
--> bytes or decoded QImage + stable identity
--> shared presentation image seam
--> retained Image/item
+runtime-owned decoded QImage + stable key
+-> process-engine image provider
+-> retained image:// identity
 ```
 
-No QPixmap worker transport, base64 churn, tempfile-per-update or unchanged reupload.
+Provider retention is bounded/identity-based. No QPixmap worker transport, base64 churn, tempfile-per-update
+or unchanged-image reupload. Packaged icons may use stable file identity.
 
-Do not build dynamic-artwork infrastructure during Clock. Media is the likely first serious consumer.
+## Geometry / natural size
 
-## Geometry variants
-
-Outer geometry remains session/Python-owned.
-
-Known:
-
-```text
-Clock:
-  digital
-  analog
-```
-
-Phase F establishes semantics; Phase G owns final CUSTOM session persistence.
+Outer geometry Python/session-owned; family QML lays out inside assigned rect. Known variant: Clock digital/
+analog. Content-driven natural/dynamic height may derive from accepted presentation state. Transient popup/
+menu state must not become committed geometry. G owns final CUSTOM persistence/session semantics.
 
 ## Style bridge
 
-QML receives final presentation values, not persistence semantics.
+QML receives final presentation values, not persistence semantics: card shadow enabled/colour/blur/signed
+offset, text shadow enabled/colour/signed offset, header gates/style, family colours/geometry. Direction and
+Extra Offset remain Python-side. No Text Blur or hidden legacy tuning.
 
-Conceptual:
+## Retained wrappers
 
-```text
-cardShadowEnabled/Alpha/Blur/OffsetX/Y
-textShadowEnabled/Alpha/OffsetX/Y
-headerShadowEnabled
-```
-
-Direction token and Extra Offset semantics remain Python-side.
-
-No Text Blur.
-
-No `shadowtuning.json`, legacy tuning dictionary or fallback constants table.
-
-### Family-authored distinction
-
-A family baseline must be deliberately authored by the destination style/family contract or represent a
-visual relationship that family historically owned independently.
-
-A global sidecar value does not become an authored family baseline by being copied into a family module.
+Small `Retained<Family>Presentation` wrapper may create registered family item, connect semantic QML signals,
+apply geometry/fade/input/config/style and register model/service retirement. It must not become second
+provider/runtime owner.
 
 ## Temporary adapters
 
-Allowed when they copy/normalize already-proven authored/logical results into a detached destination
-contract and avoid needless reimplementation.
+Allowed only to normalize already-proven logical/authored output into destination contract with explicit
+retirement owner. Forbidden if preserving QWidget pixels as fallback, screenshotting old presentation,
+making neutral runtime depend on old presenter, creating second settings/style authority or only keeping
+intermediate old pixels visible.
 
-Forbidden when they:
+## Update / lifecycle
 
-- preserve old QWidget pixels as fallback;
-- screenshot old presentation;
-- make neutral runtime depend on old presenter;
-- create another settings/style authority;
-- exist only to keep the intermediate app visually usable.
-
-Every adapter needs a retirement owner.
-
-## Update/lifecycle
-
-Static UI is event/state driven.
-
-Presentation recreation rebinds current model without provider recreation.
-
-Stale generation cannot update replacement item.
-
-After family GREEN, old pixel presenter is deleted after caller proof.
+Static UI is event/state driven. Presentation recreation rebinds accepted state without provider recreation.
+Stale generation cannot update replacement. After family GREEN + caller proof, old pixel presenter deleted.

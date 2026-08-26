@@ -1,205 +1,78 @@
-# 11 — Clock Analogue Shadow Reference and Destination Contract
+# 11 — Clock Analogue Shadow Contract
 
-Status: **MANDATORY F1 reference**  
-Last updated: 2026-08-24
+Status: **landed permanent Clock destination contract; F1 CLOSED**  
+Last updated: 2026-08-26
 
-Purpose: preserve the analogue Clock's authored shadow personality without carrying obsolete generic
-QWidget/sidecar mechanics into Quick.
+Old Clock runtime pixels are deleted. Git is historical visual reference; this file is current contract.
 
-## What is protected
-
-Until F1 is independently GREEN, preserve current Clock analogue reference behavior for:
-
-- face/ring shadow;
-- hour-marker shadow;
-- Roman-numeral shadow;
-- hour/minute/second-hand shadow;
-- `analog_face_shadow` semantics.
-
-These are family-authored because Clock independently owns their bespoke geometry/relationships.
-
-The ordinary card/frame sidecar profile is **not** protected.
-
-## Shadow composition
+## Protected composition
 
 ```text
 ordinary card shadow
-+
-analogue ring/marker hard shadow
-+
-Roman numeral special shadow
-+
-dynamic hand shadows
-+
-ordinary footer/day/date/timezone text shadows
++ analogue ring/marker hard shadow
++ Roman numeral special two-shadow composition
++ dynamic hand shadows
++ ordinary footer/day/date/timezone text shadows
 ```
 
-Do not flatten these into one generic effect.
+Do not flatten into one generic effect.
 
 ## Outer card
 
-Destination:
+`OverlayCard -> cached RectangularShadow`, canonical Card settings + global direction. Do not recreate old
+painted-card cache/profile.
 
-```text
-OverlayCard
--> RectangularShadow
-```
+## Ring / markers
 
-Uses canonical Card settings + global direction.
+Gated by `analog_face_shadow`; hard duplicate geometry/no blur; directional drop baseline ~3 logical px;
+shadow ring stroke ~`max(4.4, radius * 0.0462)`; shadow marker ~`max(2.2, radius * 0.01584)`; visible ring
+~`max(2, radius * 0.032)`; visible marker width ~`max(2, radius / 60)`; deliberately strong depth/opacity.
+These are family relationships, not hidden tuning table.
 
-Do not reproduce old painted-card cache/profile.
+## Roman numerals
 
-## Ring + hour markers
-
-Reference behavior:
-
-- gated by `analog_face_shadow`;
-- hard duplicate geometry, no authored blur;
-- shadow ring/marker geometry below visible geometry;
-- current legacy directional drop ≈ 3 logical px SE;
-- shadow ring stroke ≈ `max(4.4, radius * 0.0462)`;
-- shadow marker stroke ≈ `max(2.2, radius * 0.01584)`;
-- visible ring ≈ `max(2, radius * 0.032)`;
-- visible marker width ≈ `max(2, radius / 60)`;
-- deliberately strong depth/opacity relationship.
-
-These are visual-reference relationships, not a persistent tuning table.
-
-Tune Quick geometry against the intended appearance if rasterization differs.
-
-## Roman numerals — critical two-pass character
-
-Before the visible numeral:
-
-1. main dropped shadow;
-2. close/contact shadow;
-3. visible numeral.
-
-Reference:
-
-- main drop ≈ 2 px without card, ≈ 3 px with card;
-- close/contact pass ≈ 1 px;
-- close/contact alpha ≈ 84% of main shadow alpha;
-- no blur.
-
-Do **not** flatten Roman numerals to one ordinary `ShadowedText` pass.
-
-Preferred retained shape:
-
-```text
-contact-shadow Text
-main-drop-shadow Text
-visible Text
-```
-
-Twelve numerals remain retained/static across ticks.
+Before visible numeral: main dropped shadow -> close/contact shadow -> visible numeral.
+Main drop ~2 px without card / ~3 px with card; contact ~1 px; contact alpha ~84% main; no blur. Do not
+flatten to ordinary single-pass ShadowedText. Twelve numerals retained/static across ticks.
 
 ## Hands
 
-Reference:
-
-- gated by `analog_face_shadow`;
-- duplicate shadow line beneath each visible hand;
-- shadow stroke ≈ 1.5× visible stroke;
-- legacy directional drop ≈ 4 logical px SE;
-- same rotation/anchor as hand;
-- rounded caps/joins;
-- deliberately strong opacity;
-- no blur.
-
-Destination hand + shadow rotate from the same one-second angle state without rebuilding objects.
+Gated by `analog_face_shadow`; duplicate shadow line below visible hand; shadow stroke ~1.5× visible;
+directional drop baseline ~4 logical px; same rotation/anchor; rounded caps/joins; strong opacity; no blur.
+Hand and shadow rotate from same one-second angle state without object rebuild.
 
 ## Global direction
 
-The global 8-way direction is mandatory for every directional analogue shadow.
-
-Replace fixed SE signs with the canonical Python resolver:
+All directional analogue shadows use canonical Python resolver:
 
 ```text
-family-authored baseline
--> applicable simple modifier if deliberately chosen
--> ShadowDirection resolver
--> signed translation
+family-authored baseline magnitude -> ShadowDirection -> signed translation
 ```
 
-Do not parse direction independently in QML.
+Do not parse direction independently in QML. Direction changes mutate retained translations in place without
+rebuilding model/component/numerals/ticker/engine/window.
 
-Direction change updates retained translations in place and does not rebuild model/component/numerals/
-ticker/engine/window.
+## General modifiers / analog_face_shadow
 
-## General Card/Text modifiers
+Do not invent third analogue tuning bucket. General Card/Text modifiers need not be forced onto special
+ring/numeral/hand relationships if fidelity weakens; global direction remains mandatory. Ordinary footer/day/
+date/timezone uses ordinary Text path.
 
-Do not invent a third analogue-shadow tuning bucket.
-
-The optional General Text/Card modifiers do not have to be forced onto the special ring/numeral/hand
-system if that weakens fidelity or creates awkward semantics.
-
-Global direction remains mandatory.
-
-Roman numeral two-pass relationship remains family policy.
-
-Ordinary footer/day/date/timezone do use the ordinary Text bucket.
-
-## `analog_face_shadow`
-
-This remains a real per-Clock feature, not retired Intense-shadow debris.
-
-It gates the analogue-specific ring/marker/numeral/hand shadow personality.
-
-Clock/Clock2/Clock3 retain independent setting values.
+`analog_face_shadow` remains real per-Clock feature gating analogue-specific special shadows without changing
+mode/geometry/ticker. Clock/Clock2/Clock3 values independent.
 
 ## Retained implementation
 
-Prefer retained Shape/Text/geometry items.
+Static across ticks: ring, markers, numerals+shadow passes, separator, day/date/timezone items where identity
+does not require rebuild. Dynamic: hand rotations and time-derived text/state.
 
-Static:
+No per-tick static face rebuild, old QPixmap face cache solely for parity, MultiEffect/layer capture for hard
+shadows, dummy/effect carriers or second shadow timer/fade.
 
-- ring;
-- markers;
-- numerals + their shadow passes;
-- separator;
-- day/date/timezone.
+## Permanent regression bar
 
-Dynamic once per second:
-
-- hand rotations;
-- time-derived text.
-
-No per-tick static face rebuild.
-No old QPixmap face cache solely to mimic QWidget.
-No MultiEffect/layer capture for these hard shadows.
-No dummy/effect carriers.
-No second shadow timer/fade.
-
-## F1 proof
-
-Prove:
-
-- `analog_face_shadow` survives model/settings;
-- card shadow uses shared OverlayCard;
-- ring/markers have retained shadow geometry;
-- numerals retain two shadow passes + visible glyph;
-- contact shadow remains close and not a second user magnitude authority;
-- hand shadows share hand rotation with larger stroke;
-- no analogue blur effect;
-- no MultiEffect/layer capture solely for analogue shadows;
-- static face/numeral identity survives repeated ticks;
-- global direction mutates all directional analogue shadows in place;
-- ordinary day/date/timezone use ordinary Text shadow path;
-- disabling `analog_face_shadow` suppresses analogue-specific shadows without changing mode/geometry/
-  ticker ownership.
-
-Eyes-on:
-
-- card on/off;
-- numerals on/off;
-- face shadow on/off;
-- seconds on/off;
-- day/date + timezone;
-- separator where applicable;
-- SE/NW/N/E direction;
-- simple and busy backgrounds;
-- multiple sizes/DPRs.
-
-After F1 independent GREEN + caller proof, delete old Clock runtime pixels. Git is the historical
-reference afterward.
+Preserve `analog_face_shadow`, shared OverlayCard, retained ring/marker geometry, two Roman shadow passes,
+contact/main relationship, shared hand rotation+wider shadow stroke, no blur, static face/numeral identity,
+global direction mutation in place, ordinary footer/day/date/timezone shadow semantics, and eyes-on card/
+numeral/face-shadow/seconds/calendar/timezone/separator combinations across directions/sizes/DPRs/simple+busy
+backgrounds.

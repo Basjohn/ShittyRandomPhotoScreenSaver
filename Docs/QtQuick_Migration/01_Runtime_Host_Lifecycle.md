@@ -1,368 +1,125 @@
-# 01 — Runtime Host and Lifecycle Decomposition
+# 01 — Runtime Host and Lifecycle Contract
 
-Status: technical decomposition only; sequence owned by `Current_Plan.md`
-Last updated: 2026-08-20
+Status: **landed Quick host foundation; production orchestration/cutover remains Phase H**  
+Last updated: 2026-08-26
 
-Cross-links:
+`Current_Plan.md` owns sequence.
 
-- active sequence: `Current_Plan.md`
-- deletion ledger: `Future_Cleanup.md`
-- durable target: `Docs/Compositor_Architecture.md`
+## Current source reality
 
-## 1. Current problem seam
-
-`rendering/display_widget.py::DisplayWidget` currently combines too many concerns:
-
-- top-level fullscreen QWidget;
-- QScreen/DPR identity;
-- input/native Windows events;
-- image presentation;
-- transition ownership;
-- compositor ownership;
-- widget construction;
-- visualizer plumbing;
-- CUSTOM layout;
-- dimming;
-- cursor halo;
-- context menu;
-- lifecycle/resource teardown.
-
-That shape must **not** be recreated as one giant `QuickDisplayWindow`.
-
-`engine/display_manager.py` also types its active display set directly as `DisplayWidget` and probes
-private QWidget/compositor members during startup.
-
-## 2. Destination owner split
-
-Proposed package:
+Before H normal production remains:
 
 ```text
-rendering/quick/
-    bootstrap.py
-    runtime.py
-    window.py
-    scene_controller.py
-    state.py
-    frame_pacer.py
-    input_controller.py
-    qml/
-        DisplayScene.qml
-        components/
+DisplayManager -> DisplayWidget -> old physical presenter/compositor
 ```
 
-### `QuickDisplayWindow(QQuickWindow)`
-
-Own only window/QWindow responsibilities:
-
-- QScreen placement;
-- window flags;
-- visibility;
-- focus;
-- key/mouse/native events;
-- surface/window lifecycle signals;
-- content root.
-
-It does not own providers, widget business logic, transition algorithms, or visualizer simulation.
-
-### `QuickDisplayRuntime(QObject)`
-
-One per physical display.
-
-Own:
-
-- screen index / screen identity;
-- runtime generation;
-- exact `QuickDisplayWindow`;
-- `QuickSceneController`;
-- display-local frame pacer;
-- runtime input controller;
-- widget runtime manager;
-- CUSTOM session reference;
-- display-level signals expected by `DisplayManager`.
-
-This is the type that replaces `DisplayWidget` in `DisplayManager`.
-
-Do not inherit QWidget.
-
-Do not emulate arbitrary QWidget methods.
-
-### `QuickSceneController`
-
-Owns presentation-facing scene state:
-
-- base image;
-- transition run;
-- visualizer presentation model;
-- Quick widget items;
-- dimming;
-- pixel-shift root;
-- edit overlays;
-- reveal/fade state.
-
-It is the only owner allowed to create/destroy runtime Quick scene items for that display.
-
-### shared QML engine
-
-A process-level `QQmlEngine` or equivalent shared component factory may be used to avoid recompiling
-components for every display, but runtime QML contexts/items must be generation/display scoped.
-
-A shared QML engine must not hold references to retired display runtime models.
-
-Prefer:
+Destination Quick host is real and used by runtime-shaped tests/harnesses:
 
 ```text
-one app-level component/cache owner
-+
-one per-display QQmlContext / root item lifetime
+QuickDisplayRuntime -> QuickDisplayWindow -> QuickSceneController -> retained scene
 ```
 
-over one QML engine per widget.
+Quick existing does not mean normal production has cut over.
 
-## 3. Bootstrap
+## Destination owner split
 
-The successful P0 conditions must be configured deterministically.
+`QuickDisplayWindow(QQuickWindow)` owns QScreen placement, window flags/visibility/focus, key/mouse/native
+events and surface/window lifetime. No provider/business/transition algorithm/visualizer simulation.
 
-Before the first Quick scene graph/window:
+`QuickDisplayRuntime` is one per selected display and destination owner for screen identity, runtime
+generation, exact Quick window, scene controller, display frame pacer, input controller, one display
+`WidgetRuntimeManager` after H orchestration, and CUSTOM session after G. It replaces `DisplayWidget` at H;
+do not build a QWidget compatibility facade.
+
+`QuickSceneController` owns presentation-facing scene state: base image, transition run, visualizer
+presentation, ordinary retained items, dimming/pixel shift/edit overlays and reveal/fade. It is sole creator/
+destructor of runtime Quick scene items for that display.
+
+One process `QQmlEngine` may own components/cache. Per-display contexts/items remain display/generation
+scoped; shared engine must not retain retired models or become hidden runtime-generation owner.
+
+## Import boundary
+
+Importing common Quick host/scene must not eagerly import inactive family business/runtime/backend trees.
+Family implementation resolves at actual family activation/caller boundary.
+
+## Bootstrap
+
+Before first Quick scene/window, configure threaded Quick render loop, OpenGL graphics API and required
+surface format deterministically where Qt requires. Do not expose production render loop as casual user
+setting.
+
+## DisplayManager boundary
+
+DisplayManager keeps screen enumeration/allow-list, topology reconciliation, current-image routing,
+coordinated readiness/reveal and outward engine signals. Replace QWidget/private-compositor probing with a
+small explicit `QuickDisplayRuntime` product API, not arbitrary QWidget emulation.
+
+## H production family orchestration — REQUIRED
+
+Current Quick runtime does not yet own normal-production widget orchestration. H connects exactly once:
 
 ```text
-QSG_RENDER_LOOP=threaded
-QQuickWindow graphics API = OpenGL
-global QSurfaceFormat = current required OpenGL format
+selected display
+-> QuickDisplayRuntime
+-> one display-owned WidgetRuntimeManager
+-> canonical capability + ordinary enabled/instance resolution
+-> existing neutral service lease(s)
+-> stable family presentation model(s)
+-> QuickSceneController ordinaryWidgetHost
+-> retained family QML item(s)
 ```
 
-Do not rely on environment defaults.
+Never run legacy and Quick production `WidgetRuntimeManager` ownership in parallel. Preserve real service
+cardinality. Settings/topology recreation rebinds current accepted state without duplicating providers/
+controllers. Activation remains distinct from ordinary enabled. Stale old-generation callbacks cannot target
+replacement items. Every retained production family is caller-proofed through this chain before old physical
+host deletion.
 
-`main.py` currently imports Qt at module import time and configures `QSurfaceFormat` before
-`QApplication`. Keep that ordering safe.
-
-If `QSG_RENDER_LOOP` is set through environment, set it before `QApplication` and before any Quick
-window/engine creation. Prefer setting it at the earliest deterministic startup point.
-
-Do not make the production render loop configurable through a casual user setting.
-
-## 4. DisplayManager migration
-
-Keep `DisplayManager` responsibilities:
-
-- screen enumeration;
-- monitor allow-list;
-- topology reconciliation;
-- current-image routing;
-- coordinated readiness/reveal;
-- outward engine signals.
-
-Refactor concrete display assumptions.
-
-Change:
-
-```python
-self.displays: list[DisplayWidget]
-```
-
-to the actual new runtime type.
-
-Do not insert:
-
-```python
-class DisplayWidgetCompatibilityFacade:
-    ...
-```
-
-Expected `QuickDisplayRuntime` surface should be small and explicit, e.g.:
+## Engine lifecycle
 
 ```text
-show_on_screen()
-hide()
-close_runtime()/cleanup()
-set_image(...)
-clear()
-set_display_mode(...)
-set_dimming(...)
-quiesce_for_runtime_pause()
-describe_runtime_state()
-screen_index
-runtime_generation
-
-signals:
-exit_requested
-image_displayed
-startup_reveal_completed
-transition_completed
-previous_requested
-next_requested
-cycle_transition_requested
-settings_requested
-custom_layout_reload_requested
-dimming_changed
-```
-
-These are product/runtime operations, not QWidget compatibility methods.
-
-As callers are changed, prefer public methods over probing:
-
-```text
-_runtime_generation
-_gl_compositor
-_render_surface
-```
-
-Add explicit readiness/state APIs instead.
-
-## 5. ScreensaverEngine boundary
-
-Do not rewrite `ScreensaverEngine`.
-
-Required changes should be limited to:
-
-- concrete display runtime type assumptions;
-- startup readiness wiring;
-- image-state types if the presentation boundary changes QPixmap/QImage ownership;
-- lifecycle teardown APIs.
-
-Keep:
-
-- source/image queue;
-- rotations;
-- settings lifecycle;
-- generation ownership;
-- process/thread managers;
-- stale-callback fencing.
-
-## 6. Engine lifecycle
-
-`engine/engine_lifecycle.py` already has a strong sequence:
-
-```text
-advance generation
--> disconnect monitor owner
--> quiesce displays
--> cancel generation callbacks
--> cleanup manager
--> retire roots
+close old admission
+-> invalidate/advance generation
+-> quiesce generation-owned work
+-> stop display pacers / join logical runtimes where required
+-> close Quick presentation admission
+-> retire render resources on legal render/context owner
+-> close window/root scene
 -> destruction barrier
+-> construct replacement
+-> prepare intentional first content
+-> reveal
 ```
 
-Preserve this architecture.
+Generation 0 is valid. Do not destroy custom GL resources from GUI thread merely because window closes.
 
-Replace GL/QWidget-specific words/steps with Quick equivalents.
+## QML lifetime
 
-New required retirement ordering:
+Per-display context/root lifetime is generation scoped; runtime Python models are not process-global QML
+singletons; stale model signals cannot target replacement roots; no QML Connections survives runtime context;
+presentation retirement callbacks run before item detachment/deletion where required.
 
-```text
-generation invalidated
--> logical/widget/provider generation work quiesced
--> display frame pacers stopped
--> visualizer logical runtime joined
--> Quick presentation state admission closed
--> Quick scene render resources invalidated/deleted on render thread
--> window/root scene closed
--> QObject/QML roots queued
--> destruction barrier crossed
--> replacement runtime constructed
-```
+## Readiness / reveal
 
-Do not destroy OpenGL scene resources from the GUI thread just because the window is closing.
+Prefer explicit readiness facts: window created, scene graph initialized, background renderer ready,
+intentional base frame ready, required runtime overlays ready, reveal started/completed. First visible frame
+is intentional: no fixed sleep, white/default flash, black placeholder or stale texture accepted as ready.
 
-Use `sceneGraphInvalidated` / render-node destruction contract for render resources.
+## Topology
 
-## 7. QML object lifetime
+One runtime per selected QScreen, bound before show, using that screen's local geometry/refresh/DPR. Topology
+replacement retires old generation completely; do not move live render resources between windows. Rebuild
+presentation from current accepted model/runtime state.
 
-Rules:
+## H deletion boundary
 
-- per-display root context is parented to the runtime/window owner;
-- runtime Python models are not registered as process-global singleton QML objects;
-- stale model signals cannot target a replacement root;
-- generation identity is explicit in state publications;
-- `0` remains a valid generation;
-- no QML `Connections` object survives its runtime context;
-- do not let one shared QML engine become a hidden runtime-generation owner.
+After production chain proven, delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, old compositor
+scheduling/presentation glue, unsupported software/backend-demotion fallback, old physical-host transition/
+visualizer debris and temporary anchors no longer needed. No production switch back.
 
-## 8. Readiness / reveal
+## Cutover gates
 
-Replace old compositor-private probes with explicit facts:
-
-```text
-window_created
-scene_graph_initialized
-background_renderer_ready
-intentional_base_frame_ready
-required runtime overlays ready
-reveal_started
-reveal_completed
-```
-
-Visualizer also has its own presentation/reactive readiness contract.
-
-The first visible frame must be intentional.
-
-No fixed sleep.
-
-No black/default flash accepted as "window ready."
-
-## 9. Monitor topology
-
-Keep current settled-topology reconcile behaviour.
-
-For each selected QScreen:
-
-- create one `QuickDisplayRuntime`;
-- bind exact QScreen before show;
-- use local geometry, refresh, DPR;
-- do not use display 0 as global authority.
-
-On topology replacement:
-
-- retire old generation completely;
-- do not move live render resources between windows;
-- build replacement scene from current engine/model state.
-
-## 10. Media Center / flags
-
-Audit current `DisplayWidget` flags and Windows behaviour.
-
-Reproduce required product semantics using QWindow/QQuickWindow flags, not QWidget compatibility.
-
-Gate:
-
-- off taskbar/Alt+Tab where required;
-- correct topmost behaviour;
-- focus and interaction mode;
-- cursor;
-- cross-display focus;
-- context-menu interaction;
-- no shadow corruption after focus changes.
-
-Do not carry deprecated class-global `DisplayWidget` input ownership into the new runtime.
-
-## 11. Refactor opportunities admitted here
-
-Allowed:
-
-- split current display/input/lifecycle responsibilities;
-- remove class-global display instance state in favour of `MultiMonitorCoordinator`/explicit owners;
-- give DisplayManager a small runtime protocol/API;
-- replace private-member probes with explicit readiness APIs.
-
-Not admitted:
-
-- source/provider rewrite;
-- Settings UI rewrite;
-- image queue rewrite;
-- generic EventSystem redesign.
-
-## 12. Gates
-
-Before production cutover:
-
-- 1, 2, and N selected displays;
-- generation `0 -> 1`;
-- repeated create/destroy;
-- Settings recreate;
-- topology change;
-- display off/wake;
-- exact render-thread teardown;
-- no stale QML/model callbacks;
-- no extra top-level accelerated windows;
-- clean installed exit.
-
-Every landed owner extraction is committed and pushed before continuing.
+Before H GREEN: 1/2/N displays, generation 0->1, repeated create/destroy, Settings recreate, topology change,
+display off/wake, render-thread teardown, no stale QML/model callbacks, no duplicate family owners, no extra
+accelerated windows and clean installed exit.
