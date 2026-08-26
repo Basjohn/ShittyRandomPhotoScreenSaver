@@ -1,226 +1,165 @@
 # SRPSS Specification
 
-Last updated: 2026-08-24
+Last updated: 2026-08-26
 
-Canonical durable architecture and product-behavior contracts.
-
-`Current_Plan.md` owns sequencing. Historical closure rationale belongs in historical/phase evidence, not
-in the active plan.
+Canonical durable architecture and product-behavior contracts. `Current_Plan.md` owns sequence; independent
+closure narrative belongs under `Docs/audits/` or historical evidence.
 
 ## Product priorities
 
 1. visualizer fidelity/reactivity;
 2. lifecycle/resource safety;
-3. frame pacing / perceived continuity;
+3. frame pacing/perceived continuity;
 4. multi-display correctness;
 5. bounded resources;
 6. CPU/task efficiency;
 7. average FPS;
 8. elegance.
 
-Do not improve counters by reducing authored visualizer cadence, transition quality, image quality,
-overlay behavior or supported display topology.
+Do not improve counters by reducing authored cadence, visual quality, overlay behavior or topology support.
 
-## Accepted runtime presentation architecture
+## Accepted runtime presentation
 
 ```text
 Python / QWidget application shell
-    -> Settings / persistence / providers / media / orchestration
-    -> logical runtimes + models
-    -> bounded presentation state
-    -> one standalone threaded QQuickWindow per selected physical display
-    -> retained Quick scene + inline QSGRenderNode custom GL
-    -> physical presentation
+-> Settings / persistence / providers / media / orchestration
+-> logical runtimes + models
+-> bounded presentation state
+-> one standalone threaded QQuickWindow per selected physical display
+-> one retained Quick scene + inline QSGRenderNode custom GL
 ```
 
-This is a runtime-presentation migration, not a whole-application QML rewrite.
+Hard: one accelerated runtime surface per selected display; standalone `QQuickWindow`, never `QQuickWidget`;
+threaded Quick scene graph; Settings may remain QWidget; business/runtime ownership remains Python;
+transition+visualizer GL remains inline in the one Quick scene; no permanent old/software presenter fallback.
 
-Hard:
+## Migration epoch / retirement
 
-- one independently presented accelerated runtime surface per display;
-- runtime presenter = standalone `QQuickWindow`, not `QQuickWidget`;
-- threaded Quick scene graph on the supported Windows path;
-- Settings may remain QWidget;
-- provider/persistence/media/orchestration/logical runtimes remain Python-owned;
-- transition + visualizer custom GL remain inline in the same Quick scene;
-- no second accelerated visualizer/widget/effect window;
-- no permanent old-presenter fallback.
-
-## Migration-epoch rule
-
-The old `DisplayWidget` / QRhiWidget / `GLCompositorWidget` physical path may remain until H because it
-still hosts the pre-cutover application. It is current-legacy, not a rollback architecture.
-
-Deletion timing is owner-specific:
+Old `DisplayWidget` / QRhiWidget / `GLCompositorWidget` is current-legacy until H, not rollback architecture.
 
 ```text
-ordinary family QWidget pixels -> after that family is independently GREEN in F
-old CUSTOM/edit pixels          -> after G replacement is GREEN
-old transition-only pixels      -> as soon as caller-proofed; H maximum if tied to physical host
-old visualizer-only pixels      -> as soon as caller-proofed; H maximum if tied to physical host
+ordinary family QWidget pixels -> family GREEN + caller proof in F
+old CUSTOM/edit pixels          -> G replacement GREEN
+old transition/visualizer pixels-> caller-proof early; H maximum if physical-host bound
 old physical presenter/backend  -> H cutover + deletion
 residual debris                 -> I only
 ```
 
-Do not preserve a completed old pixel owner merely to keep the half-migrated product usable.
+## Capability / instance state
 
-## Logical-to-presentation rule
+Family activation/deactivation is different from ordinary instance enabled/disabled. Capability
+deactivation preserves detail settings and suppresses family-exclusive ownership; ordinary `enabled=False`
+is the casual per-widget off state inside an activated family.
 
-Producers integrate authored work first, then publish current state.
+## Import dormancy
 
-Presentation consumes bounded latest current state with generation fencing.
-
-No:
-
-- producer wait for paint/present;
-- paint acknowledgement;
-- FIFO render backlog;
-- catch-up replay;
-- display-rate division of authored logical cadence.
-
-## Visualizer
-
-`VisualizerLogicalRuntime` remains the sole mode-general authored visualizer clock.
-
-Quick presentation does not own simulation cadence.
-
-All five current modes use:
-
-```text
-CARD + CARD_INTERIOR
-```
-
-Architecture permits a deliberately authored future:
-
-```text
-FRAMELESS + VIEWPORT_RECT
-```
-
-inside the same Quick window/visualizer ownership.
-
-Quick visualizer geometry distinguishes:
-
-```text
-baseline viewport/aspect
-uniform_visual_scale
-viewport_extent
-```
-
-Retired pre-Quick per-mode growth/card-height controls are not destination behavior.
-
-Bubble temporal fidelity remains bound by `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
-
-## Transitions
-
-Canonical transition identity/settings remain presentation-neutral.
-
-Destination:
-
-```text
-canonical descriptor
--> activation/admission + resolved request
--> TransitionRequest / TransitionRun
--> lazy Quick transition implementation
--> display QSGRenderNode
-```
-
-All canonical transition pixels are Quick-owned. Old `GLCompositor*Transition` implementations are not
-destination or reference authority once caller-proofed.
-
-Preserve deterministic transition recovery and authored transition identity/math used by Quick.
+Common Quick scene/host imports must not eagerly import inactive family business/runtime/backend trees.
+Family implementation resolves at actual family caller/activation. Static presentation-only registry
+metadata is fine. Common Quick import must not bootstrap provider/controller/runtime/backend singletons.
 
 ## Ordinary widgets
 
-Separate:
-
 ```text
-provider/model/settings/actions/cadence
-from
-runtime pixel presentation
+provider/backend/runtime/cadence/actions
+-> stable presentation model/state
+-> retained Quick pixels
 ```
 
-Destination ordinary pixels are retained Quick content under the display's shared ordinary-widget host.
+Current proven patterns are deliberately heterogeneous:
 
-QML does not own providers, persistence or refresh cadence.
+- Clock: shared `GlobalClockTicker` + stable models; no invented service;
+- Weather: neutral manager-owned runtime service + retained model;
+- Media: runtime-generation shared owner with display leases, separate narrow volume/mute owners and a
+  process-engine artwork provider;
+- Reddit/Reddit2: separate configured member runtime services/models using shared family policy;
+- Gmail: runtime-generation shared Gmail owner/backend with per-display lease; retained port active.
 
-For each family, keep old QWidget pixels only until the retained family is proven, then delete the old
-pixel presenter.
+Do not create services/managers merely for naming symmetry.
 
-## Shadows
+## State / actions
 
-Canonical global direction:
-
-```text
-NW N NE W E SW S SE
-```
-
-Default `SE`.
-
-Direction owns orientation. Python resolves signed offsets before QML.
-
-User shadow settings:
+Producers integrate work then publish coherent accepted current state. Presentation consumes bounded latest
+state with generation/request fencing. No producer wait for paint, paint acknowledgement, FIFO render backlog,
+catch-up replay or display-rate division of authored cadence.
 
 ```text
-Card: enabled, frame_opacity, blur_radius, frame_extra_offset
-Text: text_enabled, text_opacity, text_extra_offset
-Header enable remains a gate
-All: direction
+QML semantic action
+-> Python action owner
+-> business side effect
+-> accepted current state
+-> presentation
 ```
 
-No Text Blur. No Intense mode. No `widgets.shadows.offset`.
+QML does not persist settings or directly invoke providers/backends.
 
-No `shadowtuning.json` or replacement hidden tuning authority.
+## Dynamic images
 
-A family-authored reference exists only when the family independently owns a visual relationship; values
-sourced solely from the retired global sidecar do not become family-authored by being copied into a
-family module.
-
-Clock analogue hard-shadow geometry is an explicit family-authored exception/reference.
-
-## Geometry/CUSTOM
-
-Outer geometry remains Python/session-owned.
-
-Family QML lays out inside assigned geometry.
-
-Geometry keys must support a variant dimension where required:
+Use stable identity and bounded presentation image ownership. Proven Media shape:
 
 ```text
-(widget_id, display_identity, variant)
+runtime-owned decoded QImage + stable artwork key
+-> process-engine image provider
+-> retained Image source identity
 ```
 
-Clock digital/analogue are the known required case.
+No QPixmap worker transport, base64 churn, tempfile-per-update or unchanged-image reupload.
+
+## Shadows / fade
+
+Canonical direction is NW/N/NE/W/E/SW/S/SE, default SE, resolved in Python.
+No Text Blur, Intense mode, `widgets.shadows.offset`, `shadowtuning.json`, or replacement hidden tuning.
+Ordinary card = cached retained `RectangularShadow`; ordinary text = duplicate glyph + signed offset;
+whole-widget fade = one retained root opacity. Clock analogue hard shadows are permanent family-authored
+exceptions under doc 11.
+
+## Geometry / CUSTOM
+
+Outer geometry is Python/session-owned. Variant key supports `(widget_id, display_identity, geometry_variant)`.
+Clock digital/analogue are first required example.
+
+Edit-mode X changes working session only: duplicate removal or singleton ordinary-enabled OFF. Never family
+capability deactivation. Save/Enter commits; Cancel restores pre-edit geometry/instances/enabled state.
+
+## Visualizer / transitions
+
+`VisualizerLogicalRuntime` remains sole mode-general authored visualizer clock. Quick presentation does not
+own simulation cadence.
+
+Transitions resolve canonical settings/admission into immutable request/run state and lazy Quick rendering.
+Old `GLCompositor*Transition` pixels are not destination authority after caller proof.
 
 ## Lifecycle
 
-Old generation loses publication/admission before replacement gains authority.
+Old generation loses admission before replacement gains authority; generation 0 is valid. GPU resources are
+created/used/destroyed by legal render/context owner. No `glFinish()`, `DwmFlush()`, GUI sleeps or nested
+event pumping as cadence repair. Shared `QQmlEngine` is component/cache owner, not hidden runtime-generation
+owner.
 
-Generation `0` is valid.
+## H production cutover
 
-GPU resources are created/used/destroyed by their legal render/context owner.
+Before normal startup switches to Quick, prove:
 
-No `glFinish()`, `DwmFlush()`, GUI sleeps or nested event pumping as cadence repairs.
+```text
+selected display
+-> one QuickDisplayRuntime
+-> one display-owned WidgetRuntimeManager
+-> canonical capability/instance resolution
+-> existing neutral runtime/service leases
+-> stable family presentation models
+-> QuickSceneController
+-> retained family items
+```
 
-## Validation
-
-Tests are necessary but not sufficient for:
-
-- visualizer feel;
-- transition visual character;
-- continuity;
-- startup/reveal;
-- multi-display behavior;
-- lifecycle;
-- resource behavior.
-
-Use focused automation plus runtime-shaped Windows/physical/eyes-on evidence where the claim requires it.
+Do not run old/new production runtime managers in parallel. Preserve semantic cardinality. H deletes the old
+physical presenter/backend in the same audited cutover boundary; no product switch back.
 
 ## Documentation roles
 
-- `Current_Plan.md`: current checkpoint, active work, next/future sequence, current debt.
-- `Spec.md`: durable product/architecture.
-- focused docs/guardrails: durable subsystem contracts.
-- `Docs/TestSuite.md`: live test inventory/status ledger.
-- `Future_Cleanup.md`: deferred deletion/debt.
-- `Future_Work.md`: deferred features/experiments.
-- `Docs/Historical_Plans/`, phase reports, historical bugs/evidence: history only.
+- `Current_Plan.md`: current checkpoint/work/next/debt;
+- `Spec.md`: durable product/architecture;
+- focused docs/guardrails: durable subsystem contracts;
+- `Docs/audits/`: independent audit findings/closure evidence;
+- `Docs/TestSuite.md`: live test inventory/status ledger;
+- `Future_Cleanup.md`: deferred deletion/debt;
+- `Future_Work.md`: deferred features;
+- historical records: history only.

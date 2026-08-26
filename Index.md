@@ -1,10 +1,8 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-08-25
+Last updated: 2026-08-26
 
 ## Start here
-
-For implementation work:
 
 ```text
 exact current source
@@ -13,78 +11,58 @@ exact current source
 -> tests/evidence for the claim
 ```
 
-Current migration state: **Phase F active; F1 Clock through F5 Reddit / Reddit2 are caller-proven and
-CLOSED. F6 Gmail is ACTIVE.**
-
-Do not read the whole history tree by default.
+Current migration: **Phase F active; F1–F5 closed/independently GREEN; F6 Gmail ACTIVE with partial retained
+QML/wrapper checkpoint.**
 
 ## Current authority
 
 | Need | Read |
 | --- | --- |
-| What may be changed now? | `Current_Plan.md` |
-| Durable product/architecture | `Spec.md` |
-| Physical presenter architecture | `Docs/Compositor_Architecture.md` |
-| Current owner map | `Docs/Contracts.md` |
-| General safety | `Docs/Guardrails.md` |
-| Test inventory/retirement | `Docs/TestSuite.md` |
-| Deferred deletion/debt | `Future_Cleanup.md` |
-| Deferred feature work | `Future_Work.md` |
+| current work / sequence | `Current_Plan.md` |
+| durable product/architecture | `Spec.md` |
+| physical presenter architecture | `Docs/Compositor_Architecture.md` |
+| current owner map | `Docs/Contracts.md` |
+| ordinary widget authoring | `Docs/10_WIDGET_GUIDELINES.md` |
+| safety | `Docs/Guardrails.md` |
+| test inventory/retirement | `Docs/TestSuite.md` |
+| deferred deletion/debt | `Future_Cleanup.md` |
+| deferred features | `Future_Work.md` |
 
-## Active Phase-F routing
+## Phase-F routing
 
-| Work | Read |
-| --- | --- |
-| Phase-F sequence/family contracts | `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md` |
-| retained widget shell/style | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
-| model/state/action/image bridge | `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md` |
-| Clock analogue shadow fidelity | `Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md` |
-| widget authoring | `Docs/10_WIDGET_GUIDELINES.md` |
-| Settings/style controls | `Docs/Custom_Style_Implementation.md` |
-| CUSTOM/input later | `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md` |
+- family sequence: `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md`
+- retained shell/style: `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`
+- model/state/action/image bridge: `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
+- runtime ownership/cardinality/threading: `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md`
+- capability/dormancy: `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
+- runtime style/shadows: `Docs/Custom_Style_Implementation.md`
+- Clock analogue: `Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md`
+- latest integrated audit: `Docs/audits/QtQuick_Phase_F_F2_F6_Independent_Audit_2026-08-26.md`
+
+## G / H
+
+- CUSTOM/edit/input: `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`
+- runtime host/lifecycle/cutover: `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md`
+- physical scene/render: `Docs/Compositor_Architecture.md`
 
 ## Transitions
 
-Quick transition architecture is landed. Read:
-
-- `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`
-- `Docs/Transition_Change_Checklist.md`
-
-The old compositor transition implementations are migration debris once caller-proofed. They are not
-the visual reference for new transition work.
+Quick transition architecture is landed. Read `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`
+and `Docs/Transition_Change_Checklist.md`. Old compositor transition pixels are migration debris after
+caller proof, not new-work visual authority.
 
 ## Visualizer
 
-Read:
+Read `Docs/QtQuick_Migration/03_Visualizer.md`, `Docs/Guardrails/Visualizer_Presentation.md`,
+`Docs/Guardrails/Bubble_Temporal_Fidelity.md`, and `Docs/Visualizer_Reference.md`.
 
-- `Docs/QtQuick_Migration/03_Visualizer.md`
-- `Docs/Guardrails/Visualizer_Presentation.md`
-- `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
-- `Docs/Visualizer_Reference.md`
+## Steam
 
-Preserve logical/authored/runtime state used by Quick. Old compositor-only pixels are not automatically
-protected because they are in the visualizer package.
-
-## Steam family
-
-Current Quick-era routing:
-
-- `Docs/SRPSS_Steam_Widget_Family_Implementation_Plan.md` — **Quick-era wrapper/reference index**
-- `widgets/steam_card_models.py` and current neutral Steam runtime/preparation source
-- Phase-F decomposition for substantive Steam ports F7–F8
-
-The large pre-Quick Steam plan is historical product/UX/data evidence, not current presentation
-architecture. Steam Journey/Progress and Friend Pulse are unfinished dev-gated scaffolds and are not
-Phase-F migration ports.
+Achievement Pulse and Abandonment Issues are substantive F7/F8 ports. Steam Journey/Progress and Friend
+Pulse are unfinished dev-gated future-product scaffolds, not migration ports.
 
 ## Historical evidence
 
-Closed phase rationale and old owner maps belong under:
-
-- `Docs/Historical_Plans/`
-- `Docs/Historical_Bugs/`
-- `Docs/phase_reports/`
-- `Docs/Performance_Evidence/`
-- `Docs/audits/`
-
-Historical wording does not define current work admission or ownership.
+Closed rationale and old owner maps belong under `Docs/Historical_Plans/`, `Docs/Historical_Bugs/`,
+`Docs/phase_reports/`, `Docs/Performance_Evidence/`, or `Docs/audits/`. Historical wording does not define
+current work admission or ownership.

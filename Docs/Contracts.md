@@ -1,6 +1,6 @@
 # Contracts — Current Owner Map
 
-Last updated: 2026-08-25
+Last updated: 2026-08-26
 
 `Current_Plan.md` owns work admission. This file owns fast current/destination owner routing.
 
@@ -11,151 +11,131 @@ Last updated: 2026-08-25
 | one display runtime | `QuickDisplayRuntime` |
 | physical window | one standalone `QQuickWindow` |
 | retained scene | `QuickSceneController` + retained Quick items |
+| ordinary widget presentation | per-display `OrdinaryWidgetPresentationHost` |
 | custom transition pixels | inline display `QSGRenderNode` |
 | custom visualizer pixels | inline visualizer `QSGRenderNode` |
 | Settings UI | existing QWidget/settings owners |
 
-`QQuickWidget` and selectable old-presenter fallback are prohibited.
+`QQuickWidget`, selectable old-presenter fallback and second accelerated runtime surface are prohibited.
+Normal production startup remains old `DisplayWidget` until H; H replaces it rather than creating permanent
+dual presentation.
 
-The old physical `DisplayWidget`/QRhiWidget/`GLCompositorWidget` stack retires at **H cutover and
-deletion**, not I.
+## H production runtime chain
 
-## Migration retirement timing
+Before cutover:
+
+```text
+QuickDisplayRuntime
+-> one display-owned WidgetRuntimeManager
+-> canonical capability / instance admission
+-> existing neutral runtime/service lease(s)
+-> stable presentation model(s)
+-> QuickSceneController
+-> retained family item(s)
+```
+
+`QuickSceneController` is sole runtime Quick-item creator/destructor for that display. Shared `QQmlEngine`
+is component/cache infrastructure, not runtime-generation owner.
+
+## Retirement timing
 
 | Current-legacy owner | Retirement |
 | --- | --- |
-| ordinary QWidget family pixels | after that F-family is independently GREEN + caller proof |
-| shared old widget pixel helper | when its last unported family consumer disappears |
-| old transition-only pixel implementations | caller-proof early; H maximum if tied to old physical host |
-| old visualizer-only pixel/card/overlay owners | caller-proof early; H maximum if tied to old physical host |
-| old CUSTOM/edit pixel owners | after G replacement GREEN |
+| ordinary QWidget family pixels | family GREEN under current audit policy + caller proof |
+| shared old widget pixel helper | last real old-pixel consumer disappears |
+| old transition-only pixels | caller-proof early; H maximum if physical-host bound |
+| old visualizer-only pixels/card/overlay | caller-proof early; H maximum if physical-host bound |
+| old CUSTOM/edit pixels | G replacement GREEN |
 | old physical presenter/backend/software fallback | H |
 | residue/aliases/expired adapters | I |
 
 Historical code is not automatically reference-protected.
 
-The current legacy visualizer compositor obtains its card background/border pixels from
-`widgets/spotify_visualizer/card_surface.py`. That visualizer-specific module owns the canonical
-geometry/DPR/style cache key and pixmap build used for GL texture revision and upload. Ordinary
-`BaseOverlayWidget` instances have no generic painted-frame-shadow cache or reveal-preparation
-contract.
+## Capability / ordinary enabled
 
-## Widget runtime/data ownership
+Canonical family authority: `core/settings/widget_family_catalog.py` +
+`core/settings/capability_activation.py`.
 
-Runtime pixels migrate; provider/model/business ownership remains presentation-neutral.
+```text
+family activated/deactivated != ordinary widget enabled/disabled
+```
 
-Destination flow:
+Visualizers requires Media but keeps its special visualizer runtime/render ownership outside ordinary
+Phase-F family presentation.
+
+## Import dormancy
+
+Common capability metadata and common Quick scene/host imports must not resolve inactive family business/
+runtime/backend trees. Static presentation-only registry metadata may load; family implementation resolves
+at caller/activation. Common Quick import must not bootstrap provider/controller/backend/runtime singleton.
+
+## Ordinary widgets
 
 ```text
 provider/backend/runtime owner
--> normalized presentation state/model
--> retained family Quick component
--> shared OverlayWidget shell
+-> coherent accepted current state
+-> stable presentation model/list model
+-> retained family component
+-> OrdinaryWidgetPresentationHost
+-> OverlayWidget shell
 ```
 
-Presentation destruction does not become provider destruction.
+Host owns item creation/retirement, display rect, root fade and card style; not provider, persistence,
+SettingsManager, network or cadence.
 
-Capability activation remains distinct from instance enabled state.
+| Family | Neutral/runtime owner | Presentation |
+| --- | --- | --- |
+| Clock | shared `GlobalClockTicker`; no invented service | stable per-instance Clock model/QML |
+| Weather | manager-owned `WeatherRuntimeService` | stable Weather model/QML |
+| Media | runtime-generation shared Media + display lease; separate shared volume/mute | one Media model/QML + process-engine artwork provider |
+| Reddit/Reddit2 | independent configured `RedditRuntimeService` per member | separate stable models, one family QML |
+| Gmail | runtime-generation shared Gmail + `GmailBackend.instance()` + display lease | retained model/QML port active |
 
-Reddit and Reddit2 each own one independent `RedditRuntimeService` lease through
-`WidgetRuntimeManager`. That service owns the configured provider, startup cache, accepted candidate
-window, fetch generations, rate-limit/block persistence, periodic/manual cadence and retirement.
-`RedditPresentationModel` owns only retained projection and semantic action admission; QML never owns
-URLs, provider calls, cache policy or refresh timing.
+Presentation destruction does not automatically mean backend destruction; shared owners use real consumer
+cardinality.
 
-F1 Clock's candidate destination owner is `ClockPresentationModel` plus the retained
-`ClockPresentation.qml` family component under the per-display `OrdinaryWidgetPresentationHost`.
-`GlobalClockTicker` remains the cadence owner. The old Clock QWidget pixels remain reference-only until
-F1 independent GREEN and caller-proofed retirement.
-
-## Widget shadow authority
-
-Canonical:
+## Actions / images
 
 ```text
-widgets.shadows.direction
-widgets.shadows.enabled
-widgets.shadows.frame_opacity
-widgets.shadows.blur_radius
-widgets.shadows.frame_extra_offset
-widgets.shadows.text_enabled
-widgets.shadows.text_opacity
-widgets.shadows.text_extra_offset
-widgets.shadows.header_enabled
+QML semantic action -> Python admission/action owner -> business side effect -> accepted state -> presentation
 ```
 
-No `widgets.shadows.offset`.
-No Intense mode.
-No Text Blur.
-No `shadowtuning.json`/replacement tuning provider.
+QML does not directly own URLs/backend calls, persistence, provider/cache policy or refresh cadence.
 
-Python resolves global direction to signed offsets before QML.
+Dynamic image precedent is process-engine `MediaArtworkImageProvider` over runtime-owned decoded `QImage`
+with stable identity/bounded retention. No QPixmap worker transport, base64/tempfile churn or unchanged
+reupload.
 
-A value is family-authored reference only if the family independently owns the visual relationship.
-Global sidecar values do not become family-authored when copied locally.
+## Shadow authority
 
-## Transition ownership
+Canonical includes direction, Card enabled/opacity/blur/extra offset, Text enabled/opacity/extra offset,
+and Header enabled. No `widgets.shadows.offset`, Intense mode, Text Blur or `shadowtuning.json` replacement.
+Python resolves direction to signed offsets before QML.
 
-```text
-canonical registry/settings
--> activation/admission
--> resolved immutable request
--> TransitionRequest / TransitionRun
--> lazy Quick implementation
--> display transition QSGRenderNode
-```
+A value is family-authored only when family independently owns it. Clock analogue special geometry is the
+permanent explicit exception.
 
-All canonical transition pixels are Quick-owned.
+## Transition / visualizer
 
-Old `GLCompositor*Transition` classes are migration debris once caller-proofed. Preserve semantic
-identity/math actually used by Quick and deterministic recovery behavior.
+Transitions: canonical registry/settings -> activation/admission -> immutable request/run -> lazy Quick
+implementation -> display render node. Old compositor transition pixels are debris after caller proof.
 
-## Visualizer ownership
+Visualizer: Beat/source owners -> `VisualizerLogicalRuntime` -> mode logical runtime -> immutable/latest
+render state -> Quick sync -> visualizer render node. One authored logical clock; preserve destination-used
+adapters regardless of filename.
 
-```text
-audio/source
--> BeatEngine/source owners
--> VisualizerLogicalRuntime
--> mode logical frame runtime
--> immutable/latest render state
--> Quick synchronization/snapshot bridge
--> visualizer QSGRenderNode
-```
+## Geometry / CUSTOM
 
-One authored logical clock. No GUI/physical-presentation clock as simulation authority.
+Outer geometry is Python/session-owned; key supports `(widget_id, display_identity, geometry_variant)`.
+Clock has digital/analogue variants.
 
-Preserve snapshot/adapters currently feeding Quick even if their filename says `legacy`.
+Edit-mode X: duplicate removes working duplicate; singleton maps to ordinary enabled OFF; never capability
+deactivation; persist on Save/Enter only; Cancel restores prior state.
 
-Old compositor-only pixels are not protected once caller-proofed.
+## Lifecycle / documentation
 
-## Geometry/CUSTOM
+Generation 0 is valid. Old admission closes before replacement authority. Stale generation/request results
+cannot update replacement. Render resources retire on legal owner.
 
-Outer geometry is Python/session-owned.
-
-Known variant contract:
-
-```text
-(widget_id, display_identity, variant)
-Clock: digital / analog
-```
-
-Phase G owns final edit/session behavior.
-
-## Lifecycle
-
-Generation identity is explicit; `0` is valid.
-
-Old generation admission closes before replacement authority begins.
-
-Render resources are destroyed by the legal render/context owner.
-
-## Documentation conflict rule
-
-Historical plans/reports may contain old QWidget/compositor ownership. They cannot override:
-
-1. exact current source for implementation fact;
-2. `Current_Plan.md` for sequence;
-3. `Spec.md` / focused current docs for destination contract.
-
-The large Steam pre-Quick plan is product/data/UX history only for presentation architecture; see its
-current wrapper.
+Authority order: exact source for implementation fact -> `Current_Plan.md` for sequence -> `Spec.md` and
+focused current docs for durable contract -> tests/evidence for claim. Historical plans cannot override.

@@ -1,413 +1,111 @@
 # 10 — Ordinary Widget Family Port Decomposition
 
-Status: **Phase F ACTIVE — F1–F5 CLOSED; F6 Gmail ACTIVE**
-Last updated: 2026-08-25
+Status: **Phase F ACTIVE — F1–F5 CLOSED; F6 Gmail ACTIVE / partial**  
+Last updated: 2026-08-26
 
-This file begins at current/future Phase-F work. Completed F0/F0.5 implementation history does not live
-here.
+This owns Phase-F family decomposition, not closed implementation narrative. `Current_Plan.md` owns exact
+work admission.
 
-## Phase-F mission
-
-Move ordinary runtime pixels into the one retained Quick scene while preserving presentation-neutral
-runtime/provider ownership.
+## Mission / sequence
 
 ```text
-neutral runtime/model
--> presentation model
--> retained family QML
--> OverlayWidget / shared primitives
--> one display QQuickWindow
+neutral runtime/backend/model -> stable presentation model -> retained family QML
+-> OverlayWidget/shared primitives -> one display QQuickWindow
 ```
-
-## Sequence
 
 ```text
-F0.5              closed
-F1                Clock / Clock2 / Clock3 — CLOSED
-F2                Weather — CLOSED
-F3                Media core — CLOSED
-F4                Media controls / volume / mute / progress — CLOSED
-F5                Reddit / Reddit2 — CLOSED
-F6                Gmail — ACTIVE
-F7                Achievement Pulse
-F8                Abandonment Issues
+F1 Clock / Clock2 / Clock3                     CLOSED
+F2 Weather                                     CLOSED
+F3 Media core                                  CLOSED
+F4 Media controls / volume / mute / progress   CLOSED
+F5 Reddit / Reddit2                            CLOSED
+F6 Gmail                                       ACTIVE / PARTIAL
+F7 Achievement Pulse
+F8 Abandonment Issues
 ```
 
-Do not reorder merely to dodge an architecture issue. Exact source may justify smaller sub-slices.
+Family retirement: inspect old reference -> reuse/extract neutral logic -> retained Quick family -> focused
++ eyes-on proof -> GREEN under current audit policy -> caller proof -> delete old family pixels/tests -> next.
+No completed family fallback to H/I.
 
-## Family retirement
+Common rules: no QWidget effect/shadow-fade choreography; root fade; QML no provider/cache/auth/persistence/
+cadence; common Quick imports family-runtime dormant; preserve independently-authored family behavior; do
+not copy retired tuning as family-authored; add shared primitive only when active family earns it.
 
-For F1–F8:
+## Closed families
 
-```text
-inspect old family reference
--> extract/reuse neutral logic
--> build retained Quick family
--> focused tests + eyes-on as required
--> required GREEN review/self-audit
--> caller proof
--> delete old family pixel presenter/presentation-only tests
--> next family
-```
+F1 Clock proved shared GlobalClockTicker, stable independent Clock models, shared process engine/per-display
+host, canonical shadow style, exact digital/analogue geometry, separator and retained analogue special
+shadows. Old Clock pixels/tests deleted; permanent shadow contract doc 11.
 
-Do not carry completed old family pixels to I.
+F2 Weather keeps provider/cache/cadence/retry/request generations in WeatherRuntimeService with retained
+model/QML + real manager/host proof. Old pixels deleted.
 
-## No old effect architecture
+F3/F4 Media: one retained model/item covers core+controls+progress+app volume+system mute. Existing shared
+Media/volume/mute owners remain business authorities; process-engine artwork provider; semantic seek uses
+accepted playback state truth; soft glow landed. Old Media pixels/hit routing deleted; temporary non-painting
+Media anchor remains only for old physical-host/Visualizer relationships until H.
 
-Do not port:
+F5 Reddit/Reddit2: one retained family component; independent stable model/runtime per configured member;
+shared rate-limit policy; old pixels/caches/hit/hover presentation deleted.
 
-- `ShadowFadeProfile`;
-- QGraphicsOpacityEffect choreography;
-- dummy/effect carriers;
-- separate shadow fade.
+Integrated F2–F5 independent review GREEN; see current audit under `Docs/audits/`.
 
-Whole-widget fade = retained root opacity.
+## F6 Gmail — ACTIVE
 
-## Family-authored visual reference
+Preserve existing shared Gmail backend/runtime owner.
 
-Preserve family-specific content/layout/animation/interaction/geometry while its Quick replacement is
-unproven.
+Required retained product behavior: stable bounded message/thread identity, sender/subject/date cleanup and
+grouping, loading/ready/cached/error/auth/empty, unread/read styling and envelope/header behavior, configured
+capacity/dynamic height, explicit refresh and blank-space double-click refresh, current three-dot popup action
+menu with icons, semantic open/auth/refresh/read-unread/archive/spam/delete, notification/sound Python-owned.
 
-A value is family-authored only if the family itself owned the visual relationship independently.
+### Landed partial at `c6af1260`
 
-The retired global `shadowtuning.json` card/text/header/icon/control/volume-slider numbers are not
-family-authored reference.
+- stable GmailPresentationModel + GmailRowListModel;
+- GmailPresentation.qml;
+- RetainedGmailPresentation wrapper;
+- semantic QML -> Python routing;
+- real registry/host/runtime injection not yet landed.
 
-Clock analogue hard-shadow geometry is.
+Direction is sound; do not roll it back.
 
----
+### Finish QML fidelity before owner injection
 
-# F1 — Clock
+Preserve popup three-dot menu instead of row-expanding text chips and current action icons; menu open does not
+alter committed height/CUSTOM geometry; header frame uses proper card/header border style; no-unread logo
+really desaturates if setting survives; blank-space double-click refresh remains; dynamic accepted-row height
+proved separately from popup state.
 
-Mandatory:
+### Shared Quick import-dormancy correction
 
-- `11_Clock_Analogue_Shadow_Contract.md`
-- `09_Widget_Quick_Presentation_Bridge.md`
-- current Clock source as visual/behavior reference
+Before real Gmail owner injection, common `rendering.quick.widgets` / scene imports must stop importing inactive
+family runtime/backend trees merely from `import rendering.quick.scene_controller`. Keep static registry metadata
+light; no second registry/plugin architecture.
 
-## Runtime/model
+### Complete F6
 
-Keep `GlobalClockTicker` as shared one-second cadence authority.
+Register Gmail in existing static registry -> inject real manager-owned GmailRuntimeService lease -> cross
+real QuickSceneController host -> runtime-shaped state/action/geometry/no-recreation gates -> practical multi-
+DPR eyes-on -> caller proof -> delete old Gmail QWidget pixel/cache/input presentation/tests while preserving
+neutral runtime/backend/preparation/settings/notification/sound.
 
-Python owns timezone/formatting/angles/settings.
+## F7 Achievement Pulse
 
-Use one stable presentation model per logical Clock instance.
+Use existing neutral achievement/runtime/preparation foundations and immutable card view model. Preserve
+cache/privacy/provenance/selection; do not duplicate Steam data ownership. Predominantly presentation mapping/
+fidelity. After GREEN+caller proof delete old pixels.
 
-No new Clock service merely for symmetry.
+## F8 Abandonment Issues
 
-## First generic family seam
+Use substantive Abandonment runtime/data path. Preserve privacy/provenance/selection; unknown/private data
+explicit. No provider/cache duplication. After GREEN+caller proof delete old pixels.
 
-Establish the smallest static family component/model binding mechanism using the existing Quick engine
-and ordinary-widget host.
+Steam Journey/Progress and Friend Pulse are future product scaffolds, not migration slices. If old scaffold
+presenter blocks cleanup, retire scaffold rather than manufacture parity port.
 
-No provider/settings/QWidget in QML.
+## Shared primitive admission
 
-No family-specific branching in display scene/controller.
-
-## Digital Clock product changes
-
-Required:
-
-- separator = 2 logical px;
-- target width ≈ 0.77 inner width, eyes-on range ~0.75–0.80;
-- no old 240 px cap defeating widening;
-- one symmetric separator gap above/below;
-- separator also appears in analogue mode when enabled and calendar content exists;
-- day/date shadow matches ordinary timezone secondary-text semantics;
-- no text blur.
-
-Legacy `show_digital_separator` may feed semantic `showSeparator` until H settings epoch.
-
-## Shadow wiring
-
-F1 is first real end-to-end proof:
-
-```text
-canonical widgets.shadows
--> Python style projection
--> deliberate Quick class base magnitude
--> user Extra Offset
--> canonical ShadowDirection resolver
--> signed retained properties
-```
-
-Direction/style change does not recreate Clock item/model/ticker/engine/window.
-
-Do not use sidecar-derived baseline numbers.
-
-Analogue special shadows follow `11_Clock_Analogue_Shadow_Contract.md`.
-
-## Geometry variants
-
-```text
-Clock + display
-  digital -> rect A
-  analog  -> rect B
-```
-
-First target with no saved geometry:
-
-1. current visual center;
-2. target natural size;
-3. center;
-4. clamp once;
-5. establish target baseline.
-
-After both exist:
-
-```text
-A -> B -> A exactly
-```
-
-No cumulative derivation/drift.
-
-F1 establishes semantic interface; G owns final CUSTOM Save/Cancel persistence.
-
-## Completion
-
-Deterministic:
-
-- model mapping;
-- one-second angles/ticker ownership;
-- existing engine/window;
-- item recreate without ticker recreate;
-- root fade only;
-- no text blur/MultiEffect;
-- real canonical shadow settings/direction wiring;
-- separator contract;
-- day/date/timezone shadow semantic;
-- geometry round-trip;
-- static analogue decoration retained.
-
-Eyes-on:
-
-- digital/analogue;
-- card on/off;
-- calendar/timezone combinations;
-- separator on/off;
-- several directions;
-- multiple DPR/sizes;
-- repeated mode switching;
-- multiple differently configured clocks.
-
-F1 is independently GREEN and caller-proven through the current ordinary-widget host. The old Clock
-factory/descriptors, QWidget pixel presenter and presentation-only tests are deleted; neutral settings,
-geometry metadata and `GlobalClockTicker` remain with their destination owners.
-
----
-
-# F2 — Weather
-
-Use neutral Weather runtime/provider/cache/refresh/request-generation ownership.
-
-The retained implementation uses `WeatherPresentationModel` as the existing
-`WeatherRuntimeService` consumer, publishes packaged/static icon identities and creates
-`WeatherPresentation.qml` through the ordinary-widget host. Provider/timer/cache/generation ownership
-has not moved. Caller proof crosses the real `WidgetRuntimeManager` service injection and ordinary-widget
-host; the old Weather factory, QWidget pixel presenter/components and presentation-only tests are gone.
-
-Presentation model covers location, condition, temperature, forecast, icon identity, loading/error/missing
-location and style.
-
-Prefer packaged/static icon identities where current behavior permits.
-
-Do not create full provider-artwork infrastructure merely for icons.
-
-Use offline synthetic pixel/model states.
-
-F2 is CLOSED. Runtime/cache/provider regressions remain under `tests/test_weather_runtime.py` and retained
-presentation coverage remains under `tests/test_qtquick_weather_presentation.py`.
-
----
-
-# F3 — Media core
-
-Higher risk due shared controller, artwork, playback/progress and Visualizer relationship.
-
-Reuse shared Media runtime owner.
-
-Publish one coherent revision of provider/track/artwork/playback/progress/control availability/style.
-
-Media is preferred first serious dynamic-artwork consumer. Earn one shared image-delivery seam with
-stable identity, legal threading, bounded cache/lifetime and no unchanged upload.
-
-Audit separately if asset delivery changes process/display resource ownership.
-
-The retained implementation uses `MediaPresentationModel` plus static `MediaPresentation.qml` and
-one process-engine `MediaArtworkImageProvider`. The existing shared Media runtime still owns provider,
-controller, poll cadence, accepted revision and decoded `QImage`; the Quick provider only detaches and
-serves immutable images by the runtime artwork key. Focused gates cover real runtime-manager injection,
-ordinary-widget-host activation/retirement, unchanged-artwork identity, stale-revision rejection and
-in-place settings/style mutation. Caller proof removed the old QWidget header, metadata, artwork,
-artwork-cache/fade lifecycle and their presentation-only tests. F4 subsequently removed the remaining
-control/progress pixels; the temporary QWidget is now a transparent runtime/Visualizer anchor only.
-
-F3 is CLOSED.
-
----
-
-# F4 — Media controls
-
-Build on F3.
-
-Preserve narrow volume/system-mute owners.
-
-QML emits semantic actions.
-
-Quick progress interpolation may be visual only; it does not become playback truth.
-
-No cardinality increase per display/item.
-
-The first retained F4 checkpoint added capability-gated previous/play-pause/next controls and accepted
-progress to the existing `MediaPresentation.qml`. QML emits semantic actions; Python routes them to the
-existing `MediaRuntimeService`. Primitive Ctrl/Interaction state is resolved in Python before enabling
-pointer actions. No second model/item/runtime was introduced.
-
-The second retained F4 checkpoint projected the already-separated `MediaVolumeRuntimeService` lease into
-that same Media model/item. Accepted capability/level revisions drive one inline vertical slider; QML
-emits semantic levels and Python routes them to the owner. The existing controller target, optimistic
-projection, read/write generations and debounce remain unchanged. No second Media model/item is added.
-
-The third retained F4 checkpoint projected the separate `SystemMuteRuntimeService` lease into the same
-Media model/item and places its bounded button inside the existing controls band. Accepted mute
-revisions drive the icon; QML emits a semantic toggle and owns only pressed/flash feedback. Endpoint
-acquisition, polling, toggle/global-volume actions and generation fencing remain Python-owned.
-
-The retained progress correction adds `can_seek` to the accepted Media track snapshot and sends an
-invisible track click/release as one clamped semantic fraction through the existing shared runtime and
-GSMTC controller. The controller resolves the selected session's current timeline and converts the
-fraction to WinRT ticks; QML never changes the displayed fraction itself. Unsupported or non-admitted
-requests are inert. The old solid enlarged glow rectangle is replaced by one cached, bounded
-`RectangularShadow` around the retained fill, with the configured enable and colour semantics intact.
-The real-Quick matrix carries an explicit glow-off comparison at effective DPR 1.0, 1.5 and 2.25.
-
-Caller proof removed the old Media control/progress painters, volume and mute QWidgets, factories,
-descriptors, pointer-hit routing and presentation-only tests. `MediaWidget` remains temporarily as a
-non-painting accepted-state/runtime owner and Visualizer geometry/visibility anchor until the physical
-host cutover in H. App-volume and system-mute services are injected into that neutral owner; retained
-QML remains the only Media pixel/action presenter. F4 is CLOSED.
-
----
-
-# F5 — Reddit / Reddit2
-
-Use neutral post-provider ownership.
-
-Use bounded stable post IDs and semantic actions.
-
-Differences belong in configuration/model resolution, not duplicate providers/deep QML inheritance.
-
-Reuse shared image seam if compatible.
-
-The first retained F5 checkpoint adds one static `RedditPresentation.qml` family component and one
-stable `RedditPresentationModel` plus `RedditRowListModel` per configured member. Reddit2 style
-inheritance is resolved in Python while subreddit/limit/feed identity remain independent. Coherent
-loading/ready/cached-error/empty state, stable URL-first row identities, canonical card/text-shadow
-projection, single-line title elision and interaction-gated semantic open/refresh signals mutate in
-place without item/model/list-model/engine recreation. QML owns no provider, cache, cadence, URL side
-effect, persistence, rate limiter or Timer. Real threaded-OpenGL evidence covers effective DPR 1.0,
-1.5 and 2.25.
-
-The second F5 checkpoint replaces the old provider-only lease with one per-member
-`RedditRuntimeService`. It owns provider selection/use, startup cache snapshots, the accepted candidate
-window, periodic/manual due horizons, blocked-gate persistence, request generations and retirement.
-`WidgetRuntimeManager` injects the service into the retained model; construction remains
-filesystem/network inert and activation is the first work boundary. Runtime-shaped caller proof crosses
-the real manager-owned service, retained model and current `QuickSceneController` host; it verifies
-cached-first state, semantic refresh/open routing, accepted live state, in-place geometry/style mutation,
-stable item/engine/service identity and retirement. F5 closure deletes the old Reddit factory, QWidget
-pixels, pixmap caches, hit regions, hover/config adapters and presentation-only suites. Neutral provider,
-preparation, cache, cadence, rate-limit, helper and deferred-URL contracts remain. F5 is CLOSED.
-
----
-
-# F6 — Gmail
-
-Reuse shared Gmail backend/runtime owner.
-
-Stable message IDs; bounded rows; sender/subject/snippet/time/status; semantic actions.
-
-Notification detection/sound remains Python/business-owned.
-
-The first retained F6 checkpoint keeps the existing `GmailRuntimeService` and shared runtime owner as
-the sole backend/cache/cadence/generation/action/notification authority. It adds one stable
-`GmailPresentationModel` and `GmailRowListModel` with bounded config/style projection, thread/message
-identity, grouping, sender/subject/time formatting, coherent accepted-state projection and
-interaction-gated semantic refresh/auth/open/message actions. Accepted snapshots and settings mutate
-the retained row model in place. Static QML, real owner injection and caller proof remain open.
-
----
-
-# F7–F8 — substantive Steam family
-
-Use current neutral Steam models/runtime and:
-`Docs/SRPSS_Steam_Widget_Family_Implementation_Plan.md`.
-
-Current source reality:
-
-```text
-Achievement Pulse   -> substantive implemented runtime/widget
-Abandonment Issues  -> substantive implemented runtime/widget
-
-Steam Journey       -> unfinished dev-gated scaffold
-Friend Pulse        -> unfinished dev-gated scaffold
-```
-
-Only the first two are migration ports.
-
-Do not parse the historical 123 KB pre-Quick plan as current presentation architecture.
-
-Do not build Quick components for Steam Journey/Progress or Friend Pulse merely because scaffold ids,
-settings, mock tests or descriptors exist.
-
-### F7 Achievement Pulse
-
-Current source already has strong neutral foundations:
-
-- immutable `SteamCardViewModel`;
-- dedicated Achievement resolution;
-- dedicated runtime/preparation path.
-
-This should be predominantly presentation mapping/visual fidelity once shared family seams exist.
-
-Preserve existing cache/privacy/provenance behavior and do not duplicate Steam data ownership.
-
-After GREEN, caller-proof and delete old Achievement Pulse runtime pixels.
-
-### F8 Abandonment Issues
-
-Use the existing substantive Abandonment runtime/data path.
-
-Preserve current privacy/provenance/selection semantics. Unknown/private data remains explicit.
-
-Do not duplicate Steam provider/cache ownership per component.
-
-After GREEN, caller-proof and delete old Abandonment Issues runtime pixels.
-
-### Deferred Steam stubs
-
-Steam Journey/Progress and Friend Pulse are future product work, not migration slices.
-
-During migration:
-
-- do not invent their missing product/data behavior;
-- do not port scaffold/mock pixels;
-- leave them dev-gated if harmless;
-- if their scaffold presenter blocks shared old-pixel deletion later, retire the scaffold rather than
-  manufacturing a Quick parity implementation.
-
----
-
-# Shared primitive admission
-
-Add a reusable QML primitive only when the active family needs it now and its API is naturally
-presentation-only.
-
-Likely later candidates:
-
-- Artwork;
-- ProgressBar;
-- transport/icon control;
-- bounded row/card shell.
-
-Do not prebuild a universal widget framework.
+Shared shell/text/separator and Media artwork/control/progress already provide proven patterns. Add reusable
+primitive only when active family needs it now and API is presentation-only. Do not prebuild universal widget
+framework.

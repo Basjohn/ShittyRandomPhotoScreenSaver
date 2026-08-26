@@ -1,27 +1,21 @@
 # SRPSS Guardrails
 
-Last updated: 2026-08-22
+Last updated: 2026-08-26
 
-Durable cross-cutting stop rules.
-
-## 1. Architecture decision
-
-Qt Quick is the accepted runtime presentation destination:
+## Architecture decision
 
 ```text
-one physical display -> one standalone QQuickWindow -> threaded Quick scene graph
+one selected physical display
+-> one standalone QQuickWindow
+-> threaded Quick scene graph
+-> one composed runtime scene
 ```
 
-Do not reopen a broad C++/native presenter route without new evidence that the accepted architecture
-cannot satisfy production requirements.
+Do not reopen broad native/C++ presenter work without new evidence accepted architecture cannot satisfy
+production. Do not use `QQuickWidget`, second accelerated runtime surfaces, or deepen QRhiWidget architecture
+to avoid migration work. Old QRhiWidget path is current-legacy until H.
 
-Do not use `QQuickWidget`.
-
-Do not add second accelerated runtime surfaces.
-
-During migration, the existing QRhiWidget path is the current/reference implementation only.
-
-## 2. Priority
+## Priority
 
 1. visualizer fidelity/reactivity;
 2. lifecycle/resource safety;
@@ -32,186 +26,111 @@ During migration, the existing QRhiWidget path is the current/reference implemen
 7. average FPS;
 8. elegance.
 
-Never improve a counter by silently reducing authored work or fidelity.
+Never improve counters by silently reducing authored work/fidelity.
 
-## 3. Read/scope discipline
-
-For architecture work read:
+## Read / scope discipline
 
 ```text
-current source
+exact source
 -> Current_Plan.md
 -> Spec.md
--> Docs/Compositor_Architecture.md
 -> Docs/Contracts.md
--> relevant focused guardrail
+-> relevant focused contract/guardrail
+-> tests/evidence
 ```
 
-Preserve unrelated user work.
+Preserve unrelated user work. Do not reset/checkout/clean/stash/revert merely to manufacture checkpoint
+equality. Historical evidence is not current owner map.
 
-Do not reset/checkout/clean/stash/revert merely to manufacture checkpoint equality.
-
-Historical evidence is not a current owner map.
-
-## 4. Immediate stop conditions
+## Immediate stop conditions
 
 Stop/reassess when:
 
-- Bubble/Spectrum/another mode loses fidelity/reactivity;
-- BTF fails;
-- source age rises while visuals keep moving;
+- Bubble/Spectrum/another mode loses authored fidelity/reactivity or BTF fails;
+- source age rises while visuals continue;
 - physical p99/max worsens despite prettier averages;
-- a producer waits for paint/present;
-- a second visualizer logical clock appears;
-- GUI/AnimationManager simulation ownership reappears;
+- producer waits for paint/present or second visualizer logical clock appears;
 - logical worker mutates GUI/Quick/GPU state;
-- valid generation `0` is lost;
-- stale generation can reveal/publish;
+- valid generation 0 is lost or stale generation/request can publish/reveal;
 - resource ownership cannot be explained;
-- a fallback/substitution silently changes presentation architecture, implementation, capability, or authored behavior;
-- a second accelerated window/surface is introduced;
-- `QQuickWidget` is used to claim migration progress;
-- a change deepens the old QRhiWidget presenter without explicit migration need;
-- a local renderer concern is used to reopen a whole native-presenter migration.
+- fallback silently changes presenter/renderer/capability/authored behavior;
+- second accelerated surface appears or `QQuickWidget` claims migration progress;
+- common Quick imports eagerly resolve inactive family backend/runtime trees;
+- family port duplicates provider/controller/timer/cache/action authority;
+- migration casually redesigns working family interaction/visual behavior without product intent.
 
-## 5. Fallback / substitution rule
+## Resilience vs fallback
 
-Do not silently substitute an alternate implementation, presenter, renderer, capability, or authored
-behavior when the selected path fails. Fail closed or repair the selected owner.
+Do not silently substitute alternate architecture/authored behavior when selected path fails. Fail closed or
+repair selected owner. Provider/cache/network recovery and deterministic resolution inside same feature
+contract remain valid product resilience.
 
-Explicitly designed provider/cache/network resilience, fail-safe error presentation, and ordinary
-candidate/default resolution **within the same feature contract** are not prohibited fallback
-architecture. Examples include using valid cached provider data when the network source is unavailable,
-trying an explicitly supported provider connection strategy, choosing a recently-used eligible image
-when the preferred unused candidate set is exhausted, or selecting another activated transition after
-the previous manual choice is deactivated.
+Legacy GL demotion (`FULL_SHADERS -> COMPOSITOR_ONLY -> SOFTWARE_ONLY`) retires with old physical presenter.
 
-Prefer terms such as `resilience`, `fail-safe`, `replacement selection`, and `default/baseline
-resolution` for those cases. Reserve `fallback` for architectural/behavioral substitution where
-practical so the guardrail remains unambiguous.
+## One owner per concern
 
-The legacy GL capability-demotion path (`FULL_SHADERS -> COMPOSITOR_ONLY -> SOFTWARE_ONLY`) and
-software-only rendering are **not supported SRPSS product behavior**. They are old-presenter debris to
-remove after caller proof/cutover and must not be carried into the Qt Quick destination.
+Topology: DisplayManager/topology owner. Physical presentation: one destination QQuickWindow per display.
+Ordinary retained items: QuickSceneController/OrdinaryWidgetPresentationHost. Ordinary runtime cardinality:
+WidgetRuntimeManager plus real neutral owner scope. Visualizer source: Beat/audio owner. Visualizer logical
+cadence: VisualizerLogicalRuntime. GPU deletion: legal render/context owner. ResourceManager accounts only.
 
-## 6. One owner per concern
+A per-display manager does not imply every provider/backend is per-display.
 
-Examples:
+## Capability / import dormancy
 
-- runtime lifecycle: engine/display lifecycle owner;
-- topology: DisplayManager/topology owner;
-- visualizer source: BeatEngine/audio owner;
-- visualizer logical cadence: `VisualizerLogicalRuntime`;
-- physical runtime presentation: destination `QQuickWindow` per display;
-- GPU resource deletion: explicit legal render/context owner;
-- accounting: `ResourceManager`; accounting only, never GPU deletion owner.
+Family deactivation and ordinary instance disabled are distinct. Deactivated family ultimately owns no
+family-exclusive provider/model/helper/timer/poll/worker/presentation/render resource.
 
-## 7. Presentation admission
+Cheap catalog/common Quick imports must not eagerly import heavy inactive family implementation trees. Do
+not use package `__init__` convenience exports to defeat dormancy.
 
-Allowed:
+## Presentation admission
 
-- bounded latest-state synchronization;
-- passive timing metrics;
-- coalescing that prevents duplicate queued work without waiting for paint.
+Allowed: bounded latest-state sync, passive metrics, coalescing that prevents duplicate queued work without
+waiting for paint.
 
-Forbidden:
+Forbidden: pending-until-paint, paint/swap acknowledgement, producer timestamp/display-rate divisor,
+scheduler release by paint, catch-up replay, source/event/logical cadence reduction, independent visualizer
+presentation loops.
 
-- pending-until-paint;
-- paint/swap acknowledgement;
-- producer timestamp/display-rate divisor;
-- scheduler release by paint;
-- catch-up replay;
-- source/event/logical cadence reduction;
-- independent visualizer presentation loops.
+## Visualizer safety
 
-## 8. Visualizer safety
+Preserve attack/amplitude/decay, smoothing, overshoot/elasticity/settling, low-energy response, spatial
+distribution, source freshness, transients and mode personality. Every authored input integrates before
+presentation coalescing. Logical time never derives from physical paint cadence. Bubble BTF is binding.
 
-Preserve:
+## Quick/render resource safety
 
-- attack/amplitude/decay;
-- smoothing;
-- overshoot/elasticity/settling;
-- low-energy response;
-- spatial distribution;
-- source freshness;
-- transients;
-- mode personality.
+One resource has one deletion owner; create/use/destroy under legal render-thread/context contract; old
+resources retire before replacement authority; failed deletion retains ownership/fails closed; accounting
+follows real ownership release. No `glFinish()`, `DwmFlush()`, GUI sleeps, nested event pumping or fence
+polling as cadence repair. Do not copy QRhiWidget borrowed-context rules into Quick without proof.
 
-Every authored input integrates before presentation coalescing.
+## Lifecycle
 
-Logical time never derives from physical paint cadence.
+Close old admission -> stop generation-owned producers -> join logical runtimes where required -> reject
+stale state -> retire legal render resources -> destruction barrier -> construct replacement -> prepare
+intentional first content -> reveal. No hide-only lifecycle or force-cleared handles.
 
-For Bubble, BTF is binding.
+## Runtime overlays / widgets
 
-## 9. Quick/render resource safety
+Do not rewrite provider/model/business logic because pixels migrate. QML owns presentation/semantic input
+only. Preserve proven family behavior; remove obsolete QWidget mechanics rather than using migration as an
+unrelated redesign opportunity. Settings may remain QWidget.
 
-The selected Quick primitive defines the legal render/context owner.
+## Native/C++
 
-Rules:
+Native code is contingency/local optimization only. Name measured cost, exact renderer, why current Quick
+primitive is insufficient, and how code remains inside same QQuickWindow. No second presentation architecture.
 
-- one resource has one deletion owner;
-- creation/use/destruction obey the render-thread/context contract;
-- old-generation resources retire before replacement authority;
-- failed deletion retains ownership/fails closed;
-- accounting follows real ownership release;
-- no `glFinish()`, `DwmFlush()`, GUI sleeps, nested event pumping, or fence polling as cadence repair.
+## Diagnostics
 
-Do not copy old QRhiWidget borrowed-context rules forward without verifying they apply.
+Passive, sampled, bounded, never cadence/admission control. Physical-display claims require physical/OS
+boundary evidence when internal callbacks are ambiguous.
 
-## 10. Lifecycle
+## Documentation
 
-For recreation/cutover:
-
-1. close old admission;
-2. stop generation-owned producers;
-3. join logical runtime;
-4. reject stale state;
-5. retire legal render resources;
-6. pass destruction barrier;
-7. construct replacement;
-8. prepare intentional first content;
-9. reveal current generation.
-
-No hide-only lifecycle, cleanup retry timers, force-cleared GPU handles, or garbage-collection-owned
-resource lifetime.
-
-## 11. Runtime overlays
-
-Do not rewrite provider/model/business logic merely because runtime pixels migrate.
-
-Separate data authority from pixel authority.
-
-The destination Quick scene owns runtime pixels that coexist over the screensaver.
-
-Settings may remain QWidget.
-
-## 12. Native/C++ rule
-
-Native code is contingency/local optimization only.
-
-Before introducing it, name:
-
-- the measured Python/render callback cost;
-- the exact renderer to move;
-- why existing Quick primitives are insufficient;
-- how the change remains inside the same `QQuickWindow`.
-
-No second presentation architecture.
-
-## 13. Diagnostics
-
-Diagnostics are passive, sampled, bounded, and never cadence/admission control.
-
-Use existing evidence before creating another probe family.
-
-Physical-display claims require OS/display-boundary evidence when internal callbacks are ambiguous.
-
-## 14. Documentation
-
-- edit canonical docs in place;
-- `Current_Plan.md` owns current sequence/work admission and may retain clearly marked completed-phase closure/rationale for migration continuity;
-- evidence reports keep measurements;
-- historical reports remain historical;
-- when a migration changes owner/type, reconcile current owner docs in the same docs sweep.
-
-Do not preserve obsolete planning documents that can compete with the accepted architecture.
+Edit canonical docs in place. Current Plan stays lean and owns current sequence/work/debt. Independent
+audit/closure narrative belongs under `Docs/audits/` or historical evidence. When owner/type/retirement
+policy changes, reconcile current owner docs in same sweep. Do not preserve obsolete planning docs that
+compete with accepted architecture.

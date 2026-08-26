@@ -1,8 +1,6 @@
 # Documentation Maintenance
 
-Last updated: 2026-08-24
-
-Rules for keeping SRPSS documentation useful to coding agents.
+Last updated: 2026-08-26
 
 ## Roles
 
@@ -12,118 +10,92 @@ Rules for keeping SRPSS documentation useful to coding agents.
 | `Spec.md` | durable product/architecture |
 | focused docs/guardrails | durable subsystem contracts |
 | `Index.md` / `Docs/Contracts.md` | routing/current owner map |
+| `Docs/audits/` | independent audit findings and closure evidence |
 | `Docs/TestSuite.md` | live test inventory/status ledger |
 | `Future_Cleanup.md` | deferred deletion/debt |
 | `Future_Work.md` | deferred features/experiments |
 | historical plans/reports/bugs/evidence | history only |
 
-## Current Plan must stay lean
+## Current Plan stays lean
 
-Do **not** retain completed phase implementation narratives in `Current_Plan.md`.
+Do not retain completed phase implementation narratives in `Current_Plan.md`.
 
-When a phase closes:
+When a slice/family closes:
 
-1. preserve only the durable invariant in a focused current contract if it still matters;
-2. move useful closure rationale/checkpoints to `Docs/Historical_Plans/` or an existing phase/evidence
-   report;
+1. keep only durable invariant in appropriate current contract;
+2. put useful independent review/closure detail in `Docs/audits/` or historical evidence;
 3. remove completed task lists from Current Plan;
-4. spend Current Plan length on current/next/future work.
+4. spend Current Plan length on current/next/future work and live debt.
 
-A coding agent should not parse Phase E implementation history while working in Phase F.
+A coding agent working F6 should not parse F2 implementation history to discover today's task.
 
-## Focused docs after a phase closes
+## Focused docs after closure
 
-A technical decomposition may remain current if it is still the best subsystem authoring contract.
-
-Reframe it:
-
-```text
-old: "implement/add/prove this Phase-C item"
-new: "landed invariant/current authoring rule"
-```
-
-Remove stale phase-status/task instructions that can be mistaken for active work.
-
-## Migration epoch / legacy wording
-
-Current docs must distinguish:
+A technical decomposition may remain current if it is still the best subsystem authoring contract. Reframe
+future-tense task language into landed invariant/current authoring rule.
 
 ```text
-destination authority
-temporary current implementation
-temporary reference evidence
-historical evidence
+old: implement/add/prove this Phase-X item
+new: current owner/contract; change only if evidence requires it
 ```
 
-Do not use a single blanket “H/I” retirement label.
+## Migration-epoch wording
+
+Distinguish destination authority, temporary current-legacy implementation, temporary visual/behavior
+reference, and historical evidence.
 
 Current retirement policy:
 
-- ordinary family pixels -> after family GREEN in F;
-- old transition/visualizer pixel-only owners -> caller-proof early when possible;
+- ordinary family pixels -> family GREEN under current audit policy + caller proof in F;
+- transition/visualizer old pixel-only owners -> caller-proof early when possible;
 - old CUSTOM pixels -> after G;
 - physical presenter/backend -> H;
 - residue -> I.
 
-## Family-authored means independently authored
+Do not use blanket H/I retirement labels.
 
-When old shared tuning is removed, do not relabel its numbers as family-authored.
+## Source reality / phase labels
 
-A value/relationship is family-authored only if the family itself owned it independently of the retired
-shared authority.
+A closed phase must not remain described as `ACTIVE`, `candidate`, `awaiting audit` or `will be removed` in
+a live authority document.
 
-Clock analogue geometry qualifies.
-`shadowtuning.json` card/text/icon/control/volume profiles do not.
+A partial checkpoint must be called **partial** and name what is still unproven. Do not promote model-only
+or QML-only work into caller-proof/closure language.
 
-## Large old implementation plans
+## Family-authored
 
-If a large pre-migration plan contains useful product/data/security/visual history but obsolete
-presentation architecture:
+A value/relationship is family-authored only when independently owned by family. Clock analogue qualifies;
+retired `shadowtuning.json` card/text/icon/control/volume profiles do not.
 
-- replace the live file with a concise current-epoch wrapper/reference index;
-- point to current source/current contracts;
-- record the Git commit containing the full historical plan for targeted lookup;
-- do not force every coding agent to ingest the obsolete plan.
+## Import dormancy wording
 
-This policy applies to the Steam family plan.
+Capability dormancy includes import boundaries. Current docs must not teach common registries/packages to
+eagerly import inactive family provider/runtime/backend implementation trees. Cheap catalog/static
+presentation metadata is allowed; heavy family implementation resolves at real activation/caller boundary.
 
 ## Major owner-change sweep
 
-When owner/deletion policy changes, inspect at least:
+Inspect at least `Current_Plan.md`, `Spec.md`, `Index.md`, `Docs/Contracts.md`, `Future_Cleanup.md`, relevant
+focused QtQuick docs, `Docs/10_WIDGET_GUIDELINES.md` when ordinary-family patterns changed, feature plans
+naming concrete owners, and `Docs/TestSuite.md` when test ownership/inventory materially changed.
 
-- `Current_Plan.md`;
-- `Spec.md`;
-- `Index.md`;
-- `Docs/Contracts.md`;
-- `Future_Cleanup.md`;
-- relevant focused QtQuick docs;
-- feature plans that name concrete pixel owners;
-- `Docs/TestSuite.md` status/retirement wording where materially affected.
-
-Historical bodies need not be rewritten merely to modernize names if clearly evidence-scoped.
+Historical bodies need not be modernized if clearly evidence-scoped.
 
 ## Test docs
 
-`Docs/TestSuite.md` is inventory/status authority, not work-sequence authority.
-
-Update it in the same checkpoint when:
-
-- adding/deleting/renaming a test module;
-- changing the owner asserted by a test;
-- changing migration retirement classification;
-- discovering stale/vacuous tests.
-
-Do not churn the entire inventory just to refresh a phase label when no test ownership changed; sequence
-still comes from `Current_Plan.md`.
+`Docs/TestSuite.md` is inventory/status authority, not sequence authority. Update it when adding/deleting/
+renaming a test module, changing asserted owner/retirement classification, or discovering stale/vacuous tests.
+Do not churn whole inventory just to refresh a phase label when ownership did not change.
 
 ## Closure check
 
-Before docs are considered reconciled:
+Before docs are reconciled:
 
 - current routing identifies current work unambiguously;
-- no live current-authority doc teaches a retired owner as destination;
-- no completed phase narrative bloats Current Plan;
-- old plans are clearly fenced as historical/reference where presentation ownership changed;
-- deletion timing matches the current owner-based retirement policy;
+- no current-authority doc teaches a retired owner as destination;
+- no closed phase is described as future work;
+- Current Plan is not bloated with completed implementation narrative;
+- audit evidence is available without becoming sequence authority;
+- deletion timing matches current owner policy;
 - test inventory remains truthful;
-- historical evidence remains available without becoming execution authority.
+- historical evidence is available but fenced from execution authority.

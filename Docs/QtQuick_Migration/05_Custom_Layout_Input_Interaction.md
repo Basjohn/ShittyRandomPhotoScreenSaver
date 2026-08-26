@@ -1,357 +1,114 @@
 # 05 — CUSTOM Layout, Input, Interaction and Auxiliary Runtime Pixels
 
-Status: **Phase-G technical decomposition; Clock multi-geometry contract predeclared by Phase F**  
-Last updated: 2026-08-24
+Status: **Phase-G destination contract; some geometry semantics already proven during F**  
+Last updated: 2026-08-26
 
-Phase E is independently GREEN/CLOSED through `3a562632`; this remains the waiting Phase-G authority.
+`Current_Plan.md` owns work admission.
 
-Cross-links:
+## Preserve neutral CUSTOM data
 
-- `Current_Plan.md`
-- `rendering/custom_layout_contract.py`
-- `Docs/10_WIDGET_GUIDELINES.md`
-- `Docs/QtQuick_Migration/03_Visualizer.md`
-- `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
-- `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md`
-- `Docs/Guardrails/Visualizer_Presentation.md`
+Preserve/rehome screen signatures/aliases, normalize/denormalize, clamp/snap/gutters/grid, display ownership,
+restore maps, Save/Cancel, slot persistence and family-specific size payload semantics. Move presentation/
+session ownership away from QWidget edit shells.
 
-`Current_Plan.md` owns work admission. This file defines the Phase-G destination so Phase F does not
-build presentation interfaces that G cannot preserve.
+## `CustomLayoutSession`
 
----
+Working state per edited item includes widget/model identity, source/current display, geometry variant,
+baseline/current global rect, baseline/current size payload, resize scale and working removed/enabled state.
+Session does not require QWidget. Editing one variant does not silently mutate another.
 
-## 1. Preserve useful CUSTOM data contracts
+## Geometry variants
 
-Do not rewrite existing presentation-neutral CUSTOM math without evidence.
-
-Preserve or deliberately rehome:
-
-- screen signatures/aliases;
-- normalize/denormalize;
-- clamp;
-- snap;
-- gutters/grid;
-- display ownership;
-- restore maps;
-- Save/Cancel;
-- slot persistence;
-- family-specific size payload semantics.
-
-Change presentation/session ownership away from QWidget edit shells.
-
----
-
-## 2. Destination `CustomLayoutSession`
-
-Presentation-neutral session state per edited item:
-
-```text
-widget_id
-model/presentation identity
-source display
-current display
-geometry variant
-baseline global rect
-current global rect
-baseline size payload
-current size payload
-resize scale
-removed flag
-```
-
-The session does not require QWidget.
-
-For a widget with multiple presentation geometry variants, the active session names the variant it is
-editing. An inactive variant is not collateral mutable state.
-
----
-
-## 3. Geometry-variant contract — REQUIRED
-
-The migration must not assume every widget has exactly one durable CUSTOM rect.
-
-A family may define stable geometry variants when modes have materially different shapes.
-
-Canonical operations conceptually become:
+Conceptually:
 
 ```text
 read committed geometry(widget_id, display_identity, variant)
 write committed geometry(widget_id, display_identity, variant, rect, size_payload)
 ```
 
-A missing/empty variant may fall back through documented default initialization. A present variant must
-be restored exactly subject only to current-screen validity/clamping rules.
+Missing target variant may initialize via documented default. Committed variant restores exactly subject to
+deterministic current-screen clamp. Never repeatedly derive one saved variant from another.
 
-Do not repeatedly derive one saved variant from another during ordinary mode switches.
+### Clock digital / analogue
 
----
+First missing target: keep current center intent -> obtain target natural size -> center -> clamp once ->
+establish target baseline. Once both exist, A->B->A restores exact committed rects without drift. Moving/
+resizing one changes that variant only; cross-display sets independent.
 
-## 4. Clock digital/analogue geometry
+## Edit the real Quick presentation
 
-Clock is the first required multi-geometry family:
+Live retained item stays visible; one shared Quick edit overlay/handles layer sits above it; session geometry
+temporarily overrides placement; model/provider may keep publishing; persistence unchanged until Save.
+No screenshot shell, duplicate visual owner or second accelerated edit window.
 
-```text
-Clock instance + display
-    ├── digital -> committed rect A
-    └── analog  -> committed rect B
-```
+## Edit-mode X — REQUIRED
 
-### First use of a target variant
+Every adjustable edit-mode card gets X. Clicking changes **working session only**:
 
-If the target mode has never had a committed rect:
+- duplicate -> remove that duplicate from working layout;
+- singleton -> working ordinary enabled OFF, exactly as normal Settings checkbox;
+- never family/capability deactivation;
+- no immediate settings persistence;
+- no committed provider/runtime destruction merely because preview disappeared.
 
-1. take the current visual center as the intent;
-2. obtain the target mode's natural initial size from the presentation/geometry owner;
-3. center that size on the current center;
-4. clamp to the target display;
-5. establish the result as the target variant's baseline.
+Singleton closed then cancelled reappears exactly as before.
 
-This is an initialization event, not the permanent switch algorithm.
+## Save / Cancel
 
-### Later mode switches
+Context-menu Save or Enter commits active geometry variant, final display, duplicate removals, ordinary
+enabled changes from X, and canonical monitor/position settings where product semantics require.
 
-Once both exist:
+Cancel restores active variant, duplicate set, ordinary enabled state and visualizer scale+viewport together
+where applicable. Do not mutate inactive variants or replay destructive setters for never-committed state.
 
-```text
-digital A
--> analog B
--> digital A
--> analog B
-```
+## Resize
 
-No accumulating center/size drift is allowed.
+Quick handles emit deltas; Python session/geometry math owns min size, aspect constraints, anchors, family
+size payload, active variant and display/DPR projection. No QML-only persisted geometry.
 
-### Editing
+Visualizer keeps `uniform_visual_scale` separate from `content_viewport_size`; never anisotropically stretch
+finished pixels.
 
-- moving/resizing digital updates digital only;
-- moving/resizing analogue updates analogue only;
-- changing font/style may reflow content inside the committed rect but must not silently rewrite the
-  inactive variant's committed rect;
-- an explicit reset-size/reset-layout action may deliberately recompute the active variant according to
-  its own contract.
+## Cross-monitor transfer
 
-### Persistence
+One live pixel owner: resolve target -> detach/retire source presentation -> target creates/adopts -> logical
+runtime/model survives unless product semantics require otherwise -> target-local variant rect -> update
+session display. No simultaneous source/target copies. Do not overwrite all target variants silently.
 
-Recreate/restart must restore both variants.
+## Edit overlay pixels
 
-Display identity scopes the variant set. Cross-display transfer and topology changes must resolve the
-target display's variant state deliberately rather than aliasing unrelated monitor geometry.
+One shared retained Quick overlay layer per display: grid, snap guides, selection outline, handles, widget
+label/control chrome including X.
 
-### Testing
+## Input / actions
 
-At minimum:
+Quick may own hit regions/pointer handlers and emit semantic actions. Python owns mode changes, provider
+actions, persistence, CUSTOM session commands and context/global shortcuts. Enter=Save, Esc=Cancel. Clock
+double-click mode toggle is semantic; QML writes neither Settings nor committed geometry.
 
-- 50+ digital↔analogue round trips preserve exact A/B rects;
-- manual digital resize does not change B;
-- manual analogue resize does not change A;
-- save/recreate restores A/B;
-- Cancel restores the active variant baseline and leaves inactive variant untouched;
-- two displays retain independent A/B pairs;
-- clamping due to a changed display bounds is deterministic and does not create cumulative drift on
-  subsequent switches.
+## Context menu / auxiliary pixels
 
-The current legacy Clock `_rebuild_custom_rect_for_mode()` center-derived behavior is migration source
-only, not destination authority.
+A QWidget context menu may remain temporarily if decoupled from `DisplayWidget` and not a second runtime
+presenter/lifecycle owner. If popup focus blocks, migrate once; no permanent dual menu implementations.
 
----
+Halo/dimming/pixel shift are retained pixels/transforms in same Quick scene, not extra translucent top-level
+windows.
 
-## 5. Edit the real Quick presentation
+## MC / focus gates
 
-Preferred behavior:
+Stress two displays focus A->B->A, Ctrl interaction, context menu, Clock switching, media controls/seek/
+volume, Gmail/Reddit interactions, halo/shadows, activation toggles, Settings/CUSTOM transition, cross-monitor
+transfer and edit-mode X Save/Cancel. Do not reintroduce focus-driven shadow corruption.
 
-- live retained Quick widget stays visible;
-- edit overlay/handles live above it in the same Quick window;
-- session geometry temporarily overrides normal placement;
-- model/provider may keep publishing current state;
-- persistence is unchanged until Save.
-
-Benefits:
-
-- WYSIWYG;
-- no screenshot shell;
-- no duplicate visual owner;
-- exact shadows/fade/content;
-- Cancel does not rebuild untouched runtime/provider state.
-
-The Visualizer follows the same one-live-pixel-owner rule despite using a `QSGRenderNode`.
-
----
-
-## 6. Save
-
-Save:
-
-1. identify the active widget + geometry variant;
-2. resolve final display from current global rect;
-3. compute canonical local rect/size payload;
-4. write only the active variant's committed state;
-5. update canonical monitor/position settings through the existing route where product semantics require
-   it;
-6. remove session override;
-7. let normal runtime geometry resolve to the just-committed variant.
-
-For visualizer viewport work, scale and viewport extent remain separate values.
-
-Do not recreate a whole runtime merely to adopt geometry already displayed unless current product
-semantics require recreation.
-
----
-
-## 7. Cancel
-
-Cancel:
-
-- discard session-only active-variant changes;
-- restore that variant's baseline;
-- do not mutate inactive variants;
-- restore visualizer scale + viewport together where applicable;
-- do not replay destructive config setters for state never committed;
-- do not recreate provider/model state.
-
----
-
-## 8. Resize
-
-Quick edit handles emit deltas; Python session/geometry math owns persistence semantics.
-
-Resolve:
-
-- min size;
-- aspect constraints;
-- anchor semantics;
-- family-specific size payload;
-- active geometry variant;
-- display/DPR projection.
-
-Do not invent QML-only persisted geometry.
-
-### Visualizer remains special
-
-Keep the established distinction:
+## Suggested G boundaries
 
 ```text
-uniform_visual_scale
-content_viewport_size
-```
-
-Corner/wheel may change uniform scale; edge-only resize may change viewport extent where the mode
-supports it. Never anisotropically stretch finished pixels.
-
----
-
-## 9. Cross-monitor transfer
-
-One live pixel owner at a time.
-
-1. session chooses target display using existing global-rect contract;
-2. source presentation is detached/retired;
-3. target display scene creates/reparents presentation;
-4. Python runtime/model owner survives unless product semantics say otherwise;
-5. target-local active-variant rect is applied;
-6. session updates current display identity.
-
-Do not leave simultaneous source/target copies.
-
-For multi-variant families, transfer must define whether an existing target-display variant is restored
-or whether the incoming active rect initializes/replaces that target variant. The choice must be
-deterministic and tested; never silently overwrite every variant on the target display.
-
----
-
-## 10. Edit overlays
-
-Port to retained Quick:
-
-- grid;
-- snap guides;
-- selection outline;
-- corner handles;
-- edge handles where supported;
-- widget label/control chrome.
-
-Use one shared edit-overlay layer per display.
-
----
-
-## 11. Input/action ownership
-
-Refactor old DisplayWidget/QWidget-probing input seams toward a runtime-neutral input controller.
-
-Quick may own hit regions/pointer handlers. It emits semantic actions.
-
-Python owns:
-
-- mode changes;
-- provider actions;
-- persistence;
-- CUSTOM session commands;
-- context/global shortcuts.
-
-Enter=Save and Esc=Cancel remain.
-
-Clock double-click/toggle becomes a semantic mode action; QML does not write geometry or Settings.
-
----
-
-## 12. Context menu
-
-A QWidget context menu may remain temporarily as a control surface if it does not become a second
-runtime presenter or lifecycle blocker.
-
-Decouple it from `DisplayWidget` API. Pass runtime/display identity and action/state owners explicitly.
-
-If QWidget popup focus is proven to be a blocker, migrate the menu once. Do not maintain permanent dual
-menu implementations.
-
----
-
-## 13. Halo, dimming, pixel shift
-
-These are runtime pixels and belong in the Quick scene.
-
-- halo follows the correct display pointer and uses retained animation;
-- dimming is a retained scene layer at the correct z;
-- pixel shift is a transform/offset of intended presentation items, not a moved window or rebuilt
-  texture.
-
-No extra translucent top-level windows.
-
----
-
-## 14. Media Center / focus gates
-
-Stress:
-
-- two displays;
-- focus A -> B -> A;
-- Ctrl interaction;
-- context menu;
-- Clock live mode switching;
-- media controls/volume;
-- halo;
-- shadows;
-- repeated activation/deactivation;
-- Settings/CUSTOM transition;
-- cross-monitor transfers.
-
-Do not reintroduce the old focus-driven shadow corruption class.
-
----
-
-## 15. Checkpoints
-
-Suggested Phase-G audit boundaries:
-
-```text
-G1 CustomLayoutSession + multi-variant data contract
-G2 Quick edit overlays + ordinary geometry
-G3 Save/Cancel + exact variant persistence
+G1 session + multi-variant/working-state contract
+G2 Quick edit overlays + ordinary geometry + X
+G3 Save/Cancel + exact variant/enabled/duplicate persistence
 G4 resize semantics
 G5 cross-monitor transfer
 G6 runtime-neutral input/action routing
 G7 context/halo/dimming/pixel-shift
 G8 MC/focus closure
 ```
-
-Visualizer viewport-resize QoL remains separately scoped if it proves expensive; ordinary safe scale
-resize must still work.
