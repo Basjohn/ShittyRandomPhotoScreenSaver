@@ -14,6 +14,7 @@ Item {
     property real haloX: 0.0
     property real haloY: 0.0
     property string haloShape: "cursor_light"
+    property var contextMenuModel: null
 
     Rectangle {
         id: backgroundDimming
@@ -72,5 +73,11 @@ Item {
         pointerY: displayScene.haloY
         haloShape: displayScene.haloShape
         z: 200
+    }
+
+    ContextMenu {
+        id: retainedContextMenu
+        contextMenuModel: displayScene.contextMenuModel
+        z: 300
     }
 }

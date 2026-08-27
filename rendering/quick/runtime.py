@@ -9,6 +9,7 @@ from PySide6.QtCore import QObject, QPoint, Signal
 from PySide6.QtGui import QScreen
 
 from .auxiliary import QuickAuxiliaryController
+from .context_menu import QuickContextMenuModel
 from .frame_pacer import QuickFramePacer
 from .image_state import PresentationImage
 from .input_controller import QuickInputController
@@ -111,6 +112,12 @@ class QuickDisplayRuntime(QObject):
             runtime_generation=self._runtime_generation,
             parent=self,
         )
+        self._context_menu: QuickContextMenuModel | None = QuickContextMenuModel(
+            screen_index=self._screen_index,
+            runtime_generation=self._runtime_generation,
+            parent=self,
+        )
+        self._scene.bind_context_menu_model(self._context_menu)
         self._pacer: QuickFramePacer | None = QuickFramePacer(
             self._window,
             refresh_rate,
@@ -133,6 +140,7 @@ class QuickDisplayRuntime(QObject):
         self._retired_pacer_state: dict[str, Any] | None = None
         self._retired_input_state: dict[str, Any] | None = None
         self._retired_auxiliary_state: dict[str, Any] | None = None
+        self._retired_context_menu_state: dict[str, Any] | None = None
         self._retired_transition_state: dict[str, Any] | None = None
 
         self._window.display_identity_changed.connect(
@@ -148,6 +156,9 @@ class QuickDisplayRuntime(QObject):
         self._auxiliary.apply_input_state(self._input.input_state)
         self._window.pointer_position_changed.connect(
             self._auxiliary.update_halo_pointer
+        )
+        self._context_menu.visibilityChanged.connect(
+            self._input.set_context_menu_active
         )
         self._input.input_state_changed.connect(self._scene.apply_input_state)
         self._scene.apply_input_state(self._input.input_state)
@@ -182,6 +193,9 @@ class QuickDisplayRuntime(QObject):
         )
         self._input.global_mute_toggle_requested.connect(
             self.global_mute_toggle_requested.emit
+        )
+        self._input.context_menu_requested.connect(
+            self._on_context_menu_requested
         )
         self._input.context_menu_requested.connect(self.context_menu_requested.emit)
         self._input.layout_slot_load_requested.connect(
@@ -255,6 +269,13 @@ class QuickDisplayRuntime(QObject):
         return controller
 
     @property
+    def context_menu_model(self) -> QuickContextMenuModel:
+        model = self._context_menu
+        if model is None:
+            raise RuntimeError("Quick context menu model has retired")
+        return model
+
+    @property
     def transition_controller(self) -> QuickTransitionController:
         controller = self._transition
         if controller is None:
@@ -274,6 +295,7 @@ class QuickDisplayRuntime(QObject):
         if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
             return
         was_visible = self.window.isVisible()
+        self.context_menu_model.dismiss()
         self.frame_pacer.pause()
         self.auxiliary_controller.pause()
         self.input_controller.reset_initial_position()
@@ -339,6 +361,7 @@ class QuickDisplayRuntime(QObject):
 
         self._set_phase(QuickRuntimePhase.RETIRING)
         self.input_controller.close_input()
+        self.context_menu_model.close()
         self.auxiliary_controller.close()
         self.transition_controller.close()
         self.frame_pacer.close()
@@ -370,6 +393,9 @@ class QuickDisplayRuntime(QObject):
         auxiliary_state = self._retired_auxiliary_state
         if auxiliary_state is None and self._auxiliary is not None:
             auxiliary_state = self._auxiliary.describe()
+        context_menu_state = self._retired_context_menu_state
+        if context_menu_state is None and self._context_menu is not None:
+            context_menu_state = self._context_menu.describe()
         return {
             "screen_index": self._screen_index,
             "runtime_generation": self._runtime_generation,
@@ -384,6 +410,7 @@ class QuickDisplayRuntime(QObject):
             "frame_pacer": pacer_state,
             "input": input_state,
             "auxiliary": auxiliary_state,
+            "context_menu": context_menu_state,
             "transition": transition_state,
             "close_meta_calls_queued": self._close_meta_calls_queued,
             "window_delete_queued": self._window_delete_queued,
@@ -417,6 +444,7 @@ class QuickDisplayRuntime(QObject):
         self._binding_loss = loss
         self.transition_controller.cancel_current(reason="topology-loss")
         self.frame_pacer.pause()
+        self.context_menu_model.close()
         self.auxiliary_controller.close()
         self.input_controller.close_input()
         self._set_phase(QuickRuntimePhase.PAUSED)
@@ -439,6 +467,12 @@ class QuickDisplayRuntime(QObject):
                     QuickRuntimePhase.VISIBLE if visible else QuickRuntimePhase.PAUSED
                 )
         self.visibility_changed.emit(bool(visible))
+
+    def _on_context_menu_requested(self, global_pos: QPoint) -> None:
+        if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
+            return
+        local_pos = self.window.mapFromGlobal(global_pos)
+        self.context_menu_model.open_at(local_pos.x(), local_pos.y())
 
     def _on_scene_readiness_changed(self, readiness: QuickSceneReadiness) -> None:
         self._scene_readiness = readiness
@@ -468,6 +502,8 @@ class QuickDisplayRuntime(QObject):
             self._retired_input_state = self._input.describe_input_state()
         if self._auxiliary is not None:
             self._retired_auxiliary_state = self._auxiliary.describe()
+        if self._context_menu is not None:
+            self._retired_context_menu_state = self._context_menu.describe()
         if self._transition is not None:
             self._retired_transition_state = self._transition.describe()
         self._window_delete_queued = True
@@ -484,6 +520,10 @@ class QuickDisplayRuntime(QObject):
             self._retired_auxiliary_state = self._auxiliary.describe()
             self._auxiliary.deleteLater()
             self._auxiliary = None
+        if self._context_menu is not None:
+            self._retired_context_menu_state = self._context_menu.describe()
+            self._context_menu.deleteLater()
+            self._context_menu = None
         if self._input is not None:
             self._retired_input_state = self._input.describe_input_state()
             self._input.deleteLater()
