@@ -5,6 +5,7 @@ OverlayWidget {
     objectName: "weatherPresentation"
 
     required property var weatherModel
+    semanticDoubleClickEnabled: weatherModel.viewState !== "missing"
     signal settingsRequested(string target)
     signal refreshRequested()
 

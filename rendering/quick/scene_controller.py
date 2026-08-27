@@ -38,7 +38,7 @@ from .custom_layout_overlay import (
 from .image_state import PresentationImage
 from .media_artwork import MediaArtworkImageProvider
 from .render import BackgroundRenderItem, RenderNodeTelemetry
-from .state import QuickSceneReadiness
+from .state import QuickInputState, QuickSceneReadiness
 from .transitions.state import TransitionRun
 from .visualizer import VisualizerRenderItem, VisualizerRenderNodeTelemetry
 from .widgets.host import OrdinaryWidgetPresentationHost, OverlayWidgetGeometry
@@ -354,6 +354,19 @@ class QuickSceneController(QObject):
         if overlay is None:
             raise RuntimeError("CUSTOM layout overlay has retired")
         return overlay
+
+    def apply_input_state(self, input_state: QuickInputState) -> bool:
+        """Admit one matching generation's primitive interaction facts."""
+
+        if not isinstance(input_state, QuickInputState):
+            raise TypeError("Quick scene input requires QuickInputState")
+        if (
+            not self._readiness.admission_open
+            or input_state.runtime_generation != self._readiness.runtime_generation
+            or input_state.screen_index != self._window.screen_index
+        ):
+            return False
+        return self.ordinary_widget_host.apply_input_state(input_state)
 
     def bind_custom_layout_session(
         self,

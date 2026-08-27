@@ -7,6 +7,7 @@ OverlayWidget {
     objectName: "abandonmentIssuesPresentation"
 
     required property var abandonmentModel
+    semanticDoubleClickEnabled: abandonmentModel.interactionEnabled
     signal refreshRequested()
     signal settingsRequested(string target)
 

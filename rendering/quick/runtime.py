@@ -132,6 +132,8 @@ class QuickDisplayRuntime(QObject):
         self._window.visibleChanged.connect(self._on_visibility_changed)
         self._window.destroyed.connect(self._on_window_destroyed)
         self._scene.readiness_changed.connect(self._on_scene_readiness_changed)
+        self._input.input_state_changed.connect(self._scene.apply_input_state)
+        self._scene.apply_input_state(self._input.input_state)
         self._transition.run_changed.connect(self._scene.set_transition_run)
         self._input.input_state_changed.connect(self.input_state_changed.emit)
         self._input.exit_requested.connect(self.exit_requested.emit)

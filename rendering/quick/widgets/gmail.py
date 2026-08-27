@@ -785,6 +785,7 @@ class RetainedGmailPresentation:
         self._retained.set_custom_layout_size_payload_handler(
             self._apply_custom_layout_size_payload
         )
+        host.set_widget_input_state_handler(self._retained, self.apply_input_state)
         self._connect("openInboxRequested", self._handle_open_inbox_requested)
         self._connect("openMessageRequested", model.request_open)
         self._connect("refreshRequested", model.request_refresh)

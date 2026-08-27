@@ -6,6 +6,7 @@ OverlayWidget {
     objectName: "achievementPulsePresentation"
 
     required property var achievementModel
+    semanticDoubleClickEnabled: achievementModel.interactionEnabled
     signal refreshRequested()
     signal settingsRequested(string target)
 
@@ -17,6 +18,7 @@ OverlayWidget {
     )
 
     TapHandler {
+        enabled: achievementRoot.achievementModel.interactionEnabled
         acceptedButtons: Qt.LeftButton
         onDoubleTapped: achievementRoot.refreshRequested()
     }

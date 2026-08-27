@@ -6,6 +6,7 @@ OverlayWidget {
     objectName: "gmailPresentation"
 
     required property var gmailModel
+    semanticDoubleClickEnabled: gmailModel.interactionEnabled
     property string activeActionIdentity: ""
     property string activeActionMessageId: ""
     property bool activeActionUnread: false

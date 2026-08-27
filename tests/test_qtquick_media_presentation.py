@@ -912,7 +912,15 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         assert volume_runtime.level_calls == []
         assert mute_runtime.toggle_calls == 0
         assert runtime.seek_calls == []
-        assert presentation.apply_input_state(
+        assert controller.apply_input_state(
+            QuickInputState(
+                screen_index=0,
+                runtime_generation=999,
+                ctrl_held=True,
+            )
+        ) is False
+        assert model.interactionEnabled is False
+        assert controller.apply_input_state(
             QuickInputState(
                 screen_index=0,
                 runtime_generation=92,
@@ -931,12 +939,14 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         assert runtime.seek_calls == [pytest.approx(0.6)]
         assert model.systemMuted is True
 
-        assert presentation.apply_input_state(
-            {
-                "admission_open": False,
-                "interaction_mode_enabled": True,
-                "ctrl_held": True,
-            }
+        assert controller.apply_input_state(
+            QuickInputState(
+                screen_index=0,
+                runtime_generation=92,
+                admission_open=False,
+                interaction_mode_enabled=True,
+                ctrl_held=True,
+            )
         ) is True
         item.nextRequested.emit()
         item.appVolumeLevelRequested.emit(0.8)
