@@ -5,8 +5,8 @@ Last updated: 2026-08-27
 Reviewed source basis:
 
 ```text
-test-inventory basis = F7 Achievement Pulse closure checkpoint
-Phase F0/F0.5/F1/F2/F3/F4/F5/F6/F7 CLOSED; 352 test modules; F8 Abandonment Issues active
+test-inventory basis = F8 Abandonment retained-model checkpoint
+Phase F0/F0.5/F1/F2/F3/F4/F5/F6/F7 CLOSED; 353 test modules; F8 Abandonment Issues active
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -164,9 +164,14 @@ ownership. `tests/test_steam_achievement_pulse.py` and `tests/test_steam_achieve
 neutral selection/cache/provider/preparation/generation/lifecycle contracts plus caller/dormancy proof;
 `tests/test_steam_phase4_mock_visuals.py` is narrowed to the still-live F8/dev-scaffold QWidget helpers.
 
+F8 model admission adds `tests/test_qtquick_abandonment_issues_presentation.py`. It protects exact shared-Steam
+and Abandonment config projection, stable shared Steam field-row/image/style primitives, accepted artwork
+identity/desaturation state, runtime attach/retire behavior, capability-gated refresh/rotation, and transition-
+deferred state/action commitment without admitting provider or cadence work into retained presentation.
+
 At the reviewed checkpoint the repository contains:
 
-- **352 test-module files**: 351 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **353 test-module files**: 352 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -713,6 +718,7 @@ The inventory below accounts for every executable test file present at the revie
 | --- | --- | --- |
 | `tests/test_steam_abandonment_issues.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_steam_abandonment_runtime.py` | **MIGRATION-CRITICAL — F** | Neutral Abandonment owner/generation/cardinality/timer/lifecycle contract; preserve source/model owner and rehome presenter edge. |
+| `tests/test_qtquick_abandonment_issues_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Abandonment config/style/model/image/runtime-action/transition lifecycle and stable shared Steam field-model coverage. |
 | `tests/test_steam_achievement_pulse.py` | **KEEP** | Neutral Achievement selection/cache/provider/model behavior; QWidget presentation assertions retired in F7. |
 | `tests/test_steam_achievement_runtime.py` | **KEEP — MIGRATION PERMANENT** | Neutral Achievement owner/generation/cardinality/reuse/dormancy/artwork lifecycle plus retired-caller proof. |
 | `tests/test_qtquick_achievement_pulse_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Achievement Pulse config/style/model/image/runtime-action lifecycle and stable identity destination coverage. |
