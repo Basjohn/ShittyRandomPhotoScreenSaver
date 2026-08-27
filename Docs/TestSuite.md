@@ -152,8 +152,11 @@ identity. Registry admission, real owner injection and real-OpenGL matrix remain
 The F7 owner-integration extension admits Achievement Pulse through the static Quick registry/qmldir and
 crosses the real `QuickSceneController` host with a display-generation-bound service owned by
 `WidgetRuntimeManager`. It protects semantic settings/refresh routing, runtime fade completion, fail-closed
-service lifecycle and stable item/model/list-model/engine identity. The effective-DPR visual matrix remains
-open.
+service lifecycle and stable item/model/list-model/engine identity. `tools/qtquick_achievement_pulse_smoke.py`
+renders portrait, square/long-title, wide/no-card/connection-attention, unavailable/no-art and connect states
+through one threaded-OpenGL Quick window. The inspected matrix is GREEN at effective DPR 1.0, 1.5 and 2.25;
+it also caught and permanently tests the rule that a latest-unlock stack replaces, rather than overlaps, the
+subtitle region.
 
 At the reviewed checkpoint the repository contains:
 
