@@ -233,7 +233,8 @@ class SettingsThemeSpec:
 #   * reusable input/combo/tooltip/text colours;
 #   * slider state colours + gradient stop palettes;
 #   * the recommended-slider marker colour;
-#   * screensaver context-menu colours.
+#   * screensaver context-menu colours;
+#   * central/global QWidget fallback control colours.
 #
 # Intentionally deferred until their owning renderer/tab is migrated:
 #   * tab-local palettes (RSS/accessibility/etc.);
@@ -300,6 +301,32 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "tooltip.surface": Rgba(30, 30, 30, 255),
     "tooltip.text": WHITE,
     "tooltip.border": WHITE,
+
+    # Global fallback control palette from ui/settings_theme.py. These roles
+    # apply only where a component/tab has not supplied a more specific style.
+    "control.list.surface": Rgba(30, 30, 30, 215),
+    "control.list.text": WHITE,
+    "control.list.border": Rgba(80, 80, 80, 153),
+    "control.list.selected_surface": Rgba(70, 70, 70, 204),
+    "control.list.selected_accent": Rgba(255, 255, 255, 180),
+    "control.list.hover_surface": Rgba(55, 55, 55, 204),
+    "control.button.surface": Rgba(45, 45, 45, 215),
+    "control.button.text": WHITE,
+    "control.button.border": WHITE,
+    "control.button.hover_surface": Rgba(60, 60, 60, 220),
+    "control.button.pressed_surface": Rgba(35, 35, 35, 220),
+    "control.button.pressed_border": Rgba(200, 200, 200, 200),
+    "control.checkbox.text": WHITE,
+    "control.checkbox.indicator.surface": Rgba(45, 45, 45, 204),
+    "control.checkbox.indicator.highlight_border": Rgba(90, 90, 90, 191),
+    "control.checkbox.indicator.right_shadow_border": Rgba(0, 0, 0, 179),
+    "control.checkbox.indicator.bottom_shadow_border": Rgba(0, 0, 0, 191),
+    "control.checkbox.checked.surface": Rgba(210, 210, 210, 217),
+    "control.checkbox.checked.highlight_border": Rgba(200, 200, 200, 204),
+    "control.checkbox.checked.right_shadow_border": Rgba(60, 60, 60, 179),
+    "control.checkbox.checked.bottom_shadow_border": Rgba(60, 60, 60, 191),
+    "panel.group.text": WHITE,
+    "panel.group.title_text": WHITE,
 
     # Shared slider colours that are not gradient stops.
     "slider.groove.border": Rgba(12, 12, 12, 230),
