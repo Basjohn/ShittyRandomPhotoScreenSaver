@@ -10,17 +10,23 @@ Provides quick access to:
 - Exit
 """
 from typing import Optional, List
+import weakref
 from PySide6.QtWidgets import QMenu, QWidget
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
 
 from core.logging.logger import get_logger
 from rendering.transition_registry import get_transition_setting_names
-from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME
+from ui.settings_theme_runtime import (
+    get_active_settings_theme,
+    subscribe_settings_theme,
+)
+from ui.settings_theme_spec import SettingsThemeSpec
 
 logger = get_logger(__name__)
 
-_SETTINGS_THEME = DEFAULT_DARK_SETTINGS_THEME
+_SETTINGS_THEME = get_active_settings_theme()
+_LIVE_CONTEXT_MENUS: weakref.WeakSet = weakref.WeakSet()
 
 
 def _theme_hex(token: str) -> str:
@@ -41,90 +47,100 @@ def _theme_rgba255(token: str) -> str:
 
 # Dark theme matching settings dialog - app-owned, no Windows accent bleed
 # Uses same color palette as settings_dialog.py for consistency
-MENU_STYLE = f"""
-QMenu {{
-    background-color: {_theme_rgba255('context.menu.surface')};
-    border: 3px solid {_theme_hex('context.menu.border')};
-    border-radius: 10px;
-    padding: 8px 6px;
-}}
-QMenu::item {{
-    background-color: transparent;
-    color: {_theme_hex('context.menu.text')};
-    padding: 10px 26px 10px 10px;
-    margin: 3px 5px;
-    border-radius: 6px;
-    font-size: 14px;
-    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
-    font-weight: 600;
-}}
-QMenu::item:selected {{
-    background-color: {_theme_rgba255('context.menu.selected_surface')};
-}}
-QMenu::item:disabled {{
-    color: {_theme_rgba255('context.menu.disabled_text')};
-}}
-QMenu::separator {{
-    height: 1px;
-    background-color: {_theme_rgba255('context.menu.separator')};
-    margin: 4px 12px;
-}}
-QMenu::indicator {{
-    width: 22px;
-    height: 22px;
-    margin-left: 8px;
-    margin-right: 8px;
-    border-radius: 11px;
-    border: none;
-}}
-QMenu::indicator:checked {{
-    image: url(:/ui/assets/circle_checkbox_checked.svg);
-}}
-QMenu::indicator:unchecked {{
-    image: url(:/ui/assets/circle_checkbox_unchecked.svg);
-}}
-"""
+def _build_menu_style() -> str:
+    return f"""
+    QMenu {{
+        background-color: {_theme_rgba255('context.menu.surface')};
+        border: 3px solid {_theme_hex('context.menu.border')};
+        border-radius: 10px;
+        padding: 8px 6px;
+    }}
+    QMenu::item {{
+        background-color: transparent;
+        color: {_theme_hex('context.menu.text')};
+        padding: 10px 26px 10px 10px;
+        margin: 3px 5px;
+        border-radius: 6px;
+        font-size: 14px;
+        font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+        font-weight: 600;
+    }}
+    QMenu::item:selected {{
+        background-color: {_theme_rgba255('context.menu.selected_surface')};
+    }}
+    QMenu::item:disabled {{
+        color: {_theme_rgba255('context.menu.disabled_text')};
+    }}
+    QMenu::separator {{
+        height: 1px;
+        background-color: {_theme_rgba255('context.menu.separator')};
+        margin: 4px 12px;
+    }}
+    QMenu::indicator {{
+        width: 22px;
+        height: 22px;
+        margin-left: 8px;
+        margin-right: 8px;
+        border-radius: 11px;
+        border: none;
+    }}
+    QMenu::indicator:checked {{
+        image: url(:/ui/assets/circle_checkbox_checked.svg);
+    }}
+    QMenu::indicator:unchecked {{
+        image: url(:/ui/assets/circle_checkbox_unchecked.svg);
+    }}
+    """
 
-SUBMENU_STYLE = f"""
-QMenu {{
-    background-color: {_theme_rgba255('context.submenu.surface')};
-    border: 3px solid {_theme_hex('context.submenu.border')};
-    border-radius: 8px;
-    padding: 6px 4px;
-}}
-QMenu::item {{
-    background-color: transparent;
-    color: {_theme_hex('context.submenu.text')};
-    padding: 8px 22px 8px 12px;
-    margin: 2px 4px;
-    border-radius: 4px;
-    font-size: 13px;
-    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
-    font-weight: 600;
-}}
-QMenu::item:selected {{
-    background-color: {_theme_rgba255('context.submenu.selected_surface')};
-}}
-QMenu::item:checked {{
-    color: {_theme_hex('context.submenu.checked_text')};
-    font-weight: 700;
-    background-color: {_theme_rgba255('context.submenu.checked_surface')};
-}}
-QMenu::indicator {{
-    width: 20px;
-    height: 20px;
-    margin-left: 6px;
-    margin-right: 4px;
-    border-radius: 10px;
-    border: none;
-}}
-QMenu::indicator:checked {{
-    image: url(:/ui/assets/circle_checkbox_checked.svg);
-}}
-QMenu::indicator:unchecked {{
-    image: url(:/ui/assets/circle_checkbox_unchecked.svg);
-}}
-"""
+
+MENU_STYLE = _build_menu_style()
+
+
+def _build_submenu_style() -> str:
+    return f"""
+    QMenu {{
+        background-color: {_theme_rgba255('context.submenu.surface')};
+        border: 3px solid {_theme_hex('context.submenu.border')};
+        border-radius: 8px;
+        padding: 6px 4px;
+    }}
+    QMenu::item {{
+        background-color: transparent;
+        color: {_theme_hex('context.submenu.text')};
+        padding: 8px 22px 8px 12px;
+        margin: 2px 4px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+        font-weight: 600;
+    }}
+    QMenu::item:selected {{
+        background-color: {_theme_rgba255('context.submenu.selected_surface')};
+    }}
+    QMenu::item:checked {{
+        color: {_theme_hex('context.submenu.checked_text')};
+        font-weight: 700;
+        background-color: {_theme_rgba255('context.submenu.checked_surface')};
+    }}
+    QMenu::indicator {{
+        width: 20px;
+        height: 20px;
+        margin-left: 6px;
+        margin-right: 4px;
+        border-radius: 10px;
+        border: none;
+    }}
+    QMenu::indicator:checked {{
+        image: url(:/ui/assets/circle_checkbox_checked.svg);
+    }}
+    QMenu::indicator:unchecked {{
+        image: url(:/ui/assets/circle_checkbox_unchecked.svg);
+    }}
+    """
+
+
+
+SUBMENU_STYLE = _build_submenu_style()
 
 
 
@@ -189,6 +205,7 @@ class ScreensaverContextMenu(QMenu):
             logger.debug("[CONTEXT_MENU] Exception suppressed: %s", e)
 
         self._setup_menu()
+        _LIVE_CONTEXT_MENUS.add(self)
         logger.debug("ScreensaverContextMenu created")
 
     def _setup_menu(self) -> None:
@@ -437,3 +454,27 @@ class ScreensaverContextMenu(QMenu):
     def refresh_visualizer_modes(self) -> None:
         """Rebuild the visualizer submenu (e.g. after gate changes)."""
         self._populate_visualizer_submenu()
+
+def _refresh_live_context_menus(theme: SettingsThemeSpec) -> None:
+    """Refresh existing main/submenu QSS after the active theme changes."""
+
+    global _SETTINGS_THEME, MENU_STYLE, SUBMENU_STYLE
+    _SETTINGS_THEME = theme
+    MENU_STYLE = _build_menu_style()
+    SUBMENU_STYLE = _build_submenu_style()
+
+    for menu in tuple(_LIVE_CONTEXT_MENUS):
+        try:
+            menu.setStyleSheet(MENU_STYLE)
+            transition_menu = getattr(menu, "_transition_menu", None)
+            if transition_menu is not None:
+                transition_menu.setStyleSheet(SUBMENU_STYLE)
+            visualizer_menu = getattr(menu, "_visualizer_menu", None)
+            if visualizer_menu is not None:
+                visualizer_menu.setStyleSheet(SUBMENU_STYLE)
+        except RuntimeError:
+            continue
+
+
+_THEME_UNSUBSCRIBE = subscribe_settings_theme(_refresh_live_context_menus)
+

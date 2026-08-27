@@ -27,12 +27,8 @@ from rendering.transition_registry import (
     canonicalize_transition_name,
     get_transition_setting_names,
 )
+from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
-    COMBOBOX_STYLE,
-    CIRCLE_CHECKBOX_STYLE,
-    SLIDER_STYLE,
-    SPINBOX_STYLE,
-    PAGE_TITLE_STYLE,
     add_swatch_label,
     style_group_box,
     add_aligned_row_widget as shared_add_aligned_row_widget,
@@ -222,8 +218,8 @@ class TransitionsTab(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.NoFrame)
-        from ui.tabs.shared_styles import SCROLL_AREA_STYLE
-        scroll.setStyleSheet(SCROLL_AREA_STYLE + SLIDER_STYLE)
+        scroll.setStyleSheet(shared_styles.SCROLL_AREA_STYLE)
+        shared_styles.bind_shared_styles(scroll, "SLIDER_STYLE")
         
         # Layout helpers are instance methods (see below) so lazy per-transition
         # page builders can reuse them; local aliases keep the rest of this
@@ -242,7 +238,7 @@ class TransitionsTab(QWidget):
         
         # Title
         title = QLabel("Transition Settings")
-        title.setStyleSheet(PAGE_TITLE_STYLE)
+        shared_styles.apply_shared_label_style(title, "PAGE_TITLE_STYLE")
         layout.addWidget(title)
         
         # Internal selection model. The old visible dropdown is replaced by the
@@ -354,8 +350,11 @@ class TransitionsTab(QWidget):
             setup_button.setChecked(True)
         self._on_nav_selected(_SETUP_NAV_KEY)
 
-        self.setStyleSheet(
-            self.styleSheet() + SPINBOX_STYLE + COMBOBOX_STYLE + CIRCLE_CHECKBOX_STYLE
+        shared_styles.bind_shared_styles(
+            self,
+            "SPINBOX_STYLE",
+            "COMBOBOX_STYLE",
+            "CIRCLE_CHECKBOX_STYLE",
         )
 
     # ---- E2 capability SETUP subtab ---------------------------------------
@@ -414,7 +413,7 @@ class TransitionsTab(QWidget):
         random_layout.addWidget(self._use_random_checkbox)
 
         pool_label = QLabel("Random Pool")
-        pool_label.setStyleSheet(PAGE_TITLE_STYLE)
+        shared_styles.apply_shared_label_style(pool_label, "PAGE_TITLE_STYLE")
         random_layout.addWidget(pool_label)
 
         pool_grid_host = FlowContainer(h_spacing=18, v_spacing=8)

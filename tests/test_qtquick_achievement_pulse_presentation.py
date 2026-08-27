@@ -224,6 +224,20 @@ def test_config_projects_current_steam_runtime_and_visual_settings() -> None:
     assert runtime.show_latest_artwork is False
 
 
+def test_retained_layout_policy_preserves_shapes_and_grows_complete_capsule_rails() -> None:
+    single = _config(double_capsules=False, artwork_shape="wide")
+    portrait = replace(single, artwork_shape="portrait")
+    square = replace(single, artwork_shape="square")
+    doubled = replace(single, double_capsules=True)
+    large_capsules = replace(doubled, capsule_font_size=32)
+
+    assert single.authored_size[0] == 600.0
+    assert 290.0 <= single.authored_size[1] < square.authored_size[1]
+    assert square.authored_size[1] < portrait.authored_size[1]
+    assert doubled.authored_size[1] > single.authored_size[1]
+    assert large_capsules.authored_size[1] > doubled.authored_size[1]
+
+
 def test_style_uses_canonical_shadow_direction_and_independent_alpha() -> None:
     config = _config(
         background_color=(20, 30, 40, 200),

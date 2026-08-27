@@ -17,7 +17,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE, RecommendedMarkSlider, add_section_label
+from ui.tabs import shared_styles
+from ui.tabs.shared_styles import RecommendedMarkSlider, add_section_label
 from ui.tabs.widgets_tab import NoWheelSlider
 from ui.widgets import StyledComboBox
 
@@ -902,7 +903,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
 
     helper = QLabel("Technical Controls Still Apply When Hidden.")
     helper.setProperty("class", "adv-helper")
-    helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(helper, "ADV_HELPER_LABEL_STYLE")
     host_layout.addWidget(helper)
 
     group = QWidget()

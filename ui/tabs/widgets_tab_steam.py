@@ -61,7 +61,7 @@ from ui.tabs.shared_styles import (
     style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
-from widgets.steam_components import (
+from rendering.quick.widgets.achievement_pulse_layout import (
     ACHIEVEMENT_CAPSULE_FONT_SIZE_DEFAULT,
     ACHIEVEMENT_CAPSULE_FONT_SIZE_MAX,
     ACHIEVEMENT_CAPSULE_FONT_SIZE_MIN,

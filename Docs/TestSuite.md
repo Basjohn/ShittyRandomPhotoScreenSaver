@@ -5,8 +5,8 @@ Last updated: 2026-08-27
 Reviewed source basis:
 
 ```text
-test-inventory basis = F7 Achievement Pulse model-admission checkpoint
-Phase F0/F0.5/F1/F2/F3/F4/F5/F6 CLOSED; 352 test modules; F7 Achievement Pulse active
+test-inventory basis = F7 Achievement Pulse closure checkpoint
+Phase F0/F0.5/F1/F2/F3/F4/F5/F6/F7 CLOSED; 352 test modules; F8 Abandonment Issues active
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -157,6 +157,12 @@ renders portrait, square/long-title, wide/no-card/connection-attention, unavaila
 through one threaded-OpenGL Quick window. The inspected matrix is GREEN at effective DPR 1.0, 1.5 and 2.25;
 it also caught and permanently tests the rule that a latest-unlock stack replaces, rather than overlaps, the
 subtitle region.
+
+F7 closure removes the old Achievement Pulse QWidget factory/descriptor/input route, presenter-owned runtime
+bridge, DPR artwork caches and painter branches. Achievement sizing/capsule policy now has retained Quick
+ownership. `tests/test_steam_achievement_pulse.py` and `tests/test_steam_achievement_runtime.py` retain only
+neutral selection/cache/provider/preparation/generation/lifecycle contracts plus caller/dormancy proof;
+`tests/test_steam_phase4_mock_visuals.py` is narrowed to the still-live F8/dev-scaffold QWidget helpers.
 
 At the reviewed checkpoint the repository contains:
 
@@ -356,7 +362,7 @@ Permanent E4 coverage protects: one canonical eight-direction authority; all eig
 
 The E4 host test necessarily injected already-resolved signed offsets before a real family was Quick-presented. F1 Clock subsequently supplied the end-to-end proof that an actual family projection reads the canonical direction plus the two canonical user buckets, applies the deliberate destination card/text base-distance policy in Python, and updates retained properties without presentation or runtime-owner recreation. Do not resurrect sidecar-era `text_large`/header tuning profiles.
 
-### F — widget family ports — ACTIVE; F1–F6 CLOSED, F7 Achievement Pulse ACTIVE
+### F — widget family ports — ACTIVE; F1–F7 CLOSED, F8 Abandonment Issues ACTIVE
 
 F0 deleted deprecated Imgur instead of porting it. F0.5 is the bounded QWidget Settings slice that completes the canonical global shadow controls before F1 Clock. For each later family, preserve provider/model/behavior/settings tests and rehome direct QWidget presentation assertions to retained Quick items.
 
@@ -707,15 +713,15 @@ The inventory below accounts for every executable test file present at the revie
 | --- | --- | --- |
 | `tests/test_steam_abandonment_issues.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_steam_abandonment_runtime.py` | **MIGRATION-CRITICAL — F** | Neutral Abandonment owner/generation/cardinality/timer/lifecycle contract; preserve source/model owner and rehome presenter edge. |
-| `tests/test_steam_achievement_pulse.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
-| `tests/test_steam_achievement_runtime.py` | **MIGRATION-CRITICAL — F** | Neutral Achievement owner/generation/cardinality/reuse/dormancy/artwork lifecycle contract; preserve source/model owner and rehome presenter edge. |
+| `tests/test_steam_achievement_pulse.py` | **KEEP** | Neutral Achievement selection/cache/provider/model behavior; QWidget presentation assertions retired in F7. |
+| `tests/test_steam_achievement_runtime.py` | **KEEP — MIGRATION PERMANENT** | Neutral Achievement owner/generation/cardinality/reuse/dormancy/artwork lifecycle plus retired-caller proof. |
 | `tests/test_qtquick_achievement_pulse_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Achievement Pulse config/style/model/image/runtime-action lifecycle and stable identity destination coverage. |
 | `tests/test_steam_backend.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_steam_cache.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_steam_credentials.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_steam_openid.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_steam_phase3_settings_descriptors.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_steam_phase4_mock_visuals.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
+| `tests/test_steam_phase4_mock_visuals.py` | **MIGRATION-CRITICAL — F8** | Temporary shared QWidget scaffold/helper coverage; Achievement-specific pixels retired in F7. |
 | `tests/test_steam_profile_assets_events.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_steam_request_policy.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 

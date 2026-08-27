@@ -13,15 +13,11 @@ from PySide6.QtWidgets import (
     QScrollArea, QDialog, QFrame, QSizePolicy,
 )
 from PySide6.QtGui import QPainter, QPen, QPalette
+from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
     NoWheelSlider,
-    PAGE_TITLE_STYLE,
-    SECTION_HEADING_STYLE,
-    SECTION_HEADING_STYLE_DISABLED,
-    INFO_LABEL_STYLE,
     add_aligned_row,
     style_group_box,
-    SLIDER_STYLE,
     create_inline_label,  # Added missing import
 )
 from PySide6.QtCore import Signal, Qt
@@ -110,8 +106,8 @@ class SourcesTab(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.NoFrame)
-        from ui.tabs.shared_styles import SCROLL_AREA_STYLE
-        scroll.setStyleSheet(SCROLL_AREA_STYLE + SLIDER_STYLE)
+        scroll.setStyleSheet(shared_styles.SCROLL_AREA_STYLE)
+        shared_styles.bind_shared_styles(scroll, "SLIDER_STYLE")
 
         content = QWidget()
         layout = QVBoxLayout(content)
@@ -120,7 +116,7 @@ class SourcesTab(QWidget):
         
         # Title
         title = QLabel("Image Sources")
-        title.setStyleSheet(PAGE_TITLE_STYLE)
+        shared_styles.apply_shared_label_style(title, "PAGE_TITLE_STYLE")
         layout.addWidget(title)
         
         # Folder sources group
@@ -214,7 +210,11 @@ class SourcesTab(QWidget):
             "<i>Suggested: Add high-quality RSS/JSON image feeds here.</i>"
         )
         self.rss_suggestion_label.setWordWrap(True)
-        self.rss_suggestion_label.setStyleSheet(INFO_LABEL_STYLE + "padding: 5px;")
+        shared_styles.bind_shared_styles(
+            self.rss_suggestion_label,
+            "INFO_LABEL_STYLE",
+            base_style="padding: 5px;",
+        )
         rss_layout.addWidget(self.rss_suggestion_label)
         
         # RSS list
@@ -748,7 +748,9 @@ class SourcesTab(QWidget):
                     padding: 8px;
                 }
             """)
-            self.ratio_label.setStyleSheet(SECTION_HEADING_STYLE)
+            shared_styles.apply_shared_label_style(
+                self.ratio_label, "SECTION_HEADING_STYLE"
+            )
         else:
             self.ratio_frame.setStyleSheet("""
                 #ratioFrame {
@@ -758,7 +760,9 @@ class SourcesTab(QWidget):
                     padding: 8px;
                 }
             """)
-            self.ratio_label.setStyleSheet(SECTION_HEADING_STYLE_DISABLED)
+            shared_styles.apply_shared_label_style(
+                self.ratio_label, "SECTION_HEADING_STYLE_DISABLED"
+            )
         self.local_ratio_label.setEnabled(both_available)
         self.rss_ratio_label.setEnabled(both_available)
     

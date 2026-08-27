@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-b6c559f916c581ba948a17374d779defaf275f9c
-Phase F7 Achievement Pulse retained owner integration landed on current main
+b793733536c58c9c5670299d2a058f57ae7aaec6
+Phase F7 Achievement Pulse visual proof landed on current main
 ```
 
 Current phase state:
@@ -22,8 +22,8 @@ F3    Media core                                 CLOSED / independently GREEN
 F4    Media controls / volume / mute / progress  CLOSED / independently GREEN
 F5    Reddit / Reddit2                           CLOSED / independently GREEN
 F6    Gmail                                      CLOSED
-F7    Achievement Pulse                          ACTIVE
-F8    Abandonment Issues                         after F7
+F7    Achievement Pulse                          CLOSED
+F8    Abandonment Issues                         ACTIVE
 G     CUSTOM / input / auxiliary pixels          after F
 H     settings epoch + physical Quick cutover    after G
 I     residue only                               after H
@@ -38,28 +38,27 @@ Source outranks this plan if a later checkpoint has landed.
 
 ---
 
-## Immediate work — F7 Achievement Pulse
+## Immediate work — F8 Abandonment Issues
 
 ```text
-exact runtime/preparation/cache/action/presentation ownership audit  GREEN
-stable retained config/model/image projection                       GREEN
-retained QML card + interaction/menu fidelity                       GREEN
-registry + real owner injection + runtime-shaped gates              GREEN
-effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                    GREEN
-caller proof + old Achievement Pulse pixel/cache/input retirement   ACTIVE
+exact runtime/data/cache/rotation/action/presentation ownership audit  ACTIVE
+stable retained config/model/image projection                         PENDING
+retained QML card + interaction fidelity                               PENDING
+registry + real owner injection + runtime-shaped gates                PENDING
+effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                      PENDING
+caller proof + old Abandonment pixel/cache/input retirement           PENDING
 ```
 
-### F7.5 — caller proof and old-pixel retirement (ACTIVE)
+### F8.1 — exact ownership and reuse audit (ACTIVE)
 
-- prove every enabled Achievement Pulse caller resolves through the static retained family registry and the
-  real manager-owned Steam service;
-- preserve neutral runtime/preparation/cache/privacy/provenance/selection/settings contracts and any shared
-  Abandonment Issues dependency;
-- delete only caller-proven old Achievement Pulse QWidget paint/cache/input/factory plumbing and rehome or
-  remove presentation-only tests;
-- run focused destination, neutral Steam runtime, shared manager/input and import/compile gates;
-- scan production callers and retired markers, inspect the full diff/status, then self-audit the pushed
-  checkpoint before admitting F8.
+- inspect exact `AbandonmentRuntimeService`, preparation/model/cache/rotation and selected-artwork ownership;
+- map the remaining `AbandonmentIssuesWidget`, `steam_abandonment_components.py`, factory/input and settings
+  callers before changing them;
+- identify reusable retained Steam techniques from Achievement Pulse without manufacturing a universal card
+  framework or coupling the two families' distinct content/state rules;
+- preserve privacy/provenance, shared Steam refresh authority, cache-only semantic rotation, transition
+  deferral, selected-card hydration and honest unavailable states;
+- record focused destination and neutral-runtime gates before admitting retained implementation.
 
 Do not port Steam Journey/Progress or Friend Pulse scaffolds as part of F7.
 

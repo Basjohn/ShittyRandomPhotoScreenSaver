@@ -15,7 +15,8 @@ F3 Media core closed
 F4 Media controls closed
 F5 Reddit closed
 F6 Gmail closed
-F7 Achievement Pulse active
+F7 Achievement Pulse closed
+F8 Abandonment Issues active
 ```
 
 Closed A–E history is intentionally not repeated here.

@@ -284,6 +284,9 @@ _SHARED_LABEL_STYLE_ROLES = (
     "INFO_LABEL_STYLE",
     "ADV_HELPER_LABEL_STYLE",
     "INFO_LABEL_STYLE_DISABLED",
+    "ACCESSIBILITY_TITLE_STYLE",
+    "ACCESSIBILITY_DESC_STYLE",
+    "ACCESSIBILITY_SECTION_DESC_STYLE",
 )
 
 
@@ -1185,6 +1188,36 @@ def _build_slider_style() -> str:
 SLIDER_STYLE = _build_slider_style()
 
 
+def _build_accessibility_title_style() -> str:
+    return (
+        "font-size: 18px; font-weight: bold; "
+        f"color: {_theme_hex('text.primary')};"
+    )
+
+
+ACCESSIBILITY_TITLE_STYLE = _build_accessibility_title_style()
+
+
+def _build_accessibility_desc_style() -> str:
+    return (
+        f"color: {_theme_hex('text.secondary')};"
+        " font-size: 11px; margin-bottom: 10px;"
+    )
+
+
+ACCESSIBILITY_DESC_STYLE = _build_accessibility_desc_style()
+
+
+def _build_accessibility_section_desc_style() -> str:
+    return (
+        f"color: {_theme_hex('text.tertiary')};"
+        " font-size: 10px; margin-top: 5px;"
+    )
+
+
+ACCESSIBILITY_SECTION_DESC_STYLE = _build_accessibility_section_desc_style()
+
+
 _THEME_STYLE_BUILDERS = {
     "FORM_LABEL_STYLE": _build_form_label_style,
     "FORM_ROW_LABEL_STYLE": _build_form_row_label_style,
@@ -1203,6 +1236,9 @@ _THEME_STYLE_BUILDERS = {
     "ADV_HELPER_LABEL_STYLE": _build_adv_helper_label_style,
     "INFO_LABEL_STYLE_DISABLED": _build_info_label_style_disabled,
     "SLIDER_STYLE": _build_slider_style,
+    "ACCESSIBILITY_TITLE_STYLE": _build_accessibility_title_style,
+    "ACCESSIBILITY_DESC_STYLE": _build_accessibility_desc_style,
+    "ACCESSIBILITY_SECTION_DESC_STYLE": _build_accessibility_section_desc_style,
 }
 
 
@@ -1268,15 +1304,6 @@ RSS_INPUT_STYLE = (
     " border-color: rgba(200,200,200,0.85);"
     " }"
 )
-
-# --- Accessibility tab styles ---
-
-ACCESSIBILITY_TITLE_STYLE = "font-size: 18px; font-weight: bold; color: #ffffff;"
-
-ACCESSIBILITY_DESC_STYLE = "color: #aaaaaa; font-size: 11px; margin-bottom: 10px;"
-
-ACCESSIBILITY_SECTION_DESC_STYLE = "color: #888888; font-size: 10px; margin-top: 5px;"
-
 
 def build_bucket_toggle(
     host_layout: QVBoxLayout,

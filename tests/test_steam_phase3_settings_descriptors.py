@@ -51,17 +51,19 @@ def _steam_settings_module():
     return importlib.import_module("ui.tabs.widgets_tab_steam")
 
 
-def test_promoted_steam_card_descriptors_are_public_while_unfinished_cards_stay_gated() -> None:
+def test_retained_and_unported_steam_descriptors_are_public_while_scaffolds_stay_gated() -> None:
     prior = _with_steam_gate(False)
     try:
-        promoted = {"achievement_pulse", "abandonment_issues"}
-        unfinished = set(STEAM_WIDGET_IDS) - promoted
+        substantive = {"achievement_pulse", "abandonment_issues"}
+        unfinished = set(STEAM_WIDGET_IDS) - substantive
         factory_ids = {descriptor.settings_key for descriptor in get_factory_widget_descriptors()}
         runtime_ids = {descriptor.widget_id for descriptor in get_widget_runtime_descriptors()}
         preview_ids = {descriptor.widget_id for descriptor in get_widget_stack_preview_descriptors()}
         custom_ids = {descriptor.widget_id for descriptor in get_widget_custom_position_option_descriptors()}
 
-        assert promoted.issubset(factory_ids & runtime_ids & preview_ids & custom_ids)
+        assert "achievement_pulse" not in factory_ids
+        assert "abandonment_issues" in factory_ids
+        assert substantive.issubset(runtime_ids & preview_ids & custom_ids)
         assert "steam" in {descriptor.section_id for descriptor in get_widget_settings_section_descriptors()}
         assert not unfinished.intersection(factory_ids)
         steam_factories = [
@@ -93,7 +95,10 @@ def test_steam_phase3_descriptors_are_complete_behind_dev_gate() -> None:
         )
 
         for widget_id in STEAM_WIDGET_IDS:
-            assert widget_id in factory_keys
+            if widget_id == "achievement_pulse":
+                assert widget_id not in factory_keys
+            else:
+                assert widget_id in factory_keys
             assert widget_id in runtime_ids
             assert widget_id in custom_ids
             assert widget_id in preview_ids
@@ -558,14 +563,14 @@ def test_steam_connection_bucket_opens_from_persisted_target_state(qt_app, setti
         _restore_steam_gate(prior)
 
 
-def test_promoted_factories_are_public_while_unfinished_factories_are_dev_gated(
+def test_only_unported_steam_widgets_keep_qwidget_factories(
     qt_app,
     settings_manager,
 ) -> None:
     prior = _with_steam_gate(False)
     try:
         public_registry = WidgetFactoryRegistry(settings_manager)
-        assert public_registry.get_factory("achievement_pulse") is not None
+        assert public_registry.get_factory("achievement_pulse") is None
         assert public_registry.get_factory("abandonment_issues") is not None
         assert public_registry.get_factory("steam_progress") is None
         assert public_registry.get_factory("friend_pulse") is None
@@ -596,38 +601,6 @@ def test_promoted_factories_are_public_while_unfinished_factories_are_dev_gated(
             assert widget.objectName() == "steam_progress_overlay"
             assert getattr(widget, "_view_model").state == "connect_required"
             widget.deleteLater()
-
-            achievement_widget = registry.create_widget(
-                "achievement_pulse",
-                parent,
-                {
-                    "enabled": True,
-                    "position": "Middle Right",
-                    "selection_mode": "custom",
-                    "custom_appid": 367520,
-                    "show_artwork": True,
-                    "artwork_shape": "square",
-                    "square_artwork_size": 190,
-                    "double_capsule_long_data": False,
-                    "capsule_font_size": 22,
-                    "latest_unlock_count": 5,
-                    "capsule_fill_color": [12, 34, 56, 78],
-                    "capsule_border_color": [90, 87, 65, 43],
-                },
-            )
-            assert achievement_widget is not None
-            assert getattr(achievement_widget, "_achievement_selection").mode == "custom"
-            assert getattr(achievement_widget, "_achievement_selection").custom_appid == 367520
-            assert getattr(achievement_widget, "_achievement_show_artwork") is True
-            assert getattr(achievement_widget, "_achievement_artwork_shape") == "square"
-            assert getattr(achievement_widget, "_achievement_square_artwork_size") == 190
-            assert getattr(achievement_widget, "_achievement_double_capsules") is False
-            assert getattr(achievement_widget, "_achievement_capsule_font_size") == 22
-            assert getattr(achievement_widget, "_achievement_latest_unlock_count") == 5
-            assert achievement_widget.minimumHeight() == 318
-            assert getattr(achievement_widget, "_achievement_capsule_fill_color").getRgb() == (12, 34, 56, 78)
-            assert getattr(achievement_widget, "_achievement_capsule_border_color").getRgb() == (90, 87, 65, 43)
-            achievement_widget.deleteLater()
 
             abandonment_factory = registry.get_factory("abandonment_issues")
             assert abandonment_factory is not None
@@ -864,13 +837,7 @@ def test_steam_master_gate_suppresses_enabled_cards_and_fade_expectations(qt_app
             assert "achievement_pulse" not in manager._expected_overlays
 
             registry = WidgetFactoryRegistry(settings)
-            factory = registry.get_factory("achievement_pulse")
-            assert factory is not None
-            assert factory.create(
-                parent,
-                {"enabled": True, "position": "Middle Right"},
-                steam_settings={"enabled": False},
-            ) is None
+            assert registry.get_factory("achievement_pulse") is None
         finally:
             parent.deleteLater()
     finally:

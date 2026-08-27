@@ -11,16 +11,13 @@ from pathlib import Path
 from types import MethodType, SimpleNamespace
 
 from PySide6.QtGui import QImage
-from PySide6.QtWidgets import QWidget
 import pytest
 
 from core.resources.manager import ResourceManager
 from core.steam.achievement_pulse import AchievementPulseSelection
 from core.threading.manager import TaskResult, ThreadManager
-from rendering.widget_manager import WidgetManager
 from rendering.widget_runtime_services import get_runtime_service_spec
 from widgets.steam_card_models import build_mock_steam_view_model
-from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
 from widgets.steam_achievement_preparation import (
     AchievementPulsePreparedPresentation,
     AchievementPulseRuntimeConfig,
@@ -605,181 +602,6 @@ def test_registry_reuse_validator_rejects_missing_edge_and_stopped_active_owner(
     assert spec.reuse_is_valid(consumer, service) is False
 
 
-def test_standalone_widget_owns_and_retires_one_convenience_service(qt_app) -> None:
-    widget = SteamCardWidget(
-        definition=STEAM_CARD_DEFINITIONS["achievement_pulse"],
-        achievement_show_artwork=False,
-    )
-    service = widget._achievement_runtime_service
-
-    assert service is not None
-    assert widget._owns_achievement_runtime_service is True
-    widget.cleanup()
-
-    assert widget._achievement_runtime_service is None
-    assert service.is_retired() is True
-
-
-def test_production_suppressed_widget_detaches_external_owner(qt_app) -> None:
-    widget = SteamCardWidget(
-        definition=STEAM_CARD_DEFINITIONS["achievement_pulse"],
-        achievement_show_artwork=False,
-        build_default_runtime=False,
-    )
-    service = AchievementPulseRuntimeService(config=_config())
-    widget.set_achievement_runtime_service(service)
-
-    widget.cleanup()
-
-    assert widget._achievement_runtime_service is None
-    assert service.is_retired() is False
-    assert service._consumer() is None
-    service.retire()
-
-
-def test_cleanup_makes_late_widget_deferred_callbacks_inert(qt_app) -> None:
-    class _ExternalService:
-        def __init__(self) -> None:
-            self.manual_refreshes = 0
-            self.detach_calls = 0
-
-        def configure(self, _config) -> None:
-            return None
-
-        def attach_consumer(self, _consumer) -> None:
-            return None
-
-        def detach_consumer(self, _consumer) -> None:
-            self.detach_calls += 1
-
-        def is_running(self) -> bool:
-            return False
-
-        def request_manual_refresh(self) -> bool:
-            self.manual_refreshes += 1
-            return True
-
-    widget = SteamCardWidget(
-        definition=STEAM_CARD_DEFINITIONS["achievement_pulse"],
-        achievement_show_artwork=False,
-        build_default_runtime=False,
-    )
-    service = _ExternalService()
-    widget.set_achievement_runtime_service(service)
-    initial_model = widget._view_model
-    widget._pending_achievement_manual_refresh = True
-    widget._deferred_achievement_presentation = (_prepared(appid=202), True)
-    late_callbacks = (
-        widget._run_deferred_manual_refresh,
-        widget._apply_deferred_achievement_presentation,
-    )
-
-    widget.cleanup()
-    for callback in late_callbacks:
-        callback()
-
-    assert service.manual_refreshes == 0
-    assert service.detach_calls == 1
-    assert widget._view_model is initial_model
-
-
-def test_production_setup_reuses_one_live_owner_without_recurring_timer(
-    qt_app,
-    inline_ui,
-) -> None:
-    class _Settings:
-        def get_widgets_map(self) -> dict:
-            return {
-                "steam": {"enabled": True, "refresh_minutes": 5},
-                "achievement_pulse": {
-                    "enabled": True,
-                    "monitor": "ALL",
-                    "position": "Top Right",
-                    "show_artwork": False,
-                    "show_latest_achievement_artwork": False,
-                },
-                "family_activation": {"steam": True},
-                "shadows": {"enabled": True},
-            }
-
-    parent = QWidget()
-    parent.resize(1280, 720)
-    parent._runtime_generation = 88
-    resource_manager = ResourceManager()
-    thread_manager = ThreadManager(resource_manager=resource_manager)
-    queued_tasks: list[SimpleNamespace] = []
-
-    def _queue_io_task(self, func, *, task_id, callback, **kwargs):
-        task = SimpleNamespace(
-            func=func,
-            task_id=task_id,
-            callback=callback,
-            kwargs=dict(kwargs),
-        )
-        queued_tasks.append(task)
-        return task_id
-
-    thread_manager.submit_io_task = MethodType(_queue_io_task, thread_manager)
-    parent._thread_manager = thread_manager
-    manager = WidgetManager(parent, resource_manager)
-    service = None
-    try:
-        created = manager.setup_all_widgets(
-            _Settings(),
-            screen_index=0,
-            thread_manager=thread_manager,
-        )
-        widget = created["achievement_pulse_widget"]
-        service = manager._runtime_manager.get_widget_service("achievement_pulse")
-
-        assert service is widget._achievement_runtime_service
-        assert widget._owns_achievement_runtime_service is False
-        assert widget._thread_manager is thread_manager
-        assert service._thread_manager is thread_manager
-        assert service.is_running() is True
-        assert len(queued_tasks) == 1
-        cache_task = queued_tasks[0]
-        assert cache_task.kwargs["category"] == "steam_achievement_cache_load"
-        assert cache_task.func._srpss_runtime_generation == 88
-        assert cache_task.callback._srpss_runtime_generation == 88
-
-        cache_task.callback(
-            TaskResult(
-                success=True,
-                result=(
-                    SimpleNamespace(profile_cache_key="profile"),
-                    SimpleNamespace(cache_age_seconds=30.0),
-                    _model(),
-                ),
-                task_id=cache_task.task_id,
-            )
-        )
-        assert service.current_presentation is not None
-        assert service.current_presentation.model.appid == 101
-        assert len(queued_tasks) == 1
-
-        created_again = manager.setup_all_widgets(
-            _Settings(),
-            screen_index=0,
-            thread_manager=thread_manager,
-        )
-        assert created_again["achievement_pulse_widget"] is widget
-        assert manager._runtime_manager.get_widget_service("achievement_pulse") is service
-        assert widget._achievement_runtime_service is service
-        assert service.is_running() is True
-        assert len(queued_tasks) == 1
-        assert not hasattr(service, "rotation_timer")
-
-        assert manager.cleanup_widget("achievement_pulse") is True
-        assert service.is_retired() is True
-        assert manager._runtime_manager.get_widget_service("achievement_pulse") is None
-    finally:
-        if service is not None and not service.is_retired():
-            service.retire()
-        thread_manager.shutdown()
-        parent.deleteLater()
-
-
 def test_registry_import_is_achievement_implementation_dormant_in_fresh_process() -> None:
     probe = r"""
 import json
@@ -806,7 +628,7 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
     assert json.loads(proc.stdout.strip().splitlines()[-1]) == []
 
 
-def test_deactivated_achievement_family_is_implementation_dormant_in_fresh_process() -> None:
+def test_enabled_achievement_has_no_retired_qwidget_caller_in_fresh_process() -> None:
     probe = r"""
 import json
 import os
@@ -822,7 +644,7 @@ class Settings:
         return {
             "steam": {"enabled": True},
             "achievement_pulse": {"enabled": True, "monitor": "ALL"},
-            "family_activation": {"steam": False},
+            "family_activation": {"steam": True},
         }
 
 app = QApplication.instance() or QApplication([])
@@ -832,7 +654,6 @@ created = manager.setup_all_widgets(Settings(), screen_index=0, thread_manager=N
 forbidden = {
     "widgets.steam_achievement_runtime",
     "widgets.steam_achievement_preparation",
-    "widgets.steam_card_widget",
     "core.steam.achievement_pulse_cache",
 }
 print(json.dumps({
@@ -861,43 +682,24 @@ parent.deleteLater()
     assert payload == {"created": [], "forbidden": []}
 
 
-def test_disabled_achievement_instance_owns_no_widget_or_service(qt_app) -> None:
-    class _Settings:
-        def get_widgets_map(self) -> dict:
-            return {
-                "steam": {"enabled": True},
-                "achievement_pulse": {"enabled": False, "monitor": "ALL"},
-                "family_activation": {"steam": True},
-            }
+def test_retired_qwidget_achievement_paths_have_no_production_caller() -> None:
+    from rendering.widget_descriptors import FACTORY_WIDGET_DESCRIPTORS
 
-    parent = QWidget()
-    manager = WidgetManager(parent, ResourceManager())
-    try:
-        created = manager.setup_all_widgets(
-            _Settings(),
-            screen_index=0,
-            thread_manager=None,
-        )
-        assert "achievement_pulse_widget" not in created
-        assert manager._runtime_manager.get_widget_service("achievement_pulse") is None
-    finally:
-        manager.cleanup()
-        parent.deleteLater()
-
-
-def test_legacy_widget_contains_no_achievement_source_or_task_owner() -> None:
-    source = Path("widgets/steam_card_widget.py").read_text(encoding="utf-8")
-    for forbidden in (
-        "load_achievement_pulse_cache_snapshot",
-        "refresh_achievement_pulse_cache",
-        "fetch_steam_app_artwork",
-        "fetch_steam_achievement_icon",
-        "submit_io_task",
-        "_achievement_cache_generation",
-        "_achievement_artwork_generation",
-        "_achievement_latest_artwork_generation",
+    assert all(
+        descriptor.settings_key != "achievement_pulse"
+        for descriptor in FACTORY_WIDGET_DESCRIPTORS
+    )
+    for path in (
+        Path("rendering/display_input.py"),
+        Path("rendering/widget_factories.py"),
+        Path("widgets/steam_card_widget.py"),
+        Path("widgets/steam_components.py"),
     ):
-        assert forbidden not in source
+        source = path.read_text(encoding="utf-8").lower()
+        assert "achievement_pulse_widget" not in source
+        if path.name in {"steam_card_widget.py", "steam_components.py"}:
+            assert "achievement_pulse" not in source
+            assert "_achievement" not in source
 
     runtime_source = Path("widgets/steam_achievement_runtime.py").read_text(
         encoding="utf-8"
@@ -911,5 +713,7 @@ def test_legacy_widget_contains_no_achievement_source_or_task_owner() -> None:
     ):
         assert forbidden not in runtime_source
 
-    model_source = Path("widgets/steam_card_models.py").read_text(encoding="utf-8")
+    model_source = Path("widgets/steam_card_models.py").read_text(
+        encoding="utf-8"
+    )
     assert "from PySide6" not in model_source

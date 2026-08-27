@@ -14,9 +14,8 @@ from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
+from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
-    CIRCLE_CHECKBOX_STYLE,
-    SLIDER_STYLE,
     NoWheelSlider,
     style_group_box,
     add_aligned_row_widget as shared_add_aligned_row_widget,
@@ -70,8 +69,8 @@ class AccessibilityTab(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        from ui.tabs.shared_styles import SCROLL_AREA_STYLE
-        scroll.setStyleSheet(SCROLL_AREA_STYLE + SLIDER_STYLE)
+        scroll.setStyleSheet(shared_styles.SCROLL_AREA_STYLE)
+        shared_styles.bind_shared_styles(scroll, "SLIDER_STYLE")
         
         # Create content widget
         content = QWidget()
@@ -81,8 +80,9 @@ class AccessibilityTab(QWidget):
         
         # Title
         title = QLabel("Accessibility")
-        from ui.tabs.shared_styles import ACCESSIBILITY_TITLE_STYLE
-        title.setStyleSheet(ACCESSIBILITY_TITLE_STYLE)
+        shared_styles.apply_shared_label_style(
+            title, "ACCESSIBILITY_TITLE_STYLE"
+        )
         layout.addWidget(title)
         
         # Description
@@ -90,8 +90,9 @@ class AccessibilityTab(QWidget):
             "These features help reduce eye strain and prevent screen burn-in on older displays."
         )
         desc.setWordWrap(True)
-        from ui.tabs.shared_styles import ACCESSIBILITY_DESC_STYLE
-        desc.setStyleSheet(ACCESSIBILITY_DESC_STYLE)
+        shared_styles.apply_shared_label_style(
+            desc, "ACCESSIBILITY_DESC_STYLE"
+        )
         layout.addWidget(desc)
         
         # Background Dimming group
@@ -111,7 +112,7 @@ class AccessibilityTab(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
 
-        self.setStyleSheet(self.styleSheet() + CIRCLE_CHECKBOX_STYLE)
+        shared_styles.bind_shared_styles(self, "CIRCLE_CHECKBOX_STYLE")
     
     def _create_dimming_group(self) -> QGroupBox:
         """Create the Background Dimming settings group."""
@@ -151,8 +152,9 @@ class AccessibilityTab(QWidget):
             "reducing overall screen brightness without affecting widget visibility."
         )
         dim_desc.setWordWrap(True)
-        from ui.tabs.shared_styles import ACCESSIBILITY_SECTION_DESC_STYLE
-        dim_desc.setStyleSheet(ACCESSIBILITY_SECTION_DESC_STYLE)
+        shared_styles.apply_shared_label_style(
+            dim_desc, "ACCESSIBILITY_SECTION_DESC_STYLE"
+        )
         layout.addWidget(dim_desc)
         
         return group
@@ -194,8 +196,9 @@ class AccessibilityTab(QWidget):
             "static burn-in on susceptible displays. Not effective for OLED burn-in."
         )
         shift_desc.setWordWrap(True)
-        from ui.tabs.shared_styles import ACCESSIBILITY_SECTION_DESC_STYLE as _sec_desc
-        shift_desc.setStyleSheet(_sec_desc)
+        shared_styles.apply_shared_label_style(
+            shift_desc, "ACCESSIBILITY_SECTION_DESC_STYLE"
+        )
         layout.addWidget(shift_desc)
         
         return group

@@ -74,7 +74,9 @@ Current proven patterns are deliberately heterogeneous:
 - Reddit/Reddit2: separate configured member runtime services/models using shared family policy;
 - Gmail: runtime-generation shared Gmail owner/backend with per-display lease; retained model/QML complete and
   old QWidget presentation retired.
-- Achievement Pulse: existing neutral Steam runtime/preparation/cache/selection ownership; retained port active.
+- Achievement Pulse: existing neutral Steam runtime/preparation/cache/selection ownership; retained model/QML
+  complete and old QWidget presentation retired.
+- Abandonment Issues: existing neutral Steam runtime/data/cache/rotation ownership; retained port active.
 
 Do not create services/managers merely for naming symmetry.
 

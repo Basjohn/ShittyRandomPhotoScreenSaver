@@ -201,7 +201,7 @@ def _coerce_optional_appid(value: Any) -> int | None:
 
 
 class SteamCardFactory(WidgetFactory):
-    """Factory for Achievement Pulse and gated Steam card prototypes."""
+    """Factory for Abandonment Issues and gated Steam card prototypes."""
 
     def __init__(
         self,
@@ -227,18 +227,16 @@ class SteamCardFactory(WidgetFactory):
         from core.dev_gates import is_steam_enabled
         from core.settings.models import WidgetPosition, coerce_widget_position
         from core.steam.abandonment_issues import AbandonmentSelection, parse_appid_list
-        from core.steam.achievement_pulse import AchievementPulseSelection
         from widgets.base_overlay_widget import OverlayPosition
         from widgets.abandonment_issues_widget import AbandonmentIssuesWidget
         from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
-        from widgets.steam_components import achievement_pulse_authored_size
         from widgets.steam_abandonment_components import (
             ABANDONMENT_FIELD_DEFAULTS,
             abandonment_authored_size,
             abandonment_field_slot_count,
         )
 
-        if self._widget_name not in {"achievement_pulse", "abandonment_issues"} and not is_steam_enabled():
+        if self._widget_name != "abandonment_issues" and not is_steam_enabled():
             return None
         shared_steam_settings = steam_settings if isinstance(steam_settings, Mapping) else {}
         if not SettingsManager.to_bool(shared_steam_settings.get("enabled", True), True):
@@ -270,24 +268,6 @@ class SteamCardFactory(WidgetFactory):
         )
 
         try:
-            achievement_show_artwork = SettingsManager.to_bool(config.get("show_artwork", True), True)
-            achievement_artwork_shape = str(
-                config.get("artwork_shape", "portrait") or "portrait"
-            )
-            achievement_capsule_fill = parse_color_to_qcolor(
-                config.get("capsule_fill_color", [199, 213, 224, 38])
-            )
-            achievement_capsule_border = parse_color_to_qcolor(
-                config.get("capsule_border_color", [199, 213, 224, 145])
-            )
-            field_defaults = {
-                "total": True,
-                "latest": True,
-                "playtime": True,
-                "previous": True,
-                "source": False,
-                "selected": False,
-            }
             if definition.widget_id == "abandonment_issues":
                 abandonment_field_visibility = {
                     field_id: SettingsManager.to_bool(
@@ -362,44 +342,7 @@ class SteamCardFactory(WidgetFactory):
                     definition=definition,
                     position=position_map.get(widget_position, OverlayPosition.TOP_RIGHT),
                     initial_view_model=SteamCardWidget.connect_required_model(definition.widget_id),
-                    achievement_selection=AchievementPulseSelection(
-                        mode=str(config.get("selection_mode", "most_recent") or "most_recent"),
-                        custom_appid=_coerce_optional_appid(config.get("custom_appid")),
-                    ),
-                    achievement_field_visibility={
-                        field_id: SettingsManager.to_bool(
-                            config.get(f"show_{field_id}", default_value),
-                            default_value,
-                        )
-                        for field_id, default_value in field_defaults.items()
-                    },
-                    achievement_latest_unlock_count=int(config.get("latest_unlock_count", 1)),
-                    achievement_show_latest_artwork=SettingsManager.to_bool(
-                        config.get("show_latest_achievement_artwork", True),
-                        True,
-                    ),
-                    achievement_show_artwork=achievement_show_artwork,
-                    achievement_artwork_shape=achievement_artwork_shape,
-                    achievement_square_artwork_size=int(config.get("square_artwork_size", 140)),
-                    achievement_double_capsules=SettingsManager.to_bool(
-                        config.get(
-                            "double_capsules",
-                            config.get("double_capsule_long_data", True),
-                        ),
-                        True,
-                    ),
-                    achievement_capsule_font_size=int(config.get("capsule_font_size", 12)),
-                    achievement_capsule_fill_color=achievement_capsule_fill,
-                    achievement_capsule_border_color=achievement_capsule_border,
                     refresh_minutes=int(shared_steam_settings.get("refresh_minutes", 10)),
-                    achievement_show_connection_info_icon=SettingsManager.to_bool(
-                        shared_steam_settings.get("show_connection_info_icon", True),
-                        True,
-                    ),
-                    # Production injects the registry-owned neutral service
-                    # before activation. Direct construction retains one
-                    # explicitly owned convenience service.
-                    build_default_runtime=False,
                 )
 
             if hasattr(widget, "set_font_family"):
@@ -429,24 +372,7 @@ class SteamCardFactory(WidgetFactory):
             if "preferred_width" in config or "preferred_height" in config:
                 width = max(260, int(config.get("preferred_width", 420)))
                 height = max(120, int(config.get("preferred_height", 180)))
-                if definition.widget_id == "achievement_pulse" and (width, height) in {
-                    (420, 180),
-                    (540, 250),
-                    (540, 290),
-                    (540, 330),
-                    (540, 334),
-                    (600, 290),
-                    (600, 318),
-                    (600, 334),
-                }:
-                    authored_size = achievement_pulse_authored_size(
-                        show_artwork=achievement_show_artwork,
-                        artwork_shape=achievement_artwork_shape,
-                        artwork_size=int(config.get("square_artwork_size", 140)),
-                    )
-                    width = int(authored_size.width())
-                    height = int(authored_size.height())
-                elif definition.widget_id == "abandonment_issues" and (width, height) in {
+                if definition.widget_id == "abandonment_issues" and (width, height) in {
                     (420, 180),
                     (560, 300),
                     (560, 331),
@@ -512,7 +438,7 @@ class WidgetFactoryRegistry:
         try:
             from core.dev_gates import is_steam_enabled
 
-            widget_names = ["achievement_pulse", "abandonment_issues"]
+            widget_names = ["abandonment_issues"]
             if is_steam_enabled():
                 widget_names.extend(("steam_progress", "friend_pulse"))
             for widget_name in widget_names:
