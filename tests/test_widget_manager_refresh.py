@@ -373,7 +373,6 @@ def test_factory_widget_descriptors_cover_factory_backed_widget_families():
 
     expected = [
         "media",
-        "achievement_pulse",
         "abandonment_issues",
     ]
 

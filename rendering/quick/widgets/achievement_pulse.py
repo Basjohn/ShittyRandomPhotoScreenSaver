@@ -33,7 +33,7 @@ from widgets.steam_card_models import (
     SteamCardViewModel,
     build_steam_connect_required_view_model,
 )
-from widgets.steam_components import (
+from .achievement_pulse_layout import (
     ACHIEVEMENT_CAPSULE_BORDER_RGBA,
     ACHIEVEMENT_CAPSULE_FILL_RGBA,
     achievement_capsule_geometry,

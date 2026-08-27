@@ -1,6 +1,6 @@
 # 10 — Ordinary Widget Family Port Decomposition
 
-Status: **Phase F ACTIVE — F1–F6 CLOSED; F7 Achievement Pulse ACTIVE**
+Status: **Phase F ACTIVE — F1–F7 CLOSED; F8 Abandonment Issues ACTIVE**
 Last updated: 2026-08-27
 
 This owns Phase-F family decomposition, not closed implementation narrative. `Current_Plan.md` owns exact
@@ -20,8 +20,8 @@ F3 Media core                                  CLOSED
 F4 Media controls / volume / mute / progress   CLOSED
 F5 Reddit / Reddit2                            CLOSED
 F6 Gmail                                       CLOSED
-F7 Achievement Pulse                          ACTIVE
-F8 Abandonment Issues
+F7 Achievement Pulse                          CLOSED
+F8 Abandonment Issues                         ACTIVE
 ```
 
 Family retirement: inspect old reference -> reuse/extract neutral logic -> retained Quick family -> focused
@@ -55,29 +55,29 @@ proved grouped/popup/auth/error/card variants at effective DPR 1.0, 1.5 and 2.25
 cache/input seams and presentation-only tests are caller-proven retired; neutral runtime/backend/preparation/
 cache/settings/notification/sound contracts remain.
 
+F7 Achievement Pulse keeps its neutral Steam runtime/preparation/cache/selection and immutable card-model
+authority. One stable retained model/QML item owns accepted image sources, fields/unlocks, semantic settings/
+refresh actions and family-authored capsule geometry. The threaded-OpenGL matrix proved card/no-card,
+portrait/square/wide/no-art/connect/unavailable/connection-attention states at effective DPR 1.0, 1.5 and
+2.25. Old Achievement QWidget factory/input/runtime bridge, scaled-image caches and painter branches are
+caller-proven retired; reusable Steam models/services and the F8/shared scaffold helpers remain.
+
 Integrated F2–F5 independent review GREEN; see current audit under `Docs/audits/`. F6 completed under the
 current self-audit policy.
 
-## F7 Achievement Pulse — ACTIVE
-
-Use the exact current neutral achievement runtime/preparation/cache/selection foundations and immutable card
-view model. Preserve cache/privacy/provenance/selection and existing Steam data ownership. Use the old
-presenter as the visual/interaction oracle, including its established menu behavior, while mapping only
-bounded presentation state and semantic actions into retained Quick.
-
-Current admission order:
-
-- exact ownership/caller audit — GREEN;
-- stable retained config/model/image projection — GREEN;
-- retained card and existing interaction/menu fidelity — GREEN;
-- static registry and real manager/host runtime injection — GREEN;
-- deterministic lifecycle/action/image tests plus effective-DPR 1.0/1.5/2.25 eyes-on evidence — GREEN;
-- caller proof and old pixel/cache/input retirement — ACTIVE.
-
-## F8 Abandonment Issues
+## F8 Abandonment Issues — ACTIVE
 
 Use substantive Abandonment runtime/data path. Preserve privacy/provenance/selection; unknown/private data
 explicit. No provider/cache duplication. After GREEN+caller proof delete old pixels.
+
+Current admission order:
+
+- exact runtime/data/cache/rotation/action/presentation ownership and reuse audit — ACTIVE;
+- stable retained config/model/image projection — PENDING;
+- retained card/action fidelity — PENDING;
+- static registry, real manager/host injection and runtime-shaped gates — PENDING;
+- effective-DPR 1.0/1.5/2.25 eyes-on evidence — PENDING;
+- caller proof and old pixel/cache/input retirement — PENDING.
 
 Steam Journey/Progress and Friend Pulse are future product scaffolds, not migration slices. If old scaffold
 presenter blocks cleanup, retire scaffold rather than manufacture parity port.

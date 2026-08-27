@@ -363,7 +363,6 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                     getattr(widget, "spotify_visualizer_widget", None),
                     (
                         getattr(widget, "steam_progress_widget", None),
-                        getattr(widget, "achievement_pulse_widget", None),
                         getattr(widget, "abandonment_issues_widget", None),
                         getattr(widget, "friend_pulse_widget", None),
                     ),

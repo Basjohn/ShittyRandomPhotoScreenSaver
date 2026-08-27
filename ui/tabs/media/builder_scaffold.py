@@ -8,7 +8,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget
 
 from ui.tabs.media.technical_controls import build_per_mode_technical_group
-from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE, add_swatch_label
+from ui.tabs import shared_styles
+from ui.tabs.shared_styles import add_swatch_label
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -126,7 +127,7 @@ def build_collapsible_bucket(
 
     helper = QLabel(helper_text)
     helper.setProperty("class", "adv-helper")
-    helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(helper, "ADV_HELPER_LABEL_STYLE")
     helper.setWordWrap(True)
     host_layout.addWidget(helper)
 
@@ -219,7 +220,7 @@ def build_mode_scaffold(
 
     helper = QLabel("Advanced Sliders Still Apply When Hidden.")
     helper.setProperty("class", "adv-helper")
-    helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(helper, "ADV_HELPER_LABEL_STYLE")
     setattr(tab, advanced_helper_attr, helper)
     advanced_host_layout.addWidget(helper)
 

@@ -21,8 +21,8 @@ from ui.tabs.media.builder_scaffold import (
     build_collapsible_bucket,
     build_mode_scaffold,
 )
+from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
-    ADV_HELPER_LABEL_STYLE,
     add_aligned_row_widget as shared_add_aligned_row_widget,
     add_aligned_row as shared_add_aligned_row,
 )
@@ -476,7 +476,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "Left-click to add a control node (max 5). "
         "Right-click a node to remove it. Drag to reshape."
     )
-    _shape_hint.setStyleSheet(ADV_HELPER_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(_shape_hint, "ADV_HELPER_LABEL_STYLE")
     _shape_hint.setWordWrap(True)
     shape_bucket.addWidget(_shape_hint)
 
@@ -500,7 +500,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "Lane strength now lives in the top arrows inside the shaper. "
         "These controls only handle global reactivity, shape-floor support, and falloff."
     )
-    _influence_hint.setStyleSheet(ADV_HELPER_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(_influence_hint, "ADV_HELPER_LABEL_STYLE")
     _influence_hint.setWordWrap(True)
     audio_bucket.addWidget(_influence_hint)
 

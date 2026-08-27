@@ -11,7 +11,7 @@ exact current source
 -> tests/evidence for the claim
 ```
 
-Current migration: **Phase F active; F1–F6 closed; F7 Achievement Pulse ACTIVE.**
+Current migration: **Phase F active; F1–F7 closed; F8 Abandonment Issues ACTIVE.**
 
 ## Current authority
 

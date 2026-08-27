@@ -13,7 +13,6 @@ from core.steam.abandonment_issues import AbandonmentSelection
 from widgets.steam_abandonment_components import (
     ABANDONMENT_ACCENT_RGBA,
     ABANDONMENT_ARTWORK_SIZE_DEFAULT,
-    ABANDONMENT_FIELD_DEFAULTS,
     AbandonmentCardLayout,
     abandonment_authored_size,
     abandonment_field_slot_count,
@@ -88,7 +87,6 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             definition=definition,
             position=position,
             initial_view_model=initial_view_model,
-            achievement_show_artwork=False,
             refresh_minutes=refresh_minutes,
         )
         if build_default_runtime:

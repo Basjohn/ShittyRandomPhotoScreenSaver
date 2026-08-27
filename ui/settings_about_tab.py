@@ -6,6 +6,7 @@ Contains the About tab layout, header image scaling, and external link buttons.
 from __future__ import annotations
 
 from pathlib import Path
+import weakref
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
@@ -15,14 +16,19 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QPixmap, QDesktopServices
 
 from core.logging.logger import get_logger
-from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME
+from ui.settings_theme_runtime import (
+    get_active_settings_theme,
+    subscribe_settings_theme,
+)
+from ui.settings_theme_spec import SettingsThemeSpec
 
 if TYPE_CHECKING:
     from ui.settings_dialog import SettingsDialog
 
 logger = get_logger(__name__)
 
-_SETTINGS_THEME = DEFAULT_DARK_SETTINGS_THEME
+_SETTINGS_THEME = get_active_settings_theme()
+_LIVE_ABOUT_DIALOGS: weakref.WeakSet = weakref.WeakSet()
 
 
 def _theme_hex(token: str) -> str:
@@ -39,6 +45,97 @@ def _theme_rgba255(token: str) -> str:
 
     value = _SETTINGS_THEME.color(token)
     return f"rgba({value.r}, {value.g}, {value.b}, {value.a})"
+
+
+def _about_content_card_style() -> str:
+    return (
+        "#aboutContentCard {"
+        f"  background-color: {_theme_rgba255('about.card.surface')};"
+        f"  border: 1px solid {_theme_hex('about.card.border')};"
+        "  border-radius: 8px;"
+        "}"
+    )
+
+
+def _about_blurb_style() -> str:
+    return f"color: {_theme_hex('about.blurb.text')}; font-size: 12pt;"
+
+
+def _about_link_button_style() -> str:
+    return (
+        "QPushButton {"
+        "  padding: 6px 18px;"
+        "  font-weight: bold;"
+        "  border-radius: 16px;"
+        f"  background-color: {_theme_rgba255('about.link.surface')};"
+        f"  color: {_theme_hex('about.link.text')};"
+        f"  border: 1px solid {_theme_hex('about.link.border')};"
+        "}"
+        "QPushButton:hover {"
+        f"  background-color: {_theme_rgba255('about.link.hover_surface')};"
+        "}"
+        "QPushButton:pressed {"
+        f"  background-color: {_theme_rgba255('about.link.pressed_surface')};"
+        f"  border: 1px solid {_theme_rgba255('about.link.pressed_border')};"
+        "}"
+    )
+
+
+def _about_hotkeys_style() -> str:
+    return f"color: {_theme_hex('about.hotkeys.text')}; margin-top: 16px;"
+
+
+def _about_more_style() -> str:
+    return f"""
+        QPushButton {{
+            font-size: 14px;
+            font-weight: bold;
+            padding: 0;
+            border: 1px solid {_theme_rgba255('about.more.border')};
+            border-radius: 4px;
+            background-color: {_theme_rgba255('about.more.surface')};
+            color: {_theme_rgba255('about.more.text')};
+        }}
+        QPushButton:hover {{
+            background-color: {_theme_rgba255('about.more.hover_surface')};
+        }}
+    """
+
+
+def _about_notice_style() -> str:
+    return (
+        f"color: {_theme_hex('about.notice.text')}; "
+        "font-size: 11px; padding: 4px 10px; "
+        f"background-color: {_theme_rgba255('about.notice.surface')}; "
+        "border-radius: 6px;"
+    )
+
+
+def _apply_about_theme(dialog: "SettingsDialog") -> None:
+    """Reapply semantic About styles to one already-built tab."""
+
+    content_card = getattr(dialog, "_about_content_card", None)
+    if content_card is not None:
+        content_card.setStyleSheet(_about_content_card_style())
+
+    blurb = getattr(dialog, "_about_blurb_label", None)
+    if blurb is not None:
+        blurb.setStyleSheet(_about_blurb_style())
+
+    for button in getattr(dialog, "_about_link_buttons", ()):
+        button.setStyleSheet(_about_link_button_style())
+
+    hotkeys = getattr(dialog, "_about_hotkeys_label", None)
+    if hotkeys is not None:
+        hotkeys.setStyleSheet(_about_hotkeys_style())
+
+    more = getattr(dialog, "more_options_btn", None)
+    if more is not None:
+        more.setStyleSheet(_about_more_style())
+
+    notice = getattr(dialog, "reset_notice_label", None)
+    if notice is not None:
+        notice.setStyleSheet(_about_notice_style())
 
 
 def build_about_tab(dialog: "SettingsDialog") -> QWidget:
@@ -61,13 +158,7 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     # Main content card (matches ABOUTExample mockup)
     content_card = QWidget(widget)
     content_card.setObjectName("aboutContentCard")
-    content_card.setStyleSheet(
-        "#aboutContentCard {"
-        f"  background-color: {_theme_rgba255('about.card.surface')};"
-        f"  border: 1px solid {_theme_hex('about.card.border')};"
-        "  border-radius: 8px;"
-        "}"
-    )
+    content_card.setStyleSheet(_about_content_card_style())
     card_layout = QVBoxLayout(content_card)
     card_layout.setContentsMargins(24, 12, 24, 24)
     card_layout.setSpacing(12)
@@ -129,9 +220,8 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     blurb_label = QLabel()
     blurb_label.setWordWrap(True)
     blurb_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-    blurb_label.setStyleSheet(
-        f"color: {_theme_hex('about.blurb.text')}; font-size: 12pt;"
-    )
+    blurb_label.setStyleSheet(_about_blurb_style())
+    dialog._about_blurb_label = blurb_label
     blurb_label.setTextFormat(Qt.TextFormat.RichText)
 
     default_blurb = (
@@ -176,28 +266,14 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     buttons_row = QHBoxLayout()
     buttons_row.setSpacing(16)
     buttons_row.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    dialog._about_link_buttons = []
 
     def _make_link_button(text: str, url: str) -> QPushButton:
         btn = QPushButton(text)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setFixedHeight(32)
-        btn.setStyleSheet(
-            "QPushButton {"
-            "  padding: 6px 18px;"
-            "  font-weight: bold;"
-            "  border-radius: 16px;"
-            f"  background-color: {_theme_rgba255('about.link.surface')};"
-            f"  color: {_theme_hex('about.link.text')};"
-            f"  border: 1px solid {_theme_hex('about.link.border')};"
-            "}"
-            "QPushButton:hover {"
-            f"  background-color: {_theme_rgba255('about.link.hover_surface')};"
-            "}"
-            "QPushButton:pressed {"
-            f"  background-color: {_theme_rgba255('about.link.pressed_surface')};"
-            f"  border: 1px solid {_theme_rgba255('about.link.pressed_border')};"
-            "}"
-        )
+        btn.setStyleSheet(_about_link_button_style())
+        dialog._about_link_buttons.append(btn)
 
         def _open() -> None:
             try:
@@ -227,9 +303,8 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     )
     hotkeys_label.setWordWrap(True)
     hotkeys_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-    hotkeys_label.setStyleSheet(
-        f"color: {_theme_hex('about.hotkeys.text')}; margin-top: 16px;"
-    )
+    hotkeys_label.setStyleSheet(_about_hotkeys_style())
+    dialog._about_hotkeys_label = hotkeys_label
     hotkeys_label.setOpenExternalLinks(False)
     card_layout.addWidget(hotkeys_label)
 
@@ -276,22 +351,7 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     # More options button (context menu)
     dialog.more_options_btn = QPushButton("⋮")
     dialog.more_options_btn.setFixedSize(24, 24)
-    dialog.more_options_btn.setStyleSheet(
-        f"""
-        QPushButton {{
-            font-size: 14px;
-            font-weight: bold;
-            padding: 0;
-            border: 1px solid {_theme_rgba255('about.more.border')};
-            border-radius: 4px;
-            background-color: {_theme_rgba255('about.more.surface')};
-            color: {_theme_rgba255('about.more.text')};
-        }}
-        QPushButton:hover {{
-            background-color: {_theme_rgba255('about.more.hover_surface')};
-        }}
-    """
-    )
+    dialog.more_options_btn.setStyleSheet(_about_more_style())
     dialog.more_options_btn.setToolTip("More options")
     dialog.more_options_btn.clicked.connect(dialog._show_more_options_menu)
     button_row.addWidget(dialog.more_options_btn)
@@ -299,15 +359,11 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
 
     dialog.reset_notice_label = QLabel("Settings reverted to defaults!")
     dialog.reset_notice_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-    dialog.reset_notice_label.setStyleSheet(
-        f"color: {_theme_hex('about.notice.text')}; "
-        "font-size: 11px; padding: 4px 10px; "
-        f"background-color: {_theme_rgba255('about.notice.surface')}; "
-        "border-radius: 6px;"
-    )
+    dialog.reset_notice_label.setStyleSheet(_about_notice_style())
     dialog.reset_notice_label.setVisible(False)
     layout.addWidget(dialog.reset_notice_label)
 
+    _LIVE_ABOUT_DIALOGS.add(dialog)
     return widget
 
 
@@ -404,3 +460,18 @@ def update_about_header_images(dialog: "SettingsDialog") -> None:
 
     _apply(logo_src, logo_label, y_offset=5)
     _apply(shoogle_src, shoogle_label, y_offset=0)
+
+def _refresh_live_about_tabs(theme: SettingsThemeSpec) -> None:
+    """Refresh every currently built About tab after a theme switch."""
+
+    global _SETTINGS_THEME
+    _SETTINGS_THEME = theme
+    for dialog in tuple(_LIVE_ABOUT_DIALOGS):
+        try:
+            _apply_about_theme(dialog)
+        except RuntimeError:
+            continue
+
+
+_THEME_UNSUBSCRIBE = subscribe_settings_theme(_refresh_live_about_tabs)
+

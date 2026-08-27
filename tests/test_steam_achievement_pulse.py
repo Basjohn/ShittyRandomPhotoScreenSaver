@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRectF, Qt
-from PySide6.QtGui import QPixmap
-from PySide6.QtTest import QSignalSpy
-
 from core.steam.achievement_pulse import AchievementPulseSelection, recent_game_titles, resolve_achievement_pulse
 from core.steam.achievement_pulse_cache import (
     OWNED_GAMES_CACHE_KEY,
@@ -18,19 +14,14 @@ from core.steam.cache import SteamCacheRecord, cache_path_for_profile_key, write
 from core.steam.credentials import (
     SteamCredentialPayload,
     derive_profile_cache_key,
-    write_credential_metadata,
 )
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
-from core.threading.manager import TaskResult
 from widgets.steam_card_models import (
     STEAM_SETTINGS_TARGET,
     STEAM_STALE_CONNECTION_INFO_SECONDS,
     build_achievement_pulse_view_model,
-    build_steam_connect_required_view_model,
     with_stale_connection_info,
 )
-from widgets.steam_components import layout_steam_card
-from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
 from rendering.input_handler import InputHandler
 
 
@@ -332,18 +323,6 @@ def test_achievement_pulse_custom_unavailable_is_literal_no_substitute() -> None
     assert model.status == "Custom 999"
 
 
-def test_steam_connect_required_prompt_has_click_target() -> None:
-    model = build_steam_connect_required_view_model("achievement_pulse")
-    layout = layout_steam_card(model, QRectF(0, 0, 420, 180))
-
-    assert model.state == "connect_required"
-    assert model.action_text == "Connect With Steam To Use"
-    assert layout.action_rects
-    target, rect = layout.action_rects[0]
-    assert target == STEAM_SETTINGS_TARGET
-    assert rect.contains(QPoint(int(rect.center().x()), int(rect.center().y())))
-
-
 def test_stale_connection_info_icon_is_defaultable_and_waits_one_day() -> None:
     base = build_achievement_pulse_view_model(
         resolve_achievement_pulse(
@@ -377,29 +356,6 @@ def test_stale_connection_info_icon_is_defaultable_and_waits_one_day() -> None:
     assert stale.show_connection_info is True
     assert stale.connection_info_target == STEAM_SETTINGS_TARGET
     assert disabled.show_connection_info is False
-    assert layout_steam_card(stale, QRectF(0, 0, 420, 180)).info_rect is not None
-
-
-def test_steam_card_connect_click_emits_settings_target(qt_app) -> None:
-    widget = SteamCardWidget(definition=STEAM_CARD_DEFINITIONS["achievement_pulse"])
-    try:
-        widget.resize(420, 180)
-        widget.set_view_model(build_steam_connect_required_view_model("achievement_pulse"))
-        pixmap = QPixmap(widget.size())
-        pixmap.fill(Qt.GlobalColor.transparent)
-        widget.render(pixmap)
-        layout = widget.last_layout()
-        assert layout is not None
-        target, rect = layout.action_rects[0]
-        spy = QSignalSpy(widget.settings_requested)
-
-        assert widget.handle_click(QPoint(int(rect.center().x()), int(rect.center().y()))) is True
-        assert target == STEAM_SETTINGS_TARGET
-        assert spy.count() == 1
-        assert spy.at(0)[0] == STEAM_SETTINGS_TARGET
-    finally:
-        widget.cleanup()
-        widget.deleteLater()
 
 
 class _FakeSettings:
@@ -844,70 +800,3 @@ def test_achievement_pulse_unauthorized_refresh_keeps_cache_and_flags_connection
     assert outcome.snapshot.resolved.ok is True
     assert outcome.snapshot.cache_age_seconds == 99_000
 
-
-def test_achievement_pulse_widget_applies_cache_before_requesting_first_fade(qt_app, tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("APPDATA", str(tmp_path))
-    from core.settings import storage_paths
-
-    storage_paths.reset_module_cache()
-    profile_identifier = "76561197960265728"
-    credential = SteamCredentialPayload(api_key="fake_steam_api_key_123456", profile_identifier=profile_identifier)
-    write_credential_metadata(credential)
-
-    # The cache root is account-private; the card never needs to decrypt the ID to read it.
-    profile_key = derive_profile_cache_key(profile_identifier)
-    write_cache_record(
-        SteamCacheRecord(
-            cache_key=RECENT_GAMES_CACHE_KEY,
-            source_id=SteamSourceId.RECENTLY_PLAYED,
-            payload={"response": {"games": [{"appid": 111, "name": "Hollow Knight"}]}},
-            fetched_at=1_000.0,
-        ),
-        cache_path_for_profile_key(profile_key, RECENT_GAMES_CACHE_KEY),
-    )
-    write_cache_record(
-        SteamCacheRecord(
-            cache_key=OWNED_GAMES_CACHE_KEY,
-            source_id=SteamSourceId.OWNED_GAMES,
-            payload={"response": {"games": [{"appid": 111, "name": "Hollow Knight"}]}},
-            fetched_at=1_000.0,
-        ),
-        cache_path_for_profile_key(profile_key, OWNED_GAMES_CACHE_KEY),
-    )
-    write_cache_record(
-        SteamCacheRecord(
-            cache_key=achievement_cache_key_for_app(111),
-            source_id=SteamSourceId.PLAYER_ACHIEVEMENTS,
-            payload={"playerstats": {"gameName": "Hollow Knight", "achievements": [{"name": "Start", "achieved": 1}]}},
-            fetched_at=1_000.0,
-        ),
-        cache_path_for_profile_key(profile_key, achievement_cache_key_for_app(111)),
-    )
-
-    class _InlineThreadManager:
-        def submit_io_task(self, func, *, task_id, callback, **_kwargs):
-            callback(TaskResult(success=True, result=func(), task_id=task_id))
-            return task_id
-
-    faded_models: list[tuple[str, str]] = []
-    widget = SteamCardWidget(
-        definition=STEAM_CARD_DEFINITIONS["achievement_pulse"],
-        achievement_show_artwork=False,
-    )
-    try:
-        widget.set_thread_manager(_InlineThreadManager())
-        monkeypatch.setattr(
-            widget,
-            "_request_coordinated_fade",
-            lambda: faded_models.append((widget._view_model.state, widget._view_model.title)),
-        )
-        widget._activate_impl()
-        qt_app.processEvents()
-
-        assert widget._view_model.state == "content"
-        assert widget._view_model.title == "Hollow Knight"
-        assert widget._has_displayed_valid_data is True
-        assert faded_models == [("content", "Hollow Knight")]
-    finally:
-        widget.cleanup()
-        widget.deleteLater()

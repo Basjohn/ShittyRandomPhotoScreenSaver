@@ -166,17 +166,6 @@ FACTORY_WIDGET_DESCRIPTORS: tuple[FactoryWidgetDescriptor, ...] = (
         dev_feature_gate="steam",
     ),
     FactoryWidgetDescriptor(
-        settings_key="achievement_pulse",
-        attr_name="achievement_pulse_widget",
-        factory_name="achievement_pulse",
-        default_position="Middle Right",
-        default_font_size=16,
-        base_settings_key="steam",
-        base_settings_kwarg="steam_settings",
-        base_enabled_gate=True,
-        inject_shadows_into_config=True,
-    ),
-    FactoryWidgetDescriptor(
         settings_key="abandonment_issues",
         attr_name="abandonment_issues_widget",
         factory_name="abandonment_issues",
