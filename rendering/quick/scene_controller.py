@@ -21,11 +21,17 @@ from widgets.spotify_visualizer.render_bridge import (
     VisualizerSnapshotBridge,
 )
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
+from widgets.spotify_visualizer.presentation_geometry import (
+    resize_visualizer_presentation_uniformly,
+)
 
 from .bootstrap import quick_qml_root
 from .custom_layout_overlay import (
     CustomLayoutOverlayModel,
     GeometryResolver,
+    ResizeBeginHandler,
+    ResizeUpdateHandler,
+    ResizeWheelHandler,
     RetainedCustomLayoutOverlay,
 )
 from .image_state import PresentationImage
@@ -231,6 +237,7 @@ class QuickSceneController(QObject):
         self._custom_layout_session: CustomLayoutSession | None = None
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
+        self._custom_layout_visualizer_baseline: ResolvedVisualizerPresentation | None = None
         self._visualizer_loader: QQuickItem | None = None
         self._visualizer_root: QQuickItem | None = None
         self._visualizer_content_host: QQuickItem | None = None
@@ -340,6 +347,9 @@ class QuickSceneController(QObject):
         display_identity: str,
         display_origin: QPoint | None = None,
         geometry_resolver: GeometryResolver | None = None,
+        resize_begin_handler: ResizeBeginHandler | None = None,
+        resize_update_handler: ResizeUpdateHandler | None = None,
+        resize_wheel_handler: ResizeWheelHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         """Bind this display's retained pixels to shared CUSTOM working state."""
 
@@ -349,12 +359,19 @@ class QuickSceneController(QObject):
         self._custom_layout_display_identity = identity
         self._custom_layout_display_origin = QPoint(display_origin or QPoint())
         self._custom_layout_session = session
+        current_visualizer = (
+            None if self._visualizer_item is None else self._visualizer_item.presentation
+        )
+        self._custom_layout_visualizer_baseline = current_visualizer
         return self.custom_layout_overlay.bind_session(
             session,
             display_identity=identity,
             display_origin=self._custom_layout_display_origin,
             geometry_resolver=geometry_resolver,
             item_change_publisher=self._apply_custom_layout_item,
+            resize_begin_handler=resize_begin_handler,
+            resize_update_handler=resize_update_handler,
+            resize_wheel_handler=resize_wheel_handler,
         )
 
     def refresh_custom_layout_session(self) -> None:
@@ -376,6 +393,7 @@ class QuickSceneController(QObject):
         self._custom_layout_session = None
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
+        self._custom_layout_visualizer_baseline = None
 
     def _apply_custom_layout_item(self, item: CustomLayoutSessionItem) -> None:
         if item.model_identity == "spotify_visualizer":
@@ -391,6 +409,9 @@ class QuickSceneController(QObject):
         presentation.set_working_visible(active_item is not None)
         if active_item is None:
             return
+        presentation.apply_custom_layout_size_payload(
+            active_item.current_size_payload
+        )
         rect = active_item.current_global_rect
         origin = self._custom_layout_display_origin
         presentation.set_geometry(
@@ -436,8 +457,53 @@ class QuickSceneController(QObject):
             return
         rect = active_item.current_global_rect
         origin = self._custom_layout_display_origin
-        loader.setX(float(rect.x() - origin.x()))
-        loader.setY(float(rect.y() - origin.y()))
+        local_origin = (
+            float(rect.x() - origin.x()),
+            float(rect.y() - origin.y()),
+        )
+        baseline = self._custom_layout_visualizer_baseline
+        if baseline is None:
+            loader.setX(local_origin[0])
+            loader.setY(local_origin[1])
+            return
+        screen = self._window.screen()
+        screen_geometry = None if screen is None else screen.geometry()
+        if screen_geometry is not None and screen_geometry.width() > 0 and screen_geometry.height() > 0:
+            display_size = (
+                float(screen_geometry.width()),
+                float(screen_geometry.height()),
+            )
+        else:
+            display_size = (
+                max(1.0, float(self._window.width())),
+                max(1.0, float(self._window.height())),
+            )
+        target_width = (
+            baseline.viewport_extent[0]
+            * baseline.uniform_visual_scale
+            * active_item.resize_scale
+        )
+        target_height = (
+            baseline.viewport_extent[1]
+            * baseline.uniform_visual_scale
+            * active_item.resize_scale
+        )
+        # The Python session owner has already bounded/clamped this rectangle.
+        # Keep the pure presentation resolver from independently moving it.
+        display_size = (
+            max(display_size[0], local_origin[0] + target_width),
+            max(display_size[1], local_origin[1] + target_height),
+        )
+        resized = resize_visualizer_presentation_uniformly(
+            baseline,
+            display_size=display_size,
+            outer_origin=local_origin,
+            relative_scale=active_item.resize_scale,
+        )
+        self._apply_visualizer_presentation_items(
+            resized,
+            active=bool(root.property("presentationActive")),
+        )
 
     @property
     def telemetry(self) -> RenderNodeTelemetry:
@@ -519,6 +585,21 @@ class QuickSceneController(QObject):
             raise RuntimeError("Quick scene admission is closed")
         if not isinstance(presentation, ResolvedVisualizerPresentation):
             raise TypeError("visualizer presentation must already be resolved")
+        if self._custom_layout_session is not None:
+            # Runtime publications remain truth for style/fade/content metrics;
+            # CUSTOM contributes only its relative working size and position.
+            self._custom_layout_visualizer_baseline = presentation
+        self._apply_visualizer_presentation_items(presentation, active=active)
+        self._sync_custom_layout_visualizer()
+
+    def _apply_visualizer_presentation_items(
+        self,
+        presentation: ResolvedVisualizerPresentation,
+        *,
+        active: bool,
+    ) -> None:
+        """Project one resolved record without recursively resyncing CUSTOM state."""
+
         item = self._ensure_visualizer_items()
         loader = self._visualizer_loader
         root = self._visualizer_root
@@ -581,7 +662,6 @@ class QuickSceneController(QObject):
             float(style.get("shadow_spread", 0.0)),
         )
         root.setProperty("presentationActive", bool(active))
-        self._sync_custom_layout_visualizer()
 
     def set_visualizer_presentation_active(self, active: bool) -> None:
         """Change retained presentation visibility without rebuilding it."""
@@ -771,6 +851,7 @@ class QuickSceneController(QObject):
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
         self._custom_layout_session = None
+        self._custom_layout_visualizer_baseline = None
         root = self._scene_root
         context = self._context
         # Detach and queue the C++-owned root while every Python child wrapper

@@ -1404,6 +1404,7 @@ class CustomLayoutManager:
             current_size_payload=dict(baseline_payload),
             baseline_enabled=ordinary_enabled,
             current_enabled=ordinary_enabled,
+            resize_capable=descriptor.supports_layout_resize_edit,
             source_monitor_route=source_monitor_value,
             current_monitor_route=current_monitor_value,
         )
@@ -1768,6 +1769,72 @@ class CustomLayoutManager:
         state.resize_origin_scale = float(state.item.resize_scale)
         state.resize_origin_payload = dict(state.item.current_size_payload)
         state.resize_corner = str(corner or "")
+
+    def begin_retained_resize(
+        self,
+        item: CustomLayoutSessionItem,
+        corner: str,
+        cursor_global: QPoint,
+    ) -> bool:
+        """Adapt retained Quick resize start to the canonical Python owner."""
+
+        state = self._state_for_session_item(item)
+        if state is None or not state.descriptor.supports_layout_resize_edit:
+            return False
+        self._on_shell_resize_drag_started(
+            state.descriptor.widget_id,
+            corner,
+            QRect(item.current_global_rect),
+            QPoint(cursor_global),
+        )
+        return True
+
+    def update_retained_resize(
+        self,
+        item: CustomLayoutSessionItem,
+        corner: str,
+        cursor_global: QPoint,
+        finalize: bool,
+    ) -> bool:
+        """Apply retained Quick resize through existing anchor/payload rules."""
+
+        state = self._state_for_session_item(item)
+        if state is None or not state.descriptor.supports_layout_resize_edit:
+            return False
+        self._apply_resize_drag(
+            state.descriptor.widget_id,
+            corner,
+            QRect(item.current_global_rect),
+            cursor_global=QPoint(cursor_global),
+            finalize=bool(finalize),
+        )
+        return True
+
+    def wheel_retained_resize(
+        self,
+        item: CustomLayoutSessionItem,
+        angle_delta_y: int,
+    ) -> bool:
+        """Apply retained Quick wheel resize through existing scale rules."""
+
+        state = self._state_for_session_item(item)
+        if state is None or not state.descriptor.supports_layout_resize_edit:
+            return False
+        before = float(item.resize_scale)
+        self._on_shell_resize_wheel_requested(
+            state.descriptor.widget_id,
+            int(angle_delta_y),
+        )
+        return abs(item.resize_scale - before) > 1e-6
+
+    def _state_for_session_item(
+        self,
+        item: CustomLayoutSessionItem,
+    ) -> _ShellState | None:
+        state = self._shell_states.get(item.source_key.widget_id)
+        if state is None or state.item is not item:
+            return None
+        return state
 
     def _on_shell_resize_drag_live_changed(
         self,
@@ -2786,6 +2853,7 @@ class CustomLayoutManager:
             current_size_payload=dict(payload),
             baseline_enabled=ordinary_enabled,
             current_enabled=ordinary_enabled,
+            resize_capable=descriptor.supports_layout_resize_edit,
             source_monitor_route=monitor_route,
             current_monitor_route=monitor_route,
         )

@@ -90,6 +90,9 @@ class RetainedOverlayWidget:
         self._item: QQuickItem | None = item
         self._model_identity = str(model_identity or "").strip()
         self._retirement_callbacks: list[Callable[[], None]] = []
+        self._custom_layout_size_payload_handler: Callable[
+            [Mapping[str, object]], None
+        ] | None = None
 
     @property
     def item(self) -> QQuickItem:
@@ -133,6 +136,24 @@ class RetainedOverlayWidget:
         for property_name, attribute in _CARD_STYLE_BINDINGS:
             item.setProperty(property_name, getattr(style, attribute))
 
+    def set_custom_layout_size_payload_handler(
+        self,
+        handler: Callable[[Mapping[str, object]], None] | None,
+    ) -> None:
+        """Register a presentation-only family payload projector for CUSTOM preview."""
+
+        self._custom_layout_size_payload_handler = handler
+
+    def apply_custom_layout_size_payload(
+        self,
+        payload: Mapping[str, object],
+    ) -> None:
+        """Project Python-owned working size values onto the retained family model."""
+
+        handler = self._custom_layout_size_payload_handler
+        if handler is not None:
+            handler(dict(payload))
+
     def add_retirement_callback(self, callback: Callable[[], None]) -> None:
         """Run ``callback`` exactly once before the retained item is detached."""
 
@@ -147,6 +168,7 @@ class RetainedOverlayWidget:
         self._item = None
         callbacks = self._retirement_callbacks
         self._retirement_callbacks = []
+        self._custom_layout_size_payload_handler = None
         for callback in callbacks:
             callback()
         if item is not None:

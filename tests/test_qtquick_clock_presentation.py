@@ -253,6 +253,47 @@ def test_clock_family_reuses_display_engine_and_retains_static_analogue_face_acr
 
 
 @pytest.mark.qt
+def test_clock_retained_custom_resize_payload_updates_same_model_and_item(qt_app) -> None:
+    owner = QObject()
+    factory = QuickSceneFactory()
+    context, root, host = _create_host(factory, owner)
+    model = _model(
+        [datetime(2026, 8, 25, 13, 24, 30)],
+        _FakeTicker(),
+        config=_clock_config(display_mode="digital"),
+    )
+    presentation = RetainedClockPresentation(
+        host=host,
+        model=model,
+        geometry=OverlayWidgetGeometry(100.0, 80.0, 320.0, 140.0),
+        display_bounds=OverlayWidgetGeometry(0.0, 0.0, 1920.0, 1080.0),
+        display_identity="screen:a",
+    )
+    try:
+        retained = host.presentation_for_model_identity(model.config.widget_id)
+        assert retained is not None
+        item_identity = id(presentation.item)
+        model_identity = id(model)
+
+        retained.apply_custom_layout_size_payload({"font_size": 72})
+        qt_app.processEvents()
+
+        assert model.config.font_size == 72
+        assert model.fontSize == 72.0
+        assert id(presentation.item) == item_identity
+        assert id(presentation.model) == model_identity
+    finally:
+        host.retire_all()
+        root.setParentItem(None)
+        root.setParent(None)
+        root.deleteLater()
+        context.deleteLater()
+        factory.deleteLater()
+        owner.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
 def test_style_direction_and_mode_updates_mutate_existing_clock_in_place(qt_app) -> None:
     owner = QObject()
     factory = QuickSceneFactory()
