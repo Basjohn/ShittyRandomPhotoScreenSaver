@@ -799,4 +799,3 @@ def test_achievement_pulse_unauthorized_refresh_keeps_cache_and_flags_connection
     assert outcome.connection_needs_attention is True
     assert outcome.snapshot.resolved.ok is True
     assert outcome.snapshot.cache_age_seconds == 99_000
-
