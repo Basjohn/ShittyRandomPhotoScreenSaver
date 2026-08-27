@@ -4,9 +4,25 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+import math
 import random
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, QPointF, QTimer, Signal
+
+from .state import QuickInputState
+
+
+_HALO_SHAPES = frozenset(
+    {
+        "circle",
+        "ring",
+        "crosshair",
+        "diamond",
+        "dot",
+        "cursor_light",
+        "cursor_dark",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +37,10 @@ class QuickAuxiliaryState:
     pixel_shift_x: int = 0
     pixel_shift_y: int = 0
     shifts_per_minute: int = 1
+    halo_visible: bool = False
+    halo_x: float = 0.0
+    halo_y: float = 0.0
+    halo_shape: str = "cursor_light"
     admission_open: bool = True
 
 
@@ -46,8 +66,15 @@ class QuickAuxiliaryController(QObject):
         )
         self._pixel_shift_timer = QTimer(self)
         self._pixel_shift_timer.timeout.connect(self._advance_pixel_shift)
+        self._halo_inactivity_timer = QTimer(self)
+        self._halo_inactivity_timer.setSingleShot(True)
+        self._halo_inactivity_timer.setInterval(2_000)
+        self._halo_inactivity_timer.timeout.connect(self._hide_halo)
         self._paused = True
         self._pixel_shift_defer_check: Callable[[], bool] | None = None
+        self._halo_input_active = False
+        self._halo_suppressed = False
+        self._halo_pointer: QPointF | None = None
 
     @property
     def state(self) -> QuickAuxiliaryState:
@@ -92,6 +119,67 @@ class QuickAuxiliaryController(QObject):
     ) -> None:
         self._pixel_shift_defer_check = check
 
+    def apply_input_state(self, state: QuickInputState) -> bool:
+        if not isinstance(state, QuickInputState):
+            raise TypeError("Quick auxiliary input requires QuickInputState")
+        if (
+            state.screen_index != self._state.screen_index
+            or state.runtime_generation != self._state.runtime_generation
+        ):
+            return False
+        self._halo_input_active = bool(
+            state.admission_open
+            and not state.exiting
+            and not state.context_menu_active
+            and (state.interaction_mode_enabled or state.ctrl_held)
+        )
+        if not self._halo_input_active:
+            self._halo_inactivity_timer.stop()
+            return self._publish(halo_visible=False)
+        pointer = self._halo_pointer
+        if pointer is None or self._halo_suppressed or self._paused:
+            return False
+        self._halo_inactivity_timer.start()
+        return self._publish(
+            halo_visible=True,
+            halo_x=pointer.x(),
+            halo_y=pointer.y(),
+        )
+
+    def update_halo_pointer(self, point: QPointF) -> bool:
+        if not isinstance(point, QPointF):
+            raise TypeError("Quick halo pointer requires QPointF")
+        x = float(point.x())
+        y = float(point.y())
+        if not math.isfinite(x) or not math.isfinite(y):
+            return False
+        self._halo_pointer = QPointF(x, y)
+        if (
+            not self._state.admission_open
+            or not self._halo_input_active
+            or self._halo_suppressed
+            or self._paused
+        ):
+            return False
+        self._halo_inactivity_timer.start()
+        return self._publish(halo_visible=True, halo_x=x, halo_y=y)
+
+    def set_halo_shape(self, shape: object) -> bool:
+        normalized = str(shape or "").strip().lower()
+        if normalized not in _HALO_SHAPES:
+            normalized = "cursor_light"
+        return self._publish(halo_shape=normalized)
+
+    def set_halo_suppressed(self, suppressed: bool) -> bool:
+        normalized = bool(suppressed)
+        if normalized == self._halo_suppressed:
+            return False
+        self._halo_suppressed = normalized
+        if normalized:
+            self._halo_inactivity_timer.stop()
+            return self._publish(halo_visible=False)
+        return False
+
     def resume(self) -> bool:
         if not self._state.admission_open or not self._paused:
             return False
@@ -107,7 +195,8 @@ class QuickAuxiliaryController(QObject):
             return False
         self._paused = True
         self._pixel_shift_timer.stop()
-        self._pixel_shift_defer_check = None
+        self._halo_inactivity_timer.stop()
+        self._publish(halo_visible=False)
         return True
 
     def close(self) -> bool:
@@ -115,6 +204,8 @@ class QuickAuxiliaryController(QObject):
             return False
         self._paused = True
         self._pixel_shift_timer.stop()
+        self._halo_inactivity_timer.stop()
+        self._pixel_shift_defer_check = None
         return self._publish(
             admission_open=False,
             dimming_enabled=False,
@@ -122,6 +213,7 @@ class QuickAuxiliaryController(QObject):
             pixel_shift_enabled=False,
             pixel_shift_x=0,
             pixel_shift_y=0,
+            halo_visible=False,
         )
 
     def describe(self) -> dict[str, object]:
@@ -137,6 +229,10 @@ class QuickAuxiliaryController(QObject):
             "shifts_per_minute": state.shifts_per_minute,
             "pixel_shift_timer_active": self._pixel_shift_timer.isActive(),
             "paused": self._paused,
+            "halo_visible": state.halo_visible,
+            "halo_position": [state.halo_x, state.halo_y],
+            "halo_shape": state.halo_shape,
+            "halo_inactivity_timer_active": self._halo_inactivity_timer.isActive(),
         }
 
     def _advance_pixel_shift(self) -> None:
@@ -151,6 +247,9 @@ class QuickAuxiliaryController(QObject):
             state.pixel_shift_y,
         )
         self._publish(pixel_shift_x=next_x, pixel_shift_y=next_y)
+
+    def _hide_halo(self) -> None:
+        self._publish(halo_visible=False)
 
     @classmethod
     def _next_pixel_shift(cls, current_x: int, current_y: int) -> tuple[int, int]:

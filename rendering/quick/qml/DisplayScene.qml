@@ -10,6 +10,10 @@ Item {
     property real dimmingOpacity: 0.0
     property real pixelShiftX: 0.0
     property real pixelShiftY: 0.0
+    property bool haloVisible: false
+    property real haloX: 0.0
+    property real haloY: 0.0
+    property string haloShape: "cursor_light"
 
     Rectangle {
         id: backgroundDimming
@@ -59,5 +63,14 @@ Item {
         id: customLayoutOverlay
         anchors.fill: parent
         z: 100
+    }
+
+    CursorHalo {
+        id: cursorHalo
+        haloVisible: displayScene.haloVisible
+        pointerX: displayScene.haloX
+        pointerY: displayScene.haloY
+        haloShape: displayScene.haloShape
+        z: 200
     }
 }
