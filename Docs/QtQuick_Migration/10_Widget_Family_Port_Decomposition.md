@@ -72,12 +72,19 @@ explicit. No provider/cache duplication. After GREEN+caller proof delete old pix
 
 Current admission order:
 
-- exact runtime/data/cache/rotation/action/presentation ownership and reuse audit — ACTIVE;
-- stable retained config/model/image projection — PENDING;
+- exact runtime/data/cache/rotation/action/presentation ownership and reuse audit — GREEN;
+- stable retained config/model/image projection — ACTIVE;
 - retained card/action fidelity — PENDING;
 - static registry, real manager/host injection and runtime-shaped gates — PENDING;
 - effective-DPR 1.0/1.5/2.25 eyes-on evidence — PENDING;
 - caller proof and old pixel/cache/input retirement — PENDING.
+
+The F8 audit keeps the existing cardinality and responsibility split: one neutral runtime per enabled card/
+display owns cache-first startup, refresh, cache-only rotation cadence, request/generation admission and the
+prepared semantic model plus decoded source image. The retained model will own only accepted presentation
+state and semantic action routing. Shared Steam reuse is deliberately bounded to stable field-list/image-source
+projection and existing Quick card/text primitives; Abandonment archive/ledger geometry, evidence rules,
+desaturation and rotation policy remain family-authored.
 
 Steam Journey/Progress and Friend Pulse are future product scaffolds, not migration slices. If old scaffold
 presenter blocks cleanup, retire scaffold rather than manufacture parity port.

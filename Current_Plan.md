@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-b793733536c58c9c5670299d2a058f57ae7aaec6
-Phase F7 Achievement Pulse visual proof landed on current main
+aca1087813d15b38dc9fa1c4ed2f8e0bd6567000
+Phase F7 Achievement Pulse retirement is caller-proven and self-audited on current main
 ```
 
 Current phase state:
@@ -41,26 +41,28 @@ Source outranks this plan if a later checkpoint has landed.
 ## Immediate work — F8 Abandonment Issues
 
 ```text
-exact runtime/data/cache/rotation/action/presentation ownership audit  ACTIVE
-stable retained config/model/image projection                         PENDING
+exact runtime/data/cache/rotation/action/presentation ownership audit  GREEN
+stable retained config/model/image projection                         ACTIVE
 retained QML card + interaction fidelity                               PENDING
 registry + real owner injection + runtime-shaped gates                PENDING
 effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                      PENDING
 caller proof + old Abandonment pixel/cache/input retirement           PENDING
 ```
 
-### F8.1 — exact ownership and reuse audit (ACTIVE)
+### F8.2 — stable retained model and image projection (ACTIVE)
 
-- inspect exact `AbandonmentRuntimeService`, preparation/model/cache/rotation and selected-artwork ownership;
-- map the remaining `AbandonmentIssuesWidget`, `steam_abandonment_components.py`, factory/input and settings
-  callers before changing them;
-- identify reusable retained Steam techniques from Achievement Pulse without manufacturing a universal card
-  framework or coupling the two families' distinct content/state rules;
-- preserve privacy/provenance, shared Steam refresh authority, cache-only semantic rotation, transition
-  deferral, selected-card hydration and honest unavailable states;
-- record focused destination and neutral-runtime gates before admitting retained implementation.
+- project the existing normalized selection, shelf visibility, artwork/desaturation and shared Steam settings
+  into one immutable retained config;
+- consume `AbandonmentPreparedPresentation` directly; keep accepted card/artwork identity and rotation state in
+  one stable presentation model without provider, cache or cadence work;
+- reuse a presentation-neutral retained Steam field-list model and image-source projection rather than cloning
+  the Achievement Pulse technique; keep archive/ledger policy and geometry Abandonment-specific;
+- preserve double-click manual refresh, cache-only rotation admission, fade completion and settings actions as
+  capability-gated semantic calls;
+- prove stable object/list identity, runtime attach/retire behavior, honest unavailable states and no work before
+  activation before admitting QML pixels.
 
-Do not port Steam Journey/Progress or Friend Pulse scaffolds as part of F7.
+Do not port Steam Journey/Progress or Friend Pulse scaffolds as part of F8.
 
 ---
 
