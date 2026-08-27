@@ -21,12 +21,12 @@ independently themeable colour.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping
 
 
-SETTINGS_THEME_SCHEMA_VERSION = 1
+SETTINGS_THEME_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +103,47 @@ class ShadowStyle:
 
 
 @dataclass(frozen=True, slots=True)
+class GradientStop:
+    """One semantic colour stop in a renderer-owned linear gradient."""
+
+    position: float
+    color: Rgba
+
+    def __post_init__(self) -> None:
+        if isinstance(self.position, bool) or not isinstance(
+            self.position,
+            (int, float),
+        ):
+            raise TypeError("Gradient stop position must be numeric")
+        position = float(self.position)
+        if not 0.0 <= position <= 1.0:
+            raise ValueError(
+                f"Gradient stop position must be in 0..1, got {position}"
+            )
+        object.__setattr__(self, "position", position)
+
+
+@dataclass(frozen=True, slots=True)
+class GradientStyle:
+    """Theme colours for a gradient whose direction/geometry stays renderer-owned."""
+
+    stops: tuple[GradientStop, ...]
+
+    def __post_init__(self) -> None:
+        stops = tuple(self.stops)
+        if len(stops) < 2:
+            raise ValueError("A Settings theme gradient needs at least two stops")
+        previous = -1.0
+        for stop in stops:
+            if not isinstance(stop, GradientStop):
+                raise TypeError("GradientStyle stops must be GradientStop values")
+            if stop.position < previous:
+                raise ValueError("Gradient stop positions must be non-decreasing")
+            previous = stop.position
+        object.__setattr__(self, "stops", stops)
+
+
+@dataclass(frozen=True, slots=True)
 class SettingsThemeSpec:
     """Resolved semantic theme values consumed by Settings renderers.
 
@@ -116,6 +157,7 @@ class SettingsThemeSpec:
     acrylic: AcrylicStyle
     colors: Mapping[str, Rgba]
     shadows: Mapping[str, ShadowStyle]
+    gradients: Mapping[str, GradientStyle] = field(default_factory=dict)
     schema_version: int = SETTINGS_THEME_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -130,6 +172,7 @@ class SettingsThemeSpec:
         for collection_name, mapping in (
             ("colors", self.colors),
             ("shadows", self.shadows),
+            ("gradients", self.gradients),
         ):
             for key in mapping:
                 if not isinstance(key, str) or not key.strip():
@@ -141,6 +184,11 @@ class SettingsThemeSpec:
         # underlying dictionaries supplied by a caller.
         object.__setattr__(self, "colors", MappingProxyType(dict(self.colors)))
         object.__setattr__(self, "shadows", MappingProxyType(dict(self.shadows)))
+        object.__setattr__(
+            self,
+            "gradients",
+            MappingProxyType(dict(self.gradients)),
+        )
 
     def color(self, token: str) -> Rgba:
         """Return one semantic colour or raise a useful error."""
@@ -158,6 +206,16 @@ class SettingsThemeSpec:
         except KeyError as exc:
             raise KeyError(f"Unknown Settings theme shadow token: {token}") from exc
 
+    def gradient(self, token: str) -> GradientStyle:
+        """Return one semantic gradient palette or raise a useful error."""
+
+        try:
+            return self.gradients[token]
+        except KeyError as exc:
+            raise KeyError(
+                f"Unknown Settings theme gradient token: {token}"
+            ) from exc
+
 
 # ---------------------------------------------------------------------------
 # Default Dark — current approved Settings visual language
@@ -169,10 +227,16 @@ class SettingsThemeSpec:
 #   * forged outer-border colour, but never forged-corner geometry/camouflage;
 #   * the approved central Settings shadow language.
 #
-# Intentionally deferred until their owning renderer is migrated:
-#   * the full shared control/slider QSS palette;
+# Intentionally represented here before shared_styles.py consumes it:
+#   * reusable input/combo/tooltip/text colours;
+#   * slider state colours + gradient stop palettes;
+#   * the recommended-slider marker colour.
+#
+# Intentionally deferred until their owning renderer/tab is migrated:
+#   * tab-local palettes (RSS/accessibility/etc.);
 #   * About/local popup palettes;
 #   * typography/spacing/geometry;
+#   * resource-backed checkbox artwork;
 #   * context-menu theme data.
 
 _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
@@ -202,11 +266,106 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "panel.subsection.surface": Rgba(60, 60, 60, 102),
     "panel.border": WHITE,
 
+    # Reusable text roles from ui/tabs/shared_styles.py.
+    "text.primary": WHITE,
+    "text.disabled": Rgba(102, 102, 102, 255),
+    "text.secondary": Rgba(170, 170, 170, 255),
+    "text.tertiary": Rgba(136, 136, 136, 255),
+    "text.helper": Rgba(220, 220, 220, 153),
+    "text.helper_disabled": Rgba(85, 85, 85, 255),
+
+    # Shared spin/line-edit/combo state palette.
+    "control.input.surface": Rgba(31, 31, 31, 255),
+    "control.input.hover_surface": Rgba(22, 22, 22, 255),
+    "control.input.focus_surface": Rgba(20, 20, 20, 255),
+    "control.input.text": WHITE,
+    "control.input.border": WHITE,
+    "control.input.disabled_text": Rgba(255, 255, 255, 115),
+    "control.input.disabled_border": Rgba(106, 106, 106, 255),
+    "control.stepper.surface": WHITE,
+    "control.stepper.hover_surface": Rgba(77, 77, 77, 255),
+    "control.stepper.pressed_surface": Rgba(45, 45, 45, 255),
+    "control.stepper.disabled_surface": Rgba(106, 106, 106, 255),
+
+    # Shared custom-combo popup palette.
+    "combo.popup.surface": Rgba(18, 18, 18, 242),
+    "combo.popup.border": WHITE,
+    "combo.popup.selection_surface": Rgba(255, 255, 255, 56),
+    "combo.popup.text": WHITE,
+    "combo.popup.selection_text": WHITE,
+
+    # Shared tooltip palette.
+    "tooltip.surface": Rgba(30, 30, 30, 255),
+    "tooltip.text": WHITE,
+    "tooltip.border": WHITE,
+
+    # Shared slider colours that are not gradient stops.
+    "slider.groove.border": Rgba(12, 12, 12, 230),
+    "slider.groove.top_border": Rgba(0, 0, 0, 179),
+    "slider.groove.bottom_border": Rgba(70, 70, 70, 64),
+    "slider.fill.border": Rgba(35, 35, 35, 217),
+    "slider.fill.top_border": Rgba(25, 25, 25, 179),
+    "slider.fill.bottom_border": Rgba(80, 80, 80, 64),
+    "slider.handle.border": Rgba(103, 103, 103, 255),
+    "slider.handle.hover_border": Rgba(153, 153, 153, 255),
+    "slider.handle.pressed_border": Rgba(42, 42, 42, 255),
+    "slider.handle.disabled_surface": Rgba(90, 90, 90, 255),
+    "slider.handle.active_border": Rgba(17, 17, 17, 255),
+    "slider.recommended_mark": Rgba(210, 210, 210, 170),
+
     # The visible forged outer border may be themed. The backing/corner
     # camouflage is intentionally absent: settings_dialog.py derives opaque RGB
     # from the adjacent shell surface so the illusion cannot be desynchronised.
     "chrome.outer_border": WHITE,
     "chrome.size_grip": Rgba(255, 255, 255, 200),
+}
+
+
+_DEFAULT_DARK_GRADIENTS: dict[str, GradientStyle] = {
+    # Direction, dimensions and radii remain ui/tabs/shared_styles.py concerns.
+    "slider.groove.surface": GradientStyle(
+        stops=(
+            GradientStop(0.0, Rgba(8, 8, 8, 242)),
+            GradientStop(0.35, Rgba(20, 20, 20, 230)),
+            GradientStop(0.65, Rgba(30, 30, 30, 217)),
+            GradientStop(1.0, Rgba(45, 45, 45, 179)),
+        )
+    ),
+    "slider.fill.surface": GradientStyle(
+        stops=(
+            GradientStop(0.0, Rgba(50, 50, 50, 230)),
+            GradientStop(0.5, Rgba(65, 65, 65, 217)),
+            GradientStop(1.0, Rgba(50, 50, 50, 191)),
+        )
+    ),
+    "slider.handle.surface": GradientStyle(
+        stops=(
+            GradientStop(0.0, Rgba(46, 46, 46, 255)),
+            GradientStop(0.85, Rgba(26, 26, 26, 255)),
+            GradientStop(1.0, Rgba(17, 17, 17, 255)),
+        )
+    ),
+    "slider.handle.hover_surface": GradientStyle(
+        stops=(
+            GradientStop(0.0, Rgba(58, 58, 58, 255)),
+            GradientStop(0.85, Rgba(36, 36, 36, 255)),
+            GradientStop(1.0, Rgba(24, 24, 24, 255)),
+        )
+    ),
+    "slider.handle.pressed_surface": GradientStyle(
+        stops=(
+            GradientStop(0.0, Rgba(34, 34, 34, 255)),
+            GradientStop(1.0, Rgba(20, 20, 20, 255)),
+        )
+    ),
+    # The active/last-moved handle currently reuses the normal handle gradient.
+    "slider.handle.active_surface": GradientStyle(
+        stops=(
+            GradientStop(0.0, Rgba(46, 46, 46, 255)),
+            GradientStop(0.85, Rgba(26, 26, 26, 255)),
+            GradientStop(1.0, Rgba(17, 17, 17, 255)),
+        )
+    ),
 }
 
 
@@ -291,6 +450,7 @@ DEFAULT_DARK_SETTINGS_THEME = SettingsThemeSpec(
     ),
     colors=_DEFAULT_DARK_COLORS,
     shadows=_DEFAULT_DARK_SHADOWS,
+    gradients=_DEFAULT_DARK_GRADIENTS,
 )
 
 
@@ -298,6 +458,8 @@ __all__ = [
     "AcrylicStyle",
     "BLACK",
     "DEFAULT_DARK_SETTINGS_THEME",
+    "GradientStop",
+    "GradientStyle",
     "Rgba",
     "SETTINGS_THEME_SCHEMA_VERSION",
     "SettingsThemeSpec",
