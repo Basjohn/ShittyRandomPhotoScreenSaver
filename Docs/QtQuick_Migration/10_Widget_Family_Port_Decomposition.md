@@ -1,7 +1,7 @@
 # 10 — Ordinary Widget Family Port Decomposition
 
-Status: **Phase F ACTIVE — F1–F5 CLOSED; F6 Gmail ACTIVE / partial**  
-Last updated: 2026-08-26
+Status: **Phase F ACTIVE — F1–F5 CLOSED; F6 Gmail ACTIVE**
+Last updated: 2026-08-27
 
 This owns Phase-F family decomposition, not closed implementation narrative. `Current_Plan.md` owns exact
 work admission.
@@ -60,22 +60,17 @@ grouping, loading/ready/cached/error/auth/empty, unread/read styling and envelop
 capacity/dynamic height, explicit refresh and blank-space double-click refresh, current three-dot popup action
 menu with icons, semantic open/auth/refresh/read-unread/archive/spam/delete, notification/sound Python-owned.
 
-### Landed partial at `c6af1260`
+### Retained presentation — GREEN
 
 - stable GmailPresentationModel + GmailRowListModel;
-- GmailPresentation.qml;
+- GmailPresentation.qml with the old presenter as its visual/interaction oracle;
 - RetainedGmailPresentation wrapper;
 - semantic QML -> Python routing;
+- floating three-dot popup with current icon/label identity and conditional Archive;
+- popup state independent of committed row/card height and CUSTOM geometry;
+- card-derived header border, real no-unread desaturation and blank-space double-click refresh;
+- accepted-row dynamic height and retained item/model/list-model/engine identity;
 - real registry/host/runtime injection not yet landed.
-
-Direction is sound; do not roll it back.
-
-### Finish QML fidelity before owner injection
-
-Preserve popup three-dot menu instead of row-expanding text chips and current action icons; menu open does not
-alter committed height/CUSTOM geometry; header frame uses proper card/header border style; no-unread logo
-really desaturates if setting survives; blank-space double-click refresh remains; dynamic accepted-row height
-proved separately from popup state.
 
 ### Shared Quick import-dormancy correction
 

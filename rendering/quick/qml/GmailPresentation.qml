@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 
 OverlayWidget {
     id: gmailRoot
@@ -6,6 +7,12 @@ OverlayWidget {
 
     required property var gmailModel
     property string activeActionIdentity: ""
+    property string activeActionMessageId: ""
+    property bool activeActionUnread: false
+    property bool activeActionArchiveSupported: false
+    property real actionPopupX: 0.0
+    property real actionPopupY: 0.0
+    readonly property real committedContentHeight: gmailModel.contentHeight
 
     signal openInboxRequested()
     signal openMessageRequested(string messageId)
@@ -14,8 +21,58 @@ OverlayWidget {
     signal actionRequested(string action, string messageId)
 
     function dispatchAction(action, messageId) {
-        activeActionIdentity = ""
+        dismissActionMenu()
         actionRequested(action, messageId)
+    }
+
+    function dismissActionMenu() {
+        activeActionIdentity = ""
+        activeActionMessageId = ""
+    }
+
+    function toggleActionMenu(identity, messageId, unread, archiveSupported, anchor) {
+        if (activeActionIdentity === identity) {
+            dismissActionMenu()
+            return
+        }
+        var mapped = anchor.mapToItem(actionPopup.parent, 0.0, anchor.height)
+        activeActionIdentity = identity
+        activeActionMessageId = messageId
+        activeActionUnread = unread
+        activeActionArchiveSupported = archiveSupported
+        actionPopupX = Math.max(0.0, Math.min(
+            mapped.x + anchor.width - actionPopup.width,
+            actionPopup.parent.width - actionPopup.width
+        ))
+        actionPopupY = mapped.y
+    }
+
+    Connections {
+        target: gmailRoot.gmailModel
+
+        function onStateChanged() {
+            if (!gmailRoot.gmailModel.interactionEnabled
+                    || !gmailRoot.gmailModel.showThreeDotMenu
+                    || (gmailRoot.activeActionMessageId.length > 0
+                        && !gmailRoot.gmailModel.ownsMessage(
+                            gmailRoot.activeActionMessageId
+                        ))) {
+                gmailRoot.dismissActionMenu()
+            }
+        }
+    }
+
+    Item {
+        id: blankRefreshArea
+        objectName: "gmailBlankRefreshArea"
+        anchors.fill: parent
+        z: -10
+
+        TapHandler {
+            enabled: gmailRoot.gmailModel.interactionEnabled
+            acceptedButtons: Qt.LeftButton
+            onDoubleTapped: gmailRoot.refreshRequested()
+        }
     }
 
     Column {
@@ -33,6 +90,11 @@ OverlayWidget {
             Rectangle {
                 id: headerFrame
                 objectName: "gmailHeaderFrame"
+                readonly property color resolvedBorderColor:
+                    gmailRoot.gmailModel.headerBorderColor
+                readonly property real resolvedBorderWidth:
+                    gmailRoot.gmailModel.showHeaderBorder
+                        ? gmailRoot.gmailModel.headerBorderWidth : 0.0
                 anchors.left: parent.left
                 width: Math.min(
                     parent.width - (refreshGlyph.visible ? refreshGlyph.width + 10.0 : 0.0),
@@ -41,26 +103,38 @@ OverlayWidget {
                 height: parent.height
                 radius: 9.0
                 color: "transparent"
-                border.width: gmailRoot.gmailModel.showHeaderBorder ? 1.0 : 0.0
-                border.color: gmailRoot.gmailModel.separatorColor
+                border.width: resolvedBorderWidth
+                border.color: resolvedBorderColor
 
                 Row {
                     id: headerRow
                     anchors.centerIn: parent
                     spacing: 8.0
 
-                    Image {
-                        id: gmailLogo
+                    Item {
                         objectName: "gmailHeaderLogo"
-                        source: gmailRoot.gmailModel.logoSource
                         width: gmailRoot.gmailModel.headerLogoSize
                         height: width
-                        sourceSize.width: width * 2.0
-                        sourceSize.height: height * 2.0
-                        fillMode: Image.PreserveAspectFit
-                        asynchronous: false
-                        cache: true
-                        opacity: gmailRoot.gmailModel.desaturateLogo ? 0.48 : 1.0
+
+                        Image {
+                            id: gmailLogoSource
+                            anchors.fill: parent
+                            source: gmailRoot.gmailModel.logoSource
+                            sourceSize.width: width * 2.0
+                            sourceSize.height: height * 2.0
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: false
+                            cache: true
+                            visible: false
+                        }
+
+                        MultiEffect {
+                            id: gmailLogoEffect
+                            objectName: "gmailHeaderLogoEffect"
+                            anchors.fill: parent
+                            source: gmailLogoSource
+                            saturation: gmailRoot.gmailModel.desaturateLogo ? -1.0 : 0.0
+                        }
                     }
 
                     ShadowedText {
@@ -181,13 +255,9 @@ OverlayWidget {
                 readonly property real baseRowHeight: Math.max(
                     28.0, gmailRoot.gmailModel.fontSize * 1.65
                 )
-                readonly property bool menuOpen: gmailRoot.activeActionIdentity
-                    === messageIdentity
-
                 objectName: "gmailMessageRow_" + index
                 width: contentColumn.width
                 height: boundary.height + baseRowHeight
-                    + (menuOpen ? actionMenu.height : 0.0)
 
                 Rectangle {
                     id: boundary
@@ -341,80 +411,13 @@ OverlayWidget {
                         TapHandler {
                             enabled: gmailRoot.gmailModel.interactionEnabled
                             acceptedButtons: Qt.LeftButton
-                            onTapped: gmailRoot.activeActionIdentity = messageRow.menuOpen
-                                ? "" : messageRow.messageIdentity
-                        }
-                    }
-                }
-
-                Row {
-                    id: actionMenu
-                    objectName: "gmailActionMenu_" + messageRow.index
-                    anchors.top: rowContent.bottom
-                    width: parent.width
-                    height: messageRow.menuOpen ? Math.max(
-                        30.0, gmailRoot.gmailModel.fontSize * 1.7
-                    ) : 0.0
-                    visible: messageRow.menuOpen
-                    spacing: 4.0
-
-                    function actions() {
-                        var values = [messageRow.messageUnread ? "mark_read" : "mark_unread"]
-                        if (messageRow.archiveSupported)
-                            values.push("archive")
-                        values.push("spam")
-                        values.push("trash")
-                        return values
-                    }
-
-                    Repeater {
-                        id: actionRepeater
-                        model: actionMenu.actions()
-
-                        delegate: Rectangle {
-                            id: actionChip
-                            required property string modelData
-                            required property int index
-
-                            objectName: "gmailAction_" + modelData + "_" + messageRow.index
-                            width: Math.max(1.0, (
-                                actionMenu.width
-                                - actionMenu.spacing * Math.max(0, actionRepeater.count - 1)
-                            ) / Math.max(1, actionRepeater.count))
-                            height: actionMenu.height
-                            radius: 5.0
-                            color: "#dc2b2b2b"
-                            border.width: 1.0
-                            border.color: "#c89a9a9a"
-
-                            ShadowedText {
-                                anchors.fill: parent
-                                text: {
-                                    if (actionChip.modelData === "mark_read") return "Read"
-                                    if (actionChip.modelData === "mark_unread") return "Unread"
-                                    if (actionChip.modelData === "archive") return "Archive"
-                                    if (actionChip.modelData === "spam") return "Spam"
-                                    return "Delete"
-                                }
-                                color: gmailRoot.gmailModel.textColor
-                                font.family: gmailRoot.gmailModel.fontFamily
-                                font.pointSize: Math.max(8.0, gmailRoot.gmailModel.fontSize - 2.0)
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                                elide: Text.ElideRight
-                                shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
-                                shadowColor: gmailRoot.gmailModel.textShadowColor
-                                shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
-                                shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
-                            }
-
-                            TapHandler {
-                                enabled: gmailRoot.gmailModel.interactionEnabled
-                                acceptedButtons: Qt.LeftButton
-                                onTapped: gmailRoot.dispatchAction(
-                                    actionChip.modelData, messageRow.messageId
-                                )
-                            }
+                            onTapped: gmailRoot.toggleActionMenu(
+                                messageRow.messageIdentity,
+                                messageRow.messageId,
+                                messageRow.messageUnread,
+                                messageRow.archiveSupported,
+                                menuButton
+                            )
                         }
                     }
                 }
@@ -428,6 +431,127 @@ OverlayWidget {
                     anchors.bottom: parent.bottom
                     height: visible ? gmailRoot.gmailModel.separatorThickness : 0.0
                     color: gmailRoot.gmailModel.separatorColor
+                }
+            }
+        }
+    }
+
+    Item {
+        id: actionDismissLayer
+        objectName: "gmailActionDismissLayer"
+        anchors.fill: parent
+        visible: gmailRoot.activeActionIdentity.length > 0
+        z: 90
+
+        TapHandler {
+            acceptedButtons: Qt.LeftButton
+            onTapped: gmailRoot.dismissActionMenu()
+        }
+    }
+
+    Rectangle {
+        id: actionPopup
+        objectName: "gmailActionPopup"
+        visible: gmailRoot.activeActionIdentity.length > 0
+        x: gmailRoot.actionPopupX
+        y: Math.max(0.0, Math.min(
+            gmailRoot.actionPopupY,
+            parent.height - height
+        ))
+        width: Math.min(190.0, parent.width)
+        height: popupColumn.implicitHeight + 8.0
+        radius: 6.0
+        color: "#ff2b2b2b"
+        border.width: 2.0
+        border.color: "#c89a9a9a"
+        z: 100
+
+        function actions() {
+            var values = [gmailRoot.activeActionUnread ? "mark_read" : "mark_unread"]
+            if (gmailRoot.activeActionArchiveSupported)
+                values.push("archive")
+            values.push("spam")
+            values.push("trash")
+            return values
+        }
+
+        Column {
+            id: popupColumn
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: 4.0
+            spacing: 1.0
+
+            Repeater {
+                id: popupActionRepeater
+                model: actionPopup.actions()
+
+                delegate: Rectangle {
+                    id: popupAction
+                    required property string modelData
+                    required property int index
+
+                    objectName: "gmailAction_" + modelData
+                    width: popupColumn.width
+                    height: Math.max(30.0, gmailRoot.gmailModel.fontSize * 1.8)
+                    radius: 3.0
+                    color: actionHover.hovered ? "#dc3e3e3e" : "transparent"
+
+                    Row {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8.0
+                        anchors.rightMargin: 8.0
+                        spacing: 8.0
+
+                        Image {
+                            objectName: "gmailActionIcon_" + popupAction.modelData
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 16.0
+                            height: 16.0
+                            source: gmailRoot.gmailModel.actionIconSource(
+                                popupAction.modelData
+                            )
+                            sourceSize.width: 32
+                            sourceSize.height: 32
+                            fillMode: Image.PreserveAspectFit
+                            cache: true
+                        }
+
+                        ShadowedText {
+                            width: parent.width - 24.0
+                            height: parent.height
+                            text: {
+                                if (popupAction.modelData === "mark_read") return "Mark as Read"
+                                if (popupAction.modelData === "mark_unread") return "Mark as Unread"
+                                if (popupAction.modelData === "archive") return "Archive"
+                                if (popupAction.modelData === "spam") return "Mark as Spam"
+                                return "Delete"
+                            }
+                            color: gmailRoot.gmailModel.textColor
+                            font.family: gmailRoot.gmailModel.fontFamily
+                            font.pointSize: Math.max(8.0, gmailRoot.gmailModel.fontSize - 1.0)
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                            shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
+                            shadowColor: gmailRoot.gmailModel.textShadowColor
+                            shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
+                            shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
+                        }
+                    }
+
+                    HoverHandler {
+                        id: actionHover
+                        enabled: gmailRoot.gmailModel.interactionEnabled
+                    }
+
+                    TapHandler {
+                        enabled: gmailRoot.gmailModel.interactionEnabled
+                        acceptedButtons: Qt.LeftButton
+                        onTapped: gmailRoot.dispatchAction(
+                            popupAction.modelData,
+                            gmailRoot.activeActionMessageId
+                        )
+                    }
                 }
             }
         }

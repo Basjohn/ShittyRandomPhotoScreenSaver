@@ -4,17 +4,31 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QObject, QUrl
 from PySide6.QtGui import QColor
+from PySide6.QtQml import QQmlComponent, QQmlEngine
+from PySide6.QtQuick import QQuickItem
 
 from core.gmail.gmail_client import EmailMetadata
 from rendering.quick.widgets.gmail import (
     GmailPresentationConfig,
     GmailPresentationModel,
     GmailPresentationStyle,
+    RetainedGmailPresentation,
 )
+from rendering.quick.widgets.host import (
+    OrdinaryWidgetPresentationHost,
+    OverlayWidgetGeometry,
+)
+from rendering.quick.scene_controller import QuickSceneFactory
 from widgets.gmail_runtime import GmailRuntimeSnapshot
+
+
+ROOT = Path(__file__).resolve().parents[1]
+QML_ROOT = ROOT / "rendering" / "quick" / "qml"
 
 
 def _config(**overrides) -> GmailPresentationConfig:
@@ -36,21 +50,24 @@ def _config(**overrides) -> GmailPresentationConfig:
     return GmailPresentationConfig.from_mapping(values)
 
 
+def _style_values(**overrides):
+    values = {
+        "enabled": True,
+        "direction": "NW",
+        "color": [0, 0, 0, 255],
+        "blur_radius": 18,
+        "frame_opacity": 0.7,
+        "frame_extra_offset": 1,
+        "text_enabled": True,
+        "text_opacity": 0.4,
+        "text_extra_offset": 2,
+    }
+    values.update(overrides)
+    return values
+
+
 def _style(config: GmailPresentationConfig) -> GmailPresentationStyle:
-    return GmailPresentationStyle.project(
-        config,
-        {
-            "enabled": True,
-            "direction": "NW",
-            "color": [0, 0, 0, 255],
-            "blur_radius": 18,
-            "frame_opacity": 0.7,
-            "frame_extra_offset": 1,
-            "text_enabled": True,
-            "text_opacity": 0.4,
-            "text_extra_offset": 2,
-        },
-    )
+    return GmailPresentationStyle.project(config, _style_values())
 
 
 def _email(
@@ -137,6 +154,63 @@ class _Service:
     def dispatch_action(self, action: str, message_id: str) -> bool:
         self.actions.append((action, message_id))
         return True
+
+
+def _find_visual_item(root: QQuickItem, object_name: str) -> QQuickItem | None:
+    if root.objectName() == object_name:
+        return root
+    for child in root.childItems():
+        found = _find_visual_item(child, object_name)
+        if found is not None:
+            return found
+    return None
+
+
+def _create_qml_item(model: GmailPresentationModel):
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_ROOT / "GmailPresentation.qml"))
+    )
+    assert component.status() == QQmlComponent.Status.Ready, [
+        error.toString() for error in component.errors()
+    ]
+    item = component.createWithInitialProperties({"gmailModel": model})
+    assert isinstance(item, QQuickItem), [error.toString() for error in component.errors()]
+    item.setWidth(620.0)
+    item.setHeight(360.0)
+    return engine, component, item
+
+
+def _create_retained_host(factory: QuickSceneFactory, owner: QObject):
+    context, root = factory.create_display_root(
+        owner=owner, screen_index=0, runtime_generation=71
+    )
+    host_item = root.findChild(QQuickItem, "ordinaryWidgetHost")
+    assert host_item is not None
+    engine = QQmlEngine.contextForObject(root).engine()
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_ROOT / "GmailPresentation.qml"))
+    )
+    assert component.status() == QQmlComponent.Status.Ready, [
+        error.toString() for error in component.errors()
+    ]
+
+    def create_gmail(family_id, properties, item_context):
+        assert family_id == "gmail"
+        item = component.createWithInitialProperties(dict(properties), item_context)
+        assert isinstance(item, QQuickItem), [
+            error.toString() for error in component.errors()
+        ]
+        return item
+
+    host = OrdinaryWidgetPresentationHost(
+        host_item=host_item,
+        context=context,
+        create_overlay_item=factory.create_overlay_widget,
+        create_family_item=create_gmail,
+    )
+    return context, root, host, component
 
 
 def test_gmail_config_projects_current_bounded_presentation_contract() -> None:
@@ -296,3 +370,180 @@ def test_gmail_semantic_actions_require_active_interaction_and_owned_row() -> No
     assert service.detached == 1
     assert model.row_model.rowCount() == 0
     assert model.request_open("oauth") is False
+
+
+@pytest.mark.qt
+def test_gmail_qml_keeps_popup_and_dynamic_height_out_of_row_identity(qt_app) -> None:
+    config = _config(
+        group_threads=False,
+        show_envelope_icon=True,
+        desaturate_when_no_unread=True,
+    )
+    model = GmailPresentationModel(config, _style(config))
+    model.activate()
+    model.on_gmail_runtime_snapshot(_snapshot(1, (_email("one"),), unread=0))
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        row_model = model.row_model
+        first_row = _find_visual_item(item, "gmailMessageRow_0")
+        popup = _find_visual_item(item, "gmailActionPopup")
+        header = _find_visual_item(item, "gmailHeaderFrame")
+        logo_effect = _find_visual_item(item, "gmailHeaderLogoEffect")
+        assert first_row is not None
+        assert popup is not None
+        assert header is not None
+        assert logo_effect is not None
+        assert popup.isVisible() is False
+        assert logo_effect.property("saturation") == pytest.approx(-1.0)
+        assert header.property("resolvedBorderColor") == model.headerBorderColor
+        assert header.property("resolvedBorderWidth") == pytest.approx(
+            model.headerBorderWidth
+        )
+        one_row_height = float(item.property("committedContentHeight"))
+
+        item.setProperty("activeActionIdentity", "one")
+        item.setProperty("activeActionMessageId", "one")
+        item.setProperty("activeActionUnread", True)
+        item.setProperty("activeActionArchiveSupported", True)
+        qt_app.processEvents()
+        assert popup.isVisible() is True
+        assert float(item.property("committedContentHeight")) == pytest.approx(
+            one_row_height
+        )
+        assert _find_visual_item(item, "gmailActionIcon_mark_read") is not None
+        assert _find_visual_item(item, "gmailActionIcon_archive") is not None
+        assert _find_visual_item(item, "gmailActionIcon_spam") is not None
+        assert _find_visual_item(item, "gmailActionIcon_trash") is not None
+        assert model.actionIconSource("mark_read").endswith("gmail-read.png")
+        assert model.actionIconSource("mark_unread").endswith("gmail-envelope.png")
+        assert model.actionIconSource("archive").endswith("gmail-archive.svg")
+        assert model.actionIconSource("spam").endswith("gmail-spam.png")
+        assert model.actionIconSource("trash").endswith("gmail-trash.png")
+
+        model.on_gmail_runtime_snapshot(
+            _snapshot(2, (_email("one"), _email("two", minute=2)), unread=1)
+        )
+        qt_app.processEvents()
+        assert model.row_model is row_model
+        assert _find_visual_item(item, "gmailMessageRow_0") is first_row
+        assert float(item.property("committedContentHeight")) > one_row_height
+        assert QQmlEngine.contextForObject(item).engine() is engine
+
+        model.on_gmail_runtime_snapshot(_snapshot(3, (_email("two"),), unread=0))
+        qt_app.processEvents()
+        assert popup.isVisible() is False
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        qt_app.processEvents()
+
+
+def test_gmail_qml_is_presentation_only_and_keeps_popup_height_independent() -> None:
+    qml = (QML_ROOT / "GmailPresentation.qml").read_text(encoding="utf-8")
+    for marker in (
+        "Timer {",
+        "SettingsManager",
+        "GmailRuntimeService",
+        "GmailBackend",
+        "QDesktopServices",
+        "QWidget",
+        "http://",
+        "https://",
+    ):
+        assert marker not in qml
+    assert "onDoubleTapped: gmailRoot.refreshRequested()" in qml
+    assert "committedContentHeight: gmailModel.contentHeight" in qml
+    assert "MultiEffect" in qml
+    assert "gmailActionPopup" in qml
+    assert "menuOpen ?" not in qml
+
+
+@pytest.mark.qt
+def test_retained_gmail_wrapper_routes_semantic_actions_without_recreation(qt_app) -> None:
+    owner = QObject()
+    factory = QuickSceneFactory(owner)
+    context, root, host, component = _create_retained_host(factory, owner)
+    service = _Service()
+    config = _config(group_threads=False)
+    model = GmailPresentationModel(config, _style(config), runtime_service=service)
+    opened_inbox = []
+    presentation = RetainedGmailPresentation(
+        host=host,
+        model=model,
+        geometry=OverlayWidgetGeometry(25.0, 30.0, 620.0, 360.0),
+        on_open_inbox_requested=lambda: opened_inbox.append("inbox") or True,
+    )
+    item = presentation.item
+    engine = QQmlEngine.contextForObject(item).engine()
+    try:
+        presentation.activate("tm")
+        model.on_gmail_runtime_snapshot(_snapshot(1, (_email("one"),)))
+        qt_app.processEvents()
+        row_model = model.row_model
+        first_row = _find_visual_item(item, "gmailMessageRow_0")
+        assert first_row is not None
+
+        item.openInboxRequested.emit()
+        item.openMessageRequested.emit("one")
+        item.refreshRequested.emit()
+        item.authRequested.emit()
+        item.actionRequested.emit("trash", "one")
+        assert opened_inbox == []
+        assert service.opens == []
+        assert service.refreshes == 0
+        assert service.auth_requests == 0
+        assert service.actions == []
+
+        assert presentation.apply_input_state(
+            {
+                "admission_open": True,
+                "exiting": False,
+                "interaction_mode_enabled": True,
+                "ctrl_held": False,
+            }
+        ) is True
+        item.openInboxRequested.emit()
+        item.openMessageRequested.emit("one")
+        item.openMessageRequested.emit("missing")
+        item.refreshRequested.emit()
+        item.authRequested.emit()
+        item.actionRequested.emit("trash", "one")
+        item.actionRequested.emit("unknown", "one")
+        assert opened_inbox == ["inbox"]
+        assert service.opens == ["one"]
+        assert service.refreshes == 1
+        assert service.auth_requests == 1
+        assert service.actions == [("trash", "one")]
+
+        model.on_gmail_runtime_snapshot(
+            _snapshot(2, (_email("one", subject="updated subject"),))
+        )
+        presentation.apply_config(replace(config, font_size=18), _style_values())
+        presentation.set_geometry(OverlayWidgetGeometry(40.0, 50.0, 580.0, 320.0))
+        qt_app.processEvents()
+        assert presentation.item is item
+        assert model.row_model is row_model
+        assert _find_visual_item(item, "gmailMessageRow_0") is first_row
+        assert QQmlEngine.contextForObject(item).engine() is engine
+        assert item.x() == pytest.approx(40.0)
+        assert item.y() == pytest.approx(50.0)
+        assert item.width() == pytest.approx(580.0)
+        assert item.height() == pytest.approx(320.0)
+    finally:
+        host.retire_all()
+        root.setParentItem(None)
+        root.setParent(None)
+        root.deleteLater()
+        context.deleteLater()
+        component.deleteLater()
+        owner.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+    assert model.is_active is False
+    assert service.stopped == 1
+    assert service.detached == 1

@@ -1,14 +1,14 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 ## Current checkpoint
 
 Exact pushed `main` reviewed through:
 
 ```text
-c6af1260b695e35b802e7b70ddcbb2277ef0100a
-5.0.0 - Phase F6 Partial
+88ef4903e1b85a2f5bf1e398a9ecda62385fb233
+5.0.0 - Phase F6 Partial - SGUI P14
 ```
 
 Current phase state:
@@ -43,33 +43,12 @@ Source outranks this plan if a later checkpoint has landed.
 ```text
 neutral Gmail runtime/preparation/notification ownership audit     GREEN
 retained config/style + stable message projection model            GREEN
-static QML + retained presentation wrapper                         PARTIAL / direction GREEN
-finish Gmail pointer + visual parity                               ACTIVE
-shared Quick import-dormancy correction                            REQUIRED NEXT
+static QML + retained presentation wrapper                         GREEN
+Gmail pointer + visual parity                                      GREEN
+shared Quick import-dormancy correction                            ACTIVE
 registry + real owner injection + runtime-shaped gates             pending
 caller proof + old Gmail pixel/cache/input retirement              pending
 ```
-
-### F6.1 — finish retained Gmail QML fidelity
-
-Continue the retained-QML direction. Do not roll back to QWidget pixels and do not redesign working
-product behavior merely because presentation technology changed.
-
-Before this slice is GREEN:
-
-- preserve the existing three-dot Gmail action-menu UX: floating/popup-style menu with current Read/Unread,
-  Archive where supported, Spam and Delete actions and existing icon identity;
-- opening the menu must not expand a message row, change committed card height, or create a CUSTOM variant;
-- project the Gmail header frame from the actual card/background border colour and derived border thickness,
-  not the low-alpha row separator colour;
-- `desaturate_when_no_unread` performs real desaturation if retained; opacity reduction is not equivalent;
-- preserve blank-space double-click manual refresh as well as the explicit refresh control;
-- prove dynamic Gmail content height from accepted row count independently of transient popup/menu state;
-- retain bounded rows, stable thread/message identity, sender/subject/date cleanup, grouping, envelope
-  semantics, unread styling, error/auth/empty states and normal interaction admission.
-
-QML emits semantic requests only. It does not own URLs, auth, backend selection, cache, cadence,
-notifications, sound, persistence or message mutation.
 
 ### F6.2 — shared Quick import dormancy
 

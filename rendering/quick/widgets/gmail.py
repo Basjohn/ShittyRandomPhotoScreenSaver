@@ -7,7 +7,15 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QAbstractListModel, QModelIndex, QObject, Property, Qt, Signal
+from PySide6.QtCore import (
+    QAbstractListModel,
+    QModelIndex,
+    QObject,
+    Property,
+    Qt,
+    Signal,
+    Slot,
+)
 from PySide6.QtGui import QColor
 
 from core.settings.shadow_direction import resolve_signed_offset
@@ -34,6 +42,13 @@ from .host import (
 _GMAIL_LOGO = Path(__file__).resolve().parents[3] / "images" / "google-gmail.png"
 _GMAIL_UNREAD_ENVELOPE = Path(__file__).resolve().parents[3] / "images" / "gmail-envelope.png"
 _GMAIL_READ_ENVELOPE = Path(__file__).resolve().parents[3] / "images" / "gmail-read.png"
+_GMAIL_ACTION_ICONS = {
+    "mark_read": _GMAIL_READ_ENVELOPE,
+    "mark_unread": _GMAIL_UNREAD_ENVELOPE,
+    "archive": Path(__file__).resolve().parents[3] / "images" / "gmail-archive.svg",
+    "spam": Path(__file__).resolve().parents[3] / "images" / "gmail-spam.png",
+    "trash": Path(__file__).resolve().parents[3] / "images" / "gmail-trash.png",
+}
 
 
 def _bounded_int(value: object, default: int, low: int, high: int) -> int:
@@ -704,6 +719,40 @@ class GmailPresentationModel(QObject):
     @Property(float, notify=stateChanged)
     def textShadowOffsetY(self) -> float:
         return self.style.text_shadow_offset_y
+
+    @Property(QColor, notify=stateChanged)
+    def headerBorderColor(self) -> QColor:
+        return QColor(self.style.card_style.border_color)
+
+    @Property(float, notify=stateChanged)
+    def headerBorderWidth(self) -> float:
+        return max(1.0, self.style.card_style.border_width - 3.0)
+
+    @Property(float, notify=stateChanged)
+    def contentHeight(self) -> float:
+        header_height = max(36.0, self.headerLogoSize + 10.0)
+        row_height = max(28.0, self.fontSize * 1.65)
+        rows = self._row_model.rows
+        if self._snapshot.view_state == "ready" and rows:
+            boundaries = sum(1 for row in rows if row.boundary_before)
+            body_height = (
+                row_height * len(rows)
+                + self.config.boundary_separator_thickness * boundaries
+            )
+            gaps = len(rows)
+        else:
+            body_height = max(42.0, self.fontSize * 1.8)
+            gaps = 1
+        return header_height + body_height + (4.0 * gaps)
+
+    @Slot(str, result=str)
+    def actionIconSource(self, action: str) -> str:
+        path = _GMAIL_ACTION_ICONS.get(str(action))
+        return path.resolve().as_uri() if path is not None and path.is_file() else ""
+
+    @Slot(str, result=bool)
+    def ownsMessage(self, message_id: str) -> bool:
+        return any(row.message_id == str(message_id) for row in self._row_model.rows)
 
 
 class RetainedGmailPresentation:

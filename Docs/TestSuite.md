@@ -1,11 +1,11 @@
 # Test Suite Guide
 
-Last updated: 2026-08-25
+Last updated: 2026-08-27
 
 Reviewed source basis:
 
 ```text
-test-inventory basis = F6 retained Gmail presentation-model checkpoint
+test-inventory basis = F6 retained Gmail QML fidelity checkpoint
 Phase F0/F0.5/F1/F2/F3/F4/F5 CLOSED; 353 test modules; F6 Gmail active
 ```
 
@@ -111,7 +111,13 @@ The first F6 checkpoint adds `tests/test_qtquick_gmail_presentation.py`. It prot
 configuration and canonical style projection, stable row-model and thread/message identities,
 grouping reprojection over accepted runtime state, stale-revision rejection, semantic
 refresh/auth/open/message-action admission, IMAP archive capability and runtime startup/retirement
-lifecycle. QML pixels, real host geometry and caller proof remain open and are not claimed here.
+lifecycle. At that checkpoint QML pixels, real host geometry and caller proof remained open.
+
+The F6 QML-fidelity extension compiles and instantiates the destination component directly before production
+registry admission. It protects the vertical floating action popup and current icons/labels, conditional
+Archive, popup-independent committed height, accepted-row dynamic height, card-derived header border, real
+no-unread logo desaturation, blank-space double-click refresh semantics, QML-to-Python action admission and
+stable item/model/list-model/engine identity. Real manager-owned runtime injection and caller proof remain open.
 
 At the reviewed checkpoint the repository contains:
 
@@ -636,7 +642,7 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_gmail_imap_actions.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_oauth.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_preparation.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_qtquick_gmail_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Gmail config/style, stable accepted-state row projection, semantic action admission and lifecycle coverage; extend with QML/host proof during F6. |
+| `tests/test_qtquick_gmail_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Gmail config/style, stable accepted-state row projection, static QML popup/height/visual fidelity, semantic action admission and no-recreation lifecycle coverage; extend with real manager/host proof during F6. |
 | `tests/test_gmail_retiring_runtime.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_settings_roundtrip.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
