@@ -4,6 +4,9 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Mapping
 
+from core.settings.capability_activation import is_widget_family_effective
+from core.settings.widget_family_catalog import get_family_id_for_widget
+
 
 LAYOUT_SLOTS_VERSION = 1
 LAYOUT_SLOTS_SETTINGS_KEY = "layout_slots"
@@ -251,8 +254,17 @@ def apply_layout_slot(
             widgets_config[str(section_id)] = current_section
         for key, value in section_payload.items():
             key_text = str(key)
-            if _is_layout_field(str(section_id), key_text):
-                current_section[key_text] = deepcopy(value)
+            if not _is_layout_field(str(section_id), key_text):
+                continue
+            if (
+                key_text == "enabled"
+                and bool(value)
+                and not _ordinary_enabled_replay_admitted(widgets_config, str(section_id))
+            ):
+                # A layout slot may restore ordinary ON, but it is not authority
+                # to activate a family/capability or satisfy its dependencies.
+                continue
+            current_section[key_text] = deepcopy(value)
     return True
 
 
@@ -281,3 +293,13 @@ def _is_layout_field(section_id: str, key: str) -> bool:
     if any(key.startswith(prefix) for prefix in _SOURCE_KEY_PREFIXES):
         return False
     return key in _LAYOUT_SECTION_KEYS
+
+
+def _ordinary_enabled_replay_admitted(
+    widgets_config: Mapping[str, Any],
+    widget_id: str,
+) -> bool:
+    family_id = get_family_id_for_widget(widget_id)
+    if family_id is None:
+        return True
+    return is_widget_family_effective(widgets_config, family_id)

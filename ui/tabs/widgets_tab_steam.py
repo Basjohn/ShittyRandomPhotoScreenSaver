@@ -53,8 +53,8 @@ from core.threading.manager import ThreadManager
 from core.windows.secure_url_launcher import open_url
 from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.styled_popup import ColorSwatchButton, StyledPopup
+from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
-    INFO_LABEL_STYLE,
     STATUS_LABEL_STYLE,
     add_aligned_row,
     build_bucket_toggle,
@@ -446,7 +446,12 @@ def _show_api_key_dialog(tab: "WidgetsTab") -> None:
         "If Steam asks for a website or domain, use <b>localhost</b>."
     )
     message.setTextFormat(Qt.TextFormat.RichText)
-    message.setStyleSheet(f"{INFO_LABEL_STYLE} font-size: 13px;")
+    shared_styles.bind_shared_styles(
+        message,
+        "INFO_LABEL_STYLE",
+        base_style="",
+        trailing_style=" font-size: 13px;",
+    )
     message.setWordWrap(True)
     layout.addWidget(message)
 
@@ -1142,7 +1147,7 @@ def _build_card_group(
         _update_achievement_latest_controls(tab)
 
         fields_label = QLabel("Displayed Fields:")
-        fields_label.setStyleSheet(INFO_LABEL_STYLE)
+        shared_styles.apply_shared_label_style(fields_label, "INFO_LABEL_STYLE")
         content_layout.addWidget(fields_label)
         for field_id, label_text in _ACHIEVEMENT_FIELD_OPTIONS:
             field_toggle = QCheckBox(label_text)
@@ -1310,7 +1315,7 @@ def _build_card_group(
         content_layout.addWidget(show_message)
 
         fields_label = QLabel("Displayed Ledger Fields:")
-        fields_label.setStyleSheet(INFO_LABEL_STYLE)
+        shared_styles.apply_shared_label_style(fields_label, "INFO_LABEL_STYLE")
         content_layout.addWidget(fields_label)
         for field_id, label_text, tooltip in _ABANDONMENT_FIELD_OPTIONS:
             field_toggle = QCheckBox(label_text)
@@ -1459,7 +1464,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
         "bounded cached game records only; it never decrypts credentials or contacts Steam."
     )
     info.setWordWrap(True)
-    info.setStyleSheet(INFO_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(info, "INFO_LABEL_STYLE")
     connection_layout.addWidget(info)
 
     identity_row = _aligned_row(connection_layout, "Steam Identity:")

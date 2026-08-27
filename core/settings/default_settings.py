@@ -664,7 +664,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 4
                         'show_seconds': False,
                         'show_timezone': True,
                         'timezone': 'local'},
-             'custom_layout': {'displays': {}, 'version': 1},
+             'custom_layout': {'displays': {}, 'version': 2},
              'custom_layout_restore': {'version': 1,
                                        'widgets': {'abandonment_issues': {'monitor': '1',
                                                                           'position': 'Bottom '

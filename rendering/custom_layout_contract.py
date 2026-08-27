@@ -12,10 +12,14 @@ from typing import Any, Mapping
 from PySide6.QtCore import QPoint, QRect, QSize
 from PySide6.QtGui import QGuiApplication, QScreen
 
+from rendering.custom_layout_session import (
+    DEFAULT_GEOMETRY_VARIANT,
+    normalize_geometry_variant,
+)
 from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
 
 
-CUSTOM_LAYOUT_VERSION = 1
+CUSTOM_LAYOUT_VERSION = 2
 CUSTOM_LAYOUT_SETTINGS_KEY = "custom_layout"
 CUSTOM_LAYOUT_RESTORE_VERSION = 1
 CUSTOM_LAYOUT_RESTORE_SETTINGS_KEY = "custom_layout_restore"
@@ -45,6 +49,7 @@ class NormalizedRect:
 @dataclass(frozen=True)
 class CustomLayoutEntry:
     widget_id: str
+    geometry_variant: str
     rect: NormalizedRect
     size_payload: dict[str, Any]
     resize_mode: str = "none"
@@ -146,15 +151,31 @@ def load_custom_layout_map(widgets_config: Mapping[str, Any] | None) -> dict[str
     if not isinstance(candidate, Mapping):
         return build_default_custom_layout_map()
 
+    try:
+        version = int(candidate.get("version", 0) or 0)
+    except (TypeError, ValueError):
+        return build_default_custom_layout_map()
+    if version != CUSTOM_LAYOUT_VERSION:
+        return build_default_custom_layout_map()
+
     displays = candidate.get("displays", {})
     if not isinstance(displays, Mapping):
         displays = {}
 
     return {
-        "version": int(candidate.get("version", CUSTOM_LAYOUT_VERSION) or CUSTOM_LAYOUT_VERSION),
+        "version": CUSTOM_LAYOUT_VERSION,
         "displays": {
-            str(screen_key): dict(layouts) if isinstance(layouts, Mapping) else {}
+            str(screen_key): {
+                str(widget_id): {
+                    normalize_geometry_variant(variant): dict(payload)
+                    for variant, payload in variants.items()
+                    if isinstance(payload, Mapping)
+                }
+                for widget_id, variants in layouts.items()
+                if isinstance(variants, Mapping)
+            }
             for screen_key, layouts in displays.items()
+            if isinstance(layouts, Mapping)
         },
     }
 
@@ -166,10 +187,19 @@ def write_custom_layout_map(
     """Persist a normalized custom layout map back into the widgets config."""
 
     widgets_config[CUSTOM_LAYOUT_SETTINGS_KEY] = {
-        "version": int(custom_layout_map.get("version", CUSTOM_LAYOUT_VERSION) or CUSTOM_LAYOUT_VERSION),
+        "version": CUSTOM_LAYOUT_VERSION,
         "displays": {
-            str(screen_key): dict(layouts) if isinstance(layouts, Mapping) else {}
+            str(screen_key): {
+                str(widget_id): {
+                    normalize_geometry_variant(variant): dict(payload)
+                    for variant, payload in variants.items()
+                    if isinstance(payload, Mapping)
+                }
+                for widget_id, variants in layouts.items()
+                if isinstance(variants, Mapping)
+            }
             for screen_key, layouts in dict(custom_layout_map.get("displays", {})).items()
+            if isinstance(layouts, Mapping)
         },
     }
     return widgets_config
@@ -368,7 +398,11 @@ def set_screen_layout_entry(
     if not isinstance(layouts, dict):
         layouts = {}
         displays[screen_signature] = layouts
-    layouts[widget_id] = entry.to_mapping()
+    variants = layouts.setdefault(widget_id, {})
+    if not isinstance(variants, dict):
+        variants = {}
+        layouts[widget_id] = variants
+    variants[normalize_geometry_variant(entry.geometry_variant)] = entry.to_mapping()
     return custom_layout_map
 
 
@@ -376,6 +410,7 @@ def remove_screen_layout_entry(
     custom_layout_map: dict[str, Any],
     screen_signature: str,
     widget_id: str,
+    geometry_variant: str | None = None,
 ) -> dict[str, Any]:
     displays = custom_layout_map.get("displays", {})
     if not isinstance(displays, dict):
@@ -383,14 +418,34 @@ def remove_screen_layout_entry(
     layouts = displays.get(screen_signature, {})
     if not isinstance(layouts, dict):
         return custom_layout_map
-    layouts.pop(widget_id, None)
+    if geometry_variant is None:
+        layouts.pop(widget_id, None)
+    else:
+        variants = layouts.get(widget_id, {})
+        if isinstance(variants, dict):
+            variants.pop(normalize_geometry_variant(geometry_variant), None)
+            if not variants:
+                layouts.pop(widget_id, None)
     if not layouts:
         displays.pop(screen_signature, None)
     return custom_layout_map
 
 
+def get_widget_layout_variant_payload(
+    screen_entries: Mapping[str, Any],
+    widget_id: str,
+    geometry_variant: str = DEFAULT_GEOMETRY_VARIANT,
+) -> Mapping[str, Any] | None:
+    variants = screen_entries.get(widget_id, {})
+    if not isinstance(variants, Mapping):
+        return None
+    payload = variants.get(normalize_geometry_variant(geometry_variant))
+    return payload if isinstance(payload, Mapping) else None
+
+
 def deserialize_custom_layout_entry(
     widget_id: str,
+    geometry_variant: str,
     payload: Mapping[str, Any] | None,
 ) -> CustomLayoutEntry | None:
     if not isinstance(payload, Mapping):
@@ -418,6 +473,7 @@ def deserialize_custom_layout_entry(
     resize_mode = str(payload.get("resize_mode", "none") or "none")
     return CustomLayoutEntry(
         widget_id=widget_id,
+        geometry_variant=normalize_geometry_variant(geometry_variant),
         rect=rect,
         size_payload=dict(size_payload),
         resize_mode=resize_mode,

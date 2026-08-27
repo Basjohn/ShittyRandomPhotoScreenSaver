@@ -232,8 +232,8 @@ def test_snapshot_import_strips_secrets_and_profile_specific_values(tmp_path) ->
                     "gmail": {"sound_file_path": r"C:\Users\Private\alert.ogg"},
                     "steam": {"api_key": "SECRET", "enabled": True},
                     "weather": {"location": "Private Home"},
-                    "custom_layout": {
-                        "displays": {"serial:PRIVATE-MONITOR": {"clock": {"x": 1}}},
+                    "custom_layout": {"version": 2, 
+                        "displays": {"serial:PRIVATE-MONITOR": {"clock": {"digital": {"x": 1}}}},
                     },
                     "layout_slots": {
                         "slots": {"1": {"monitor_name": "PRIVATE-MONITOR"}},

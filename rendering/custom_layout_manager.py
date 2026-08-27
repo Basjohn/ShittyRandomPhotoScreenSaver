@@ -26,6 +26,7 @@ from rendering.custom_layout_contract import (
     denormalize_local_rect,
     deserialize_custom_layout_entry,
     get_screen_layout_entries_for_screen,
+    get_widget_layout_variant_payload,
     get_screen_signature,
     get_screen_signature_aliases,
     get_custom_layout_restore_entry,
@@ -38,6 +39,10 @@ from rendering.custom_layout_contract import (
     should_transfer_rect_to_screen,
     SnapGuide,
     write_custom_layout_map,
+)
+from rendering.custom_layout_session import (
+    DEFAULT_GEOMETRY_VARIANT,
+    normalize_geometry_variant,
 )
 from rendering.widget_descriptors import (
     get_custom_persistence_monitor_settings_key_for_widget,
@@ -62,13 +67,6 @@ _MIN_CUSTOM_WIDGET_WIDTH = int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.width())
 _MIN_CUSTOM_WIDGET_HEIGHT = int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.height())
 _VISUALIZER_RECOVERY_ASPECT = 1.5
 _VISUALIZER_RECOVERY_MIN_SIZE = QSize(max(260, _MIN_CUSTOM_WIDGET_WIDTH), max(120, _MIN_CUSTOM_WIDGET_HEIGHT))
-_CLOCK_GEOMETRY_VARIANT_KEY = "geometry_variant"
-
-
-def _normalize_clock_geometry_variant(value: Any) -> str:
-    return "analog" if str(value or "").strip().lower() in {"analog", "analogue"} else "digital"
-
-
 def _dispatch_shell_signal(
     manager_ref: "weakref.ReferenceType[CustomLayoutManager]",
     handler_name: str,
@@ -264,6 +262,16 @@ class CustomLayoutManager:
     def _rect_from_top_center(anchor_x: float, top_y: int, width: int, height: int) -> QRect:
         left = int(round(anchor_x - (float(width) / 2.0)))
         return QRect(left, int(top_y), int(width), int(height))
+
+    @staticmethod
+    def _geometry_variant_for_widget(
+        descriptor: WidgetRuntimeDescriptor,
+        widget: Any,
+    ) -> str:
+        if descriptor.custom_layout_resize_mode == "clock_font":
+            mode = normalize_geometry_variant(getattr(widget, "_display_mode", "digital"))
+            return "analog" if mode == "analog" else "digital"
+        return DEFAULT_GEOMETRY_VARIANT
 
     def _get_available_screens(self) -> list[Any]:
         instances = self._get_global_display_instances()
@@ -717,14 +725,21 @@ class CustomLayoutManager:
         if not target_signature:
             target_signature = get_screen_signature(target_screen)
         target_geom = target_screen.geometry()
+        geometry_variant = self._geometry_variant_for_widget(state.descriptor, state.widget)
 
         if self._monitor_value_is_all(monitor_value):
             for alias in get_screen_signature_aliases(state.current_screen or state.source_screen or target_screen):
-                remove_screen_layout_entry(custom_layout_map, alias, widget_id)
+                remove_screen_layout_entry(
+                    custom_layout_map,
+                    alias,
+                    widget_id,
+                    geometry_variant,
+                )
         else:
             self._remove_widget_entries_from_other_displays(
                 custom_layout_map,
                 widget_id,
+                geometry_variant,
                 exclude_signature=target_signature,
             )
 
@@ -745,12 +760,9 @@ class CustomLayoutManager:
         size_payload = dict(state.current_size_payload)
         if state.descriptor.custom_layout_resize_mode == "clock_font":
             size_payload.pop("display_mode", None)
-            size_payload.setdefault(
-                _CLOCK_GEOMETRY_VARIANT_KEY,
-                _normalize_clock_geometry_variant(getattr(state.widget, "_display_mode", "digital")),
-            )
         entry = CustomLayoutEntry(
             widget_id=widget_id,
+            geometry_variant=geometry_variant,
             rect=normalize_local_rect(local_rect, target_geom.size()),
             size_payload=size_payload,
             resize_mode=state.descriptor.custom_layout_resize_mode,
@@ -789,6 +801,7 @@ class CustomLayoutManager:
         self,
         custom_layout_map: dict[str, Any],
         widget_id: str,
+        geometry_variant: str,
         *,
         exclude_signature: str,
     ) -> None:
@@ -798,7 +811,12 @@ class CustomLayoutManager:
         for screen_signature in tuple(displays.keys()):
             if screen_signature == exclude_signature:
                 continue
-            remove_screen_layout_entry(custom_layout_map, screen_signature, widget_id)
+            remove_screen_layout_entry(
+                custom_layout_map,
+                screen_signature,
+                widget_id,
+                geometry_variant,
+            )
 
     def _reapply_saved_layouts_across_instances(self) -> None:
         instances: list[Any] = []
@@ -957,8 +975,6 @@ class CustomLayoutManager:
         custom_layout_map = load_custom_layout_map(widgets_map)
         matched_signature, entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
         self._screen_signature = matched_signature or fallback_signature
-        layout_changed = False
-
         for descriptor in get_layout_edit_runtime_descriptors():
             if only_widget_ids is not None and descriptor.widget_id not in only_widget_ids:
                 continue
@@ -968,83 +984,21 @@ class CustomLayoutManager:
             if not is_custom_position_selected_for_widget(descriptor.widget_id, widgets_map):
                 self._clear_widget_custom_layout(widget)
                 continue
-            payload = entries.get(descriptor.widget_id, {})
-            entry = deserialize_custom_layout_entry(descriptor.widget_id, payload)
+            geometry_variant = self._geometry_variant_for_widget(descriptor, widget)
+            payload = get_widget_layout_variant_payload(
+                entries,
+                descriptor.widget_id,
+                geometry_variant,
+            )
+            entry = deserialize_custom_layout_entry(
+                descriptor.widget_id,
+                geometry_variant,
+                payload,
+            )
             if entry is None:
                 self._clear_widget_custom_layout(widget)
                 continue
-            entry, entry_changed = self._reconcile_clock_geometry_variant(widget, descriptor, entry)
-            if entry_changed and matched_signature:
-                set_screen_layout_entry(custom_layout_map, matched_signature, descriptor.widget_id, entry)
-                layout_changed = True
             self._apply_entry_to_widget(widget, descriptor, entry)
-
-        if layout_changed:
-            write_custom_layout_map(widgets_map, custom_layout_map)
-            try:
-                settings_manager.set_widgets_map(widgets_map, emit_change=False)
-                save = getattr(settings_manager, "save", None)
-                if callable(save):
-                    save()
-            except Exception:
-                logger.debug("[CUSTOM_LAYOUT] Failed to persist reconciled clock geometry variants", exc_info=True)
-
-    def _reconcile_clock_geometry_variant(
-        self,
-        widget: Any,
-        descriptor: WidgetRuntimeDescriptor,
-        entry: CustomLayoutEntry,
-    ) -> tuple[CustomLayoutEntry, bool]:
-        """Keep Clock mode settings-owned while preserving mode-shaped CUSTOM rects."""
-
-        if descriptor.custom_layout_resize_mode != "clock_font" or self._screen is None:
-            return entry, False
-
-        payload = dict(entry.size_payload)
-        legacy_variant = payload.pop("display_mode", None)
-        saved_variant_raw = payload.get(_CLOCK_GEOMETRY_VARIANT_KEY, legacy_variant)
-        current_variant = _normalize_clock_geometry_variant(getattr(widget, "_display_mode", "digital"))
-        saved_variant = (
-            _normalize_clock_geometry_variant(saved_variant_raw)
-            if saved_variant_raw is not None
-            else current_variant
-        )
-        target_variant = current_variant
-        rect = entry.rect
-
-        if saved_variant != current_variant:
-            local_rect = denormalize_local_rect(entry.rect, self._screen.geometry().size())
-            setattr(widget, "_custom_layout_local_rect", QRect(local_rect))
-            rebuild = getattr(widget, "_rebuild_custom_rect_for_mode", None)
-            rebuilt_rect = (
-                rebuild(
-                    current_variant,
-                    font_size=int(payload.get("font_size", getattr(widget, "_font_size", 48))),
-                )
-                if callable(rebuild)
-                else None
-            )
-            if isinstance(rebuilt_rect, QRect) and rebuilt_rect.width() > 0 and rebuilt_rect.height() > 0:
-                rect = normalize_local_rect(rebuilt_rect, self._screen.geometry().size())
-                logger.info(
-                    "[CUSTOM_LAYOUT] Rebuilt %s rect for clock geometry variant %s -> %s",
-                    descriptor.widget_id,
-                    saved_variant,
-                    current_variant,
-                )
-            else:
-                # Keep the old geometry marker if a non-production stand-in cannot
-                # perform the required shape conversion.
-                target_variant = saved_variant
-
-        payload[_CLOCK_GEOMETRY_VARIANT_KEY] = target_variant
-        reconciled = CustomLayoutEntry(
-            widget_id=entry.widget_id,
-            rect=rect,
-            size_payload=payload,
-            resize_mode=entry.resize_mode,
-        )
-        return reconciled, reconciled != entry
 
     def persist_runtime_content_rect(self, widget: Any, local_rect: QRect) -> bool:
         """Persist a live CUSTOM rect adjustment without triggering rebuild churn."""
@@ -1076,6 +1030,7 @@ class CustomLayoutManager:
 
         entry = CustomLayoutEntry(
             widget_id=descriptor.widget_id,
+            geometry_variant=self._geometry_variant_for_widget(descriptor, widget),
             rect=normalize_local_rect(QRect(local_rect), self._screen.geometry().size()),
             size_payload=self._capture_size_payload(descriptor, widget),
             resize_mode=descriptor.custom_layout_resize_mode,
@@ -2434,12 +2389,7 @@ class CustomLayoutManager:
     ) -> dict[str, Any]:
         mode = descriptor.custom_layout_resize_mode
         if mode == "clock_font":
-            return {
-                "font_size": int(getattr(widget, "_font_size", 48)),
-                _CLOCK_GEOMETRY_VARIANT_KEY: _normalize_clock_geometry_variant(
-                    getattr(widget, "_display_mode", "digital")
-                ),
-            }
+            return {"font_size": int(getattr(widget, "_font_size", 48))}
         if mode == "weather_scale":
             return {
                 "font_size": int(getattr(widget, "_font_size", 18)),
@@ -2488,15 +2438,7 @@ class CustomLayoutManager:
         mode = descriptor.custom_layout_resize_mode
         if mode == "clock_font":
             base = int(baseline_payload.get("font_size", 48))
-            return {
-                "font_size": max(12, int(round(base * scale))),
-                _CLOCK_GEOMETRY_VARIANT_KEY: _normalize_clock_geometry_variant(
-                    baseline_payload.get(
-                        _CLOCK_GEOMETRY_VARIANT_KEY,
-                        baseline_payload.get("display_mode", "digital"),
-                    )
-                ),
-            }
+            return {"font_size": max(12, int(round(base * scale)))}
         if mode == "weather_scale":
             font_size = max(10, int(round(int(baseline_payload.get("font_size", 18)) * scale)))
             icon_size = max(12, int(round(int(baseline_payload.get("icon_size", 32)) * scale)))
@@ -2629,7 +2571,14 @@ class CustomLayoutManager:
                 if foreign_rect[0] is not None:
                     return foreign_rect
                 return None, "no_current_screen_entry"
-            entry = deserialize_custom_layout_entry("spotify_visualizer", entries.get("spotify_visualizer"))
+            entry = deserialize_custom_layout_entry(
+                "spotify_visualizer",
+                DEFAULT_GEOMETRY_VARIANT,
+                get_widget_layout_variant_payload(
+                    entries,
+                    "spotify_visualizer",
+                ),
+            )
             if entry is None:
                 foreign_rect = self._resolve_single_foreign_saved_visualizer_recovery_rect(custom_layout_map, screen)
                 if foreign_rect[0] is not None:
@@ -2660,7 +2609,14 @@ class CustomLayoutManager:
         for layouts in displays.values():
             if not isinstance(layouts, dict):
                 continue
-            entry = deserialize_custom_layout_entry("spotify_visualizer", layouts.get("spotify_visualizer"))
+            entry = deserialize_custom_layout_entry(
+                "spotify_visualizer",
+                DEFAULT_GEOMETRY_VARIANT,
+                get_widget_layout_variant_payload(
+                    layouts,
+                    "spotify_visualizer",
+                ),
+            )
             if entry is not None:
                 entries.append(entry)
         if len(entries) != 1:

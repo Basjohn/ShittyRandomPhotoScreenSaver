@@ -1432,14 +1432,14 @@ class TestCreateTimeRefreshParity:
                 "bar_count": 32,
             },
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     screen_signature: {
-                        "spotify_visualizer": {
+                        "spotify_visualizer": {"default": {
                             "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
                             "size_payload": {"width": 420, "height": 280},
                             "resize_mode": "visualizer_rect",
-                        }
+                        }}
                     }
                 },
             },
@@ -1553,14 +1553,14 @@ class TestCreateTimeRefreshParity:
                 "bar_count": 32,
             },
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     screen_signature: {
-                        "spotify_visualizer": {
+                        "spotify_visualizer": {"default": {
                             "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
                             "size_payload": {"width": 420, "height": 280},
                             "resize_mode": "visualizer_rect",
-                        }
+                        }}
                     }
                 },
             },
@@ -1996,14 +1996,14 @@ class TestCreateTimeRefreshParity:
                 "bar_count": 32,
             },
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     "screen:missing-monitor": {
-                        "spotify_visualizer": {
+                        "spotify_visualizer": {"default": {
                             "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
                             "size_payload": {"width": 420, "height": 280},
                             "resize_mode": "visualizer_rect",
-                        }
+                        }}
                     }
                 },
             },
@@ -2171,14 +2171,14 @@ class TestCreateTimeRefreshParity:
                 "bar_count": 32,
             },
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     "screen:stale-signature": {
-                        "spotify_visualizer": {
+                        "spotify_visualizer": {"default": {
                             "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
                             "size_payload": {"width": 420, "height": 280},
                             "resize_mode": "visualizer_rect",
-                        }
+                        }}
                     }
                 },
             },
@@ -2526,12 +2526,12 @@ class TestCreateTimeRefreshParity:
             "media": {"enabled": True, "monitor": "2"},
             "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "ALL", "mode": "bubble"},
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     "screen:name:Display-B": {
-                        "spotify_visualizer": {
+                        "spotify_visualizer": {"default": {
                             "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2}
-                        }
+                        }}
                     }
                 },
             },
@@ -2634,12 +2634,12 @@ class TestCreateTimeRefreshParity:
             "media": {"enabled": True, "monitor": "1"},
             "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "ALL", "mode": "bubble"},
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     "screen:name:Missing": {
-                        "spotify_visualizer": {
+                        "spotify_visualizer": {"default": {
                             "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2}
-                        }
+                        }}
                     }
                 },
             },
@@ -2709,12 +2709,12 @@ class TestCreateTimeRefreshParity:
             "media": {"enabled": True, "monitor": "ALL"},
             "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "ALL", "mode": "bubble"},
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     "screen:name:Missing": {
-                        "spotify_visualizer": {
+                        "spotify_visualizer": {"default": {
                             "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2}
-                        }
+                        }}
                     }
                 },
             },

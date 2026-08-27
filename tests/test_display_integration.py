@@ -1243,14 +1243,14 @@ class TestSpotifyWidgetIntegration:
                     "bar_count": 32,
                 },
                 "custom_layout": {
-                    "version": 1,
+                    "version": 2,
                     "displays": {
                         "screen:stale-signature": {
-                            "spotify_visualizer": {
+                            "spotify_visualizer": {"default": {
                                 "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
                                 "size_payload": {"width": 420, "height": 280},
                                 "resize_mode": "visualizer_rect",
-                            }
+                            }}
                         }
                     },
                 },

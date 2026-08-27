@@ -55,6 +55,8 @@ manager/session integration without QWidget pixel ownership           PENDING
 - cut `CustomLayoutManager` working-state ownership over to the neutral session while the old shell remains only the
   temporary G1/G2 presentation adapter;
 - prove Clock digital -> analogue -> digital restores exact committed rects without derivation or drift;
+- keep layout-slot replay source-free while restoring ordinary ON/OFF only when the owning capability family remains
+  effective; a saved ordinary ON is never capability/family reactivation authority;
 - do not create Quick overlay pixels or retire old edit pixels until the session/storage/manager contract is GREEN.
 
 Use `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`; exact current source outranks stale owner names.
@@ -158,6 +160,10 @@ Every adjustable edit-mode card gets `X`:
 
 Context-menu Save or Enter commits geometry, duplicate removals and ordinary enabled-state changes.
 Cancel restores pre-edit geometry, duplicate set and ordinary enabled state.
+
+Layout slots remain ordinary visible-layout snapshots: `Shift+1`..`Shift+0` save and `1`..`0` load geometry plus
+ordinary ON/OFF. Slot load may turn an effective family member ordinarily ON or OFF, but never activates a deactivated
+family/capability, and never replaces provider/account/source settings.
 
 G2 retained edit-overlay visual rule: centering guides are red so display/peer-centre alignment is immediately
 distinct from ordinary grid and edge guides.

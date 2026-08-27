@@ -730,11 +730,11 @@ def test_custom_position_contract_helpers_follow_runtime_descriptor_metadata():
     widgets_cfg = {
         "clock": {"position": "Custom"},
         "gmail": {"position": "Top Left"},
-        "custom_layout": {
+        "custom_layout": {"version": 2, 
             "displays": {
                 "screen:1": {
-                    "clock": {"rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4}},
-                    "gmail": {"rect": {"x": 0.2, "y": 0.3, "width": 0.2, "height": 0.1}},
+                    "clock": {"digital": {"rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4}}},
+                    "gmail": {"default": {"rect": {"x": 0.2, "y": 0.3, "width": 0.2, "height": 0.1}}},
                 }
             }
         },
@@ -774,13 +774,13 @@ def test_restore_widget_family_to_authored_layout_restores_media_route_and_clear
         "media": {"position": "Custom", "monitor": "2"},
         "spotify_visualizer": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:a": {
-                    "media": {"rect": {"x": 0.1, "y": 0.2, "width": 0.2, "height": 0.2}},
-                    "spotify_volume": {"rect": {"x": 0.3, "y": 0.2, "width": 0.1, "height": 0.3}},
-                    "mute_button": {"rect": {"x": 0.4, "y": 0.2, "width": 0.05, "height": 0.05}},
-                    "gmail": {"rect": {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.2}},
+                    "media": {"default": {"rect": {"x": 0.1, "y": 0.2, "width": 0.2, "height": 0.2}}},
+                    "spotify_volume": {"default": {"rect": {"x": 0.3, "y": 0.2, "width": 0.1, "height": 0.3}}},
+                    "mute_button": {"default": {"rect": {"x": 0.4, "y": 0.2, "width": 0.05, "height": 0.05}}},
+                    "gmail": {"default": {"rect": {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.2}}},
                 }
             },
         },
@@ -810,11 +810,11 @@ def test_restore_widget_family_to_authored_layout_restores_visualizer_without_to
         "media": {"position": "Bottom Left", "monitor": "2"},
         "spotify_visualizer": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:a": {
-                    "spotify_visualizer": {"rect": {"x": 0.1, "y": 0.2, "width": 0.2, "height": 0.2}},
-                    "media": {"rect": {"x": 0.2, "y": 0.2, "width": 0.2, "height": 0.2}},
+                    "spotify_visualizer": {"default": {"rect": {"x": 0.1, "y": 0.2, "width": 0.2, "height": 0.2}}},
+                    "media": {"default": {"rect": {"x": 0.2, "y": 0.2, "width": 0.2, "height": 0.2}}},
                 }
             },
         },
@@ -842,13 +842,13 @@ def test_restore_all_custom_layouts_to_authored_layout_restores_every_active_cus
         "spotify_visualizer": {"position": "Custom", "monitor": "1"},
         "gmail": {"position": "Custom", "monitor": "2"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:a": {
-                    "media": {"rect": {"x": 0.2, "y": 0.2, "width": 0.2, "height": 0.2}},
-                    "spotify_volume": {"rect": {"x": 0.4, "y": 0.2, "width": 0.05, "height": 0.3}},
-                    "spotify_visualizer": {"rect": {"x": 0.0, "y": 0.0, "width": 0.3, "height": 0.3}},
-                    "gmail": {"rect": {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.2}},
+                    "media": {"default": {"rect": {"x": 0.2, "y": 0.2, "width": 0.2, "height": 0.2}}},
+                    "spotify_volume": {"default": {"rect": {"x": 0.4, "y": 0.2, "width": 0.05, "height": 0.3}}},
+                    "spotify_visualizer": {"default": {"rect": {"x": 0.0, "y": 0.0, "width": 0.3, "height": 0.3}}},
+                    "gmail": {"default": {"rect": {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.2}}},
                 }
             },
         },
@@ -876,10 +876,10 @@ def test_restore_widget_family_to_application_default_layout_restores_visualizer
     widgets_cfg = {
         "spotify_visualizer": {"position": "Custom", "monitor": "ALL"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:a": {
-                    "spotify_visualizer": {"rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2}},
+                    "spotify_visualizer": {"default": {"rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2}}},
                 }
             },
         },
@@ -910,13 +910,13 @@ def test_restore_all_widget_positions_to_application_defaults_resets_all_custom_
         "spotify_visualizer": {"position": "Custom", "monitor": "2"},
         "gmail": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:a": {
-                    "media": {"rect": {"x": 0.2, "y": 0.2, "width": 0.2, "height": 0.2}},
-                    "spotify_volume": {"rect": {"x": 0.4, "y": 0.2, "width": 0.05, "height": 0.3}},
-                    "spotify_visualizer": {"rect": {"x": 0.0, "y": 0.0, "width": 0.3, "height": 0.3}},
-                    "gmail": {"rect": {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.2}},
+                    "media": {"default": {"rect": {"x": 0.2, "y": 0.2, "width": 0.2, "height": 0.2}}},
+                    "spotify_volume": {"default": {"rect": {"x": 0.4, "y": 0.2, "width": 0.05, "height": 0.3}}},
+                    "spotify_visualizer": {"default": {"rect": {"x": 0.0, "y": 0.0, "width": 0.3, "height": 0.3}}},
+                    "gmail": {"default": {"rect": {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.2}}},
                 }
             },
         },

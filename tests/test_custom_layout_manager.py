@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 import pytest
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QEvent, Signal
@@ -339,9 +341,11 @@ def test_custom_layout_manager_saves_and_reapplies_clock_geometry(qtbot):
     custom_layout = settings_stub.get_widgets_map()["custom_layout"]
     displays = custom_layout["displays"]
     assert len(displays) == 1
-    payload = next(iter(displays.values()))["clock"]
+    variants = next(iter(displays.values()))["clock"]
+    assert set(variants) == {"digital"}
+    payload = variants["digital"]
     assert payload["size_payload"]["font_size"] == 72
-    assert payload["size_payload"]["geometry_variant"] == "digital"
+    assert "geometry_variant" not in payload["size_payload"]
     assert "display_mode" not in payload["size_payload"]
     assert payload["resize_mode"] == "clock_font"
     assert settings_stub.get_widgets_map()["clock"]["position"] == "Custom"
@@ -377,6 +381,57 @@ def test_custom_layout_manager_clock_payload_keeps_display_mode_settings_owned(q
 
     assert clock._font_size == 54
     assert clock._display_mode == "analog"
+
+
+def test_custom_layout_manager_clock_variant_replay_is_exact_and_drift_free(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 800, 600))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "clock": {"position": "Custom"},
+        "custom_layout": {
+            "version": 2,
+            "displays": {
+                signature: {
+                    "clock": {
+                        "digital": {
+                            "rect": {"x": 0.1, "y": 0.1, "width": 0.3, "height": 0.2},
+                            "size_payload": {"font_size": 48},
+                            "resize_mode": "clock_font",
+                        },
+                        "analog": {
+                            "rect": {"x": 0.2, "y": 0.15, "width": 0.25, "height": 0.4},
+                            "size_payload": {"font_size": 48},
+                            "resize_mode": "clock_font",
+                        },
+                    }
+                }
+            },
+        },
+    }
+    committed = deepcopy(settings_stub._widgets_map["custom_layout"])
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+    clock = _EditableTestWidget(display, font_size=48)
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+
+    manager.apply_saved_layouts_to_display()
+    assert clock.geometry() == QRect(80, 60, 240, 120)
+
+    clock._display_mode = "analog"
+    manager.apply_saved_layouts_to_display()
+    assert clock.geometry() == QRect(160, 90, 200, 240)
+
+    clock._display_mode = "digital"
+    manager.apply_saved_layouts_to_display()
+    assert clock.geometry() == QRect(80, 60, 240, 120)
+    assert settings_stub.get_widgets_map()["custom_layout"] == committed
+    assert settings_stub.saved is False
 
 
 def test_custom_layout_manager_save_session_persists_untouched_widgets_as_authoritative_custom_scene(qtbot):
@@ -420,13 +475,14 @@ def test_custom_layout_manager_save_session_persists_untouched_widgets_as_author
     assert set(payloads.keys()) >= {"clock", "gmail"}
     assert widgets_map["clock"]["position"] == "Custom"
     assert widgets_map["gmail"]["position"] == "Custom"
-    assert payloads["clock"]["size_payload"]["font_size"] == 60
-    assert payloads["gmail"]["size_payload"]["font_size"] == 13
-    assert payloads["gmail"]["resize_mode"] == "gmail_font"
-    assert payloads["gmail"]["rect"]["x"] == pytest.approx(untouched_rect.x() / screen.geometry().width())
-    assert payloads["gmail"]["rect"]["y"] == pytest.approx(untouched_rect.y() / screen.geometry().height())
-    assert payloads["gmail"]["rect"]["width"] == pytest.approx(untouched_rect.width() / screen.geometry().width())
-    assert payloads["gmail"]["rect"]["height"] == pytest.approx(untouched_rect.height() / screen.geometry().height())
+    assert payloads["clock"]["digital"]["size_payload"]["font_size"] == 60
+    gmail_payload = payloads["gmail"]["default"]
+    assert gmail_payload["size_payload"]["font_size"] == 13
+    assert gmail_payload["resize_mode"] == "gmail_font"
+    assert gmail_payload["rect"]["x"] == pytest.approx(untouched_rect.x() / screen.geometry().width())
+    assert gmail_payload["rect"]["y"] == pytest.approx(untouched_rect.y() / screen.geometry().height())
+    assert gmail_payload["rect"]["width"] == pytest.approx(untouched_rect.width() / screen.geometry().width())
+    assert gmail_payload["rect"]["height"] == pytest.approx(untouched_rect.height() / screen.geometry().height())
 
 
 def test_custom_widget_position_normalizes_without_fallback():
@@ -1077,19 +1133,19 @@ def test_custom_layout_manager_media_shell_reset_visualizer_recovers_edit_rect_w
             "bubble_big_count": 7,
         },
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 get_screen_signature(screen): {
-                    "media": {
+                    "media": {"default": {
                         "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
                         "size_payload": {"font_size": 22, "artwork_size": 220},
                         "resize_mode": "media_scale",
-                    },
-                    "spotify_visualizer": {
+                    }},
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.2, "y": 0.1, "width": 0.4, "height": 0.2},
                         "size_payload": {"width": 420, "height": 180},
                         "resize_mode": "visualizer_rect",
-                    },
+                    }},
                 }
             },
         },
@@ -1160,19 +1216,19 @@ def test_custom_layout_manager_media_shell_reset_visualizer_creates_transparent_
             "mode": "spectrum",
         },
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 get_screen_signature(screen): {
-                    "media": {
+                    "media": {"default": {
                         "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
                         "size_payload": {"font_size": 22, "artwork_size": 220},
                         "resize_mode": "media_scale",
-                    },
-                    "spotify_visualizer": {
+                    }},
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.25, "y": 0.15, "width": 0.5, "height": 0.25},
                         "size_payload": {"width": 400, "height": 150},
                         "resize_mode": "visualizer_rect",
-                    },
+                    }},
                 }
             },
         },
@@ -1224,14 +1280,14 @@ def test_custom_layout_manager_media_shell_reset_visualizer_uses_foreign_saved_a
             "mode": "spectrum",
         },
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 get_screen_signature(screen_a): {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.1, "y": 0.2, "width": 0.525, "height": 0.4667},
                         "size_payload": {"width": 420, "height": 280},
                         "resize_mode": "visualizer_rect",
-                    },
+                    }},
                 }
             },
         },
@@ -1326,7 +1382,7 @@ def test_custom_layout_manager_duplicate_all_shell_can_be_removed_to_single_disp
     assert widgets_map["clock"]["monitor"] == "1"
     displays = widgets_map["custom_layout"]["displays"]
     assert len(displays) == 1
-    payload = next(iter(displays.values()))["clock"]
+    payload = next(iter(displays.values()))["clock"]["digital"]
     assert payload["resize_mode"] == "clock_font"
 
 
@@ -1700,14 +1756,14 @@ def test_custom_layout_manager_reapply_skips_saved_rects_when_position_not_custo
     settings_stub._widgets_map = {
         "clock": {"position": "Top Right"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:test": {
-                    "clock": {
+                    "clock": {"digital": {
                         "rect": {"x": 0.2, "y": 0.2, "width": 0.3, "height": 0.2},
                         "size_payload": {"font_size": 64},
                         "resize_mode": "clock_font",
-                    }
+                    }}
                 }
             },
         },
@@ -1736,14 +1792,14 @@ def test_custom_layout_manager_apply_saved_layouts_does_not_force_widget_visible
     settings_stub._widgets_map = {
         "clock": {"position": "Custom"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "clock": {
+                    "clock": {"digital": {
                         "rect": {"x": 0.1, "y": 0.1, "width": 0.3, "height": 0.2},
                         "size_payload": {"font_size": 64},
                         "resize_mode": "clock_font",
-                    }
+                    }}
                 }
             },
         },
@@ -1807,14 +1863,14 @@ def test_custom_layout_manager_reapplies_legacy_signature_after_late_screen_bind
     settings_stub._widgets_map = {
         "clock": {"position": "Custom"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 legacy_signature: {
-                    "clock": {
+                    "clock": {"digital": {
                         "rect": {"x": 0.2, "y": 0.2, "width": 0.3, "height": 0.2},
                         "size_payload": {"font_size": 64},
                         "resize_mode": "clock_font",
-                    }
+                    }}
                 }
             },
         },
@@ -1848,14 +1904,14 @@ def test_custom_layout_manager_apply_saved_layouts_clamps_rect_within_display_bo
     settings_stub._widgets_map = {
         "gmail": {"position": "Custom"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "gmail": {
+                    "gmail": {"default": {
                         "rect": {"x": 0.7, "y": 0.75, "width": 0.45, "height": 0.4},
                         "size_payload": {"font_size": 20},
                         "resize_mode": "gmail_font",
-                    }
+                    }}
                 }
             },
         },
@@ -2451,7 +2507,7 @@ def test_custom_layout_manager_saves_and_reapplies_reddit_font_resize(qtbot):
     state.current_global_rect = QRect(state.current_global_rect.x(), state.current_global_rect.y(), 360, 220)
 
     assert manager.save_session() is True
-    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["reddit"]
+    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["reddit"]["default"]
     assert payload["size_payload"]["font_size"] == 24
     assert payload["resize_mode"] == "reddit_font"
 
@@ -2478,7 +2534,7 @@ def test_custom_layout_manager_saves_and_reapplies_gmail_font_resize(qtbot):
     state.current_global_rect = QRect(state.current_global_rect.x(), state.current_global_rect.y(), 680, 260)
 
     assert manager.save_session() is True
-    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["gmail"]
+    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["gmail"]["default"]
     assert payload["size_payload"]["font_size"] == 18
     assert payload["resize_mode"] == "gmail_font"
 
@@ -2495,10 +2551,10 @@ def test_custom_layout_manager_replay_keeps_gmail_internal_balance_settings_owne
             "sender_subject_ratio": 68,
         },
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "gmail": {
+                    "gmail": {"default": {
                         "rect": {"x": 0.12, "y": 0.16, "width": 0.44, "height": 0.28},
                         "size_payload": {
                             "font_size": 18,
@@ -2506,7 +2562,7 @@ def test_custom_layout_manager_replay_keeps_gmail_internal_balance_settings_owne
                             "sender_column_width": 180,
                         },
                         "resize_mode": "gmail_font",
-                    }
+                    }}
                 }
             },
         },
@@ -2726,7 +2782,7 @@ def test_custom_layout_manager_saves_visualizer_rect_under_visualizer_custom_slo
     widgets_map = settings_stub.get_widgets_map()
     assert widgets_map["media"]["position"] == "Bottom Left"
     assert widgets_map["spotify_visualizer"]["position"] == "Custom"
-    payload = next(iter(widgets_map["custom_layout"]["displays"].values()))["spotify_visualizer"]
+    payload = next(iter(widgets_map["custom_layout"]["displays"].values()))["spotify_visualizer"]["default"]
     assert payload["resize_mode"] == "visualizer_rect"
     assert payload["size_payload"] == {"width": 420, "height": 210}
 
@@ -2740,14 +2796,14 @@ def test_custom_layout_manager_reapplies_visualizer_custom_rect_size(qtbot):
         "media": {"position": "Bottom Left", "monitor": "2"},
         "spotify_visualizer": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.22, "y": 0.38, "width": 0.42, "height": 0.31},
                         "size_payload": {"width_scale": 1.0, "height_scale": 1.0},
                         "resize_mode": "visualizer_rect",
-                    }
+                    }}
                 }
             },
         },
@@ -2780,14 +2836,14 @@ def test_custom_layout_manager_keeps_committed_visualizer_rect_even_if_mode_heig
         "media": {"position": "Custom", "monitor": "1"},
         "spotify_visualizer": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.045, "y": 0.20, "width": 0.36, "height": 0.40},
                         "size_payload": {"width_scale": 1.0, "height_scale": 1.0},
                         "resize_mode": "visualizer_rect",
-                    }
+                    }}
                 }
             },
         },
@@ -2822,14 +2878,14 @@ def test_custom_layout_manager_replays_real_visualizer_rect_over_authored_min_he
     settings_stub._widgets_map = {
         "spotify_visualizer": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.255, "y": 0.30, "width": 0.525, "height": 0.4666666667},
                         "size_payload": {"width_scale": 0.7, "height_scale": 0.7},
                         "resize_mode": "visualizer_rect",
-                    }
+                    }}
                 }
             },
         },
@@ -2865,14 +2921,14 @@ def test_custom_layout_manager_primes_visualizer_rect_before_constraint_lock_and
     settings_stub._widgets_map = {
         "spotify_visualizer": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.255, "y": 0.30, "width": 0.525, "height": 0.4666666667},
                         "size_payload": {"width": 420, "height": 280},
                         "resize_mode": "visualizer_rect",
-                    }
+                    }}
                 }
             },
         },
@@ -2920,14 +2976,14 @@ def test_widget_setup_finalize_resettles_visualizer_custom_rect_after_startup_sq
     settings_stub._widgets_map = {
         "spotify_visualizer": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.255, "y": 0.30, "width": 0.525, "height": 0.4666666667},
                         "size_payload": {"width": 420, "height": 280},
                         "resize_mode": "visualizer_rect",
-                    }
+                    }}
                 }
             },
         },
@@ -3007,14 +3063,14 @@ def test_widget_setup_startup_stabilizer_waits_for_persistent_visualizer_custom_
     settings_stub._widgets_map = {
         "spotify_visualizer": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.255, "y": 0.30, "width": 0.525, "height": 0.4666666667},
                         "size_payload": {"width": 420, "height": 280},
                         "resize_mode": "visualizer_rect",
-                    }
+                    }}
                 }
             },
         },
@@ -3092,14 +3148,14 @@ def test_custom_layout_manager_reasserts_media_outer_rect_after_artwork_scale_ap
     settings_stub._widgets_map = {
         "media": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "media": {
+                    "media": {"default": {
                         "rect": {"x": 0.10, "y": 0.12, "width": 0.40, "height": 0.30},
                         "size_payload": {"font_size": 18, "artwork_size": 220},
                         "resize_mode": "media_scale",
-                    }
+                    }}
                 }
             },
         },
@@ -3137,14 +3193,14 @@ def test_custom_layout_manager_reasserts_weather_outer_rect_after_scale_apply(qt
     settings_stub._widgets_map = {
         "weather": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "weather": {
+                    "weather": {"default": {
                         "rect": {"x": 0.08, "y": 0.10, "width": 0.36, "height": 0.24},
                         "size_payload": {"font_size": 22, "icon_size": 50, "detail_icon_size": 24},
                         "resize_mode": "weather_scale",
-                    }
+                    }}
                 }
             },
         },
@@ -3182,14 +3238,14 @@ def test_custom_layout_manager_reasserts_reddit_outer_rect_after_font_payload_ap
     settings_stub._widgets_map = {
         "reddit": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "reddit": {
+                    "reddit": {"default": {
                         "rect": {"x": 0.10, "y": 0.14, "width": 0.42, "height": 0.32},
                         "size_payload": {"font_size": 24},
                         "resize_mode": "reddit_font",
-                    }
+                    }}
                 }
             },
         },
@@ -3227,14 +3283,14 @@ def test_custom_layout_manager_reasserts_gmail_outer_rect_after_font_payload_app
     settings_stub._widgets_map = {
         "gmail": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "gmail": {
+                    "gmail": {"default": {
                         "rect": {"x": 0.12, "y": 0.16, "width": 0.44, "height": 0.28},
                         "size_payload": {"font_size": 18},
                         "resize_mode": "gmail_font",
-                    }
+                    }}
                 }
             },
         },
@@ -3272,14 +3328,14 @@ def test_custom_layout_manager_can_shrink_overlay_below_authored_minimums_when_c
     settings_stub._widgets_map = {
         "gmail": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "gmail": {
+                    "gmail": {"default": {
                         "rect": {"x": 0.08, "y": 0.10, "width": 0.28, "height": 0.20},
                         "size_payload": {"font_size": 18},
                         "resize_mode": "gmail_font",
-                    }
+                    }}
                 }
             },
         },
@@ -3315,14 +3371,14 @@ def test_custom_layout_manager_persists_runtime_vertical_growth_for_reddit_custo
     settings_stub._widgets_map = {
         "reddit": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "reddit": {
+                    "reddit": {"default": {
                         "rect": {"x": 0.10, "y": 0.14, "width": 0.42, "height": 0.20},
                         "size_payload": {"font_size": 18},
                         "resize_mode": "reddit_font",
-                    }
+                    }}
                 }
             },
         },
@@ -3347,7 +3403,7 @@ def test_custom_layout_manager_persists_runtime_vertical_growth_for_reddit_custo
     assert custom_rect.height() == 260
     assert reddit.geometry() == custom_rect
 
-    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["reddit"]
+    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["reddit"]["default"]
     assert payload["rect"]["width"] == pytest.approx(0.42)
     assert payload["rect"]["height"] == pytest.approx(260 / 700)
 
@@ -3360,14 +3416,14 @@ def test_custom_layout_manager_persists_runtime_vertical_shrink_for_gmail_custom
     settings_stub._widgets_map = {
         "gmail": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "gmail": {
+                    "gmail": {"default": {
                         "rect": {"x": 0.12, "y": 0.16, "width": 0.44, "height": 0.40},
                         "size_payload": {"font_size": 13},
                         "resize_mode": "gmail_font",
-                    }
+                    }}
                 }
             },
         },
@@ -3392,7 +3448,7 @@ def test_custom_layout_manager_persists_runtime_vertical_shrink_for_gmail_custom
     assert custom_rect.height() == 180
     assert gmail.geometry() == custom_rect
 
-    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["gmail"]
+    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["gmail"]["default"]
     assert payload["rect"]["width"] == pytest.approx(0.44)
     assert payload["rect"]["height"] == pytest.approx(180 / 700)
 
@@ -3406,19 +3462,19 @@ def test_custom_layout_manager_persists_runtime_vertical_resize_for_reddit2_with
         "reddit": {"position": "Custom", "monitor": "1"},
         "reddit2": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 signature: {
-                    "reddit": {
+                    "reddit": {"default": {
                         "rect": {"x": 0.10, "y": 0.14, "width": 0.42, "height": 0.28},
                         "size_payload": {"font_size": 18},
                         "resize_mode": "reddit_font",
-                    },
-                    "reddit2": {
+                    }},
+                    "reddit2": {"default": {
                         "rect": {"x": 0.55, "y": 0.16, "width": 0.42, "height": 0.24},
                         "size_payload": {"font_size": 18},
                         "resize_mode": "reddit_font",
-                    },
+                    }},
                 }
             },
         },
@@ -3441,8 +3497,8 @@ def test_custom_layout_manager_persists_runtime_vertical_resize_for_reddit2_with
     assert reddit2._apply_runtime_content_height_in_custom_layout(210) is True  # type: ignore[attr-defined]
 
     displays_payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))
-    assert displays_payload["reddit"]["rect"]["height"] == pytest.approx(0.28)
-    assert displays_payload["reddit2"]["rect"]["height"] == pytest.approx(210 / 700)
+    assert displays_payload["reddit"]["default"]["rect"]["height"] == pytest.approx(0.28)
+    assert displays_payload["reddit2"]["default"]["rect"]["height"] == pytest.approx(210 / 700)
 
 
 def test_custom_layout_manager_visualizer_shell_uses_maximum_envelope(qtbot):
@@ -3556,7 +3612,7 @@ def test_custom_layout_manager_saves_visualizer_absolute_rect_payload(qtbot):
     state.resize_scale = 1.2
 
     assert manager.save_session() is True
-    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["spotify_visualizer"]
+    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["spotify_visualizer"]["default"]
     assert payload["size_payload"] == {"width": 448, "height": 224}
 
 
@@ -3606,14 +3662,14 @@ def test_custom_layout_manager_visualizer_legacy_scale_payload_rebaselines_to_co
     settings_stub._widgets_map = {
         "spotify_visualizer": {"position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 get_screen_signature(screen): {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.035, "y": 0.75, "width": 0.335, "height": 0.23},
                         "size_payload": {"width_scale": 1.1024, "height_scale": 1.1024},
                         "resize_mode": "visualizer_rect",
-                    }
+                    }}
                 }
             },
         },
@@ -3853,14 +3909,14 @@ def test_custom_layout_manager_reset_to_authored_layout_clears_custom_geometry_a
         "clock": {"position": "Custom"},
         "clock2": {"monitor": "2"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:test": {
-                    "clock": {
+                    "clock": {"digital": {
                         "rect": {"x": 0.2, "y": 0.2, "width": 0.3, "height": 0.2},
                         "size_payload": {"font_size": 64},
                         "resize_mode": "clock_font",
-                    }
+                    }}
                 }
             },
         },
