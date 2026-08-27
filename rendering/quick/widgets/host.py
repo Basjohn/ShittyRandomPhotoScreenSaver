@@ -86,8 +86,9 @@ _CARD_STYLE_BINDINGS: tuple[tuple[str, str], ...] = (
 class RetainedOverlayWidget:
     """One retained ``OverlayWidget`` root with explicit presentation setters."""
 
-    def __init__(self, item: QQuickItem) -> None:
+    def __init__(self, item: QQuickItem, *, model_identity: str | None = None) -> None:
         self._item: QQuickItem | None = item
+        self._model_identity = str(model_identity or "").strip()
         self._retirement_callbacks: list[Callable[[], None]] = []
 
     @property
@@ -100,6 +101,10 @@ class RetainedOverlayWidget:
     @property
     def is_retired(self) -> bool:
         return self._item is None
+
+    @property
+    def model_identity(self) -> str:
+        return self._model_identity
 
     def set_geometry(self, geometry: OverlayWidgetGeometry) -> None:
         """Assign this widget's display-space rectangle."""
@@ -115,6 +120,11 @@ class RetainedOverlayWidget:
 
         clamped = max(0.0, min(1.0, float(opacity)))
         self.item.setProperty("fadeOpacity", clamped)
+
+    def set_working_visible(self, visible: bool) -> None:
+        """Apply transient CUSTOM visibility without rewriting authored fade."""
+
+        self.item.setProperty("workingVisible", bool(visible))
 
     def set_card_style(self, style: OverlayCardStyle) -> None:
         """Apply one immutable card style record to the shared shell."""
@@ -168,6 +178,7 @@ class OrdinaryWidgetPresentationHost:
         self._create_overlay_item = create_overlay_item
         self._create_family_item = create_family_item
         self._live: list[RetainedOverlayWidget] = []
+        self._by_model_identity: dict[str, RetainedOverlayWidget] = {}
         self._retired = False
 
     @property
@@ -182,6 +193,7 @@ class OrdinaryWidgetPresentationHost:
         self,
         *,
         object_name: str | None = None,
+        model_identity: str | None = None,
         geometry: OverlayWidgetGeometry | None = None,
         fade_opacity: float | None = None,
         card_style: OverlayCardStyle | None = None,
@@ -202,6 +214,7 @@ class OrdinaryWidgetPresentationHost:
         return self._adopt_item(
             item,
             host_item=host_item,
+            model_identity=model_identity,
             geometry=geometry,
             fade_opacity=fade_opacity,
             card_style=card_style,
@@ -213,6 +226,7 @@ class OrdinaryWidgetPresentationHost:
         *,
         initial_properties: Mapping[str, object] | None = None,
         object_name: str | None = None,
+        model_identity: str | None = None,
         geometry: OverlayWidgetGeometry | None = None,
         fade_opacity: float | None = None,
         card_style: OverlayCardStyle | None = None,
@@ -236,6 +250,7 @@ class OrdinaryWidgetPresentationHost:
         return self._adopt_item(
             item,
             host_item=host_item,
+            model_identity=model_identity,
             geometry=geometry,
             fade_opacity=fade_opacity,
             card_style=card_style,
@@ -246,6 +261,7 @@ class OrdinaryWidgetPresentationHost:
         item: QQuickItem,
         *,
         host_item: QQuickItem,
+        model_identity: str | None,
         geometry: OverlayWidgetGeometry | None,
         fade_opacity: float | None,
         card_style: OverlayCardStyle | None,
@@ -257,8 +273,21 @@ class OrdinaryWidgetPresentationHost:
         item.setParentItem(host_item)
         item.setParent(host_item)
 
-        widget = RetainedOverlayWidget(item)
+        normalized_identity = str(model_identity or "").strip()
+        if normalized_identity and normalized_identity in self._by_model_identity:
+            item.setParentItem(None)
+            item.setParent(None)
+            item.deleteLater()
+            raise ValueError(
+                f"duplicate retained model identity: {normalized_identity!r}"
+            )
+        widget = RetainedOverlayWidget(
+            item,
+            model_identity=normalized_identity or None,
+        )
         self._live.append(widget)
+        if normalized_identity:
+            self._by_model_identity[normalized_identity] = widget
         if geometry is not None:
             widget.set_geometry(geometry)
         if fade_opacity is not None:
@@ -267,12 +296,23 @@ class OrdinaryWidgetPresentationHost:
             widget.set_card_style(card_style)
         return widget
 
+    def presentation_for_model_identity(
+        self,
+        model_identity: str,
+    ) -> RetainedOverlayWidget | None:
+        return self._by_model_identity.get(str(model_identity or "").strip())
+
+    def model_identities(self) -> tuple[str, ...]:
+        return tuple(self._by_model_identity)
+
     def retire_widget(self, widget: RetainedOverlayWidget) -> bool:
         """Retire one live widget mid-generation without retiring the host."""
 
         for index, live in enumerate(self._live):
             if live is widget:
                 del self._live[index]
+                if live.model_identity:
+                    self._by_model_identity.pop(live.model_identity, None)
                 live._retire()
                 return True
         return False
@@ -282,6 +322,7 @@ class OrdinaryWidgetPresentationHost:
 
         live = self._live
         self._live = []
+        self._by_model_identity = {}
         self._retired = True
         self._host_item = None
         self._context = None

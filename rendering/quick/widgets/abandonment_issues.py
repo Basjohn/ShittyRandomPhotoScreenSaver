@@ -659,6 +659,7 @@ class RetainedAbandonmentIssuesPresentation:
             "abandonment_issues",
             initial_properties={"abandonmentModel": model},
             object_name="abandonment_issues",
+            model_identity="abandonment_issues",
             geometry=geometry,
             fade_opacity=fade_opacity,
             card_style=model.style.card_style,

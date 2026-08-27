@@ -12,10 +12,11 @@ Item {
     objectName: "overlayWidget"
 
     property real fadeOpacity: 1.0
+    property bool workingVisible: true
     opacity: fadeOpacity
     // Never clip the composed card/text shadows or their negative offsets.
     clip: false
-    visible: opacity > 0.0
+    visible: workingVisible && opacity > 0.0
 
     default property alias content: card.content
 

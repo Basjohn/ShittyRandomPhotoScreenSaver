@@ -821,6 +821,7 @@ class RetainedClockPresentation:
             "clocks",
             initial_properties={"clockModel": model},
             object_name=model.config.widget_id,
+            model_identity=model.config.widget_id,
             geometry=geometry,
             fade_opacity=fade_opacity,
             card_style=model.style.card_style,

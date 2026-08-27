@@ -715,6 +715,7 @@ class RetainedAchievementPulsePresentation:
             "achievement_pulse",
             initial_properties={"achievementModel": model},
             object_name="achievement_pulse",
+            model_identity="achievement_pulse",
             geometry=geometry,
             fade_opacity=fade_opacity,
             card_style=model.style.card_style,
