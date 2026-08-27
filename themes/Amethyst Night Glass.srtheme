@@ -1,14 +1,14 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 4,
+  "schema_version": 5,
   "name": "Amethyst Night Glass",
-  "acrylic": {
-    "enabled": true,
+  "backdrop": {
+    "mode": "glass",
     "tint": [
       50,
       20,
       72,
-      30
+      0
     ]
   },
   "colors": {

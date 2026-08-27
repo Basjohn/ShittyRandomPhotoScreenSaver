@@ -3,7 +3,7 @@
 This module centralises Settings *visual decisions* while deliberately leaving
 rendering mechanisms in their existing owners:
 
-* ``core/windows/dwm_blur.py`` owns Windows/DWM acrylic implementation.
+* ``core/windows/dwm_blur.py`` owns Windows native backdrop implementation.
 * ``ui/widgets/control_shadow.py`` owns the proven Settings shadow renderers.
 * ``ui/settings_dialog.py`` owns frameless-window lifecycle and the forged
   outer-edge painter.
@@ -13,7 +13,7 @@ rendering mechanisms in their existing owners:
 Renderers consume values from :data:`DEFAULT_DARK_SETTINGS_THEME` instead of
 inventing their own colour/opacity/shadow constants, including the
 screensaver context-menu palette. Geometry that is known to
-be fragile (the forged acrylic outer-corner radius/overlap maths in particular)
+be fragile (the forged native-backdrop outer-corner radius/overlap maths in particular)
 is intentionally not theme data.
 
 The forged edge has one additional invariant: its opaque camouflage colour is
@@ -28,7 +28,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 
-SETTINGS_THEME_SCHEMA_VERSION = 4
+SETTINGS_THEME_SCHEMA_VERSION = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,25 +66,47 @@ WHITE = Rgba(255, 255, 255, 255)
 BLACK = Rgba(0, 0, 0, 255)
 
 
-@dataclass(frozen=True, slots=True)
-class AcrylicStyle:
-    """Theme-facing request for the Settings native acrylic backdrop.
+NATIVE_BACKDROP_MODES = frozenset({"off", "acrylic", "glass"})
 
-    ``enabled`` is deliberately separate from tint alpha. Disabling acrylic
-    calls the platform disable path rather than relying on an alpha-zero
-    acrylic request, which is an unreliable/degenerate Windows edge case on
-    some compositor versions.
+
+@dataclass(frozen=True, slots=True)
+class NativeBackdropStyle:
+    """Theme-facing request for the Settings native Windows backdrop.
+
+    ``mode`` is one of ``off``, ``acrylic`` or ``glass``:
+
+    * ``off`` disables the composition accent entirely;
+    * ``acrylic`` uses Windows Acrylic blur-behind and requires non-zero tint
+      alpha because alpha-zero Acrylic is an unreliable/degenerate state;
+    * ``glass`` uses the older/native blur-behind material and may use a fully
+      transparent tint.
+
+    The platform adapter owns how each native mode is applied. Theme data owns
+    only the requested material and tint.
     """
 
-    enabled: bool
+    mode: str
     tint: Rgba
 
     def __post_init__(self) -> None:
-        if self.enabled and self.tint.a == 0:
+        mode = self.mode.strip().lower() if isinstance(self.mode, str) else self.mode
+        if mode not in NATIVE_BACKDROP_MODES:
             raise ValueError(
-                "Enabled Settings acrylic must use non-zero tint alpha; "
-                "use enabled=False to disable acrylic"
+                "Settings native backdrop mode must be one of "
+                f"{sorted(NATIVE_BACKDROP_MODES)!r}, got {self.mode!r}"
             )
+        object.__setattr__(self, "mode", mode)
+        if mode == "acrylic" and self.tint.a == 0:
+            raise ValueError(
+                "Settings Acrylic backdrop must use non-zero tint alpha; "
+                "use mode='off' or mode='glass' instead"
+            )
+
+    @property
+    def enabled(self) -> bool:
+        """Whether any native backdrop material is requested."""
+
+        return self.mode != "off"
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,7 +178,7 @@ class SettingsThemeSpec:
     """
 
     name: str
-    acrylic: AcrylicStyle
+    backdrop: NativeBackdropStyle
     colors: Mapping[str, Rgba]
     shadows: Mapping[str, ShadowStyle]
     gradients: Mapping[str, GradientStyle] = field(default_factory=dict)
@@ -224,7 +246,7 @@ class SettingsThemeSpec:
 # ---------------------------------------------------------------------------
 #
 # Intentionally represented here:
-#   * native acrylic request;
+#   * native backdrop material/tint request;
 #   * Settings shell/navigation/panel colours;
 #   * forged outer-border colour, but never forged-corner geometry/camouflage;
 #   * the approved central Settings shadow language.
@@ -621,8 +643,8 @@ _DEFAULT_DARK_SHADOWS: dict[str, ShadowStyle] = {
 
 DEFAULT_DARK_SETTINGS_THEME = SettingsThemeSpec(
     name="Default Dark",
-    acrylic=AcrylicStyle(
-        enabled=True,
+    backdrop=NativeBackdropStyle(
+        mode="acrylic",
         tint=Rgba(24, 24, 24, 80),
     ),
     colors=_DEFAULT_DARK_COLORS,
@@ -632,7 +654,8 @@ DEFAULT_DARK_SETTINGS_THEME = SettingsThemeSpec(
 
 
 __all__ = [
-    "AcrylicStyle",
+    "NATIVE_BACKDROP_MODES",
+    "NativeBackdropStyle",
     "BLACK",
     "DEFAULT_DARK_SETTINGS_THEME",
     "GradientStop",

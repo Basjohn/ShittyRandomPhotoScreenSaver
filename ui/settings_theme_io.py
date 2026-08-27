@@ -21,7 +21,7 @@ import tempfile
 from typing import Any
 
 from ui.settings_theme_spec import (
-    AcrylicStyle,
+    NativeBackdropStyle,
     DEFAULT_DARK_SETTINGS_THEME,
     GradientStop,
     GradientStyle,
@@ -40,7 +40,7 @@ _TOP_LEVEL_KEYS = frozenset(
         "format",
         "schema_version",
         "name",
-        "acrylic",
+        "backdrop",
         "colors",
         "shadows",
         "gradients",
@@ -142,18 +142,23 @@ def _require_role_set(
         raise _error(path, "; ".join(details))
 
 
-def _acrylic_from_payload(value: Any) -> AcrylicStyle:
-    obj = _expect_mapping(value, "acrylic")
-    _expect_exact_keys(obj, {"enabled", "tint"}, "acrylic")
+def _backdrop_from_payload(value: Any) -> NativeBackdropStyle:
+    obj = _expect_mapping(value, "backdrop")
+    _expect_exact_keys(obj, {"mode", "tint"}, "backdrop")
+
+    mode = obj["mode"]
+    if not isinstance(mode, str) or not mode.strip():
+        raise _error("backdrop.mode", "must be a non-empty string")
+
     try:
-        return AcrylicStyle(
-            enabled=_expect_bool(obj["enabled"], "acrylic.enabled"),
-            tint=_rgba_from_payload(obj["tint"], "acrylic.tint"),
+        return NativeBackdropStyle(
+            mode=mode,
+            tint=_rgba_from_payload(obj["tint"], "backdrop.tint"),
         )
     except (TypeError, ValueError) as exc:
         if isinstance(exc, SettingsThemeFileError):
             raise
-        raise _error("acrylic", str(exc)) from exc
+        raise _error("backdrop", str(exc)) from exc
 
 
 def _shadow_from_payload(value: Any, path: str) -> ShadowStyle:
@@ -232,9 +237,9 @@ def settings_theme_to_payload(theme: SettingsThemeSpec) -> dict[str, Any]:
         "format": SETTINGS_THEME_FILE_FORMAT,
         "schema_version": theme.schema_version,
         "name": theme.name,
-        "acrylic": {
-            "enabled": theme.acrylic.enabled,
-            "tint": theme.acrylic.tint.as_list(),
+        "backdrop": {
+            "mode": theme.backdrop.mode,
+            "tint": theme.backdrop.tint.as_list(),
         },
         "colors": {
             token: color.as_list()
@@ -345,7 +350,7 @@ def settings_theme_from_payload(payload: Any) -> SettingsThemeSpec:
     try:
         return SettingsThemeSpec(
             name=name,
-            acrylic=_acrylic_from_payload(obj["acrylic"]),
+            backdrop=_backdrop_from_payload(obj["backdrop"]),
             colors=colors,
             shadows=shadows,
             gradients=gradients,

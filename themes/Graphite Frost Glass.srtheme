@@ -1,14 +1,14 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 4,
+  "schema_version": 5,
   "name": "Graphite Frost Glass",
-  "acrylic": {
-    "enabled": true,
+  "backdrop": {
+    "mode": "glass",
     "tint": [
       27,
       34,
       41,
-      28
+      0
     ]
   },
   "colors": {

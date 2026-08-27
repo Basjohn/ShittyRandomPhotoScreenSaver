@@ -563,7 +563,7 @@ class SettingsDialog(QDialog):
         self._background_hydration_delay_ms = 1500
         self._background_hydration_step_delay_ms = 150
         self._closing = False
-        self._acrylic_applied = False
+        self._backdrop_applied = False
         cache = get_settings_dialog_cache()
         stored_scroll = self._settings.get('ui.last_tab_scroll', {})
         if isinstance(stored_scroll, dict):
@@ -698,54 +698,69 @@ class SettingsDialog(QDialog):
         from ui.settings_theme import load_theme
         load_theme(self)
 
-    def _apply_acrylic_theme(
+    def _apply_native_backdrop_theme(
         self,
         theme: SettingsThemeSpec,
         *,
         record_diagnostics: bool = False,
     ) -> bool:
-        """Apply one theme's acrylic state through the existing DWM renderer."""
+        """Apply one theme's native backdrop through the Windows adapter."""
 
-        self._acrylic_applied = True
+        self._backdrop_applied = True
         try:
             if record_diagnostics:
                 _record_diagnostic_stage("settings_show_event_before_winid")
             hwnd = int(self.winId())
-            acrylic = theme.acrylic
+            backdrop = theme.backdrop
             if record_diagnostics:
                 _record_diagnostic_stage(
-                    "settings_show_event_before_acrylic",
+                    "settings_show_event_before_backdrop",
                     hwnd=hwnd,
-                    requested=acrylic.enabled,
+                    mode=backdrop.mode,
                 )
 
-            if acrylic.enabled:
+            tint = backdrop.tint
+            if backdrop.mode == "acrylic":
                 from core.windows.dwm_blur import enable_acrylic_blur
 
-                tint = acrylic.tint
-                acrylic_enabled = enable_acrylic_blur(
+                native_enabled = enable_acrylic_blur(
                     hwnd,
                     tint_r=tint.r,
                     tint_g=tint.g,
                     tint_b=tint.b,
                     tint_alpha=tint.a,
                 )
-            else:
+            elif backdrop.mode == "glass":
+                from core.windows.dwm_blur import enable_glass_blur
+
+                native_enabled = enable_glass_blur(
+                    hwnd,
+                    tint_r=tint.r,
+                    tint_g=tint.g,
+                    tint_b=tint.b,
+                    tint_alpha=tint.a,
+                )
+            elif backdrop.mode == "off":
                 from core.windows.dwm_blur import disable_blur
 
                 disable_blur(hwnd)
-                acrylic_enabled = False
+                native_enabled = False
+            else:
+                raise ValueError(
+                    f"Unsupported Settings native backdrop mode: {backdrop.mode!r}"
+                )
 
             if record_diagnostics:
                 _record_diagnostic_stage(
-                    "settings_show_event_after_acrylic",
-                    enabled=acrylic_enabled,
+                    "settings_show_event_after_backdrop",
+                    mode=backdrop.mode,
+                    enabled=native_enabled,
                 )
-            return bool(acrylic_enabled)
+            return bool(native_enabled)
         except Exception:
-            logger.debug("Acrylic blur not available", exc_info=True)
+            logger.debug("Native Settings backdrop not available", exc_info=True)
             if record_diagnostics:
-                _record_diagnostic_stage("settings_show_event_acrylic_exception")
+                _record_diagnostic_stage("settings_show_event_backdrop_exception")
             return False
 
     def _refresh_live_shell_theme(self, theme: SettingsThemeSpec) -> None:
@@ -766,9 +781,9 @@ class SettingsDialog(QDialog):
         # Hidden dialogs use the latest ThemeSpec when shown. Visible dialogs
         # update native acrylic immediately through the exact same DWM path.
         if self.isVisible():
-            self._apply_acrylic_theme(theme)
+            self._apply_native_backdrop_theme(theme)
         else:
-            self._acrylic_applied = False
+            self._backdrop_applied = False
 
     def _setup_ui(self) -> None:
         """Setup dialog UI."""
@@ -1360,7 +1375,7 @@ class SettingsDialog(QDialog):
         except Exception:
             logger.exception("[SETTINGS_PERSIST] Settings close flush failed")
         
-        # Disable acrylic blur
+        # Disable native backdrop
         try:
             from core.windows.dwm_blur import disable_blur
             disable_blur(int(self.winId()))
@@ -1944,13 +1959,13 @@ class SettingsDialog(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
         _record_diagnostic_stage("settings_show_event_activation_enabled")
         self._start_background_tab_hydration()
-        # Apply the theme-requested Windows acrylic state on first show.
+        # Apply the theme-requested Windows native backdrop on first show.
         # Enabled themes pass their exact tint/strength into the existing DWM
         # renderer; disabled themes use the real disable path rather than an
-        # unreliable alpha-zero acrylic request.
-        if not self._acrylic_applied:
+        # explicit backdrop mode rather than an alpha-zero Acrylic workaround.
+        if not self._backdrop_applied:
             blur_start = time.perf_counter()
-            self._apply_acrylic_theme(
+            self._apply_native_backdrop_theme(
                 _SETTINGS_THEME,
                 record_diagnostics=True,
             )

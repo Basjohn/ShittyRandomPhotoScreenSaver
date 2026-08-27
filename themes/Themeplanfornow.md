@@ -68,7 +68,7 @@ to compiled Default Dark rather than an unstyled window.
   **Widget Themes**.
 - Source/dev builds discover file themes through the temporary explicit /
   build-stub / repository-local path seam before first Settings QWidget paint.
-- Theme schema **v4** owns the current semantic Settings visual vocabulary.
+- Theme schema **v5** owns the current semantic Settings visual vocabulary.
 - Full-role Obnoxious Windows testing is green for bucket states, tooltips,
   popup/dialog language, combo popup views, menus, About controls, Themes pill
   geometry and the custom non-native Qt colour picker including its button/X
@@ -81,23 +81,23 @@ to compiled Default Dark rather than an unstyled window.
   values render as integer-alpha `rgba(...)` through one central formatter.
 - The shared-style placeholder vocabulary now says `@@color:...@@`, not
   `@@hex:...@@`, so future theme authors are not taught a false opacity rule.
-- Foundry work is paused until the native backdrop contract can truthfully expose
-  real **Off / Acrylic / Glass** runtime modes instead of tint presets pretending
-  to be different materials.
+- Theme schema v5 owns a truthful per-theme native backdrop request: **Off / Acrylic / Glass**.
+  Acrylic keeps the proven tintable AccentPolicy path. Glass uses Windows 11
+  `DWMWA_SYSTEMBACKDROP_TYPE = DWMSBT_TRANSIENTWINDOW` (Desktop Acrylic), not
+  the obsolete/flickery `ACCENT_ENABLE_BLURBEHIND` state. Off clears both.
 
 ## Immediate remaining work
 
-1. Windows smoke P34: Default Dark and Obnoxious remain visually stable; a theme
-   containing translucent formerly-hex colour roles applies without rollback.
-2. Add a real per-theme native backdrop mode: **Off / Acrylic / Glass**. Glass
-   must use the Windows blur-behind path, not lower Acrylic tint alpha. Bump the
-   semantic theme schema once for that durable contract and migrate built-ins.
-3. Update Theme Foundry against that final backdrop/alpha contract, then smoke
-   load/edit/save/reload and reversible composite authoring.
-4. Build/release work replaces the temporary theme-directory stub and retires
+1. Windows smoke P36: switch live Default Dark Acrylic -> Graphite Frost Glass
+   -> Matte Graphite Off -> Default Dark. Glass must stay stable while moving/
+   resizing; Off should remain translucent but comfortably legible.
+2. Update Theme Foundry against schema v5: expose real **Off / Acrylic / Glass**
+   material selection, remove the temporary unavailable-Glass fiction, and keep
+   reversible composite authoring on ordinary Qt alpha-over relationships only.
+3. Build/release work replaces the temporary theme-directory stub and retires
    the dev fallback as recorded in `Future_Cleanup.md`.
-5. Perform the deliberate `dark.qss` retirement pass: relocate required
+4. Perform the deliberate `dark.qss` retirement pass: relocate required
    structural/geometry/resource selectors, run with the file physically absent,
    then remove redundant anti-`dark.qss` compensation/comments before deletion.
-6. Remove the Obnoxious validation theme and this temporary plan after final
+5. Remove the Obnoxious validation theme and this temporary plan after final
    Foundry/dark.qss/build-path validation and durable documentation.

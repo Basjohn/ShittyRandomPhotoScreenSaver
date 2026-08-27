@@ -1,9 +1,9 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 4,
+  "schema_version": 5,
   "name": "Theme Plumbing Test - Obnoxious",
-  "acrylic": {
-    "enabled": true,
+  "backdrop": {
+    "mode": "acrylic",
     "tint": [
       180,
       0,
