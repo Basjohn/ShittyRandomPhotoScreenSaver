@@ -35,7 +35,10 @@ from core.animation import AnimationManager
 from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab
 from ui.styled_popup import StyledPopup
 from ui.tabs import shared_styles
-from ui.widgets.control_shadow import apply_shadows_to_inputs
+from ui.widgets.control_shadow import (
+    apply_shadows_to_existing,
+    apply_shadows_to_inputs,
+)
 from ui.settings_dialog_cache import get_settings_dialog_cache
 from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME
 
@@ -893,8 +896,6 @@ class SettingsDialog(QDialog):
         bottom_spacer.setFixedHeight(9)
         main_layout.addWidget(bottom_spacer)
 
-        self._style_tab_widget(self.content_stack.widget(self._initial_tab_index))
-
         # Size grip for resizing
         self.size_grip = CornerSizeGrip(container)
         self.size_grip.setFixedSize(20, 20)
@@ -906,6 +907,14 @@ class SettingsDialog(QDialog):
         
         self.tab_buttons[self._initial_tab_index].setChecked(True)
         self.content_stack.setCurrentIndex(self._initial_tab_index)
+
+        # The initial tab was constructed before the finished dialog hierarchy
+        # existed, so its tab-scoped pass cannot reliably reach shell siblings.
+        # Apply the fully assembled existing tree synchronously now: title,
+        # sidebar, nav content, scrollbars and current-tab controls are shadowed
+        # before the first visible frame. Lazy children still use their normal
+        # watcher when they are actually created later.
+        apply_shadows_to_existing(self)
 
 
 

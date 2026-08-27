@@ -552,6 +552,27 @@ def _input_shadow_config(widget: QWidget) -> ShadowConfig:
     return SPIN_COMBO_SHADOW
 
 
+def _scrollbar_shadow_config(scrollbar: QScrollBar) -> ShadowConfig:
+    """Adapt the semantic cast inward so edge-mounted scrollbars cannot clip it.
+
+    The theme owns the shadow magnitude/opacity.  This renderer owns physical
+    placement: vertical Settings scrollbars sit on the right edge, while
+    horizontal ones sit on the bottom edge.
+    """
+
+    offset = SCROLLBAR_SHADOW.offset
+    if scrollbar.orientation() == Qt.Orientation.Vertical:
+        resolved_offset = QPointF(-abs(float(offset.x())), float(offset.y()))
+    else:
+        resolved_offset = QPointF(float(offset.x()), -abs(float(offset.y())))
+    return ShadowConfig(
+        blur_radius=SCROLLBAR_SHADOW.blur_radius,
+        offset=resolved_offset,
+        color=QColor(SCROLLBAR_SHADOW.color),
+        disabled_alpha_scale=SCROLLBAR_SHADOW.disabled_alpha_scale,
+    )
+
+
 def _is_bucket_toggle(button: QToolButton) -> bool:
     """Recognize the shared build_bucket_toggle() contract without tab coupling."""
 
@@ -723,9 +744,14 @@ def _style_one_widget(
 
     if isinstance(widget, QScrollBar):
         # QScrollBar is a non-text surface, so a zero-blur graphics effect is
-        # acceptable. Keep the offset small because Qt nests scrollbars in an
-        # internal container that may clip large casts on some styles.
-        attach_control_shadow(widget, SCROLLBAR_SHADOW, replace_existing=True)
+        # appropriate. Edge-mounted scrollbars cast inward so the useful part
+        # of the shadow remains inside the scroll-area chrome instead of being
+        # clipped beyond its right/bottom edge.
+        attach_control_shadow(
+            widget,
+            _scrollbar_shadow_config(widget),
+            replace_existing=True,
+        )
 
     name = widget.objectName()
     if name in ("sidebar", "contentArea"):
@@ -817,6 +843,29 @@ class _SettingsShadowWatcher(QObject):
         return super().eventFilter(watched, event)
 
 
+def apply_shadows_to_existing(
+    root: Optional[QWidget],
+    *,
+    include_types: Sequence[Type[QWidget]] | None = None,
+) -> None:
+    """Synchronously apply Settings shadows to the widgets that exist now.
+
+    This performs no delayed work and installs no watcher.  It is the correct
+    path for the fully assembled Settings shell before first paint, and is also
+    suitable for a future live-theme refresh of existing widgets.
+    """
+
+    if root is None:
+        return
+
+    target_types_list: list[Type[QWidget]] = list(_DEFAULT_TARGET_TYPES)
+    if include_types:
+        for cls in include_types:
+            if cls not in target_types_list:
+                target_types_list.append(cls)
+    _style_scope(root, tuple(target_types_list))
+
+
 def apply_shadows_to_inputs(
     root: Optional[QWidget],
     *,
@@ -839,7 +888,7 @@ def apply_shadows_to_inputs(
                 target_types_list.append(cls)
     target_types = tuple(target_types_list)
 
-    _style_scope(root, target_types)
+    apply_shadows_to_existing(root, include_types=include_types)
 
     existing_watcher = getattr(root, "_settings_shadow_scope_watcher", None)
     if isinstance(existing_watcher, _SettingsShadowWatcher):
@@ -878,5 +927,6 @@ __all__ = [
     "attach_control_shadow",
     "attach_text_shadow",
     "attach_cast_shadow",
+    "apply_shadows_to_existing",
     "apply_shadows_to_inputs",
 ]
