@@ -80,6 +80,9 @@ session display. No simultaneous source/target copies. Do not overwrite all targ
 One shared retained Quick overlay layer per display: grid, snap guides, selection outline, handles, widget
 label/control chrome including X.
 
+Centering guides use red so display/peer-centre alignment remains visually distinct from ordinary grid and edge
+guides.
+
 ## Input / actions
 
 Quick may own hit regions/pointer handlers and emit semantic actions. Python owns mode changes, provider
