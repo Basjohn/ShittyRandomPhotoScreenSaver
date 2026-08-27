@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-f5d881e1c0c768ba04019e6c3a7cff8a81297d5b
-Phase F8 Abandonment retained model landed on current main
+f85a7e8e26a8b89cafaa0004f14ce2145abec2e2
+Phase F8 Abandonment retained archive card landed on current main
 ```
 
 Current phase state:
@@ -44,21 +44,20 @@ Source outranks this plan if a later checkpoint has landed.
 exact runtime/data/cache/rotation/action/presentation ownership audit  GREEN
 stable retained config/model/image projection                         GREEN
 retained QML card + interaction fidelity                               GREEN
-registry + real owner injection + runtime-shaped gates                ACTIVE
-effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                      PENDING
+registry + real owner injection + runtime-shaped gates                GREEN
+effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                      ACTIVE
 caller proof + old Abandonment pixel/cache/input retirement           PENDING
 ```
 
-### F8.4 — registry and real owner integration (ACTIVE)
+### F8.5 — effective-DPR visual and lifecycle proof (ACTIVE)
 
-- register the retained Abandonment component statically and add one presentation wrapper that routes QML
-  refresh/settings signals to capability-gated model actions;
-- make the existing runtime-service injection/reuse contract accept the retained model without weakening the
-  still-live QWidget edge during this checkpoint;
-- admit enabled Abandonment through the ordinary retained host with the canonical geometry/style/input state;
-- prove real manager-owned service reuse, stable item/model/list/engine identity, one timer and late-callback
-  fencing under runtime-shaped setup/retire/rebuild;
-- keep all provider/cache/rotation cadence work in `AbandonmentRuntimeService`.
+- extend the real threaded-OpenGL ordinary-widget smoke with portrait, wide, no-art, unavailable and connect
+  archive-card states;
+- render and inspect at exact effective DPR 1.0, 1.5 and 2.25 against the old archival presenter oracle;
+- make the archive tab, artwork shelf/hatch, age stamp, rediscovery text and ledger shelves inspectable without
+  changing their distinct visual treatment;
+- prove geometry/image/cache/transition behavior and one-window/one-engine lifecycle without item recreation;
+- record deterministic screenshots/logs and keep the tool reusable for later Steam-family visual checks.
 
 Do not port Steam Journey/Progress or Friend Pulse scaffolds as part of F8.
 

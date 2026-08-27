@@ -7,7 +7,7 @@ state, semantic action admission and presentation-only configuration.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -34,7 +34,12 @@ from widgets.steam_card_models import (
     build_steam_connect_required_view_model,
 )
 
-from .host import OverlayCardStyle
+from .host import (
+    OrdinaryWidgetPresentationHost,
+    OverlayCardStyle,
+    OverlayWidgetGeometry,
+    RetainedOverlayWidget,
+)
 from .steam_common import (
     SteamCardFieldListModel,
     accepted_local_image_source,
@@ -635,9 +640,114 @@ class AbandonmentIssuesPresentationModel(QObject):
         return self.config.authored_size[1]
 
 
+class RetainedAbandonmentIssuesPresentation:
+    """One retained archive card with semantic action routing."""
+
+    def __init__(
+        self,
+        *,
+        host: OrdinaryWidgetPresentationHost,
+        model: AbandonmentIssuesPresentationModel,
+        geometry: OverlayWidgetGeometry,
+        fade_opacity: float = 0.0,
+        on_settings_requested: Callable[[str], Any] | None = None,
+    ) -> None:
+        self._host = host
+        self._model = model
+        self._on_settings_requested = on_settings_requested
+        self._retained: RetainedOverlayWidget = host.create_family_widget(
+            "abandonment_issues",
+            initial_properties={"abandonmentModel": model},
+            object_name="abandonment_issues",
+            geometry=geometry,
+            fade_opacity=fade_opacity,
+            card_style=model.style.card_style,
+        )
+        self._retained.add_retirement_callback(model.retire)
+        self._connect("refreshRequested", model.request_manual_refresh)
+        self._connect("settingsRequested", self._handle_settings_requested)
+        model.fadeRequested.connect(self._handle_fade_requested)
+
+    def _connect(self, signal_name: str, callback: Callable[..., Any]) -> None:
+        signal = getattr(self._retained.item, signal_name, None)
+        if signal is not None and hasattr(signal, "connect"):
+            signal.connect(callback)
+
+    @property
+    def item(self):
+        return self._retained.item
+
+    @property
+    def model(self) -> AbandonmentIssuesPresentationModel:
+        return self._model
+
+    def activate(self, thread_manager: Any | None = None) -> bool:
+        return self._model.activate(thread_manager)
+
+    def set_geometry(self, geometry: OverlayWidgetGeometry) -> None:
+        self._retained.set_geometry(geometry)
+
+    def set_fade_opacity(self, opacity: float) -> None:
+        self._retained.set_fade_opacity(opacity)
+
+    def set_interaction_enabled(self, enabled: bool) -> bool:
+        return self._model.set_interaction_enabled(enabled)
+
+    def apply_input_state(self, input_state: object) -> bool:
+        if isinstance(input_state, Mapping):
+            value = input_state.get
+        else:
+            def value(name, default):
+                return getattr(input_state, name, default)
+        enabled = (
+            bool(value("admission_open", True))
+            and not bool(value("exiting", False))
+            and (
+                bool(value("interaction_mode_enabled", False))
+                or bool(value("ctrl_held", False))
+            )
+        )
+        return self._model.set_interaction_enabled(enabled)
+
+    def apply_style(
+        self,
+        shadow_values: Mapping[str, object],
+        *,
+        border_width: float = 4.0,
+    ) -> None:
+        style = AbandonmentIssuesPresentationStyle.project(
+            self._model.config,
+            shadow_values,
+            border_width=border_width,
+        )
+        self._model.apply_style(style)
+        self._retained.set_card_style(style.card_style)
+
+    def _handle_settings_requested(self, target: str) -> bool:
+        normalized = str(target or "").strip()
+        if (
+            not self._model.is_active
+            or not self._model.interactionEnabled
+            or not normalized
+            or self._on_settings_requested is None
+        ):
+            return False
+        return bool(self._on_settings_requested(normalized))
+
+    def _handle_fade_requested(self) -> None:
+        if not self._model.is_active:
+            return
+        self._retained.set_fade_opacity(1.0)
+        self._model.notify_fade_complete()
+
+    def retire(self) -> bool:
+        return self._host.retire_widget(self._retained)
+
+
 __all__ = [
     "AbandonmentIssuesPresentationConfig",
     "AbandonmentIssuesPresentationModel",
     "AbandonmentIssuesPresentationSnapshot",
     "AbandonmentIssuesPresentationStyle",
+    "RetainedAbandonmentIssuesPresentation",
 ]
