@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Sequence, Tuple, Type
 
 from PySide6.QtCore import QObject, QPointF, QEvent, QRectF, QTimer, Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath
+from PySide6.QtGui import QColor, QPainter, QPainterPath
 from PySide6.QtWidgets import (
     QAbstractButton,
     QAbstractSpinBox,
@@ -23,8 +23,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollBar,
-    QStyle,
-    QStyleOptionButton,
     QToolButton,
     QWidget,
 )
@@ -81,10 +79,10 @@ LINE_EDIT_SHADOW = SPIN_COMBO_SHADOW
 PILL_BUTTON_SHADOW = _theme_shadow_config("button.pill")
 
 # Main left-nav tabs are translucent; a normal graphics effect shadows their
-# border/text alpha and looks hollow.  Their body therefore remains a solid
-# geometry backing, while their label content gets a separate shadow-only pass.
+# border/text alpha and looks hollow. Their body therefore remains a solid
+# geometry backing. TabButton renders icon/text separately; its text QLabel
+# naturally receives the proven sibling-painted text shadow below.
 NAV_TAB_SHADOW = _theme_shadow_config("navigation.tab")
-NAV_TAB_CONTENT_SHADOW = _theme_shadow_config("text.section")
 
 BUCKET_CLOSED_SHADOW = _theme_shadow_config("bucket.closed")
 BUCKET_OPEN_SHADOW = _theme_shadow_config("bucket.open")
@@ -330,163 +328,6 @@ def attach_text_shadow(
         return
     helper = _TextShadowHelper(label, config)
     setattr(label, "_settings_text_shadow_helper", helper)
-
-
-class _ButtonContentShadowOverlay(QWidget):
-    """Paint an alpha-masked tab-content shadow beneath the translucent button."""
-
-    def __init__(self, helper: "_ButtonContentShadowHelper", parent: QWidget) -> None:
-        super().__init__(parent)
-        self._helper = helper
-        self.setProperty("settingsShadowInternal", True)
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.setStyleSheet("background: transparent; border: none;")
-
-    def paintEvent(self, event) -> None:  # noqa: N802
-        del event
-        helper = self._helper
-        owner = helper.owner
-        if owner is None or owner.isHidden() or not owner.text():
-            return
-        if owner.width() <= 0 or owner.height() <= 0:
-            return
-
-        # Render Qt's real push-button label (including colour emoji / QIcon)
-        # into an off-screen alpha mask.  Recolouring that mask avoids the
-        # checkpoint-4 failure where colour emoji were visibly duplicated.
-        label_image = QImage(
-            owner.size(),
-            QImage.Format.Format_ARGB32_Premultiplied,
-        )
-        label_image.fill(0)
-
-        option = QStyleOptionButton()
-        option.initFrom(owner)
-        option.rect = owner.rect()
-        option.text = owner.text()
-        option.icon = owner.icon()
-        option.iconSize = owner.iconSize()
-
-        label_painter = QPainter(label_image)
-        label_painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        label_painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
-        owner.style().drawControl(
-            QStyle.ControlElement.CE_PushButtonLabel,
-            option,
-            label_painter,
-            owner,
-        )
-        label_painter.end()
-
-        color = QColor(helper.config.color)
-        if not owner.isEnabled():
-            color.setAlpha(int(color.alpha() * helper.config.disabled_alpha_scale))
-
-        shadow_image = QImage(
-            label_image.size(),
-            QImage.Format.Format_ARGB32_Premultiplied,
-        )
-        shadow_image.fill(0)
-        mask_painter = QPainter(shadow_image)
-        mask_painter.drawImage(0, 0, label_image)
-        mask_painter.setCompositionMode(
-            QPainter.CompositionMode.CompositionMode_SourceIn
-        )
-        mask_painter.fillRect(shadow_image.rect(), color)
-        mask_painter.end()
-
-        painter = QPainter(self)
-        painter.drawImage(helper.config.offset, shadow_image)
-        painter.end()
-
-
-class _ButtonContentShadowHelper(QObject):
-    """Keep a true underlay shadow synchronized with one navigation button."""
-
-    def __init__(self, owner: QPushButton, config: ShadowConfig) -> None:
-        super().__init__(owner)
-        self.owner = owner
-        self.config = config
-        self.overlay: _ButtonContentShadowOverlay | None = None
-        owner.installEventFilter(self)
-        owner.toggled.connect(self._sync)
-        self._sync()
-
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # type: ignore[override]
-        if watched is self.owner:
-            etype = event.type()
-            if etype in (
-                QEvent.Type.Move,
-                QEvent.Type.Resize,
-                QEvent.Type.Show,
-                QEvent.Type.Hide,
-                QEvent.Type.EnabledChange,
-                QEvent.Type.StyleChange,
-                QEvent.Type.FontChange,
-                QEvent.Type.PaletteChange,
-                QEvent.Type.ParentChange,
-                QEvent.Type.Enter,
-                QEvent.Type.Leave,
-                QEvent.Type.UpdateRequest,
-            ):
-                self._sync()
-            elif etype == QEvent.Type.Destroy:
-                if self.overlay is not None:
-                    self.overlay.deleteLater()
-                    self.overlay = None
-        return super().eventFilter(watched, event)
-
-    def reconfigure(self, config: ShadowConfig) -> None:
-        self.config = config
-        self._sync()
-
-    def _ensure_overlay_parent(self) -> None:
-        parent = self.owner.parentWidget()
-        if parent is None:
-            if self.overlay is not None:
-                self.overlay.hide()
-            return
-        if self.overlay is None:
-            self.overlay = _ButtonContentShadowOverlay(self, parent)
-        elif self.overlay.parentWidget() is not parent:
-            self.overlay.setParent(parent)
-
-    def _sync(self, *_args) -> None:
-        self._ensure_overlay_parent()
-        overlay = self.overlay
-        if overlay is None:
-            return
-        offset = self.config.offset
-        pad_x = max(2, int(math.ceil(max(0.0, float(offset.x())))) + 2)
-        pad_y = max(2, int(math.ceil(max(0.0, float(offset.y())))) + 2)
-        geom = self.owner.geometry()
-        overlay.setGeometry(
-            geom.x(),
-            geom.y(),
-            geom.width() + pad_x,
-            geom.height() + pad_y,
-        )
-        overlay.setVisible(not self.owner.isHidden())
-        # This is the crucial difference from checkpoint 4: the shadow is a
-        # sibling *under* the translucent button, never a child raised above it.
-        overlay.stackUnder(self.owner)
-        overlay.update()
-
-
-def attach_button_content_shadow(
-    button: QPushButton,
-    config: ShadowConfig,
-) -> None:
-    """Shadow only a button's label silhouette beneath its body renderer."""
-
-    existing = getattr(button, "_settings_button_content_shadow_helper", None)
-    if isinstance(existing, _ButtonContentShadowHelper):
-        existing.reconfigure(config)
-        return
-    helper = _ButtonContentShadowHelper(button, config)
-    setattr(button, "_settings_button_content_shadow_helper", helper)
 
 
 class _CastShadowOverlay(QWidget):
@@ -741,7 +582,7 @@ def _label_font_size_px(label: QLabel) -> float:
 
 
 def _prepare_title_label(label: QLabel) -> None:
-    """Apply the requested +2pt Settings title treatment exactly once."""
+    """Apply the approved enlarged Settings-title treatment exactly once."""
 
     if label.text().strip() != "SRPSS SETTINGS":
         return
@@ -751,19 +592,20 @@ def _prepare_title_label(label: QLabel) -> None:
     font = label.font()
     point_size = font.pointSizeF()
     if point_size > 0:
-        font.setPointSizeF(point_size + 2.0)
+        # Original base 15pt + first approved 2pt + this follow-up 2pt.
+        font.setPointSizeF(point_size + 4.0)
     else:
         pixel_size = font.pixelSize()
         if pixel_size > 0:
-            font.setPixelSize(pixel_size + 3)
+            font.setPixelSize(pixel_size + 5)
     label.setFont(font)
     label.setProperty("settingsTitleShadowPrepared", True)
 
     parent = label.parentWidget()
     if parent is not None and parent.objectName() == "customTitleBar":
-        # The original title bar is fixed at 40px. Give the larger glyphs and
-        # 5px cast enough vertical room instead of letting the parent clip it.
-        parent.setFixedHeight(max(46, parent.height()))
+        # Give the 19pt-class title, its 3px top padding and 3x4px hard cast
+        # generous room so neither glyphs nor shadow can clip.
+        parent.setFixedHeight(max(52, parent.height()))
 
 
 def _heading_shadow_config(label: QLabel) -> ShadowConfig | None:
@@ -851,7 +693,11 @@ def _style_one_widget(
         if widget.objectName() == "tabButton":
             # Never return to a whole-button graphics effect: the tab surface is
             # translucent and that treatment produces a hollow alpha-following
-            # shadow. Keep the body cast and shadow only its text/emoji content.
+            # shadow. Keep only the proven outside-only body cast here.
+            #
+            # TabButton owns its icon/text layout. Its dedicated text QLabel is
+            # discovered below and gets the existing crisp sibling text shadow;
+            # the icon itself owns a small alpha-following Qt effect.
             if widget.graphicsEffect() is not None:
                 widget.setGraphicsEffect(None)
             attach_cast_shadow(
@@ -860,7 +706,6 @@ def _style_one_widget(
                 radius=6.0,
                 insets=(3.0, 3.0, 5.0, 5.0),
             )
-            attach_button_content_shadow(widget, NAV_TAB_CONTENT_SHADOW)
         else:
             attach_control_shadow(widget, PILL_BUTTON_SHADOW, replace_existing=True)
             _reserve_flow_shadow_clearance(widget, PILL_BUTTON_SHADOW)
