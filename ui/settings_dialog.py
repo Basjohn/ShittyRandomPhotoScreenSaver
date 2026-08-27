@@ -14,7 +14,8 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton,
     QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip,
-    QFileDialog, QMenu, QScrollArea,
+    QFileDialog, QMenu, QScrollArea, QStyle, QStyleOptionButton,
+    QStylePainter,
 )
 from PySide6.QtCore import Qt, QPoint, QRect, QRectF, Signal, QUrl, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication, QPainterPath, QDesktopServices
@@ -167,27 +168,171 @@ class CustomTitleBar(QWidget):
 
 
 class TabButton(QPushButton):
-    """Custom tab button with icon and text."""
-    
-    def __init__(self, text: str, icon_text: str = "", parent: Optional[QWidget] = None):
+    """Navigation tab with separately rendered icon and text content.
+
+    The QPushButton continues to own interaction/state and keeps its full text
+    value for tests/accessibility. Painting the icon and label as dedicated
+    child widgets avoids Windows colour-emoji clipping and lets the existing
+    crisp QLabel shadow renderer handle the text without duplicating the icon.
+    """
+
+    _ICON_PIXEL_SIZE = 17  # Previously inherited the 15px tab QSS: +2px.
+    _ICON_BOX_SIZE = 26
+    _TEXT_POINT_SIZE = 12.25  # 15px at 96 DPI is 11.25pt: requested +1pt.
+    _MINIMUM_HEIGHT = 52  # Previous minimum was 50px: requested +2px.
+
+    def __init__(
+        self,
+        text: str,
+        icon_text: str = "",
+        parent: Optional[QWidget] = None,
+    ):
         """
         Initialize tab button.
-        
+
         Args:
-            text: Button text
-            icon_text: Icon text (emoji or symbol)
-            parent: Parent widget
+            text: Button text.
+            icon_text: Icon text (emoji or symbol).
+            parent: Parent widget.
         """
         super().__init__(parent)
-        
+
+        # Preserve the historical public button text even though the native
+        # label is suppressed in paintEvent in favour of unclipped children.
+        self._tab_label_text = text
+        self._tab_icon_text = icon_text
         self.setText(f"{icon_text} {text}" if icon_text else text)
+        self.setAccessibleName(text)
         self.setCheckable(True)
         self.setObjectName("tabButton")
-        self.setMinimumHeight(50)
+        self.setMinimumHeight(self._MINIMUM_HEIGHT)
 
-        font = QFont("Jost", 10)
-        font.setFamilies(["Jost", "Segoe UI", "Arial", "Sans Serif"])
-        self.setFont(font)
+        # The parent button's QSS still owns its translucent body/border. Child
+        # content is positioned to match the existing 20px left padding plus
+        # the tab's 3px left margin.
+        content_layout = QHBoxLayout(self)
+        content_layout.setContentsMargins(23, 0, 20, 0)
+        content_layout.setSpacing(6)
+
+        if icon_text:
+            self._tab_icon_host = QWidget(self)
+            self._tab_icon_host.setProperty("settingsShadowInternal", True)
+            self._tab_icon_host.setAttribute(
+                Qt.WidgetAttribute.WA_TransparentForMouseEvents,
+                True,
+            )
+
+            icon_shadow = _SETTINGS_THEME.shadow("text.section")
+            shadow_x = int(round(icon_shadow.offset_x))
+            shadow_y = int(round(icon_shadow.offset_y))
+            # Keep explicit room around the colour glyph and the zero-blur
+            # effect offset so neither the source nor its shadow can clip.
+            host_width = self._ICON_BOX_SIZE + max(0, shadow_x) + 2
+            host_height = self._ICON_BOX_SIZE + max(0, shadow_y) + 2
+            self._tab_icon_host.setFixedSize(host_width, host_height)
+
+            self._tab_icon_label = QLabel(icon_text, self._tab_icon_host)
+            self._tab_icon_label.setProperty("settingsShadowInternal", True)
+            self._tab_icon_label.setAttribute(
+                Qt.WidgetAttribute.WA_TransparentForMouseEvents,
+                True,
+            )
+            self._tab_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._tab_icon_label.setGeometry(
+                0,
+                0,
+                self._ICON_BOX_SIZE,
+                self._ICON_BOX_SIZE,
+            )
+            icon_font = QFont("Segoe UI Emoji")
+            icon_font.setFamilies(
+                [
+                    "Segoe UI Emoji",
+                    "Noto Color Emoji",
+                    "Apple Color Emoji",
+                    "Segoe UI Symbol",
+                ]
+            )
+            icon_font.setPixelSize(self._ICON_PIXEL_SIZE)
+            self._tab_icon_label.setFont(icon_font)
+            self._tab_icon_label.setStyleSheet(
+                "background: transparent; border: none; padding: 0px; margin: 0px;"
+            )
+
+            # One source glyph, with Qt compositing its alpha shadow underneath.
+            # This avoids every previous failure mode caused by painting a
+            # second emoji/symbol as the "shadow".
+            icon_effect = QGraphicsDropShadowEffect(self._tab_icon_label)
+            icon_effect.setBlurRadius(float(icon_shadow.blur_radius))
+            icon_effect.setOffset(icon_shadow.offset_x, icon_shadow.offset_y)
+            icon_effect.setColor(QColor(*icon_shadow.color.as_tuple()))
+            self._tab_icon_label.setGraphicsEffect(icon_effect)
+
+            content_layout.addWidget(
+                self._tab_icon_host,
+                0,
+                Qt.AlignmentFlag.AlignVCenter,
+            )
+
+        self._tab_text_label = QLabel(text, self)
+        self._tab_text_label.setObjectName("tabButtonText")
+        self._tab_text_label.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents,
+            True,
+        )
+        self._tab_text_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        text_font = QFont("Jost")
+        text_font.setFamilies(["Jost", "Segoe UI", "Arial", "Sans Serif"])
+        text_font.setPointSizeF(self._TEXT_POINT_SIZE)
+        text_font.setWeight(QFont.Weight.DemiBold)
+        self._tab_text_label.setFont(text_font)
+        content_layout.addWidget(
+            self._tab_text_label,
+            1,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
+
+        self.toggled.connect(self._sync_content_style)
+        self._sync_content_style()
+
+    def _sync_content_style(self, *_args) -> None:
+        if self.isChecked():
+            token = "navigation.tab.selected_text"
+            weight = QFont.Weight.Bold
+        elif self.underMouse():
+            token = "navigation.tab.hover_text"
+            weight = QFont.Weight.DemiBold
+        else:
+            token = "navigation.tab.text"
+            weight = QFont.Weight.DemiBold
+
+        color = _SETTINGS_THEME.color(token)
+        self._tab_text_label.setStyleSheet(
+            "background: transparent; border: none; padding: 0px; margin: 0px;"
+            f" color: rgba({color.r}, {color.g}, {color.b}, {color.a});"
+        )
+        font = self._tab_text_label.font()
+        font.setWeight(weight)
+        self._tab_text_label.setFont(font)
+
+    def enterEvent(self, event) -> None:  # type: ignore[override]
+        super().enterEvent(event)
+        self._sync_content_style()
+
+    def leaveEvent(self, event) -> None:  # type: ignore[override]
+        super().leaveEvent(event)
+        self._sync_content_style()
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        """Paint only the native/QSS button chrome; children paint the content."""
+        del event
+        option = QStyleOptionButton()
+        self.initStyleOption(option)
+        option.text = ""
+        painter = QStylePainter(self)
+        painter.drawControl(QStyle.ControlElement.CE_PushButton, option)
 
 
 class CornerSizeGrip(QSizeGrip):
@@ -669,6 +814,18 @@ class SettingsDialog(QDialog):
         
         # Custom title bar
         self.title_bar = CustomTitleBar(self)
+        # The content row puts the sidebar frame at +10px. The title QLabel
+        # already owns 10px of left QSS padding, so remove only this main
+        # title bar's extra 10px layout inset. Popup title bars are unaffected.
+        title_layout = self.title_bar.layout()
+        if title_layout is not None:
+            margins = title_layout.contentsMargins()
+            title_layout.setContentsMargins(
+                0,
+                margins.top(),
+                margins.right(),
+                margins.bottom(),
+            )
         main_layout.addWidget(self.title_bar)
         
         # Content area
