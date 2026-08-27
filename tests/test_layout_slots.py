@@ -184,6 +184,38 @@ def test_layout_slot_saved_on_cannot_reactivate_deactivated_family():
     assert widgets["clock"]["position"] == "Bottom Right"
 
 
+def test_layout_slot_saved_on_cannot_bypass_deactivated_family_dependency():
+    widgets = {
+        "family_activation": {"media": False, "visualizers": True},
+        "spotify_visualizer": {"enabled": False, "position": "Top Left"},
+        "layout_slots": {
+            "version": 1,
+            "slots": {
+                "1": {
+                    "version": 1,
+                    "widgets": {
+                        "spotify_visualizer": {
+                            "enabled": True,
+                            "position": "Bottom Right",
+                        },
+                    },
+                    "custom_layout": {"version": 2, "displays": {}},
+                    "custom_layout_restore": {"widgets": {}},
+                }
+            },
+        },
+    }
+
+    assert apply_layout_slot(widgets, "1") is True
+
+    assert widgets["family_activation"] == {
+        "media": False,
+        "visualizers": True,
+    }
+    assert widgets["spotify_visualizer"]["enabled"] is False
+    assert widgets["spotify_visualizer"]["position"] == "Bottom Right"
+
+
 def test_layout_slot_enabled_replay_preserves_provider_account_and_source_settings():
     widgets = {
         "reddit": {

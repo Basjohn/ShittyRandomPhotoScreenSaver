@@ -362,25 +362,46 @@ def canonicalize_screen_layout_bucket(
         displays = {}
         custom_layout_map["displays"] = displays
 
-    matched = resolve_screen_layout_signature(custom_layout_map, screen)
-    if matched is None:
-        displays.setdefault(canonical, {})
-        return canonical
-
-    if matched == canonical:
-        displays.setdefault(canonical, {})
-        return canonical
-
-    source_layouts = displays.get(matched, {})
     target_layouts = displays.get(canonical, {})
-    if not isinstance(source_layouts, dict):
-        source_layouts = dict(source_layouts) if isinstance(source_layouts, Mapping) else {}
     if not isinstance(target_layouts, dict):
         target_layouts = dict(target_layouts) if isinstance(target_layouts, Mapping) else {}
-    merged = dict(source_layouts)
-    merged.update(target_layouts)
-    displays[canonical] = merged
-    displays.pop(matched, None)
+
+    source_signatures: list[str] = []
+    for alias in get_screen_signature_aliases(screen):
+        if alias != canonical and alias in displays:
+            source_signatures.append(alias)
+    if "|geom:" not in canonical:
+        legacy_prefix = f"{canonical}|geom:"
+        source_signatures.extend(
+            str(saved_signature)
+            for saved_signature in displays
+            if isinstance(saved_signature, str)
+            and saved_signature != canonical
+            and saved_signature.startswith(legacy_prefix)
+            and saved_signature not in source_signatures
+        )
+
+    for source_signature in source_signatures:
+        source_layouts = displays.get(source_signature, {})
+        if not isinstance(source_layouts, Mapping):
+            displays.pop(source_signature, None)
+            continue
+        merged: dict[str, Any] = {}
+        for widget_id in set(source_layouts) | set(target_layouts):
+            source_variants = source_layouts.get(widget_id, {})
+            target_variants = target_layouts.get(widget_id, {})
+            if not isinstance(source_variants, Mapping):
+                source_variants = {}
+            if not isinstance(target_variants, Mapping):
+                target_variants = {}
+            merged[str(widget_id)] = {
+                **dict(source_variants),
+                **dict(target_variants),
+            }
+        target_layouts = merged
+        displays.pop(source_signature, None)
+
+    displays[canonical] = target_layouts
     return canonical
 
 

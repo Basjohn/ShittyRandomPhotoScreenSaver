@@ -257,6 +257,47 @@ def test_custom_layout_entries_resolve_legacy_signature_when_screen_geometry_dri
     assert legacy_signature not in custom_map["displays"]
 
 
+def test_canonicalizing_screen_bucket_merges_independent_variants():
+    custom_map = build_default_custom_layout_map()
+    legacy_signature = "serial:abc|manufacturer:LG|model:TV|name:LG TV|geom:0_0_1920x1080"
+    canonical_signature = "serial:abc|manufacturer:LG|model:TV|name:LG TV"
+    custom_map["displays"] = {
+        legacy_signature: {
+            "clock": {
+                "digital": {
+                    "rect": {"x": 0.1, "y": 0.1, "width": 0.3, "height": 0.2},
+                    "size_payload": {"font_size": 48},
+                    "resize_mode": "clock_font",
+                }
+            }
+        },
+        canonical_signature: {
+            "clock": {
+                "analog": {
+                    "rect": {"x": 0.2, "y": 0.1, "width": 0.25, "height": 0.4},
+                    "size_payload": {"font_size": 48},
+                    "resize_mode": "clock_font",
+                }
+            }
+        },
+    }
+    live_screen = _FakeScreen(
+        QRect(0, 0, 1920, 1080),
+        serial="abc",
+        manufacturer="LG",
+        model="TV",
+        name="LG TV",
+    )
+
+    canonicalize_screen_layout_bucket(custom_map, live_screen)
+
+    assert set(custom_map["displays"][canonical_signature]["clock"]) == {
+        "digital",
+        "analog",
+    }
+    assert legacy_signature not in custom_map["displays"]
+
+
 def test_version_one_custom_geometry_is_invalidated_without_compatibility_replay():
     widgets_map = {
         "custom_layout": {
