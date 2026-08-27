@@ -69,6 +69,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._resize_update_handler = resize_update_handler
         self._resize_wheel_handler = resize_wheel_handler
         self._items: list[CustomLayoutSessionItem] = []
+        session.subscribe_changes(self._on_session_item_changed)
         self.refresh()
 
     def roleNames(self) -> dict[int, QByteArray]:  # type: ignore[override]
@@ -144,13 +145,9 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         resolver = self._geometry_resolver
         resolved = QRect(resolver(item, proposed)) if resolver is not None else proposed
         item.set_geometry(resolved)
-        self._publish_item_change(item)
-        model_index = self.index(int(row), 0)
-        self.dataChanged.emit(
-            model_index,
-            model_index,
-            [self._GEOMETRY_X_ROLE, self._GEOMETRY_Y_ROLE],
-        )
+        session = self._session
+        if session is not None:
+            session.notify_item_changed(item)
 
     @Slot(int)
     def closeItem(self, row: int) -> None:
@@ -168,7 +165,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         removed = item.removed
         enabled = item.current_enabled
         session.refresh_duplicate_state()
-        self.refresh()
+        session.notify_all_items_changed()
         self.item_closed.emit(widget_id, removed, enabled)
 
     @Slot(int, str, float, float, result=bool)
@@ -206,7 +203,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         cursor = self._global_point(local_x, local_y)
         if not handler(item, str(corner), cursor, bool(finalize)):
             return False
-        self._publish_resize(item, row)
+        self._notify_resize(item)
         return True
 
     @Slot(int, int, result=bool)
@@ -219,10 +216,13 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return False
         if not handler(item, int(angle_delta_y)):
             return False
-        self._publish_resize(item, row)
+        self._notify_resize(item)
         return True
 
     def retire(self) -> None:
+        session = self._session
+        if session is not None:
+            session.unsubscribe_changes(self._on_session_item_changed)
         self.beginResetModel()
         self._items = []
         self._session = None
@@ -245,9 +245,28 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             self._display_origin.y() + int(round(float(local_y))),
         )
 
-    def _publish_resize(self, item: CustomLayoutSessionItem, row: int) -> None:
+    def _notify_resize(self, item: CustomLayoutSessionItem) -> None:
+        session = self._session
+        if session is not None:
+            session.notify_item_changed(item)
+
+    def _on_session_item_changed(self, item: CustomLayoutSessionItem) -> None:
+        prior_row = next(
+            (index for index, entry in enumerate(self._items) if entry is item),
+            None,
+        )
+        belongs_here = (
+            item.current_display_identity == self._display_identity
+            and item.current_enabled
+            and not item.removed
+        )
+        if (prior_row is None) != (not belongs_here):
+            self.refresh()
+            return
         self._publish_item_change(item)
-        model_index = self.index(int(row), 0)
+        if prior_row is None:
+            return
+        model_index = self.index(prior_row, 0)
         self.dataChanged.emit(
             model_index,
             model_index,
@@ -256,6 +275,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
                 self._GEOMETRY_Y_ROLE,
                 self._GEOMETRY_WIDTH_ROLE,
                 self._GEOMETRY_HEIGHT_ROLE,
+                self._DUPLICATE_ROLE,
+                self._RESIZABLE_ROLE,
             ],
         )
 

@@ -169,6 +169,56 @@ def test_overlay_resize_requests_route_through_python_and_keep_item_identity() -
     assert model.resizeWheel(0, -120) is False
 
 
+def test_shared_session_transfer_moves_frame_between_display_models_and_cancel_restores() -> None:
+    session = CustomLayoutSession()
+    clock = _item("clock", "display:a", QRect(120, 80, 180, 80))
+    session.add_item(clock)
+    source_publications: list[int] = []
+    target_publications: list[int] = []
+
+    def _resolve_transfer(item, proposed):
+        item.set_current_display("display:b", monitor_route="2")
+        return QRect(proposed)
+
+    source = CustomLayoutOverlayModel(
+        session=session,
+        display_identity="display:a",
+        geometry_resolver=_resolve_transfer,
+        item_change_publisher=lambda item: source_publications.append(id(item)),
+    )
+    target = CustomLayoutOverlayModel(
+        session=session,
+        display_identity="display:b",
+        display_origin=QPoint(800, 0),
+        item_change_publisher=lambda item: target_publications.append(id(item)),
+    )
+    identity = id(clock)
+
+    assert source.rowCount() == 1
+    assert target.rowCount() == 0
+    source.moveItem(0, 860.0, 120.0)
+
+    assert source.rowCount() == 0
+    assert target.rowCount() == 1
+    assert clock.current_display_identity == "display:b"
+    assert clock.current_monitor_route == "2"
+    assert clock.current_global_rect == QRect(860, 120, 180, 80)
+    assert source_publications[-1] == identity
+    assert target_publications[-1] == identity
+
+    session.restore_baseline()
+
+    assert source.rowCount() == 1
+    assert target.rowCount() == 0
+    assert clock.current_display_identity == "display:a"
+    assert clock.current_monitor_route == "ALL"
+    assert clock.current_global_rect == QRect(120, 80, 180, 80)
+    assert id(session.item(clock.source_key)) == identity
+
+    source.retire()
+    target.retire()
+
+
 @pytest.mark.qt
 def test_display_scene_has_one_retained_overlay_with_red_center_guides(qt_app) -> None:
     owner = QObject()
@@ -354,6 +404,84 @@ def test_scene_binding_moves_hides_and_restores_same_retained_family_item(qt_app
 
     controller.quiesce_for_retirement()
     window.deleteLater()
+    factory.deleteLater()
+    qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_cross_display_transfer_flips_one_visible_retained_family_owner(qt_app) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    factory = QuickSceneFactory()
+    source_window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=101,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    target_window = QuickDisplayWindow(
+        screen_index=1,
+        runtime_generation=101,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    source_controller = QuickSceneController(window=source_window, factory=factory)
+    target_controller = QuickSceneController(window=target_window, factory=factory)
+    source_presentation = source_controller.ordinary_widget_host.create_widget(
+        object_name="clock-source",
+        model_identity="clock",
+        geometry=OverlayWidgetGeometry(120.0, 80.0, 180.0, 80.0),
+    )
+    target_presentation = target_controller.ordinary_widget_host.create_widget(
+        object_name="clock-target",
+        model_identity="clock",
+        geometry=OverlayWidgetGeometry(40.0, 120.0, 180.0, 80.0),
+    )
+    source_identity = id(source_presentation.item)
+    target_identity = id(target_presentation.item)
+
+    session = CustomLayoutSession()
+    clock = _item("clock", "display:a", QRect(120, 80, 180, 80))
+    session.add_item(clock)
+
+    def _transfer(item, proposed):
+        item.set_current_display("display:b", monitor_route="2")
+        return QRect(proposed)
+
+    source_model = source_controller.bind_custom_layout_session(
+        session,
+        display_identity="display:a",
+        geometry_resolver=_transfer,
+    )
+    target_controller.bind_custom_layout_session(
+        session,
+        display_identity="display:b",
+        display_origin=QPoint(800, 0),
+    )
+
+    assert source_presentation.item.property("workingVisible") is True
+    assert target_presentation.item.property("workingVisible") is False
+    source_model.moveItem(0, 860.0, 120.0)
+
+    assert source_presentation.item.property("workingVisible") is False
+    assert target_presentation.item.property("workingVisible") is True
+    assert (target_presentation.item.x(), target_presentation.item.y()) == (
+        60.0,
+        120.0,
+    )
+    assert id(source_presentation.item) == source_identity
+    assert id(target_presentation.item) == target_identity
+
+    session.restore_baseline()
+    assert source_presentation.item.property("workingVisible") is True
+    assert target_presentation.item.property("workingVisible") is False
+    assert id(source_presentation.item) == source_identity
+    assert id(target_presentation.item) == target_identity
+
+    source_controller.quiesce_for_retirement()
+    target_controller.quiesce_for_retirement()
+    source_window.deleteLater()
+    target_window.deleteLater()
     factory.deleteLater()
     qt_app.processEvents()
 
