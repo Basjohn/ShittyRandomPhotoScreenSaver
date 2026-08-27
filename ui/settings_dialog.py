@@ -9,6 +9,7 @@ Features gorgeous UI with:
 import sys
 import time
 import os
+import weakref
 from typing import Dict, Optional, Any
 from pathlib import Path
 from PySide6.QtWidgets import (
@@ -40,7 +41,11 @@ from ui.widgets.control_shadow import (
     apply_shadows_to_inputs,
 )
 from ui.settings_dialog_cache import get_settings_dialog_cache
-from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME
+from ui.settings_theme_runtime import (
+    get_active_settings_theme,
+    subscribe_settings_theme,
+)
+from ui.settings_theme_spec import SettingsThemeSpec
 
 logger = get_logger(__name__)
 
@@ -54,18 +59,29 @@ def _record_diagnostic_stage(stage: str, **fields: object) -> None:
 
     record_diagnostic_stage(stage, **fields)
 
-_SETTINGS_THEME = DEFAULT_DARK_SETTINGS_THEME
+_SETTINGS_THEME = get_active_settings_theme()
+_LIVE_SETTINGS_DIALOGS: weakref.WeakSet = weakref.WeakSet()
 
 
-def _theme_qcolor(token: str) -> QColor:
+def _theme_qcolor(
+    token: str,
+    theme: SettingsThemeSpec | None = None,
+) -> QColor:
     """Convert one semantic Settings theme colour into Qt's QColor."""
-    value = _SETTINGS_THEME.color(token)
+
+    resolved_theme = theme or _SETTINGS_THEME
+    value = resolved_theme.color(token)
     return QColor(*value.as_tuple())
 
 
-def _theme_opaque_qcolor(token: str) -> QColor:
+def _theme_opaque_qcolor(
+    token: str,
+    theme: SettingsThemeSpec | None = None,
+) -> QColor:
     """Use a theme surface's RGB as an opaque renderer camouflage colour."""
-    value = _SETTINGS_THEME.color(token)
+
+    resolved_theme = theme or _SETTINGS_THEME
+    value = resolved_theme.color(token)
     return QColor(value.r, value.g, value.b, 255)
 
 
@@ -80,6 +96,23 @@ SETTINGS_OUTER_BORDER_COLOR = _theme_qcolor("chrome.outer_border")
 SETTINGS_FORGED_EDGE_COLOR = _theme_opaque_qcolor("window.titlebar.surface")
 SETTINGS_OUTER_BORDER_BACKING_COLOR = SETTINGS_FORGED_EDGE_COLOR
 SETTINGS_CORNER_COVER_COLOR = SETTINGS_FORGED_EDGE_COLOR
+
+
+def _install_settings_dialog_theme(theme: SettingsThemeSpec) -> None:
+    """Install live shell colours without altering forged-edge geometry."""
+
+    global _SETTINGS_THEME
+    global SETTINGS_OUTER_BORDER_COLOR
+    global SETTINGS_FORGED_EDGE_COLOR
+    global SETTINGS_OUTER_BORDER_BACKING_COLOR
+    global SETTINGS_CORNER_COVER_COLOR
+
+    _SETTINGS_THEME = theme
+    SETTINGS_OUTER_BORDER_COLOR = _theme_qcolor("chrome.outer_border", theme)
+    forged_edge = _theme_opaque_qcolor("window.titlebar.surface", theme)
+    SETTINGS_FORGED_EDGE_COLOR = forged_edge
+    SETTINGS_OUTER_BORDER_BACKING_COLOR = forged_edge
+    SETTINGS_CORNER_COVER_COLOR = forged_edge
 
 
 class CustomTitleBar(QWidget):
@@ -700,6 +733,10 @@ class SettingsDialog(QDialog):
         self._restore_geometry()
         self._restore_last_tab_selection()
 
+        # Register only after the complete Settings hierarchy exists. Runtime
+        # theme callbacks hold weak references and cannot extend dialog life.
+        _LIVE_SETTINGS_DIALOGS.add(self)
+
         logger.info("Settings dialog created")
 
     def _log_perf_event(self, label: str, start_time: float) -> None:
@@ -776,6 +813,78 @@ class SettingsDialog(QDialog):
         """Delegates to ui.settings_theme."""
         from ui.settings_theme import load_theme
         load_theme(self)
+
+    def _apply_acrylic_theme(
+        self,
+        theme: SettingsThemeSpec,
+        *,
+        record_diagnostics: bool = False,
+    ) -> bool:
+        """Apply one theme's acrylic state through the existing DWM renderer."""
+
+        self._acrylic_applied = True
+        try:
+            if record_diagnostics:
+                _record_diagnostic_stage("settings_show_event_before_winid")
+            hwnd = int(self.winId())
+            acrylic = theme.acrylic
+            if record_diagnostics:
+                _record_diagnostic_stage(
+                    "settings_show_event_before_acrylic",
+                    hwnd=hwnd,
+                    requested=acrylic.enabled,
+                )
+
+            if acrylic.enabled:
+                from core.windows.dwm_blur import enable_acrylic_blur
+
+                tint = acrylic.tint
+                acrylic_enabled = enable_acrylic_blur(
+                    hwnd,
+                    tint_r=tint.r,
+                    tint_g=tint.g,
+                    tint_b=tint.b,
+                    tint_alpha=tint.a,
+                )
+            else:
+                from core.windows.dwm_blur import disable_blur
+
+                disable_blur(hwnd)
+                acrylic_enabled = False
+
+            if record_diagnostics:
+                _record_diagnostic_stage(
+                    "settings_show_event_after_acrylic",
+                    enabled=acrylic_enabled,
+                )
+            return bool(acrylic_enabled)
+        except Exception:
+            logger.debug("Acrylic blur not available", exc_info=True)
+            if record_diagnostics:
+                _record_diagnostic_stage("settings_show_event_acrylic_exception")
+            return False
+
+    def _refresh_live_shell_theme(self, theme: SettingsThemeSpec) -> None:
+        """Refresh shell-owned visuals on an already-built Settings dialog."""
+
+        for button in getattr(self, "tab_buttons", ()):
+            sync_content = getattr(button, "_sync_content_style", None)
+            if callable(sync_content):
+                sync_content()
+
+        size_grip = getattr(self, "size_grip", None)
+        if size_grip is not None:
+            size_grip.update()
+
+        # paintEvent consumes the live forged-edge globals installed above.
+        self.update()
+
+        # Hidden dialogs use the latest ThemeSpec when shown. Visible dialogs
+        # update native acrylic immediately through the exact same DWM path.
+        if self.isVisible():
+            self._apply_acrylic_theme(theme)
+        else:
+            self._acrylic_applied = False
 
     def _setup_ui(self) -> None:
         """Setup dialog UI."""
@@ -1936,40 +2045,11 @@ class SettingsDialog(QDialog):
         # renderer; disabled themes use the real disable path rather than an
         # unreliable alpha-zero acrylic request.
         if not self._acrylic_applied:
-            self._acrylic_applied = True
             blur_start = time.perf_counter()
-            try:
-                _record_diagnostic_stage("settings_show_event_before_winid")
-                hwnd = int(self.winId())
-                acrylic = _SETTINGS_THEME.acrylic
-                _record_diagnostic_stage(
-                    "settings_show_event_before_acrylic",
-                    hwnd=hwnd,
-                    requested=acrylic.enabled,
-                )
-                if acrylic.enabled:
-                    from core.windows.dwm_blur import enable_acrylic_blur
-
-                    tint = acrylic.tint
-                    acrylic_enabled = enable_acrylic_blur(
-                        hwnd,
-                        tint_r=tint.r,
-                        tint_g=tint.g,
-                        tint_b=tint.b,
-                        tint_alpha=tint.a,
-                    )
-                else:
-                    from core.windows.dwm_blur import disable_blur
-
-                    disable_blur(hwnd)
-                    acrylic_enabled = False
-                _record_diagnostic_stage(
-                    "settings_show_event_after_acrylic",
-                    enabled=acrylic_enabled,
-                )
-            except Exception:
-                logger.debug("Acrylic blur not available", exc_info=True)
-                _record_diagnostic_stage("settings_show_event_acrylic_exception")
+            self._apply_acrylic_theme(
+                _SETTINGS_THEME,
+                record_diagnostics=True,
+            )
             self._log_perf_event("SettingsDialog.showEvent.blur", blur_start)
         # Reset cached width so images rescale on every show
         try:
@@ -2193,3 +2273,19 @@ class SettingsDialog(QDialog):
                 self.move(x_saved, y_saved)
                 self.resize(w_saved, h_saved)
                 logger.debug("Restored dialog geometry (no screen info): %s", geometry)
+
+def _refresh_live_settings_dialogs(theme: SettingsThemeSpec) -> None:
+    """Refresh all live Settings shells after the active ThemeSpec changes."""
+
+    _install_settings_dialog_theme(theme)
+    for dialog in tuple(_LIVE_SETTINGS_DIALOGS):
+        try:
+            dialog._refresh_live_shell_theme(theme)
+        except RuntimeError:
+            # Qt can delete the C++ object just before its Python weakref clears.
+            continue
+
+
+# settings_theme.py owns root QSS; control_shadow.py owns shadow refreshes.
+_THEME_UNSUBSCRIBE = subscribe_settings_theme(_refresh_live_settings_dialogs)
+
