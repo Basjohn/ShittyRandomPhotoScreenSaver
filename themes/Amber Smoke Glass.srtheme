@@ -1,14 +1,14 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 4,
+  "schema_version": 5,
   "name": "Amber Smoke Glass",
-  "acrylic": {
-    "enabled": true,
+  "backdrop": {
+    "mode": "glass",
     "tint": [
       74,
       47,
       24,
-      36
+      0
     ]
   },
   "colors": {

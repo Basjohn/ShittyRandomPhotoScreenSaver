@@ -1,14 +1,14 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 4,
+  "schema_version": 5,
   "name": "Rose Smoke Glass",
-  "acrylic": {
-    "enabled": true,
+  "backdrop": {
+    "mode": "glass",
     "tint": [
       72,
       24,
       39,
-      34
+      0
     ]
   },
   "colors": {

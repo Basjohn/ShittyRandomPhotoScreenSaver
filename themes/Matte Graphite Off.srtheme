@@ -1,9 +1,9 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 4,
+  "schema_version": 5,
   "name": "Matte Graphite Off",
-  "acrylic": {
-    "enabled": false,
+  "backdrop": {
+    "mode": "off",
     "tint": [
       32,
       35,
@@ -16,13 +16,13 @@
       41,
       45,
       49,
-      34
+      104
     ],
     "window.titlebar.surface": [
       21,
       23,
       25,
-      222
+      238
     ],
     "window.titlebar.text": [
       245,
@@ -58,13 +58,13 @@
       29,
       32,
       35,
-      64
+      168
     ],
     "navigation.tab.surface": [
       29,
       32,
       35,
-      74
+      178
     ],
     "navigation.tab.text": [
       209,
@@ -76,7 +76,7 @@
       74,
       84,
       91,
-      118
+      205
     ],
     "navigation.tab.hover_text": [
       245,
@@ -88,7 +88,7 @@
       90,
       104,
       112,
-      145
+      218
     ],
     "navigation.tab.selected_text": [
       245,
@@ -100,7 +100,7 @@
       41,
       45,
       49,
-      222
+      232
     ],
     "navigation.subtab.text": [
       245,
@@ -118,13 +118,13 @@
       74,
       84,
       91,
-      218
+      238
     ],
     "navigation.subtab.selected_surface": [
       90,
       104,
       112,
-      226
+      242
     ],
     "bucket.closed.surface": [
       41,
@@ -190,13 +190,13 @@
       41,
       45,
       49,
-      112
+      184
     ],
     "panel.subsection.surface": [
       41,
       45,
       49,
-      100
+      168
     ],
     "panel.border": [
       172,
@@ -358,7 +358,7 @@
       29,
       32,
       35,
-      224
+      232
     ],
     "control.list.text": [
       245,
@@ -376,7 +376,7 @@
       90,
       104,
       112,
-      205
+      220
     ],
     "control.list.selected_accent": [
       143,
@@ -388,13 +388,13 @@
       74,
       84,
       91,
-      190
+      210
     ],
     "control.button.surface": [
       41,
       45,
       49,
-      220
+      226
     ],
     "control.button.text": [
       245,
@@ -412,13 +412,13 @@
       74,
       84,
       91,
-      220
+      236
     ],
     "control.button.pressed_surface": [
       90,
       104,
       112,
-      230
+      242
     ],
     "control.button.pressed_border": [
       172,
@@ -784,7 +784,7 @@
       29,
       32,
       35,
-      190
+      214
     ],
     "about.card.border": [
       172,
@@ -808,7 +808,7 @@
       41,
       45,
       49,
-      205
+      224
     ],
     "about.link.text": [
       245,
@@ -868,7 +868,7 @@
       21,
       23,
       25,
-      225
+      224
     ],
     "about.notice.text": [
       245,
@@ -880,7 +880,7 @@
       21,
       23,
       25,
-      230
+      236
     ],
     "popup.container.border": [
       91,
@@ -1066,7 +1066,7 @@
       21,
       23,
       25,
-      215
+      236
     ],
     "context.menu.border": [
       172,
@@ -1102,7 +1102,7 @@
       21,
       23,
       25,
-      215
+      236
     ],
     "context.submenu.border": [
       172,

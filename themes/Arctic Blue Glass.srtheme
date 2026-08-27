@@ -1,14 +1,14 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 4,
+  "schema_version": 5,
   "name": "Arctic Blue Glass",
-  "acrylic": {
-    "enabled": true,
+  "backdrop": {
+    "mode": "glass",
     "tint": [
       16,
       46,
       74,
-      24
+      0
     ]
   },
   "colors": {

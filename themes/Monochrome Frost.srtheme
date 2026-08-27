@@ -1,9 +1,9 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 4,
+  "schema_version": 5,
   "name": "Monochrome Frost",
-  "acrylic": {
-    "enabled": true,
+  "backdrop": {
+    "mode": "acrylic",
     "tint": [
       36,
       40,
