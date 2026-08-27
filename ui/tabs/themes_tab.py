@@ -66,6 +66,8 @@ class ThemesTab(QWidget):
 
     def _make_nav_pill(self,text,page_index):
         button=QPushButton(text); button.setCheckable(True)
+        # Keep both authored labels comfortably inside their pills.
+        button.setMinimumWidth(150)
         shared_styles.bind_shared_styles(button,"NAV_PILL_STYLE",base_style="")
         self._nav_group.addButton(button,page_index)
         button.clicked.connect(lambda _checked=False,index=page_index:self._select_page(index))
@@ -83,6 +85,9 @@ class ThemesTab(QWidget):
         intro=QLabel("Choose the appearance used by the Settings window. A valid selection applies immediately.")
         intro.setWordWrap(True); shared_styles.apply_shared_label_style(intro,"INFO_LABEL_STYLE"); group_layout.addWidget(intro)
         self.theme_list=QListWidget(); self.theme_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        # Root Settings QSS still owns semantic list colours; only typography
+        # is enlarged here for catalogue readability.
+        self.theme_list.setStyleSheet("QListWidget { font-size: 12pt; }")
         self.theme_list.setMinimumHeight(240); group_layout.addWidget(self.theme_list)
         self.theme_status=QLabel(""); self.theme_status.setWordWrap(True)
         shared_styles.apply_shared_label_style(self.theme_status,"INFO_LABEL_STYLE"); group_layout.addWidget(self.theme_status)

@@ -61,6 +61,17 @@ enabled changes from X, and canonical monitor/position settings where product se
 Cancel restores active variant, duplicate set, ordinary enabled state and visualizer scale+viewport together
 where applicable. Do not mutate inactive variants or replay destructive setters for never-committed state.
 
+## Layout slots
+
+`Shift+1` through `Shift+0` save slots; `1` through `0` load them. A slot is a source-free snapshot of the ordinary
+visible layout, including committed geometry/size and ordinary ON/OFF state. Loading saved ordinary ON turns an
+ordinarily-OFF widget ON only while its owning capability family and dependencies remain effective; loading saved
+ordinary OFF turns an ordinarily-ON widget OFF.
+
+Ordinary `enabled` is never authority to activate a fully deactivated family/capability. Slot replay leaves
+family-activation, provider, account and source settings untouched. This is the same distinction used by edit-mode X:
+singleton X changes working ordinary enabled state, never capability activation.
+
 ## Resize
 
 Quick handles emit deltas; Python session/geometry math owns min size, aspect constraints, anchors, family

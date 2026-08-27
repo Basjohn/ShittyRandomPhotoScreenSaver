@@ -11,6 +11,7 @@ from rendering.custom_layout_contract import (
     clamp_local_rect_to_bounds,
     deserialize_custom_layout_entry,
     get_screen_layout_entries_for_screen,
+    get_widget_layout_variant_payload,
     load_custom_layout_map,
     normalize_local_rect,
     resolve_snap_local_rect_for_edit,
@@ -24,6 +25,7 @@ def test_custom_layout_map_round_trips_entries():
     custom_map = build_default_custom_layout_map()
     entry = CustomLayoutEntry(
         widget_id="clock",
+        geometry_variant="digital",
         rect=NormalizedRect(0.1, 0.2, 0.3, 0.4),
         size_payload={"font_size": 64},
         resize_mode="clock_font",
@@ -35,7 +37,12 @@ def test_custom_layout_map_round_trips_entries():
     loaded = load_custom_layout_map(widgets_map)
     restored = deserialize_custom_layout_entry(
         "clock",
-        loaded["displays"]["screen:test"]["clock"],
+        "digital",
+        get_widget_layout_variant_payload(
+            loaded["displays"]["screen:test"],
+            "clock",
+            "digital",
+        ),
     )
 
     assert restored is not None
@@ -224,9 +231,11 @@ def test_custom_layout_entries_resolve_legacy_signature_when_screen_geometry_dri
     legacy_signature = "serial:abc|manufacturer:LG|model:TV|name:LG TV|geom:2560_0_2560x1440"
     custom_map["displays"][legacy_signature] = {
         "clock": {
-            "rect": {"x": 0.2, "y": 0.1, "width": 0.15, "height": 0.3},
-            "size_payload": {"font_size": 72},
-            "resize_mode": "clock_font",
+            "digital": {
+                "rect": {"x": 0.2, "y": 0.1, "width": 0.15, "height": 0.3},
+                "size_payload": {"font_size": 72},
+                "resize_mode": "clock_font",
+            },
         }
     }
     live_screen = _FakeScreen(
@@ -246,6 +255,52 @@ def test_custom_layout_entries_resolve_legacy_signature_when_screen_geometry_dri
     assert canonical == "serial:abc|manufacturer:LG|model:TV|name:LG TV"
     assert canonical in custom_map["displays"]
     assert legacy_signature not in custom_map["displays"]
+
+
+def test_version_one_custom_geometry_is_invalidated_without_compatibility_replay():
+    widgets_map = {
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                "screen:test": {
+                    "clock": {
+                        "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
+                    }
+                }
+            },
+        }
+    }
+
+    assert load_custom_layout_map(widgets_map) == {
+        "version": 2,
+        "displays": {},
+    }
+
+
+def test_screen_layout_entry_preserves_independent_clock_variants():
+    custom_map = build_default_custom_layout_map()
+    digital = CustomLayoutEntry(
+        widget_id="clock",
+        geometry_variant="digital",
+        rect=NormalizedRect(0.1, 0.2, 0.3, 0.2),
+        size_payload={"font_size": 48},
+        resize_mode="clock_font",
+    )
+    analog = CustomLayoutEntry(
+        widget_id="clock",
+        geometry_variant="analog",
+        rect=NormalizedRect(0.2, 0.1, 0.25, 0.4),
+        size_payload={"font_size": 48},
+        resize_mode="clock_font",
+    )
+
+    set_screen_layout_entry(custom_map, "screen:test", "clock", digital)
+    set_screen_layout_entry(custom_map, "screen:test", "clock", analog)
+
+    variants = custom_map["displays"]["screen:test"]["clock"]
+    assert set(variants) == {"digital", "analog"}
+    assert variants["digital"]["rect"] == digital.rect.to_mapping()
+    assert variants["analog"]["rect"] == analog.rect.to_mapping()
 
 
 def test_should_transfer_rect_to_screen_requires_deliberate_push_past_edge():

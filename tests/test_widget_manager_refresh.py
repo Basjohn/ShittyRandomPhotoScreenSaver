@@ -1035,14 +1035,14 @@ def test_reconcile_remote_custom_visualizer_rejects_foreign_saved_rect_when_requ
         "family_activation": {"media": True, "visualizers": True},
         "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:missing-monitor": {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
                         "size_payload": {"width": 420, "height": 280},
                         "resize_mode": "visualizer_rect",
-                    }
+                    }}
                 }
             },
         },
@@ -1193,14 +1193,14 @@ def test_reconcile_remote_custom_visualizer_repairs_single_foreign_rect_when_act
     widgets_config = {
         "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:stale-signature": {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
                         "size_payload": {"width": 420, "height": 280},
                         "resize_mode": "visualizer_rect",
-                    }
+                    }}
                 }
             },
         },
@@ -1246,12 +1246,12 @@ def test_visualizer_custom_route_recovers_from_single_live_foreign_rect_instead_
     widgets_config = {
         "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:display-1": {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
-                    }
+                    }}
                 }
             },
         },
@@ -1298,12 +1298,12 @@ def test_visualizer_custom_route_recovery_refuses_reduced_topology_monitor_rewri
     widgets_config = {
         "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:display-0": {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
-                    }
+                    }}
                 }
             },
         },
@@ -1337,17 +1337,17 @@ def test_visualizer_custom_foreign_bucket_repair_rejects_ambiguous_rects(monkeyp
     widgets_config = {
         "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:old-a": {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
-                    }
+                    }}
                 },
                 "screen:old-b": {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.4, "y": 0.3, "width": 0.2, "height": 0.1},
-                    }
+                    }}
                 },
             },
         },
@@ -1386,12 +1386,12 @@ def test_visualizer_custom_foreign_bucket_repair_rejects_parent_monitor_mismatch
     widgets_config = {
         "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:old": {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
-                    }
+                    }}
                 },
             },
         },
@@ -1418,12 +1418,12 @@ def test_visualizer_custom_foreign_bucket_repair_refuses_active_source_bucket(mo
     widgets_config = {
         "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "1"},
         "custom_layout": {
-            "version": 1,
+            "version": 2,
             "displays": {
                 "screen:display-1": {
-                    "spotify_visualizer": {
+                    "spotify_visualizer": {"default": {
                         "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
-                    }
+                    }}
                 },
             },
         },

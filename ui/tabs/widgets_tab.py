@@ -85,16 +85,12 @@ from core.settings.capability_activation import (
     normalize_widget_capability_state,
     set_widget_family_activated,
 )
+from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
-    SPINBOX_STYLE,
-    TOOLTIP_STYLE,
-    COMBOBOX_STYLE,
-    PAGE_TITLE_STYLE,
     NAV_TAB_FONT_STYLE,
     NAV_TAB_FONT_STYLE_ACTIVE,
     STATUS_LABEL_STYLE,
     SCROLL_AREA_STYLE,
-    FORM_ROW_LABEL_STYLE,
     style_group_box,
     NoWheelSlider,  # noqa: F401 — re-exported
 )
@@ -949,7 +945,7 @@ class WidgetsTab(QWidget):
 
         # Title
         title = QLabel("Overlay Widgets")
-        title.setStyleSheet(PAGE_TITLE_STYLE)
+        shared_styles.apply_shared_label_style(title, "PAGE_TITLE_STYLE")
         layout.addWidget(title)
 
         # Subtab-style toggle buttons (Setup / Clocks / Weather / ...). A
@@ -1029,14 +1025,13 @@ class WidgetsTab(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
 
-        from ui.tabs.shared_styles import CIRCLE_CHECKBOX_STYLE, SLIDER_STYLE
-        self.setStyleSheet(
-            self.styleSheet()
-            + SPINBOX_STYLE
-            + TOOLTIP_STYLE
-            + CIRCLE_CHECKBOX_STYLE
-            + COMBOBOX_STYLE
-            + SLIDER_STYLE
+        shared_styles.bind_shared_styles(
+            self,
+            "SPINBOX_STYLE",
+            "TOOLTIP_STYLE",
+            "CIRCLE_CHECKBOX_STYLE",
+            "COMBOBOX_STYLE",
+            "SLIDER_STYLE",
         )
 
         if not self._lazy_sections:

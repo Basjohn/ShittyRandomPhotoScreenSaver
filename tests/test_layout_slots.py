@@ -47,7 +47,7 @@ def test_capture_layout_slot_includes_layout_state_and_excludes_sources():
             "mode": "bubble",
             "bubble_big_count": 11,
         },
-        "custom_layout": {"displays": {"screen:a": {"clock": {"rect": {"x": 0.1}}}}},
+        "custom_layout": {"version": 2, "displays": {"screen:a": {"clock": {"digital": {"rect": {"x": 0.1}}}}}},
         "custom_layout_restore": {"widgets": {"clock": {"position": "Top Right", "monitor": "ALL"}}},
         "layout_slots": {"version": 1, "slots": {"1": {"bad": "recursive"}}},
     }
@@ -96,7 +96,7 @@ def test_apply_layout_slot_preserves_sources_and_replaces_layout_fields():
             "subreddit": "Games",
             "provider": "public_json",
         },
-        "custom_layout": {"displays": {"screen:stale": {"clock": {}}}},
+        "custom_layout": {"version": 2, "displays": {"screen:stale": {"clock": {"digital": {}}}}},
         "layout_slots": {
             "version": 1,
             "slots": {
@@ -110,7 +110,7 @@ def test_apply_layout_slot_preserves_sources_and_replaces_layout_fields():
                             "subreddit": "ShouldNotApply",
                         },
                     },
-                    "custom_layout": {"displays": {}},
+                    "custom_layout": {"version": 2, "displays": {}},
                     "custom_layout_restore": {"widgets": {}},
                 }
             },
@@ -126,8 +126,112 @@ def test_apply_layout_slot_preserves_sources_and_replaces_layout_fields():
     assert widgets["reddit"]["limit"] == 12
     assert widgets["reddit"]["subreddit"] == "Games"
     assert widgets["reddit"]["provider"] == "public_json"
-    assert widgets["custom_layout"] == {"displays": {}}
+    assert widgets["custom_layout"] == {"version": 2, "displays": {}}
     assert widgets["custom_layout_restore"] == {"widgets": {}}
+
+
+def test_layout_slot_replays_ordinary_enabled_state_both_directions():
+    widgets = {
+        "clock": {"enabled": False, "position": "Top Left"},
+        "weather": {"enabled": True, "position": "Top Right"},
+        "layout_slots": {
+            "version": 1,
+            "slots": {
+                "1": {
+                    "version": 1,
+                    "widgets": {
+                        "clock": {"enabled": True, "position": "Bottom Right"},
+                        "weather": {"enabled": False, "position": "Bottom Left"},
+                    },
+                    "custom_layout": {"version": 2, "displays": {}},
+                    "custom_layout_restore": {"widgets": {}},
+                }
+            },
+        },
+    }
+
+    assert apply_layout_slot(widgets, "1") is True
+
+    assert widgets["clock"]["enabled"] is True
+    assert widgets["clock"]["position"] == "Bottom Right"
+    assert widgets["weather"]["enabled"] is False
+    assert widgets["weather"]["position"] == "Bottom Left"
+
+
+def test_layout_slot_saved_on_cannot_reactivate_deactivated_family():
+    widgets = {
+        "family_activation": {"clocks": False},
+        "clock": {"enabled": False, "position": "Top Left"},
+        "layout_slots": {
+            "version": 1,
+            "slots": {
+                "1": {
+                    "version": 1,
+                    "widgets": {
+                        "clock": {"enabled": True, "position": "Bottom Right"},
+                    },
+                    "custom_layout": {"version": 2, "displays": {}},
+                    "custom_layout_restore": {"widgets": {}},
+                }
+            },
+        },
+    }
+
+    assert apply_layout_slot(widgets, "1") is True
+
+    assert widgets["family_activation"] == {"clocks": False}
+    assert widgets["clock"]["enabled"] is False
+    assert widgets["clock"]["position"] == "Bottom Right"
+
+
+def test_layout_slot_enabled_replay_preserves_provider_account_and_source_settings():
+    widgets = {
+        "reddit": {
+            "enabled": False,
+            "provider": "public_json",
+            "subreddit": "Games",
+        },
+        "gmail": {
+            "enabled": True,
+            "account_slot": "2",
+            "filter_label": "Alerts",
+        },
+        "layout_slots": {
+            "version": 1,
+            "slots": {
+                "1": {
+                    "version": 1,
+                    "widgets": {
+                        "reddit": {
+                            "enabled": True,
+                            "provider": "rss",
+                            "subreddit": "CityPorn",
+                        },
+                        "gmail": {
+                            "enabled": False,
+                            "account_slot": "1",
+                            "filter_label": "Inbox",
+                        },
+                    },
+                    "custom_layout": {"version": 2, "displays": {}},
+                    "custom_layout_restore": {"widgets": {}},
+                }
+            },
+        },
+    }
+
+    assert apply_layout_slot(widgets, "1") is True
+
+    assert widgets["reddit"] == {
+        "enabled": True,
+        "provider": "public_json",
+        "subreddit": "Games",
+    }
+    assert widgets["gmail"] == {
+        "enabled": False,
+        "account_slot": "2",
+        "filter_label": "Alerts",
+    }
 
 
 def test_slot_zero_round_trips_and_invalid_slots_do_not_mutate():
@@ -224,14 +328,14 @@ def test_display_load_slot_while_editing_commits_applies_and_preserves_slot():
     slot_payload = {
         "version": 1,
         "widgets": {"clock": {"position": "Bottom Right", "font_size": 64}},
-        "custom_layout": {"displays": {}},
+        "custom_layout": {"version": 2, "displays": {}},
         "custom_layout_restore": {"widgets": {}},
     }
     settings = _SettingsStub(
         {
             "clock": {"position": "Top Left", "font_size": 24, "timezone": "local"},
             "layout_slots": {"version": 1, "slots": {"1": deepcopy(slot_payload)}},
-            "custom_layout": {"displays": {"screen:old": {"clock": {}}}},
+            "custom_layout": {"version": 2, "displays": {"screen:old": {"clock": {"digital": {}}}}},
         }
     )
     manager = Mock()
@@ -252,5 +356,5 @@ def test_display_load_slot_while_editing_commits_applies_and_preserves_slot():
         "font_size": 64,
         "timezone": "local",
     }
-    assert settings.widgets["custom_layout"] == {"displays": {}}
+    assert settings.widgets["custom_layout"] == {"version": 2, "displays": {}}
     assert settings.widgets["layout_slots"]["slots"]["1"] == slot_payload

@@ -559,14 +559,14 @@ class TestWidgetsTab:
             "clock": {"enabled": True, "position": "Custom"},
             "media": {"enabled": True, "position": "Bottom Left", "monitor": "ALL"},
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     "screen:test": {
-                        "clock": {
+                        "clock": {"digital": {
                             "rect": {"x": 0.1, "y": 0.2, "width": 0.2, "height": 0.1},
                             "size_payload": {"font_size": 64},
                             "resize_mode": "clock_font",
-                        }
+                        }}
                     }
                 },
             },
@@ -588,14 +588,14 @@ class TestWidgetsTab:
         settings_manager.set("widgets", {
             "media": {"enabled": True, "position": "Custom", "monitor": "1"},
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     "screen:test": {
-                        "media": {
+                        "media": {"default": {
                             "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
                             "size_payload": {"font_size": 22, "artwork_size": 220},
                             "resize_mode": "media_scale",
-                        }
+                        }}
                     }
                 },
             },
@@ -627,14 +627,14 @@ class TestWidgetsTab:
                 "calendar_font_size": 28,
             },
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     "screen:test": {
-                        "clock": {
+                        "clock": {"digital": {
                             "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
                             "size_payload": {"font_size": 64},
                             "resize_mode": "clock_font",
-                        }
+                        }}
                     }
                 },
             },
@@ -655,24 +655,24 @@ class TestWidgetsTab:
             "media": {"enabled": True, "position": "Custom", "monitor": "1"},
             "spotify_visualizer": {"position": "Custom", "monitor": "2"},
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     "screen:test": {
-                        "media": {
+                        "media": {"default": {
                             "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
                             "size_payload": {"font_size": 22, "artwork_size": 220},
                             "resize_mode": "media_scale",
-                        },
-                        "spotify_volume": {
+                        }},
+                        "spotify_volume": {"default": {
                             "rect": {"x": 0.4, "y": 0.2, "width": 0.05, "height": 0.3},
                             "size_payload": {"width": 32, "height": 180},
                             "resize_mode": "volume_scale",
-                        },
-                        "spotify_visualizer": {
+                        }},
+                        "spotify_visualizer": {"default": {
                             "rect": {"x": 0.55, "y": 0.2, "width": 0.18, "height": 0.22},
                             "size_payload": {"width_scale": 1.2, "height_scale": 1.1},
                             "resize_mode": "visualizer_rect",
-                        },
+                        }},
                     }
                 },
             },
@@ -710,14 +710,14 @@ class TestWidgetsTab:
         settings_manager.set("widgets", {
             "media": {"enabled": True, "position": "Custom", "monitor": "1"},
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     "screen:test": {
-                        "media": {
+                        "media": {"default": {
                             "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
                             "size_payload": {"font_size": 22, "artwork_size": 220},
                             "resize_mode": "media_scale",
-                        }
+                        }}
                     }
                 },
             },
@@ -746,19 +746,19 @@ class TestWidgetsTab:
             "media": {"enabled": True, "position": "Custom", "monitor": "1"},
             "spotify_visualizer": {"position": "Custom", "monitor": "2"},
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     "screen:test": {
-                        "media": {
+                        "media": {"default": {
                             "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
                             "size_payload": {"font_size": 22, "artwork_size": 220},
                             "resize_mode": "media_scale",
-                        },
-                        "spotify_visualizer": {
+                        }},
+                        "spotify_visualizer": {"default": {
                             "rect": {"x": 0.55, "y": 0.2, "width": 0.18, "height": 0.22},
                             "size_payload": {"width_scale": 1.2, "height_scale": 1.1},
                             "resize_mode": "visualizer_rect",
-                        },
+                        }},
                     }
                 },
             },
@@ -796,19 +796,19 @@ class TestWidgetsTab:
             "media": {"enabled": True, "position": "Custom", "monitor": "1"},
             "gmail": {"enabled": True, "position": "Custom", "monitor": "2"},
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     "screen:test": {
-                        "media": {
+                        "media": {"default": {
                             "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
                             "size_payload": {"font_size": 22, "artwork_size": 220},
                             "resize_mode": "media_scale",
-                        },
-                        "gmail": {
+                        }},
+                        "gmail": {"default": {
                             "rect": {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.2},
                             "size_payload": {"font_size": 15},
                             "resize_mode": "gmail_font",
-                        }
+                        }}
                     }
                 },
             },
@@ -1162,24 +1162,24 @@ class TestWidgetsTab:
             "spotify_visualizer": {"position": "Custom", "monitor": "2"},
             "gmail": {"enabled": True, "position": "Custom", "monitor": "1"},
             "custom_layout": {
-                "version": 1,
+                "version": 2,
                 "displays": {
                     "screen:test": {
-                        "media": {
+                        "media": {"default": {
                             "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
                             "size_payload": {"font_size": 22, "artwork_size": 220},
                             "resize_mode": "media_scale",
-                        },
-                        "spotify_visualizer": {
+                        }},
+                        "spotify_visualizer": {"default": {
                             "rect": {"x": 0.55, "y": 0.2, "width": 0.18, "height": 0.22},
                             "size_payload": {"width_scale": 1.2, "height_scale": 1.1},
                             "resize_mode": "visualizer_rect",
-                        },
-                        "gmail": {
+                        }},
+                        "gmail": {"default": {
                             "rect": {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.2},
                             "size_payload": {"font_size": 15},
                             "resize_mode": "gmail_font",
-                        },
+                        }},
                     }
                 },
             },

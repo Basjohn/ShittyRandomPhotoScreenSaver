@@ -1,4 +1,4 @@
-CODEX IGNORE THIS DOCUMENT UNLESS TOLD OTHERWISE YA HONKY ASS BITCH.
+CODEX IGNORE THIS DOCUMENT UNLESS TOLD OTHERWISE
 
 # Theme Plan For Now
 
@@ -53,11 +53,24 @@ This layer intentionally does **not** guess a frozen executable path. Settings a
 - `dark.qss` — leave untouched until caller/reference audit proves whether it is obsolete. The `.srtheme` catalogue ignores `.qss` files.
 - `Dark More Cohesive.srtheme` — removed legacy Theme Foundry source-scanner output.
 
+## Current checkpoint state
+
+- Themes sidebar surface exists with two pills: **Setting Themes** and
+  **Widget Themes**.
+- Setting Themes is the landing page; Widget Themes is intentionally empty.
+- Both theme pills now have authored minimum width and the catalogue list text
+  is enlarged for readability without overriding semantic list colours.
+- The previously deferred live rendered-style consumers in `widgets_tab.py`
+  and `widgets_tab_steam.py` are migrated.
+- Whole-UI frozen rendered-style scan now leaves only
+  `ui/tabs/presets_tab.py`, disconnected legacy debris already logged for
+  deletion. It is not a live migration target.
+
 ## Immediate remaining work
 
 1. Wire packaged themes directory from real startup/build authority.
-2. Add one deliberately obvious semantic test theme and perform Windows eyes-on live switching, especially forged corners/acrylic/nav/shadows.
-3. Finish last frozen shared-style consumers when overlapping Widgets/Steam work is clear.
-4. Audit remaining local literal Settings palettes and legacy shadow styling.
-5. Rewrite Theme Foundry to edit/save this semantic `.srtheme` schema.
-6. Remove this temporary plan once durable docs own the final architecture.
+2. Add one deliberately obvious semantic test theme and perform Windows eyes-on
+   live switching, especially forged corners/acrylic/nav/shadows.
+3. Audit remaining local literal Settings palettes and legacy shadow styling.
+4. Rewrite Theme Foundry to edit/save this semantic `.srtheme` schema.
+5. Remove this temporary plan once durable docs own the final architecture.

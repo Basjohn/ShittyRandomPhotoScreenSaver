@@ -26,11 +26,15 @@ from rendering.custom_layout_contract import (
     deserialize_custom_layout_entry,
     get_custom_layout_restore_entry,
     get_screen_layout_entries_for_screen,
+    get_widget_layout_variant_payload,
     resolve_screen_layout_signature,
     load_custom_layout_restore_map,
     load_custom_layout_map,
+    remove_screen_layout_entry,
+    set_screen_layout_entry,
     write_custom_layout_map,
 )
+from rendering.custom_layout_session import DEFAULT_GEOMETRY_VARIANT
 from rendering.spotify_display_participation import resolve_visualizer_spawn_display
 from widgets.media_widget import MediaWidget
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
@@ -40,6 +44,16 @@ if TYPE_CHECKING:
     from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
+
+
+def _deserialize_visualizer_layout_entry(
+    screen_entries: Mapping[str, object],
+):
+    return deserialize_custom_layout_entry(
+        "spotify_visualizer",
+        DEFAULT_GEOMETRY_VARIANT,
+        get_widget_layout_variant_payload(screen_entries, "spotify_visualizer"),
+    )
 
 
 def _resolve_parent_screen(parent) -> object | None:
@@ -85,10 +99,7 @@ def _prime_visualizer_custom_rect_for_startup(
 
     custom_layout_map = load_custom_layout_map(widgets_config)
     matched_signature, screen_entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
-    entry = deserialize_custom_layout_entry(
-        "spotify_visualizer",
-        screen_entries.get("spotify_visualizer"),
-    )
+    entry = _deserialize_visualizer_layout_entry(screen_entries)
     if entry is None:
         logger.warning(
             "[SPOTIFY_VIS][FALLBACK] No saved CUSTOM visualizer rect matched live screen bucket=%s; "
@@ -145,10 +156,7 @@ def _has_exact_visualizer_custom_rect_for_startup(
 
     custom_layout_map = load_custom_layout_map(widgets_config)
     matched_signature, screen_entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
-    entry = deserialize_custom_layout_entry(
-        "spotify_visualizer",
-        screen_entries.get("spotify_visualizer"),
-    )
+    entry = _deserialize_visualizer_layout_entry(screen_entries)
     if entry is None:
         logger.warning(
             "[SPOTIFY_VIS][FALLBACK] No saved CUSTOM visualizer rect matched live screen bucket=%s; "
@@ -240,10 +248,7 @@ def _recover_visualizer_custom_monitor_from_single_live_saved_rect(
     for saved_signature, layouts in displays.items():
         if not isinstance(layouts, Mapping):
             continue
-        entry = deserialize_custom_layout_entry(
-            "spotify_visualizer",
-            layouts.get("spotify_visualizer"),
-        )
+        entry = _deserialize_visualizer_layout_entry(layouts)
         if entry is not None:
             candidates.append(str(saved_signature))
     if len(candidates) != 1:
@@ -349,10 +354,7 @@ def _repair_single_foreign_visualizer_custom_rect_for_startup(
 
     custom_layout_map = load_custom_layout_map(widgets_config)
     _matched_signature, screen_entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
-    exact_entry = deserialize_custom_layout_entry(
-        "spotify_visualizer",
-        screen_entries.get("spotify_visualizer"),
-    )
+    exact_entry = _deserialize_visualizer_layout_entry(screen_entries)
     if exact_entry is not None:
         return True
 
@@ -364,10 +366,7 @@ def _repair_single_foreign_visualizer_custom_rect_for_startup(
     for saved_signature, layouts in displays.items():
         if not isinstance(layouts, Mapping):
             continue
-        entry = deserialize_custom_layout_entry(
-            "spotify_visualizer",
-            layouts.get("spotify_visualizer"),
-        )
+        entry = _deserialize_visualizer_layout_entry(layouts)
         if entry is not None:
             candidates.append((str(saved_signature), entry))
 
@@ -391,18 +390,20 @@ def _repair_single_foreign_visualizer_custom_rect_for_startup(
     if not target_signature:
         return False
 
-    target_layouts = displays.setdefault(target_signature, {})
-    if not isinstance(target_layouts, dict):
-        target_layouts = {}
-        displays[target_signature] = target_layouts
-    target_layouts["spotify_visualizer"] = entry.to_mapping()
+    set_screen_layout_entry(
+        custom_layout_map,
+        target_signature,
+        "spotify_visualizer",
+        entry,
+    )
 
     if source_signature != target_signature:
-        source_layouts = displays.get(source_signature, {})
-        if isinstance(source_layouts, dict):
-            source_layouts.pop("spotify_visualizer", None)
-            if not source_layouts:
-                displays.pop(source_signature, None)
+        remove_screen_layout_entry(
+            custom_layout_map,
+            source_signature,
+            "spotify_visualizer",
+            DEFAULT_GEOMETRY_VARIANT,
+        )
 
     write_custom_layout_map(widgets_config, custom_layout_map)
     logger.warning(
@@ -448,10 +449,7 @@ def _recover_visualizer_custom_monitor_from_saved_layout(
 
     custom_layout_map = load_custom_layout_map(widgets_config)
     matched_signature, screen_entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
-    entry = deserialize_custom_layout_entry(
-        "spotify_visualizer",
-        screen_entries.get("spotify_visualizer"),
-    )
+    entry = _deserialize_visualizer_layout_entry(screen_entries)
     if entry is None:
         return None
 
