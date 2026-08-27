@@ -1,6 +1,6 @@
 # Contracts — Current Owner Map
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 `Current_Plan.md` owns work admission. This file owns fast current/destination owner routing.
 
@@ -89,7 +89,8 @@ SettingsManager, network or cadence.
 | Weather | manager-owned `WeatherRuntimeService` | stable Weather model/QML |
 | Media | runtime-generation shared Media + display lease; separate shared volume/mute | one Media model/QML + process-engine artwork provider |
 | Reddit/Reddit2 | independent configured `RedditRuntimeService` per member | separate stable models, one family QML |
-| Gmail | runtime-generation shared Gmail + `GmailBackend.instance()` + display lease | retained model/QML port active |
+| Gmail | runtime-generation shared Gmail + `GmailBackend.instance()` + display lease | retained model/QML; old QWidget presenter retired |
+| Achievement Pulse | existing neutral Steam runtime/preparation/cache/selection owners | retained port active |
 
 Presentation destruction does not automatically mean backend destruction; shared owners use real consumer
 cardinality.

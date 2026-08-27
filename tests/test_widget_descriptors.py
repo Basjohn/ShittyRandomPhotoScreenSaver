@@ -14,7 +14,6 @@ from rendering.widget_descriptors import (
     collect_widget_section_signal_block_targets,
     collect_widget_section_signal_block_targets_for_sections,
     collect_widget_stack_status_targets,
-    get_factory_widget_descriptors,
     get_widget_custom_position_option_descriptors,
     get_default_widget_section_index,
     get_widget_custom_resize_lock_descriptors,

@@ -72,7 +72,9 @@ Current proven patterns are deliberately heterogeneous:
 - Media: runtime-generation shared owner with display leases, separate narrow volume/mute owners and a
   process-engine artwork provider;
 - Reddit/Reddit2: separate configured member runtime services/models using shared family policy;
-- Gmail: runtime-generation shared Gmail owner/backend with per-display lease; retained port active.
+- Gmail: runtime-generation shared Gmail owner/backend with per-display lease; retained model/QML complete and
+  old QWidget presentation retired.
+- Achievement Pulse: existing neutral Steam runtime/preparation/cache/selection ownership; retained port active.
 
 Do not create services/managers merely for naming symmetry.
 

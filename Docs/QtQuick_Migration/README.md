@@ -1,6 +1,6 @@
 # Qt Quick Production Migration — Technical Index
 
-Last updated: 2026-08-25
+Last updated: 2026-08-27
 
 Sequence/work admission comes only from `Current_Plan.md`.
 
@@ -14,7 +14,8 @@ F2 Weather closed
 F3 Media core closed
 F4 Media controls closed
 F5 Reddit closed
-F6 Gmail active
+F6 Gmail closed
+F7 Achievement Pulse active
 ```
 
 Closed A–E history is intentionally not repeated here.
