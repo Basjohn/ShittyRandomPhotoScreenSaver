@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-08-26
+Last updated: 2026-08-28
 
 ## Architecture decision
 
@@ -11,9 +11,16 @@ one selected physical display
 -> one composed runtime scene
 ```
 
-Do not reopen broad native/C++ presenter work without new evidence accepted architecture cannot satisfy
-production. Do not use `QQuickWidget`, second accelerated runtime surfaces, or deepen QRhiWidget architecture
-to avoid migration work. Old QRhiWidget path is current-legacy until H.
+Do not reopen broad native/C++ presenter work without new evidence the accepted architecture cannot satisfy production.
+Do not use `QQuickWidget`, second accelerated runtime surfaces, or deepen QRhiWidget architecture to avoid migration
+work. Remaining old QRhiWidget/DisplayWidget code is temporary scaffolding until H, not a fallback product.
+
+## Migration continuity
+
+A working legacy screensaver during intermediate migration slices is **not** required. Do not preserve, restore or
+invent old QWidget/compositor presentation solely so the half-migrated app keeps running. Caller-dead old pixels may be
+deleted once their destination contract is owned and proven. H wires final production ownership; J proves the complete
+installed product.
 
 ## Priority
 
@@ -39,14 +46,19 @@ exact source
 -> tests/evidence
 ```
 
-Preserve unrelated user work. Do not reset/checkout/clean/stash/revert merely to manufacture checkpoint
-equality. Historical evidence is not current owner map.
+Preserve unrelated user work. Do not reset/checkout/clean/stash/revert merely to manufacture checkpoint equality.
+Historical evidence is not current owner map.
+
+When current source contradicts a durable product contract, do not silently rewrite the contract to match the bug.
+Promote the missing behavior into `Current_Plan.md` unless explicit product intent changed it.
 
 ## Immediate stop conditions
 
 Stop/reassess when:
 
 - Bubble/Spectrum/another mode loses authored fidelity/reactivity or BTF fails;
+- visualizer wide/tall viewport support is replaced by final-pixel anisotropic stretch;
+- Bubble is treated as exempt from required viewport reflow merely because a temporary capability flag says false;
 - source age rises while visuals continue;
 - physical p99/max worsens despite prettier averages;
 - producer waits for paint/present or second visualizer logical clock appears;
@@ -59,78 +71,24 @@ Stop/reassess when:
 - family port duplicates provider/controller/timer/cache/action authority;
 - migration casually redesigns working family interaction/visual behavior without product intent.
 
-## Resilience vs fallback
+## Visualizer geometry guardrail
 
-Do not silently substitute alternate architecture/authored behavior when selected path fails. Fail closed or
-repair selected owner. Provider/cache/network recovery and deterministic resolution inside same feature
-contract remain valid product resilience.
+Keep these distinct:
 
-Legacy GL demotion (`FULL_SHADERS -> COMPOSITOR_ONLY -> SOFTWARE_ONLY`) retires with old physical presenter.
+```text
+uniform_visual_scale   # wheel/corner whole-size scaling
+viewport_extent        # independent world/playroom width/height
+```
 
-## One owner per concern
+All five current modes support both destination operations. Edge viewport resize is configuration, not a clock. Bubble
+must receive changed spatial bounds without deforming circles or compromising BTF.
 
-Topology: DisplayManager/topology owner. Physical presentation: one destination QQuickWindow per display.
-Ordinary retained items: QuickSceneController/OrdinaryWidgetPresentationHost. Ordinary runtime cardinality:
-WidgetRuntimeManager plus real neutral owner scope. Visualizer source: Beat/audio owner. Visualizer logical
-cadence: VisualizerLogicalRuntime. GPU deletion: legal render/context owner. ResourceManager accounts only.
+## Capability state
 
-A per-display manager does not imply every provider/backend is per-display.
-
-## Capability / import dormancy
-
-Family deactivation and ordinary instance disabled are distinct. Deactivated family ultimately owns no
-family-exclusive provider/model/helper/timer/poll/worker/presentation/render resource.
-
-Cheap catalog/common Quick imports must not eagerly import heavy inactive family implementation trees. Do
-not use package `__init__` convenience exports to defeat dormancy.
-
-## Presentation admission
-
-Allowed: bounded latest-state sync, passive metrics, coalescing that prevents duplicate queued work without
-waiting for paint.
-
-Forbidden: pending-until-paint, paint/swap acknowledgement, producer timestamp/display-rate divisor,
-scheduler release by paint, catch-up replay, source/event/logical cadence reduction, independent visualizer
-presentation loops.
-
-## Visualizer safety
-
-Preserve attack/amplitude/decay, smoothing, overshoot/elasticity/settling, low-energy response, spatial
-distribution, source freshness, transients and mode personality. Every authored input integrates before
-presentation coalescing. Logical time never derives from physical paint cadence. Bubble BTF is binding.
-
-## Quick/render resource safety
-
-One resource has one deletion owner; create/use/destroy under legal render-thread/context contract; old
-resources retire before replacement authority; failed deletion retains ownership/fails closed; accounting
-follows real ownership release. No `glFinish()`, `DwmFlush()`, GUI sleeps, nested event pumping or fence
-polling as cadence repair. Do not copy QRhiWidget borrowed-context rules into Quick without proof.
+Ordinary ON/OFF is not family/capability activation. CUSTOM X and layout slots may change ordinary ON/OFF only.
+A deactivated family remains deactivated even if a saved layout contained it.
 
 ## Lifecycle
 
-Close old admission -> stop generation-owned producers -> join logical runtimes where required -> reject
-stale state -> retire legal render resources -> destruction barrier -> construct replacement -> prepare
-intentional first content -> reveal. No hide-only lifecycle or force-cleared handles.
-
-## Runtime overlays / widgets
-
-Do not rewrite provider/model/business logic because pixels migrate. QML owns presentation/semantic input
-only. Preserve proven family behavior; remove obsolete QWidget mechanics rather than using migration as an
-unrelated redesign opportunity. Settings may remain QWidget.
-
-## Native/C++
-
-Native code is contingency/local optimization only. Name measured cost, exact renderer, why current Quick
-primitive is insufficient, and how code remains inside same QQuickWindow. No second presentation architecture.
-
-## Diagnostics
-
-Passive, sampled, bounded, never cadence/admission control. Physical-display claims require physical/OS
-boundary evidence when internal callbacks are ambiguous.
-
-## Documentation
-
-Edit canonical docs in place. Current Plan stays lean and owns current sequence/work/debt. Independent
-audit/closure narrative belongs under `Docs/audits/` or historical evidence. When owner/type/retirement
-policy changes, reconcile current owner docs in same sweep. Do not preserve obsolete planning docs that
-compete with accepted architecture.
+Close admission before retirement. Fence stale generation/request state. Destroy custom GL on the legal render/context
+owner. Do not repair cadence with `glFinish()`, `DwmFlush()`, GUI sleeps or nested event loops.

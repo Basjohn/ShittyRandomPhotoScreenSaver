@@ -1,6 +1,6 @@
 # Transition Change Checklist
 
-Last updated: 2026-08-24
+Last updated: 2026-08-28
 
 Quick transition presentation is landed. Use this for future transition changes.
 
@@ -29,9 +29,9 @@ The old:
 
 are **not visual-reference authority**.
 
-Delete them as soon as exact caller proof makes that safe. If the final call edge is embedded in the old
-physical `DisplayWidget`, that edge may leave at H with the physical presenter. Do not preserve the old
-transition stack until I.
+Delete them as soon as exact caller proof makes that safe. If the final call edge is inseparable from the old physical
+`DisplayWidget`, that edge leaves at H with the physical presenter. Do not preserve or reconstruct the old transition
+stack merely to keep the half-migrated app runnable, and do not postpone caller-dead transition pixels to I.
 
 ## Preserve
 

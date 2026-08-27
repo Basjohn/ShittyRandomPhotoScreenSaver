@@ -1,7 +1,7 @@
 # 07 — Settings Capability Activation and Lazy Navigation
 
-Status: **landed capability/Settings contract — E2/E2.7/E1/E3/E4 closed; Phase F preserves it**  
-Last updated: 2026-08-26
+Status: **landed capability/Settings contract — preserved through closed Phase F and current G/H**  
+Last updated: 2026-08-28
 
 ## Durable capability model
 

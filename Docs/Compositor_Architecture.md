@@ -1,6 +1,6 @@
 # Runtime Presentation Architecture
 
-Last updated: 2026-08-22
+Last updated: 2026-08-28
 
 ## 1. Decision
 
@@ -25,7 +25,7 @@ This decision is closed unless new production evidence contradicts it.
 
 ## 2. Migration status
 
-The production source may still contain the previous presenter:
+Source may still route startup through the previous physical presenter until H:
 
 ```text
 DisplayWidget
@@ -33,17 +33,19 @@ DisplayWidget
           └── OpenGL QRhiWidget path
 ```
 
-Until Phase H cutover that code may remain the current production/reference implementation. It is
-not the destination and is not a permanent fallback architecture.
+That is temporary source scaffolding, not a requirement that the legacy half-migrated application remain functional.
+Caller-dead family/CUSTOM/auxiliary/transition/visualizer pixels should retire as soon as their destination contract is
+owned and proven; only the inseparable physical-host edge needs to survive to H.
 
 Do not:
 
-- expand the old presenter to avoid migration work;
+- expand or restore the old presenter for migration continuity;
 - create new QRhiWidget-specific architecture;
-- treat current old class names as permanent product contracts;
+- treat old class names as permanent product contracts;
 - add a production runtime switch between old and Quick presenters.
 
-Do not delete the reference path until the active migration plan reaches the cutover/deletion phases.
+H makes Quick production-authoritative and deletes the remaining physical host. J, not the old presenter, proves the
+complete installed product.
 
 ## 3. One-surface invariant
 
@@ -232,28 +234,30 @@ viewport_extent
 Scroll-wheel and corner-handle resize change uniform whole-visualizer scale and preserve the baseline
 aspect.
 
-Later explicit left/right edge resize may change viewport width only, while top/bottom edge resize may
-change viewport height only, at unchanged visual scale. That changes available mode playroom rather
-than stretching final rendered pixels.
+Required retained CUSTOM left/right edge resize changes viewport width only, while top/bottom edge resize changes
+viewport height only, at unchanged visual scale. That changes available mode playroom rather than stretching final
+rendered pixels. All five current modes must support it, including Bubble.
 
-Where a logical mode needs spatial bounds, committed viewport metrics are configuration input to the
-logical side and never another clock.
+Where a logical mode needs spatial bounds, committed viewport metrics are configuration input to the logical side and
+never another clock; Bubble must preserve round geometry, motion/collision semantics and BTF as the domain changes.
 
 ## 8. Runtime overlays
 
 Providers/models/settings do not migrate merely because pixels migrate.
 
-Target pattern:
+Current pattern:
 
 ```text
-existing Python data/model owner
+existing Python data/model/action owner
         ↓
-small presentation state
+small generation-scoped presentation state
         ↓
 retained Quick runtime item/layer
 ```
 
-Avoid reimplementing network/provider/business logic in QML.
+G7 has already landed same-scene dimming/pixel shift, cursor halo and retained context-menu presentation. Avoid
+reimplementing network/provider/business/settings authority in QML. Any remaining QWidget/top-level auxiliary pixels are
+migration debris, not a second destination path.
 
 The one Quick scene owns runtime pixels that visually coexist over the screensaver.
 

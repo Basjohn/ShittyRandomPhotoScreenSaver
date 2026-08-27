@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-08-23
+Last updated: 2026-08-28
 
 Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
 `Docs/Historical_Bugs/`.
@@ -22,7 +22,7 @@ not automatic current architecture instructions.
 - [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN; physical dual-display wake/late-return acceptance remains.
 
 No other R-series record is current implementation sequencing. Current migration work is owned by
-`Current_Plan.md` (**E1 active** at this reconciliation), not by old Phase/P-number status prose.
+`Current_Plan.md`; historical Phase/P-number status prose never admits current work.
 
 ## Standalone R Records
 

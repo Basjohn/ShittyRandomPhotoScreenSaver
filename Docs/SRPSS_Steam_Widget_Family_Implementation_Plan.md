@@ -1,7 +1,7 @@
 # SRPSS Steam Widget Family — Quick-Era Reference Index
 
-Status: **CURRENT WRAPPER — two substantive migration families; two deferred stubs**  
-Updated: 2026-08-24
+Status: **CLOSED MIGRATION REFERENCE — two substantive Quick families; two deferred product stubs**  
+Updated: 2026-08-28
 
 ## Current source reality
 
@@ -27,22 +27,22 @@ abandonment_issues  -> Abandonment Issues
 Achievement Pulse has dedicated cache-first runtime/resolution/preparation behavior.
 Abandonment Issues has its own substantive runtime/widget/data path.
 
-Therefore the Qt Quick migration has only two Steam presentation slices:
+The Qt Quick migration had only two substantive Steam slices and both are closed:
 
 ```text
-F7 Achievement Pulse
-F8 Abandonment Issues
+F7 Achievement Pulse   CLOSED
+F8 Abandonment Issues  CLOSED
 ```
 
-Steam Journey/Progress and Friend Pulse are **not Phase-F work**.
+Steam Journey/Progress and Friend Pulse are future product work, not migration debt.
 
 Do not manufacture Quick versions of placeholder cards just because their ids exist in descriptors,
 settings, mock visuals or old plans.
 
 ## Deferred stub policy
 
-The existing Steam Journey/Progress and Friend Pulse stubs may remain dev-gated during migration if they
-do not obstruct cleanup.
+Steam Journey/Progress and Friend Pulse remain dev-gated product scaffolds. Their old generic QWidget presentation
+paths were retired with F8 and must not be recreated for symmetry.
 
 Do not:
 
@@ -53,10 +53,7 @@ Do not:
 - expand migration scope merely to make the four-family catalog symmetrical.
 
 Their actual product implementation belongs to future feature work after the migration or to an explicit
-operator-requested product slice.
-
-If their old scaffold pixels later block removal of a shared QWidget presentation owner, caller-proof
-and retire the scaffold rather than porting it for parity.
+operator-requested product slice. Old scaffold pixel ownership is already retired; do not recreate it.
 
 ## Why this file is short
 
@@ -71,7 +68,7 @@ presentation architecture.
 
 ## Current implementation authority
 
-For substantive Steam migration work read:
+For current substantive Steam owner/product reference read:
 
 - `Current_Plan.md`
 - `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md`
@@ -101,7 +98,7 @@ semantics.
 
 ## Current presentation rule
 
-Substantive Steam runtime pixels migrate to retained Quick presentation.
+Substantive Steam runtime pixels are retained Quick presentation.
 
 Do not deepen or reproduce:
 

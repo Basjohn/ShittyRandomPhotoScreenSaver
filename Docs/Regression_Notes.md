@@ -1,6 +1,6 @@
 # Regression Notes
 
-Last updated: 2026-08-23
+Last updated: 2026-08-28
 
 Resolved regression notes that should remain easy to find but do not need the full dated narrative
 treatment in `Docs/Historical_Bugs.md`.
@@ -11,8 +11,8 @@ treatment in `Docs/Historical_Bugs.md`.
 - Use `Docs/Historical_Bugs.md` for larger bug families, failed-fix paths, or lessons that should shape
   future architecture decisions.
 - Do not use this as a changelog.
-- `Current_Plan.md` may retain compact completed-phase closure/rationale when it materially protects
-  migration continuity; completed work does **not** have to disappear mechanically after validation.
+- `Current_Plan.md` owns only current blockers/sequence and compact durable invariants; completed implementation
+  narrative belongs in current contracts or historical/audit evidence, not as a running changelog.
 
 ## Architecture-epoch rule
 
@@ -20,11 +20,11 @@ The notes below record the implementation owner that existed when the regression
 QWidget/overlay/compositor file references are therefore historical/current-legacy implementation
 coordinates, not destination authority.
 
-When a named owner is removed by E1/F/G/H/I:
+When a named historical owner is gone or caller-dead:
 
 - preserve the behavioral/lifecycle lesson;
-- rehome surviving regression coverage to the destination owner;
-- do not keep a dead presenter/widget class merely because this note names it.
+- keep surviving regression coverage on the destination owner;
+- do not keep or reconstruct a dead presenter/widget class merely because this note names it.
 
 ## Current Notes
 
@@ -39,8 +39,8 @@ When a named owner is removed by E1/F/G/H/I:
   result then authoritatively promotes that image for the same key or replaces it for a changed key. A
   resulting startup pixmap remains at zero opacity until card fade completion; overlapping display
   transition work hands the same pending fade to the existing all-displays-idle callback.
-- **Migration note:** QWidget/pixmap presentation details are **CURRENT-LEGACY — WILL BE REHOMED in F/I**;
-  the generation/artwork-before-reveal ordering contract survives.
+- **Current architecture note:** the QWidget/pixmap presentation coordinates are historical; the
+  generation/artwork-before-reveal ordering contract survives on the retained destination.
 - **Coverage:** runtime-shaped startup ordering/reveal coverage must survive the owner migration.
 
 ### SettingsManager Bulk-Mutation Cache Purge
@@ -88,7 +88,7 @@ When a named owner is removed by E1/F/G/H/I:
 - **Fix:** state handoff and stencil math were extracted while preserving first-frame authority and mask
   alignment.
 - **Migration note:** old `SpotifyBarsGLOverlay` presentation/resource-host ownership is
-  **CURRENT-LEGACY — WILL BE OBSOLETE at H/I**. Preserve relevant GL-state/clip/first-frame contracts in
+  historical/remaining-host coordinates. Preserve relevant GL-state/clip/first-frame contracts in
   the Quick render-node tests rather than preserving the overlay.
 
 ### Mute Button Secondary-Stage Late-Anchor Recovery
@@ -98,7 +98,7 @@ When a named owner is removed by E1/F/G/H/I:
   anchor appeared.
 - **Fix:** later anchor visibility can release secondary-stage reveal once the shared deadline is
   satisfied.
-- **Migration note:** QWidget pixel ownership may be rehomed in F/I; anchor/reveal ordering survives.
+- **Current architecture note:** QWidget pixel ownership is not destination authority; anchor/reveal ordering survives.
 - **Coverage:** secondary-stage and anchor-visibility behavior.
 
 ### Transition Random Pool Parity

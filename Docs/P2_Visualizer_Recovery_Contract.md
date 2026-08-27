@@ -1,7 +1,7 @@
 # Visualizer Recovery / Migration Contract
 
 Status: **LANDED / PRESERVE visualizer ownership contract during Qt Quick migration**  
-Date: 2026-08-23
+Date: 2026-08-28
 
 The `P2` filename is historical. The contract below remains current and must not be deleted merely
 because the originating recovery phase is old.
@@ -52,8 +52,8 @@ Logical publication is latest-state.
 The migration replaces the old QRhiWidget/GUI physical consumer with a bounded Quick presentation
 bridge.
 
-The old consumer is **CURRENT-LEGACY — WILL BE OBSOLETE at H/I**. Preserve this bridge contract, not
-the old presenter.
+Any remaining old GUI/QRhi physical consumer is migration scaffolding. Preserve this bridge contract, not the old
+presenter; caller-dead pieces may retire immediately and the final physical-host edge leaves at H.
 
 Required properties:
 

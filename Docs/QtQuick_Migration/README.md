@@ -1,63 +1,52 @@
 # Qt Quick Production Migration — Technical Index
 
-Last updated: 2026-08-27
+Last updated: 2026-08-28
 
 Sequence/work admission comes only from `Current_Plan.md`.
 
 Current state:
 
 ```text
-Phase F closed
-Phase G CUSTOM/input active
-F0.5 closed
-F1 Clock closed
-F2 Weather closed
-F3 Media core closed
-F4 Media controls closed
-F5 Reddit closed
-F6 Gmail closed
-F7 Achievement Pulse closed
-F8 Abandonment Issues closed
+Phase F F0–F8 closed
+G1–G6 closed
+G7 retained dimming/pixel-shift, halo and context menu landed; closure pending
+G4 correction required first: visualizer independent viewport-edge resize for all five modes
+G8 pending
+H production owner/orchestration cutover follows G
+I residue only
+J final installed/physical validation
 ```
 
-Closed A–E history is intentionally not repeated here.
-
-## Active routing
+## Current routing
 
 | File | Purpose |
 | --- | --- |
+| `05_Custom_Layout_Input_Interaction.md` | current G contracts, including required viewport-resize correction and G7/G8 |
+| `03_Visualizer.md` | visualizer logical/render/geometry contract |
+| `01_Runtime_Host_Lifecycle.md` | Quick runtime/window/lifecycle and H owner cutover |
+| `06_Build_Tooling_Validation.md` | focused migration proof vs J installed/physical closure |
 | `04_Widget_Runtime_Presentation.md` | retained ordinary-widget architecture/style |
 | `09_Widget_Quick_Presentation_Bridge.md` | state/model/action/image family bridge |
-| `10_Widget_Family_Port_Decomposition.md` | F1–F8 order/contracts |
-| `11_Clock_Analogue_Shadow_Contract.md` | mandatory F1 analogue shadow fidelity |
-| `05_Custom_Layout_Input_Interaction.md` | Phase-G CUSTOM/input |
-| `06_Build_Tooling_Validation.md` | final/installed/build validation |
+| `07_Settings_Capability_Activation.md` | capability activation/dormancy |
+| `08_Widget_Runtime_Ownership_Threading.md` | neutral runtime ownership/cardinality |
+| `10_Widget_Family_Port_Decomposition.md` | closed F1–F8 reference |
+| `11_Clock_Analogue_Shadow_Contract.md` | permanent Clock analogue fidelity |
+| `Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` | prescriptive implementation route for the missed G4 scale/extent split |
+| `Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` | prescriptive G7 caller retirement + G8 focus/MC/input closure |
+| `Remaining_H_Production_Cutover_Decomposition.md` | prescriptive H owner wiring, cardinality and old-host deletion |
 
-Landed references used only when relevant:
+## Current scaffolding rule
 
-| File | Purpose |
-| --- | --- |
-| `01_Runtime_Host_Lifecycle.md` | Quick runtime/window/lifecycle |
-| `02_Scene_Renderer_Transitions.md` | current Quick transition architecture |
-| `03_Visualizer.md` | current Quick visualizer architecture |
-| `07_Settings_Capability_Activation.md` | capability activation |
-| `08_Widget_Runtime_Ownership_Threading.md` | neutral runtime ownership |
+The remaining legacy physical host is not a supported fallback and does not need to keep the partially migrated product
+functional. Caller-dead old family/CUSTOM/auxiliary/transition/visualizer pixels should not be retained for temporary
+continuity. H wires the destination production chain and removes whatever physical-host edge remains.
 
-Historical Phase-E closure:
-`Docs/Historical_Plans/QtQuick_Migration_Phase_E_Closure_2026-08-24.md`.
+## Visualizer correction rule
 
-## Current legacy rule
-
-Ordinary old family pixels survive only until their retained replacement is independently GREEN.
-
-Old transition/visualizer pixel-only implementations may retire earlier on caller proof because their
-Quick replacements are already landed.
-
-The old physical DisplayWidget/QRhi/GLCompositor presenter retires at H cutover.
-
-Do not create selectable fallback presentation.
+Do not interpret a temporary `viewport_resize_capable=False` flag as destination intent. All five current modes,
+including Bubble, must support independent viewport extent in CUSTOM in addition to uniform whole-size scale.
 
 ## Off-rails rule
 
-If a decomposition conflicts with exact source or `Current_Plan.md`, stop following the stale portion
-and reconcile the smallest current-authority doc. Historical evidence never overrides current ownership.
+If a decomposition conflicts with exact source or `Current_Plan.md`, determine whether source is missing a durable
+contract before rewriting documentation. Historical evidence never overrides current ownership.
