@@ -1,24 +1,22 @@
 """Semantic Settings GUI theme specification.
 
-This module is the first, behaviour-neutral step of the Settings visual-theme
-migration.  It centralises *visual decisions* while deliberately leaving
+This module centralises Settings *visual decisions* while deliberately leaving
 rendering mechanisms in their existing owners:
 
-* ``core/windows/dwm_blur.py`` still owns Windows/DWM acrylic implementation.
-* ``ui/widgets/control_shadow.py`` still owns the three proven Settings shadow
-  renderers (control effect, text sibling, outside-only cast sibling).
-* ``ui/settings_dialog.py`` still owns frameless-window lifecycle and the forged
+* ``core/windows/dwm_blur.py`` owns Windows/DWM acrylic implementation.
+* ``ui/widgets/control_shadow.py`` owns the proven Settings shadow renderers.
+* ``ui/settings_dialog.py`` owns frameless-window lifecycle and the forged
   outer-edge painter.
-* QSS/component modules still own how Qt controls are rendered.
+* QSS/component modules own how Qt controls are rendered.
 
-Nothing imports this module yet.  Adding it alone must therefore produce no
-visual or behavioural change.
+Renderers consume values from :data:`DEFAULT_DARK_SETTINGS_THEME` instead of
+inventing their own colour/opacity/shadow constants. Geometry that is known to
+be fragile (the forged acrylic outer-corner radius/overlap maths in particular)
+is intentionally not theme data.
 
-The migration rule is simple: as each existing renderer is converted, it should
-consume values from :data:`DEFAULT_DARK_SETTINGS_THEME` instead of inventing
-its own colour/opacity/shadow constants.  Geometry that is known to be fragile
-(the forged acrylic outer-corner radius/overlap maths in particular) is
-intentionally *not* theme data at this stage.
+The forged edge has one additional invariant: its opaque camouflage colour is
+derived by the renderer from the adjacent shell surface. It is therefore not an
+independently themeable colour.
 """
 
 from __future__ import annotations
@@ -70,10 +68,10 @@ BLACK = Rgba(0, 0, 0, 255)
 class AcrylicStyle:
     """Theme-facing request for the Settings native acrylic backdrop.
 
-    ``enabled`` is deliberately separate from tint alpha.  Disabling acrylic
-    should eventually call the platform disable path rather than relying on an
-    alpha-zero acrylic request, which is an unreliable/degenerate Windows edge
-    case on some compositor versions.
+    ``enabled`` is deliberately separate from tint alpha. Disabling acrylic
+    calls the platform disable path rather than relying on an alpha-zero
+    acrylic request, which is an unreliable/degenerate Windows edge case on
+    some compositor versions.
     """
 
     enabled: bool
@@ -108,10 +106,10 @@ class ShadowStyle:
 class SettingsThemeSpec:
     """Resolved semantic theme values consumed by Settings renderers.
 
-    The maps use semantic keys rather than source-file identities.  That is an
-    intentional break from Theme Foundry's current source-location-shaped token
-    discovery and is what allows a future selectable theme to change appearance
-    without rewriting Python files.
+    The maps use semantic keys rather than source-file identities. That is an
+    intentional break from Theme Foundry's old source-location-shaped token
+    discovery and allows a future selectable theme to change appearance without
+    rewriting Python files.
     """
 
     name: str
@@ -162,17 +160,13 @@ class SettingsThemeSpec:
 
 
 # ---------------------------------------------------------------------------
-# Default Dark — exact current values for the first migration surface
+# Default Dark — current approved Settings visual language
 # ---------------------------------------------------------------------------
 #
-# These are copied from the current working visual authorities.  This first
-# checkpoint does not consume them, so it cannot alter a pixel.  Later files
-# should migrate to these values one renderer at a time.
-#
-# Intentionally included now:
+# Intentionally represented here:
 #   * native acrylic request;
 #   * Settings shell/navigation/panel colours;
-#   * forged-edge colours (not its fragile geometry);
+#   * forged outer-border colour, but never forged-corner geometry/camouflage;
 #   * the approved central Settings shadow language.
 #
 # Intentionally deferred until their owning renderer is migrated:
@@ -201,35 +195,30 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "navigation.tab.selected_text": WHITE,
     "content.surface": TRANSPARENT,
 
-    # Global + mature local panel layers.  Both remain separate because the
+    # Global + mature local panel layers. Both remain separate because the
     # local subsection style intentionally masks the global QGroupBox surface
     # on many mature Settings sections.
     "panel.group.surface": Rgba(60, 60, 60, 115),
     "panel.subsection.surface": Rgba(60, 60, 60, 102),
     "panel.border": WHITE,
 
-    # Forged outer edge colours from ui/settings_dialog.py.  Widths, radius and
-    # cover-path maths remain renderer invariants during this migration.
+    # The visible forged outer border may be themed. The backing/corner
+    # camouflage is intentionally absent: settings_dialog.py derives opaque RGB
+    # from the adjacent shell surface so the illusion cannot be desynchronised.
     "chrome.outer_border": WHITE,
-    "chrome.outer_border_backing": Rgba(12, 12, 12, 255),
-    "chrome.corner_cover": Rgba(12, 12, 12, 255),
     "chrome.size_grip": Rgba(255, 255, 255, 200),
 }
 
 
 _DEFAULT_DARK_SHADOWS: dict[str, ShadowStyle] = {
-    # Current approved values from ui/widgets/control_shadow.py.
+    # Current approved values consumed by ui/widgets/control_shadow.py.
+    # QLineEdit intentionally shares this crisp input style; there is no
+    # separate legacy blurred-line-edit token anymore.
     "input.spin_combo": ShadowStyle(
         blur_radius=0.0,
         offset_x=6.0,
         offset_y=8.0,
         color=Rgba(0, 0, 0, 120),
-    ),
-    "input.line_edit": ShadowStyle(
-        blur_radius=26.0,
-        offset_x=4.5,
-        offset_y=7.5,
-        color=Rgba(0, 0, 0, 210),
     ),
     "button.pill": ShadowStyle(
         blur_radius=0.0,
