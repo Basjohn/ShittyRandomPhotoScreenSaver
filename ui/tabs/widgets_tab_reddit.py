@@ -23,9 +23,9 @@ from core.settings.widget_capacity_policy import (
 )
 from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
-    INFO_LABEL_STYLE,
     add_swatch_label,
     style_group_box,
     add_aligned_row,
@@ -167,7 +167,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "interaction modes are active."
     )
     reddit_info.setWordWrap(True)
-    reddit_info.setStyleSheet(INFO_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(reddit_info, "INFO_LABEL_STYLE")
     interaction_layout.addWidget(reddit_info)
 
     tab.reddit_exit_on_click = QCheckBox("Exit Screensaver When Reddit Links Are Opened")
@@ -196,7 +196,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_provider_combo.currentIndexChanged.connect(tab._save_settings)
     provider_row.addWidget(tab.reddit_provider_combo)
     provider_note = _inline_label("Shared by Reddit 1 and Reddit 2.")
-    provider_note.setStyleSheet(INFO_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(provider_note, "INFO_LABEL_STYLE")
     provider_row.addWidget(provider_note)
     provider_row.addStretch()
 

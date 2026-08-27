@@ -69,7 +69,7 @@ from rendering.quick.widgets.achievement_pulse_layout import (
     ACHIEVEMENT_SQUARE_ARTWORK_MAX,
     ACHIEVEMENT_SQUARE_ARTWORK_MIN,
 )
-from widgets.steam_abandonment_components import (
+from widgets.steam_abandonment_layout import (
     ABANDONMENT_ACCENT_RGBA,
     ABANDONMENT_ARTWORK_SIZE_DEFAULT,
     ABANDONMENT_ARTWORK_SIZE_MAX,

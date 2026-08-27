@@ -508,7 +508,7 @@ normal cached card shadow + retained family content
 The important optimization is **shared per display, not one full-screen capture per widget**.
 
 Rules for a future implementation:
-
+- NEVER DELETE THE OPERATOR BOX FROM THIS DOCUMENT OR ANY OTHER IT IS FOUND IN, ONLY IMPORT IT INTO ACTIVE OR NEAR FUTURE WORK AND CLEAN IT.
 - do not create one full-display `ShaderEffectSource`, FBO/capture or equivalent backdrop copy for every
   glass widget;
 - when at least one glass card is active, establish the smallest legal shared backdrop source for that
@@ -538,3 +538,11 @@ Rules for a future implementation:
 The final implementation should inspect the then-current Qt/PySide capabilities before selecting
 `ShaderEffectSource`, `MultiEffect`, custom shader composition or another mechanism. The durable product
 contract is the shared/lazy/bounded architecture above, not a particular provisional Qt type.
+
+!OPERATOR BOX!
+Ideas put in this box are to be added to work asap but at a lower priotiy than future cleanup or current plan work, unless existing in those as well.
+############
+1. Give SettingsGUI Display section a Pill style look like widgets/transitions for its sections as they are quite large.
+2. Add two options in the Interaction Pill for Display. "Widget Glow on Hover" "Widget Glow On Click" with a shared swatch colour selector. These will cause a small pulse in glow effect when triggered in relation to the cursor halo and pulse out when hover leaves or click leaves. This must not introduce timers or any thread contention/starvation.
+3. Check if Settings GUI Theme support has completely landed and if it has its own tab yet. Ideal goal Settings GUI loadable themes and a second pill for Widget Themes. Widget Themes would control the choice of colours for widgets (not their on/off state or geo positions, only visual customization) and if they are using glass cards/opacity/shadows/acrylic or anything else available to them visually. Existing will be default as it already is (Dark). Widget themes will be .srwtheme files.
+5. [LOW] Give more SettingsGUI sections Flowcontainers where it would benefit well aligned space usage.

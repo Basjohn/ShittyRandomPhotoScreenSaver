@@ -1,4 +1,4 @@
-"""Shared QWidget shell for Abandonment Issues and dev-gated Steam scaffolds."""
+"""Shared QWidget shell for dev-gated future Steam card scaffolds."""
 from __future__ import annotations
 
 import math
@@ -41,11 +41,6 @@ STEAM_CARD_DEFINITIONS: dict[str, SteamCardDefinition] = {
         title="Steam Journey",
         subtitle="Dev-gated update card scaffold",
     ),
-    "abandonment_issues": SteamCardDefinition(
-        widget_id="abandonment_issues",
-        title="Abandonment Issues",
-        subtitle="Cache-first library rediscovery card",
-    ),
     "friend_pulse": SteamCardDefinition(
         widget_id="friend_pulse",
         title="Friend Pulse",
@@ -55,7 +50,7 @@ STEAM_CARD_DEFINITIONS: dict[str, SteamCardDefinition] = {
 
 
 class SteamCardWidget(BaseOverlayWidget):
-    """Temporary QWidget shell retained only for F8 and dev scaffolds."""
+    """Temporary QWidget shell retained only for dev-gated future scaffolds."""
 
     settings_requested = Signal(str)
 

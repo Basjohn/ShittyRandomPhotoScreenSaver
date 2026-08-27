@@ -31,8 +31,8 @@ from core.settings.visualizer_presets import (
 from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
-    INFO_LABEL_STYLE,
     STATUS_LABEL_STYLE,
     add_section_label,
     add_swatch_label,
@@ -413,13 +413,13 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "only its Spotify tab."
     )
     tab._spotify_browser_provider_note.setWordWrap(True)
-    tab._spotify_browser_provider_note.setStyleSheet(INFO_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(tab._spotify_browser_provider_note, "INFO_LABEL_STYLE")
     tab._spotify_browser_provider_note.setVisible(False)
     provider_layout.addWidget(tab._spotify_browser_provider_note)
 
     tab._unsupported_media_provider_note = QLabel("")
     tab._unsupported_media_provider_note.setWordWrap(True)
-    tab._unsupported_media_provider_note.setStyleSheet(INFO_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(tab._unsupported_media_provider_note, "INFO_LABEL_STYLE")
     tab._unsupported_media_provider_note.setVisible(False)
     provider_layout.addWidget(tab._unsupported_media_provider_note)
 

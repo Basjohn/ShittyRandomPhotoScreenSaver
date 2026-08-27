@@ -48,7 +48,7 @@ class AbandonmentPreparedPresentation:
 def achievement_evidence_requested(field_visibility: Mapping[str, bool]) -> bool:
     """Return whether visible shelves require selected-game achievement data."""
 
-    from widgets.steam_abandonment_components import ABANDONMENT_FIELD_DEFAULTS
+    from widgets.steam_abandonment_layout import ABANDONMENT_FIELD_DEFAULTS
 
     return any(
         bool(field_visibility.get(field_id, ABANDONMENT_FIELD_DEFAULTS[field_id]))
@@ -85,7 +85,7 @@ def prepare_abandonment_presentation(
         steam_app_artwork_variant_order,
     )
     from core.steam.models import SteamResultStatus
-    from widgets.steam_abandonment_components import (
+    from widgets.steam_abandonment_models import (
         abandonment_shelf_diagnostics,
         build_abandonment_view_model,
     )

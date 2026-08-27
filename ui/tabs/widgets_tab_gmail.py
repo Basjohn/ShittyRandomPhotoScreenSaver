@@ -28,9 +28,9 @@ from rendering.widget_descriptors import GMAIL_SIGNAL_BLOCK_ATTRS, get_widget_po
 from core.audio.sound_paths import default_notification_sound_path
 from core.threading.manager import ThreadManager
 from ui.styled_popup import ColorSwatchButton, StyledPopup
+from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
-    INFO_LABEL_STYLE,
     add_swatch_label,
     style_group_box,
     add_aligned_row,
@@ -637,7 +637,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "Shows recent Gmail messages. Choose a backend below to connect."
     )
     gmail_info.setWordWrap(True)
-    gmail_info.setStyleSheet(INFO_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(gmail_info, "INFO_LABEL_STYLE")
     backend_inner.addWidget(gmail_info)
 
     # ------------------------------------------------------------------
@@ -668,7 +668,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     imap_info.setWordWrap(True)
     imap_info.setOpenExternalLinks(True)
-    imap_info.setStyleSheet(INFO_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(imap_info, "INFO_LABEL_STYLE")
     imap_layout.addWidget(imap_info)
 
     email_row = _aligned_row(imap_layout, "Email:")
@@ -705,7 +705,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "This is a <b>restricted</b> scope — in Testing mode, tokens expire every 7 days."
     )
     oauth_info.setWordWrap(True)
-    oauth_info.setStyleSheet(INFO_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(oauth_info, "INFO_LABEL_STYLE")
     oauth_layout.addWidget(oauth_info)
 
     backend_inner.addWidget(tab._gmail_oauth_panel)
