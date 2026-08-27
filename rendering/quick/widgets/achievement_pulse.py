@@ -7,7 +7,7 @@ accepted state into stable Qt models and presentation-only style/config values.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -47,7 +47,10 @@ from widgets.steam_components import (
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
     ORDINARY_TEXT_SHADOW_BASE,
+    OrdinaryWidgetPresentationHost,
     OverlayCardStyle,
+    OverlayWidgetGeometry,
+    RetainedOverlayWidget,
 )
 
 
@@ -564,7 +567,7 @@ class AchievementPulsePresentationModel(QObject):
         )
         self._field_model = AchievementPulseFieldListModel(self)
         self._unlock_model = AchievementPulseUnlockListModel(self)
-        self._runtime_service = runtime_service
+        self._achievement_runtime_service = runtime_service
         self._runtime_attached = False
         self._active = False
         self._retired = False
@@ -596,25 +599,25 @@ class AchievementPulsePresentationModel(QObject):
     def is_achievement_consumer_alive(self) -> bool:
         return self.is_active
 
-    def set_runtime_service(self, service: Any) -> None:
+    def set_achievement_runtime_service(self, service: Any) -> None:
         if self._retired or self._active:
             raise RuntimeError(
                 "cannot replace Achievement Pulse runtime after activation"
             )
-        if self._runtime_service is service:
+        if self._achievement_runtime_service is service:
             return
-        if self._runtime_service is not None:
+        if self._achievement_runtime_service is not None:
             raise RuntimeError(
                 "Achievement Pulse presentation already has a runtime service"
             )
-        self._runtime_service = service
+        self._achievement_runtime_service = service
 
     def activate(self, thread_manager: Any | None = None) -> bool:
         if self._retired:
             raise RuntimeError("cannot activate a retired Achievement Pulse model")
         if self._active:
             return True
-        service = self._runtime_service
+        service = self._achievement_runtime_service
         if service is not None:
             if thread_manager is None:
                 raise RuntimeError(
@@ -629,7 +632,7 @@ class AchievementPulsePresentationModel(QObject):
             self._active = False
             service.detach_consumer(self)
             self._runtime_attached = False
-            self._runtime_service = None
+            self._achievement_runtime_service = None
             raise RuntimeError("Achievement Pulse runtime service failed to start")
         return True
 
@@ -674,13 +677,13 @@ class AchievementPulsePresentationModel(QObject):
         return bool(
             self.is_active
             and self._snapshot.interaction_enabled
-            and self._runtime_service is not None
-            and self._runtime_service.request_manual_refresh()
+            and self._achievement_runtime_service is not None
+            and self._achievement_runtime_service.request_manual_refresh()
         )
 
     def notify_fade_complete(self) -> None:
-        if self.is_active and self._runtime_service is not None:
-            self._runtime_service.on_presentation_fade_complete()
+        if self.is_active and self._achievement_runtime_service is not None:
+            self._achievement_runtime_service.on_presentation_fade_complete()
 
     def set_interaction_enabled(self, enabled: bool) -> bool:
         normalized = bool(enabled)
@@ -705,11 +708,11 @@ class AchievementPulsePresentationModel(QObject):
             return
         self._retired = True
         self._active = False
-        if self._runtime_service is not None and self._runtime_attached:
-            self._runtime_service.stop()
-            self._runtime_service.detach_consumer(self)
+        if self._achievement_runtime_service is not None and self._runtime_attached:
+            self._achievement_runtime_service.stop()
+            self._achievement_runtime_service.detach_consumer(self)
         self._runtime_attached = False
-        self._runtime_service = None
+        self._achievement_runtime_service = None
         self._field_model.replace_rows(())
         self._unlock_model.replace_rows(())
 
@@ -877,6 +880,110 @@ class AchievementPulsePresentationModel(QObject):
         return self.config.authored_size[1]
 
 
+class RetainedAchievementPulsePresentation:
+    """One retained Achievement Pulse item with semantic action routing."""
+
+    def __init__(
+        self,
+        *,
+        host: OrdinaryWidgetPresentationHost,
+        model: AchievementPulsePresentationModel,
+        geometry: OverlayWidgetGeometry,
+        fade_opacity: float = 0.0,
+        on_settings_requested: Callable[[str], Any] | None = None,
+    ) -> None:
+        self._host = host
+        self._model = model
+        self._on_settings_requested = on_settings_requested
+        self._retained: RetainedOverlayWidget = host.create_family_widget(
+            "achievement_pulse",
+            initial_properties={"achievementModel": model},
+            object_name="achievement_pulse",
+            geometry=geometry,
+            fade_opacity=fade_opacity,
+            card_style=model.style.card_style,
+        )
+        self._retained.add_retirement_callback(model.retire)
+        self._connect("refreshRequested", model.request_manual_refresh)
+        self._connect("settingsRequested", self._handle_settings_requested)
+        model.fadeRequested.connect(self._handle_fade_requested)
+
+    def _connect(self, signal_name: str, callback: Callable[..., Any]) -> None:
+        signal = getattr(self._retained.item, signal_name, None)
+        if signal is not None and hasattr(signal, "connect"):
+            signal.connect(callback)
+
+    @property
+    def item(self):
+        return self._retained.item
+
+    @property
+    def model(self) -> AchievementPulsePresentationModel:
+        return self._model
+
+    def activate(self, thread_manager: Any | None = None) -> bool:
+        return self._model.activate(thread_manager)
+
+    def set_geometry(self, geometry: OverlayWidgetGeometry) -> None:
+        self._retained.set_geometry(geometry)
+
+    def set_fade_opacity(self, opacity: float) -> None:
+        self._retained.set_fade_opacity(opacity)
+
+    def set_interaction_enabled(self, enabled: bool) -> bool:
+        return self._model.set_interaction_enabled(enabled)
+
+    def apply_input_state(self, input_state: object) -> bool:
+        if isinstance(input_state, Mapping):
+            value = input_state.get
+        else:
+            def value(name, default):
+                return getattr(input_state, name, default)
+        enabled = (
+            bool(value("admission_open", True))
+            and not bool(value("exiting", False))
+            and (
+                bool(value("interaction_mode_enabled", False))
+                or bool(value("ctrl_held", False))
+            )
+        )
+        return self._model.set_interaction_enabled(enabled)
+
+    def apply_style(
+        self,
+        shadow_values: Mapping[str, object],
+        *,
+        border_width: float = 4.0,
+    ) -> None:
+        style = AchievementPulsePresentationStyle.project(
+            self._model.config,
+            shadow_values,
+            border_width=border_width,
+        )
+        self._model.apply_style(style)
+        self._retained.set_card_style(style.card_style)
+
+    def _handle_settings_requested(self, target: str) -> bool:
+        normalized = str(target or "").strip()
+        if (
+            not self._model.is_active
+            or not self._model.interactionEnabled
+            or not normalized
+            or self._on_settings_requested is None
+        ):
+            return False
+        return bool(self._on_settings_requested(normalized))
+
+    def _handle_fade_requested(self) -> None:
+        if not self._model.is_active:
+            return
+        self._retained.set_fade_opacity(1.0)
+        self._model.notify_fade_complete()
+
+    def retire(self) -> bool:
+        return self._host.retire_widget(self._retained)
+
+
 __all__ = [
     "AchievementPulseFieldListModel",
     "AchievementPulsePresentationConfig",
@@ -885,4 +992,5 @@ __all__ = [
     "AchievementPulsePresentationStyle",
     "AchievementPulseUnlockListModel",
     "AchievementPulseUnlockRow",
+    "RetainedAchievementPulsePresentation",
 ]

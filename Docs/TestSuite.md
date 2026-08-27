@@ -149,6 +149,12 @@ header/title/artwork/metric/latest-unlock/capsule hierarchy, uniform Custom scal
 bottom/right capsule shell shadow, explicit refresh/settings signals and stable delegate/model/engine
 identity. Registry admission, real owner injection and real-OpenGL matrix remain open.
 
+The F7 owner-integration extension admits Achievement Pulse through the static Quick registry/qmldir and
+crosses the real `QuickSceneController` host with a display-generation-bound service owned by
+`WidgetRuntimeManager`. It protects semantic settings/refresh routing, runtime fade completion, fail-closed
+service lifecycle and stable item/model/list-model/engine identity. The effective-DPR visual matrix remains
+open.
+
 At the reviewed checkpoint the repository contains:
 
 - **352 test-module files**: 351 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
