@@ -765,6 +765,23 @@ class AchievementPulsePresentationModel(QObject):
     def connectionInfoTooltip(self) -> str:
         return self.card.connection_info_tooltip
 
+    @Property(str, notify=stateChanged)
+    def settingsTarget(self) -> str:
+        return self.card.settings_target
+
+    @Property(str, notify=stateChanged)
+    def actionText(self) -> str:
+        return self.card.action_text
+
+    @Property(str, notify=stateChanged)
+    def actionLabel(self) -> str:
+        return self.card.action_label
+
+    @Property(QColor, notify=stateChanged)
+    def accentColor(self) -> QColor:
+        color = QColor(self.card.accent)
+        return color if color.isValid() else QColor(199, 213, 224, 255)
+
     @Property(str, constant=True)
     def logoSource(self) -> str:
         return _STEAM_LOGO.resolve().as_uri() if _STEAM_LOGO.is_file() else ""
@@ -800,6 +817,20 @@ class AchievementPulsePresentationModel(QObject):
     @Property(float, notify=stateChanged)
     def capsuleFontSize(self) -> float:
         return float(self.config.capsule_font_size)
+
+    @Property(float, notify=stateChanged)
+    def capsuleHeight(self) -> float:
+        return achievement_capsule_geometry(
+            font_family=self.config.font_family,
+            capsule_font_size=self.config.capsule_font_size,
+        )[0]
+
+    @Property(float, notify=stateChanged)
+    def capsuleGap(self) -> float:
+        return achievement_capsule_geometry(
+            font_family=self.config.font_family,
+            capsule_font_size=self.config.capsule_font_size,
+        )[1]
 
     @Property(QColor, notify=stateChanged)
     def capsuleFillColor(self) -> QColor:

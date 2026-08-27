@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QUrl, Qt
 from PySide6.QtGui import QImage
+from PySide6.QtQml import QQmlComponent, QQmlEngine
+from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QSignalSpy
 
 from rendering.quick.widgets.achievement_pulse import (
@@ -19,6 +22,9 @@ from widgets.steam_card_models import build_mock_steam_view_model
 
 
 pytestmark = pytest.mark.usefixtures("qt_app")
+
+ROOT = Path(__file__).resolve().parents[1]
+QML_ROOT = ROOT / "rendering" / "quick" / "qml"
 
 
 def _shadow_values(**changes):
@@ -101,6 +107,37 @@ class _RuntimeService:
 
     def on_presentation_fade_complete(self) -> None:
         self.fade_complete_calls += 1
+
+
+def _find_visual_item(root: QQuickItem, object_name: str) -> QQuickItem | None:
+    if root.objectName() == object_name:
+        return root
+    for child in root.childItems():
+        found = _find_visual_item(child, object_name)
+        if found is not None:
+            return found
+    return None
+
+
+def _create_qml_item(model: AchievementPulsePresentationModel):
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(
+        engine,
+        QUrl.fromLocalFile(
+            str(QML_ROOT / "AchievementPulsePresentation.qml")
+        ),
+    )
+    assert component.status() == QQmlComponent.Status.Ready, [
+        error.toString() for error in component.errors()
+    ]
+    item = component.createWithInitialProperties({"achievementModel": model})
+    assert isinstance(item, QQuickItem), [
+        error.toString() for error in component.errors()
+    ]
+    item.setWidth(model.authoredWidth)
+    item.setHeight(model.authoredHeight)
+    return engine, component, item
 
 
 def test_config_projects_current_steam_runtime_and_visual_settings() -> None:
@@ -286,3 +323,101 @@ def test_failed_runtime_start_detaches_and_fails_closed() -> None:
 
     assert service.detached == [model]
     assert model.is_achievement_consumer_alive() is False
+
+
+@pytest.mark.qt
+def test_qml_preserves_authored_regions_and_delegate_identity(qt_app) -> None:
+    model = _model()
+    model.activate()
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(
+            model=build_mock_steam_view_model("achievement_pulse")
+        ),
+        animate=False,
+    )
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        canvas = _find_visual_item(item, "achievementAuthoredCanvas")
+        header = _find_visual_item(item, "achievementHeaderFrame")
+        artwork = _find_visual_item(item, "achievementArtworkFrame")
+        metric = _find_visual_item(item, "achievementMetric")
+        rarity = _find_visual_item(item, "achievementField_rarity")
+        rarity_detail = _find_visual_item(
+            item, "achievementCapsuleDetail_rarity"
+        )
+        assert canvas is not None
+        assert header is not None
+        assert artwork is not None
+        assert metric is not None
+        assert rarity is not None
+        assert rarity_detail is not None
+        assert float(item.property("contentScale")) == pytest.approx(1.0)
+        assert (header.x(), header.y(), header.width(), header.height()) == (
+            18.0,
+            14.0,
+            302.0,
+            38.0,
+        )
+        assert (artwork.x(), artwork.y(), artwork.width(), artwork.height()) == (
+            442.0,
+            14.0,
+            140.0,
+            196.0,
+        )
+        assert metric.y() == pytest.approx(216.0)
+        assert rarity_detail.isVisible() is True
+
+        card = build_mock_steam_view_model("achievement_pulse")
+        changed_card = replace(
+            card,
+            fields=(replace(card.fields[0], value="7%"), *card.fields[1:]),
+        )
+        model.on_achievement_presentation(
+            AchievementPulsePreparedPresentation(model=changed_card),
+            animate=True,
+        )
+        qt_app.processEvents()
+        assert _find_visual_item(item, "achievementField_rarity") is rarity
+        assert QQmlEngine.contextForObject(item).engine() is engine
+
+        item.setWidth(model.authoredWidth * 1.5)
+        item.setHeight(model.authoredHeight * 1.5)
+        qt_app.processEvents()
+        assert float(item.property("contentScale")) == pytest.approx(1.5)
+        assert _find_visual_item(item, "achievementField_rarity") is rarity
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        qt_app.processEvents()
+
+
+def test_qml_is_presentation_only_and_keeps_family_authored_capsule_shadow() -> None:
+    qml = (QML_ROOT / "AchievementPulsePresentation.qml").read_text(
+        encoding="utf-8"
+    )
+    capsule_qml = (QML_ROOT / "AchievementCapsule.qml").read_text(
+        encoding="utf-8"
+    )
+    for marker in (
+        "Timer {",
+        "SettingsManager",
+        "AchievementPulseRuntimeService",
+        "SteamBackend",
+        "QDesktopServices",
+        "QWidget",
+        "QPainter",
+        "http://",
+        "https://",
+    ):
+        assert marker not in qml
+        assert marker not in capsule_qml
+    assert "onDoubleTapped: achievementRoot.refreshRequested()" in qml
+    assert "achievementRoot.settingsRequested(" in qml
+    assert "AchievementCapsule" in qml
+    assert "RectangularShadow" in capsule_qml
+    assert "offset: Qt.vector2d(1.5, 1.5)" in capsule_qml
+    assert "cached: true" in capsule_qml
