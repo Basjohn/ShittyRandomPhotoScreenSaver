@@ -5,8 +5,8 @@ Last updated: 2026-08-27
 Reviewed source basis:
 
 ```text
-test-inventory basis = F6 Gmail retirement checkpoint
-Phase F0/F0.5/F1/F2/F3/F4/F5/F6 CLOSED; 351 test modules; F7 Achievement Pulse active
+test-inventory basis = F7 Achievement Pulse model-admission checkpoint
+Phase F0/F0.5/F1/F2/F3/F4/F5/F6 CLOSED; 352 test modules; F7 Achievement Pulse active
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -138,9 +138,15 @@ with `tests/test_gmail_widget.py` and its single-purpose effect-cache contract. 
 preparation, asset/packaging, settings, notification and sound contracts remain under their focused suites;
 the retained Quick suite is the permanent Gmail presentation authority.
 
+The F7 model-admission checkpoint adds `tests/test_qtquick_achievement_pulse_presentation.py`. It protects
+canonical shared-Steam/card settings projection, immutable runtime configuration, canonical shadow style,
+stable field/unlock model identity, accepted local artwork sources, manager-owned runtime activation,
+interaction-gated manual refresh, fade handoff and fail-closed startup. QML pixels and real host admission
+remain open at this checkpoint.
+
 At the reviewed checkpoint the repository contains:
 
-- **351 test-module files**: 350 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **352 test-module files**: 351 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -151,7 +157,7 @@ Inventory status is **not an execution result**. `KEEP` does not mean a test was
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 350 top-level modules was manually
+This is deliberately **not** a claim that every assertion in all 351 top-level modules was manually
 read line-by-line or executed during this review. The inventory is complete; semantic inspection was
 concentrated where migration status could change whether a test remains authority.
 
@@ -689,6 +695,7 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_steam_abandonment_runtime.py` | **MIGRATION-CRITICAL — F** | Neutral Abandonment owner/generation/cardinality/timer/lifecycle contract; preserve source/model owner and rehome presenter edge. |
 | `tests/test_steam_achievement_pulse.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_steam_achievement_runtime.py` | **MIGRATION-CRITICAL — F** | Neutral Achievement owner/generation/cardinality/reuse/dormancy/artwork lifecycle contract; preserve source/model owner and rehome presenter edge. |
+| `tests/test_qtquick_achievement_pulse_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Achievement Pulse config/style/model/image/runtime-action lifecycle and stable identity destination coverage. |
 | `tests/test_steam_backend.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_steam_cache.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_steam_credentials.py` | **KEEP** | Retain; no migration-specific retirement identified. |
