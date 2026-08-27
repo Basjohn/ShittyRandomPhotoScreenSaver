@@ -223,6 +223,45 @@ def test_shared_session_transfer_moves_frame_between_display_models_and_cancel_r
     target.retire()
 
 
+def test_visualizer_scene_coordinator_rejects_occupied_target_and_rolls_back() -> None:
+    class _SceneStub:
+        def __init__(self, identity) -> None:
+            self.visualizer_render_identity = identity
+            self.transfers: list[object] = []
+
+        def transfer_visualizer_to(self, target) -> None:
+            self.transfers.append(target)
+
+    session = CustomLayoutSession()
+    visualizer = _item(
+        "spotify_visualizer",
+        "display:a",
+        QRect(120, 90, 630, 420),
+        resizable=True,
+    )
+    visualizer.current_monitor_route = "1"
+    session.add_item(visualizer)
+    coordinator = QuickCustomLayoutSceneCoordinator(session)
+    source = _SceneStub(object())
+    target = _SceneStub(object())
+    coordinator.register_scene("display:a", source)
+    coordinator.register_scene("display:b", target)
+
+    visualizer.set_current_display("display:b", monitor_route="2")
+    visualizer.set_geometry(QRect(860, 140, 630, 420))
+    with pytest.raises(
+        RuntimeError,
+        match="target already has a retained scene admission",
+    ):
+        session.notify_item_changed(visualizer)
+
+    assert visualizer.current_display_identity == "display:a"
+    assert visualizer.current_monitor_route == "1"
+    assert visualizer.current_global_rect == QRect(120, 90, 630, 420)
+    assert source.transfers == []
+    coordinator.retire()
+
+
 @pytest.mark.qt
 def test_display_scene_has_one_retained_overlay_with_red_center_guides(qt_app) -> None:
     owner = QObject()

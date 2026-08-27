@@ -92,6 +92,17 @@ One live pixel owner: resolve target -> detach/retire source presentation -> tar
 runtime/model survives unless product semantics require otherwise -> target-local variant rect -> update
 session display. No simultaneous source/target copies. Do not overwrite all target variants silently.
 
+The retained move request includes both the proposed global rect and actual pointer position. Python routes those
+through the canonical screen-choice threshold, clamp, snap-guide and monitor-route owner; QML does not choose a
+screen or commit geometry. Shared session publication flips ordinary retained display-local visibility without
+recreating those items.
+
+Visualizer transfer preserves the same snapshot bridge and render identity, explicitly retires the source
+window's render item/presentation root, creates the target-window item, and reprojects presentation DPR from the
+target window. The shared Quick CUSTOM scene coordinator performs the same handoff when Cancel restores the source
+display. A missing or already-occupied target is rejected before handoff and restores the prior working display,
+monitor route and rect rather than leaving a partial transfer.
+
 ## Edit overlay pixels
 
 One shared retained Quick overlay layer per display: grid, snap guides, selection outline, handles, widget

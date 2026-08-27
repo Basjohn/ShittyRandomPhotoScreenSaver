@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-3bc98ca142ac478020cb71562261351bb4cac85c
-G4 retained resize semantics is validated in the current checkpoint
+a5930c9a
+G5 retained cross-display routing and one-owner Visualizer handoff are validated
 ```
 
 Current phase state:
@@ -38,20 +38,19 @@ Source outranks this plan if a later checkpoint has landed.
 
 ---
 
-## Immediate work — G5 retained cross-monitor transfer
+## Immediate work — G6 runtime-neutral input/action routing
 
 ```text
-one live retained pixel owner across display transfer                 ACTIVE
+retained hit regions -> semantic Python-owned runtime actions         ACTIVE
 ```
 
-### G5 — cross-monitor transfer (ACTIVE)
+### G6 — runtime-neutral input/actions (ACTIVE)
 
-- route retained drag transfer through the existing screen-choice threshold, clamp and monitor-route rules;
-- keep one live retained pixel owner while source presentation detaches and the target display adopts/reprojects it;
-- preserve the logical model/runtime and update only session current display/monitor plus the active variant rect;
-- never overwrite unrelated target variants or create simultaneous source/target Visualizer render owners;
-- make Cancel restore source display, rect and route; make Save persist the canonical target monitor/bucket;
-- prove single- and multi-display transfer, DPR projection, retained identity and Visualizer lifecycle with focused gates.
+- inventory retained family hit regions and existing presentation-neutral action/controller seams before adding APIs;
+- route Clock double-click mode toggle, Media transport/seek/volume/system-mute and retained family actions as semantic requests;
+- keep provider admission, accepted runtime state, settings writes and capability authority in Python owners rather than QML;
+- preserve unavailable/unsupported action inertness and generation fencing without compatibility presenters;
+- prove retained item/model identity, admission/action routing and no QML settings/runtime authority with focused gates.
 
 Use `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`; exact current source outranks stale owner names.
 
