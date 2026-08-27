@@ -40,6 +40,11 @@ ORDINARY_WIDGET_FAMILY_COMPONENTS: tuple[OrdinaryWidgetFamilyComponent, ...] = (
         qml_filename="RedditPresentation.qml",
         presentation_model_kind="RedditPresentationModel",
     ),
+    OrdinaryWidgetFamilyComponent(
+        family_id="gmail",
+        qml_filename="GmailPresentation.qml",
+        presentation_model_kind="GmailPresentationModel",
+    ),
 )
 
 

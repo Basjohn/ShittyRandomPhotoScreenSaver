@@ -7,3 +7,4 @@ ClockHand 1.0 ClockHand.qml
 WeatherPresentation 1.0 WeatherPresentation.qml
 MediaPresentation 1.0 MediaPresentation.qml
 RedditPresentation 1.0 RedditPresentation.qml
+GmailPresentation 1.0 GmailPresentation.qml
