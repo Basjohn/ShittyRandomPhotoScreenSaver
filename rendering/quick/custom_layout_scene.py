@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+from PySide6.QtCore import QRect
+
 from rendering.custom_layout_session import (
     CustomLayoutKey,
     CustomLayoutSession,
@@ -11,14 +15,32 @@ from rendering.custom_layout_session import (
 from .scene_controller import QuickSceneController
 
 
+@dataclass(frozen=True, slots=True)
+class _VisualizerPlacement:
+    display_identity: str
+    monitor_route: str
+    global_rect: QRect
+
+    @classmethod
+    def from_item(cls, item: CustomLayoutSessionItem) -> "_VisualizerPlacement":
+        return cls(
+            display_identity=item.current_display_identity,
+            monitor_route=item.current_monitor_route,
+            global_rect=QRect(item.current_global_rect),
+        )
+
+
 class QuickCustomLayoutSceneCoordinator:
     """Keep Visualizer presentation admission on the session item's display."""
 
     def __init__(self, session: CustomLayoutSession) -> None:
         self._session: CustomLayoutSession | None = session
         self._scenes: dict[str, QuickSceneController] = {}
-        self._visualizer_display_by_key: dict[CustomLayoutKey, str] = {
-            item.source_key: item.current_display_identity
+        self._visualizer_placement_by_key: dict[
+            CustomLayoutKey,
+            _VisualizerPlacement,
+        ] = {
+            item.source_key: _VisualizerPlacement.from_item(item)
             for item in session.items()
             if item.model_identity == "spotify_visualizer"
         }
@@ -52,33 +74,61 @@ class QuickCustomLayoutSceneCoordinator:
         if session is not None:
             session.unsubscribe_changes(self._on_session_item_changed)
         self._scenes.clear()
-        self._visualizer_display_by_key.clear()
+        self._visualizer_placement_by_key.clear()
 
     def _on_session_item_changed(self, item: CustomLayoutSessionItem) -> None:
         if item.model_identity != "spotify_visualizer":
             return
-        source_identity = self._visualizer_display_by_key.get(
+        prior = self._visualizer_placement_by_key.get(
             item.source_key,
-            item.source_key.display_identity,
+            _VisualizerPlacement(
+                display_identity=item.source_key.display_identity,
+                monitor_route=item.source_monitor_route,
+                global_rect=QRect(item.baseline_global_rect),
+            ),
         )
         target_identity = item.current_display_identity
-        if source_identity == target_identity:
+        if prior.display_identity == target_identity:
+            self._visualizer_placement_by_key[item.source_key] = (
+                _VisualizerPlacement.from_item(item)
+            )
             return
-        source = self._scenes.get(source_identity)
+        source = self._scenes.get(prior.display_identity)
         target = self._scenes.get(target_identity)
         if source is None or target is None:
+            self._restore_item_placement(item, prior)
             raise RuntimeError(
                 "CUSTOM Visualizer transfer display has no retained scene"
             )
         if source.visualizer_render_identity is None:
-            self._visualizer_display_by_key[item.source_key] = target_identity
+            self._visualizer_placement_by_key[item.source_key] = (
+                _VisualizerPlacement.from_item(item)
+            )
             return
         if target.visualizer_render_identity is not None:
+            self._restore_item_placement(item, prior)
             raise RuntimeError(
                 "CUSTOM Visualizer target already has a retained scene admission"
             )
-        source.transfer_visualizer_to(target)
-        self._visualizer_display_by_key[item.source_key] = target_identity
+        try:
+            source.transfer_visualizer_to(target)
+        except Exception:
+            self._restore_item_placement(item, prior)
+            raise
+        self._visualizer_placement_by_key[item.source_key] = (
+            _VisualizerPlacement.from_item(item)
+        )
+
+    @staticmethod
+    def _restore_item_placement(
+        item: CustomLayoutSessionItem,
+        placement: _VisualizerPlacement,
+    ) -> None:
+        item.set_current_display(
+            placement.display_identity,
+            monitor_route=placement.monitor_route,
+        )
+        item.set_geometry(placement.global_rect)
 
 
 __all__ = ["QuickCustomLayoutSceneCoordinator"]
