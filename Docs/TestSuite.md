@@ -125,6 +125,14 @@ direct family implementation imports at actual callers, type-only Gmail runtime 
 OAuth/IMAP/backend/runtime trees before family activation. Existing legacy-host and runtime-registry dormancy
 gates remain unchanged.
 
+The F6 real-owner extension admits Gmail through the static family registry and extends
+`tests/test_qtquick_gmail_presentation.py` through the real `QuickSceneController` host and a
+`WidgetRuntimeManager`-owned shared lease. It protects pre-activation dormancy, display-generation ownership,
+cache/live/error-fallback/auth state, semantic inbox/open/auth/message actions, configured projection capacity,
+dynamic height and stable item/model/list-model/runtime/engine identity. `tools/qtquick_gmail_smoke.py` renders
+grouped long text, no-unread desaturation, auth/error, popup and card/no-card cases through threaded OpenGL at
+effective DPR 1.0, 1.5 and 2.25.
+
 At the reviewed checkpoint the repository contains:
 
 - **353 test-module files**: 352 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
@@ -648,7 +656,7 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_gmail_imap_actions.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_oauth.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_preparation.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_qtquick_gmail_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Gmail config/style, stable accepted-state row projection, static QML popup/height/visual fidelity, semantic action admission and no-recreation lifecycle coverage; extend with real manager/host proof during F6. |
+| `tests/test_qtquick_gmail_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Gmail config/style, stable accepted-state row projection, static QML popup/height/visual fidelity, real manager-owned runtime/host state and action routing, and no-recreation lifecycle coverage. |
 | `tests/test_gmail_retiring_runtime.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_settings_roundtrip.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |

@@ -517,7 +517,7 @@ OverlayWidget {
                             cache: true
                         }
 
-                        ShadowedText {
+                        Text {
                             width: parent.width - 24.0
                             height: parent.height
                             text: {
@@ -527,15 +527,11 @@ OverlayWidget {
                                 if (popupAction.modelData === "spam") return "Mark as Spam"
                                 return "Delete"
                             }
-                            color: gmailRoot.gmailModel.textColor
+                            color: "#ffffffff"
                             font.family: gmailRoot.gmailModel.fontFamily
-                            font.pointSize: Math.max(8.0, gmailRoot.gmailModel.fontSize - 1.0)
+                            font.pixelSize: 12.0
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
-                            shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
-                            shadowColor: gmailRoot.gmailModel.textShadowColor
-                            shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
-                            shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
                         }
                     }
 

@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-6fa9453bc17e1fabd54fea162927032d7399b636
-Phase F6 shared Quick import-dormancy implementation on current main
+2816379fe383021aa9328312ad9fbf7da90fd34a
+Phase F6 partial real-owner integration on current main
 ```
 
 Current phase state:
@@ -31,8 +31,7 @@ J     final installed / physical validation      final
 ```
 
 Integrated audit: `Docs/audits/QtQuick_Phase_F_F2_F6_Independent_Audit_2026-08-26.md`.
-F2–F5 remain GREEN. F6 is incomplete. One shared Quick import-dormancy correction is required inside F6
-before real Gmail owner injection.
+F2–F5 remain GREEN. F6 is incomplete; old Gmail caller proof and presentation retirement remain.
 
 Source outranks this plan if a later checkpoint has landed.
 
@@ -46,23 +45,11 @@ retained config/style + stable message projection model            GREEN
 static QML + retained presentation wrapper                         GREEN
 Gmail pointer + visual parity                                      GREEN
 shared Quick import-dormancy correction                            GREEN
-registry + real owner injection + runtime-shaped gates             ACTIVE
-caller proof + old Gmail pixel/cache/input retirement              pending
+registry + real owner injection + runtime-shaped gates             GREEN
+caller proof + old Gmail pixel/cache/input retirement              ACTIVE
 ```
 
-### F6.3 — real owner / host integration
-
-- admit `gmail` through the existing static presentation-only family registry;
-- inject the existing `WidgetRuntimeManager`-owned `GmailRuntimeService` lease;
-- keep the existing runtime-generation shared Gmail owner and `GmailBackend.instance()` authority;
-- prove loading/ready/cached/error/auth state and semantic refresh/open/auth/message actions through the
-  real retained host;
-- prove stable item/model/list-model/runtime/engine identity across accepted feed/settings changes;
-- prove configured capacity and dynamic height through runtime-shaped state;
-- run practical multi-DPR eyes-on cases including grouped/long text, no-unread, auth/error, popup menu and
-  card/no-card styling.
-
-### F6.4 — retirement
+### F6.4 — retirement (ACTIVE)
 
 Only after all F6 gates GREEN:
 

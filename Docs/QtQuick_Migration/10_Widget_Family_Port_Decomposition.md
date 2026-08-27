@@ -70,7 +70,11 @@ menu with icons, semantic open/auth/refresh/read-unread/archive/spam/delete, not
 - popup state independent of committed row/card height and CUSTOM geometry;
 - card-derived header border, real no-unread desaturation and blank-space double-click refresh;
 - accepted-row dynamic height and retained item/model/list-model/engine identity;
-- real registry/host/runtime injection not yet landed.
+- static registry admission and real `QuickSceneController` host creation;
+- pre-activation dormant then display-generation-bound manager-owned `GmailRuntimeService` injection;
+- runtime-shaped cache/live/error-fallback/auth and semantic inbox/open/auth/message-action gates;
+- practical real-OpenGL eyes-on at effective DPR 1.0, 1.5 and 2.25, including grouped long text, popup,
+  no-unread desaturation, auth/error and card/no-card cases.
 
 ### Shared Quick import dormancy — GREEN
 
@@ -83,10 +87,8 @@ or plugin architecture was added.
 
 ### Complete F6
 
-Register Gmail in existing static registry -> inject real manager-owned GmailRuntimeService lease -> cross
-real QuickSceneController host -> runtime-shaped state/action/geometry/no-recreation gates -> practical multi-
-DPR eyes-on -> caller proof -> delete old Gmail QWidget pixel/cache/input presentation/tests while preserving
-neutral runtime/backend/preparation/settings/notification/sound.
+Caller proof -> delete old Gmail QWidget pixel/cache/input presentation/tests while preserving neutral
+runtime/backend/preparation/settings/notification/sound.
 
 ## F7 Achievement Pulse
 
