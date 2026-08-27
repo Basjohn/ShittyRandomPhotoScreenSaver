@@ -14,7 +14,17 @@ from rendering.quick.widgets.achievement_pulse import (
     AchievementPulsePresentationConfig,
     AchievementPulsePresentationModel,
     AchievementPulsePresentationStyle,
+    RetainedAchievementPulsePresentation,
 )
+from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
+from rendering.quick.state import QuickWindowPolicy
+from rendering.quick.widgets.host import OverlayWidgetGeometry
+from rendering.quick.widgets.registry import (
+    ORDINARY_WIDGET_FAMILY_COMPONENTS,
+    ordinary_widget_family_component,
+)
+from rendering.quick.window import QuickDisplayWindow
+from rendering.widget_runtime_manager import WidgetRuntimeManager
 from widgets.steam_achievement_preparation import (
     AchievementPulsePreparedPresentation,
 )
@@ -107,6 +117,31 @@ class _RuntimeService:
 
     def on_presentation_fade_complete(self) -> None:
         self.fade_complete_calls += 1
+
+
+class _QueuedRuntimeManager:
+    def __init__(self) -> None:
+        self.tasks = []
+
+    def submit_io_task(
+        self,
+        callback_fn,
+        *args,
+        task_id=None,
+        callback=None,
+        category=None,
+        **kwargs,
+    ) -> None:
+        self.tasks.append(
+            {
+                "callback_fn": callback_fn,
+                "args": args,
+                "kwargs": kwargs,
+                "task_id": task_id,
+                "callback": callback,
+                "category": category,
+            }
+        )
 
 
 def _find_visual_item(root: QQuickItem, object_name: str) -> QQuickItem | None:
@@ -421,3 +456,124 @@ def test_qml_is_presentation_only_and_keeps_family_authored_capsule_shadow() -> 
     assert "RectangularShadow" in capsule_qml
     assert "offset: Qt.vector2d(1.5, 1.5)" in capsule_qml
     assert "cached: true" in capsule_qml
+    descriptor = ordinary_widget_family_component("achievement_pulse")
+    assert descriptor.qml_filename == "AchievementPulsePresentation.qml"
+    assert (
+        descriptor.presentation_model_kind
+        == "AchievementPulsePresentationModel"
+    )
+    assert descriptor in ORDINARY_WIDGET_FAMILY_COMPONENTS
+    qmldir = (QML_ROOT / "qmldir").read_text(encoding="utf-8")
+    assert (
+        "AchievementPulsePresentation 1.0 AchievementPulsePresentation.qml"
+        in qmldir
+    )
+    assert "AchievementCapsule 1.0 AchievementCapsule.qml" in qmldir
+
+
+@pytest.mark.qt
+def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
+    qt_app,
+) -> None:
+    class _Host:
+        @staticmethod
+        def get_runtime_widget_registry():
+            return {}
+
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=81,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime_owner = WidgetRuntimeManager(_Host())
+    manager = _QueuedRuntimeManager()
+    config = _config()
+    model = AchievementPulsePresentationModel(
+        config,
+        AchievementPulsePresentationStyle.project(config, _shadow_values()),
+        parent=window,
+    )
+    service = runtime_owner.ensure_widget_service(
+        "achievement_pulse",
+        model,
+        {
+            "steam": {"refresh_minutes": 10},
+            "achievement_pulse": {"enabled": True},
+        },
+    )
+    assert service is not None
+    assert model._achievement_runtime_service is service
+    assert service.is_running() is False
+
+    settings_requests = []
+    presentation = None
+    try:
+        presentation = RetainedAchievementPulsePresentation(
+            host=controller.ordinary_widget_host,
+            model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 600.0, 334.0),
+            on_settings_requested=lambda target: settings_requests.append(target)
+            or True,
+        )
+        item = presentation.item
+        engine = QQmlEngine.contextForObject(item).engine()
+        field_model = model.field_model
+        unlock_model = model.unlock_model
+        assert item.property("fadeOpacity") == pytest.approx(0.0)
+
+        assert presentation.activate(manager) is True
+        qt_app.processEvents()
+        assert service.runtime_generation == 81
+        assert service.is_running() is True
+        assert [task["category"] for task in manager.tasks] == [
+            "steam_achievement_cache_load"
+        ]
+
+        service._accept_model(
+            build_mock_steam_view_model("achievement_pulse"),
+            profile_key="",
+            animate=False,
+        )
+        qt_app.processEvents()
+        first_field = _find_visual_item(item, "achievementField_rarity")
+        assert first_field is not None
+
+        presentation.apply_input_state(
+            {
+                "admission_open": True,
+                "exiting": False,
+                "interaction_mode_enabled": True,
+                "ctrl_held": False,
+            }
+        )
+        item.settingsRequested.emit("steam_connection")
+        item.refreshRequested.emit()
+        assert settings_requests == ["steam_connection"]
+        assert [task["category"] for task in manager.tasks] == [
+            "steam_achievement_cache_load",
+            "steam_achievement_refresh",
+        ]
+
+        service._request_consumer_fade()
+        qt_app.processEvents()
+        assert item.property("fadeOpacity") == pytest.approx(1.0)
+        assert presentation.item is item
+        assert presentation.model is model
+        assert model.field_model is field_model
+        assert model.unlock_model is unlock_model
+        assert QQmlEngine.contextForObject(item).engine() is engine
+        assert _find_visual_item(item, "achievementField_rarity") is first_field
+    finally:
+        controller.quiesce_for_retirement()
+        runtime_owner.cleanup()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+    assert presentation is not None
+    assert service.is_retired() is True
