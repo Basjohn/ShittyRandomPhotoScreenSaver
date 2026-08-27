@@ -1,7 +1,7 @@
 """Presentation-neutral Steam Abandonment runtime/model owner (E1 slice 4).
 
-``AbandonmentRuntimeService`` owns the non-pixel lifecycle that previously
-existed only because ``AbandonmentIssuesWidget`` existed:
+``AbandonmentRuntimeService`` owns the non-pixel lifecycle for one retained
+Abandonment Issues card:
 
 - cache-first startup load;
 - source refresh and explicit manual force-refresh;
@@ -16,16 +16,16 @@ a Steam provider singleton or share one card's selection/cadence with another
 display.  Current cardinality remains one Abandonment runtime per enabled
 card/display.
 
-The temporary QWidget presentation implements a small consumer protocol:
+The retained presentation model implements a small consumer protocol:
 
 - ``is_abandonment_consumer_alive()``
 - ``on_abandonment_presentation(presentation, *, animate)``
 - ``request_abandonment_fade()``
 - ``on_abandonment_rotation_due()``
 
-It retains authored geometry, QPainter rendering, content/fade transitions,
-transition-only deferral and input routing.  A later Quick presenter can consume
-the same prepared state without owning provider/cache/timer work.
+It retains only accepted presentation state, transition-only deferral and
+semantic action routing. The service remains independent of Quick geometry,
+pixels and item lifetime.
 """
 from __future__ import annotations
 

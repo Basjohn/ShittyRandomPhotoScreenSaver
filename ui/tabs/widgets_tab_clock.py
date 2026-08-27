@@ -18,9 +18,9 @@ from PySide6.QtGui import QColor, QFont
 from core.logging.logger import get_logger
 from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
-    INFO_LABEL_STYLE,
     add_swatch_label,
     style_group_box,
     add_aligned_row,
@@ -493,7 +493,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     clock_border_opacity_row.addWidget(tab.clock_border_opacity_label)
 
     extra_label = QLabel("Additional Clocks (Optional, Share Style with Main Clock)")
-    extra_label.setStyleSheet(INFO_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(extra_label, "INFO_LABEL_STYLE")
     extra_layout.addWidget(extra_label)
 
     clock2_row = _aligned_row(extra_layout, "Clock 2:")

@@ -36,9 +36,8 @@ from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
 from ui.flow_layout import FlowContainer
 from ui.styled_popup import StyledPopup
+from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
-    FORM_ROW_LABEL_STYLE,
-    INFO_LABEL_STYLE,
     add_aligned_row,
     build_bucket_toggle,
     style_group_box,
@@ -149,7 +148,12 @@ def _set_cache_status(tab: WidgetsTab, message: str, *, state: str = "info") -> 
         "warning": "#ffbd70",
         "error": "#ff8585",
     }.get(state, "rgba(255, 255, 255, 175)")
-    label.setStyleSheet(f"{INFO_LABEL_STYLE} color: {color};")
+    shared_styles.bind_shared_styles(
+        label,
+        "INFO_LABEL_STYLE",
+        base_style="",
+        trailing_style=f" color: {color};",
+    )
     label.setText(message)
 
 
@@ -325,7 +329,12 @@ def _build_shadow_spin_control(
     control_layout.setSpacing(2)
 
     label = QLabel(label_text)
-    label.setStyleSheet(f"{FORM_ROW_LABEL_STYLE} qproperty-alignment: AlignCenter;")
+    shared_styles.bind_shared_styles(
+        label,
+        "FORM_ROW_LABEL_STYLE",
+        base_style="",
+        trailing_style=" qproperty-alignment: AlignCenter;",
+    )
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     control_layout.addWidget(label)
 
@@ -369,7 +378,7 @@ def _build_shadow_direction_picker(
     tab._shadow_direction_buttons = {}
 
     label = QLabel("Shadow Direction:")
-    label.setStyleSheet(FORM_ROW_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(label, "FORM_ROW_LABEL_STYLE")
     label.setMinimumWidth(150)
 
     grid = QGridLayout()
@@ -593,7 +602,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     border_row.addWidget(tab.card_border_width_spin)
 
     px_label = QLabel("px")
-    px_label.setStyleSheet(FORM_ROW_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(px_label, "FORM_ROW_LABEL_STYLE")
     px_label.setMinimumWidth(24)
     border_row.addWidget(px_label)
     border_row.addStretch()
@@ -617,7 +626,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "Choose only the cached content you want removed. Settings, credentials, layouts, and defaults are never included."
     )
     cache_intro.setWordWrap(True)
-    cache_intro.setStyleSheet(INFO_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(cache_intro, "INFO_LABEL_STYLE")
     cache_layout.addWidget(cache_intro)
 
     app_data_dir = _settings_app_data_dir(tab)
@@ -642,7 +651,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     cache_button_row.setSpacing(12)
     tab.cache_clear_status_label = QLabel("Choose one or more cache families.")
     tab.cache_clear_status_label.setWordWrap(True)
-    tab.cache_clear_status_label.setStyleSheet(INFO_LABEL_STYLE)
+    shared_styles.apply_shared_label_style(tab.cache_clear_status_label, "INFO_LABEL_STYLE")
     cache_button_row.addWidget(tab.cache_clear_status_label, 1)
     tab.clear_selected_caches_btn = QPushButton("Clear Selected Caches")
     tab.clear_selected_caches_btn.setFixedHeight(32)

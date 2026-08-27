@@ -12,6 +12,7 @@ asked to reapply the previous theme before the original exception is re-raised.
 from __future__ import annotations
 
 from collections.abc import Callable
+from os import PathLike
 
 from ui.settings_theme_spec import (
     DEFAULT_DARK_SETTINGS_THEME,
@@ -100,8 +101,27 @@ def reset_active_settings_theme() -> bool:
     return set_active_settings_theme(DEFAULT_DARK_SETTINGS_THEME)
 
 
+def activate_settings_theme_file(
+    path: str | PathLike[str] | None,
+):
+    """Safely activate one optional file-backed theme.
+
+    File absence or any parse/schema/semantic validation failure activates the
+    compiled-in Default Dark ThemeSpec. The returned load result preserves the
+    error detail for a future Themes UI without making Settings depend on disk
+    theme files.
+    """
+
+    from ui.settings_theme_io import load_settings_theme_or_default
+
+    result = load_settings_theme_or_default(path)
+    set_active_settings_theme(result.theme)
+    return result
+
+
 __all__ = [
     "SettingsThemeListener",
+    "activate_settings_theme_file",
     "get_active_settings_theme",
     "reset_active_settings_theme",
     "set_active_settings_theme",
