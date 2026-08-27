@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-88ef4903e1b85a2f5bf1e398a9ecda62385fb233
-5.0.0 - Phase F6 Partial - SGUI P14
+6fa9453bc17e1fabd54fea162927032d7399b636
+Phase F6 shared Quick import-dormancy implementation on current main
 ```
 
 Current phase state:
@@ -45,41 +45,12 @@ neutral Gmail runtime/preparation/notification ownership audit     GREEN
 retained config/style + stable message projection model            GREEN
 static QML + retained presentation wrapper                         GREEN
 Gmail pointer + visual parity                                      GREEN
-shared Quick import-dormancy correction                            ACTIVE
-registry + real owner injection + runtime-shaped gates             pending
+shared Quick import-dormancy correction                            GREEN
+registry + real owner injection + runtime-shaped gates             ACTIVE
 caller proof + old Gmail pixel/cache/input retirement              pending
 ```
 
-### F6.2 — shared Quick import dormancy
-
-Do this immediately after F6.1 and before real Gmail runtime-owner injection.
-
-Current defect:
-
-```text
-import rendering.quick.scene_controller
--> rendering.quick.widgets package
--> eager family imports
--> Gmail presentation module
--> widgets.gmail_runtime / Gmail backend implementation tree
-```
-
-Required:
-
-- `rendering.quick.widgets` stays light;
-- common Quick scene/host import does not eagerly import inactive family business/runtime trees;
-- family implementation resolves at the actual family caller/activation boundary;
-- annotation-only runtime imports use `TYPE_CHECKING` where appropriate;
-- no second registry/plugin framework merely to solve import timing;
-- importing common Quick infrastructure constructs no provider/controller/runtime/backend singleton.
-
-Fresh-process regression must cover `import rendering.quick.scene_controller` while keeping inactive Gmail,
-Weather, Reddit and Media business/runtime backend trees dormant. Retain the existing legacy-host dormancy
-tests too.
-
 ### F6.3 — real owner / host integration
-
-After F6.2 GREEN:
 
 - admit `gmail` through the existing static presentation-only family registry;
 - inject the existing `WidgetRuntimeManager`-owned `GmailRuntimeService` lease;

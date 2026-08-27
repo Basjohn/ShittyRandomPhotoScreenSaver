@@ -72,11 +72,14 @@ menu with icons, semantic open/auth/refresh/read-unread/archive/spam/delete, not
 - accepted-row dynamic height and retained item/model/list-model/engine identity;
 - real registry/host/runtime injection not yet landed.
 
-### Shared Quick import-dormancy correction
+### Shared Quick import dormancy — GREEN
 
-Before real Gmail owner injection, common `rendering.quick.widgets` / scene imports must stop importing inactive
-family runtime/backend trees merely from `import rendering.quick.scene_controller`. Keep static registry metadata
-light; no second registry/plugin architecture.
+`rendering.quick.widgets` now exports only the light retained host/style records and static family metadata.
+Family tests/tools import their implementation modules directly, common `scene_controller` imports only host and
+registry modules, Gmail runtime snapshot annotations are type-only, and the Gmail integration package initializer
+no longer eagerly imports OAuth/IMAP/backend modules. Fresh-process gates prove common Quick scene import keeps
+inactive Clock, Weather, Media, Reddit and Gmail presentation/runtime/backend trees dormant. No second registry
+or plugin architecture was added.
 
 ### Complete F6
 
