@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-3159febf0a4f486afd3c0b89bf3d8f42a02b746a
-G2.1 single retained overlay/session-model bootstrap landed and passed post-push self-audit
+39fcf12d78279f45d0d89fbd0d2c8357f208d30d
+G2 retained family/Visualizer session integration is on main and validated for closure
 ```
 
 Current phase state:
@@ -44,14 +44,14 @@ Source outranks this plan if a later checkpoint has landed.
 one retained Quick edit overlay per display                           ACTIVE
 ```
 
-### G2.3 — visualizer participation and G2 closure (ACTIVE)
+### G3 — Save/Cancel and exact enabled/duplicate persistence (ACTIVE)
 
-- route the retained Visualizer shell/item through the same session geometry and working-visibility seam without eager activation;
-- preserve visualizer scale/viewport and compositor identity while session rects temporarily override placement;
-- prove move/X/Cancel reuse the same retained visualizer shell and render item;
-- close remaining admission/refresh wiring required by the future physical Quick runtime without binding G2 back to QWidget;
-- self-audit all adjustable retained families against duplicate-versus-singleton X and ordinary-enabled semantics;
-- do not retire old edit/grid pixels until the complete retained integration is GREEN.
+- derive duplicate status from current active survivors so X can remove duplicates and then ordinary-disable the final singleton;
+- commit working ordinary enabled state together with geometry/monitor/duplicate removals, never family/capability activation;
+- keep provider/account/source settings untouched and preserve inactive geometry variants;
+- make Cancel restore geometry, display, duplicate set and ordinary enabled state on the same retained items;
+- prove Enter/context Save and Escape/Cancel against single- and multi-display working sessions;
+- keep the old edit/grid presentation only until retained Save/Cancel proof is GREEN.
 
 Use `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`; exact current source outranks stale owner names.
 
