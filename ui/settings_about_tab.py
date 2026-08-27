@@ -15,11 +15,30 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QPixmap, QDesktopServices
 
 from core.logging.logger import get_logger
+from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME
 
 if TYPE_CHECKING:
     from ui.settings_dialog import SettingsDialog
 
 logger = get_logger(__name__)
+
+_SETTINGS_THEME = DEFAULT_DARK_SETTINGS_THEME
+
+
+def _theme_hex(token: str) -> str:
+    """Render one opaque About theme role as QSS hex."""
+
+    value = _SETTINGS_THEME.color(token)
+    if value.a != 255:
+        raise ValueError(f"About theme colour {token!r} is not opaque")
+    return f"#{value.r:02x}{value.g:02x}{value.b:02x}"
+
+
+def _theme_rgba255(token: str) -> str:
+    """Render one About theme role using Qt's integer-alpha rgba syntax."""
+
+    value = _SETTINGS_THEME.color(token)
+    return f"rgba({value.r}, {value.g}, {value.b}, {value.a})"
 
 
 def build_about_tab(dialog: "SettingsDialog") -> QWidget:
@@ -44,8 +63,8 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     content_card.setObjectName("aboutContentCard")
     content_card.setStyleSheet(
         "#aboutContentCard {"
-        "  background-color: rgba(31, 31, 31, 200);"
-        "  border: 1px solid #ffffff;"
+        f"  background-color: {_theme_rgba255('about.card.surface')};"
+        f"  border: 1px solid {_theme_hex('about.card.border')};"
         "  border-radius: 8px;"
         "}"
     )
@@ -110,7 +129,9 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     blurb_label = QLabel()
     blurb_label.setWordWrap(True)
     blurb_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-    blurb_label.setStyleSheet("color: #dddddd; font-size: 12pt;")
+    blurb_label.setStyleSheet(
+        f"color: {_theme_hex('about.blurb.text')}; font-size: 12pt;"
+    )
     blurb_label.setTextFormat(Qt.TextFormat.RichText)
 
     default_blurb = (
@@ -165,16 +186,16 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
             "  padding: 6px 18px;"
             "  font-weight: bold;"
             "  border-radius: 16px;"
-            "  background-color: rgba(47, 47, 47, 215);"
-            "  color: #ffffff;"
-            "  border: 1px solid #ffffff;"
+            f"  background-color: {_theme_rgba255('about.link.surface')};"
+            f"  color: {_theme_hex('about.link.text')};"
+            f"  border: 1px solid {_theme_hex('about.link.border')};"
             "}"
             "QPushButton:hover {"
-            "  background-color: rgba(58, 58, 58, 220);"
+            f"  background-color: {_theme_rgba255('about.link.hover_surface')};"
             "}"
             "QPushButton:pressed {"
-            "  background-color: rgba(38, 38, 38, 220);"
-            "  border: 1px solid rgba(200, 200, 200, 200);"
+            f"  background-color: {_theme_rgba255('about.link.pressed_surface')};"
+            f"  border: 1px solid {_theme_rgba255('about.link.pressed_border')};"
             "}"
         )
 
@@ -206,7 +227,9 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     )
     hotkeys_label.setWordWrap(True)
     hotkeys_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-    hotkeys_label.setStyleSheet("color: #cccccc; margin-top: 16px;")
+    hotkeys_label.setStyleSheet(
+        f"color: {_theme_hex('about.hotkeys.text')}; margin-top: 16px;"
+    )
     hotkeys_label.setOpenExternalLinks(False)
     card_layout.addWidget(hotkeys_label)
 
@@ -253,20 +276,22 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     # More options button (context menu)
     dialog.more_options_btn = QPushButton("⋮")
     dialog.more_options_btn.setFixedSize(24, 24)
-    dialog.more_options_btn.setStyleSheet("""
-        QPushButton {
+    dialog.more_options_btn.setStyleSheet(
+        f"""
+        QPushButton {{
             font-size: 14px;
             font-weight: bold;
             padding: 0;
-            border: 1px solid rgba(80, 80, 90, 150);
+            border: 1px solid {_theme_rgba255('about.more.border')};
             border-radius: 4px;
-            background-color: rgba(40, 40, 45, 200);
-            color: rgba(200, 200, 210, 220);
-        }
-        QPushButton:hover {
-            background-color: rgba(60, 60, 70, 220);
-        }
-    """)
+            background-color: {_theme_rgba255('about.more.surface')};
+            color: {_theme_rgba255('about.more.text')};
+        }}
+        QPushButton:hover {{
+            background-color: {_theme_rgba255('about.more.hover_surface')};
+        }}
+    """
+    )
     dialog.more_options_btn.setToolTip("More options")
     dialog.more_options_btn.clicked.connect(dialog._show_more_options_menu)
     button_row.addWidget(dialog.more_options_btn)
@@ -275,8 +300,10 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     dialog.reset_notice_label = QLabel("Settings reverted to defaults!")
     dialog.reset_notice_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
     dialog.reset_notice_label.setStyleSheet(
-        "color: #ffffff; font-size: 11px; padding: 4px 10px; "
-        "background-color: rgba(16, 16, 16, 230); border-radius: 6px;"
+        f"color: {_theme_hex('about.notice.text')}; "
+        "font-size: 11px; padding: 4px 10px; "
+        f"background-color: {_theme_rgba255('about.notice.surface')}; "
+        "border-radius: 6px;"
     )
     dialog.reset_notice_label.setVisible(False)
     layout.addWidget(dialog.reset_notice_label)
