@@ -28,6 +28,7 @@ from widgets.spotify_visualizer.presentation_geometry import (
 
 from .bootstrap import quick_qml_root
 from .auxiliary import QuickAuxiliaryState
+from .context_menu import QuickContextMenuModel
 from .custom_layout_overlay import (
     CustomLayoutOverlayModel,
     GeometryResolver,
@@ -390,6 +391,20 @@ class QuickSceneController(QObject):
         root.setProperty("haloX", state.halo_x)
         root.setProperty("haloY", state.halo_y)
         root.setProperty("haloShape", state.halo_shape)
+        return True
+
+    def bind_context_menu_model(self, model: QuickContextMenuModel) -> bool:
+        if not isinstance(model, QuickContextMenuModel):
+            raise TypeError("Quick scene context menu requires QuickContextMenuModel")
+        root = self._scene_root
+        if (
+            root is None
+            or not self._readiness.admission_open
+            or model.screen_index != self._window.screen_index
+            or model.runtime_generation != self._readiness.runtime_generation
+        ):
+            return False
+        root.setProperty("contextMenuModel", model)
         return True
 
     def bind_custom_layout_session(
