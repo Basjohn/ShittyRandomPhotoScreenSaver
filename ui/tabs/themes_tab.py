@@ -10,7 +10,7 @@ Internal navigation:
 """
 from __future__ import annotations
 from typing import Optional
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QSignalBlocker, QSize, Qt
 from PySide6.QtWidgets import (QButtonGroup, QGroupBox, QLabel, QListWidget,
     QListWidgetItem, QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 from core.logging.logger import get_logger
@@ -26,6 +26,25 @@ from ui.tabs.shared_styles import style_group_box
 logger = get_logger(__name__)
 _SETTING_THEMES_PAGE = 0
 _WIDGET_THEMES_PAGE = 1
+
+
+class _ThemePillButton(QPushButton):
+    """Pill whose layout hint always includes the full authored label."""
+
+    _MIN_WIDTH = 280
+    _TEXT_PADDING = 112
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        hint = super().sizeHint()
+        text_width = self.fontMetrics().horizontalAdvance(self.text())
+        return QSize(
+            max(self._MIN_WIDTH, text_width + self._TEXT_PADDING),
+            hint.height(),
+        )
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return self.sizeHint()
+
 
 class ThemesTab(QWidget):
     """Settings theme catalogue with reserved future Widget Themes surface."""
@@ -65,9 +84,7 @@ class ThemesTab(QWidget):
         root=QVBoxLayout(self); root.setContentsMargins(0,0,0,0); root.addWidget(scroll)
 
     def _make_nav_pill(self,text,page_index):
-        button=QPushButton(text); button.setCheckable(True)
-        # Keep both authored labels comfortably inside their pills.
-        button.setMinimumWidth(220)
+        button=_ThemePillButton(text); button.setCheckable(True)
         shared_styles.bind_shared_styles(button,"NAV_PILL_STYLE",base_style="")
         self._nav_group.addButton(button,page_index)
         button.clicked.connect(lambda _checked=False,index=page_index:self._select_page(index))
