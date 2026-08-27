@@ -22,6 +22,11 @@ from rendering.quick.scene_controller import QuickSceneController, QuickSceneFac
 from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.widgets.host import OverlayWidgetGeometry
 from rendering.quick.window import QuickDisplayWindow
+from widgets.spotify_visualizer.presentation_geometry import (
+    resolve_visualizer_presentation,
+)
+from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
+from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -253,6 +258,114 @@ def test_scene_binding_moves_hides_and_restores_same_retained_family_item(qt_app
     assert controller.custom_layout_overlay.item.property("editActive") is False
     assert presentation_item.property("workingVisible") is True
     assert id(presentation.item) == retained_identity
+
+    controller.quiesce_for_retirement()
+    window.deleteLater()
+    factory.deleteLater()
+    qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_visualizer_custom_session_preserves_retained_item_and_render_identity(qt_app) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=109,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("spectrum"),
+        display_size=(1920.0, 1080.0),
+        outer_origin=(207.0, 310.0),
+        uniform_visual_scale=1.5,
+        scene_fade=0.75,
+    )
+    outer_x, outer_y, outer_width, outer_height = presentation.outer_rect
+
+    session = CustomLayoutSession()
+    visualizer = _item(
+        "spotify_visualizer",
+        "display:a",
+        QRect(
+            100 + int(outer_x),
+            200 + int(outer_y),
+            int(outer_width),
+            int(outer_height),
+        ),
+    )
+    foreign_duplicate = _item(
+        "spotify_visualizer",
+        "display:b",
+        QRect(1300, 400, int(outer_width), int(outer_height)),
+        duplicate=True,
+    )
+    session.add_item(visualizer)
+    session.add_item(foreign_duplicate)
+    model = controller.bind_custom_layout_session(
+        session,
+        display_identity="display:a",
+        display_origin=QPoint(100, 200),
+    )
+    assert controller.describe_scene_state()["visualizer"]["instantiated"] is False
+
+    bridge = VisualizerSnapshotBridge()
+    render_identity = bridge.begin_activation(
+        runtime_generation=109,
+        engine_generation=5,
+        activation_id=7,
+        mode_id="spectrum",
+    )
+    controller.set_visualizer_render_source(bridge, render_identity)
+    controller.apply_visualizer_presentation(presentation)
+    render_item = controller.visualizer_item
+    render_item_identity = id(render_item)
+    visualizer_root = controller.scene_root.findChild(
+        QQuickItem,
+        "visualizerPresentationRoot",
+    )
+    loader = controller.scene_root.findChild(
+        QQuickItem,
+        "visualizerPresentationLoader",
+    )
+    assert visualizer_root is not None and loader is not None
+    root_identity = id(visualizer_root)
+
+    assert (loader.x(), loader.y()) == (outer_x, outer_y)
+    assert visualizer_root.property("presentationActive") is True
+    assert visualizer_root.property("customLayoutWorkingVisible") is True
+    assert render_item.presentation is presentation
+    assert render_item.render_identity == render_identity
+
+    model.moveItem(0, outer_x + 80.0, outer_y + 45.0)
+    assert (loader.x(), loader.y()) == (outer_x + 80.0, outer_y + 45.0)
+    assert id(controller.visualizer_item) == render_item_identity
+    assert id(visualizer_root) == root_identity
+    assert render_item.presentation is presentation
+    assert render_item.render_identity == render_identity
+
+    model.closeItem(0)
+    assert visualizer.current_enabled is False
+    assert visualizer_root.property("presentationActive") is True
+    assert visualizer_root.property("customLayoutWorkingVisible") is False
+    assert id(controller.visualizer_item) == render_item_identity
+    assert render_item.render_identity == render_identity
+
+    session.restore_baseline()
+    controller.refresh_custom_layout_session()
+    assert visualizer.current_enabled is True
+    assert visualizer_root.property("customLayoutWorkingVisible") is True
+    assert (loader.x(), loader.y()) == (outer_x, outer_y)
+    assert id(controller.visualizer_item) == render_item_identity
+    assert render_item.render_identity == render_identity
+
+    controller.clear_custom_layout_session()
+    assert visualizer_root.property("customLayoutWorkingVisible") is True
+    assert id(visualizer_root) == root_identity
+    assert id(controller.visualizer_item) == render_item_identity
 
     controller.quiesce_for_retirement()
     window.deleteLater()
