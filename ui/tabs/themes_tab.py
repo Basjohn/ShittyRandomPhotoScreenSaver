@@ -67,7 +67,7 @@ class ThemesTab(QWidget):
     def _make_nav_pill(self,text,page_index):
         button=QPushButton(text); button.setCheckable(True)
         # Keep both authored labels comfortably inside their pills.
-        button.setMinimumWidth(150)
+        button.setMinimumWidth(220)
         shared_styles.bind_shared_styles(button,"NAV_PILL_STYLE",base_style="")
         self._nav_group.addButton(button,page_index)
         button.clicked.connect(lambda _checked=False,index=page_index:self._select_page(index))

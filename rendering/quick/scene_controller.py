@@ -228,6 +228,7 @@ class QuickSceneController(QObject):
         self._background_item: BackgroundRenderItem | None = None
         self._ordinary_widget_host: OrdinaryWidgetPresentationHost | None = None
         self._custom_layout_overlay: RetainedCustomLayoutOverlay | None = None
+        self._custom_layout_session: CustomLayoutSession | None = None
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
         self._visualizer_loader: QQuickItem | None = None
@@ -347,6 +348,7 @@ class QuickSceneController(QObject):
             raise ValueError("display_identity must not be empty")
         self._custom_layout_display_identity = identity
         self._custom_layout_display_origin = QPoint(display_origin or QPoint())
+        self._custom_layout_session = session
         return self.custom_layout_overlay.bind_session(
             session,
             display_identity=identity,
@@ -368,26 +370,28 @@ class QuickSceneController(QObject):
             presentation = host.presentation_for_model_identity(model_identity)
             if presentation is not None:
                 presentation.set_working_visible(True)
+        if self._visualizer_root is not None:
+            self._visualizer_root.setProperty("customLayoutWorkingVisible", True)
         self.custom_layout_overlay.clear_session()
+        self._custom_layout_session = None
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
 
     def _apply_custom_layout_item(self, item: CustomLayoutSessionItem) -> None:
+        if item.model_identity == "spotify_visualizer":
+            self._sync_custom_layout_visualizer()
+            return
         host = self._ordinary_widget_host
         if host is None:
             return
         presentation = host.presentation_for_model_identity(item.model_identity)
         if presentation is None:
             return
-        belongs_here = (
-            item.current_display_identity == self._custom_layout_display_identity
-            and item.current_enabled
-            and not item.removed
-        )
-        presentation.set_working_visible(belongs_here)
-        if not belongs_here:
+        active_item = self._active_custom_layout_item(item.model_identity)
+        presentation.set_working_visible(active_item is not None)
+        if active_item is None:
             return
-        rect = item.current_global_rect
+        rect = active_item.current_global_rect
         origin = self._custom_layout_display_origin
         presentation.set_geometry(
             OverlayWidgetGeometry(
@@ -397,6 +401,43 @@ class QuickSceneController(QObject):
                 float(rect.height()),
             )
         )
+
+    def _active_custom_layout_item(
+        self,
+        model_identity: str,
+    ) -> CustomLayoutSessionItem | None:
+        session = self._custom_layout_session
+        if session is None:
+            return None
+        return next(
+            (
+                item
+                for item in session.items()
+                if item.model_identity == model_identity
+                and item.current_display_identity
+                == self._custom_layout_display_identity
+                and item.current_enabled
+                and not item.removed
+            ),
+            None,
+        )
+
+    def _sync_custom_layout_visualizer(self) -> None:
+        root = self._visualizer_root
+        loader = self._visualizer_loader
+        if root is None or loader is None:
+            return
+        if self._custom_layout_session is None:
+            root.setProperty("customLayoutWorkingVisible", True)
+            return
+        active_item = self._active_custom_layout_item("spotify_visualizer")
+        root.setProperty("customLayoutWorkingVisible", active_item is not None)
+        if active_item is None:
+            return
+        rect = active_item.current_global_rect
+        origin = self._custom_layout_display_origin
+        loader.setX(float(rect.x() - origin.x()))
+        loader.setY(float(rect.y() - origin.y()))
 
     @property
     def telemetry(self) -> RenderNodeTelemetry:
@@ -540,6 +581,7 @@ class QuickSceneController(QObject):
             float(style.get("shadow_spread", 0.0)),
         )
         root.setProperty("presentationActive", bool(active))
+        self._sync_custom_layout_visualizer()
 
     def set_visualizer_presentation_active(self, active: bool) -> None:
         """Change retained presentation visibility without rebuilding it."""
@@ -548,6 +590,7 @@ class QuickSceneController(QObject):
             raise RuntimeError("Quick scene admission is closed")
         if self._visualizer_root is not None:
             self._visualizer_root.setProperty("presentationActive", bool(active))
+            self._sync_custom_layout_visualizer()
 
     def quiesce_for_retirement(self) -> None:
         """Close state admission; item deletion waits for legal invalidation."""
@@ -655,6 +698,7 @@ class QuickSceneController(QObject):
         self._visualizer_root = root
         self._visualizer_content_host = content_host
         self._visualizer_item = item
+        self._sync_custom_layout_visualizer()
         return item
 
     @staticmethod
@@ -726,6 +770,7 @@ class QuickSceneController(QObject):
             self._custom_layout_overlay.retire()
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
+        self._custom_layout_session = None
         root = self._scene_root
         context = self._context
         # Detach and queue the C++-owned root while every Python child wrapper
