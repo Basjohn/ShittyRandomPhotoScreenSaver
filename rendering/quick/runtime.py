@@ -144,6 +144,11 @@ class QuickDisplayRuntime(QObject):
         self._scene.readiness_changed.connect(self._on_scene_readiness_changed)
         self._auxiliary.state_changed.connect(self._scene.apply_auxiliary_state)
         self._scene.apply_auxiliary_state(self._auxiliary.state)
+        self._input.input_state_changed.connect(self._auxiliary.apply_input_state)
+        self._auxiliary.apply_input_state(self._input.input_state)
+        self._window.pointer_position_changed.connect(
+            self._auxiliary.update_halo_pointer
+        )
         self._input.input_state_changed.connect(self._scene.apply_input_state)
         self._scene.apply_input_state(self._input.input_state)
         self._transition.run_changed.connect(self._scene.set_transition_run)
