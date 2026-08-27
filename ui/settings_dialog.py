@@ -33,7 +33,7 @@ from core.settings.visualizer_preset_transfer import (
     import_visualizer_presets_folder,
 )
 from core.animation import AnimationManager
-from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab
+from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab, ThemesTab
 from ui.styled_popup import StyledPopup
 from ui.tabs import shared_styles
 from ui.widgets.control_shadow import (
@@ -652,14 +652,15 @@ class SettingsDialog(QDialog):
     - Resizable
     - Animated tab switching
     - Dark theme
-    - 4 tabs: Sources, Transitions, Widgets, About
+    - Sidebar tabs including Themes between Accessibility and About
     """
     
     def __init__(self, settings_manager: SettingsManager,
                  animation_manager: AnimationManager,
                  parent: Optional[QWidget] = None,
                  *,
-                 runtime_generation: object | None = None):
+                 runtime_generation: object | None = None,
+                 themes_directory: str | os.PathLike[str] | None = None):
         """
         Initialize settings dialog.
         
@@ -667,7 +668,21 @@ class SettingsDialog(QDialog):
             settings_manager: Settings manager instance
             animation_manager: Animation manager for UI animations
             parent: Parent widget
+            themes_directory: Optional caller-resolved packaged themes directory.
+                No install/frozen-build path is guessed by Settings itself.
         """
+        # Resolve a supplied persisted selection before this QWidget or any
+        # Settings child exists. The resolver never installs Default Dark as
+        # an intermediate step before a valid custom theme.
+        if themes_directory is not None:
+            try:
+                from ui.settings_theme_catalog import activate_persisted_settings_theme
+                activate_persisted_settings_theme(settings_manager, themes_directory)
+            except Exception:
+                # Runtime activation is transactional and retains the previous
+                # valid theme, which is compiled Default Dark on a cold start.
+                logger.warning("Failed to resolve persisted Settings theme before UI construction", exc_info=True)
+
         super().__init__(parent)
 
         self._runtime_generation = runtime_generation
@@ -697,7 +712,7 @@ class SettingsDialog(QDialog):
                 except (TypeError, ValueError):
                     pass
         self._suppress_scroll_capture: bool = False
-        self._tab_keys = ["sources", "display", "transitions", "widgets", "accessibility", "about"]
+        self._tab_keys = ["sources", "display", "transitions", "widgets", "accessibility", "themes", "about"]
         self._force_initial_sources_tab = os.getenv(
             "SRPSS_SETTINGS_FORCE_INITIAL_TAB_SOURCES", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
@@ -745,12 +760,20 @@ class SettingsDialog(QDialog):
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0
         logger.info("[PERF][SETTINGS] %s in %.1f ms", label, elapsed_ms)
 
-    def _determine_initial_tab(self) -> None:
+    def _read_persisted_tab_index(self) -> int:
+        """Resolve stable tab key first, then migrate the pre-Themes index."""
+        stored_key = self._settings.get('ui.last_tab_key', None)
+        if isinstance(stored_key, str) and stored_key in self._tab_keys:
+            return self._tab_keys.index(stored_key)
+        legacy_keys = ("sources", "display", "transitions", "widgets", "accessibility", "about")
         stored = self._settings.get('ui.last_tab_index', 0)
-        try:
-            index = int(stored)
-        except Exception:
-            index = 0
+        try: legacy_index = int(stored)
+        except Exception: legacy_index = 0
+        if legacy_index < 0 or legacy_index >= len(legacy_keys): legacy_index = 0
+        return self._tab_keys.index(legacy_keys[legacy_index])
+
+    def _determine_initial_tab(self) -> None:
+        index = self._read_persisted_tab_index()
         # Diagnostic toggle for U-04 isolation:
         # force a lightweight initial tab so we can compare startup behavior.
         if self._force_initial_sources_tab:
@@ -946,6 +969,7 @@ class SettingsDialog(QDialog):
         self.widgets_tab_btn = TabButton("Widgets", "🕐")
         # Accessibility icon: wheelchair symbol for universal accessibility
         self.accessibility_tab_btn = TabButton("Accessibility", "♿")
+        self.themes_tab_btn = TabButton("Themes", "🎨")
         self.about_tab_btn = TabButton("About", "ℹ️")
 
         self._tab_button_by_key = {
@@ -954,6 +978,7 @@ class SettingsDialog(QDialog):
             "transitions": self.transitions_tab_btn,
             "widgets": self.widgets_tab_btn,
             "accessibility": self.accessibility_tab_btn,
+            "themes": self.themes_tab_btn,
             "about": self.about_tab_btn,
         }
         self.tab_buttons = [self._tab_button_by_key[key] for key in self._tab_keys]
@@ -984,6 +1009,7 @@ class SettingsDialog(QDialog):
                 ) if isinstance(self._tab_state_cache.get("widgets", {}).get("view_state", {}), dict) else None,
             ),
             "accessibility": lambda: AccessibilityTab(self._settings, parent=self.content_stack),
+            "themes": lambda: ThemesTab(self._settings, parent=self.content_stack),
             "about": self._create_about_tab,
         }
         for key in self._tab_keys:
@@ -1209,7 +1235,6 @@ class SettingsDialog(QDialog):
             index = self._tab_index_for_key(key)
             btn.clicked.connect(lambda _checked=False, idx=index: self._switch_tab(idx))
         
-        # Presets tab signal is wired when the tab is built (lazy)
 
     def _switch_tab(self, index: int, animate: bool = True) -> None:
         """
@@ -1411,23 +1436,19 @@ class SettingsDialog(QDialog):
         self._schedule_runtime_single_shot(0, _apply_scroll)
 
     def _save_last_tab(self, index: int) -> None:
-        if index < 0:
+        if index < 0 or index >= len(self._tab_keys):
             return
         try:
+            self._settings.set('ui.last_tab_key', self._tab_keys[index])
             self._settings.set('ui.last_tab_index', int(index))
             self._settings.save()
         except Exception:
-            logger.debug("Failed to persist last tab index", exc_info=True)
+            logger.debug("Failed to persist last Settings tab", exc_info=True)
 
     def _restore_last_tab_selection(self) -> None:
         if self._force_initial_sources_tab:
             return
-        stored = self._settings.get('ui.last_tab_index', 0)
-        try:
-            index = int(stored)
-        except Exception:
-            logger.debug("[SETTINGS] Exception suppressed")
-            index = 0
+        index = self._read_persisted_tab_index()
         if index < 0 or index >= len(self.tab_buttons):
             index = 0
         self._suppress_scroll_capture = True

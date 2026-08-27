@@ -91,6 +91,28 @@ class SettingsThemeCatalog:
         return None
 
 
+def _builtin_default_entry() -> SettingsThemeCatalogEntry:
+    return SettingsThemeCatalogEntry(
+        theme_id=BUILTIN_DEFAULT_THEME_ID,
+        name=DEFAULT_DARK_SETTINGS_THEME.name,
+        theme=DEFAULT_DARK_SETTINGS_THEME,
+        source_path=None,
+        is_builtin=True,
+    )
+
+
+_current_settings_theme_catalog = SettingsThemeCatalog(
+    entries=(_builtin_default_entry(),),
+    issues=(),
+)
+
+
+def get_current_settings_theme_catalog() -> SettingsThemeCatalog:
+    """Return the last startup-resolved catalogue, or built-in-only fallback."""
+
+    return _current_settings_theme_catalog
+
+
 @dataclass(frozen=True, slots=True)
 class SettingsThemeSelectionResolution:
     """A persisted request resolved to one always-valid ThemeSpec."""
@@ -151,13 +173,7 @@ def build_settings_theme_catalog(
     """
 
     root = Path(themes_directory)
-    builtin = SettingsThemeCatalogEntry(
-        theme_id=BUILTIN_DEFAULT_THEME_ID,
-        name=DEFAULT_DARK_SETTINGS_THEME.name,
-        theme=DEFAULT_DARK_SETTINGS_THEME,
-        source_path=None,
-        is_builtin=True,
-    )
+    builtin = _builtin_default_entry()
 
     entries: list[SettingsThemeCatalogEntry] = [builtin]
     issues: list[SettingsThemeCatalogIssue] = []
@@ -330,9 +346,12 @@ def activate_persisted_settings_theme(
     recover on a later run instead of silently destroying the user's choice.
     """
 
+    global _current_settings_theme_catalog
+
     catalog = build_settings_theme_catalog(themes_directory)
     resolution = resolve_persisted_settings_theme(settings, catalog)
     activate_catalog_theme(resolution.entry)
+    _current_settings_theme_catalog = catalog
     return SettingsThemeStartupResult(
         catalog=catalog,
         resolution=resolution,
@@ -352,6 +371,7 @@ __all__ = [
     "activate_catalog_theme",
     "activate_persisted_settings_theme",
     "build_settings_theme_catalog",
+    "get_current_settings_theme_catalog",
     "persist_settings_theme_selection",
     "read_persisted_theme_id",
     "resolve_persisted_settings_theme",
