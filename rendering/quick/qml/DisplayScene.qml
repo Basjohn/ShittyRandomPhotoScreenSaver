@@ -28,4 +28,10 @@ Item {
         source: "VisualizerPresentation.qml"
         z: 10
     }
+
+    CustomLayoutOverlay {
+        id: customLayoutOverlay
+        anchors.fill: parent
+        z: 100
+    }
 }

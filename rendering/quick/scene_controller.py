@@ -19,6 +19,7 @@ from widgets.spotify_visualizer.render_bridge import (
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
 
 from .bootstrap import quick_qml_root
+from .custom_layout_overlay import RetainedCustomLayoutOverlay
 from .image_state import PresentationImage
 from .media_artwork import MediaArtworkImageProvider
 from .render import BackgroundRenderItem, RenderNodeTelemetry
@@ -218,6 +219,7 @@ class QuickSceneController(QObject):
         self._scene_root: QQuickItem | None = None
         self._background_item: BackgroundRenderItem | None = None
         self._ordinary_widget_host: OrdinaryWidgetPresentationHost | None = None
+        self._custom_layout_overlay: RetainedCustomLayoutOverlay | None = None
         self._visualizer_loader: QQuickItem | None = None
         self._visualizer_root: QQuickItem | None = None
         self._visualizer_content_host: QQuickItem | None = None
@@ -256,6 +258,15 @@ class QuickSceneController(QObject):
             context=context,
             create_overlay_item=factory.create_overlay_widget,
             create_family_item=factory.create_ordinary_widget_family,
+        )
+        custom_layout_overlay_item = root.findChild(
+            QQuickItem,
+            "customLayoutOverlay",
+        )
+        if custom_layout_overlay_item is None:
+            raise RuntimeError("DisplayScene.qml has no CUSTOM layout overlay")
+        self._custom_layout_overlay = RetainedCustomLayoutOverlay(
+            custom_layout_overlay_item
         )
         self._background_item = BackgroundRenderItem(
             root,
@@ -303,6 +314,13 @@ class QuickSceneController(QObject):
         if host is None:
             raise RuntimeError("ordinary widget host has retired")
         return host
+
+    @property
+    def custom_layout_overlay(self) -> RetainedCustomLayoutOverlay:
+        overlay = self._custom_layout_overlay
+        if overlay is None:
+            raise RuntimeError("CUSTOM layout overlay has retired")
+        return overlay
 
     @property
     def telemetry(self) -> RenderNodeTelemetry:
@@ -628,6 +646,8 @@ class QuickSceneController(QObject):
         # generation or depends on the scene root still being attached.
         if self._ordinary_widget_host is not None:
             self._ordinary_widget_host.retire_all()
+        if self._custom_layout_overlay is not None:
+            self._custom_layout_overlay.retire()
         root = self._scene_root
         context = self._context
         # Detach and queue the C++-owned root while every Python child wrapper
@@ -642,6 +662,7 @@ class QuickSceneController(QObject):
         self._scene_root = None
         self._background_item = None
         self._ordinary_widget_host = None
+        self._custom_layout_overlay = None
         self._visualizer_item = None
         self._visualizer_content_host = None
         self._visualizer_root = None
