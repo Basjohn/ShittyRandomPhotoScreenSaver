@@ -27,6 +27,7 @@ from widgets.spotify_visualizer.presentation_geometry import (
 )
 
 from .bootstrap import quick_qml_root
+from .auxiliary import QuickAuxiliaryState
 from .custom_layout_overlay import (
     CustomLayoutOverlayModel,
     GeometryResolver,
@@ -367,6 +368,25 @@ class QuickSceneController(QObject):
         ):
             return False
         return self.ordinary_widget_host.apply_input_state(input_state)
+
+    def apply_auxiliary_state(self, state: QuickAuxiliaryState) -> bool:
+        """Project matching display-local auxiliary facts into the scene root."""
+
+        if not isinstance(state, QuickAuxiliaryState):
+            raise TypeError("Quick scene auxiliary state requires QuickAuxiliaryState")
+        root = self._scene_root
+        if (
+            root is None
+            or not self._readiness.admission_open
+            or state.runtime_generation != self._readiness.runtime_generation
+            or state.screen_index != self._window.screen_index
+        ):
+            return False
+        root.setProperty("dimmingEnabled", state.dimming_enabled)
+        root.setProperty("dimmingOpacity", state.dimming_opacity)
+        root.setProperty("pixelShiftX", float(state.pixel_shift_x))
+        root.setProperty("pixelShiftY", float(state.pixel_shift_y))
+        return True
 
     def bind_custom_layout_session(
         self,

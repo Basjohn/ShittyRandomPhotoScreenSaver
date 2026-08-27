@@ -8,6 +8,7 @@ from typing import Any
 from PySide6.QtCore import QObject, QPoint, Signal
 from PySide6.QtGui import QScreen
 
+from .auxiliary import QuickAuxiliaryController
 from .frame_pacer import QuickFramePacer
 from .image_state import PresentationImage
 from .input_controller import QuickInputController
@@ -105,6 +106,11 @@ class QuickDisplayRuntime(QObject):
             telemetry=self._telemetry,
         )
         self._scene_readiness = self._scene.readiness
+        self._auxiliary: QuickAuxiliaryController | None = QuickAuxiliaryController(
+            screen_index=self._screen_index,
+            runtime_generation=self._runtime_generation,
+            parent=self,
+        )
         self._pacer: QuickFramePacer | None = QuickFramePacer(
             self._window,
             refresh_rate,
@@ -116,6 +122,9 @@ class QuickDisplayRuntime(QObject):
                 parent=self,
             )
         )
+        self._auxiliary.set_pixel_shift_defer_check(
+            lambda: self._transition is not None and self._transition.is_active
+        )
         self._close_meta_calls_queued = False
         self._window_delete_queued = False
         self._retirement_emitted = False
@@ -123,6 +132,7 @@ class QuickDisplayRuntime(QObject):
         self._retired_scene_state: dict[str, Any] | None = None
         self._retired_pacer_state: dict[str, Any] | None = None
         self._retired_input_state: dict[str, Any] | None = None
+        self._retired_auxiliary_state: dict[str, Any] | None = None
         self._retired_transition_state: dict[str, Any] | None = None
 
         self._window.display_identity_changed.connect(
@@ -132,6 +142,8 @@ class QuickDisplayRuntime(QObject):
         self._window.visibleChanged.connect(self._on_visibility_changed)
         self._window.destroyed.connect(self._on_window_destroyed)
         self._scene.readiness_changed.connect(self._on_scene_readiness_changed)
+        self._auxiliary.state_changed.connect(self._scene.apply_auxiliary_state)
+        self._scene.apply_auxiliary_state(self._auxiliary.state)
         self._input.input_state_changed.connect(self._scene.apply_input_state)
         self._scene.apply_input_state(self._input.input_state)
         self._transition.run_changed.connect(self._scene.set_transition_run)
@@ -231,6 +243,13 @@ class QuickDisplayRuntime(QObject):
         return controller
 
     @property
+    def auxiliary_controller(self) -> QuickAuxiliaryController:
+        controller = self._auxiliary
+        if controller is None:
+            raise RuntimeError("Quick auxiliary controller has retired")
+        return controller
+
+    @property
     def transition_controller(self) -> QuickTransitionController:
         controller = self._transition
         if controller is None:
@@ -242,6 +261,7 @@ class QuickDisplayRuntime(QObject):
             raise RuntimeError("cannot show a retiring Quick display runtime")
         if self._binding_loss is not None:
             raise RuntimeError("cannot show a topology-displaced Quick display runtime")
+        self.auxiliary_controller.resume()
         self.input_controller.reset_initial_position()
         self.window.show_on_screen()
 
@@ -250,6 +270,7 @@ class QuickDisplayRuntime(QObject):
             return
         was_visible = self.window.isVisible()
         self.frame_pacer.pause()
+        self.auxiliary_controller.pause()
         self.input_controller.reset_initial_position()
         self.window.queue_hide()
         if not was_visible:
@@ -313,6 +334,7 @@ class QuickDisplayRuntime(QObject):
 
         self._set_phase(QuickRuntimePhase.RETIRING)
         self.input_controller.close_input()
+        self.auxiliary_controller.close()
         self.transition_controller.close()
         self.frame_pacer.close()
         self.scene_controller.quiesce_for_retirement()
@@ -340,6 +362,9 @@ class QuickDisplayRuntime(QObject):
         transition_state = self._retired_transition_state
         if transition_state is None and self._transition is not None:
             transition_state = self._transition.describe()
+        auxiliary_state = self._retired_auxiliary_state
+        if auxiliary_state is None and self._auxiliary is not None:
+            auxiliary_state = self._auxiliary.describe()
         return {
             "screen_index": self._screen_index,
             "runtime_generation": self._runtime_generation,
@@ -353,6 +378,7 @@ class QuickDisplayRuntime(QObject):
             "scene": scene_state,
             "frame_pacer": pacer_state,
             "input": input_state,
+            "auxiliary": auxiliary_state,
             "transition": transition_state,
             "close_meta_calls_queued": self._close_meta_calls_queued,
             "window_delete_queued": self._window_delete_queued,
@@ -386,6 +412,7 @@ class QuickDisplayRuntime(QObject):
         self._binding_loss = loss
         self.transition_controller.cancel_current(reason="topology-loss")
         self.frame_pacer.pause()
+        self.auxiliary_controller.close()
         self.input_controller.close_input()
         self._set_phase(QuickRuntimePhase.PAUSED)
         self.topology_loss_detected.emit(loss)
@@ -434,6 +461,8 @@ class QuickDisplayRuntime(QObject):
             self._retired_pacer_state = self._pacer.describe()
         if self._input is not None:
             self._retired_input_state = self._input.describe_input_state()
+        if self._auxiliary is not None:
+            self._retired_auxiliary_state = self._auxiliary.describe()
         if self._transition is not None:
             self._retired_transition_state = self._transition.describe()
         self._window_delete_queued = True
@@ -446,6 +475,10 @@ class QuickDisplayRuntime(QObject):
         self._scene = None
         self._pacer = None
         self._transition = None
+        if self._auxiliary is not None:
+            self._retired_auxiliary_state = self._auxiliary.describe()
+            self._auxiliary.deleteLater()
+            self._auxiliary = None
         if self._input is not None:
             self._retired_input_state = self._input.describe_input_state()
             self._input.deleteLater()

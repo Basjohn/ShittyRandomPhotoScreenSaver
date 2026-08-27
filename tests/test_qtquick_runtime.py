@@ -49,8 +49,10 @@ def test_runtime_is_a_narrow_qobject_owner_with_queued_window_retirement():
     ]
     assert direct_release_calls == []
     assert close_calls == [
+        "self.auxiliary_controller.close",
         "self.transition_controller.close",
         "self.frame_pacer.close",
+        "self.auxiliary_controller.close",
     ]
     assert source.index("self.transition_controller.close()") < source.index(
         "self.frame_pacer.close()"
@@ -60,6 +62,9 @@ def test_runtime_is_a_narrow_qobject_owner_with_queued_window_retirement():
     )
     assert source.index("self.input_controller.close_input()") < source.index(
         "self.frame_pacer.close()"
+    )
+    assert source.index("self.auxiliary_controller.close()") < source.index(
+        "self.scene_controller.quiesce_for_retirement()"
     )
     assert source.index("self.scene_controller.quiesce_for_retirement()") < source.index(
         "self.window.queue_close()"
