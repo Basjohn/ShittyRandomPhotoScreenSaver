@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-a5930c9a
-G5 retained cross-display routing and one-owner Visualizer handoff are validated
+7c8cbfeb
+G6 retained input admission and semantic family action routing are validated
 ```
 
 Current phase state:
@@ -38,19 +38,19 @@ Source outranks this plan if a later checkpoint has landed.
 
 ---
 
-## Immediate work — G6 runtime-neutral input/action routing
+## Immediate work — G7 context and auxiliary retained pixels
 
 ```text
-retained hit regions -> semantic Python-owned runtime actions         ACTIVE
+context / halo / dimming / pixel shift -> one retained Quick scene   ACTIVE
 ```
 
-### G6 — runtime-neutral input/actions (ACTIVE)
+### G7 — context / halo / dimming / pixel shift (ACTIVE)
 
-- inventory retained family hit regions and existing presentation-neutral action/controller seams before adding APIs;
-- route Clock double-click mode toggle, Media transport/seek/volume/system-mute and retained family actions as semantic requests;
-- keep provider admission, accepted runtime state, settings writes and capability authority in Python owners rather than QML;
-- preserve unavailable/unsupported action inertness and generation fencing without compatibility presenters;
-- prove retained item/model identity, admission/action routing and no QML settings/runtime authority with focused gates.
+- inventory exact current context-menu, selection-halo, dimming and pixel-shift owners before adding APIs;
+- keep context/global command authority in Python while presenting any admitted menu/auxiliary pixels in the retained Quick scene;
+- preserve display-local geometry, focus/input admission and generation fencing without extra translucent top-level windows;
+- retire superseded QWidget auxiliary pixel/window ownership as caller proof permits; do not add compatibility presenters;
+- prove retained scene identity, semantic command routing, focus behavior and same-window auxiliary pixels with focused gates.
 
 Use `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`; exact current source outranks stale owner names.
 

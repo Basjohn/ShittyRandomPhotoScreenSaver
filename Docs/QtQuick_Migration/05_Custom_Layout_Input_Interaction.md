@@ -117,6 +117,19 @@ Quick may own hit regions/pointer handlers and emit semantic actions. Python own
 actions, persistence, CUSTOM session commands and context/global shortcuts. Enter=Save, Esc=Cancel. Clock
 double-click mode toggle is semantic; QML writes neither Settings nor committed geometry.
 
+G6 is closed. `QuickInputState` is projected from each generation-scoped input controller through its matching
+scene and retained ordinary-widget host. The scene rejects mismatched screen/generation state and closed
+admission; the host stores the latest accepted state so newly created retained family presenters receive the
+same admission facts without item recreation. Interactive family models derive only bounded pointer admission
+from those facts.
+
+Retained QML hit regions emit semantic requests only. Clock mode changes, Media transport/seek/app-volume/
+system-mute, Weather refresh/settings, Reddit URL/refresh, Gmail message/auth/actions and both Steam-family
+refresh/settings paths terminate in Python presentation admission and the existing neutral runtime/settings/
+provider owners. Unsupported capabilities remain inert, accepted runtime/provider state remains authoritative,
+and every retained double-click hit region explicitly suppresses the global next-image fallback only while its
+own action is admitted.
+
 ## Context menu / auxiliary pixels
 
 A QWidget context menu may remain temporarily if decoupled from `DisplayWidget` and not a second runtime
