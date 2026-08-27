@@ -76,8 +76,8 @@ Current admission order:
 - stable retained config/model/image projection — GREEN;
 - retained card/action fidelity — GREEN;
 - static registry, real manager/host injection and runtime-shaped gates — GREEN;
-- effective-DPR 1.0/1.5/2.25 eyes-on evidence — ACTIVE;
-- caller proof and old pixel/cache/input retirement — PENDING.
+- effective-DPR 1.0/1.5/2.25 eyes-on evidence — GREEN;
+- caller proof and old pixel/cache/input retirement — ACTIVE.
 
 The F8 audit keeps the existing cardinality and responsibility split: one neutral runtime per enabled card/
 display owns cache-first startup, refresh, cache-only rotation cadence, request/generation admission and the

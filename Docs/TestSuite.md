@@ -174,6 +174,11 @@ ordinary host plus `WidgetRuntimeManager` to prove static registry/qmldir admiss
 service, cache-load/manual-refresh action routing, one runtime-owned rotation timer and stable item/model/list/
 engine/delegate identity through accepted presentation and fade completion.
 
+`tools/qtquick_abandonment_issues_smoke.py` renders portrait archive, wide long-title, no-art/no-card,
+unavailable and connect states through one threaded-OpenGL Quick window. The inspected matrix is GREEN at
+effective DPR 1.0, 1.5 and 2.25, including checkerboard/busy-background composites for transparency and the
+family-distinct archive tab, warm shelf/hatch, age stamp and two-column ledger treatment.
+
 At the reviewed checkpoint the repository contains:
 
 - **353 test-module files**: 352 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
