@@ -67,9 +67,9 @@ bounded presentation state and semantic actions into retained Quick.
 
 Current admission order:
 
-- exact ownership/caller audit;
-- stable retained config/model/image projection;
-- retained card and existing interaction/menu fidelity;
+- exact ownership/caller audit — GREEN;
+- stable retained config/model/image projection — GREEN;
+- retained card and existing interaction/menu fidelity — ACTIVE;
 - static registry and real manager/host runtime injection;
 - deterministic lifecycle/action/image tests plus effective-DPR 1.0/1.5/2.25 eyes-on evidence;
 - caller proof and old pixel/cache/input retirement only after GREEN.
