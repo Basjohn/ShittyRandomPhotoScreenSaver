@@ -18,6 +18,7 @@ from rendering.quick.custom_layout_overlay import (
     CustomLayoutOverlayModel,
     RetainedCustomLayoutOverlay,
 )
+from rendering.quick.custom_layout_scene import QuickCustomLayoutSceneCoordinator
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.widgets.host import OverlayWidgetGeometry
@@ -89,7 +90,7 @@ def test_overlay_model_mutates_shared_session_items_without_copying_authority() 
 
     assert model.rowCount() == 2
     singleton_identity = id(singleton)
-    model.moveItem(0, 36.0, 48.0)
+    model.moveItem(0, 36.0, 48.0, 50.0, 60.0)
     assert id(session.item(singleton.source_key)) == singleton_identity
     assert singleton.current_global_rect == QRect(136, 248, 180, 80)
 
@@ -175,8 +176,10 @@ def test_shared_session_transfer_moves_frame_between_display_models_and_cancel_r
     session.add_item(clock)
     source_publications: list[int] = []
     target_publications: list[int] = []
+    transfer_cursors: list[QPoint] = []
 
-    def _resolve_transfer(item, proposed):
+    def _resolve_transfer(item, proposed, cursor):
+        transfer_cursors.append(QPoint(cursor))
         item.set_current_display("display:b", monitor_route="2")
         return QRect(proposed)
 
@@ -196,13 +199,14 @@ def test_shared_session_transfer_moves_frame_between_display_models_and_cancel_r
 
     assert source.rowCount() == 1
     assert target.rowCount() == 0
-    source.moveItem(0, 860.0, 120.0)
+    source.moveItem(0, 860.0, 120.0, 900.0, 150.0)
 
     assert source.rowCount() == 0
     assert target.rowCount() == 1
     assert clock.current_display_identity == "display:b"
     assert clock.current_monitor_route == "2"
     assert clock.current_global_rect == QRect(860, 120, 180, 80)
+    assert transfer_cursors == [QPoint(900, 150)]
     assert source_publications[-1] == identity
     assert target_publications[-1] == identity
 
@@ -267,7 +271,7 @@ def test_display_scene_has_one_retained_overlay_with_red_center_guides(qt_app) -
     assert peer_vertical.property("color") == QColor(180, 110, 255, 235)
     assert horizontal[0].property("color") == QColor("#ff3b30")
 
-    overlay.model.moveItem(0, 70.0, 90.0)
+    overlay.model.moveItem(0, 70.0, 90.0, 85.0, 105.0)
     qt_app.processEvents()
     assert clock.current_global_rect == QRect(70, 90, 180, 80)
     assert id(overlay.item) == retained_identity
@@ -379,7 +383,7 @@ def test_scene_binding_moves_hides_and_restores_same_retained_family_item(qt_app
         for corner in ("top_left", "top_right", "bottom_left", "bottom_right")
     ) == 4
 
-    model.moveItem(0, 70.0, 95.0)
+    model.moveItem(0, 70.0, 95.0, 85.0, 110.0)
     assert clock.current_global_rect == QRect(170, 295, 200, 90)
     assert (presentation_item.x(), presentation_item.y()) == (70.0, 95.0)
     assert id(presentation.item) == retained_identity
@@ -444,7 +448,7 @@ def test_cross_display_transfer_flips_one_visible_retained_family_owner(qt_app) 
     clock = _item("clock", "display:a", QRect(120, 80, 180, 80))
     session.add_item(clock)
 
-    def _transfer(item, proposed):
+    def _transfer(item, proposed, _cursor):
         item.set_current_display("display:b", monitor_route="2")
         return QRect(proposed)
 
@@ -461,7 +465,7 @@ def test_cross_display_transfer_flips_one_visible_retained_family_owner(qt_app) 
 
     assert source_presentation.item.property("workingVisible") is True
     assert target_presentation.item.property("workingVisible") is False
-    source_model.moveItem(0, 860.0, 120.0)
+    source_model.moveItem(0, 860.0, 120.0, 900.0, 150.0)
 
     assert source_presentation.item.property("workingVisible") is False
     assert target_presentation.item.property("workingVisible") is True
@@ -530,9 +534,18 @@ def test_visualizer_cross_display_transfer_rehomes_one_render_admission(
         resizable=True,
     )
     session.add_item(visualizer)
-    source_controller.bind_custom_layout_session(
+    coordinator = QuickCustomLayoutSceneCoordinator(session)
+    coordinator.register_scene("display:a", source_controller)
+    coordinator.register_scene("display:b", target_controller)
+
+    def _transfer(item, proposed, _cursor):
+        item.set_current_display("display:b", monitor_route="2")
+        return QRect(proposed)
+
+    source_model = source_controller.bind_custom_layout_session(
         session,
         display_identity="display:a",
+        geometry_resolver=_transfer,
     )
     target_controller.bind_custom_layout_session(
         session,
@@ -551,12 +564,7 @@ def test_visualizer_cross_display_transfer_rehomes_one_render_admission(
     source_controller.apply_visualizer_presentation(presentation)
     source_item_identity = id(source_controller.visualizer_item)
 
-    visualizer.set_current_display("display:b", monitor_route="2")
-    visualizer.set_geometry(
-        QRect(860, 140, int(outer_width), int(outer_height)),
-    )
-    assert source_controller.transfer_visualizer_to(target_controller) == render_identity
-    session.notify_item_changed(visualizer)
+    source_model.moveItem(0, 860.0, 140.0, 900.0, 170.0)
 
     source_state = source_controller.describe_scene_state()["visualizer"]
     target_state = target_controller.describe_scene_state()["visualizer"]
@@ -581,7 +589,6 @@ def test_visualizer_cross_display_transfer_rehomes_one_render_admission(
 
     session.restore_baseline()
     assert target_root.property("customLayoutWorkingVisible") is False
-    assert target_controller.transfer_visualizer_to(source_controller) == render_identity
     source_state = source_controller.describe_scene_state()["visualizer"]
     target_state = target_controller.describe_scene_state()["visualizer"]
     assert source_state["instantiated"] is True
@@ -604,6 +611,7 @@ def test_visualizer_cross_display_transfer_rehomes_one_render_admission(
     assert source_root.property("presentationActive") is True
     assert source_root.property("customLayoutWorkingVisible") is True
 
+    coordinator.retire()
     source_controller.quiesce_for_retirement()
     target_controller.quiesce_for_retirement()
     source_window.deleteLater()
@@ -712,7 +720,13 @@ def test_visualizer_custom_session_preserves_retained_item_and_render_identity(q
     assert id(controller.visualizer_item) == render_item_identity
     assert render_item.render_identity == render_identity
 
-    model.moveItem(0, outer_x + 80.0, outer_y + 45.0)
+    model.moveItem(
+        0,
+        outer_x + 80.0,
+        outer_y + 45.0,
+        outer_x + 100.0,
+        outer_y + 65.0,
+    )
     assert (loader.x(), loader.y()) == (outer_x + 80.0, outer_y + 45.0)
     assert id(controller.visualizer_item) == render_item_identity
     assert id(visualizer_root) == root_identity

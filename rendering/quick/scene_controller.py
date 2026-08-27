@@ -533,6 +533,11 @@ class QuickSceneController(QObject):
         return item
 
     @property
+    def visualizer_render_identity(self) -> VisualizerRenderIdentity | None:
+        item = self._visualizer_item
+        return None if item is None else item.render_identity
+
+    @property
     def readiness(self) -> QuickSceneReadiness:
         return self._readiness
 

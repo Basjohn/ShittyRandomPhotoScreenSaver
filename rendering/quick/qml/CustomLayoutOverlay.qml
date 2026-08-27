@@ -156,7 +156,9 @@ Item {
                     customLayoutOverlay.sessionModel.moveItem(
                         editFrame.index,
                         point.x - pressOffsetX,
-                        point.y - pressOffsetY
+                        point.y - pressOffsetY,
+                        point.x,
+                        point.y
                     )
                 }
                 onWheel: function(wheel) {

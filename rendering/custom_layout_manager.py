@@ -1695,6 +1695,24 @@ class CustomLayoutManager:
         self._reparent_shell_to_target_display_if_needed(state)
         return resolved
 
+    def resolve_retained_move(
+        self,
+        item: CustomLayoutSessionItem,
+        global_rect: QRect,
+        cursor_global: QPoint,
+    ) -> QRect:
+        """Route retained Quick drag through the canonical transfer geometry owner."""
+
+        state = self._state_for_session_item(item)
+        if state is None:
+            return QRect(global_rect)
+        return self._resolve_shell_global_rect(
+            state,
+            global_rect,
+            snap_to_grid=False,
+            cursor_global=QPoint(cursor_global),
+        )
+
     def _apply_live_shell_geometry_for_widget_id(self, widget_id: str, global_rect: QRect) -> None:
         state = self._shell_states.get(widget_id)
         if state is None:
