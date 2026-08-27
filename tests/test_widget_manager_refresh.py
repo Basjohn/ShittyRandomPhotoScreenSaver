@@ -371,10 +371,7 @@ def test_factory_widget_descriptors_cover_factory_backed_widget_families():
     descriptors = get_factory_widget_descriptors()
     descriptor_names = [descriptor.settings_key for descriptor in descriptors]
 
-    expected = [
-        "media",
-        "abandonment_issues",
-    ]
+    expected = ["media"]
 
     assert descriptor_names == expected
 

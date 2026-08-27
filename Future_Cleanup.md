@@ -25,6 +25,11 @@ ordinary family checkpoint. Real product resilience is not migration debris.
 - Reddit helper recovery/installer/watcher tests contain stale helper-era expectations (`_SPOOL_LAST_PROBE`,
   installer markers and singleton-state assumptions). Reconcile helper tests against current helper/
   installer contract separately from retained Reddit feed migration.
+- The three physical two-display `tests/test_qtquick_runtime.py` smoke cases can miss only the second
+  screen's 250 ms crossfade-midpoint capture while still completing transition and retirement. In the
+  2026-08-27 Phase-F boundary run, the input-exit case passed on immediate rerun while identity/topology
+  cases repeated the same capture miss. Reconcile the real-GL smoke capture deadline/oracle separately;
+  no F8 Steam source participates in that path.
 
 ## Settings GUI residue
 

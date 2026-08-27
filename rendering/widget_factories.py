@@ -12,16 +12,14 @@ This decomposition improves:
 """
 from __future__ import annotations
 
-import math
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Mapping, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
 from rendering.widget_setup import parse_color_to_qcolor
-from widgets.base_overlay_widget import BaseOverlayWidget
 
 if TYPE_CHECKING:
     from core.threading.manager import ThreadManager
@@ -192,219 +190,6 @@ class SpotifyVisualizerFactory(WidgetFactory):
             return None
 
 
-def _coerce_optional_appid(value: Any) -> int | None:
-    try:
-        appid = int(value)
-    except (TypeError, ValueError):
-        return None
-    return appid if appid > 0 else None
-
-
-class SteamCardFactory(WidgetFactory):
-    """Factory for Abandonment Issues and gated Steam card prototypes."""
-
-    def __init__(
-        self,
-        settings: SettingsManager,
-        thread_manager: Optional["ThreadManager"] = None,
-        *,
-        widget_name: str,
-    ) -> None:
-        super().__init__(settings, thread_manager)
-        self._widget_name = widget_name
-
-    def get_widget_name(self) -> str:
-        return self._widget_name
-
-    def create(
-        self,
-        parent: QWidget,
-        config: Dict[str, Any],
-        *,
-        steam_settings: Mapping[str, Any] | None = None,
-    ) -> Optional[QWidget]:
-        """Create one Steam card with normal overlay styling."""
-        from core.dev_gates import is_steam_enabled
-        from core.settings.models import WidgetPosition, coerce_widget_position
-        from core.steam.abandonment_issues import AbandonmentSelection, parse_appid_list
-        from widgets.base_overlay_widget import OverlayPosition
-        from widgets.abandonment_issues_widget import AbandonmentIssuesWidget
-        from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
-        from widgets.steam_abandonment_components import (
-            ABANDONMENT_FIELD_DEFAULTS,
-            abandonment_authored_size,
-            abandonment_field_slot_count,
-        )
-
-        if self._widget_name != "abandonment_issues" and not is_steam_enabled():
-            return None
-        shared_steam_settings = steam_settings if isinstance(steam_settings, Mapping) else {}
-        if not SettingsManager.to_bool(shared_steam_settings.get("enabled", True), True):
-            return None
-        if not SettingsManager.to_bool(config.get("enabled", False), False):
-            return None
-
-        definition = STEAM_CARD_DEFINITIONS.get(self._widget_name)
-        if definition is None:
-            logger.warning("[STEAM_WIDGET] Unknown Steam scaffold card: %s", self._widget_name)
-            return None
-
-        position_map = {
-            WidgetPosition.TOP_LEFT: OverlayPosition.TOP_LEFT,
-            WidgetPosition.TOP_CENTER: OverlayPosition.TOP_CENTER,
-            WidgetPosition.TOP_RIGHT: OverlayPosition.TOP_RIGHT,
-            WidgetPosition.MIDDLE_LEFT: OverlayPosition.MIDDLE_LEFT,
-            WidgetPosition.CENTER: OverlayPosition.CENTER,
-            WidgetPosition.MIDDLE_RIGHT: OverlayPosition.MIDDLE_RIGHT,
-            WidgetPosition.BOTTOM_LEFT: OverlayPosition.BOTTOM_LEFT,
-            WidgetPosition.BOTTOM_CENTER: OverlayPosition.BOTTOM_CENTER,
-            WidgetPosition.BOTTOM_RIGHT: OverlayPosition.BOTTOM_RIGHT,
-            WidgetPosition.CUSTOM: OverlayPosition.TOP_RIGHT,
-        }
-        default_position = str(config.get("_default_position", "Top Right") or "Top Right")
-        widget_position = coerce_widget_position(
-            config.get("position", default_position),
-            coerce_widget_position(default_position, WidgetPosition.TOP_RIGHT),
-        )
-
-        try:
-            if definition.widget_id == "abandonment_issues":
-                abandonment_field_visibility = {
-                    field_id: SettingsManager.to_bool(
-                        config.get(f"show_{field_id}", default_value),
-                        default_value,
-                    )
-                    for field_id, default_value in ABANDONMENT_FIELD_DEFAULTS.items()
-                }
-                widget = AbandonmentIssuesWidget(
-                    parent=parent,
-                    definition=definition,
-                    position=position_map.get(widget_position, OverlayPosition.BOTTOM_RIGHT),
-                    initial_view_model=SteamCardWidget.connect_required_model(definition.widget_id),
-                    selection=AbandonmentSelection(
-                        mode=str(config.get("selection_mode", "smart_rotation") or "smart_rotation"),
-                        pinned_appid=_coerce_optional_appid(config.get("pinned_appid")),
-                        minimum_playtime_minutes=max(
-                            0,
-                            int(config.get("minimum_playtime_minutes", 15)),
-                        ),
-                        preferred_max_playtime_minutes=max(
-                            1,
-                            int(config.get("preferred_max_playtime_hours", 2)),
-                        ) * 60,
-                        preferred_max_unlocked_achievements=max(
-                            0,
-                            int(config.get("preferred_max_unlocked_achievements", 2)),
-                        ),
-                        minimum_inactivity_days=max(
-                            0,
-                            int(config.get("minimum_inactivity_weeks", 12)),
-                        )
-                        * 7,
-                        preferred_minimum_inactivity_days=max(
-                            0,
-                            int(config.get("preferred_minimum_inactivity_weeks", 26)),
-                        ) * 7,
-                        never_show_appids=parse_appid_list(config.get("never_show_appids", ())),
-                    ),
-                    field_visibility=abandonment_field_visibility,
-                    show_rediscovery_message=SettingsManager.to_bool(
-                        config.get("show_rediscovery_message", True),
-                        True,
-                    ),
-                    show_artwork=SettingsManager.to_bool(config.get("show_artwork", True), True),
-                    artwork_shape=str(config.get("artwork_shape", "portrait") or "portrait"),
-                    artwork_size=int(config.get("artwork_size", 140)),
-                    accent_color=parse_color_to_qcolor(
-                        config.get("accent_color", [222, 157, 88, 225])
-                    ),
-                    guilt_desaturater=SettingsManager.to_bool(
-                        config.get("guilt_desaturater", False),
-                        False,
-                    ),
-                    guilt_desaturation_strength=int(
-                        config.get("guilt_desaturation_strength", 55)
-                    ),
-                    refresh_minutes=int(shared_steam_settings.get("refresh_minutes", 10)),
-                    show_connection_info_icon=SettingsManager.to_bool(
-                        shared_steam_settings.get("show_connection_info_icon", True),
-                        True,
-                    ),
-                    # The production setup path injects the registry-owned
-                    # service before activation.  Direct factory construction
-                    # intentionally remains inert; standalone callers opt into
-                    # the widget's convenience owner explicitly.
-                    build_default_runtime=False,
-                )
-            else:
-                widget = SteamCardWidget(
-                    parent=parent,
-                    definition=definition,
-                    position=position_map.get(widget_position, OverlayPosition.TOP_RIGHT),
-                    initial_view_model=SteamCardWidget.connect_required_model(definition.widget_id),
-                    refresh_minutes=int(shared_steam_settings.get("refresh_minutes", 10)),
-                )
-
-            if hasattr(widget, "set_font_family"):
-                widget.set_font_family(str(config.get("font_family", "Inter") or "Inter"))
-            widget.set_font_size(int(config.get("font_size", 14)))
-            widget.set_margin(int(config.get("margin", 30)))
-
-            text_qcolor = parse_color_to_qcolor(config.get("color", [255, 255, 255, 230]))
-            if text_qcolor is not None:
-                widget.set_text_color(text_qcolor)
-
-            bg_qcolor = parse_color_to_qcolor(config.get("bg_color", [35, 35, 35, 255]))
-            if bg_qcolor is not None:
-                widget.set_background_color(bg_qcolor)
-            widget.set_background_opacity(float(config.get("bg_opacity", 0.3)))
-
-            border_qcolor = parse_color_to_qcolor(
-                config.get("border_color", [255, 255, 255, 255]),
-                opacity_override=float(config.get("border_opacity", 1.0)),
-            )
-            if border_qcolor is not None:
-                widget.set_background_border(BaseOverlayWidget.get_global_border_width(), border_qcolor)
-
-            widget.set_show_background(
-                SettingsManager.to_bool(config.get("show_background", True), True)
-            )
-            if "preferred_width" in config or "preferred_height" in config:
-                width = max(260, int(config.get("preferred_width", 420)))
-                height = max(120, int(config.get("preferred_height", 180)))
-                if definition.widget_id == "abandonment_issues" and (width, height) in {
-                    (420, 180),
-                    (560, 300),
-                    (560, 331),
-                    (600, 300),
-                    (600, 331),
-                }:
-                    authored_size = abandonment_authored_size(
-                        show_artwork=SettingsManager.to_bool(config.get("show_artwork", True), True),
-                        artwork_shape=str(config.get("artwork_shape", "portrait") or "portrait"),
-                        artwork_size=int(config.get("artwork_size", 140)),
-                        field_count=abandonment_field_slot_count(
-                            abandonment_field_visibility
-                        ),
-                    )
-                    width = int(math.ceil(authored_size.width()))
-                    height = int(math.ceil(authored_size.height()))
-                width = max(width, widget.minimumWidth())
-                height = max(height, widget.minimumHeight())
-                widget.setMinimumSize(width, height)
-                widget.resize(width, height)
-
-            shadows_config = config.get("_shadows_config") or {}
-            if isinstance(shadows_config, dict) and hasattr(widget, "set_shadow_config"):
-                widget.set_shadow_config(shadows_config)
-
-            logger.debug("[STEAM_WIDGET] Created connect-required Steam card: %s", self._widget_name)
-            return widget
-        except Exception as exc:
-            logger.error("[STEAM_WIDGET] Failed to create %s: %s", self._widget_name, exc, exc_info=True)
-            return None
-
-
 # ---------------------------------------------------------------------------
 # Factory Registry
 # ---------------------------------------------------------------------------
@@ -435,22 +220,6 @@ class WidgetFactoryRegistry:
         """Register all default widget factories."""
         self.register(MediaWidgetFactory(self._settings, self._thread_manager))
         self.register(SpotifyVisualizerFactory(self._settings, self._thread_manager))
-        try:
-            from core.dev_gates import is_steam_enabled
-
-            widget_names = ["abandonment_issues"]
-            if is_steam_enabled():
-                widget_names.extend(("steam_progress", "friend_pulse"))
-            for widget_name in widget_names:
-                self.register(
-                    SteamCardFactory(
-                        self._settings,
-                        self._thread_manager,
-                        widget_name=widget_name,
-                    )
-                )
-        except Exception:
-            logger.debug("[FACTORY_REGISTRY] Steam factories could not be registered", exc_info=True)
 
     def set_thread_manager(self, thread_manager: Optional["ThreadManager"]) -> None:
         """Update thread manager on the registry and all factories."""

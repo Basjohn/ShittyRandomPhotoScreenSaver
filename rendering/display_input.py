@@ -361,11 +361,7 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                 handled, reddit_handled, reddit_url = widget._input_handler.route_widget_click(
                     event,
                     getattr(widget, "spotify_visualizer_widget", None),
-                    (
-                        getattr(widget, "steam_progress_widget", None),
-                        getattr(widget, "abandonment_issues_widget", None),
-                        getattr(widget, "friend_pulse_widget", None),
-                    ),
+                    (),
                     weather_widget=getattr(widget, "weather_widget", None),
                 )
                 logger.info("[REDDIT] route_widget_click returned: handled=%s reddit_handled=%s screen=%s",

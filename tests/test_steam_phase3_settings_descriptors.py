@@ -61,19 +61,10 @@ def test_retained_and_unported_steam_descriptors_are_public_while_scaffolds_stay
         preview_ids = {descriptor.widget_id for descriptor in get_widget_stack_preview_descriptors()}
         custom_ids = {descriptor.widget_id for descriptor in get_widget_custom_position_option_descriptors()}
 
-        assert "achievement_pulse" not in factory_ids
-        assert "abandonment_issues" in factory_ids
+        assert not substantive.intersection(factory_ids)
         assert substantive.issubset(runtime_ids & preview_ids & custom_ids)
         assert "steam" in {descriptor.section_id for descriptor in get_widget_settings_section_descriptors()}
         assert not unfinished.intersection(factory_ids)
-        steam_factories = [
-            descriptor
-            for descriptor in get_factory_widget_descriptors()
-            if descriptor.settings_key in STEAM_WIDGET_IDS
-        ]
-        assert steam_factories
-        assert all(descriptor.base_settings_key == "steam" for descriptor in steam_factories)
-        assert all(descriptor.base_enabled_gate is True for descriptor in steam_factories)
         assert not unfinished.intersection(runtime_ids)
         assert not unfinished.intersection(preview_ids)
         assert not unfinished.intersection(custom_ids)
@@ -94,21 +85,26 @@ def test_steam_phase3_descriptors_are_complete_behind_dev_gate() -> None:
             if descriptor.section_id == "steam"
         )
 
-        for widget_id in STEAM_WIDGET_IDS:
-            if widget_id == "achievement_pulse":
-                assert widget_id not in factory_keys
-            else:
-                assert widget_id in factory_keys
+        substantive = {"achievement_pulse", "abandonment_issues"}
+        unfinished = set(STEAM_WIDGET_IDS) - substantive
+        assert not set(STEAM_WIDGET_IDS).intersection(factory_keys)
+        for widget_id in substantive:
             assert widget_id in runtime_ids
             assert widget_id in custom_ids
             assert widget_id in preview_ids
             assert get_service_runtime_contracts(widget_id) == STEAM_SERVICE_RUNTIME_CONTRACTS
+        assert not unfinished.intersection(runtime_ids)
+        assert not unfinished.intersection(custom_ids)
+        assert unfinished.issubset(preview_ids)
 
         assert section.persisted_widget_keys == ("steam",) + STEAM_WIDGET_IDS
         assert section.builder_module == "ui.tabs.widgets_tab_steam"
         assert section.loader_name == "load_steam_settings"
         assert section.saver_name == "save_steam_settings"
-        assert resize_sections["steam"].widget_ids == STEAM_WIDGET_IDS
+        assert resize_sections["steam"].widget_ids == (
+            "achievement_pulse",
+            "abandonment_issues",
+        )
     finally:
         _restore_steam_gate(prior)
 
@@ -563,106 +559,26 @@ def test_steam_connection_bucket_opens_from_persisted_target_state(qt_app, setti
         _restore_steam_gate(prior)
 
 
-def test_only_unported_steam_widgets_keep_qwidget_factories(
-    qt_app,
+def test_converted_and_unported_steam_qwidget_factories_are_retired(
     settings_manager,
 ) -> None:
     prior = _with_steam_gate(False)
     try:
         public_registry = WidgetFactoryRegistry(settings_manager)
-        assert public_registry.get_factory("achievement_pulse") is None
-        assert public_registry.get_factory("abandonment_issues") is not None
-        assert public_registry.get_factory("steam_progress") is None
-        assert public_registry.get_factory("friend_pulse") is None
+        assert all(
+            public_registry.get_factory(widget_id) is None
+            for widget_id in STEAM_WIDGET_IDS
+        )
     finally:
         _restore_steam_gate(prior)
 
     prior = _with_steam_gate(True)
     try:
-        parent = QWidget()
-        parent.resize(1280, 720)
-        registry = WidgetFactoryRegistry(settings_manager)
-        try:
-            assert registry.get_factory("steam_progress") is not None
-            assert registry.create_widget("steam_progress", parent, {"enabled": False}) is None
-
-            widget = registry.create_widget(
-                "steam_progress",
-                parent,
-                {
-                    "enabled": True,
-                    "position": "Top Right",
-                    "font_size": 16,
-                    "preferred_width": 420,
-                    "preferred_height": 180,
-                },
-            )
-            assert widget is not None
-            assert widget.objectName() == "steam_progress_overlay"
-            assert getattr(widget, "_view_model").state == "connect_required"
-            widget.deleteLater()
-
-            abandonment_factory = registry.get_factory("abandonment_issues")
-            assert abandonment_factory is not None
-            abandonment_widget = abandonment_factory.create(
-                parent,
-                {
-                    "enabled": True,
-                    "position": "Bottom Right",
-                    "selection_mode": "pinned_game",
-                    "pinned_appid": 101,
-                    "minimum_playtime_minutes": 20,
-                    "preferred_max_playtime_hours": 6,
-                    "preferred_max_unlocked_achievements": 1,
-                    "minimum_inactivity_weeks": 24,
-                    "preferred_minimum_inactivity_weeks": 52,
-                    "rotation_interval_minutes": 45,
-                    "never_show_appids": [440, 570],
-                    "show_artwork": True,
-                    "artwork_shape": "square",
-                    "artwork_size": 175,
-                    "accent_color": [180, 110, 55, 170],
-                    "guilt_desaturater": True,
-                    "guilt_desaturation_strength": 65,
-                    "show_rediscovery_message": False,
-                    "preferred_width": 420,
-                    "preferred_height": 180,
-                },
-                steam_settings={"enabled": True, "refresh_minutes": 5},
-            )
-            assert abandonment_widget is not None
-            assert abandonment_widget.objectName() == "abandonment_issues_overlay"
-            assert abandonment_widget._runtime_service is None
-            assert abandonment_widget._owns_runtime_service is False
-            assert getattr(abandonment_widget, "_abandonment_selection").mode == "pinned_game"
-            assert getattr(abandonment_widget, "_abandonment_selection").pinned_appid == 101
-            assert getattr(abandonment_widget, "_abandonment_selection").minimum_playtime_minutes == 20
-            assert getattr(abandonment_widget, "_abandonment_selection").preferred_max_playtime_minutes == 360
-            assert getattr(abandonment_widget, "_abandonment_selection").preferred_max_unlocked_achievements == 1
-            assert getattr(abandonment_widget, "_abandonment_selection").preferred_minimum_inactivity_days == 364
-            assert getattr(abandonment_widget, "_refresh_minutes") == 5
-            assert getattr(abandonment_widget, "_abandonment_artwork_size") == 175
-            assert getattr(abandonment_widget, "_abandonment_guilt_desaturater") is True
-            assert getattr(abandonment_widget, "_abandonment_show_rediscovery_message") is False
-            assert getattr(abandonment_widget, "_abandonment_accent_color").getRgb() == (180, 110, 55, 170)
-            abandonment_fields = getattr(
-                abandonment_widget,
-                "_abandonment_field_visibility",
-            )
-            assert abandonment_fields["achievements"] is True
-            assert abandonment_fields["last_unlock"] is True
-            assert abandonment_fields["last_played"] is True
-            assert abandonment_fields["archive_class"] is bool(
-                get_default_settings()["widgets"]["abandonment_issues"][
-                    "show_archive_class"
-                ]
-            )
-            assert abandonment_fields["queue"] is False
-            assert abandonment_widget.minimumWidth() >= 560
-            assert abandonment_widget.minimumHeight() > 300
-            abandonment_widget.deleteLater()
-        finally:
-            parent.deleteLater()
+        gated_registry = WidgetFactoryRegistry(settings_manager)
+        assert all(
+            gated_registry.get_factory(widget_id) is None
+            for widget_id in STEAM_WIDGET_IDS
+        )
     finally:
         _restore_steam_gate(prior)
 
@@ -673,147 +589,6 @@ class _SteamSetupSettings:
 
     def get_widgets_map(self) -> dict:
         return self._widgets
-
-
-def test_steam_cards_flow_through_descriptor_widget_setup_when_enabled(qt_app) -> None:
-    prior = _with_steam_gate(True)
-    try:
-        parent = QWidget()
-        parent.resize(1280, 720)
-        manager = WidgetManager(parent, ResourceManager())
-        settings = _SteamSetupSettings({
-            "steam": {"enabled": True, "refresh_minutes": 5},
-            "steam_progress": {
-                "enabled": True,
-                "monitor": "ALL",
-                "position": "Top Right",
-                "font_size": 14,
-                "preferred_width": 420,
-                "preferred_height": 180,
-            },
-            "achievement_pulse": {"enabled": False, "monitor": "ALL"},
-            "abandonment_issues": {
-                "enabled": True,
-                "monitor": "ALL",
-                "position": "Bottom Right",
-                "show_artwork": False,
-            },
-            "friend_pulse": {"enabled": False, "monitor": "ALL"},
-            "shadows": {"enabled": True},
-        })
-        try:
-            created = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
-            assert "steam_progress_widget" in created
-            assert created["steam_progress_widget"] is getattr(parent, "steam_progress_widget")
-            assert getattr(created["steam_progress_widget"], "_refresh_minutes") == 5
-            assert "achievement_pulse_widget" not in created
-            assert "abandonment_issues_widget" in created
-            abandonment_widget = created["abandonment_issues_widget"]
-            assert getattr(abandonment_widget, "_refresh_minutes") == 5
-            assert not hasattr(abandonment_widget, "_abandonment_rotation_interval_minutes")
-            service = manager._runtime_manager.get_widget_service("abandonment_issues")
-            assert service is abandonment_widget._runtime_service
-            assert abandonment_widget._owns_runtime_service is False
-
-            created_again = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
-            assert created_again["steam_progress_widget"] is created["steam_progress_widget"]
-            assert created_again["abandonment_issues_widget"] is abandonment_widget
-            assert (
-                manager._runtime_manager.get_widget_service("abandonment_issues")
-                is service
-            )
-            assert abandonment_widget._runtime_service is service
-        finally:
-            parent.deleteLater()
-    finally:
-        _restore_steam_gate(prior)
-
-
-def test_deactivated_steam_family_builds_no_abandonment_runtime_service(qt_app) -> None:
-    parent = QWidget()
-    parent.resize(1280, 720)
-    manager = WidgetManager(parent, ResourceManager())
-    settings = _SteamSetupSettings({
-        "steam": {"enabled": True, "refresh_minutes": 5},
-        "abandonment_issues": {
-            "enabled": True,
-            "monitor": "ALL",
-            "position": "Bottom Right",
-            "show_artwork": False,
-        },
-        "family_activation": {"steam": False},
-        "shadows": {"enabled": True},
-    })
-    try:
-        created = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
-
-        assert "abandonment_issues_widget" not in created
-        assert manager._runtime_manager.get_widget_service("abandonment_issues") is None
-    finally:
-        parent.deleteLater()
-
-
-def test_disabled_abandonment_instance_is_distinct_from_family_deactivation(qt_app) -> None:
-    parent = QWidget()
-    parent.resize(1280, 720)
-    manager = WidgetManager(parent, ResourceManager())
-    settings = _SteamSetupSettings({
-        "steam": {"enabled": True, "refresh_minutes": 5},
-        "abandonment_issues": {
-            "enabled": False,
-            "monitor": "ALL",
-            "position": "Bottom Right",
-        },
-        "family_activation": {"steam": True},
-        "shadows": {"enabled": True},
-    })
-    try:
-        created = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
-
-        assert manager._runtime_manager.admits_widget_family(
-            "abandonment_issues", settings.get_widgets_map()
-        ) is True
-        assert "abandonment_issues_widget" not in created
-        assert manager._runtime_manager.get_widget_service("abandonment_issues") is None
-    finally:
-        parent.deleteLater()
-
-
-def test_abandonment_fails_closed_when_required_runtime_service_build_fails(
-    qt_app,
-    monkeypatch,
-) -> None:
-    import widgets.steam_abandonment_runtime as abandonment_runtime
-
-    monkeypatch.setattr(
-        abandonment_runtime,
-        "AbandonmentRuntimeService",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            RuntimeError("Abandonment service build failed")
-        ),
-    )
-    parent = QWidget()
-    parent.resize(1280, 720)
-    manager = WidgetManager(parent, ResourceManager())
-    settings = _SteamSetupSettings({
-        "steam": {"enabled": True, "refresh_minutes": 5},
-        "abandonment_issues": {
-            "enabled": True,
-            "monitor": "ALL",
-            "position": "Bottom Right",
-            "show_artwork": False,
-        },
-        "family_activation": {"steam": True},
-        "shadows": {"enabled": True},
-    })
-    try:
-        created = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
-
-        assert "abandonment_issues_widget" not in created
-        assert manager.get_widget("abandonment_issues") is None
-        assert manager._runtime_manager.get_widget_service("abandonment_issues") is None
-    finally:
-        parent.deleteLater()
 
 
 def test_steam_master_gate_suppresses_enabled_cards_and_fade_expectations(qt_app) -> None:
