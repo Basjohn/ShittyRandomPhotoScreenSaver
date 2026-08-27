@@ -5,8 +5,8 @@ Last updated: 2026-08-27
 Reviewed source basis:
 
 ```text
-test-inventory basis = F8 Abandonment retained-model checkpoint
-Phase F0/F0.5/F1/F2/F3/F4/F5/F6/F7 CLOSED; 353 test modules; F8 Abandonment Issues active
+test-inventory basis = 91c468e6 Phase F8 caller-proof retirement
+Phase F0/F0.5/F1/F2/F3/F4/F5/F6/F7/F8 CLOSED; 352 test modules; Phase G active
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -162,7 +162,7 @@ F7 closure removes the old Achievement Pulse QWidget factory/descriptor/input ro
 bridge, DPR artwork caches and painter branches. Achievement sizing/capsule policy now has retained Quick
 ownership. `tests/test_steam_achievement_pulse.py` and `tests/test_steam_achievement_runtime.py` retain only
 neutral selection/cache/provider/preparation/generation/lifecycle contracts plus caller/dormancy proof;
-`tests/test_steam_phase4_mock_visuals.py` is narrowed to the still-live F8/dev-scaffold QWidget helpers.
+the temporary shared QWidget scaffold/painter coverage has now retired with its last live pixel consumers.
 
 F8 model admission adds `tests/test_qtquick_abandonment_issues_presentation.py`. It protects exact shared-Steam
 and Abandonment config projection, stable shared Steam field-row/image/style primitives, accepted artwork
@@ -179,9 +179,14 @@ unavailable and connect states through one threaded-OpenGL Quick window. The ins
 effective DPR 1.0, 1.5 and 2.25, including checkerboard/busy-background composites for transparency and the
 family-distinct archive tab, warm shelf/hatch, age stamp and two-column ledger treatment.
 
+F8 closure removes the old Abandonment QWidget factory/input/runtime bridge, DPR artwork cache and QPainter
+archive card. It also removes the unconverted generic Steam QWidget renderer/factory/runtime/CUSTOM pixels
+rather than preserving them as future compatibility. Neutral selection/cache/privacy/provenance/preparation/
+rotation/model contracts remain; future Steam product work reuses only the retained Quick-era techniques.
+
 At the reviewed checkpoint the repository contains:
 
-- **353 test-module files**: 352 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **352 test-module files**: 351 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -210,6 +215,10 @@ concentrated where migration status could change whether a test remains authorit
 **Do not use filename age or phase prefixes as the decision rule.** `test_p2_logical_runtime.py`, for example, is permanent logical-runtime coverage, while some newer-looking files encode presenter paths intentionally scheduled for deletion.
 
 ### Inventory status counts
+
+This table is the pre-family-retirement classification snapshot and is not an executable-file count. The
+current 352-module count above is authoritative; Phase J owns the final row-by-row ledger reconciliation.
+Closed-phase labels below preserve why a test entered the ledger and do not reopen that phase.
 
 | Status | Files |
 | --- | ---: |
@@ -353,7 +362,7 @@ Preserve:
   - new outage after reclaim → fresh full 30 s grace/global generation;
   - capability OFF retires pending failover state and only discards live-fallback state after confirmed retirement.
 
-E2/E2.7, E1, E3 and E4 are closed and Phase E is structurally **CLOSED**. F0 deprecated Imgur deletion is source-audited GREEN from `19460a7`, with its stale scraping dependency pins removed by the closure reconciliation. Phase F remains active with F0.5 Widgets → General canonical shadow controls next. Do not write “after E1/E3/E4/F0 lands” tests as future work.
+E2/E2.7, E1, E3 and E4 are closed and Phase E is structurally **CLOSED**. F0 deprecated Imgur deletion is source-audited GREEN from `19460a7`, with its stale scraping dependency pins removed by the closure reconciliation. Phase F is also **CLOSED** through F8 caller-proof retirement; Phase G owns the next active test migration. Do not write “after E/F lands” tests as future work.
 
 ## 5. Active migration gates by next phase
 
@@ -377,7 +386,7 @@ Permanent E4 coverage protects: one canonical eight-direction authority; all eig
 
 The E4 host test necessarily injected already-resolved signed offsets before a real family was Quick-presented. F1 Clock subsequently supplied the end-to-end proof that an actual family projection reads the canonical direction plus the two canonical user buckets, applies the deliberate destination card/text base-distance policy in Python, and updates retained properties without presentation or runtime-owner recreation. Do not resurrect sidecar-era `text_large`/header tuning profiles.
 
-### F — widget family ports — ACTIVE; F1–F7 CLOSED, F8 Abandonment Issues ACTIVE
+### F — widget family ports — CLOSED; F1–F8 CLOSED
 
 F0 deleted deprecated Imgur instead of porting it. F0.5 is the bounded QWidget Settings slice that completes the canonical global shadow controls before F1 Clock. For each later family, preserve provider/model/behavior/settings tests and rehome direct QWidget presentation assertions to retained Quick items.
 
@@ -726,8 +735,8 @@ The inventory below accounts for every executable test file present at the revie
 
 | File | Status | Note |
 | --- | --- | --- |
-| `tests/test_steam_abandonment_issues.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
-| `tests/test_steam_abandonment_runtime.py` | **MIGRATION-CRITICAL — F** | Neutral Abandonment owner/generation/cardinality/timer/lifecycle contract; preserve source/model owner and rehome presenter edge. |
+| `tests/test_steam_abandonment_issues.py` | **KEEP** | Neutral Abandonment provider/cache/selection/preparation/model/rotation behavior; QWidget presentation assertions retired in F8. |
+| `tests/test_steam_abandonment_runtime.py` | **KEEP — MIGRATION PERMANENT** | Neutral Abandonment owner/generation/cardinality/timer/lifecycle plus retired-caller proof. |
 | `tests/test_qtquick_abandonment_issues_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Abandonment config/style/model/image/runtime-action/transition lifecycle and stable shared Steam field-model coverage. |
 | `tests/test_steam_achievement_pulse.py` | **KEEP** | Neutral Achievement selection/cache/provider/model behavior; QWidget presentation assertions retired in F7. |
 | `tests/test_steam_achievement_runtime.py` | **KEEP — MIGRATION PERMANENT** | Neutral Achievement owner/generation/cardinality/reuse/dormancy/artwork lifecycle plus retired-caller proof. |
@@ -737,7 +746,7 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_steam_credentials.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_steam_openid.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_steam_phase3_settings_descriptors.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_steam_phase4_mock_visuals.py` | **MIGRATION-CRITICAL — F8** | Temporary shared QWidget scaffold/helper coverage; Achievement-specific pixels retired in F7. |
+| `tests/test_steam_phase4_mock_visuals.py` | **REMOVED — F8** | Temporary generic Steam QWidget scaffold/painter coverage retired with the old pixels. |
 | `tests/test_steam_profile_assets_events.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_steam_request_policy.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 

@@ -1,6 +1,6 @@
 # 10 — Ordinary Widget Family Port Decomposition
 
-Status: **Phase F ACTIVE — F1–F7 CLOSED; F8 Abandonment Issues ACTIVE**
+Status: **Phase F CLOSED — F1–F8 CLOSED**
 Last updated: 2026-08-27
 
 This owns Phase-F family decomposition, not closed implementation narrative. `Current_Plan.md` owns exact
@@ -21,7 +21,7 @@ F4 Media controls / volume / mute / progress   CLOSED
 F5 Reddit / Reddit2                            CLOSED
 F6 Gmail                                       CLOSED
 F7 Achievement Pulse                          CLOSED
-F8 Abandonment Issues                         ACTIVE
+F8 Abandonment Issues                         CLOSED
 ```
 
 Family retirement: inspect old reference -> reuse/extract neutral logic -> retained Quick family -> focused
@@ -60,12 +60,12 @@ authority. One stable retained model/QML item owns accepted image sources, field
 refresh actions and family-authored capsule geometry. The threaded-OpenGL matrix proved card/no-card,
 portrait/square/wide/no-art/connect/unavailable/connection-attention states at effective DPR 1.0, 1.5 and
 2.25. Old Achievement QWidget factory/input/runtime bridge, scaled-image caches and painter branches are
-caller-proven retired; reusable Steam models/services and the F8/shared scaffold helpers remain.
+caller-proven retired; reusable retained Quick Steam models/services/helpers remain.
 
 Integrated F2–F5 independent review GREEN; see current audit under `Docs/audits/`. F6 completed under the
 current self-audit policy.
 
-## F8 Abandonment Issues — ACTIVE
+## F8 Abandonment Issues — CLOSED
 
 Use substantive Abandonment runtime/data path. Preserve privacy/provenance/selection; unknown/private data
 explicit. No provider/cache duplication. After GREEN+caller proof delete old pixels.
@@ -77,18 +77,19 @@ Current admission order:
 - retained card/action fidelity — GREEN;
 - static registry, real manager/host injection and runtime-shaped gates — GREEN;
 - effective-DPR 1.0/1.5/2.25 eyes-on evidence — GREEN;
-- caller proof and old pixel/cache/input retirement — ACTIVE.
+- caller proof and old pixel/cache/input retirement — GREEN.
 
-The F8 audit keeps the existing cardinality and responsibility split: one neutral runtime per enabled card/
+The F8 port keeps the existing cardinality and responsibility split: one neutral runtime per enabled card/
 display owns cache-first startup, refresh, cache-only rotation cadence, request/generation admission and the
-prepared semantic model plus decoded source image. The retained model will own only accepted presentation
+prepared semantic model plus decoded source image. The retained model owns only accepted presentation
 state and semantic action routing. Shared Steam reuse is deliberately bounded to stable field-list/image-source
 and ordinary card-style projection plus existing Quick card/text primitives; Abandonment archive/ledger
 geometry, evidence rules, desaturation and rotation policy remain family-authored. Any future shared visual
 shelf primitive must expose archive-ledger versus capsule treatment explicitly rather than erasing either style.
 
-Steam Journey/Progress and Friend Pulse are future product scaffolds, not migration slices. If old scaffold
-presenter blocks cleanup, retire scaffold rather than manufacture parity port.
+Steam Journey/Progress and Friend Pulse are future product Settings scaffolds, not migration slices. Their old
+generic QWidget renderer/factory/runtime/CUSTOM presentation paths were retired in F8; future work must start
+from the retained Quick techniques instead of restoring that compatibility presenter.
 
 ## Shared primitive admission
 

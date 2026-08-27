@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-d99e83e84f0c99434b9940a242b593df52a94eda
-Phase F8 Abandonment retained owner integration landed on current main
+91c468e6ba1e87f2292a9c60813013cb266c7b1b
+Phase F8 caller-proof retirement landed and passed post-push self-audit
 ```
 
 Current phase state:
@@ -23,51 +23,48 @@ F4    Media controls / volume / mute / progress  CLOSED / independently GREEN
 F5    Reddit / Reddit2                           CLOSED / independently GREEN
 F6    Gmail                                      CLOSED
 F7    Achievement Pulse                          CLOSED
-F8    Abandonment Issues                         ACTIVE
-G     CUSTOM / input / auxiliary pixels          after F
+F8    Abandonment Issues                         CLOSED
+G     CUSTOM / input / auxiliary pixels          ACTIVE
 H     settings epoch + physical Quick cutover    after G
 I     residue only                               after H
 J     final installed / physical validation      final
 ```
 
 Integrated audit: `Docs/audits/QtQuick_Phase_F_F2_F6_Independent_Audit_2026-08-26.md`.
-F2–F5 remain independently GREEN. F6 is GREEN after retained owner/host/visual proof and caller-proven
-retirement of the old Gmail QWidget presentation.
+F2–F5 remain independently GREEN. F6–F8 are GREEN after retained owner/host/visual proof and caller-proven
+retirement of their old QWidget presentations. Phase F is CLOSED.
 
 Source outranks this plan if a later checkpoint has landed.
 
 ---
 
-## Immediate work — F8 Abandonment Issues
+## Immediate work — G1 session and multi-variant working-state contract
 
 ```text
-exact runtime/data/cache/rotation/action/presentation ownership audit  GREEN
-stable retained config/model/image projection                         GREEN
-retained QML card + interaction fidelity                               GREEN
-registry + real owner injection + runtime-shaped gates                GREEN
-effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                      GREEN
-caller proof + old Abandonment pixel/cache/input retirement           ACTIVE
+exact current geometry/persistence/edit-session ownership audit       ACTIVE
+presentation-neutral CustomLayoutSession contract                     PENDING
+variant-key + Clock digital/analogue no-drift bars                    PENDING
+working duplicate/enabled/X state bars                                PENDING
+manager/session integration without QWidget pixel ownership           PENDING
 ```
 
-### F8.6 — caller proof and old-pixel retirement (ACTIVE)
+### G1.1 — ownership and caller audit (ACTIVE)
 
-- prove every enabled Abandonment caller resolves through the retained registry/model and the real manager-owned
-  neutral service;
-- preserve neutral selection/cache/rotation/privacy/provenance/preparation and reusable Steam-family contracts;
-- delete only caller-proven old Abandonment QWidget factory/input/runtime bridge, DPR image cache, layout/painter
-  and presentation-only tests;
-- keep Steam Journey/Progress and Friend Pulse future scaffolds provider-inert without retaining Abandonment
-  compatibility aliases or a generic god-card presenter;
-- run focused destination/runtime/shared-manager/import gates, retired-marker scans, full diff/status review and
-  post-push self-audit before closing Phase F.
+- trace exact current committed-geometry, screen identity, normalization/clamp/snap, Save/Cancel, duplicate and
+  ordinary-enabled owners from Settings/runtime through the old edit shell;
+- classify presentation-neutral logic to reuse versus QWidget/edit-grid pixel/session ownership to replace;
+- prove the accepted variant key `(widget_id, display_identity, geometry_variant)` can preserve independent Clock
+  digital/analogue rects and display-local state without compatibility replay;
+- identify the smallest neutral session boundary for working geometry, duplicate removal and ordinary-enabled OFF;
+- do not create Quick overlay pixels or retire old edit pixels until this ownership audit and contract tests are GREEN.
 
-Do not port Steam Journey/Progress or Friend Pulse scaffolds as part of F8.
+Use `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`; exact current source outranks stale owner names.
 
 ---
 
-## Phase-F execution / audit policy
+## Phase-G execution / audit policy
 
-Normal family slice:
+Normal bounded slice:
 
 ```text
 inspect exact source
@@ -83,7 +80,7 @@ External audit is required for cross-family/process/display architecture changes
 resource ownership changes, material runtime lifecycle/shared-resource changes, unresolved YELLOW,
 deterministic-vs-visual disagreement, or explicit request. H physical cutover is independently audit-required.
 
-No routine hosted CI or full/Nuitka/installed build during ordinary Phase-F implementation.
+No routine hosted CI or full/Nuitka/installed build during ordinary Phase-G implementation.
 
 ---
 
@@ -129,7 +126,7 @@ Do not carry completed family pixels to H/I merely as fallback.
 
 ---
 
-## F7–F8
+## F7–F8 — CLOSED
 
 Only substantive Steam widgets are migration ports:
 
@@ -138,12 +135,17 @@ F7 Achievement Pulse
 F8 Abandonment Issues
 ```
 
-Steam Journey/Progress and Friend Pulse remain unfinished dev-gated future-product scaffolds. Do not
-manufacture Quick parity ports. Retire scaffold pixels later if they obstruct shared cleanup.
+Steam Journey/Progress and Friend Pulse remain unfinished dev-gated future-product Settings scaffolds. Their
+old QWidget renderer/factory/runtime/CUSTOM pixels are retired; do not manufacture Quick parity ports or
+restore compatibility presenters before real future product work is admitted.
 
 ---
 
 ## G — CUSTOM / input
+
+Suggested sequence remains G1 session/variant contract, G2 retained edit overlay/X, G3 Save/Cancel commit,
+G4 resize, G5 cross-monitor transfer, G6 runtime-neutral input/actions, G7 auxiliary pixels/context and G8
+MC/focus closure. Do not reorder from local convenience.
 
 Geometry key supports `(widget_id, display_identity, geometry_variant)`; Clock digital/analogue keep
 independent committed rects without drift.
@@ -201,4 +203,5 @@ docs closure.
 
 ## Current acceptance debt
 
-- unrelated logging and Reddit-helper focused-test debt remains in `Future_Cleanup.md`.
+- unrelated logging, Reddit-helper and physical two-display midpoint-capture focused-test debt remains in
+  `Future_Cleanup.md`.
