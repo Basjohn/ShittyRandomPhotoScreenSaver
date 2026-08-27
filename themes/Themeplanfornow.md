@@ -83,7 +83,8 @@ to compiled Default Dark rather than an unstyled window.
 
 ## Immediate remaining work
 
-1. One final Windows eyes-on check of picker shell and both Themes pills.
+1. One final Windows eyes-on check that picker OK/Cancel casts now clear the
+   actual QDialogButtonBox clip boundary; close-X alignment is already green.
 2. Rewrite Theme Foundry around semantic schema-v4 `.srtheme` files.
 3. Build/release work replaces the temporary theme-directory stub and retires
    the dev fallback as recorded in `Future_Cleanup.md`.
