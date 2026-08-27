@@ -338,6 +338,9 @@ class _ColorPickerDialog(QDialog):
         self.setObjectName("subsettingsDialog")
         self.setModal(True)
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        # The wrapper is frameless, so let its rounded child frames define the
+        # visible outline instead of leaving an opaque rectangular backing.
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._drag_pos = QPoint()
 
         layout = QVBoxLayout(self)
@@ -368,6 +371,26 @@ class _ColorPickerDialog(QDialog):
 
         content_frame = QFrame(self)
         content_frame.setObjectName("settingsContentFrame")
+        picker_theme = get_active_settings_theme()
+        picker_window = _theme_qcolor(picker_theme, "color_picker.window")
+        picker_window_qss = _theme_rgba255(picker_theme, "color_picker.window")
+
+        # Legacy dark.qss deliberately makes generic subsettings content
+        # transparent. This picker owns its body, so override only this frame;
+        # QColorDialog descendants remain palette/Qt-owned.
+        content_frame.setStyleSheet(
+            "QFrame#settingsContentFrame {"
+            f" background-color: {picker_window_qss};"
+            " border: none;"
+            " border-bottom-left-radius: 10px;"
+            " border-bottom-right-radius: 10px;"
+            " margin: 0 2px 2px 2px;"
+            " }"
+        )
+        content_palette = content_frame.palette()
+        content_palette.setColor(QPalette.ColorRole.Window, picker_window)
+        content_frame.setPalette(content_palette)
+        content_frame.setAutoFillBackground(True)
         content_layout = QVBoxLayout(content_frame)
         content_layout.setContentsMargins(20, 20, 20, 20)
         content_layout.setSpacing(12)
@@ -630,5 +653,15 @@ class StyledColorPicker:
             _theme_qcolor(theme, "color_picker.button_text"),
         )
         dialog.setPalette(palette)
+        # Qt's non-native QColorDialog does not consistently paint its empty
+        # body from QPalette.Window on Windows. Restrict this selector to the
+        # dialog object itself so the actual colour wells/sliders remain Qt-owned.
+        window = theme.color("color_picker.window")
+        dialog.setStyleSheet(
+            "QColorDialog#styledColorDialog {"
+            f" background-color: rgba({window.r}, {window.g}, {window.b}, {window.a});"
+            " }"
+        )
+        dialog.setAutoFillBackground(True)
 
 

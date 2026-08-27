@@ -66,39 +66,27 @@ to compiled Default Dark rather than an unstyled window.
 
 - Themes sidebar surface exists with **Setting Themes** and intentionally-empty
   **Widget Themes**.
-- Source/dev builds can discover file themes through the temporary explicit /
+- Source/dev builds discover file themes through the temporary explicit /
   build-stub / repository-local path seam before first Settings QWidget paint.
-- Theme schema **v4** adds the remaining bucket open/closed palette and popup
-  form-input palette.
-- Sources uses the established circular Save RSS checkbox and central
-  `StyledPopup` for duplicate, autocorrect and RSS-cache notices/questions.
-- The no-sources close guard uses `StyledPopup`; the bespoke popup/shadow is
-  gone. The legacy ResetDefaults toast API is retained but its visuals now use
-  the popup semantic palette/shadow rather than another hardcoded skin.
-- Settings More/Import menus use semantic `context.menu.*` roles.
-- Styled combo/font-combo popup views bind to the live
-  `COMBOBOX_POPUP_VIEW_STYLE` rather than freezing construction-time colours.
-- Tooltips are consistent: both root and local tooltip QSS consume the same
-  alpha-aware ThemeSpec roles and preserve the old global geometry.
-- Bucket closed/open surfaces are ThemeSpec-owned while existing geometry,
-  arrows and semantic bucket-shadow renderer stay unchanged.
-- The Steam API-key input dialog keeps its form mechanics but uses the same
-  popup container/input/button/shadow vocabulary as `StyledPopup`.
-- The non-native wrapped Qt colour picker already consumes semantic
-  `color_picker.*` roles and is now exercised by the full-role validation theme.
-- The validation theme changes every semantic colour role, every shadow role
-  and every gradient role so apparently-unaffected UI is meaningful evidence.
+- Theme schema **v4** owns the current semantic Settings visual vocabulary.
+- Full-role Obnoxious Windows testing has exercised bucket states, tooltips,
+  popup/dialog language, combo popup views, menus, About controls and the
+  custom non-native Qt colour picker.
+- The picker wrapper now explicitly fills its owned content frame from
+  `color_picker.window`; QColorDialog's actual colour wells/sliders/preview
+  remain Qt-owned and truthful to the selected colour.
+- The frameless picker wrapper permits transparent outer corners so the
+  existing rounded title/content frames can define the visible shell.
+- Themes navigation now uses a dedicated `_ThemePillButton` whose own
+  `sizeHint()` / `minimumSizeHint()` reserve the full rendered label plus
+  generous padding. FlowLayout therefore receives the correct width directly.
 
 ## Immediate remaining work
 
-1. Windows eyes-on live-switch audit with schema-v4 Obnoxious: bucket closed/open,
-   About `⋮`, Sources popups/Save RSS, combo dropdowns, tooltips, More/Import
-   menus, Steam API-key form and colour picker.
-2. Fix any remaining stubborn Settings chrome revealed by that full-role test;
-   leave semantic status and user/widget-authored colours alone.
-3. Rewrite Theme Foundry around the semantic schema-v4 `.srtheme` model.
-4. Build/release work replaces the temporary theme-directory stub and retires
-   the dev fallback as already recorded in `Future_Cleanup.md`.
-5. Keep `dark.qss` until its remaining geometry/resource/base-selector ownership
-   is deliberately retired or relocated; it is not selectable theme authority.
-6. Remove the validation theme and this temporary plan after final validation.
+1. One final Windows eyes-on check of picker shell and both Themes pills.
+2. Rewrite Theme Foundry around semantic schema-v4 `.srtheme` files.
+3. Build/release work replaces the temporary theme-directory stub and retires
+   the dev fallback as recorded in `Future_Cleanup.md`.
+4. Keep `dark.qss` until remaining geometry/resource/base-selector ownership is
+   deliberately retired or relocated; it is not selectable theme authority.
+5. Remove the validation theme and this temporary plan after final validation.
