@@ -56,6 +56,7 @@ _FONTS_REGISTERED = False
 
 _LIVE_GROUP_BOXES: weakref.WeakSet = weakref.WeakSet()
 _LIVE_RECOMMENDED_SLIDERS: weakref.WeakSet = weakref.WeakSet()
+_LIVE_STYLED_LABELS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
 _SETTINGS_THEME = get_active_settings_theme()
@@ -270,6 +271,41 @@ def _build_form_row_label_style_disabled() -> str:
 FORM_ROW_LABEL_STYLE_DISABLED = _build_form_row_label_style_disabled()
 
 
+_SHARED_LABEL_STYLE_ROLES = (
+    "FORM_LABEL_STYLE",
+    "FORM_ROW_LABEL_STYLE",
+    "FORM_LABEL_STYLE_DISABLED",
+    "FORM_ROW_LABEL_STYLE_DISABLED",
+    "PAGE_TITLE_STYLE",
+    "SECTION_HEADING_STYLE",
+    "SECTION_HEADING_STYLE_DISABLED",
+    "SWATCH_LABEL_STYLE",
+    "INFO_LABEL_STYLE",
+    "ADV_HELPER_LABEL_STYLE",
+    "INFO_LABEL_STYLE_DISABLED",
+)
+
+
+def _shared_label_style_role(style_sheet: str) -> str | None:
+    """Identify a current shared label style when the mapping is unambiguous."""
+
+    matches = [
+        name
+        for name in _SHARED_LABEL_STYLE_ROLES
+        if globals().get(name) == style_sheet
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _remember_live_label(label: QLabel, role: str | None) -> None:
+    """Track only labels whose full style is owned by shared_styles.py."""
+
+    if role is None:
+        _LIVE_STYLED_LABELS.pop(label, None)
+        return
+    _LIVE_STYLED_LABELS[label] = role
+
+
 def apply_section_heading_style(
     label: QLabel,
     *,
@@ -282,10 +318,15 @@ def apply_section_heading_style(
 
     ensure_custom_fonts()
     if style is None:
-        style_sheet = FORM_LABEL_STYLE_DISABLED if disabled else FORM_LABEL_STYLE
+        style_role = (
+            "FORM_LABEL_STYLE_DISABLED" if disabled else "FORM_LABEL_STYLE"
+        )
+        style_sheet = globals()[style_role]
     else:
         style_sheet = style
+        style_role = _shared_label_style_role(style_sheet)
     label.setStyleSheet(style_sheet)
+    _remember_live_label(label, style_role)
     target_height = height if height is not None else FORM_LABEL_HEIGHT
     if lock_height:
         label.setFixedHeight(target_height)
@@ -420,6 +461,7 @@ def create_inline_label(
 ) -> QLabel:
     label = QLabel(text)
     label.setStyleSheet(FORM_ROW_LABEL_STYLE)
+    _remember_live_label(label, "FORM_ROW_LABEL_STYLE")
     if minimum_width is not None:
         label.setMinimumWidth(minimum_width)
     label.setAlignment(alignment)
@@ -1127,6 +1169,12 @@ def _refresh_live_shared_widgets(theme: SettingsThemeSpec) -> None:
     """Refresh widget families whose styling is owned directly in this module."""
 
     _install_theme_styles(theme)
+
+    for label, role in tuple(_LIVE_STYLED_LABELS.items()):
+        if _is_live_qobject(label):
+            style_sheet = globals().get(role)
+            if isinstance(style_sheet, str):
+                label.setStyleSheet(style_sheet)
 
     for box in tuple(_LIVE_GROUP_BOXES):
         if _is_live_qobject(box):
