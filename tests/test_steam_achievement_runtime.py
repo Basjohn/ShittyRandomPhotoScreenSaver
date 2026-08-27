@@ -692,14 +692,11 @@ def test_retired_qwidget_achievement_paths_have_no_production_caller() -> None:
     for path in (
         Path("rendering/display_input.py"),
         Path("rendering/widget_factories.py"),
-        Path("widgets/steam_card_widget.py"),
-        Path("widgets/steam_components.py"),
     ):
         source = path.read_text(encoding="utf-8").lower()
         assert "achievement_pulse_widget" not in source
-        if path.name in {"steam_card_widget.py", "steam_components.py"}:
-            assert "achievement_pulse" not in source
-            assert "_achievement" not in source
+    assert not Path("widgets/steam_card_widget.py").exists()
+    assert not Path("widgets/steam_components.py").exists()
 
     runtime_source = Path("widgets/steam_achievement_runtime.py").read_text(
         encoding="utf-8"

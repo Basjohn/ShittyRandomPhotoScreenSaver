@@ -4,23 +4,19 @@ from __future__ import annotations
 import gc
 import weakref
 from pathlib import Path
-from types import MethodType, SimpleNamespace
+from types import SimpleNamespace
 
 from PySide6.QtGui import QImage
-from PySide6.QtWidgets import QWidget
 import pytest
 
-from core.resources.manager import ResourceManager
 from core.steam.abandonment_issues import AbandonmentSelection
-from core.threading.manager import TaskResult, ThreadManager
-from rendering.widget_manager import WidgetManager
+from core.threading.manager import TaskResult
 from rendering.widget_runtime_services import get_runtime_service_spec
-from widgets.abandonment_issues_widget import AbandonmentIssuesWidget
-from widgets.base_overlay_widget import OverlayPosition
-from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
-from widgets.steam_abandonment_runtime import (
+from widgets.steam_abandonment_preparation import (
     AbandonmentPreparedPresentation,
     AbandonmentRuntimeConfig,
+)
+from widgets.steam_abandonment_runtime import (
     AbandonmentRuntimeService,
 )
 
@@ -402,232 +398,46 @@ def test_registry_reuse_validator_rejects_missing_edge_and_stopped_active_owner(
     assert spec.reuse_is_valid(consumer, service) is False
 
 
-def test_standalone_widget_owns_and_retires_exactly_one_convenience_service(
-    qt_app,
-) -> None:
-    widget = AbandonmentIssuesWidget(
-        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
-        position=OverlayPosition.BOTTOM_RIGHT,
-        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
-        show_artwork=False,
-    )
-    service = widget._runtime_service
-
-    assert service is not None
-    assert widget._owns_runtime_service is True
-    widget.cleanup()
-
-    assert widget._runtime_service is None
-    assert service.is_retired() is True
-    service.retire()
-    assert service.is_retired() is True
-
-
-def test_production_suppressed_widget_detaches_but_does_not_retire_external_owner(
-    qt_app,
-) -> None:
-    widget = AbandonmentIssuesWidget(
-        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
-        position=OverlayPosition.BOTTOM_RIGHT,
-        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
-        show_artwork=False,
-        build_default_runtime=False,
-    )
-    service = AbandonmentRuntimeService(config=_config())
-    widget.set_runtime_service(service)
-
-    assert widget._runtime_service is service
-    assert widget._owns_runtime_service is False
-    widget.cleanup()
-
-    assert widget._runtime_service is None
-    assert service.is_retired() is False
-    assert service._consumer() is None
-    service.retire()
-
-
-def test_cleanup_makes_late_widget_deferred_callbacks_inert(qt_app) -> None:
-    class _ExternalService:
-        def __init__(self) -> None:
-            self.manual_refreshes = 0
-            self.rotations = 0
-            self.detach_calls = 0
-
-        def configure(self, _config) -> None:
-            return None
-
-        def attach_consumer(self, _consumer) -> None:
-            return None
-
-        def detach_consumer(self, _consumer) -> None:
-            self.detach_calls += 1
-
-        def is_running(self) -> bool:
-            return False
-
-        def request_manual_refresh(self) -> bool:
-            self.manual_refreshes += 1
-            return True
-
-        def request_cache_rotation(self) -> bool:
-            self.rotations += 1
-            return True
-
-    widget = AbandonmentIssuesWidget(
-        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
-        position=OverlayPosition.BOTTOM_RIGHT,
-        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
-        show_artwork=False,
-        build_default_runtime=False,
-    )
-    service = _ExternalService()
-    widget.set_runtime_service(service)
-    initial_model = widget._view_model
-    widget._pending_abandonment_manual_refresh = True
-    widget._pending_abandonment_rotation = True
-    widget._deferred_abandonment_presentation = (_prepared("late-ui"), True)
-    late_callbacks = (
-        widget._run_deferred_manual_refresh,
-        widget._run_deferred_cache_rotation,
-        widget._apply_deferred_presentation,
+def test_retired_abandonment_and_unconverted_steam_qwidget_pixels_have_no_callers() -> None:
+    from rendering.widget_descriptors import (
+        FACTORY_WIDGET_DESCRIPTORS,
+        WIDGET_RUNTIME_DESCRIPTORS,
     )
 
-    widget.cleanup()
-    for callback in late_callbacks:
-        callback()
+    retired_paths = (
+        Path("widgets/abandonment_issues_widget.py"),
+        Path("widgets/steam_abandonment_components.py"),
+        Path("widgets/steam_card_widget.py"),
+        Path("widgets/steam_components.py"),
+    )
+    assert all(not path.exists() for path in retired_paths)
+    assert all(
+        descriptor.settings_key
+        not in {"steam_progress", "abandonment_issues", "friend_pulse"}
+        for descriptor in FACTORY_WIDGET_DESCRIPTORS
+    )
+    assert all(
+        descriptor.widget_id not in {"steam_progress", "friend_pulse"}
+        for descriptor in WIDGET_RUNTIME_DESCRIPTORS
+    )
 
-    assert service.manual_refreshes == 0
-    assert service.rotations == 0
-    assert service.detach_calls == 1
-    assert widget._view_model is initial_model
-
-
-def test_production_setup_activation_timer_and_cleanup_share_one_owner(
-    qt_app,
-    inline_ui,
-) -> None:
-    class _Settings:
-        def get_widgets_map(self) -> dict:
-            return {
-                "steam": {"enabled": True, "refresh_minutes": 5},
-                "abandonment_issues": {
-                    "enabled": True,
-                    "monitor": "ALL",
-                    "position": "Bottom Right",
-                    "show_artwork": False,
-                },
-                "family_activation": {"steam": True},
-                "shadows": {"enabled": True},
-            }
-
-    parent = QWidget()
-    parent.resize(1280, 720)
-    parent._runtime_generation = 88
-    resource_manager = ResourceManager()
-    thread_manager = ThreadManager(resource_manager=resource_manager)
-    queued_tasks: list[SimpleNamespace] = []
-
-    def _queue_io_task(self, func, *, task_id, callback, **kwargs):
-        task = SimpleNamespace(
-            func=func,
-            task_id=task_id,
-            callback=callback,
-            kwargs=dict(kwargs),
+    production_sources = "\n".join(
+        Path(path).read_text(encoding="utf-8")
+        for path in (
+            "rendering/display_input.py",
+            "rendering/widget_factories.py",
+            "rendering/widget_descriptors.py",
         )
-        queued_tasks.append(task)
-        return task_id
-
-    thread_manager.submit_io_task = MethodType(_queue_io_task, thread_manager)
-    parent._thread_manager = thread_manager
-    manager = WidgetManager(parent, resource_manager)
-    service = None
-    raw_timer = None
-    try:
-        created = manager.setup_all_widgets(
-            _Settings(),
-            screen_index=0,
-            thread_manager=thread_manager,
-        )
-        widget = created["abandonment_issues_widget"]
-        service = manager._runtime_manager.get_widget_service("abandonment_issues")
-
-        assert service is widget._runtime_service
-        assert widget._thread_manager is thread_manager
-        assert service._thread_manager is thread_manager
-        assert service.is_running() is True
-        assert len(queued_tasks) == 1
-        cache_task = queued_tasks[0]
-        assert cache_task.kwargs["category"] == "steam_abandonment_cache_load"
-        assert cache_task.func._srpss_runtime_generation == 88
-        assert cache_task.callback._srpss_runtime_generation == 88
-
-        snapshot = SimpleNamespace(
-            cache_age_seconds=30.0,
-            rotation_due_seconds=75.0,
-        )
-        presentation = _prepared("production")
-        cache_task.callback(
-            TaskResult(
-                success=True,
-                result=(object(), snapshot, presentation),
-                task_id=cache_task.task_id,
-            )
-        )
-        assert service.current_presentation is presentation
-
-        service.on_presentation_fade_complete()
-        assert service.rotation_timer is not None
-        raw_timer = service.rotation_timer._timer
-        assert raw_timer is not None
-        assert raw_timer.interval() == 75_000
-        assert raw_timer.isActive() is True
-        assert raw_timer._runtime_generation == 88
-
-        created_again = manager.setup_all_widgets(
-            _Settings(),
-            screen_index=0,
-            thread_manager=thread_manager,
-        )
-        assert created_again["abandonment_issues_widget"] is widget
-        assert (
-            manager._runtime_manager.get_widget_service("abandonment_issues")
-            is service
-        )
-        assert widget._runtime_service is service
-        assert service.is_running() is True
-        assert len(queued_tasks) == 1
-        assert service.rotation_timer is not None
-        assert service.rotation_timer._timer is raw_timer
-        assert raw_timer.isActive() is True
-
-        assert manager.cleanup_widget("abandonment_issues") is True
-        assert raw_timer.isActive() is False
-        assert service.is_retired() is True
-        assert manager._runtime_manager.get_widget_service("abandonment_issues") is None
-    finally:
-        if service is not None and not service.is_retired():
-            service.retire()
-        if raw_timer is not None:
-            raw_timer.stop()
-        thread_manager.shutdown()
-        parent.deleteLater()
-
-
-def test_legacy_widget_contains_no_abandonment_source_or_cadence_owner() -> None:
-    source = Path("widgets/abandonment_issues_widget.py").read_text(encoding="utf-8")
-
-    for forbidden in (
-        "load_abandonment_cache_snapshot",
-        "refresh_abandonment_cache",
-        "hydrate_selected_achievement_evidence",
-        "read_credential_metadata",
-        "load_credentials",
-        "submit_io_task",
-        "create_overlay_timer",
-        "_abandonment_generation",
-        "_abandonment_rotation_timer",
+    )
+    for retired_marker in (
+        "AbandonmentIssuesWidget",
+        "SteamCardFactory",
+        "steam_abandonment_components",
+        "abandonment_issues_widget",
+        "steam_progress_widget",
+        "friend_pulse_widget",
     ):
-        assert forbidden not in source
+        assert retired_marker not in production_sources
 
 
 def test_neutral_abandonment_owner_contains_no_presenter_geometry_contract() -> None:

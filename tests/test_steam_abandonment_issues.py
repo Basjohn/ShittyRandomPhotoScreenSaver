@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import json
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QPainter
+from PySide6.QtGui import QColor, QImage
 
 from core.steam.abandonment_cache import (
     MAX_CACHED_ACHIEVEMENT_PROBES,
@@ -46,37 +44,29 @@ from core.steam.cache import (
 from core.steam.credentials import (
     SteamCredentialPayload,
     derive_profile_cache_key,
-    write_credential_metadata,
 )
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
 from core.threading.manager import TaskResult
-from widgets.abandonment_issues_widget import AbandonmentIssuesWidget
-from widgets.base_overlay_widget import OverlayPosition
 from widgets.steam_abandonment_runtime import (
-    AbandonmentPreparedPresentation,
+    AbandonmentRuntimeService,
     achievement_evidence_requested as _achievement_evidence_requested,
-    prepare_abandonment_presentation,
 )
 from widgets.steam_abandonment_preparation import (
+    AbandonmentRuntimeConfig,
     decode_abandonment_artwork as _decode_abandonment_artwork,
+    prepare_abandonment_presentation,
 )
-from widgets.steam_abandonment_components import (
+from widgets.steam_abandonment_layout import normalize_abandonment_artwork_shape
+from widgets.steam_abandonment_models import (
     ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES,
-    ABANDONMENT_FIELD_DEFAULTS,
     ABANDONMENT_PRIMARY_REDISCOVERY_MESSAGE,
-    _fit_wrapped_font,
     _rediscovery_message_for_bucket,
-    abandonment_authored_size,
     abandonment_archive_class,
     abandonment_rediscovery_message,
     abandonment_shelf_diagnostics,
     build_abandonment_view_model,
     format_abandonment_last_played,
-    layout_abandonment_card,
-    normalize_abandonment_artwork_shape,
-    render_abandonment_card,
 )
-from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
 
 
 FIXTURE_ROOT = Path(__file__).resolve().parent / "fixtures" / "steam"
@@ -1090,11 +1080,29 @@ def test_guilt_desaturater_is_smooth_capped_and_decoded_outside_paint(tmp_path) 
     ) == prepared
     decoded = _decode_abandonment_artwork(prepared)
     assert (decoded.width(), decoded.height()) == (32, 48)
-    assert hasattr(AbandonmentIssuesWidget, "_scaled_abandonment_artwork")
+
+
+def _runtime_config(
+    *,
+    field_visibility: dict[str, bool] | None = None,
+    show_artwork: bool = True,
+    artwork_shape: str = "portrait",
+    refresh_minutes: int = 10,
+) -> AbandonmentRuntimeConfig:
+    return AbandonmentRuntimeConfig(
+        selection=AbandonmentSelection(),
+        field_visibility=field_visibility or {},
+        show_artwork=show_artwork,
+        artwork_shape=artwork_shape,
+        guilt_desaturater=False,
+        guilt_desaturation_strength=55,
+        refresh_minutes=refresh_minutes,
+        show_connection_info_icon=True,
+        show_rediscovery_message=True,
+    )
 
 
 def test_abandonment_preparation_hydrates_one_missing_selected_artwork(
-    qt_app,
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -1131,31 +1139,19 @@ def test_abandonment_preparation_hydrates_one_missing_selected_artwork(
         )
 
     monkeypatch.setattr(assets, "fetch_steam_app_artwork", _fetch)
-    widget = AbandonmentIssuesWidget(
-        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
-        position=OverlayPosition.BOTTOM_RIGHT,
-        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
-        show_artwork=True,
-        artwork_shape="square",
-        guilt_desaturater=False,
+    presentation = prepare_abandonment_presentation(
+        _runtime_config(artwork_shape="portrait"),
+        _Snapshot(),
+        profile_key="profile_fixture",
+        allow_asset_network=True,
     )
-    try:
-        presentation = prepare_abandonment_presentation(
-            widget._build_runtime_config(),
-            _Snapshot(),
-            profile_key="profile_fixture",
-            allow_asset_network=True,
-        )
 
-        assert fetches == [resolved.appid]
-        assert presentation.artwork_identity == str(source)
-        assert (presentation.artwork.width(), presentation.artwork.height()) == (120, 180)
-    finally:
-        widget.cleanup()
+    assert fetches == [resolved.appid]
+    assert presentation.artwork_identity == str(source)
+    assert (presentation.artwork.width(), presentation.artwork.height()) == (120, 180)
 
 
 def test_abandonment_preparation_falls_back_to_wide_artwork_after_portrait_404(
-    qt_app,
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -1198,31 +1194,19 @@ def test_abandonment_preparation_falls_back_to_wide_artwork_after_portrait_404(
         )
 
     monkeypatch.setattr(assets, "fetch_steam_app_artwork", _fetch)
-    widget = AbandonmentIssuesWidget(
-        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
-        position=OverlayPosition.BOTTOM_RIGHT,
-        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
-        show_artwork=True,
-        artwork_shape="square",
-        guilt_desaturater=False,
+    presentation = prepare_abandonment_presentation(
+        _runtime_config(artwork_shape="portrait"),
+        _Snapshot(),
+        profile_key="profile_fixture",
+        allow_asset_network=True,
     )
-    try:
-        presentation = prepare_abandonment_presentation(
-            widget._build_runtime_config(),
-            _Snapshot(),
-            profile_key="profile_fixture",
-            allow_asset_network=True,
-        )
 
-        assert fetch_shapes == ["portrait", "wide"]
-        assert presentation.artwork_identity == str(source)
-        assert (presentation.artwork.width(), presentation.artwork.height()) == (180, 100)
-    finally:
-        widget.cleanup()
+    assert fetch_shapes == ["portrait", "wide"]
+    assert presentation.artwork_identity == str(source)
+    assert (presentation.artwork.width(), presentation.artwork.height()) == (180, 100)
 
 
 def test_abandonment_preparation_does_not_retry_transient_artwork_failure(
-    qt_app,
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -1250,290 +1234,15 @@ def test_abandonment_preparation_does_not_retry_transient_artwork_failure(
         return SteamResult(status=SteamResultStatus.NETWORK_ERROR)
 
     monkeypatch.setattr(assets, "fetch_steam_app_artwork", _fetch)
-    widget = AbandonmentIssuesWidget(
-        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
-        position=OverlayPosition.BOTTOM_RIGHT,
-        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
-        show_artwork=True,
-        artwork_shape="square",
-        guilt_desaturater=False,
-    )
-    try:
-        presentation = prepare_abandonment_presentation(
-            widget._build_runtime_config(),
-            _Snapshot(),
-            profile_key="profile_fixture",
-            allow_asset_network=True,
-        )
-
-        assert fetch_shapes == ["portrait"]
-        assert presentation.artwork.isNull()
-    finally:
-        widget.cleanup()
-
-
-def test_abandonment_widget_owns_dpr_cover_crop_cache(qt_app) -> None:
-    widget = AbandonmentIssuesWidget(
-        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
-        position=OverlayPosition.BOTTOM_RIGHT,
-        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
-        show_artwork=True,
-        artwork_shape="portrait",
-        build_default_runtime=False,
-    )
-    try:
-        source = QImage(120, 180, QImage.Format.Format_RGB32)
-        source.fill(QColor(190, 90, 45))
-        presentation = AbandonmentPreparedPresentation(
-            model=widget._view_model,
-            artwork=source,
-            artwork_identity="source-resolution-fixture",
-            desaturation_bucket=0,
-        )
-        widget._commit_prepared_presentation(presentation, animate=False)
-
-        assert (presentation.artwork.width(), presentation.artwork.height()) == (120, 180)
-        assert (widget._abandonment_artwork.width(), widget._abandonment_artwork.height()) == (
-            120,
-            180,
-        )
-
-        first = widget._scaled_abandonment_artwork(QRectF(0.0, 0.0, 80.0, 80.0), 2.0)
-        assert (first.width(), first.height()) == (160, 160)
-        assert first.devicePixelRatio() == 2.0
-        first_cache_key = first.cacheKey()
-
-        replay = widget._scaled_abandonment_artwork(
-            QRectF(0.0, 0.0, 80.0, 80.0),
-            2.0,
-        )
-        assert replay.cacheKey() == first_cache_key
-
-        resized = widget._scaled_abandonment_artwork(
-            QRectF(0.0, 0.0, 60.0, 90.0),
-            2.0,
-        )
-        assert (resized.width(), resized.height()) == (120, 180)
-        assert resized.cacheKey() != first_cache_key
-
-        replacement = QImage(120, 180, QImage.Format.Format_RGB32)
-        replacement.fill(QColor(45, 90, 190))
-        widget._commit_prepared_presentation(
-            AbandonmentPreparedPresentation(
-                model=widget._view_model,
-                artwork=replacement,
-                artwork_identity="source-resolution-fixture",
-                desaturation_bucket=0,
-            ),
-            animate=False,
-        )
-        assert widget._abandonment_scaled_artwork_cache.isNull()
-        assert widget._abandonment_scaled_artwork_cache_key is None
-    finally:
-        widget.cleanup()
-
-
-def test_abandonment_archival_layout_keeps_large_portrait_and_ledger_separate(qt_app) -> None:
-    resolved = resolve_abandonment_issues(
-        owned_result=_owned_result(),
-        recent_result=_recent_result(),
-        now=NOW,
-    )
-    model = build_abandonment_view_model(resolved)
-    authored = abandonment_authored_size(
-        show_artwork=True,
-        artwork_shape="square",
-        artwork_size=180,
-    )
-    layout = layout_abandonment_card(
-        model,
-        QRectF(0, 0, authored.width(), authored.height()),
-        show_artwork=True,
-        artwork_shape="square",
-        artwork_size=180,
+    presentation = prepare_abandonment_presentation(
+        _runtime_config(artwork_shape="portrait"),
+        _Snapshot(),
+        profile_key="profile_fixture",
+        allow_asset_network=True,
     )
 
-    assert authored.height() > 300
-    assert layout.art_rect.bottom() < layout.authored_rect.bottom()
-    assert not layout.art_rect.intersects(layout.title_rect)
-    assert not layout.art_rect.intersects(layout.age_stamp_rect)
-    assert all(not layout.art_rect.intersects(rect) for _field_id, rect in layout.field_rects)
-
-
-def test_abandonment_layout_allocates_every_enabled_ledger_shelf(qt_app) -> None:
-    resolved = AbandonmentResolved(
-        status="ok",
-        appid=90,
-        title="Full Ledger Fixture",
-        playtime_minutes=90,
-        last_played_at=1_493_424_000.0,
-        last_played_confidence=LAST_PLAYED_VERIFIED,
-        inactivity_days=2_500,
-        queue_position=3,
-        queue_count=40,
-        source_label="Cache",
-        unlocked_achievement_count=2,
-        total_achievement_count=20,
-        latest_unlock_at=1_609_459_200.0,
-        latest_unlock_age_days=1_400,
-    )
-    visibility = {field_id: True for field_id in ABANDONMENT_FIELD_DEFAULTS}
-    model = build_abandonment_view_model(resolved, field_visibility=visibility)
-    authored = abandonment_authored_size(
-        show_artwork=True,
-        artwork_shape="square",
-        artwork_size=140,
-        field_count=len(visibility),
-    )
-    layout = layout_abandonment_card(
-        model,
-        QRectF(0, 0, authored.width(), authored.height()),
-        show_artwork=True,
-        artwork_shape="square",
-        artwork_size=140,
-        field_slot_count=len(visibility),
-    )
-
-    assert authored.height() == 362
-    assert len(layout.field_rects) == len(visibility)
-    assert {field_id for field_id, _rect in layout.field_rects} == set(visibility)
-    assert max(rect.bottom() for _field_id, rect in layout.field_rects) < authored.height()
-    assert all(not layout.art_rect.intersects(rect) for _field_id, rect in layout.field_rects)
-
-
-def test_abandonment_enabled_ledger_text_is_measured_to_fit(qt_app, monkeypatch) -> None:
-    import widgets.steam_abandonment_components as components
-
-    resolved = AbandonmentResolved(
-        status="ok",
-        appid=91,
-        title="Measured Ledger Fixture",
-        playtime_minutes=90,
-        last_played_at=1_493_424_000.0,
-        last_played_confidence=LAST_PLAYED_VERIFIED,
-        inactivity_days=3_350,
-        queue_position=3,
-        queue_count=40,
-        source_label="Cache",
-        unlocked_achievement_count=2,
-        total_achievement_count=54,
-        latest_unlock_at=1_609_459_200.0,
-        latest_unlock_age_days=42,
-    )
-    model = build_abandonment_view_model(
-        resolved,
-        field_visibility={"archive_class": True},
-    )
-    calls: list[tuple[QRectF, str, QFont]] = []
-
-    def _capture(_painter, rect, text, *, color, font, flags=None) -> None:
-        del color, flags
-        calls.append((QRectF(rect), str(text), QFont(font)))
-
-    monkeypatch.setattr(components, "_draw_elided_text", _capture)
-    image = QImage(600, 331, QImage.Format.Format_ARGB32_Premultiplied)
-    image.fill(QColor(0, 0, 0, 0))
-    painter = QPainter(image)
-    try:
-        render_abandonment_card(
-            painter,
-            model,
-            QRectF(0, 0, 600, 331),
-            font_family="Segoe UI",
-            font_size=14,
-            text_color=QColor(255, 255, 255, 230),
-            logo_pixmap=None,
-            artwork_image=None,
-            show_artwork=True,
-            artwork_shape="square",
-            artwork_size=140,
-            accent_color=QColor(222, 157, 88, 225),
-            field_slot_count=5,
-        )
-    finally:
-        painter.end()
-
-    expected = {
-        "PLAYED",
-        "1.5H",
-        "ACHIEVEMENTS",
-        "2 / 54",
-        "LAST UNLOCK",
-        "6 WEEKS AGO",
-        "LAST PLAYED",
-        "29/04/2017",
-        "BACKLOG CLASS",
-        "BARELY STARTED",
-    }
-    measured = {text: (rect, font) for rect, text, font in calls if text in expected}
-
-    assert set(measured) == expected
-    for text, (rect, font) in measured.items():
-        assert QFontMetricsF(font).horizontalAdvance(text) <= rect.width() + 1.0
-
-
-def test_abandonment_game_title_shrinks_before_eliding_without_crossing_reminder_floor(
-    qt_app,
-    monkeypatch,
-) -> None:
-    import widgets.steam_abandonment_components as components
-
-    resolved = AbandonmentResolved(
-        status="ok",
-        appid=92,
-        title="Fixture",
-        playtime_minutes=90,
-        last_played_at=1_493_424_000.0,
-        last_played_confidence=LAST_PLAYED_VERIFIED,
-        inactivity_days=3_350,
-        queue_position=3,
-        queue_count=40,
-        source_label="Cache",
-    )
-    title = "An Exceptionally Long Complete Deluxe Collection Game Title"
-    reminder = "You Don't Even Remember Buying This One Do You?"
-    model = replace(
-        build_abandonment_view_model(resolved),
-        title=title,
-        subtitle=reminder,
-    )
-    captured: dict[str, QFont] = {}
-
-    def _capture_elided(_painter, _rect, text, *, color, font, flags=None) -> None:
-        del color, flags
-        if text == title:
-            captured["title"] = QFont(font)
-
-    def _capture_shadow(painter, _rect, _flags, text, **_kwargs) -> None:
-        if text == reminder:
-            captured["reminder"] = QFont(painter.font())
-
-    monkeypatch.setattr(components, "_draw_elided_text", _capture_elided)
-    monkeypatch.setattr(components, "draw_text_rect_with_shadow", _capture_shadow)
-    image = QImage(600, 300, QImage.Format.Format_ARGB32_Premultiplied)
-    image.fill(QColor(0, 0, 0, 0))
-    painter = QPainter(image)
-    try:
-        render_abandonment_card(
-            painter,
-            model,
-            QRectF(0, 0, 600, 300),
-            font_family="Segoe UI",
-            font_size=14,
-            text_color=QColor(255, 255, 255, 230),
-            logo_pixmap=None,
-            artwork_image=None,
-            show_artwork=True,
-            artwork_shape="square",
-            artwork_size=140,
-            accent_color=QColor(222, 157, 88, 225),
-            field_slot_count=4,
-        )
-    finally:
-        painter.end()
-
-    assert captured["title"].pointSize() < 20
-    assert captured["title"].pointSize() >= captured["reminder"].pointSize()
+    assert fetch_shapes == ["portrait"]
+    assert presentation.artwork.isNull()
 
 
 def test_abandonment_rediscovery_messages_use_exact_stable_60_40_buckets() -> None:
@@ -1561,41 +1270,6 @@ def test_abandonment_rediscovery_messages_use_exact_stable_60_40_buckets() -> No
     )
 
 
-def test_abandonment_longest_rediscovery_message_fits_narrow_wide_art_rail(qt_app) -> None:
-    resolved = resolve_abandonment_issues(
-        owned_result=_owned_result(),
-        recent_result=_recent_result(),
-        now=NOW,
-    )
-    model = build_abandonment_view_model(resolved)
-    authored = abandonment_authored_size(
-        show_artwork=True,
-        artwork_shape="wide",
-        artwork_size=180,
-    )
-    layout = layout_abandonment_card(
-        model,
-        QRectF(0, 0, authored.width(), authored.height()),
-        show_artwork=True,
-        artwork_shape="wide",
-        artwork_size=180,
-    )
-    base_font = QFont("Inter", 12, QFont.Weight.DemiBold)
-    longest = max(
-        ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES,
-        key=lambda text: QFontMetricsF(base_font).horizontalAdvance(text),
-    )
-    fitted = _fit_wrapped_font(base_font, longest, layout.subtitle_rect)
-    bounds = QFontMetricsF(fitted).boundingRect(
-        QRectF(0, 0, layout.subtitle_rect.width() - 2.0, 10_000.0),
-        int(Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap),
-        longest,
-    )
-
-    assert fitted.pointSize() >= 6
-    assert bounds.height() <= layout.subtitle_rect.height() - 2.0
-
-
 def test_abandonment_rediscovery_message_can_be_hidden() -> None:
     resolved = resolve_abandonment_issues(
         owned_result=_owned_result(),
@@ -1608,87 +1282,6 @@ def test_abandonment_rediscovery_message_can_be_hidden() -> None:
         resolved,
         show_rediscovery_message=False,
     ).subtitle == ""
-
-
-def test_abandonment_renderer_produces_nonempty_archival_card(qt_app) -> None:
-    resolved = resolve_abandonment_issues(
-        owned_result=_owned_result(),
-        recent_result=_recent_result(),
-        now=NOW,
-    )
-    model = build_abandonment_view_model(resolved)
-    image = QImage(560, 300, QImage.Format.Format_ARGB32_Premultiplied)
-    image.fill(QColor(0, 0, 0, 0))
-    artwork = QImage(140, 196, QImage.Format.Format_RGB32)
-    artwork.fill(QColor(190, 90, 45))
-    painter = QPainter(image)
-    try:
-        layout = render_abandonment_card(
-            painter,
-            model,
-            QRectF(0, 0, 560, 300),
-            font_family="Inter",
-            font_size=14,
-            text_color=QColor(255, 255, 255, 230),
-            logo_pixmap=None,
-            artwork_image=artwork,
-            show_artwork=True,
-            artwork_shape="square",
-            artwork_size=140,
-            accent_color=QColor(222, 157, 88, 225),
-        )
-    finally:
-        painter.end()
-
-    assert not layout.art_rect.isNull()
-    assert any(image.pixelColor(x, y).alpha() > 0 for x, y in ((30, 30), (40, 100), (250, 180)))
-
-
-def test_abandonment_rotation_defers_transition_collision_through_shared_single_shot(
-    qt_app,
-    monkeypatch,
-) -> None:
-    from core.threading.manager import ThreadManager
-    import widgets.service_widget_runtime as service_runtime
-
-    scheduled: list[tuple[int, object]] = []
-    busy = {"value": True}
-    monkeypatch.setattr(
-        service_runtime,
-        "parent_transition_running",
-        lambda _widget: busy["value"],
-    )
-    monkeypatch.setattr(
-        ThreadManager,
-        "single_shot",
-        staticmethod(
-            lambda delay_ms, callback, *args, **kwargs: scheduled.append((delay_ms, callback))
-        ),
-    )
-    widget = AbandonmentIssuesWidget(
-        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
-        position=OverlayPosition.BOTTOM_RIGHT,
-        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
-        show_artwork=False,
-    )
-    resumed: list[bool] = []
-    try:
-        assert widget._request_cache_only_rotation() is True
-        assert widget._pending_abandonment_rotation is True
-        assert scheduled[0][0] == 1_000
-
-        busy["value"] = False
-        monkeypatch.setattr(
-            widget._runtime_service,
-            "request_cache_rotation",
-            lambda: resumed.append(True) or True,
-        )
-        scheduled[0][1]()
-
-        assert widget._pending_abandonment_rotation is False
-        assert resumed == [True]
-    finally:
-        widget.cleanup()
 
 
 @pytest.mark.parametrize(
@@ -1748,16 +1341,11 @@ def test_abandonment_automatic_rotation_hydrates_only_when_updates_are_allowed(
             ),
         ),
     )
-    widget = AbandonmentIssuesWidget(
-        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
-        position=OverlayPosition.BOTTOM_RIGHT,
-        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
-        field_visibility=field_visibility,
-        show_artwork=True,
+    service = AbandonmentRuntimeService(
+        config=_runtime_config(field_visibility=field_visibility),
     )
     try:
-        widget.set_thread_manager(_InlineThreadManager())
-        service = widget._runtime_service
+        service.set_thread_manager(_InlineThreadManager())
         service._running = True
 
         def _prepare(_snapshot, **kwargs):
@@ -1768,15 +1356,13 @@ def test_abandonment_automatic_rotation_hydrates_only_when_updates_are_allowed(
             "widgets.steam_abandonment_runtime.prepare_abandonment_presentation",
             lambda _config, snapshot, **kwargs: _prepare(snapshot, **kwargs),
         )
-        monkeypatch.setattr(widget, "_apply_prepared_presentation", lambda *_args, **_kwargs: None)
-
-        assert widget._request_cache_only_rotation() is True
+        assert service.request_cache_rotation() is True
         qt_app.processEvents()
 
         assert preparation_calls[0]["allow_asset_network"] is expected_asset_network
         assert len(evidence_calls) == expected_evidence_calls
     finally:
-        widget.cleanup()
+        service.retire()
 
 
 def test_abandonment_rebuild_arms_persisted_remaining_rotation_delay(
@@ -1804,23 +1390,24 @@ def test_abandonment_rebuild_arms_persisted_remaining_rotation_delay(
         "widgets.steam_abandonment_runtime.create_overlay_timer",
         _create,
     )
-    widget = AbandonmentIssuesWidget(
-        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
-        position=OverlayPosition.BOTTOM_RIGHT,
-        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
-        show_artwork=False,
-        refresh_minutes=5,
-    )
     rotations: list[bool] = []
+
+    class _Consumer:
+        def is_abandonment_consumer_alive(self) -> bool:
+            return True
+
+        def on_abandonment_rotation_due(self) -> bool:
+            rotations.append(True)
+            return True
+
+    consumer = _Consumer()
+    service = AbandonmentRuntimeService(
+        config=_runtime_config(show_artwork=False, refresh_minutes=5),
+    )
     try:
-        service = widget._runtime_service
+        service.attach_consumer(consumer)
         service._running = True
         service._activation_rotation_due_seconds = 75.0
-        monkeypatch.setattr(
-            widget,
-            "_request_cache_only_rotation",
-            lambda: rotations.append(True) or True,
-        )
 
         service.start_rotation_timer()
         assert created[0][0] == 75_000
@@ -1830,143 +1417,4 @@ def test_abandonment_rebuild_arms_persisted_remaining_rotation_delay(
         assert created[1][0] == 5 * 60 * 1_000
         assert rotations == [True]
     finally:
-        widget.cleanup()
-
-
-def test_abandonment_double_click_forces_source_refresh_and_new_draw(
-    qt_app,
-    monkeypatch,
-) -> None:
-    widget = AbandonmentIssuesWidget(
-        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
-        position=OverlayPosition.BOTTOM_RIGHT,
-        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
-        show_artwork=False,
-    )
-    calls: list[dict[str, object]] = []
-    try:
-        monkeypatch.setattr(
-            widget._runtime_service,
-            "request_manual_refresh",
-            lambda: calls.append(
-                {
-                    "cache_age_seconds": None,
-                    "force": True,
-                    "force_rotation": True,
-                }
-            )
-            or True,
-        )
-
-        assert widget.handle_double_click(None) is True
-        assert calls == [
-            {
-                "cache_age_seconds": None,
-                "force": True,
-                "force_rotation": True,
-            }
-        ]
-    finally:
-        widget.cleanup()
-
-
-def test_abandonment_widget_applies_cache_before_first_coordinated_fade(
-    qt_app,
-    tmp_path,
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("APPDATA", str(tmp_path))
-    from core.settings import storage_paths
-    from core.steam import abandonment_cache
-
-    storage_paths.reset_module_cache()
-    monkeypatch.setattr(abandonment_cache.time, "time", lambda: NOW)
-    credential = SteamCredentialPayload(
-        api_key="fixture_api_key_111222",
-        profile_identifier="76561198000000004",
-    )
-    write_credential_metadata(credential)
-    profile_key = derive_profile_cache_key(credential.profile_identifier)
-    for cache_key, source_id, payload in (
-        (OWNED_GAMES_CACHE_KEY, SteamSourceId.OWNED_GAMES, _fixture("owned_games_last_played.json")),
-        (RECENT_GAMES_CACHE_KEY, SteamSourceId.RECENTLY_PLAYED, _fixture("recent_games_for_abandonment.json")),
-    ):
-        write_cache_record(
-            SteamCacheRecord(
-                cache_key=cache_key,
-                source_id=source_id,
-                payload=payload,
-                fetched_at=NOW - 60,
-            ),
-            cache_path_for_profile_key(profile_key, cache_key),
-        )
-
-    class _InlineThreadManager:
-        def submit_io_task(self, func, *, task_id, callback, **_kwargs):
-            callback(TaskResult(success=True, result=func(), task_id=task_id))
-            return task_id
-
-    faded_models: list[tuple[str, str]] = []
-    widget = AbandonmentIssuesWidget(
-        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
-        position=OverlayPosition.BOTTOM_RIGHT,
-        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
-        show_artwork=False,
-    )
-    try:
-        widget.set_thread_manager(_InlineThreadManager())
-        monkeypatch.setattr(
-            widget,
-            "_request_coordinated_fade",
-            lambda: faded_models.append((widget._view_model.state, widget._view_model.title)),
-        )
-        widget._activate_impl()
-        qt_app.processEvents()
-
-        assert widget._view_model.state == "content"
-        assert widget._view_model.appid is not None
-        assert faded_models == [("content", widget._view_model.title)]
-    finally:
-        widget.cleanup()
-        storage_paths.reset_module_cache()
-
-
-def test_steam_content_transition_commits_at_hidden_midpoint_with_sparse_updates(qt_app, monkeypatch) -> None:
-    animations: list[dict] = []
-
-    class _AnimationManager:
-        def animate_custom(self, **kwargs):
-            animations.append(kwargs)
-            return f"animation-{len(animations)}"
-
-        def cancel_animation(self, _animation_id):
-            return True
-
-    manager = _AnimationManager()
-    from core.animation.animator import AnimationManager
-
-    monkeypatch.setattr(AnimationManager, "get_or_create_app_shared", classmethod(lambda cls: manager))
-    monkeypatch.setattr(AnimationManager, "get_app_shared", classmethod(lambda cls: manager))
-    widget = SteamCardWidget(definition=STEAM_CARD_DEFINITIONS["abandonment_issues"])
-    commits: list[str] = []
-    try:
-        widget.apply_content_transition("first", lambda: commits.append("first"), animate=False)
-        widget.show()
-        widget._has_faded_in = True
-        widget._has_displayed_valid_data = True
-        widget.apply_content_transition("second", lambda: commits.append("second"), animate=True)
-
-        assert commits == ["first"]
-        assert len(animations) == 1
-        animations[0]["update_callback"](0.01)
-        assert widget.content_opacity() == 1.0
-        animations[0]["update_callback"](1.0)
-        animations[0]["on_complete"]()
-        assert commits == ["first", "second"]
-        assert widget.content_opacity() == 0.0
-        assert len(animations) == 2
-        animations[1]["update_callback"](1.0)
-        animations[1]["on_complete"]()
-        assert widget.content_opacity() == 1.0
-    finally:
-        widget.cleanup()
+        service.retire()
