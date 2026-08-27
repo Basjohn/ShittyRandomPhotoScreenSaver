@@ -43,21 +43,21 @@ Source outranks this plan if a later checkpoint has landed.
 ```text
 exact runtime/preparation/cache/action/presentation ownership audit  GREEN
 stable retained config/model/image projection                       GREEN
-retained QML card + interaction/menu fidelity                       ACTIVE
-registry + real owner injection + runtime-shaped gates              PENDING
+retained QML card + interaction/menu fidelity                       GREEN
+registry + real owner injection + runtime-shaped gates              ACTIVE
 effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                    PENDING
 caller proof + old Achievement Pulse pixel/cache/input retirement   PENDING
 ```
 
-### F7.2 — retained card and interaction fidelity (ACTIVE)
+### F7.3 — registry and real-owner integration (ACTIVE)
 
-- use the old presenter as the visual/interaction oracle, including its existing menu behavior;
 - preserve cache/privacy/provenance/selection and existing Steam data authority;
 - keep QML presentation-only: no Steam provider/cache/persistence/cadence authority;
-- reproduce the authored card hierarchy, art modes, latest-unlock treatment, capsule rails and explicit
-  connection/refresh affordances in one retained component;
-- preserve stable model/list-model/image identity and root-only fade ownership;
-- add deterministic QML/item/action/no-recreation tests before registry admission.
+- admit the retained family through the static Quick registry and package metadata;
+- inject the existing display-generation-bound `AchievementPulseRuntimeService` through the real
+  `WidgetRuntimeManager` / `QuickSceneController` host chain;
+- route semantic refresh/settings actions and runtime fade completion without QWidget authority;
+- prove cache-first/runtime/artwork/list/item/engine identity and fail-closed lifecycle behavior.
 
 Do not port Steam Journey/Progress or Friend Pulse scaffolds as part of F7.
 

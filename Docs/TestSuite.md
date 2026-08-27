@@ -144,6 +144,11 @@ stable field/unlock model identity, accepted local artwork sources, manager-owne
 interaction-gated manual refresh, fade handoff and fail-closed startup. QML pixels and real host admission
 remain open at this checkpoint.
 
+The F7 retained-card extension compiles the destination QML directly and protects the current authored
+header/title/artwork/metric/latest-unlock/capsule hierarchy, uniform Custom scaling, family-authored
+bottom/right capsule shell shadow, explicit refresh/settings signals and stable delegate/model/engine
+identity. Registry admission, real owner injection and real-OpenGL matrix remain open.
+
 At the reviewed checkpoint the repository contains:
 
 - **352 test-module files**: 351 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
