@@ -234,7 +234,7 @@ class SettingsThemeSpec:
 #
 # Intentionally deferred until their owning renderer/tab is migrated:
 #   * tab-local palettes (RSS/accessibility/etc.);
-#   * About/local popup palettes;
+#   * Settings-dialog local popup palettes;
 #   * typography/spacing/geometry;
 #   * resource-backed checkbox artwork;
 #   * context-menu theme data.
@@ -312,6 +312,27 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "slider.handle.disabled_surface": Rgba(90, 90, 90, 255),
     "slider.handle.active_border": Rgba(17, 17, 17, 255),
     "slider.recommended_mark": Rgba(210, 210, 210, 170),
+
+    # About-tab local presentation roles from ui/settings_about_tab.py.
+    # These remain distinct roles even where Default Dark currently shares
+    # white/grey values, so future themes can style the About surface
+    # independently without source edits.
+    "about.card.surface": Rgba(31, 31, 31, 200),
+    "about.card.border": WHITE,
+    "about.blurb.text": Rgba(221, 221, 221, 255),
+    "about.hotkeys.text": Rgba(204, 204, 204, 255),
+    "about.link.surface": Rgba(47, 47, 47, 215),
+    "about.link.text": WHITE,
+    "about.link.border": WHITE,
+    "about.link.hover_surface": Rgba(58, 58, 58, 220),
+    "about.link.pressed_surface": Rgba(38, 38, 38, 220),
+    "about.link.pressed_border": Rgba(200, 200, 200, 200),
+    "about.more.surface": Rgba(40, 40, 45, 200),
+    "about.more.text": Rgba(200, 200, 210, 220),
+    "about.more.border": Rgba(80, 80, 90, 150),
+    "about.more.hover_surface": Rgba(60, 60, 70, 220),
+    "about.notice.surface": Rgba(16, 16, 16, 230),
+    "about.notice.text": WHITE,
 
     # The visible forged outer border may be themed. The backing/corner
     # camouflage is intentionally absent: settings_dialog.py derives opaque RGB
