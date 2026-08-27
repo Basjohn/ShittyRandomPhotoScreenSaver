@@ -29,7 +29,11 @@ from PySide6.QtWidgets import (
     QStyleOptionSlider,
 )
 
-from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME
+from ui.settings_theme_runtime import (
+    get_active_settings_theme,
+    subscribe_settings_theme,
+)
+from ui.settings_theme_spec import SettingsThemeSpec
 
 # Ensure UI resources (e.g., circle checkbox SVGs) are registered even when
 # shared_styles is imported before ui/__init__.py. Safe no-op if already loaded.
@@ -50,18 +54,25 @@ _INTER_FONT_PATHS = (
 )
 _FONTS_REGISTERED = False
 
+_LIVE_GROUP_BOXES: weakref.WeakSet = weakref.WeakSet()
+_LIVE_RECOMMENDED_SLIDERS: weakref.WeakSet = weakref.WeakSet()
 
-_SETTINGS_THEME = DEFAULT_DARK_SETTINGS_THEME
+
+_SETTINGS_THEME = get_active_settings_theme()
 
 _THEME_QSS_TOKEN_RE = re.compile(
     r"@@(?P<mode>hex|rgba|rgba255|gradient):(?P<token>[a-zA-Z0-9_.-]+)@@"
 )
 
 
-def _theme_qcolor(token: str) -> QColor:
+def _theme_qcolor(
+    token: str,
+    theme: SettingsThemeSpec | None = None,
+) -> QColor:
     """Return one semantic theme colour as QColor for custom painters."""
 
-    value = _SETTINGS_THEME.color(token)
+    resolved_theme = theme or _SETTINGS_THEME
+    value = resolved_theme.color(token)
     return QColor(*value.as_tuple())
 
 
@@ -182,65 +193,81 @@ def _is_live_qobject(obj) -> bool:
         return False
 
 
-FORM_LABEL_STYLE = (
-    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 600;"
-    "font-size: 14px;"
-    "letter-spacing: 0.4px;"
-    f"color: {_theme_hex('text.primary')};"
-    f"min-height: {FORM_LABEL_HEIGHT}px;"
-    "line-height: 34px;"
-    "padding-top: 0px;"
-    "padding-bottom: 1px;"
-    "margin-top: -1px;"
-    "margin-bottom: 0px;"
-    "qproperty-alignment: AlignVCenter;"
-)
+def _build_form_label_style() -> str:
+    return (
+        "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+        "font-weight: 600;"
+        "font-size: 14px;"
+        "letter-spacing: 0.4px;"
+        f"color: {_theme_hex('text.primary')};"
+        f"min-height: {FORM_LABEL_HEIGHT}px;"
+        "line-height: 34px;"
+        "padding-top: 0px;"
+        "padding-bottom: 1px;"
+        "margin-top: -1px;"
+        "margin-bottom: 0px;"
+        "qproperty-alignment: AlignVCenter;"
+    )
 
-FORM_ROW_LABEL_STYLE = (
-    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 500;"
-    "font-size: 14px;"
-    "letter-spacing: 0.35px;"
-    f"color: {_theme_hex('text.primary')};"
-    f"min-height: {FORM_LABEL_HEIGHT}px;"
-    "line-height: 34px;"
-    "padding-top: 0px;"
-    "padding-bottom: 1px;"
-    "margin-top: -1px;"
-    "margin-bottom: 0px;"
-    "qproperty-alignment: AlignVCenter;"
-)
 
-FORM_LABEL_STYLE_DISABLED = (
-    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 600;"
-    "font-size: 14px;"
-    "letter-spacing: 0.35px;"
-    f"color: {_theme_hex('text.disabled')};"
-    f"min-height: {FORM_LABEL_HEIGHT}px;"
-    "line-height: 34px;"
-    "padding-top: 0px;"
-    "padding-bottom: 1px;"
-    "margin-top: -1px;"
-    "margin-bottom: 0px;"
-    "qproperty-alignment: AlignVCenter;"
-)
+FORM_LABEL_STYLE = _build_form_label_style()
 
-FORM_ROW_LABEL_STYLE_DISABLED = (
-    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 500;"
-    "font-size: 14px;"
-    "letter-spacing: 0.35px;"
-    f"color: {_theme_hex('text.disabled')};"
-    f"min-height: {FORM_LABEL_HEIGHT}px;"
-    "line-height: 34px;"
-    "padding-top: 0px;"
-    "padding-bottom: 1px;"
-    "margin-top: -1px;"
-    "margin-bottom: 0px;"
-    "qproperty-alignment: AlignVCenter;"
-)
+def _build_form_row_label_style() -> str:
+    return (
+        "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+        "font-weight: 500;"
+        "font-size: 14px;"
+        "letter-spacing: 0.35px;"
+        f"color: {_theme_hex('text.primary')};"
+        f"min-height: {FORM_LABEL_HEIGHT}px;"
+        "line-height: 34px;"
+        "padding-top: 0px;"
+        "padding-bottom: 1px;"
+        "margin-top: -1px;"
+        "margin-bottom: 0px;"
+        "qproperty-alignment: AlignVCenter;"
+    )
+
+
+FORM_ROW_LABEL_STYLE = _build_form_row_label_style()
+
+def _build_form_label_style_disabled() -> str:
+    return (
+        "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+        "font-weight: 600;"
+        "font-size: 14px;"
+        "letter-spacing: 0.35px;"
+        f"color: {_theme_hex('text.disabled')};"
+        f"min-height: {FORM_LABEL_HEIGHT}px;"
+        "line-height: 34px;"
+        "padding-top: 0px;"
+        "padding-bottom: 1px;"
+        "margin-top: -1px;"
+        "margin-bottom: 0px;"
+        "qproperty-alignment: AlignVCenter;"
+    )
+
+
+FORM_LABEL_STYLE_DISABLED = _build_form_label_style_disabled()
+
+def _build_form_row_label_style_disabled() -> str:
+    return (
+        "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+        "font-weight: 500;"
+        "font-size: 14px;"
+        "letter-spacing: 0.35px;"
+        f"color: {_theme_hex('text.disabled')};"
+        f"min-height: {FORM_LABEL_HEIGHT}px;"
+        "line-height: 34px;"
+        "padding-top: 0px;"
+        "padding-bottom: 1px;"
+        "margin-top: -1px;"
+        "margin-bottom: 0px;"
+        "qproperty-alignment: AlignVCenter;"
+    )
+
+
+FORM_ROW_LABEL_STYLE_DISABLED = _build_form_row_label_style_disabled()
 
 
 def apply_section_heading_style(
@@ -451,7 +478,9 @@ class RecommendedMarkSlider(NoWheelSlider):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._recommended_value: int | None = None
+        self._recommended_color_uses_theme = True
         self._recommended_color = _theme_qcolor("slider.recommended_mark")
+        _LIVE_RECOMMENDED_SLIDERS.add(self)
 
     def set_recommended_value(self, value: int | None) -> None:
         target = None if value is None else int(value)
@@ -465,6 +494,16 @@ class RecommendedMarkSlider(NoWheelSlider):
 
     def set_recommended_color(self, color: QColor) -> None:
         next_color = QColor(color)
+        self._recommended_color_uses_theme = False
+        if next_color == self._recommended_color:
+            return
+        self._recommended_color = next_color
+        self.update()
+
+    def _refresh_theme_marker(self, theme: SettingsThemeSpec) -> None:
+        if not self._recommended_color_uses_theme:
+            return
+        next_color = _theme_qcolor("slider.recommended_mark", theme)
         if next_color == self._recommended_color:
             return
         self._recommended_color = next_color
@@ -519,94 +558,98 @@ class RecommendedMarkSlider(NoWheelSlider):
         )
         painter.end()
 
-SPINBOX_STYLE = _theme_qss("""
-/* Rounded inputs with opaque borders + circular stepper controls */
-QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox {
-    min-height: 34px;
-    padding: 4px 48px 4px 16px;
-    margin-bottom: 0px;
-    color: @@hex:control.input.text@@;
-    font-family: 'Jost';
-    font-weight: 600;
-    background-color: @@hex:control.input.surface@@;
-    border: 2px solid @@hex:control.input.border@@;
-    border-radius: 18px;
-}
+def _build_spinbox_style() -> str:
+    return _theme_qss("""
+    /* Rounded inputs with opaque borders + circular stepper controls */
+    QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox {
+        min-height: 34px;
+        padding: 4px 48px 4px 16px;
+        margin-bottom: 0px;
+        color: @@hex:control.input.text@@;
+        font-family: 'Jost';
+        font-weight: 600;
+        background-color: @@hex:control.input.surface@@;
+        border: 2px solid @@hex:control.input.border@@;
+        border-radius: 18px;
+    }
+    
+    QSpinBox > QLineEdit,
+    QDoubleSpinBox > QLineEdit,
+    QAbstractSpinBox > QLineEdit {
+        background-color: @@hex:control.input.surface@@;
+        border: none;
+        padding: 0px;
+        margin: 0px;
+    }
+    
+    QLineEdit {
+        padding-right: 16px;
+    }
+    
+    QSpinBox:hover, QDoubleSpinBox:hover, QLineEdit:hover, QAbstractSpinBox:hover {
+        border-color: @@hex:control.input.border@@;
+    }
+    
+    QSpinBox:focus, QDoubleSpinBox:focus, QLineEdit:focus, QAbstractSpinBox:focus {
+        border-color: @@hex:control.input.border@@;
+    }
+    
+    QSpinBox:disabled, QDoubleSpinBox:disabled, QLineEdit:disabled, QAbstractSpinBox:disabled {
+        color: @@rgba:control.input.disabled_text@@;
+        border-color: @@hex:control.input.disabled_border@@;
+        background-color: @@hex:control.input.surface@@;
+    }
+    
+    QSpinBox::up-button, QDoubleSpinBox::up-button,
+    QSpinBox::down-button, QDoubleSpinBox::down-button {
+        subcontrol-origin: border;
+        subcontrol-position: right;
+        width: 10px;
+        height: 10px;
+        margin: 4px 14px 4px 0px;
+        padding: 0px;
+        border: none;
+        border-radius: 5px;
+        background-color: @@hex:control.stepper.surface@@;
+    }
+    
+    QSpinBox::up-button, QDoubleSpinBox::up-button {
+        subcontrol-position: top right;
+        margin-top: 7.5px;
+        margin-bottom: -3.5px;
+    }
+    
+    QSpinBox::down-button, QDoubleSpinBox::down-button {
+        subcontrol-position: bottom right;
+        margin-top: -3.5px;
+        margin-bottom: 7.5px;
+    }
+    
+    QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+    QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+        background-color: @@hex:control.stepper.hover_surface@@;
+    }
+    
+    QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
+    QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
+        background-color: @@hex:control.stepper.pressed_surface@@;
+    }
+    
+    QSpinBox::up-button:disabled, QDoubleSpinBox::up-button:disabled,
+    QSpinBox::down-button:disabled, QDoubleSpinBox::down-button:disabled {
+        background-color: @@hex:control.stepper.disabled_surface@@;
+    }
+    
+    QSpinBox::up-arrow, QDoubleSpinBox::up-arrow,
+    QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+        width: 0px;
+        height: 0px;
+        border: none;
+    }
+    """)
 
-QSpinBox > QLineEdit,
-QDoubleSpinBox > QLineEdit,
-QAbstractSpinBox > QLineEdit {
-    background-color: @@hex:control.input.surface@@;
-    border: none;
-    padding: 0px;
-    margin: 0px;
-}
 
-QLineEdit {
-    padding-right: 16px;
-}
-
-QSpinBox:hover, QDoubleSpinBox:hover, QLineEdit:hover, QAbstractSpinBox:hover {
-    border-color: @@hex:control.input.border@@;
-}
-
-QSpinBox:focus, QDoubleSpinBox:focus, QLineEdit:focus, QAbstractSpinBox:focus {
-    border-color: @@hex:control.input.border@@;
-}
-
-QSpinBox:disabled, QDoubleSpinBox:disabled, QLineEdit:disabled, QAbstractSpinBox:disabled {
-    color: @@rgba:control.input.disabled_text@@;
-    border-color: @@hex:control.input.disabled_border@@;
-    background-color: @@hex:control.input.surface@@;
-}
-
-QSpinBox::up-button, QDoubleSpinBox::up-button,
-QSpinBox::down-button, QDoubleSpinBox::down-button {
-    subcontrol-origin: border;
-    subcontrol-position: right;
-    width: 10px;
-    height: 10px;
-    margin: 4px 14px 4px 0px;
-    padding: 0px;
-    border: none;
-    border-radius: 5px;
-    background-color: @@hex:control.stepper.surface@@;
-}
-
-QSpinBox::up-button, QDoubleSpinBox::up-button {
-    subcontrol-position: top right;
-    margin-top: 7.5px;
-    margin-bottom: -3.5px;
-}
-
-QSpinBox::down-button, QDoubleSpinBox::down-button {
-    subcontrol-position: bottom right;
-    margin-top: -3.5px;
-    margin-bottom: 7.5px;
-}
-
-QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
-QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
-    background-color: @@hex:control.stepper.hover_surface@@;
-}
-
-QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
-QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
-    background-color: @@hex:control.stepper.pressed_surface@@;
-}
-
-QSpinBox::up-button:disabled, QDoubleSpinBox::up-button:disabled,
-QSpinBox::down-button:disabled, QDoubleSpinBox::down-button:disabled {
-    background-color: @@hex:control.stepper.disabled_surface@@;
-}
-
-QSpinBox::up-arrow, QDoubleSpinBox::up-arrow,
-QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
-    width: 0px;
-    height: 0px;
-    border: none;
-}
-""")
+SPINBOX_STYLE = _build_spinbox_style()
 
 CIRCLE_CHECKBOX_STYLE = """
 /* Circular indicator prototype (feature flag via `circleIndicator` dynamic property). */
@@ -662,191 +705,224 @@ QCheckBox[circleIndicator='true']::indicator:disabled:checked {
 """
 
 
-COMBOBOX_STYLE = _theme_qss("""
-/* StyledComboBox base skin */
-QComboBox[customCombo='true'] {
-    min-height: 34px;
-    padding: 4px 56px 4px 18px;
-    margin-top: 1px;
-    margin-bottom: 10px;
-    font-family: 'Jost';
-    font-weight: 700;
-    font-size: 14px;
-    letter-spacing: 0.4px;
-    color: @@hex:control.input.text@@;
-    border: 2px solid @@hex:control.input.border@@;
-    border-radius: 18px;
-    background-color: @@hex:control.input.surface@@;
-}
+def _build_combobox_style() -> str:
+    return _theme_qss("""
+    /* StyledComboBox base skin */
+    QComboBox[customCombo='true'] {
+        min-height: 34px;
+        padding: 4px 56px 4px 18px;
+        margin-top: 1px;
+        margin-bottom: 10px;
+        font-family: 'Jost';
+        font-weight: 700;
+        font-size: 14px;
+        letter-spacing: 0.4px;
+        color: @@hex:control.input.text@@;
+        border: 2px solid @@hex:control.input.border@@;
+        border-radius: 18px;
+        background-color: @@hex:control.input.surface@@;
+    }
+    
+    QComboBox[customCombo='true']:hover {
+        background-color: @@hex:control.input.hover_surface@@;
+    }
+    
+    QComboBox[customCombo='true']:focus,
+    QComboBox[customCombo='true']:on {
+        background-color: @@hex:control.input.focus_surface@@;
+        border-color: @@hex:control.input.border@@;
+        outline: none;
+    }
+    
+    QComboBox[customCombo='true']:disabled {
+        color: @@rgba:control.input.disabled_text@@;
+        border-color: @@hex:control.input.disabled_border@@;
+        background-color: @@hex:control.input.surface@@;
+    }
+    
+    QComboBox[customCombo='true']::drop-down,
+    QComboBox[customCombo='true']::down-arrow {
+        width: 0px;
+        border: none;
+        background: transparent;
+        image: none;
+        margin: 0px;
+        padding: 0px;
+    }
+    
+    QComboBox[customCombo='true'][comboSize='regular'] {
+        min-width: 188px;
+        min-height: 38px;
+        padding: 4px 60px 4px 18px;
+        border-radius: 20px;
+        margin-top: 1px;
+        margin-bottom: 10px;
+    }
+    
+    QComboBox[customCombo='true'][comboSize='compact'] {
+        min-width: 164px;
+        min-height: 34px;
+        padding: 3px 52px 3px 16px;
+        border-radius: 17px;
+        font-size: 13px;
+        margin-top: 2px;
+        margin-bottom: 12px;
+    }
+    
+    QComboBox[customCombo='true'][comboSize='mini'] {
+        min-width: 136px;
+        min-height: 32px;
+        padding: 2px 46px 2px 14px;
+        border-radius: 16px;
+        font-size: 12px;
+        margin-top: 2px;
+        margin-bottom: 12px;
+    }
+    
+    QComboBox[customCombo='true'][comboSize='hero'] {
+        min-width: 198px;
+        max-width: 306px;
+        min-height: 38px;
+        padding: 3px 54px 5px 20px;
+        border-radius: 20px;
+        font-size: 14px;
+        margin-top: 1px;
+        margin-bottom: 10px;
+    }
+    """)
 
-QComboBox[customCombo='true']:hover {
-    background-color: @@hex:control.input.hover_surface@@;
-}
 
-QComboBox[customCombo='true']:focus,
-QComboBox[customCombo='true']:on {
-    background-color: @@hex:control.input.focus_surface@@;
-    border-color: @@hex:control.input.border@@;
-    outline: none;
-}
+COMBOBOX_STYLE = _build_combobox_style()
 
-QComboBox[customCombo='true']:disabled {
-    color: @@rgba:control.input.disabled_text@@;
-    border-color: @@hex:control.input.disabled_border@@;
-    background-color: @@hex:control.input.surface@@;
-}
+def _build_combobox_popup_view_style() -> str:
+    return _theme_qss("""
+    QListView[customComboPopup='true'],
+    QListWidget[customComboPopup='true'] {
+        background-color: @@rgba:combo.popup.surface@@;
+        border: 2px solid @@hex:combo.popup.border@@;
+        border-radius: 14px;
+        padding: 8px 8px 12px 8px;
+        outline: none;
+        selection-background-color: @@rgba:combo.popup.selection_surface@@;
+        selection-color: @@hex:combo.popup.selection_text@@;
+        color: @@hex:combo.popup.text@@;
+        font-family: 'Jost';
+        font-weight: 600;
+        font-size: 14px;
+        letter-spacing: 0.4px;
+    }
+    
+    QListView[customComboPopup='true']::item,
+    QListWidget[customComboPopup='true']::item {
+        padding: 4px 6px;
+        min-height: 22px;
+        margin: 0px 2px;
+        border-radius: 8px;
+        background: transparent;
+    }
+    """)
 
-QComboBox[customCombo='true']::drop-down,
-QComboBox[customCombo='true']::down-arrow {
-    width: 0px;
-    border: none;
-    background: transparent;
-    image: none;
-    margin: 0px;
-    padding: 0px;
-}
 
-QComboBox[customCombo='true'][comboSize='regular'] {
-    min-width: 188px;
-    min-height: 38px;
-    padding: 4px 60px 4px 18px;
-    border-radius: 20px;
-    margin-top: 1px;
-    margin-bottom: 10px;
-}
+COMBOBOX_POPUP_VIEW_STYLE = _build_combobox_popup_view_style()
 
-QComboBox[customCombo='true'][comboSize='compact'] {
-    min-width: 164px;
-    min-height: 34px;
-    padding: 3px 52px 3px 16px;
-    border-radius: 17px;
-    font-size: 13px;
-    margin-top: 2px;
-    margin-bottom: 12px;
-}
+def _build_tooltip_style() -> str:
+    return _theme_qss("""
+    QToolTip {
+        background-color: @@hex:tooltip.surface@@;
+        color: @@hex:tooltip.text@@;
+        border: 1px solid @@hex:tooltip.border@@;
+        padding: 6px;
+        font-size: 12px;
+    }
+    """)
 
-QComboBox[customCombo='true'][comboSize='mini'] {
-    min-width: 136px;
-    min-height: 32px;
-    padding: 2px 46px 2px 14px;
-    border-radius: 16px;
-    font-size: 12px;
-    margin-top: 2px;
-    margin-bottom: 12px;
-}
 
-QComboBox[customCombo='true'][comboSize='hero'] {
-    min-width: 198px;
-    max-width: 306px;
-    min-height: 38px;
-    padding: 3px 54px 5px 20px;
-    border-radius: 20px;
-    font-size: 14px;
-    margin-top: 1px;
-    margin-bottom: 10px;
-}
-""")
+TOOLTIP_STYLE = _build_tooltip_style()
 
-COMBOBOX_POPUP_VIEW_STYLE = _theme_qss("""
-QListView[customComboPopup='true'],
-QListWidget[customComboPopup='true'] {
-    background-color: @@rgba:combo.popup.surface@@;
-    border: 2px solid @@hex:combo.popup.border@@;
-    border-radius: 14px;
-    padding: 8px 8px 12px 8px;
-    outline: none;
-    selection-background-color: @@rgba:combo.popup.selection_surface@@;
-    selection-color: @@hex:combo.popup.selection_text@@;
-    color: @@hex:combo.popup.text@@;
-    font-family: 'Jost';
-    font-weight: 600;
-    font-size: 14px;
-    letter-spacing: 0.4px;
-}
+def _build_page_title_style() -> str:
+    return (
+        "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+        "font-weight: 700;"
+        "font-size: 18px;"
+        "letter-spacing: 0.5px;"
+        f"color: {_theme_hex('text.primary')};"
+    )
 
-QListView[customComboPopup='true']::item,
-QListWidget[customComboPopup='true']::item {
-    padding: 4px 6px;
-    min-height: 22px;
-    margin: 0px 2px;
-    border-radius: 8px;
-    background: transparent;
-}
-""")
 
-TOOLTIP_STYLE = _theme_qss("""
-QToolTip {
-    background-color: @@hex:tooltip.surface@@;
-    color: @@hex:tooltip.text@@;
-    border: 1px solid @@hex:tooltip.border@@;
-    padding: 6px;
-    font-size: 12px;
-}
-""")
+PAGE_TITLE_STYLE = _build_page_title_style()
 
-PAGE_TITLE_STYLE = (
-    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 700;"
-    "font-size: 18px;"
-    "letter-spacing: 0.5px;"
-    f"color: {_theme_hex('text.primary')};"
-)
+def _build_section_heading_style() -> str:
+    return (
+        "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+        "font-weight: 800;"
+        "font-size: 15px;"
+        "letter-spacing: 0.6px;"
+        f"color: {_theme_hex('text.primary')};"
+        f"min-height: {FORM_LABEL_HEIGHT + 6}px;"
+        "line-height: 36px;"
+        "padding-top: 0px;"
+        "padding-bottom: 2px;"
+        "margin-top: -6px;"
+        "margin-bottom: 12px;"
+        "qproperty-alignment: AlignVCenter;"
+    )
 
-SECTION_HEADING_STYLE = (
-    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 800;"
-    "font-size: 15px;"
-    "letter-spacing: 0.6px;"
-    f"color: {_theme_hex('text.primary')};"
-    f"min-height: {FORM_LABEL_HEIGHT + 6}px;"
-    "line-height: 36px;"
-    "padding-top: 0px;"
-    "padding-bottom: 2px;"
-    "margin-top: -6px;"
-    "margin-bottom: 12px;"
-    "qproperty-alignment: AlignVCenter;"
-)
 
-SECTION_HEADING_STYLE_DISABLED = (
-    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 800;"
-    "font-size: 15px;"
-    "letter-spacing: 0.6px;"
-    f"color: {_theme_hex('text.disabled')};"
-    f"min-height: {FORM_LABEL_HEIGHT + 6}px;"
-    "line-height: 36px;"
-    "padding-top: 0px;"
-    "padding-bottom: 2px;"
-    "margin-top: -6px;"
-    "margin-bottom: 12px;"
-    "qproperty-alignment: AlignVCenter;"
-)
+SECTION_HEADING_STYLE = _build_section_heading_style()
 
-SWATCH_LABEL_STYLE = (
-    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 500;"
-    "font-size: 13px;"
-    "letter-spacing: 0.4px;"
-    f"color: {_theme_hex('text.primary')};"
-    f"min-height: {SWATCH_LABEL_HEIGHT}px;"
-    "line-height: 34px;"
-    "padding-top: 0px;"
-    "padding-bottom: 0px;"
-    "margin-top: 0px;"
-    "margin-bottom: 0px;"
-    "qproperty-alignment: AlignVCenter;"
-)
+def _build_section_heading_style_disabled() -> str:
+    return (
+        "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+        "font-weight: 800;"
+        "font-size: 15px;"
+        "letter-spacing: 0.6px;"
+        f"color: {_theme_hex('text.disabled')};"
+        f"min-height: {FORM_LABEL_HEIGHT + 6}px;"
+        "line-height: 36px;"
+        "padding-top: 0px;"
+        "padding-bottom: 2px;"
+        "margin-top: -6px;"
+        "margin-bottom: 12px;"
+        "qproperty-alignment: AlignVCenter;"
+    )
 
-SUBSECTION_DIVIDER_STYLE = (
-    f"background-color: {_theme_rgba255('panel.subsection.surface')};"
-    f"border: 2px solid {_theme_hex('panel.border')};"
-    "border-radius: 19px;"
-)
+
+SECTION_HEADING_STYLE_DISABLED = _build_section_heading_style_disabled()
+
+def _build_swatch_label_style() -> str:
+    return (
+        "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+        "font-weight: 500;"
+        "font-size: 13px;"
+        "letter-spacing: 0.4px;"
+        f"color: {_theme_hex('text.primary')};"
+        f"min-height: {SWATCH_LABEL_HEIGHT}px;"
+        "line-height: 34px;"
+        "padding-top: 0px;"
+        "padding-bottom: 0px;"
+        "margin-top: 0px;"
+        "margin-bottom: 0px;"
+        "qproperty-alignment: AlignVCenter;"
+    )
+
+
+SWATCH_LABEL_STYLE = _build_swatch_label_style()
+
+def _build_subsection_divider_style() -> str:
+    return (
+        f"background-color: {_theme_rgba255('panel.subsection.surface')};"
+        f"border: 2px solid {_theme_hex('panel.border')};"
+        "border-radius: 19px;"
+    )
+
+
+SUBSECTION_DIVIDER_STYLE = _build_subsection_divider_style()
 
 
 def style_group_box(box) -> None:
     """Apply the subsection border + title style to a QGroupBox."""
 
+    _LIVE_GROUP_BOXES.add(box)
     box.setStyleSheet(
         (
             f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}"
@@ -885,119 +961,188 @@ STATUS_LABEL_STYLE = (
     "letter-spacing: 0.3px;"
 )
 
-INFO_LABEL_STYLE = (
-    f"color: {_theme_hex('text.secondary')};"
-    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 500;"
-    "font-size: 11px;"
-    "letter-spacing: 0.3px;"
-)
+def _build_info_label_style() -> str:
+    return (
+        f"color: {_theme_hex('text.secondary')};"
+        "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+        "font-weight: 500;"
+        "font-size: 11px;"
+        "letter-spacing: 0.3px;"
+    )
 
-ADV_HELPER_LABEL_STYLE = (
-    f"color: {_theme_rgba('text.helper')};"
-    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 500;"
-    "font-size: 11px;"
-    "letter-spacing: 0.3px;"
-)
 
-INFO_LABEL_STYLE_DISABLED = (
-    f"color: {_theme_hex('text.helper_disabled')};"
-    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 500;"
-    "font-size: 11px;"
-    "letter-spacing: 0.3px;"
-)
+INFO_LABEL_STYLE = _build_info_label_style()
 
-SLIDER_STYLE = _theme_qss("""
-/* Dark glass indented slider with pill-shaped notch handle */
-QSlider {
-    min-height: 34px;
-    margin: 2px 0px 0px 0px;
-}
+def _build_adv_helper_label_style() -> str:
+    return (
+        f"color: {_theme_rgba('text.helper')};"
+        "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+        "font-weight: 500;"
+        "font-size: 11px;"
+        "letter-spacing: 0.3px;"
+    )
 
-QSlider::groove:horizontal {
-    height: 4px;
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        @@gradient:slider.groove.surface@@);
-    border: 1px solid @@rgba:slider.groove.border@@;
-    border-top-color: @@rgba:slider.groove.top_border@@;
-    border-bottom-color: @@rgba:slider.groove.bottom_border@@;
-    border-radius: 2px;
-    margin: 0px 0;
-}
 
-QSlider::sub-page:horizontal {
-    height: 4px;
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        @@gradient:slider.fill.surface@@);
-    border: 1px solid @@rgba:slider.fill.border@@;
-    border-top-color: @@rgba:slider.fill.top_border@@;
-    border-bottom-color: @@rgba:slider.fill.bottom_border@@;
-    border-radius: 2px;
-}
+ADV_HELPER_LABEL_STYLE = _build_adv_helper_label_style()
 
-QSlider::handle:horizontal {
-    width: 16px;
-    height: 10px;
-    margin: -4px 0;
-    border-radius: 5px;
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        @@gradient:slider.handle.surface@@);
-    border: 1px solid @@hex:slider.handle.border@@;
+def _build_info_label_style_disabled() -> str:
+    return (
+        f"color: {_theme_hex('text.helper_disabled')};"
+        "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+        "font-weight: 500;"
+        "font-size: 11px;"
+        "letter-spacing: 0.3px;"
+    )
+
+
+INFO_LABEL_STYLE_DISABLED = _build_info_label_style_disabled()
+
+def _build_slider_style() -> str:
+    return _theme_qss("""
+    /* Dark glass indented slider with pill-shaped notch handle */
+    QSlider {
+        min-height: 34px;
+        margin: 2px 0px 0px 0px;
+    }
     
-}
-
-QSlider::handle:horizontal:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        @@gradient:slider.handle.hover_surface@@);
-    border: 1px solid @@hex:slider.handle.hover_border@@;
+    QSlider::groove:horizontal {
+        height: 4px;
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            @@gradient:slider.groove.surface@@);
+        border: 1px solid @@rgba:slider.groove.border@@;
+        border-top-color: @@rgba:slider.groove.top_border@@;
+        border-bottom-color: @@rgba:slider.groove.bottom_border@@;
+        border-radius: 2px;
+        margin: 0px 0;
+    }
     
+    QSlider::sub-page:horizontal {
+        height: 4px;
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            @@gradient:slider.fill.surface@@);
+        border: 1px solid @@rgba:slider.fill.border@@;
+        border-top-color: @@rgba:slider.fill.top_border@@;
+        border-bottom-color: @@rgba:slider.fill.bottom_border@@;
+        border-radius: 2px;
+    }
+    
+    QSlider::handle:horizontal {
+        width: 16px;
+        height: 10px;
+        margin: -4px 0;
+        border-radius: 5px;
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            @@gradient:slider.handle.surface@@);
+        border: 1px solid @@hex:slider.handle.border@@;
+        
+    }
+    
+    QSlider::handle:horizontal:hover {
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            @@gradient:slider.handle.hover_surface@@);
+        border: 1px solid @@hex:slider.handle.hover_border@@;
+        
+    }
+    
+    QSlider::handle:horizontal:pressed {
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            @@gradient:slider.handle.pressed_surface@@);
+        border: 1px solid @@hex:slider.handle.pressed_border@@;
+    }
+    
+    QSlider::handle:horizontal:disabled {
+        background: @@hex:slider.handle.disabled_surface@@;
+    }
+    
+    QSlider#presetModeSlider {
+        margin: 3px 0 0 0;
+    }
+    
+    QSlider#presetModeSlider::groove:horizontal {
+        margin: 1px 0 0 0;
+    }
+    
+    QSlider::add-page:horizontal {
+        background: transparent;
+    }
+    
+    NoWheelSlider#sourcesRatioSlider {
+        min-height: 22px;
+        margin: 0px;
+    }
+    
+    NoWheelSlider#sourcesRatioSlider::handle:horizontal {
+        margin-top: -2px;
+        margin-bottom: -2px;
+    }
+    
+    /* Active indicator on the most-recently-moved slider handle */
+    QSlider[lastMoved="true"]::handle:horizontal {
+        width: 12px;
+        height: 6px;
+        margin: -4px 0;
+        border-radius: 5px;
+        border: 1.5px solid @@hex:slider.handle.active_border@@;
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            @@gradient:slider.handle.active_surface@@);
+    }
+    """)
+
+
+SLIDER_STYLE = _build_slider_style()
+
+
+_THEME_STYLE_BUILDERS = {
+    "FORM_LABEL_STYLE": _build_form_label_style,
+    "FORM_ROW_LABEL_STYLE": _build_form_row_label_style,
+    "FORM_LABEL_STYLE_DISABLED": _build_form_label_style_disabled,
+    "FORM_ROW_LABEL_STYLE_DISABLED": _build_form_row_label_style_disabled,
+    "SPINBOX_STYLE": _build_spinbox_style,
+    "COMBOBOX_STYLE": _build_combobox_style,
+    "COMBOBOX_POPUP_VIEW_STYLE": _build_combobox_popup_view_style,
+    "TOOLTIP_STYLE": _build_tooltip_style,
+    "PAGE_TITLE_STYLE": _build_page_title_style,
+    "SECTION_HEADING_STYLE": _build_section_heading_style,
+    "SECTION_HEADING_STYLE_DISABLED": _build_section_heading_style_disabled,
+    "SWATCH_LABEL_STYLE": _build_swatch_label_style,
+    "SUBSECTION_DIVIDER_STYLE": _build_subsection_divider_style,
+    "INFO_LABEL_STYLE": _build_info_label_style,
+    "ADV_HELPER_LABEL_STYLE": _build_adv_helper_label_style,
+    "INFO_LABEL_STYLE_DISABLED": _build_info_label_style_disabled,
+    "SLIDER_STYLE": _build_slider_style,
 }
 
-QSlider::handle:horizontal:pressed {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        @@gradient:slider.handle.pressed_surface@@);
-    border: 1px solid @@hex:slider.handle.pressed_border@@;
-}
 
-QSlider::handle:horizontal:disabled {
-    background: @@hex:slider.handle.disabled_surface@@;
-}
+def _install_theme_styles(theme: SettingsThemeSpec) -> None:
+    """Rebuild shared style vocabulary from one resolved active ThemeSpec."""
 
-QSlider#presetModeSlider {
-    margin: 3px 0 0 0;
-}
+    global _SETTINGS_THEME
+    _SETTINGS_THEME = theme
+    namespace = globals()
+    for name, builder in _THEME_STYLE_BUILDERS.items():
+        namespace[name] = builder()
 
-QSlider#presetModeSlider::groove:horizontal {
-    margin: 1px 0 0 0;
-}
 
-QSlider::add-page:horizontal {
-    background: transparent;
-}
+def _refresh_live_shared_widgets(theme: SettingsThemeSpec) -> None:
+    """Refresh widget families whose styling is owned directly in this module."""
 
-NoWheelSlider#sourcesRatioSlider {
-    min-height: 22px;
-    margin: 0px;
-}
+    _install_theme_styles(theme)
 
-NoWheelSlider#sourcesRatioSlider::handle:horizontal {
-    margin-top: -2px;
-    margin-bottom: -2px;
-}
+    for box in tuple(_LIVE_GROUP_BOXES):
+        if _is_live_qobject(box):
+            style_group_box(box)
 
-/* Active indicator on the most-recently-moved slider handle */
-QSlider[lastMoved="true"]::handle:horizontal {
-    width: 12px;
-    height: 6px;
-    margin: -4px 0;
-    border-radius: 5px;
-    border: 1.5px solid @@hex:slider.handle.active_border@@;
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        @@gradient:slider.handle.active_surface@@);
-}
-""")
+    for slider in tuple(_LIVE_RECOMMENDED_SLIDERS):
+        if _is_live_qobject(slider):
+            slider._refresh_theme_marker(theme)
+
+
+# Future tab/component migration should consume current module attributes or
+# shared apply helpers rather than importing rendered style strings by value.
+# Existing by-value consumers are deliberately migrated in focused checkpoints
+# instead of being patched through module-global or application-wide scans.
+_THEME_UNSUBSCRIBE = subscribe_settings_theme(_refresh_live_shared_widgets)
+
 
 SCROLL_AREA_STYLE = """
 QScrollArea { border: none; background: transparent; }

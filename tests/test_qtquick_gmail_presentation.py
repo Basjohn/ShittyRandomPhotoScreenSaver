@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QObject, QUrl
@@ -13,6 +14,11 @@ from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
 from core.gmail.gmail_client import EmailMetadata
+from core.gmail.gmail_backend import GmailBackendMode
+from core.gmail.gmail_preparation import PreparedGmailStartup
+from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
+from rendering.quick.state import QuickWindowPolicy
+from rendering.quick.window import QuickDisplayWindow
 from rendering.quick.widgets.gmail import (
     GmailPresentationConfig,
     GmailPresentationModel,
@@ -23,8 +29,13 @@ from rendering.quick.widgets.host import (
     OrdinaryWidgetPresentationHost,
     OverlayWidgetGeometry,
 )
-from rendering.quick.scene_controller import QuickSceneFactory
-from widgets.gmail_runtime import GmailRuntimeSnapshot
+from rendering.quick.widgets.registry import (
+    ORDINARY_WIDGET_FAMILY_COMPONENTS,
+    ordinary_widget_family_component,
+)
+from rendering.widget_runtime_manager import WidgetRuntimeManager
+from widgets import gmail_runtime
+from widgets.gmail_runtime import GmailRuntimeSnapshot, reset_shared_gmail_runtime_for_tests
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -154,6 +165,89 @@ class _Service:
     def dispatch_action(self, action: str, message_id: str) -> bool:
         self.actions.append((action, message_id))
         return True
+
+
+class _QueuedRuntimeManager:
+    def __init__(self) -> None:
+        self.tasks: list[SimpleNamespace] = []
+
+    def submit_io_task(
+        self,
+        callback_fn,
+        *args,
+        callback=None,
+        category="uncategorized",
+        **kwargs,
+    ):
+        self.tasks.append(
+            SimpleNamespace(
+                callback_fn=callback_fn,
+                args=args,
+                callback=callback,
+                category=category,
+                kwargs=kwargs,
+            )
+        )
+        return f"task-{len(self.tasks)}"
+
+    def pop(self, category: str) -> SimpleNamespace:
+        for index, task in enumerate(self.tasks):
+            if task.category == category:
+                return self.tasks.pop(index)
+        raise AssertionError(
+            f"missing queued category {category}: {[task.category for task in self.tasks]}"
+        )
+
+
+def _run_runtime_task(task: SimpleNamespace) -> None:
+    try:
+        value = task.callback_fn(*task.args, **task.kwargs)
+        result = SimpleNamespace(success=True, result=value, error=None)
+    except Exception as exc:
+        result = SimpleNamespace(success=False, result=None, error=exc)
+    if task.callback is not None:
+        task.callback(result)
+
+
+class _RuntimeClient:
+    def __init__(self, emails) -> None:
+        self.emails = list(emails)
+        self.list_calls = []
+        self.actions = []
+        self.error: Exception | None = None
+
+    def list_messages(self, **kwargs):
+        self.list_calls.append(dict(kwargs))
+        if self.error is not None:
+            raise self.error
+        return list(self.emails)
+
+    def mark_as_read(self, message_id: str) -> bool:
+        self.actions.append(("mark_read", message_id))
+        return True
+
+    def open_message_in_browser(self, message_id: str) -> None:
+        self.actions.append(("open", message_id))
+
+
+class _RuntimeBackend:
+    def __init__(self, client: _RuntimeClient) -> None:
+        self.client = client
+        self.is_initialized = True
+        self.is_authenticated = True
+        self.mode = GmailBackendMode.OAUTH
+        self.auth_calls = 0
+
+    def ensure_initialized(self, _manager, callback) -> bool:
+        callback(True)
+        return True
+
+    def start_oauth_flow(self) -> bool:
+        self.auth_calls += 1
+        return True
+
+    def shutdown(self) -> None:
+        return None
 
 
 def _find_visual_item(root: QQuickItem, object_name: str) -> QQuickItem | None:
@@ -373,6 +467,170 @@ def test_gmail_semantic_actions_require_active_interaction_and_owned_row() -> No
 
 
 @pytest.mark.qt
+def test_real_gmail_runtime_drives_registered_scene_host_actions_and_state_in_place(
+    qt_app, monkeypatch
+) -> None:
+    class _Host:
+        @staticmethod
+        def get_runtime_widget_registry():
+            return {}
+
+    reset_shared_gmail_runtime_for_tests()
+    cached = (
+        _email("one", subject="cached first message"),
+        _email("two", subject="cached second message", minute=1),
+        _email("three", subject="cached third message", minute=2),
+    )
+    client = _RuntimeClient(
+        (
+            _email("one", subject="live first message"),
+            _email("two", subject="live second message", minute=1),
+            _email("three", subject="live third message", minute=2),
+        )
+    )
+    backend = _RuntimeBackend(client)
+    manager = _QueuedRuntimeManager()
+    monkeypatch.setattr(
+        gmail_runtime.GmailBackend,
+        "instance",
+        classmethod(lambda _cls: backend),
+    )
+    monkeypatch.setattr(
+        gmail_runtime,
+        "load_gmail_startup_snapshot",
+        lambda *_args, **_kwargs: PreparedGmailStartup(
+            cached, datetime.now(timezone.utc), "fresh"
+        ),
+    )
+    monkeypatch.setattr(gmail_runtime, "automatic_service_updates_enabled", lambda: False)
+    monkeypatch.setattr(
+        gmail_runtime.ThreadManager,
+        "run_on_ui_thread",
+        staticmethod(lambda callback, *args: callback(*args)),
+    )
+
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=72,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime_owner = WidgetRuntimeManager(_Host())
+    config = _config(limit=2, group_threads=False)
+    model = GmailPresentationModel(config, _style(config), parent=window)
+    service = runtime_owner.ensure_widget_service(
+        "gmail",
+        model,
+        {"gmail": {"limit": 2, "refresh_minutes": 5, "filter_label": "INBOX"}},
+    )
+    assert service is not None
+    assert model._runtime_service is service
+    assert service.shared_owner is None
+    assert service.is_running() is False
+
+    opened_inbox = []
+    presentation = None
+    try:
+        presentation = RetainedGmailPresentation(
+            host=controller.ordinary_widget_host,
+            model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 620.0, 360.0),
+            on_open_inbox_requested=lambda: opened_inbox.append("inbox") or True,
+        )
+        item = presentation.item
+        engine = QQmlEngine.contextForObject(item).engine()
+        row_model = model.row_model
+        assert model.viewState == "loading"
+
+        presentation.activate(manager)
+        qt_app.processEvents()
+        assert service.runtime_generation == 72
+        assert service.shared_owner is not None
+        assert service.is_running() is True
+        assert [task.category for task in manager.tasks] == ["gmail_startup_cache"]
+
+        _run_runtime_task(manager.pop("gmail_startup_cache"))
+        qt_app.processEvents()
+        first_row = _find_visual_item(item, "gmailMessageRow_0")
+        assert first_row is not None
+        assert model.viewState == "ready"
+        assert service.current_snapshot().source == "cache"
+        assert row_model.rowCount() == 2
+        two_row_height = model.contentHeight
+
+        presentation.apply_input_state(
+            {
+                "admission_open": True,
+                "exiting": False,
+                "interaction_mode_enabled": True,
+                "ctrl_held": False,
+            }
+        )
+        item.openInboxRequested.emit()
+        item.openMessageRequested.emit("one")
+        item.authRequested.emit()
+        item.actionRequested.emit("mark_read", "one")
+        assert opened_inbox == ["inbox"]
+        assert client.actions == [("open", "one")]
+        assert backend.auth_calls == 1
+        assert [task.category for task in manager.tasks] == ["gmail_action"]
+
+        _run_runtime_task(manager.pop("gmail_action"))
+        assert client.actions[-1] == ("mark_read", "one")
+        assert [task.category for task in manager.tasks] == ["gmail_fetch"]
+        _run_runtime_task(manager.pop("gmail_fetch"))
+        qt_app.processEvents()
+        assert model.viewState == "ready"
+        assert service.current_snapshot().source == "live"
+        assert client.list_calls[-1]["max_results"] == service.config.fetch_window_capacity
+
+        presentation.apply_config(replace(config, limit=3), _style_values())
+        presentation.set_geometry(OverlayWidgetGeometry(40.0, 50.0, 580.0, 420.0))
+        qt_app.processEvents()
+        assert presentation.item is item
+        assert presentation.model is model
+        assert model.row_model is row_model
+        assert QQmlEngine.contextForObject(item).engine() is engine
+        assert _find_visual_item(item, "gmailMessageRow_0") is first_row
+        assert row_model.rowCount() == 3
+        assert model.contentHeight > two_row_height
+        assert item.x() == pytest.approx(40.0)
+        assert item.y() == pytest.approx(50.0)
+        assert item.width() == pytest.approx(580.0)
+        assert item.height() == pytest.approx(420.0)
+
+        client.error = RuntimeError("offline")
+        item.refreshRequested.emit()
+        _run_runtime_task(manager.pop("gmail_fetch"))
+        qt_app.processEvents()
+        assert model.viewState == "ready"
+        assert model.errorText == "offline"
+        assert row_model.rowCount() == 3
+
+        client.error = None
+        backend.is_authenticated = False
+        item.refreshRequested.emit()
+        qt_app.processEvents()
+        assert model.viewState == "error"
+        assert model.errorText == "auth"
+        assert manager.tasks == []
+    finally:
+        controller.quiesce_for_retirement()
+        runtime_owner.cleanup()
+        window.deleteLater()
+        factory.deleteLater()
+        reset_shared_gmail_runtime_for_tests()
+        qt_app.processEvents()
+
+    assert presentation is not None
+    assert service.is_retired() is True
+
+
+@pytest.mark.qt
 def test_gmail_qml_keeps_popup_and_dynamic_height_out_of_row_identity(qt_app) -> None:
     config = _config(
         group_threads=False,
@@ -460,6 +718,13 @@ def test_gmail_qml_is_presentation_only_and_keeps_popup_height_independent() -> 
     assert "MultiEffect" in qml
     assert "gmailActionPopup" in qml
     assert "menuOpen ?" not in qml
+    descriptor = ordinary_widget_family_component("gmail")
+    assert descriptor.qml_filename == "GmailPresentation.qml"
+    assert descriptor.presentation_model_kind == "GmailPresentationModel"
+    assert descriptor in ORDINARY_WIDGET_FAMILY_COMPONENTS
+    assert "GmailPresentation 1.0 GmailPresentation.qml" in (
+        QML_ROOT / "qmldir"
+    ).read_text(encoding="utf-8")
 
 
 @pytest.mark.qt
