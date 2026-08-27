@@ -24,6 +24,15 @@ def _theme_rgba(token: str) -> str:
     return f"rgba({value.r}, {value.g}, {value.b}, {value.a})"
 
 
+def _theme_hex(token: str) -> str:
+    """Render one opaque semantic Settings colour in legacy QSS hex form."""
+
+    value = _SETTINGS_THEME.color(token)
+    if value.a != 255:
+        raise ValueError(f"Settings theme colour {token!r} is not opaque")
+    return f"#{value.r:02x}{value.g:02x}{value.b:02x}"
+
+
 def load_theme(widget) -> None:
     """Load the base dark QSS plus Settings-specific semantic theme values."""
     try:
@@ -33,9 +42,8 @@ def load_theme(widget) -> None:
                 stylesheet = f.read()
 
                 # Preserve the existing QSS selector/geometry architecture.
-                # Only visual values already owned by SettingsThemeSpec are
-                # substituted here; the remaining control palette migrates
-                # with its owning component modules later.
+                # Semantic visual values come from SettingsThemeSpec; selector,
+                # typography, spacing, radii and control dimensions remain here.
                 custom_styles = """
                 /* Settings Dialog Custom Styles
                    NOTE: Qt QSS rgba() alpha MUST be integer 0-255.
@@ -145,41 +153,41 @@ def load_theme(widget) -> None:
                 }
 
                 QListWidget {
-                    background-color: rgba(30, 30, 30, 215);
-                    color: #ffffff;
-                    border: 1px solid rgba(80, 80, 80, 153);
+                    background-color: %(list_surface)s;
+                    color: %(list_text)s;
+                    border: 1px solid %(list_border)s;
                     border-radius: 8px;
                     padding: 4px;
                 }
 
                 QListWidget::item:selected {
-                    background-color: rgba(70, 70, 70, 204);
-                    border-left: 3px solid rgba(255, 255, 255, 180);
+                    background-color: %(list_selected_surface)s;
+                    border-left: 3px solid %(list_selected_accent)s;
                 }
 
                 QListWidget::item:hover {
-                    background-color: rgba(55, 55, 55, 204);
+                    background-color: %(list_hover_surface)s;
                 }
 
                 QPushButton {
-                    background-color: rgba(45, 45, 45, 215);
-                    color: #ffffff;
+                    background-color: %(button_surface)s;
+                    color: %(button_text)s;
                     border-radius: 8px;
                     padding: 7px 18px;
                     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
                     font-weight: 500;
                     font-size: 14px;
-                    border: 1.25px solid #ffffff;
+                    border: 1.25px solid %(button_border)s;
                 }
 
                 QPushButton:hover {
-                    background-color: rgba(60, 60, 60, 220);
-                    border: 1.25px solid #ffffff;
+                    background-color: %(button_hover_surface)s;
+                    border: 1.25px solid %(button_border)s;
                 }
 
                 QPushButton:pressed {
-                    background-color: rgba(35, 35, 35, 220);
-                    border: 1.25px solid rgba(200, 200, 200, 200);
+                    background-color: %(button_pressed_surface)s;
+                    border: 1.25px solid %(button_pressed_border)s;
                 }
 
                 QGroupBox {
@@ -189,7 +197,7 @@ def load_theme(widget) -> None:
                     margin-top: 20px;
                     margin-bottom: 12px;
                     padding: 18px 24px 18px 24px;
-                    color: #ffffff;
+                    color: %(group_text)s;
                 }
 
                 QGroupBox::title {
@@ -197,7 +205,7 @@ def load_theme(widget) -> None:
                     subcontrol-position: top left;
                     padding: 2px 10px;
                     margin-top: 5px;
-                    color: #ffffff;
+                    color: %(group_title_text)s;
                     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
                     font-weight: 800;
                     font-size: 15px;
@@ -205,31 +213,31 @@ def load_theme(widget) -> None:
                 }
 
                 QCheckBox {
-                    color: #ffffff;
+                    color: %(checkbox_text)s;
                     spacing: 8px;
                 }
 
                 QCheckBox::indicator {
                     width: 18px;
                     height: 18px;
-                    background-color: rgba(45, 45, 45, 204);
+                    background-color: %(checkbox_surface)s;
                     border-radius: 3px;
-                    border-top: 1px solid rgba(90, 90, 90, 191);
-                    border-left: 1px solid rgba(90, 90, 90, 191);
-                    border-right: 2px solid rgba(0, 0, 0, 179);
-                    border-bottom: 2px solid rgba(0, 0, 0, 191);
+                    border-top: 1px solid %(checkbox_highlight_border)s;
+                    border-left: 1px solid %(checkbox_highlight_border)s;
+                    border-right: 2px solid %(checkbox_right_shadow_border)s;
+                    border-bottom: 2px solid %(checkbox_bottom_shadow_border)s;
                 }
 
                 QCheckBox::indicator:checked {
-                    background-color: rgba(210, 210, 210, 217);
-                    border-top: 1px solid rgba(200, 200, 200, 204);
-                    border-left: 1px solid rgba(200, 200, 200, 204);
-                    border-right: 2px solid rgba(60, 60, 60, 179);
-                    border-bottom: 2px solid rgba(60, 60, 60, 191);
+                    background-color: %(checkbox_checked_surface)s;
+                    border-top: 1px solid %(checkbox_checked_highlight_border)s;
+                    border-left: 1px solid %(checkbox_checked_highlight_border)s;
+                    border-right: 2px solid %(checkbox_checked_right_shadow_border)s;
+                    border-bottom: 2px solid %(checkbox_checked_bottom_shadow_border)s;
                 }
 
                 QLabel {
-                    color: #ffffff;
+                    color: %(label_text)s;
                     background-color: rgba(0, 0, 0, 0);
                 }
                 """ % {
@@ -264,6 +272,58 @@ def load_theme(widget) -> None:
                     "content_surface": _theme_rgba("content.surface"),
                     "group_surface": _theme_rgba("panel.group.surface"),
                     "panel_border": _theme_rgba("panel.border"),
+                    "group_text": _theme_hex("panel.group.text"),
+                    "group_title_text": _theme_hex("panel.group.title_text"),
+                    "list_surface": _theme_rgba("control.list.surface"),
+                    "list_text": _theme_hex("control.list.text"),
+                    "list_border": _theme_rgba("control.list.border"),
+                    "list_selected_surface": _theme_rgba(
+                        "control.list.selected_surface"
+                    ),
+                    "list_selected_accent": _theme_rgba(
+                        "control.list.selected_accent"
+                    ),
+                    "list_hover_surface": _theme_rgba(
+                        "control.list.hover_surface"
+                    ),
+                    "button_surface": _theme_rgba("control.button.surface"),
+                    "button_text": _theme_hex("control.button.text"),
+                    "button_border": _theme_hex("control.button.border"),
+                    "button_hover_surface": _theme_rgba(
+                        "control.button.hover_surface"
+                    ),
+                    "button_pressed_surface": _theme_rgba(
+                        "control.button.pressed_surface"
+                    ),
+                    "button_pressed_border": _theme_rgba(
+                        "control.button.pressed_border"
+                    ),
+                    "checkbox_text": _theme_hex("control.checkbox.text"),
+                    "checkbox_surface": _theme_rgba(
+                        "control.checkbox.indicator.surface"
+                    ),
+                    "checkbox_highlight_border": _theme_rgba(
+                        "control.checkbox.indicator.highlight_border"
+                    ),
+                    "checkbox_right_shadow_border": _theme_rgba(
+                        "control.checkbox.indicator.right_shadow_border"
+                    ),
+                    "checkbox_bottom_shadow_border": _theme_rgba(
+                        "control.checkbox.indicator.bottom_shadow_border"
+                    ),
+                    "checkbox_checked_surface": _theme_rgba(
+                        "control.checkbox.checked.surface"
+                    ),
+                    "checkbox_checked_highlight_border": _theme_rgba(
+                        "control.checkbox.checked.highlight_border"
+                    ),
+                    "checkbox_checked_right_shadow_border": _theme_rgba(
+                        "control.checkbox.checked.right_shadow_border"
+                    ),
+                    "checkbox_checked_bottom_shadow_border": _theme_rgba(
+                        "control.checkbox.checked.bottom_shadow_border"
+                    ),
+                    "label_text": _theme_hex("text.primary"),
                 }
 
                 widget.setStyleSheet(stylesheet + custom_styles)
