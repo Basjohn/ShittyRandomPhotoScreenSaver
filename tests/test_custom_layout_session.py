@@ -99,12 +99,14 @@ def test_cancel_restores_geometry_payload_display_enabled_and_removed_working_st
         resize_scale=1.25,
     )
     item.transfer_to_display("display:b", item.current_global_rect)
+    item.current_monitor_route = "2"
     item.current_enabled = False
     item.removed = True
 
     session.restore_baseline()
 
     assert item.current_key == key
+    assert item.current_monitor_route == "ALL"
     assert item.current_global_rect == baseline_rect
     assert item.current_size_payload == {"font_size": 48}
     assert item.current_enabled is True

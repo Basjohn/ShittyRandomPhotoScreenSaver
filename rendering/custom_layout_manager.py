@@ -39,6 +39,9 @@ from rendering.custom_layout_contract import (
     write_custom_layout_map,
 )
 from rendering.custom_layout_session import (
+    CustomLayoutKey,
+    CustomLayoutSession,
+    CustomLayoutSessionItem,
     DEFAULT_GEOMETRY_VARIANT,
     normalize_geometry_variant,
 )
@@ -106,20 +109,11 @@ class _ShellState:
     descriptor: WidgetRuntimeDescriptor
     widget: Any
     shell: EditShellWidget
-    baseline_global_rect: QRect
-    current_global_rect: QRect
-    baseline_size_payload: dict[str, Any]
-    current_size_payload: dict[str, Any]
-    resize_scale: float
+    item: CustomLayoutSessionItem
     was_visible: bool
     source_screen: Any
-    source_screen_signature: str
-    source_monitor_value: str
     current_screen: Any
-    current_screen_signature: str
-    current_monitor_value: str
     last_drag_axis: str = "both"
-    removed: bool = False
     resize_origin_rect: QRect | None = None
     resize_origin_cursor: QPoint | None = None
     resize_origin_scale: float = 1.0
@@ -161,6 +155,7 @@ class CustomLayoutManager:
         self._screen = getattr(display_widget, "_screen", None)
         self._screen_signature = get_screen_signature(self._screen)
         self._shell_states: dict[str, _ShellState] = {}
+        self._session: CustomLayoutSession | None = None
         self._special_hidden: list[tuple[Any, bool]] = []
         self._paused_visualizer: tuple[Any, bool, Any | None, bool] | None = None
         self._active = False
@@ -197,6 +192,7 @@ class CustomLayoutManager:
             CustomLayoutManager._uninstall_global_key_filter()
 
         self._shell_states.clear()
+        self._session = None
         self._suppress_live_feedback_widget_ids.clear()
         self._active = False
         self._geo_session_id = None
@@ -291,22 +287,21 @@ class CustomLayoutManager:
         return best_screen
 
     def _repair_visualizer_save_screen_if_needed(self, state: _ShellState) -> str | None:
-        actual_screen = self._screen_overlapping_global_rect(state.current_global_rect)
+        actual_screen = self._screen_overlapping_global_rect(state.item.current_global_rect)
         if actual_screen is None:
             return None
         actual_signature = get_screen_signature(actual_screen)
         actual_monitor = self._monitor_value_for_screen(actual_screen)
         if (
-            actual_signature == state.current_screen_signature
-            and str(state.current_monitor_value or "ALL") == actual_monitor
+            actual_signature == state.item.current_display_identity
+            and str(state.item.current_monitor_route or "ALL") == actual_monitor
         ):
             return None
 
-        old_signature = state.current_screen_signature
-        old_monitor = state.current_monitor_value
+        old_signature = state.item.current_display_identity
+        old_monitor = state.item.current_monitor_route
         state.current_screen = actual_screen
-        state.current_screen_signature = actual_signature
-        state.current_monitor_value = actual_monitor
+        state.item.set_current_display(actual_signature, monitor_route=actual_monitor)
         logger.warning(
             "[CUSTOM_LAYOUT][FALLBACK] Repaired spotify_visualizer CUSTOM save route from shell rect ownership "
             "old_monitor=%s new_monitor=%s old_screen=%s new_screen=%s rect=%s",
@@ -314,7 +309,7 @@ class CustomLayoutManager:
             actual_monitor,
             old_signature,
             actual_signature,
-            self._format_rect(state.current_global_rect),
+            self._format_rect(state.item.current_global_rect),
         )
         return actual_monitor
 
@@ -440,9 +435,9 @@ class CustomLayoutManager:
         for manager in cls._active_managers:
             manager_signature = str(getattr(manager, "_screen_signature", "") or "")
             for state in getattr(manager, "_shell_states", {}).values():
-                if getattr(state, "removed", False):
+                if state.item.removed:
                     continue
-                if str(getattr(state, "current_screen_signature", "") or "") != manager_signature:
+                if state.item.current_display_identity != manager_signature:
                     return True
         return False
 
@@ -487,8 +482,10 @@ class CustomLayoutManager:
             seen_ids.add(id(manager))
             managers.append(manager)
         session_id = CustomLayoutManager._next_geo_session_id()
+        session = CustomLayoutSession()
         for manager in managers:
             manager._geo_session_id = session_id
+            manager._session = session
         started: list[CustomLayoutManager] = []
         for manager in managers:
             if manager._start_session_local():
@@ -496,6 +493,7 @@ class CustomLayoutManager:
         if not started:
             for manager in managers:
                 manager._geo_session_id = None
+                manager._session = None
             return False
         CustomLayoutManager._active_managers = started
         started[0]._refresh_duplicate_shell_remove_affordances_global()
@@ -525,14 +523,14 @@ class CustomLayoutManager:
                 grouped_states.setdefault(widget_id, []).append((manager, state))
 
         for widget_id, entries in grouped_states.items():
-            survivors = [(manager, state) for manager, state in entries if not state.removed]
+            survivors = [(manager, state) for manager, state in entries if not state.item.removed]
             if not survivors:
                 continue
             source_had_duplicates = len(entries) > 1
             if (
                 widget_id == "spotify_visualizer"
                 and len(survivors) > 1
-                and any(manager._monitor_value_is_all(state.source_monitor_value) for manager, state in survivors)
+                and any(manager._monitor_value_is_all(state.item.source_monitor_route) for manager, state in survivors)
             ):
                 logger.warning(
                     "[CUSTOM_LAYOUT] Refusing to persist spotify_visualizer as Custom with multiple ALL-routed survivors; "
@@ -540,14 +538,14 @@ class CustomLayoutManager:
                 )
                 continue
             for manager, state in survivors:
-                monitor_value = state.current_monitor_value
+                monitor_value = state.item.current_monitor_route
                 if widget_id == "spotify_visualizer":
                     repaired_monitor = manager._repair_visualizer_save_screen_if_needed(state)
                     if repaired_monitor is not None:
                         monitor_value = repaired_monitor
-                if source_had_duplicates and len(survivors) == 1 and manager._monitor_value_is_all(state.source_monitor_value):
+                if source_had_duplicates and len(survivors) == 1 and manager._monitor_value_is_all(state.item.source_monitor_route):
                     monitor_value = manager._monitor_value_for_screen(state.current_screen)
-                elif state.current_screen_signature != state.source_screen_signature:
+                elif state.item.current_display_identity != state.item.source_key.display_identity:
                     monitor_value = manager._monitor_value_for_screen(state.current_screen)
                 elif widget_id == "spotify_visualizer" and manager._monitor_value_is_all(monitor_value):
                     monitor_value = manager._monitor_value_for_screen(state.current_screen)
@@ -630,6 +628,9 @@ class CustomLayoutManager:
     def _start_session_local(self) -> bool:
         if self._active:
             return True
+
+        if self._session is None:
+            self._session = CustomLayoutSession()
 
         self._sync_display_screen_binding()
         targets = self._collect_targets()
@@ -740,7 +741,7 @@ class CustomLayoutManager:
                 exclude_signature=target_signature,
             )
 
-        global_rect = QRect(state.current_global_rect)
+        global_rect = QRect(state.item.current_global_rect)
         local_rect = QRect(
             global_rect.x() - target_geom.x(),
             global_rect.y() - target_geom.y(),
@@ -748,13 +749,13 @@ class CustomLayoutManager:
             global_rect.height(),
         )
         if not state.descriptor.supports_layout_resize_edit:
-            local_rect.setSize(state.baseline_global_rect.size())
+            local_rect.setSize(state.item.baseline_global_rect.size())
         local_rect = clamp_local_rect_to_bounds(
             local_rect,
             target_geom.size(),
             min_size=self._min_size_for_state(state),
         )
-        size_payload = dict(state.current_size_payload)
+        size_payload = dict(state.item.current_size_payload)
         if state.descriptor.custom_layout_resize_mode == "clock_font":
             size_payload.pop("display_mode", None)
         entry = CustomLayoutEntry(
@@ -921,18 +922,20 @@ class CustomLayoutManager:
 
     def _current_monitor_value_for_state_screen(self, state: _ShellState, screen: Any) -> str:
         if not widget_writes_custom_monitor_key(state.descriptor.widget_id):
-            return state.current_monitor_value
+            return state.item.current_monitor_route
         if (
             state.descriptor.widget_id != "spotify_visualizer"
-            and self._monitor_value_is_all(state.source_monitor_value)
+            and self._monitor_value_is_all(state.item.source_monitor_route)
         ):
-            return state.current_monitor_value
+            return state.item.current_monitor_route
         return self._monitor_value_for_screen(screen)
 
     def cancel_session(self) -> bool:
         if not self._active:
             return False
         active_managers = list(CustomLayoutManager._active_managers)
+        if self._session is not None:
+            self._session.restore_baseline()
         for manager in active_managers:
             manager._finish_session()
         # Cancel discards a preview. It restores the specific owners whose live
@@ -1104,6 +1107,7 @@ class CustomLayoutManager:
         if display is not None:
             setattr(display, "_custom_layout_edit_active", False)
         self._geo_session_id = None
+        self._session = None
         if discard_deferred_image:
             self._deferred_processed_image = None
         else:
@@ -1375,22 +1379,34 @@ class CustomLayoutManager:
                 f"had_prior_custom={str(isinstance(prior_custom_rect, QRect)).lower()}"
             ),
         )
-        state = _ShellState(
-            descriptor=descriptor,
-            widget=widget,
-            shell=shell,
+        if self._session is None:
+            raise RuntimeError("CUSTOM layout session missing while creating edit state")
+        ordinary_enabled = self._read_ordinary_enabled_for_widget(descriptor)
+        item = CustomLayoutSessionItem(
+            source_key=CustomLayoutKey(
+                descriptor.widget_id,
+                screen_signature,
+                self._geometry_variant_for_widget(descriptor, widget),
+            ),
+            model_identity=descriptor.widget_id,
             baseline_global_rect=QRect(global_rect),
             current_global_rect=QRect(global_rect),
             baseline_size_payload=baseline_payload,
             current_size_payload=dict(baseline_payload),
-            resize_scale=1.0,
+            baseline_enabled=ordinary_enabled,
+            current_enabled=ordinary_enabled,
+            source_monitor_route=source_monitor_value,
+            current_monitor_route=current_monitor_value,
+        )
+        self._session.add_item(item)
+        state = _ShellState(
+            descriptor=descriptor,
+            widget=widget,
+            shell=shell,
+            item=item,
             was_visible=bool(getattr(widget, "isVisible", lambda: False)()),
             source_screen=screen,
-            source_screen_signature=screen_signature,
-            source_monitor_value=source_monitor_value,
             current_screen=screen,
-            current_screen_signature=screen_signature,
-            current_monitor_value=current_monitor_value,
             last_drag_axis="both",
         )
         self._update_shell_reset_affordances(state)
@@ -1536,8 +1552,22 @@ class CustomLayoutManager:
             return "ALL"
         return str(section.get("monitor", "ALL") or "ALL")
 
+    def _read_ordinary_enabled_for_widget(self, descriptor: WidgetRuntimeDescriptor) -> bool:
+        settings_manager = getattr(self._display, "settings_manager", None)
+        if settings_manager is None:
+            return True
+        try:
+            widgets_map = settings_manager.get_widgets_map()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to read ordinary enabled state", exc_info=True)
+            return True
+        section = widgets_map.get(descriptor.widget_id, {}) if isinstance(widgets_map, dict) else {}
+        if not isinstance(section, dict):
+            return True
+        return bool(section.get("enabled", True))
+
     def _can_transfer_shell_between_displays(self, state: _ShellState) -> tuple[bool, str]:
-        if self._monitor_value_is_all(state.current_monitor_value):
+        if self._monitor_value_is_all(state.item.current_monitor_route):
             return False, "Locked to ALL displays"
         return True, ""
 
@@ -1552,7 +1582,7 @@ class CustomLayoutManager:
 
     def _raise_all_shells(self) -> None:
         for state in self._shell_states.values():
-            if state.removed:
+            if state.item.removed:
                 continue
             try:
                 if state.shell.isVisible():
@@ -1578,9 +1608,9 @@ class CustomLayoutManager:
         restored = 0
         for manager in list(CustomLayoutManager._active_managers):
             for state in manager._shell_states.values():
-                if state.removed:
+                if state.item.removed:
                     continue
-                if str(getattr(state, "current_screen_signature", "") or "") != current_signature:
+                if state.item.current_display_identity != current_signature:
                     continue
                 try:
                     manager._sync_shell_parent_to_state(state)
@@ -1596,7 +1626,7 @@ class CustomLayoutManager:
         )
 
     def _sync_shell_parent_to_state(self, state: _ShellState) -> None:
-        self._apply_shell_global_rect_to_shell(state, state.current_global_rect, suppress_feedback=True)
+        self._apply_shell_global_rect_to_shell(state, state.item.current_global_rect, suppress_feedback=True)
 
     def _apply_shell_global_rect_to_shell(
         self,
@@ -1659,15 +1689,15 @@ class CustomLayoutManager:
         state = self._shell_states.get(widget_id)
         if state is None:
             return
-        dx = abs(global_rect.x() - state.current_global_rect.x())
-        dy = abs(global_rect.y() - state.current_global_rect.y())
+        dx = abs(global_rect.x() - state.item.current_global_rect.x())
+        dy = abs(global_rect.y() - state.item.current_global_rect.y())
         if dx > dy:
             state.last_drag_axis = "x"
         elif dy > dx:
             state.last_drag_axis = "y"
         else:
             state.last_drag_axis = "both"
-        state.current_global_rect = QRect(global_rect)
+        state.item.current_global_rect = QRect(global_rect)
         self._apply_shell_global_rect_to_shell(state, global_rect, suppress_feedback=True)
         self._update_shell_reset_affordances(state)
 
@@ -1675,8 +1705,8 @@ class CustomLayoutManager:
         state = self._shell_states.get(widget_id)
         if state is None:
             return
-        dx = abs(global_rect.x() - state.current_global_rect.x())
-        dy = abs(global_rect.y() - state.current_global_rect.y())
+        dx = abs(global_rect.x() - state.item.current_global_rect.x())
+        dy = abs(global_rect.y() - state.item.current_global_rect.y())
         if dx > dy:
             state.last_drag_axis = "x"
         elif dy > dx:
@@ -1684,7 +1714,7 @@ class CustomLayoutManager:
         else:
             state.last_drag_axis = "both"
         if widget_id in self._suppress_live_feedback_widget_ids:
-            state.current_global_rect = QRect(global_rect)
+            state.item.current_global_rect = QRect(global_rect)
             return
         resolved = self._resolve_shell_global_rect(
             state,
@@ -1692,7 +1722,7 @@ class CustomLayoutManager:
             snap_to_grid=False,
             cursor_global=self._get_cursor_global_pos(),
         )
-        state.current_global_rect = QRect(resolved)
+        state.item.current_global_rect = QRect(resolved)
         self._sync_shell_parent_to_state(state)
         self._update_shell_reset_affordances(state)
         if resolved != global_rect:
@@ -1709,7 +1739,7 @@ class CustomLayoutManager:
             snap_to_grid=True,
             cursor_global=cursor_global,
         )
-        state.current_global_rect = QRect(committed)
+        state.item.current_global_rect = QRect(committed)
         self._sync_shell_parent_to_state(state)
         self._update_shell_reset_affordances(state)
         self._set_shell_geometry_silently(state, committed)
@@ -1726,8 +1756,8 @@ class CustomLayoutManager:
             return
         state.resize_origin_rect = QRect(global_rect)
         state.resize_origin_cursor = QPoint(cursor_global)
-        state.resize_origin_scale = float(state.resize_scale)
-        state.resize_origin_payload = dict(state.current_size_payload)
+        state.resize_origin_scale = float(state.item.resize_scale)
+        state.resize_origin_payload = dict(state.item.current_size_payload)
         state.resize_corner = str(corner or "")
 
     def _on_shell_resize_drag_live_changed(
@@ -1758,16 +1788,16 @@ class CustomLayoutManager:
         target_screen = state.current_screen or self._screen
         min_scale, max_scale = self._resize_scale_bounds_for_state(
             state,
-            state.current_global_rect,
+            state.item.current_global_rect,
             screen=target_screen,
         )
-        next_scale = max(min_scale, min(max_scale, state.resize_scale + (0.05 * step_count)))
-        if abs(next_scale - state.resize_scale) < 1e-6:
+        next_scale = max(min_scale, min(max_scale, state.item.resize_scale + (0.05 * step_count)))
+        if abs(next_scale - state.item.resize_scale) < 1e-6:
             return
-        state.resize_scale = next_scale
-        state.current_size_payload = self._scale_size_payload(
+        state.item.resize_scale = next_scale
+        state.item.current_size_payload = self._scale_size_payload(
             state.descriptor,
-            state.baseline_size_payload,
+            state.item.baseline_size_payload,
             next_scale,
         )
         self._update_shell_reset_affordances(state)
@@ -1778,16 +1808,16 @@ class CustomLayoutManager:
                 target_screen,
                 min_size=self._min_size_for_state(state),
             )
-        state.current_global_rect = QRect(next_rect)
-        anchor_x, anchor_y = self._top_center_anchor_for_rect(state.current_global_rect)
+        state.item.current_global_rect = QRect(next_rect)
+        anchor_x, anchor_y = self._top_center_anchor_for_rect(state.item.current_global_rect)
         self._log_geo_audit(
             widget_id,
             "resize_wheel",
             global_rect=next_rect,
-            payload=state.current_size_payload,
+            payload=state.item.current_size_payload,
             source="_on_shell_resize_wheel_requested",
             extra=(
-                f"scale={state.resize_scale:.4f} min_scale={min_scale:.4f} max_scale={max_scale:.4f} "
+                f"scale={state.item.resize_scale:.4f} min_scale={min_scale:.4f} max_scale={max_scale:.4f} "
                 f"anchor=({anchor_x:.2f},{anchor_y})"
             ),
         )
@@ -1806,7 +1836,7 @@ class CustomLayoutManager:
         state = self._shell_states.get(widget_id)
         if state is None or not state.descriptor.supports_layout_resize_edit:
             return
-        origin_rect = state.resize_origin_rect or QRect(state.current_global_rect)
+        origin_rect = state.resize_origin_rect or QRect(state.item.current_global_rect)
         resolved_corner = str(corner or state.resize_corner or "")
         if not resolved_corner:
             return
@@ -1823,34 +1853,34 @@ class CustomLayoutManager:
             origin_rect,
             screen=target_screen,
         )
-        state.resize_scale = max(min_scale, min(max_scale, raw_scale))
-        state.current_size_payload = self._scale_size_payload(
+        state.item.resize_scale = max(min_scale, min(max_scale, raw_scale))
+        state.item.current_size_payload = self._scale_size_payload(
             state.descriptor,
-            state.baseline_size_payload,
-            state.resize_scale,
+            state.item.baseline_size_payload,
+            state.item.resize_scale,
         )
         next_rect = self._scaled_rect_from_anchor(
             state,
             origin_rect,
             resolved_corner,
-            next_scale=state.resize_scale,
+            next_scale=state.item.resize_scale,
         )
         next_rect = self._resolve_resize_drag_rect_on_fixed_screen(
             state,
             next_rect,
             snap_to_grid=finalize,
         )
-        state.current_global_rect = QRect(next_rect)
+        state.item.current_global_rect = QRect(next_rect)
         self._update_shell_reset_affordances(state)
         anchor_x, anchor_y = self._top_center_anchor_for_rect(origin_rect)
         self._log_geo_audit(
             widget_id,
             "resize_drag_final" if finalize else "resize_drag_live",
             global_rect=next_rect,
-            payload=state.current_size_payload,
+            payload=state.item.current_size_payload,
             source="_apply_resize_drag",
             extra=(
-                f"corner={resolved_corner} raw_scale={raw_scale:.4f} scale={state.resize_scale:.4f} "
+                f"corner={resolved_corner} raw_scale={raw_scale:.4f} scale={state.item.resize_scale:.4f} "
                 f"min_scale={min_scale:.4f} max_scale={max_scale:.4f} anchor=({anchor_x:.2f},{anchor_y})"
             ),
         )
@@ -1860,18 +1890,18 @@ class CustomLayoutManager:
             state.resize_origin_rect = None
             state.resize_origin_cursor = None
             state.resize_origin_payload = None
-            state.resize_origin_scale = state.resize_scale
+            state.resize_origin_scale = state.item.resize_scale
             state.resize_corner = None
 
     def _on_shell_reset_size_requested(self, widget_id: str) -> None:
         state = self._shell_states.get(widget_id)
         if state is None:
             return
-        state.resize_scale = 1.0
-        state.current_size_payload = dict(state.baseline_size_payload)
+        state.item.resize_scale = 1.0
+        state.item.current_size_payload = dict(state.item.baseline_size_payload)
         self._update_shell_reset_affordances(state)
-        current = QRect(state.current_global_rect)
-        baseline = QRect(state.baseline_global_rect)
+        current = QRect(state.item.current_global_rect)
+        baseline = QRect(state.item.baseline_global_rect)
         anchor_x, top_y = self._top_center_anchor_for_rect(current)
         baseline = self._rect_from_top_center(anchor_x, top_y, baseline.width(), baseline.height())
         target_screen = state.current_screen or self._screen
@@ -1881,7 +1911,7 @@ class CustomLayoutManager:
                 target_screen,
                 min_size=self._min_size_for_state(state),
             )
-        state.current_global_rect = QRect(baseline)
+        state.item.current_global_rect = QRect(baseline)
         self._set_shell_geometry_silently(state, baseline)
 
     def _on_shell_reset_position_requested(self, widget_id: str) -> None:
@@ -1890,10 +1920,12 @@ class CustomLayoutManager:
             return
         source_screen = state.source_screen or self._screen
         state.current_screen = source_screen
-        state.current_screen_signature = state.source_screen_signature
-        state.current_monitor_value = state.source_monitor_value
-        baseline_top_left = state.baseline_global_rect.topLeft()
-        current_rect = QRect(state.current_global_rect)
+        state.item.set_current_display(
+            state.item.source_key.display_identity,
+            monitor_route=state.item.source_monitor_route,
+        )
+        baseline_top_left = state.item.baseline_global_rect.topLeft()
+        current_rect = QRect(state.item.current_global_rect)
         reset_rect = QRect(baseline_top_left, current_rect.size())
         if source_screen is not None:
             reset_rect = clamp_global_rect_to_screen(
@@ -1901,7 +1933,7 @@ class CustomLayoutManager:
                 source_screen,
                 min_size=self._min_size_for_state(state),
             )
-        state.current_global_rect = QRect(reset_rect)
+        state.item.current_global_rect = QRect(reset_rect)
         state.shell.set_transfer_blocked(False, "")
         self._set_shell_geometry_silently(state, reset_rect)
         self._update_shell_reset_affordances(state)
@@ -1913,9 +1945,9 @@ class CustomLayoutManager:
 
     def _on_shell_remove_requested(self, widget_id: str) -> None:
         state = self._shell_states.get(widget_id)
-        if state is None or state.removed:
+        if state is None or state.item.removed or not state.item.current_enabled:
             return
-        state.removed = True
+        state.item.apply_remove_action()
         try:
             state.shell.hide()
         except Exception:
@@ -1953,16 +1985,16 @@ class CustomLayoutManager:
         return QSize(1, 1)
 
     def _update_shell_reset_affordances(self, state: _ShellState) -> None:
-        if state.removed:
+        if state.item.removed:
             state.shell.set_reset_size_enabled(False)
             state.shell.set_reset_position_enabled(False)
             state.shell.set_reset_visualizer_enabled(False)
             state.shell.set_remove_enabled(False)
             return
-        size_changed = abs(state.resize_scale - 1.0) > 1e-6
+        size_changed = abs(state.item.resize_scale - 1.0) > 1e-6
         position_changed = (
-            state.current_screen_signature != state.source_screen_signature
-            or state.current_global_rect.topLeft() != state.baseline_global_rect.topLeft()
+            state.item.current_display_identity != state.item.source_key.display_identity
+            or state.item.current_global_rect.topLeft() != state.item.baseline_global_rect.topLeft()
         )
         state.shell.set_reset_size_enabled(size_changed)
         state.shell.set_reset_position_enabled(position_changed)
@@ -1978,11 +2010,12 @@ class CustomLayoutManager:
                 grouped.setdefault(widget_id, []).append(state)
         for manager in CustomLayoutManager._active_managers:
             for widget_id, state in manager._shell_states.items():
-                survivors = [entry for entry in grouped.get(widget_id, ()) if not entry.removed]
+                state.item.is_duplicate = len(grouped.get(widget_id, ())) > 1
+                survivors = [entry for entry in grouped.get(widget_id, ()) if not entry.item.removed]
                 removable = bool(
                     widget_writes_custom_monitor_key(widget_id)
                     and len(survivors) > 1
-                    and not state.removed
+                    and not state.item.removed
                 )
                 state.shell.set_remove_enabled(removable)
 
@@ -2001,11 +2034,11 @@ class CustomLayoutManager:
         for widget_id, state in self._shell_states.items():
             if widget_id == exclude_widget_id:
                 continue
-            if state.removed:
+            if state.item.removed:
                 continue
-            if state.current_screen_signature != get_screen_signature(screen):
+            if state.item.current_display_identity != get_screen_signature(screen):
                 continue
-            current = state.current_global_rect
+            current = state.item.current_global_rect
             peers.append(
                 QRect(
                     current.x() - geom.x(),
@@ -2069,8 +2102,10 @@ class CustomLayoutManager:
         if snap_to_grid:
             local_rect = snap_resolution.rect
         state.current_screen = target_screen
-        state.current_screen_signature = target_signature
-        state.current_monitor_value = self._current_monitor_value_for_state_screen(state, target_screen)
+        state.item.set_current_display(
+            target_signature,
+            monitor_route=self._current_monitor_value_for_state_screen(state, target_screen),
+        )
         self._update_grid_guides(state, target_screen, snap_resolution, active_local_rect=local_rect)
         return QRect(
             geom.x() + local_rect.x(),
@@ -2195,13 +2230,13 @@ class CustomLayoutManager:
         return current_screen
 
     def _scaled_rect_from_baseline(self, state: _ShellState) -> QRect:
-        current = state.current_global_rect
+        current = state.item.current_global_rect
         anchor_x, top_y = self._top_center_anchor_for_rect(current)
         return self._scaled_rect_from_top_center(
             state,
             anchor_x=anchor_x,
             top_y=top_y,
-            next_scale=state.resize_scale,
+            next_scale=state.item.resize_scale,
             fallback_rect=current,
         )
 
@@ -2216,7 +2251,7 @@ class CustomLayoutManager:
     ) -> QRect:
         next_payload = self._scale_size_payload(
             state.descriptor,
-            state.baseline_size_payload,
+            state.item.baseline_size_payload,
             next_scale,
         )
         if state.descriptor.custom_layout_resize_mode == "volume_scale":
@@ -2226,8 +2261,8 @@ class CustomLayoutManager:
             width = max(48, int(next_payload.get("width", fallback_rect.width())))
             height = max(32, int(next_payload.get("height", fallback_rect.height())))
         else:
-            width = max(48, int(round(state.baseline_global_rect.width() * next_scale)))
-            height = max(32, int(round(state.baseline_global_rect.height() * next_scale)))
+            width = max(48, int(round(state.item.baseline_global_rect.width() * next_scale)))
+            height = max(32, int(round(state.item.baseline_global_rect.height() * next_scale)))
         return self._rect_from_top_center(anchor_x, top_y, width, height)
 
     def _resize_scale_bounds_for_state(
@@ -2284,7 +2319,7 @@ class CustomLayoutManager:
     ) -> float:
         screen = state.current_screen or self._screen
         if screen is None:
-            return state.resize_scale
+            return state.item.resize_scale
         min_size = self._min_size_for_state(state)
         base_half_width = max(1.0, float(origin_rect.width()) / 2.0)
         base_height = max(1.0, float(origin_rect.height()))
@@ -2350,8 +2385,10 @@ class CustomLayoutManager:
         if snap_to_grid:
             local_rect = snap_resolution.rect
         state.current_screen = target_screen
-        state.current_screen_signature = target_signature
-        state.current_monitor_value = self._current_monitor_value_for_state_screen(state, target_screen)
+        state.item.set_current_display(
+            target_signature,
+            monitor_route=self._current_monitor_value_for_state_screen(state, target_screen),
+        )
         self._update_grid_guides(state, target_screen, snap_resolution, active_local_rect=local_rect)
         return QRect(
             geom.x() + local_rect.x(),
@@ -2666,8 +2703,8 @@ class CustomLayoutManager:
 
         if state is not None:
             state_rect = QRect(
-                self._display.mapFromGlobal(state.current_global_rect.topLeft()),
-                state.current_global_rect.size(),
+                self._display.mapFromGlobal(state.item.current_global_rect.topLeft()),
+                state.item.current_global_rect.size(),
             )
             if state_rect.width() > 0 and state_rect.height() > 0:
                 return clamp_local_rect_to_bounds(state_rect, display_size), "active_shell_rect"
@@ -2689,7 +2726,7 @@ class CustomLayoutManager:
                 logger.debug("[CUSTOM_LAYOUT] Failed to read live visualizer rect for recovery", exc_info=True)
 
         media_state = self._shell_states.get("media")
-        if media_state is not None and media_state.current_global_rect.width() > 0:
+        if media_state is not None and media_state.item.current_global_rect.width() > 0:
             return self._centered_visualizer_recovery_rect(display_size), f"safe_visualizer_center_rect:{saved_source}"
 
         return self._centered_visualizer_recovery_rect(display_size), f"safe_visualizer_center_rect:{saved_source}"
@@ -2728,22 +2765,35 @@ class CustomLayoutManager:
         )
         self._connect_shell_signals(shell)
         payload = {"width": int(local_rect.width()), "height": int(local_rect.height())}
-        state = _ShellState(
-            descriptor=descriptor,
-            widget=placeholder,
-            shell=shell,
+        monitor_route = self._read_monitor_value_for_widget(descriptor)
+        ordinary_enabled = self._read_ordinary_enabled_for_widget(descriptor)
+        if self._session is None:
+            raise RuntimeError("CUSTOM layout session missing while creating recovery state")
+        item = CustomLayoutSessionItem(
+            source_key=CustomLayoutKey(
+                descriptor.widget_id,
+                screen_signature,
+                self._geometry_variant_for_widget(descriptor, placeholder),
+            ),
+            model_identity=descriptor.widget_id,
             baseline_global_rect=QRect(global_rect),
             current_global_rect=QRect(global_rect),
             baseline_size_payload=dict(payload),
             current_size_payload=dict(payload),
-            resize_scale=1.0,
+            baseline_enabled=ordinary_enabled,
+            current_enabled=ordinary_enabled,
+            source_monitor_route=monitor_route,
+            current_monitor_route=monitor_route,
+        )
+        self._session.add_item(item)
+        state = _ShellState(
+            descriptor=descriptor,
+            widget=placeholder,
+            shell=shell,
+            item=item,
             was_visible=False,
             source_screen=screen,
-            source_screen_signature=screen_signature,
-            source_monitor_value=self._read_monitor_value_for_widget(descriptor),
             current_screen=screen,
-            current_screen_signature=screen_signature,
-            current_monitor_value=self._read_monitor_value_for_widget(descriptor),
             last_drag_axis="both",
         )
         self._update_shell_reset_affordances(state)
@@ -2768,21 +2818,23 @@ class CustomLayoutManager:
         screen, screen_signature = self._sync_display_screen_binding()
         global_rect = QRect(self._display.mapToGlobal(local_rect.topLeft()), local_rect.size())
         payload = {"width": int(local_rect.width()), "height": int(local_rect.height())}
-        state.baseline_global_rect = QRect(global_rect)
-        state.current_global_rect = QRect(global_rect)
-        state.baseline_size_payload = dict(payload)
-        state.current_size_payload = dict(payload)
-        state.resize_scale = 1.0
+        state.item.baseline_global_rect = QRect(global_rect)
+        state.item.current_global_rect = QRect(global_rect)
+        state.item.baseline_size_payload = dict(payload)
+        state.item.current_size_payload = dict(payload)
+        state.item.resize_scale = 1.0
         state.last_drag_axis = "both"
-        state.removed = False
+        state.item.removed = False
         state.resize_origin_rect = None
         state.resize_origin_cursor = None
         state.resize_origin_scale = 1.0
         state.resize_origin_payload = None
         state.resize_corner = None
         state.current_screen = screen
-        state.current_screen_signature = screen_signature
-        state.current_monitor_value = self._monitor_value_for_screen(screen)
+        state.item.set_current_display(
+            screen_signature,
+            monitor_route=self._monitor_value_for_screen(screen),
+        )
         if getattr(state.widget, "_custom_layout_recovery_placeholder", False):
             setattr(state.widget, "_custom_layout_local_rect", QRect(local_rect))
             state.widget.setGeometry(local_rect)
@@ -3083,10 +3135,10 @@ class CustomLayoutManager:
         if state.descriptor.custom_layout_resize_mode == "volume_scale":
             return QSize(24, 120)
         if state.descriptor.custom_layout_resize_mode == "visualizer_rect":
-            baseline_width = max(1, int(state.baseline_size_payload.get("width", state.baseline_global_rect.width())))
+            baseline_width = max(1, int(state.item.baseline_size_payload.get("width", state.item.baseline_global_rect.width())))
             baseline_height = max(
                 1,
-                int(state.baseline_size_payload.get("height", state.baseline_global_rect.height())),
+                int(state.item.baseline_size_payload.get("height", state.item.baseline_global_rect.height())),
             )
             return QSize(
                 max(1, int(round(baseline_width * 0.5))),
@@ -3094,10 +3146,10 @@ class CustomLayoutManager:
             )
         if state.descriptor.supports_layout_resize_edit:
             return QSize(
-                max(1, int(round(state.baseline_global_rect.width() * 0.5))),
-                max(1, int(round(state.baseline_global_rect.height() * 0.5))),
+                max(1, int(round(state.item.baseline_global_rect.width() * 0.5))),
+                max(1, int(round(state.item.baseline_global_rect.height() * 0.5))),
             )
         return QSize(
-            max(1, state.baseline_global_rect.width()),
-            max(1, state.baseline_global_rect.height()),
+            max(1, state.item.baseline_global_rect.width()),
+            max(1, state.item.baseline_global_rect.height()),
         )

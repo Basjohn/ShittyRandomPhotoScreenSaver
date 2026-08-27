@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-866f968487d32e2b4f6cf3b800f3265c543c2c3b
-G1 neutral session, variant-aware storage and capability-gated layout-slot contract landed
+f73cfd7cf0db9ac035f1d180152b82a1225a17ad
+G1 variant-aware storage and capability-gated layout-slot contract landed; neutral manager cutover validated
 ```
 
 Current phase state:
@@ -38,20 +38,20 @@ Source outranks this plan if a later checkpoint has landed.
 
 ---
 
-## Immediate work — G1 session and multi-variant working-state contract
+## Immediate work — G2 retained edit overlay and X semantics
 
 ```text
-manager/session integration without QWidget pixel ownership           ACTIVE
+one retained Quick edit overlay per display                           ACTIVE
 ```
 
-### G1.2 — manager/session ownership cutover (ACTIVE)
+### G2.1 — retained overlay bootstrap (ACTIVE)
 
-- give all active display managers one shared `CustomLayoutSession` for exact working item state;
-- remove duplicate mutable geometry/payload/display/resize/removed ownership from `_ShellState`; the old shell remains
-  only the temporary G1/G2 presentation adapter;
-- route drag, resize, transfer and X mutations through session items and prove Cancel restores session baselines;
-- preserve exact variant-aware Save/replay and capability-gated source-free layout-slot behavior;
-- do not create Quick overlay pixels or retire old edit pixels until the manager/session contract is GREEN.
+- add one display-owned retained Quick overlay layer for the grid, selection outline, handles, guide lines and X;
+- bind overlay delegates directly to the shared `CustomLayoutSession` working items, with no second geometry owner;
+- make centering guides red and keep ordinary grid/edge guides visually distinct;
+- route X through `CustomLayoutSessionItem.apply_remove_action()`: duplicate removal versus singleton ordinary OFF;
+- preserve current Save/Cancel timing: G2 mutates working state only and does not persist or deactivate a family;
+- keep old edit/grid pixels only as the temporary presentation reference until focused retained-overlay proof is GREEN.
 
 Use `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`; exact current source outranks stale owner names.
 
