@@ -1,6 +1,7 @@
 """Presentation-neutral working state for CUSTOM layout editing."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -150,6 +151,9 @@ class CustomLayoutSession:
 
     def __init__(self) -> None:
         self._items: dict[CustomLayoutKey, CustomLayoutSessionItem] = {}
+        self._change_listeners: list[
+            Callable[[CustomLayoutSessionItem], None]
+        ] = []
 
     def add_item(self, item: CustomLayoutSessionItem) -> None:
         if item.source_key in self._items:
@@ -164,6 +168,31 @@ class CustomLayoutSession:
 
     def active_items(self) -> tuple[CustomLayoutSessionItem, ...]:
         return tuple(item for item in self._items.values() if not item.removed)
+
+    def subscribe_changes(
+        self,
+        listener: Callable[[CustomLayoutSessionItem], None],
+    ) -> None:
+        if listener not in self._change_listeners:
+            self._change_listeners.append(listener)
+
+    def unsubscribe_changes(
+        self,
+        listener: Callable[[CustomLayoutSessionItem], None],
+    ) -> None:
+        self._change_listeners = [
+            entry for entry in self._change_listeners if entry != listener
+        ]
+
+    def notify_item_changed(self, item: CustomLayoutSessionItem) -> None:
+        if self._items.get(item.source_key) is not item:
+            raise ValueError("changed item is not owned by this CUSTOM session")
+        for listener in tuple(self._change_listeners):
+            listener(item)
+
+    def notify_all_items_changed(self) -> None:
+        for item in self._items.values():
+            self.notify_item_changed(item)
 
     def refresh_duplicate_state(self) -> None:
         """Derive duplicate status from current enabled, non-removed survivors."""
@@ -183,3 +212,4 @@ class CustomLayoutSession:
         for item in self._items.values():
             item.restore_baseline()
         self.refresh_duplicate_state()
+        self.notify_all_items_changed()
