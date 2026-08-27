@@ -1,6 +1,6 @@
 # Future Cleanup — Migration Deletion Ledger
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 This tracks deferred/caller-proven deletion work and does not admit work ahead of `Current_Plan.md`.
 
@@ -25,6 +25,14 @@ ordinary family checkpoint. Real product resilience is not migration debris.
 - Reddit helper recovery/installer/watcher tests contain stale helper-era expectations (`_SPOOL_LAST_PROBE`,
   installer markers and singleton-state assumptions). Reconcile helper tests against current helper/
   installer contract separately from retained Reddit feed migration.
+
+## Settings GUI residue
+
+- `ui/tabs/presets_tab.py` is the disconnected legacy top-level Settings **Presets** tab. Current
+  `SettingsDialog` has no Presets tab/import/constructor path. Delete it after final caller proof, together
+  with stale comments such as the lazy Presets-tab signal-wiring note in `ui/settings_dialog.py`.
+- This is **not** the active visualizer preset system. Preserve the live visualizer preset UI, transfer/
+  import/export paths, preset data and runtime behavior.
 
 ## Phase-F family retirement
 
