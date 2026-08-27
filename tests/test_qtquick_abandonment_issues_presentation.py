@@ -4,7 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QTimer, QUrl, Qt
 from PySide6.QtGui import QImage
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem
@@ -14,7 +14,17 @@ from rendering.quick.widgets.abandonment_issues import (
     AbandonmentIssuesPresentationConfig,
     AbandonmentIssuesPresentationModel,
     AbandonmentIssuesPresentationStyle,
+    RetainedAbandonmentIssuesPresentation,
 )
+from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
+from rendering.quick.state import QuickWindowPolicy
+from rendering.quick.widgets.host import OverlayWidgetGeometry
+from rendering.quick.widgets.registry import (
+    ORDINARY_WIDGET_FAMILY_COMPONENTS,
+    ordinary_widget_family_component,
+)
+from rendering.quick.window import QuickDisplayWindow
+from rendering.widget_runtime_manager import WidgetRuntimeManager
 from widgets.steam_abandonment_preparation import AbandonmentPreparedPresentation
 from widgets.steam_card_models import build_mock_steam_view_model
 
@@ -122,6 +132,41 @@ class _RuntimeService:
 
     def on_presentation_fade_complete(self) -> None:
         self.fade_complete_calls += 1
+
+
+class _QueuedRuntimeManager:
+    def __init__(self) -> None:
+        self.tasks = []
+        self.timers = []
+
+    def submit_io_task(
+        self,
+        callback_fn,
+        *args,
+        task_id=None,
+        callback=None,
+        category=None,
+        **kwargs,
+    ) -> None:
+        self.tasks.append(
+            {
+                "callback_fn": callback_fn,
+                "args": args,
+                "kwargs": kwargs,
+                "task_id": task_id,
+                "callback": callback,
+                "category": category,
+            }
+        )
+
+    def schedule_recurring(self, interval_ms, callback, *, description=None):
+        del description
+        timer = QTimer()
+        timer.setInterval(int(interval_ms))
+        timer.timeout.connect(callback)
+        timer.start()
+        self.timers.append(timer)
+        return timer
 
 
 def _find_visual_item(root: QQuickItem, object_name: str) -> QQuickItem | None:
@@ -469,3 +514,160 @@ def test_qml_content_transition_commits_pending_runtime_state(qt_app, tmp_path) 
         item.deleteLater()
         component.deleteLater()
         engine.deleteLater()
+
+
+def test_static_registry_and_qml_surface_are_provider_inert() -> None:
+    qml = (QML_ROOT / "AbandonmentIssuesPresentation.qml").read_text(
+        encoding="utf-8"
+    )
+    for marker in (
+        "SettingsManager",
+        "SteamBackend",
+        "QDesktopServices",
+        "QWidget",
+        "QPainter",
+        "http://",
+        "https://",
+    ):
+        assert marker not in qml
+    assert "onDoubleTapped: abandonmentRoot.refreshRequested()" in qml
+    assert "abandonmentRoot.settingsRequested(" in qml
+    assert "abandonmentLedgerShelf_" in qml
+    assert "AchievementCapsule" not in qml
+    descriptor = ordinary_widget_family_component("abandonment_issues")
+    assert descriptor.qml_filename == "AbandonmentIssuesPresentation.qml"
+    assert (
+        descriptor.presentation_model_kind
+        == "AbandonmentIssuesPresentationModel"
+    )
+    assert descriptor in ORDINARY_WIDGET_FAMILY_COMPONENTS
+    qmldir = (QML_ROOT / "qmldir").read_text(encoding="utf-8")
+    assert (
+        "AbandonmentIssuesPresentation 1.0 AbandonmentIssuesPresentation.qml"
+        in qmldir
+    )
+
+
+@pytest.mark.qt
+def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
+    qt_app,
+    tmp_path,
+) -> None:
+    class _Host:
+        @staticmethod
+        def get_runtime_widget_registry():
+            return {}
+
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=82,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime_owner = WidgetRuntimeManager(_Host())
+    manager = _QueuedRuntimeManager()
+    config = _config()
+    model = AbandonmentIssuesPresentationModel(
+        config,
+        AbandonmentIssuesPresentationStyle.project(config, _shadow_values()),
+        parent=window,
+    )
+    service = runtime_owner.ensure_widget_service(
+        "abandonment_issues",
+        model,
+        {
+            "steam": {"refresh_minutes": 10},
+            "abandonment_issues": {"enabled": True},
+        },
+    )
+    assert service is not None
+    assert model._runtime_service is service
+    assert service.is_running() is False
+    assert (
+        runtime_owner.get_reusable_widget_service(
+            "abandonment_issues",
+            model,
+        )
+        is service
+    )
+
+    settings_requests = []
+    retained = None
+    try:
+        retained = RetainedAbandonmentIssuesPresentation(
+            host=controller.ordinary_widget_host,
+            model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 600.0, 331.0),
+            on_settings_requested=lambda target: settings_requests.append(target)
+            or True,
+        )
+        item = retained.item
+        engine = QQmlEngine.contextForObject(item).engine()
+        field_model = model.field_model
+        assert item.property("fadeOpacity") == pytest.approx(0.0)
+
+        assert retained.activate(manager) is True
+        qt_app.processEvents()
+        assert service.runtime_generation == 82
+        assert service.is_running() is True
+        assert [task["category"] for task in manager.tasks] == [
+            "steam_abandonment_cache_load"
+        ]
+
+        service._deliver_presentation(
+            _presentation(tmp_path / "owner.png"),
+            animate=False,
+        )
+        qt_app.processEvents()
+        first_field = _find_visual_item(
+            item,
+            "abandonmentLedgerShelf_playtime",
+        )
+        assert first_field is not None
+
+        retained.apply_input_state(
+            {
+                "admission_open": True,
+                "exiting": False,
+                "interaction_mode_enabled": True,
+                "ctrl_held": False,
+            }
+        )
+        item.settingsRequested.emit("steam_connection")
+        item.refreshRequested.emit()
+        assert settings_requests == ["steam_connection"]
+        assert [task["category"] for task in manager.tasks] == [
+            "steam_abandonment_cache_load",
+            "steam_abandonment_refresh",
+        ]
+
+        # The queued cache task deliberately remains unexecuted in this owner
+        # test; admit the same metadata/due-time state that its commit supplies
+        # so fade completion can prove the single runtime-owned rotation timer.
+        service._activation_has_metadata = True
+        service._activation_rotation_due_seconds = 60.0
+        service._request_consumer_fade()
+        qt_app.processEvents()
+        assert item.property("fadeOpacity") == pytest.approx(1.0)
+        assert service.rotation_timer is not None
+        assert retained.item is item
+        assert retained.model is model
+        assert model.field_model is field_model
+        assert QQmlEngine.contextForObject(item).engine() is engine
+        assert (
+            _find_visual_item(item, "abandonmentLedgerShelf_playtime")
+            is first_field
+        )
+    finally:
+        controller.quiesce_for_retirement()
+        runtime_owner.cleanup()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+    assert retained is not None
+    assert service.is_retired() is True

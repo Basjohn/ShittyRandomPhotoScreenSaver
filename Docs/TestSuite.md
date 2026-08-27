@@ -169,7 +169,10 @@ and Abandonment config projection, stable shared Steam field-row/image/style pri
 identity/desaturation state, runtime attach/retire behavior, capability-gated refresh/rotation, and transition-
 deferred state/action commitment without admitting provider or cadence work into retained presentation. Its
 QML extension protects the archival header/tab/artwork shelf/age stamp/two-column ledger, no-art/connect variants,
-bounded text fit and retained delegate identity across accepted updates.
+bounded text fit and retained delegate identity across accepted updates. Its owner integration uses the real
+ordinary host plus `WidgetRuntimeManager` to prove static registry/qmldir admission, one injected/reused neutral
+service, cache-load/manual-refresh action routing, one runtime-owned rotation timer and stable item/model/list/
+engine/delegate identity through accepted presentation and fade completion.
 
 At the reviewed checkpoint the repository contains:
 
