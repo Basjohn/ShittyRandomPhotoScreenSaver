@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-39fcf12d78279f45d0d89fbd0d2c8357f208d30d
-G2 retained family/Visualizer session integration is on main and validated for closure
+7ef1c463458f5813381afee4536dc6a21483448c
+G3 Save/Cancel and enabled/duplicate persistence is validated in the current checkpoint
 ```
 
 Current phase state:
@@ -38,20 +38,20 @@ Source outranks this plan if a later checkpoint has landed.
 
 ---
 
-## Immediate work — G2 retained edit overlay and X semantics
+## Immediate work — G4 retained resize semantics
 
 ```text
-one retained Quick edit overlay per display                           ACTIVE
+Quick handles -> Python session geometry/payload authority            ACTIVE
 ```
 
-### G3 — Save/Cancel and exact enabled/duplicate persistence (ACTIVE)
+### G4 — resize semantics (ACTIVE)
 
-- derive duplicate status from current active survivors so X can remove duplicates and then ordinary-disable the final singleton;
-- commit working ordinary enabled state together with geometry/monitor/duplicate removals, never family/capability activation;
-- keep provider/account/source settings untouched and preserve inactive geometry variants;
-- make Cancel restore geometry, display, duplicate set and ordinary enabled state on the same retained items;
-- prove Enter/context Save and Escape/Cancel against single- and multi-display working sessions;
-- keep the old edit/grid presentation only until retained Save/Cancel proof is GREEN.
+- add retained Quick resize handles that emit semantic deltas into Python-owned session geometry;
+- reuse the canonical minimum-size, anchor, aspect and wheel-resize rules already proven by each family;
+- update only the active geometry variant and its family-specific size payload; preserve inactive variants exactly;
+- keep Visualizer uniform scale separate from viewport extent and never anisotropically stretch finished pixels;
+- preserve the same retained item/model/render identity through resize, Cancel and Save without runtime recreation;
+- prove wheel/corner resize, minimums, active-variant persistence and retained identity with focused Quick/runtime tests.
 
 Use `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`; exact current source outranks stale owner names.
 

@@ -86,6 +86,36 @@ def test_remove_action_marks_duplicate_removed_but_disables_ordinary_singleton()
     assert singleton.current_enabled is False
 
 
+def test_duplicate_state_recomputes_so_final_survivor_x_is_ordinary_off():
+    session = CustomLayoutSession()
+    first = _item(
+        CustomLayoutKey("clock", "display:a", "digital"),
+        QRect(40, 50, 320, 140),
+    )
+    second = _item(
+        CustomLayoutKey("clock", "display:b", "digital"),
+        QRect(900, 70, 300, 130),
+    )
+    session.add_item(first)
+    session.add_item(second)
+    session.refresh_duplicate_state()
+
+    assert first.is_duplicate is True
+    assert second.is_duplicate is True
+    first.apply_remove_action()
+    session.refresh_duplicate_state()
+
+    assert first.removed is True
+    assert first.is_duplicate is False
+    assert second.removed is False
+    assert second.is_duplicate is False
+
+    second.apply_remove_action()
+    session.refresh_duplicate_state()
+    assert second.removed is False
+    assert second.current_enabled is False
+
+
 def test_cancel_restores_geometry_payload_display_enabled_and_removed_working_state():
     session = CustomLayoutSession()
     key = CustomLayoutKey("weather", "display:a")
