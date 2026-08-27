@@ -63,6 +63,8 @@ class CustomLayoutSessionItem:
     resize_scale: float = 1.0
     removed: bool = False
     current_display_identity: str = ""
+    source_monitor_route: str = "ALL"
+    current_monitor_route: str = ""
 
     def __post_init__(self) -> None:
         self.model_identity = str(self.model_identity or self.source_key.widget_id)
@@ -78,6 +80,11 @@ class CustomLayoutSessionItem:
         self.current_display_identity = (
             str(self.current_display_identity or "").strip()
             or self.source_key.display_identity
+        )
+        self.source_monitor_route = str(self.source_monitor_route or "ALL")
+        self.current_monitor_route = (
+            str(self.current_monitor_route or "").strip()
+            or self.source_monitor_route
         )
 
     @property
@@ -102,11 +109,21 @@ class CustomLayoutSessionItem:
             self.resize_scale = float(resize_scale)
 
     def transfer_to_display(self, display_identity: str, global_rect: QRect) -> None:
+        self.set_current_display(display_identity)
+        self.current_global_rect = QRect(global_rect)
+
+    def set_current_display(
+        self,
+        display_identity: str,
+        *,
+        monitor_route: str | None = None,
+    ) -> None:
         target = str(display_identity or "").strip()
         if not target:
             raise ValueError("display_identity must not be empty")
         self.current_display_identity = target
-        self.current_global_rect = QRect(global_rect)
+        if monitor_route is not None:
+            self.current_monitor_route = str(monitor_route or "ALL")
 
     def apply_remove_action(self) -> None:
         """Apply edit-mode X without mutating family capability state."""
@@ -118,6 +135,7 @@ class CustomLayoutSessionItem:
 
     def restore_baseline(self) -> None:
         self.current_display_identity = self.source_key.display_identity
+        self.current_monitor_route = self.source_monitor_route
         self.current_global_rect = QRect(self.baseline_global_rect)
         self.current_size_payload = dict(self.baseline_size_payload)
         self.current_enabled = self.baseline_enabled

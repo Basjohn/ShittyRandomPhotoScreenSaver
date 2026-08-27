@@ -328,10 +328,10 @@ def test_custom_layout_manager_saves_and_reapplies_clock_geometry(qtbot):
     assert display._custom_layout_edit_active is True
 
     state = manager._shell_states["clock"]
-    updated_rect = QRect(state.current_global_rect.x() + 48, state.current_global_rect.y() + 36, 240, 120)
-    state.current_global_rect = QRect(updated_rect)
-    state.current_size_payload = {"font_size": 72}
-    state.resize_scale = 1.5
+    updated_rect = QRect(state.item.current_global_rect.x() + 48, state.item.current_global_rect.y() + 36, 240, 120)
+    state.item.current_global_rect = QRect(updated_rect)
+    state.item.current_size_payload = {"font_size": 72}
+    state.item.resize_scale = 1.5
     state.shell.set_shell_geometry(updated_rect)
 
     assert manager.save_session() is True
@@ -458,14 +458,14 @@ def test_custom_layout_manager_save_session_persists_untouched_widgets_as_author
     assert manager.start_session() is True
 
     clock_state = manager._shell_states["clock"]
-    updated_rect = QRect(clock_state.current_global_rect.x() + 36, clock_state.current_global_rect.y() + 24, 260, 140)
-    clock_state.current_global_rect = QRect(updated_rect)
-    clock_state.current_size_payload = {"font_size": 60}
-    clock_state.resize_scale = 1.25
+    updated_rect = QRect(clock_state.item.current_global_rect.x() + 36, clock_state.item.current_global_rect.y() + 24, 260, 140)
+    clock_state.item.current_global_rect = QRect(updated_rect)
+    clock_state.item.current_size_payload = {"font_size": 60}
+    clock_state.item.resize_scale = 1.25
     clock_state.shell.set_shell_geometry(updated_rect)
 
     gmail_state = manager._shell_states["gmail"]
-    untouched_rect = QRect(gmail_state.current_global_rect)
+    untouched_rect = QRect(gmail_state.item.current_global_rect)
 
     assert manager.save_session() is True
 
@@ -648,7 +648,7 @@ def test_custom_layout_corner_drag_resize_scales_from_top_center_anchor(qtbot):
     assert manager.start_session() is True
 
     state = manager._shell_states["clock"]
-    origin_rect = QRect(state.current_global_rect)
+    origin_rect = QRect(state.item.current_global_rect)
     origin_top = origin_rect.y()
     manager._on_shell_resize_drag_started(
         "clock",
@@ -663,19 +663,19 @@ def test_custom_layout_corner_drag_resize_scales_from_top_center_anchor(qtbot):
         QPoint(origin_rect.right() + 60, origin_rect.bottom() + 40),
     )
 
-    assert state.resize_scale > 1.0
-    assert state.current_size_payload["font_size"] > state.baseline_size_payload["font_size"]
-    assert state.current_global_rect.y() == origin_top
-    assert state.current_global_rect.width() > origin_rect.width()
-    assert state.current_global_rect.height() > origin_rect.height()
-    assert state.current_global_rect.x() >= screen.geometry().x()
-    assert state.current_global_rect.right() <= screen.geometry().right()
+    assert state.item.resize_scale > 1.0
+    assert state.item.current_size_payload["font_size"] > state.item.baseline_size_payload["font_size"]
+    assert state.item.current_global_rect.y() == origin_top
+    assert state.item.current_global_rect.width() > origin_rect.width()
+    assert state.item.current_global_rect.height() > origin_rect.height()
+    assert state.item.current_global_rect.x() >= screen.geometry().x()
+    assert state.item.current_global_rect.right() <= screen.geometry().right()
 
     manager._on_shell_resize_drag_finished(
         "clock",
         "bottom_right",
-        QRect(state.current_global_rect),
-        QPoint(state.current_global_rect.right(), state.current_global_rect.bottom()),
+        QRect(state.item.current_global_rect),
+        QPoint(state.item.current_global_rect.right(), state.item.current_global_rect.bottom()),
     )
     assert state.resize_corner is None
     assert state.resize_origin_rect is None
@@ -698,29 +698,29 @@ def test_custom_layout_resize_wheel_uses_absolute_half_scale_minimum_and_display
     assert manager.start_session() is True
 
     state = manager._shell_states["clock"]
-    origin_rect = QRect(state.current_global_rect)
+    origin_rect = QRect(state.item.current_global_rect)
     origin_top = origin_rect.y()
     origin_center_x = origin_rect.center().x()
 
     manager._on_shell_resize_wheel_requested("clock", -12000)
 
-    assert state.resize_scale == pytest.approx(0.5)
-    assert state.current_global_rect.y() == origin_top
-    assert abs(state.current_global_rect.center().x() - origin_center_x) <= 1
-    assert state.current_global_rect.width() == int(round(origin_rect.width() * 0.5))
-    assert state.current_global_rect.height() == int(round(origin_rect.height() * 0.5))
+    assert state.item.resize_scale == pytest.approx(0.5)
+    assert state.item.current_global_rect.y() == origin_top
+    assert abs(state.item.current_global_rect.center().x() - origin_center_x) <= 1
+    assert state.item.current_global_rect.width() == int(round(origin_rect.width() * 0.5))
+    assert state.item.current_global_rect.height() == int(round(origin_rect.height() * 0.5))
 
     manager._on_shell_resize_wheel_requested("clock", 120000)
 
-    assert state.resize_scale > 1.0
-    assert state.current_global_rect.y() == origin_top
-    assert state.current_global_rect.x() >= screen.geometry().x()
-    assert state.current_global_rect.x() + state.current_global_rect.width() <= screen.geometry().x() + screen.geometry().width()
+    assert state.item.resize_scale > 1.0
+    assert state.item.current_global_rect.y() == origin_top
+    assert state.item.current_global_rect.x() >= screen.geometry().x()
+    assert state.item.current_global_rect.x() + state.item.current_global_rect.width() <= screen.geometry().x() + screen.geometry().width()
     assert (
-        state.current_global_rect.x() == screen.geometry().x()
-        or state.current_global_rect.x() + state.current_global_rect.width() == screen.geometry().x() + screen.geometry().width()
+        state.item.current_global_rect.x() == screen.geometry().x()
+        or state.item.current_global_rect.x() + state.item.current_global_rect.width() == screen.geometry().x() + screen.geometry().width()
     )
-    assert state.current_global_rect.height() > origin_rect.height()
+    assert state.item.current_global_rect.height() > origin_rect.height()
 
 
 def test_custom_layout_resize_wheel_can_grow_by_pushing_back_inside_screen(qtbot):
@@ -741,17 +741,17 @@ def test_custom_layout_resize_wheel_can_grow_by_pushing_back_inside_screen(qtbot
 
     state = manager._shell_states["clock"]
     constrained_rect = QRect(0, 20, 180, 200)
-    state.baseline_global_rect = QRect(constrained_rect)
-    state.current_global_rect = QRect(constrained_rect)
+    state.item.baseline_global_rect = QRect(constrained_rect)
+    state.item.current_global_rect = QRect(constrained_rect)
     manager._set_shell_geometry_silently(state, constrained_rect)
 
     manager._on_shell_resize_wheel_requested("clock", 12000)
 
-    assert state.resize_scale > 1.0
-    assert state.current_global_rect.width() > constrained_rect.width()
-    assert state.current_global_rect.height() > constrained_rect.height()
-    assert state.current_global_rect.x() >= screen.geometry().x()
-    assert state.current_global_rect.right() <= screen.geometry().right()
+    assert state.item.resize_scale > 1.0
+    assert state.item.current_global_rect.width() > constrained_rect.width()
+    assert state.item.current_global_rect.height() > constrained_rect.height()
+    assert state.item.current_global_rect.x() >= screen.geometry().x()
+    assert state.item.current_global_rect.right() <= screen.geometry().right()
 
 
 def test_custom_layout_corner_drag_does_not_jump_when_press_starts_inside_resize_gutter(qtbot):
@@ -771,7 +771,7 @@ def test_custom_layout_corner_drag_does_not_jump_when_press_starts_inside_resize
     assert manager.start_session() is True
 
     state = manager._shell_states["clock"]
-    origin_rect = QRect(state.current_global_rect)
+    origin_rect = QRect(state.item.current_global_rect)
     press_cursor = QPoint(origin_rect.right() - 18, origin_rect.bottom() - 18)
 
     manager._on_shell_resize_drag_started(
@@ -787,8 +787,8 @@ def test_custom_layout_corner_drag_does_not_jump_when_press_starts_inside_resize
         QPoint(press_cursor),
     )
 
-    assert state.resize_scale == pytest.approx(1.0)
-    assert state.current_global_rect == origin_rect
+    assert state.item.resize_scale == pytest.approx(1.0)
+    assert state.item.current_global_rect == origin_rect
 
 
 def test_custom_layout_resize_preview_refresh_does_not_mutate_live_widget_geometry_or_state(qtbot):
@@ -880,21 +880,21 @@ def test_custom_layout_corner_resize_stays_on_current_screen(qtbot, monkeypatch)
 
     assert manager_a.start_session() is True
     state = manager_a._shell_states["clock"]
-    origin_signature = state.current_screen_signature
+    origin_signature = state.item.current_display_identity
     manager_a._on_shell_resize_drag_started(
         "clock",
         "top_right",
-        QRect(state.current_global_rect),
-        state.current_global_rect.topRight(),
+        QRect(state.item.current_global_rect),
+        state.item.current_global_rect.topRight(),
     )
     manager_a._on_shell_resize_drag_live_changed(
         "clock",
         "top_right",
-        QRect(state.current_global_rect),
-        QPoint(screen_b.geometry().x() + 10, state.current_global_rect.y() - 10),
+        QRect(state.item.current_global_rect),
+        QPoint(screen_b.geometry().x() + 10, state.item.current_global_rect.y() - 10),
     )
 
-    assert state.current_screen_signature == origin_signature
+    assert state.item.current_display_identity == origin_signature
 
 
 def test_custom_layout_manager_escape_cancels_active_session(qtbot):
@@ -1187,11 +1187,11 @@ def test_custom_layout_manager_media_shell_reset_visualizer_recovers_edit_rect_w
     assert hasattr(visualizer, "_custom_layout_local_rect")
 
     state = manager._shell_states["spotify_visualizer"]
-    assert state.removed is False
+    assert state.item.removed is False
     assert state.shell.isVisible() is True
-    local_rect = QRect(display.mapFromGlobal(state.current_global_rect.topLeft()), state.current_global_rect.size())
+    local_rect = QRect(display.mapFromGlobal(state.item.current_global_rect.topLeft()), state.item.current_global_rect.size())
     assert local_rect == QRect(160, 60, 320, 120)
-    assert state.current_size_payload == {"width": 320, "height": 120}
+    assert state.item.current_size_payload == {"width": 320, "height": 120}
 
     assert manager.save_session() is True
     widgets_map = settings_stub.get_widgets_map()
@@ -1254,7 +1254,7 @@ def test_custom_layout_manager_media_shell_reset_visualizer_creates_transparent_
     state = manager._shell_states["spotify_visualizer"]
     assert getattr(state.widget, "_custom_layout_recovery_placeholder", False) is True
     assert state.shell.isVisible() is True
-    local_rect = QRect(display.mapFromGlobal(state.current_global_rect.topLeft()), state.current_global_rect.size())
+    local_rect = QRect(display.mapFromGlobal(state.item.current_global_rect.topLeft()), state.item.current_global_rect.size())
     assert local_rect == QRect(200, 90, 400, 150)
 
     assert manager.save_session() is True
@@ -1321,10 +1321,10 @@ def test_custom_layout_manager_media_shell_reset_visualizer_uses_foreign_saved_a
     assert manager_b._reset_visualizer_from_media_shell() is True
 
     state = manager_b._shell_states["spotify_visualizer"]
-    local_rect = QRect(display_b.mapFromGlobal(state.current_global_rect.topLeft()), state.current_global_rect.size())
+    local_rect = QRect(display_b.mapFromGlobal(state.item.current_global_rect.topLeft()), state.item.current_global_rect.size())
     assert local_rect == QRect(190, 160, 420, 280)
-    assert state.current_size_payload == {"width": 420, "height": 280}
-    assert state.current_monitor_value == "2"
+    assert state.item.current_size_payload == {"width": 420, "height": 280}
+    assert state.item.current_monitor_route == "2"
 
 
 def test_custom_layout_manager_duplicate_all_shell_can_be_removed_to_single_display(qtbot, monkeypatch):
@@ -1371,7 +1371,7 @@ def test_custom_layout_manager_duplicate_all_shell_can_be_removed_to_single_disp
 
     manager_b._on_shell_remove_requested("clock")
 
-    assert state_b.removed is True
+    assert state_b.item.removed is True
     assert state_b.shell.isVisible() is False
     assert state_a.shell._remove_btn.isVisible() is False
     assert "shell_a" in restack_events
@@ -1481,7 +1481,7 @@ def test_custom_layout_manager_global_restack_keeps_cross_display_shells_in_shel
     state_a = manager_a._shell_states["clock"]
     state_b = manager_b._shell_states["clock"]
     state_a.current_screen = screen_b
-    state_a.current_screen_signature = get_screen_signature(screen_b)
+    state_a.item.current_display_identity = get_screen_signature(screen_b)
 
     calls: list[str] = []
     monkeypatch.setattr(state_a.shell, "raise_", lambda: calls.append("shell_a"), raising=False)
@@ -1522,7 +1522,7 @@ def test_custom_layout_manager_restore_shells_for_display_targets_only_current_d
     state_a = manager_a._shell_states["clock"]
     state_b = manager_b._shell_states["clock"]
     state_a.current_screen = screen_b
-    state_a.current_screen_signature = get_screen_signature(screen_b)
+    state_a.item.current_display_identity = get_screen_signature(screen_b)
 
     calls: list[str] = []
     monkeypatch.setattr(state_a.shell, "raise_", lambda: calls.append("shell_a"), raising=False)
@@ -1578,10 +1578,10 @@ def test_custom_layout_manager_reparents_shell_to_target_display(qtbot):
     state = manager._shell_states["clock"]
     assert state.shell.parentWidget() is display_a
 
-    target_rect = QRect(860, 90, state.current_global_rect.width(), state.current_global_rect.height())
+    target_rect = QRect(860, 90, state.item.current_global_rect.width(), state.item.current_global_rect.height())
     state.current_screen = screen_b
-    state.current_screen_signature = get_screen_signature(screen_b)
-    state.current_global_rect = QRect(target_rect)
+    state.item.current_display_identity = get_screen_signature(screen_b)
+    state.item.current_global_rect = QRect(target_rect)
     manager._get_display_instance_for_screen = lambda screen: display_b if screen is screen_b else display_a  # type: ignore[method-assign]
 
     manager._sync_shell_parent_to_state(state)
@@ -1625,7 +1625,7 @@ def test_custom_layout_manager_live_apply_reparents_shell_before_cross_display_d
 
     assert manager1.start_session() is True
     state = manager1._shell_states["clock2"]
-    target_rect = QRect(120, 90, state.current_global_rect.width(), state.current_global_rect.height())
+    target_rect = QRect(120, 90, state.item.current_global_rect.width(), state.item.current_global_rect.height())
     resolved = manager1._resolve_shell_geometry_for_widget_id(
         "clock2",
         target_rect,
@@ -1734,20 +1734,20 @@ def test_custom_layout_manager_reset_position_restores_source_rect_without_reset
     assert manager.start_session() is True
 
     state = manager._shell_states["clock"]
-    state.current_global_rect = QRect(
-        state.current_global_rect.x() + 120,
-        state.current_global_rect.y() + 80,
-        state.current_global_rect.width() + 40,
-        state.current_global_rect.height() + 20,
+    state.item.current_global_rect = QRect(
+        state.item.current_global_rect.x() + 120,
+        state.item.current_global_rect.y() + 80,
+        state.item.current_global_rect.width() + 40,
+        state.item.current_global_rect.height() + 20,
     )
-    state.resize_scale = 1.15
-    state.current_size_payload = {"font_size": 55}
+    state.item.resize_scale = 1.15
+    state.item.current_size_payload = {"font_size": 55}
 
     manager._on_shell_reset_position_requested("clock")
 
-    assert state.current_global_rect.topLeft() == state.baseline_global_rect.topLeft()
-    assert state.current_global_rect.size() != state.baseline_global_rect.size()
-    assert state.resize_scale == 1.15
+    assert state.item.current_global_rect.topLeft() == state.item.baseline_global_rect.topLeft()
+    assert state.item.current_global_rect.size() != state.item.baseline_global_rect.size()
+    assert state.item.resize_scale == 1.15
 
 
 def test_custom_layout_manager_reapply_skips_saved_rects_when_position_not_custom(qtbot):
@@ -1958,13 +1958,13 @@ def test_custom_layout_manager_live_drag_snaps_to_peer_guides(qtbot):
     clock_state = manager._shell_states["clock"]
     weather_state = manager._shell_states["weather"]
     proposal = QRect(
-        weather_state.current_global_rect.x() - clock_state.current_global_rect.width() - 6,
-        weather_state.current_global_rect.y() + 7,
-        clock_state.current_global_rect.width(),
-        clock_state.current_global_rect.height(),
+        weather_state.item.current_global_rect.x() - clock_state.item.current_global_rect.width() - 6,
+        weather_state.item.current_global_rect.y() + 7,
+        clock_state.item.current_global_rect.width(),
+        clock_state.item.current_global_rect.height(),
     )
     manager._on_shell_geometry_live_changed("clock", proposal)
-    resolved = manager._shell_states["clock"].current_global_rect
+    resolved = manager._shell_states["clock"].item.current_global_rect
 
     assert resolved == proposal
     assert manager._shell_states["clock"].shell.current_global_rect() == resolved
@@ -1993,10 +1993,10 @@ def test_custom_layout_manager_live_drag_guides_without_forcing_snap(qtbot):
     clock_state = manager._shell_states["clock"]
     weather_state = manager._shell_states["weather"]
     proposal = QRect(
-        weather_state.current_global_rect.x() - clock_state.current_global_rect.width() - 6,
-        weather_state.current_global_rect.y() + 7,
-        clock_state.current_global_rect.width(),
-        clock_state.current_global_rect.height(),
+        weather_state.item.current_global_rect.x() - clock_state.item.current_global_rect.width() - 6,
+        weather_state.item.current_global_rect.y() + 7,
+        clock_state.item.current_global_rect.width(),
+        clock_state.item.current_global_rect.height(),
     )
 
     resolved = manager._resolve_shell_geometry_for_widget_id(
@@ -2007,7 +2007,7 @@ def test_custom_layout_manager_live_drag_guides_without_forcing_snap(qtbot):
     )
 
     assert resolved == proposal
-    assert clock_state.shell.current_global_rect() == clock_state.current_global_rect
+    assert clock_state.shell.current_global_rect() == clock_state.item.current_global_rect
     assert clock_state.shell._active_vertical_guides
 
 
@@ -2027,8 +2027,8 @@ def test_custom_layout_display_center_guides_are_real_snap_candidates(qtbot):
     assert manager.start_session() is True
 
     clock_state = manager._shell_states["clock"]
-    width = clock_state.current_global_rect.width()
-    height = clock_state.current_global_rect.height()
+    width = clock_state.item.current_global_rect.width()
+    height = clock_state.item.current_global_rect.height()
     proposal = QRect(
         400 - width + 1,
         300 - height + 1,
@@ -2069,8 +2069,8 @@ def test_custom_layout_display_center_still_snaps_when_centered(qtbot):
     proposal = QRect(
         309,
         259,
-        clock_state.current_global_rect.width(),
-        clock_state.current_global_rect.height(),
+        clock_state.item.current_global_rect.width(),
+        clock_state.item.current_global_rect.height(),
     )
 
     committed = manager._resolve_shell_geometry_for_widget_id(
@@ -2105,8 +2105,8 @@ def test_custom_layout_overlay_does_not_draw_edge_grid_or_gutter_primary_guides(
     proposal = QRect(
         2,
         2,
-        clock_state.current_global_rect.width(),
-        clock_state.current_global_rect.height(),
+        clock_state.item.current_global_rect.width(),
+        clock_state.item.current_global_rect.height(),
     )
 
     live_resolved = manager._resolve_shell_geometry_for_widget_id(
@@ -2147,18 +2147,18 @@ def test_custom_layout_peer_center_guides_are_real_snap_candidates(qtbot):
     peer_center = int(
         round(
             (
-                float(weather_state.current_global_rect.x())
-                + float(weather_state.current_global_rect.x() + weather_state.current_global_rect.width())
+                float(weather_state.item.current_global_rect.x())
+                + float(weather_state.item.current_global_rect.x() + weather_state.item.current_global_rect.width())
             )
             / 2.0
         )
     )
-    target_x = peer_center - int(round(float(clock_state.current_global_rect.width()) / 2.0))
+    target_x = peer_center - int(round(float(clock_state.item.current_global_rect.width()) / 2.0))
     proposal = QRect(
         target_x,
-        weather_state.current_global_rect.y() + weather_state.current_global_rect.height() + 16,
-        clock_state.current_global_rect.width(),
-        clock_state.current_global_rect.height(),
+        weather_state.item.current_global_rect.y() + weather_state.item.current_global_rect.height() + 16,
+        clock_state.item.current_global_rect.width(),
+        clock_state.item.current_global_rect.height(),
     )
 
     live_resolved = manager._resolve_shell_geometry_for_widget_id(
@@ -2233,11 +2233,11 @@ def test_custom_layout_manager_cross_display_transfer_updates_monitor_and_reload
     assert manager1.start_session() is True
     state = manager1._shell_states["clock2"]
     assert state.descriptor.get_effective_position_settings_key() == "clock"
-    proposal = QRect(120, 80, state.current_global_rect.width(), state.current_global_rect.height())
+    proposal = QRect(120, 80, state.item.current_global_rect.width(), state.item.current_global_rect.height())
     manager1._on_shell_drag_finished("clock2", proposal, proposal.center())
 
     assert state.current_screen is screen0
-    assert state.current_screen_signature == get_screen_signature(screen0)
+    assert state.item.current_display_identity == get_screen_signature(screen0)
 
     assert manager1.save_session() is True
     widgets_map = settings_stub.get_widgets_map()
@@ -2296,10 +2296,10 @@ def test_custom_layout_manager_persists_and_replays_complete_two_display_graph(
     clock_state = manager_a._shell_states["clock"]
     weather_state = manager_b._shell_states["weather"]
     shell_refs = [weakref.ref(clock_state.shell), weakref.ref(weather_state.shell)]
-    clock_state.current_global_rect = QRect(70, 90, 240, 120)
-    clock_state.current_size_payload = {"font_size": 64}
-    weather_state.current_global_rect = QRect(880, 110, 300, 160)
-    weather_state.current_size_payload = {"font_size": 24}
+    clock_state.item.current_global_rect = QRect(70, 90, 240, 120)
+    clock_state.item.current_size_payload = {"font_size": 64}
+    weather_state.item.current_global_rect = QRect(880, 110, 300, 160)
+    weather_state.item.current_size_payload = {"font_size": 24}
 
     assert manager_a.save_session() is True
     del clock_state
@@ -2368,11 +2368,11 @@ def test_custom_layout_manager_blocks_all_widget_cross_display_transfer(qtbot, m
 
     assert manager.start_session() is True
     state = manager._shell_states["clock"]
-    source_signature = state.current_screen_signature
-    proposal = QRect(580, 90, state.current_global_rect.width(), state.current_global_rect.height())
+    source_signature = state.item.current_display_identity
+    proposal = QRect(580, 90, state.item.current_global_rect.width(), state.item.current_global_rect.height())
     manager._on_shell_drag_finished("clock", proposal, QPoint(760, 120))
 
-    assert state.current_screen_signature == source_signature
+    assert state.item.current_display_identity == source_signature
     assert state.shell._transfer_blocked is True
     assert state.shell._transfer_block_reason == "Locked to ALL displays"
 
@@ -2410,6 +2410,79 @@ def test_custom_layout_manager_starts_global_session_for_all_active_displays(qtb
     assert set(CustomLayoutManager.active_managers()) == {manager0, manager1}
     assert "clock" in manager0._shell_states
     assert "weather" in manager1._shell_states
+    assert manager0._session is manager1._session
+    assert manager0._session is not None
+    clock_item = manager0._shell_states["clock"].item
+    weather_item = manager1._shell_states["weather"].item
+    assert manager0._session.item(clock_item.source_key) is clock_item
+    assert manager0._session.item(weather_item.source_key) is weather_item
+
+
+def test_custom_layout_manager_cancel_restores_neutral_item_baseline(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "clock": {"enabled": True, "position": "Top Right", "monitor": "1"},
+    }
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display, font_size=48)
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+
+    assert manager.start_session() is True
+    state = manager._shell_states["clock"]
+    item = state.item
+    baseline_rect = QRect(item.baseline_global_rect)
+    item.set_geometry(
+        QRect(baseline_rect.x() + 60, baseline_rect.y() + 40, 260, 140),
+        size_payload={"font_size": 64},
+        resize_scale=1.4,
+    )
+    item.current_display_identity = "screen:other"
+    item.current_monitor_route = "2"
+    item.current_enabled = False
+    item.removed = True
+
+    assert manager.cancel_session() is True
+
+    assert item.current_global_rect == baseline_rect
+    assert item.current_size_payload == item.baseline_size_payload
+    assert item.current_display_identity == item.source_key.display_identity
+    assert item.current_monitor_route == item.source_monitor_route
+    assert item.current_enabled is True
+    assert item.resize_scale == 1.0
+    assert item.removed is False
+    assert manager._session is None
+
+
+def test_shell_state_keeps_only_presentation_and_pointer_transients(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display)
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+
+    assert manager.start_session() is True
+    state = manager._shell_states["clock"]
+
+    assert "item" in state.__dataclass_fields__
+    assert {
+        "baseline_global_rect",
+        "current_global_rect",
+        "baseline_size_payload",
+        "current_size_payload",
+        "resize_scale",
+        "removed",
+        "source_screen_signature",
+        "current_screen_signature",
+        "source_monitor_value",
+        "current_monitor_value",
+    }.isdisjoint(state.__dataclass_fields__)
 
 
 def test_custom_layout_manager_transfer_targets_only_active_displays(qtbot, monkeypatch):
@@ -2446,7 +2519,7 @@ def test_custom_layout_manager_transfer_targets_only_active_displays(qtbot, monk
     assert manager1.start_session() is True
     state = manager1._shell_states["clock2"]
 
-    proposal = QRect(1700, 120, state.current_global_rect.width(), state.current_global_rect.height())
+    proposal = QRect(1700, 120, state.item.current_global_rect.width(), state.item.current_global_rect.height())
     manager1._on_shell_drag_finished("clock2", proposal, QPoint(1750, 140))
 
     assert state.current_screen is screen1
@@ -2473,12 +2546,12 @@ def test_custom_layout_manager_same_display_near_edge_does_not_transfer(qtbot, m
 
     assert manager.start_session() is True
     state = manager._shell_states["clock2"]
-    source_signature = state.current_screen_signature
+    source_signature = state.item.current_display_identity
 
-    proposal = QRect(790, 100, state.current_global_rect.width(), state.current_global_rect.height())
+    proposal = QRect(790, 100, state.item.current_global_rect.width(), state.item.current_global_rect.height())
     manager._on_shell_drag_finished("clock2", proposal, QPoint(795, 120))
 
-    assert state.current_screen_signature == source_signature
+    assert state.item.current_display_identity == source_signature
     assert state.shell._transfer_blocked is False
 
     assert manager.save_session() is True
@@ -2502,9 +2575,9 @@ def test_custom_layout_manager_saves_and_reapplies_reddit_font_resize(qtbot):
     assert manager.start_session() is True
 
     state = manager._shell_states["reddit"]
-    state.current_size_payload = {"font_size": 24}
-    state.resize_scale = 1.3
-    state.current_global_rect = QRect(state.current_global_rect.x(), state.current_global_rect.y(), 360, 220)
+    state.item.current_size_payload = {"font_size": 24}
+    state.item.resize_scale = 1.3
+    state.item.current_global_rect = QRect(state.item.current_global_rect.x(), state.item.current_global_rect.y(), 360, 220)
 
     assert manager.save_session() is True
     payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["reddit"]["default"]
@@ -2529,9 +2602,9 @@ def test_custom_layout_manager_saves_and_reapplies_gmail_font_resize(qtbot):
     assert manager.start_session() is True
 
     state = manager._shell_states["gmail"]
-    state.current_size_payload = {"font_size": 18}
-    state.resize_scale = 1.4
-    state.current_global_rect = QRect(state.current_global_rect.x(), state.current_global_rect.y(), 680, 260)
+    state.item.current_size_payload = {"font_size": 18}
+    state.item.resize_scale = 1.4
+    state.item.current_global_rect = QRect(state.item.current_global_rect.x(), state.item.current_global_rect.y(), 680, 260)
 
     assert manager.save_session() is True
     payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["gmail"]["default"]
@@ -2616,7 +2689,7 @@ def test_custom_layout_manager_marks_runtime_reload_pending_during_save(qtbot):
     assert manager.start_session() is True
 
     state = manager._shell_states["reddit"]
-    state.current_size_payload = {"font_size": 20}
+    state.item.current_size_payload = {"font_size": 20}
 
     assert manager.save_session() is True
     assert settings_stub.flags_seen == [True]
@@ -2768,14 +2841,14 @@ def test_custom_layout_manager_saves_visualizer_rect_under_visualizer_custom_slo
 
     state = manager._shell_states["spotify_visualizer"]
     updated_rect = QRect(
-        state.current_global_rect.x() + 22,
-        state.current_global_rect.y() + 18,
+        state.item.current_global_rect.x() + 22,
+        state.item.current_global_rect.y() + 18,
         420,
         210,
     )
-    state.current_global_rect = QRect(updated_rect)
-    state.resize_scale = 1.25
-    state.current_size_payload = {"width": 420, "height": 210}
+    state.item.current_global_rect = QRect(updated_rect)
+    state.item.resize_scale = 1.25
+    state.item.current_size_payload = {"width": 420, "height": 210}
     state.shell.set_shell_geometry(updated_rect)
 
     assert manager.save_session() is True
@@ -3518,8 +3591,8 @@ def test_custom_layout_manager_visualizer_shell_uses_maximum_envelope(qtbot):
     assert manager.start_session() is True
 
     state = manager._shell_states["spotify_visualizer"]
-    assert state.baseline_global_rect.width() == 320
-    assert state.baseline_global_rect.height() == 240
+    assert state.item.baseline_global_rect.width() == 320
+    assert state.item.baseline_global_rect.height() == 240
     assert state.shell._snapshot.size() == QSize(320, 240)
 
 
@@ -3547,10 +3620,10 @@ def test_custom_layout_manager_visualizer_shell_qol_preview_only_grows_height(qt
     assert manager.start_session() is True
 
     state = manager._shell_states["spotify_visualizer"]
-    assert display.mapFromGlobal(state.baseline_global_rect.topLeft()) == QPoint(70, 360)
-    assert display.mapFromGlobal(state.current_global_rect.topLeft()) == QPoint(70, 360)
-    assert state.baseline_global_rect.size() == QSize(300, 240)
-    assert state.current_global_rect.size() == QSize(300, 240)
+    assert display.mapFromGlobal(state.item.baseline_global_rect.topLeft()) == QPoint(70, 360)
+    assert display.mapFromGlobal(state.item.current_global_rect.topLeft()) == QPoint(70, 360)
+    assert state.item.baseline_global_rect.size() == QSize(300, 240)
+    assert state.item.current_global_rect.size() == QSize(300, 240)
     assert state.shell._snapshot.size() == QSize(300, 240)
 
 
@@ -3583,11 +3656,11 @@ def test_custom_layout_manager_visualizer_shell_prefers_committed_custom_rect_ov
     assert manager.start_session() is True
 
     state = manager._shell_states["spotify_visualizer"]
-    assert display.mapFromGlobal(state.baseline_global_rect.topLeft()) == QPoint(12, 252)
-    assert display.mapFromGlobal(state.current_global_rect.topLeft()) == QPoint(12, 252)
-    assert state.baseline_global_rect.size() == QSize(521, 347)
-    assert state.current_global_rect.size() == QSize(521, 347)
-    assert state.baseline_size_payload == {"width": 521, "height": 347}
+    assert display.mapFromGlobal(state.item.baseline_global_rect.topLeft()) == QPoint(12, 252)
+    assert display.mapFromGlobal(state.item.current_global_rect.topLeft()) == QPoint(12, 252)
+    assert state.item.baseline_global_rect.size() == QSize(521, 347)
+    assert state.item.current_global_rect.size() == QSize(521, 347)
+    assert state.item.baseline_size_payload == {"width": 521, "height": 347}
     assert state.shell._snapshot.size() == QSize(521, 347)
 
 
@@ -3608,8 +3681,8 @@ def test_custom_layout_manager_saves_visualizer_absolute_rect_payload(qtbot):
     assert manager.start_session() is True
 
     state = manager._shell_states["spotify_visualizer"]
-    state.current_size_payload = {"width": 448, "height": 224}
-    state.resize_scale = 1.2
+    state.item.current_size_payload = {"width": 448, "height": 224}
+    state.item.resize_scale = 1.2
 
     assert manager.save_session() is True
     payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["spotify_visualizer"]["default"]
@@ -3642,14 +3715,14 @@ def test_custom_layout_manager_visualizer_uniform_resize_uses_committed_rect_bas
     assert manager.start_session() is True
 
     state = manager._shell_states["spotify_visualizer"]
-    assert state.baseline_size_payload == {"width": 372, "height": 276}
+    assert state.item.baseline_size_payload == {"width": 372, "height": 276}
 
     scaled = manager._scaled_rect_from_top_center(
         state,
-        anchor_x=state.current_global_rect.center().x(),
-        top_y=state.current_global_rect.top(),
+        anchor_x=state.item.current_global_rect.center().x(),
+        top_y=state.item.current_global_rect.top(),
         next_scale=1.1024,
-        fallback_rect=state.current_global_rect,
+        fallback_rect=state.item.current_global_rect,
     )
 
     assert scaled.size() == QSize(410, 304)
@@ -3697,7 +3770,7 @@ def test_custom_layout_manager_visualizer_legacy_scale_payload_rebaselines_to_co
 
     assert manager.start_session() is True
     state = manager._shell_states["spotify_visualizer"]
-    assert state.baseline_size_payload == {"width": 536, "height": 276}
+    assert state.item.baseline_size_payload == {"width": 536, "height": 276}
 
 
 def test_custom_layout_manager_promotes_visualizer_from_follow_media_to_visualizer_custom_slot(qtbot):
@@ -3720,12 +3793,12 @@ def test_custom_layout_manager_promotes_visualizer_from_follow_media_to_visualiz
     assert manager.start_session() is True
 
     state = manager._shell_states["spotify_visualizer"]
-    state.current_monitor_value = "1"
-    state.current_global_rect = QRect(
-        state.current_global_rect.x() + 18,
-        state.current_global_rect.y() + 14,
-        state.current_global_rect.width(),
-        state.current_global_rect.height(),
+    state.item.current_monitor_route = "1"
+    state.item.current_global_rect = QRect(
+        state.item.current_global_rect.x() + 18,
+        state.item.current_global_rect.y() + 14,
+        state.item.current_global_rect.width(),
+        state.item.current_global_rect.height(),
     )
 
     assert manager.save_session() is True
@@ -3768,11 +3841,11 @@ def test_custom_layout_manager_repairs_visualizer_monitor_from_rect_owner_on_sav
 
     assert manager_a.start_session() is True
     state = manager_a._shell_states["spotify_visualizer"]
-    assert state.current_monitor_value == "1"
+    assert state.item.current_monitor_route == "1"
     assert state.current_screen is screen_a
-    state.current_monitor_value = "2"
+    state.item.current_monitor_route = "2"
     state.current_screen = screen_b
-    state.current_screen_signature = get_screen_signature(screen_b)
+    state.item.current_display_identity = get_screen_signature(screen_b)
 
     assert manager_a.save_session() is True
     widgets_map = settings_stub.get_widgets_map()
@@ -3818,8 +3891,8 @@ def test_custom_layout_manager_initializes_visualizer_current_route_from_shell_d
     assert manager_b.start_session() is True
     state = manager_b._shell_states["spotify_visualizer"]
 
-    assert state.source_monitor_value == "1"
-    assert state.current_monitor_value == "2"
+    assert state.item.source_monitor_route == "1"
+    assert state.item.current_monitor_route == "2"
     assert state.current_screen is screen_b
 
     assert manager_b.save_session() is True
@@ -3847,8 +3920,8 @@ def test_custom_layout_manager_promotes_visualizer_from_all_follow_media_to_numb
     assert manager.start_session() is True
 
     state = manager._shell_states["spotify_visualizer"]
-    assert state.source_monitor_value == "ALL"
-    assert state.current_monitor_value == "1"
+    assert state.item.source_monitor_route == "ALL"
+    assert state.item.current_monitor_route == "1"
 
     assert manager.save_session() is True
     widgets_map = settings_stub.get_widgets_map()
@@ -3977,13 +4050,13 @@ def test_custom_layout_manager_live_drag_uses_softer_snap_threshold(qtbot):
     clock_state = manager._shell_states["clock"]
     weather_state = manager._shell_states["weather"]
     proposal = QRect(
-        weather_state.current_global_rect.x() - clock_state.current_global_rect.width() - 30,
-        weather_state.current_global_rect.y() + 30,
-        clock_state.current_global_rect.width(),
-        clock_state.current_global_rect.height(),
+        weather_state.item.current_global_rect.x() - clock_state.item.current_global_rect.width() - 30,
+        weather_state.item.current_global_rect.y() + 30,
+        clock_state.item.current_global_rect.width(),
+        clock_state.item.current_global_rect.height(),
     )
     manager._on_shell_geometry_live_changed("clock", proposal)
-    not_snapped = manager._shell_states["clock"].current_global_rect
+    not_snapped = manager._shell_states["clock"].item.current_global_rect
 
     assert not_snapped == proposal
     assert clock.isVisible() is False
