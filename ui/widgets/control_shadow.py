@@ -87,6 +87,7 @@ NAV_TAB_SHADOW = _theme_shadow_config("navigation.tab")
 BUCKET_CLOSED_SHADOW = _theme_shadow_config("bucket.closed")
 BUCKET_OPEN_SHADOW = _theme_shadow_config("bucket.open")
 SECTION_TEXT_SHADOW = _theme_shadow_config("text.section")
+NAV_ICON_SHADOW = SECTION_TEXT_SHADOW
 PAGE_TEXT_SHADOW = _theme_shadow_config("text.page")
 TITLE_TEXT_SHADOW = _theme_shadow_config("text.title")
 SHELL_PANEL_SHADOW = _theme_shadow_config("shell.panel")
@@ -644,6 +645,16 @@ def _style_one_widget(
     if _is_shadow_internal(widget):
         return
 
+    if widget.property("settingsNavIcon"):
+        # Widget construction owns icon geometry. This module owns only the
+        # semantic shadow attachment/rendering.
+        attach_control_shadow(
+            widget,
+            NAV_ICON_SHADOW,
+            replace_existing=True,
+        )
+        return
+
     if isinstance(widget, target_types):
         if isinstance(widget, QLineEdit) and isinstance(widget.parent(), QAbstractSpinBox):
             pass
@@ -669,9 +680,8 @@ def _style_one_widget(
             # translucent and that treatment produces a hollow alpha-following
             # shadow. Keep only the proven outside-only body cast here.
             #
-            # TabButton owns its icon/text layout. Its dedicated text QLabel is
-            # discovered below and gets the existing crisp sibling text shadow;
-            # the icon itself owns a small alpha-following Qt effect.
+            # TabButton owns icon/text layout only. Its child text and icon are
+            # discovered by this centralized pass and receive their shadows here.
             if widget.graphicsEffect() is not None:
                 widget.setGraphicsEffect(None)
             attach_cast_shadow(
@@ -859,6 +869,7 @@ __all__ = [
     "BUCKET_CLOSED_SHADOW",
     "BUCKET_OPEN_SHADOW",
     "SECTION_TEXT_SHADOW",
+    "NAV_ICON_SHADOW",
     "PAGE_TEXT_SHADOW",
     "TITLE_TEXT_SHADOW",
     "SHELL_PANEL_SHADOW",
