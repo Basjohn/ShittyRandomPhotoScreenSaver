@@ -144,6 +144,23 @@ def test_host_creates_updates_and_retires_synthetic_item_without_new_engine_or_w
     widget.apply_custom_layout_size_payload({"font_size": 72})
     assert projected_payloads == [{"font_size": 72}]
 
+    input_states: list[object] = []
+    initial_input_state = {"ctrl_held": False}
+
+    def _project_input_state(state: object) -> bool:
+        input_states.append(state)
+        return True
+
+    assert host.apply_input_state(initial_input_state) is False
+    host.set_widget_input_state_handler(
+        widget,
+        _project_input_state,
+    )
+    assert input_states == [initial_input_state]
+    next_input_state = {"ctrl_held": True}
+    assert host.apply_input_state(next_input_state) is True
+    assert input_states == [initial_input_state, next_input_state]
+
     # Retire without retaining the display generation: the item detaches, the
     # host reports no live widgets, and the retained wrapper fails closed.
     assert host.retire_widget(widget) is True
@@ -151,6 +168,7 @@ def test_host_creates_updates_and_retires_synthetic_item_without_new_engine_or_w
     assert widget.is_retired is True
     with pytest.raises(RuntimeError):
         _ = widget.item
+    assert host.apply_input_state({"ctrl_held": False}) is False
 
     factory.deleteLater()
     owner.deleteLater()

@@ -9,8 +9,11 @@ from PySide6.QtGui import QKeyEvent
 
 from rendering.input_handler import InputHandler
 from rendering.quick.input_controller import QuickInputController
+from rendering.quick.runtime import QuickDisplayRuntime
+from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.window import QuickDisplayWindow
+from rendering.quick.widgets.host import OverlayWidgetGeometry
 from rendering.runtime_input import RuntimeInputOwner
 
 
@@ -56,6 +59,10 @@ def test_legacy_and_quick_input_share_one_neutral_policy_owner():
     assert "RuntimeInputOwner" in quick_source
     assert "bind_input_controller" in window_source
     compact_runtime_source = "".join(runtime_source.split())
+    assert (
+        "self._input.input_state_changed.connect(self._scene.apply_input_state)"
+        in compact_runtime_source
+    )
     for event_method in (
         "keyPressEvent",
         "keyReleaseEvent",
@@ -102,6 +109,81 @@ def test_legacy_and_quick_input_share_one_neutral_policy_owner():
     ):
         assert forbidden not in quick_source
         assert forbidden not in window_source
+
+
+def test_every_retained_double_click_owner_declares_fallback_admission() -> None:
+    qml_root = ROOT / "rendering" / "quick" / "qml"
+    expected = {
+        "AbandonmentIssuesPresentation.qml": (
+            "semanticDoubleClickEnabled: abandonmentModel.interactionEnabled",
+            "enabled: abandonmentRoot.abandonmentModel.interactionEnabled",
+        ),
+        "AchievementPulsePresentation.qml": (
+            "semanticDoubleClickEnabled: achievementModel.interactionEnabled",
+            "enabled: achievementRoot.achievementModel.interactionEnabled",
+        ),
+        "ClockPresentation.qml": ("semanticDoubleClickEnabled: true",),
+        "GmailPresentation.qml": (
+            "semanticDoubleClickEnabled: gmailModel.interactionEnabled",
+            "enabled: gmailRoot.gmailModel.interactionEnabled",
+        ),
+        "MediaPresentation.qml": ("semanticDoubleClickEnabled: true",),
+        "WeatherPresentation.qml": (
+            'semanticDoubleClickEnabled: weatherModel.viewState !== "missing"',
+            'enabled: weatherRoot.weatherModel.viewState !== "missing"',
+        ),
+    }
+    actual = {
+        path.name
+        for path in qml_root.glob("*.qml")
+        if "onDoubleTapped" in path.read_text(encoding="utf-8")
+    }
+    assert actual == set(expected)
+    for filename, markers in expected.items():
+        source = (qml_root / filename).read_text(encoding="utf-8")
+        assert all(marker in source for marker in markers)
+    assert "property bool semanticDoubleClickEnabled: false" in (
+        qml_root / "OverlayWidget.qml"
+    ).read_text(encoding="utf-8")
+
+
+def test_runtime_input_state_reaches_retained_presenters_without_recreation(
+    qt_app,
+) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    factory = QuickSceneFactory()
+    runtime = QuickDisplayRuntime(
+        screen_index=0,
+        runtime_generation=37,
+        screen=screen,
+        scene_factory=factory,
+        window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    try:
+        host = runtime.scene_controller.ordinary_widget_host
+        widget = host.create_widget(
+            geometry=OverlayWidgetGeometry(5.0, 6.0, 120.0, 70.0),
+        )
+        item = widget.item
+        received = []
+        host.set_widget_input_state_handler(widget, received.append)
+
+        assert len(received) == 1
+        assert received[-1].screen_index == 0
+        assert received[-1].runtime_generation == 37
+        assert received[-1].ctrl_held is False
+
+        runtime.input_controller.set_ctrl_held(True)
+
+        assert widget.item is item
+        assert received[-1].screen_index == 0
+        assert received[-1].runtime_generation == 37
+        assert received[-1].ctrl_held is True
+    finally:
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
 
 
 def test_quick_window_forwards_hotkeys_to_generation_zero_owner(qt_app):

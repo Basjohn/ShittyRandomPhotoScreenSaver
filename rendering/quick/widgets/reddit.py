@@ -766,6 +766,7 @@ class RetainedRedditPresentation:
         self._retained.set_custom_layout_size_payload_handler(
             self._apply_custom_layout_size_payload
         )
+        host.set_widget_input_state_handler(self._retained, self.apply_input_state)
         open_signal = getattr(self._retained.item, "openPostRequested", None)
         if open_signal is not None and hasattr(open_signal, "connect"):
             open_signal.connect(self._handle_open_requested)

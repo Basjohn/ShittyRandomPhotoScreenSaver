@@ -665,6 +665,7 @@ class RetainedAbandonmentIssuesPresentation:
             card_style=model.style.card_style,
         )
         self._retained.add_retirement_callback(model.retire)
+        host.set_widget_input_state_handler(self._retained, self.apply_input_state)
         self._connect("refreshRequested", model.request_manual_refresh)
         self._connect("settingsRequested", self._handle_settings_requested)
         model.fadeRequested.connect(self._handle_fade_requested)

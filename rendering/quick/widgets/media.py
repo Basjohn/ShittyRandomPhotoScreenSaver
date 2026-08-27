@@ -1051,6 +1051,7 @@ class RetainedMediaPresentation:
         self._retained.set_custom_layout_size_payload_handler(
             self._apply_custom_layout_size_payload
         )
+        host.set_widget_input_state_handler(self._retained, self.apply_input_state)
         refresh = getattr(self._retained.item, "refreshRequested", None)
         if refresh is not None and hasattr(refresh, "connect"):
             refresh.connect(model.request_refresh)
@@ -1115,7 +1116,8 @@ class RetainedMediaPresentation:
         if isinstance(input_state, Mapping):
             value = input_state.get
         else:
-            value = lambda name, default: getattr(input_state, name, default)
+            def value(name: str, default: object) -> object:
+                return getattr(input_state, name, default)
         enabled = (
             bool(value("admission_open", True))
             and not bool(value("exiting", False))

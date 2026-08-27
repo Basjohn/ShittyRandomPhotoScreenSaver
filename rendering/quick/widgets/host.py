@@ -94,6 +94,7 @@ class RetainedOverlayWidget:
         self._custom_layout_size_payload_handler: Callable[
             [Mapping[str, object]], None
         ] | None = None
+        self._input_state_handler: Callable[[object], bool] | None = None
 
     @property
     def item(self) -> QQuickItem:
@@ -164,12 +165,23 @@ class RetainedOverlayWidget:
         if callback not in self._retirement_callbacks:
             self._retirement_callbacks.append(callback)
 
+    def _set_input_state_handler(
+        self,
+        handler: Callable[[object], bool] | None,
+    ) -> None:
+        self._input_state_handler = handler
+
+    def _apply_input_state(self, input_state: object) -> bool:
+        handler = self._input_state_handler
+        return bool(handler is not None and handler(input_state))
+
     def _retire(self) -> None:
         item = self._item
         self._item = None
         callbacks = self._retirement_callbacks
         self._retirement_callbacks = []
         self._custom_layout_size_payload_handler = None
+        self._input_state_handler = None
         for callback in callbacks:
             callback()
         if item is not None:
@@ -202,6 +214,7 @@ class OrdinaryWidgetPresentationHost:
         self._create_family_item = create_family_item
         self._live: list[RetainedOverlayWidget] = []
         self._by_model_identity: dict[str, RetainedOverlayWidget] = {}
+        self._input_state: object | None = None
         self._retired = False
 
     @property
@@ -344,6 +357,28 @@ class OrdinaryWidgetPresentationHost:
                 return True
         return False
 
+    def set_widget_input_state_handler(
+        self,
+        widget: RetainedOverlayWidget,
+        handler: Callable[[object], bool] | None,
+    ) -> None:
+        """Register one family admission projector and seed current state."""
+
+        if widget not in self._live:
+            raise ValueError("input-state target is not owned by this host")
+        widget._set_input_state_handler(handler)
+        if handler is not None and self._input_state is not None:
+            handler(self._input_state)
+
+    def apply_input_state(self, input_state: object) -> bool:
+        """Project one display-local input state onto all interactive families."""
+
+        self._input_state = input_state
+        changed = False
+        for widget in tuple(self._live):
+            changed = widget._apply_input_state(input_state) or changed
+        return changed
+
     def retire_widget(self, widget: RetainedOverlayWidget) -> bool:
         """Retire one live widget mid-generation without retiring the host."""
 
@@ -362,6 +397,7 @@ class OrdinaryWidgetPresentationHost:
         live = self._live
         self._live = []
         self._by_model_identity = {}
+        self._input_state = None
         self._retired = True
         self._host_item = None
         self._context = None
