@@ -90,14 +90,14 @@ import sys
 
 import rendering.quick.widgets.gmail  # noqa: F401
 
-    forbidden = {
-        "widgets.gmail_runtime",
-        "widgets.gmail_widget",
-        "core.gmail.gmail_backend",
-        "core.gmail.gmail_imap",
-        "core.gmail.gmail_oauth",
-        "core.audio.notification_sound",
-    }
+forbidden = {
+    "widgets.gmail_runtime",
+    "widgets.gmail_widget",
+    "core.gmail.gmail_backend",
+    "core.gmail.gmail_imap",
+    "core.gmail.gmail_oauth",
+    "core.audio.notification_sound",
+}
 print(json.dumps(sorted(forbidden & set(sys.modules))))
 """
 

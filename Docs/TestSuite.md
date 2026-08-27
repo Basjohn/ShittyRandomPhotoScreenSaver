@@ -119,6 +119,12 @@ Archive, popup-independent committed height, accepted-row dynamic height, card-d
 no-unread logo desaturation, blank-space double-click refresh semantics, QML-to-Python action admission and
 stable item/model/list-model/engine identity. Real manager-owned runtime injection and caller proof remain open.
 
+The F6 shared-import correction extends `tests/test_widget_import_dormancy.py` with fresh-process common-Quick
+and Gmail-presentation probes. It protects the light host/registry-only `rendering.quick.widgets` package,
+direct family implementation imports at actual callers, type-only Gmail runtime annotations and dormant
+OAuth/IMAP/backend/runtime trees before family activation. Existing legacy-host and runtime-registry dormancy
+gates remain unchanged.
+
 At the reviewed checkpoint the repository contains:
 
 - **353 test-module files**: 352 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
@@ -575,7 +581,7 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_widget_lifecycle.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_manager.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_manager_refresh.py` | **MIGRATION-CRITICAL — F** | Current E2/E2.7 lifecycle/admission regression owner; six stale tests were corrected at 5b3cbaef. Update with E1/F ownership. |
-| `tests/test_widget_import_dormancy.py` | **KEEP — MIGRATION PERMANENT** | Fresh-process host/package and deactivated-family implementation-loading oracle; preserve after cutover. |
+| `tests/test_widget_import_dormancy.py` | **KEEP — MIGRATION PERMANENT** | Fresh-process legacy/common-Quick host/package and deactivated-family implementation/runtime/backend loading oracle; preserve after cutover. |
 | `tests/test_widget_runtime_manager.py` | **KEEP — MIGRATION PERMANENT** | Neutral owner admission/service/fail-closed/reuse/lifecycle contract; permanent destination ownership bar. |
 | `tests/test_widget_runtime_owner_hoist.py` | **MIGRATION-CRITICAL — H/I** | Current `DisplayWidget -> WidgetRuntimeManager <- WidgetManager` identity/order proof; rehome host identity to `QuickDisplayRuntime` at cutover while preserving one-owner/cleanup-order semantics. |
 | `tests/test_widget_performance.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
