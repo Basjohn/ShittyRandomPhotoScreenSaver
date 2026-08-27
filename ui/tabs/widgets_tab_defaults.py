@@ -48,52 +48,8 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_ACTION_BUTTON_STYLE = """
-QPushButton {
-    background-color: rgba(255, 255, 255, 18);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 92);
-    border-radius: 16px;
-    padding: 0 16px;
-    font-size: 12px;
-    font-weight: 600;
-}
-QPushButton:hover {
-    background-color: rgba(255, 255, 255, 30);
-    border-color: rgba(255, 255, 255, 132);
-}
-QPushButton:pressed {
-    background-color: rgba(255, 255, 255, 42);
-}
-QPushButton:disabled {
-    color: rgba(255, 255, 255, 90);
-    background-color: rgba(255, 255, 255, 8);
-    border-color: rgba(255, 255, 255, 35);
-}
-"""
-
 _SHADOW_SPIN_CONTROL_WIDTH = 220
 _SHADOW_SPIN_SHADOW_PAD = 10
-_SHADOW_DIRECTION_CELL_STYLE = """
-QPushButton {
-    background-color: rgba(32, 32, 32, 235);
-    border: 1px solid rgba(255, 255, 255, 210);
-    border-radius: 6px;
-    padding: 0px;
-}
-QPushButton:hover {
-    background-color: rgba(56, 56, 56, 240);
-    border-color: #ffffff;
-}
-QPushButton:pressed {
-    background-color: rgba(18, 18, 18, 245);
-}
-QPushButton:checked {
-    background-color: rgba(255, 255, 255, 58);
-    border: 2px solid #ffffff;
-}
-"""
-
 
 def _finalize_bucket_body(toggle, body: QWidget) -> None:
     expanded = bool(toggle.isChecked())
@@ -398,7 +354,9 @@ def _build_shadow_direction_picker(
         button.setCheckable(True)
         button.setFixedSize(28, 28)
         button.setProperty("shadowDirectionCell", True)
-        button.setStyleSheet(_SHADOW_DIRECTION_CELL_STYLE)
+        shared_styles.bind_shared_styles(
+            button, "SHADOW_DIRECTION_CELL_STYLE", base_style=""
+        )
         button.setToolTip(f"Shadow direction {direction.value}")
         button.setAccessibleName(f"Shadow direction {direction.value}")
         button.setChecked(direction is current)
@@ -617,7 +575,9 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reset_widget_positions_btn.setToolTip(
         "Restore all widget positions and monitor routes to the application defaults for this profile."
     )
-    tab.reset_widget_positions_btn.setStyleSheet(_ACTION_BUTTON_STYLE)
+    shared_styles.bind_shared_styles(
+        tab.reset_widget_positions_btn, "GHOST_ACTION_BUTTON_STYLE", base_style=""
+    )
     tab.reset_widget_positions_btn.clicked.connect(tab._on_reset_widget_positions_to_defaults_clicked)
     button_row.addWidget(tab.reset_widget_positions_btn)
     layout_settings_layout.addLayout(button_row)
@@ -655,7 +615,9 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     cache_button_row.addWidget(tab.cache_clear_status_label, 1)
     tab.clear_selected_caches_btn = QPushButton("Clear Selected Caches")
     tab.clear_selected_caches_btn.setFixedHeight(32)
-    tab.clear_selected_caches_btn.setStyleSheet(_ACTION_BUTTON_STYLE)
+    shared_styles.bind_shared_styles(
+        tab.clear_selected_caches_btn, "GHOST_ACTION_BUTTON_STYLE", base_style=""
+    )
     tab.clear_selected_caches_btn.clicked.connect(lambda: _on_clear_selected_caches(tab))
     cache_button_row.addWidget(tab.clear_selected_caches_btn)
     cache_layout.addLayout(cache_button_row)

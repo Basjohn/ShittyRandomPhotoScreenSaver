@@ -14,6 +14,7 @@ from ui.tabs.media.builder_scaffold import (
     build_collapsible_bucket,
     build_mode_scaffold,
 )
+from ui.tabs import shared_styles
 from ui.tabs.shared_styles import add_aligned_row, add_aligned_row_widget
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -166,32 +167,13 @@ def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.devcurve_layer_buttons = {}
     tab.devcurve_layer_button_group = QButtonGroup(tab)
     tab.devcurve_layer_button_group.setExclusive(True)
-    _mode_button_style = """
-        QPushButton {
-            background-color: #232323;
-            color: #ffffff;
-            border: 2px solid #f1f1f1;
-            border-radius: 18px;
-            padding: 10px 20px;
-            font-weight: 600;
-            min-height: 18px;
-        }
-        QPushButton:hover {
-            background-color: #2a2a2a;
-        }
-        QPushButton:checked {
-            background-color: #4a4a4a;
-            border-color: #f7f7f7;
-        }
-        QPushButton:disabled {
-            color: #7a7a7a;
-            border-color: #6a6a6a;
-        }
-    """
+
     for src in _LAYER_ORDER:
         btn = QPushButton(_LAYER_LABEL[src])
         btn.setCheckable(True)
-        btn.setStyleSheet(_mode_button_style)
+        shared_styles.bind_shared_styles(
+            btn, "MODE_TOGGLE_BUTTON_STYLE", base_style=""
+        )
         btn.setToolTip(_TOOLTIP_LAYER_BUTTON)
         tab.devcurve_layer_button_group.addButton(btn)
         tab.devcurve_layer_buttons[src] = btn

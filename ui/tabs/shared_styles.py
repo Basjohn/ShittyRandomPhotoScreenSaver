@@ -1094,6 +1094,226 @@ def _build_nav_pill_style() -> str:
 NAV_PILL_STYLE = _build_nav_pill_style()
 
 
+def _build_widget_nav_pill_style() -> str:
+    return (
+        "QPushButton {"
+        f" {NAV_TAB_FONT_STYLE}"
+        f" background-color: {_theme_rgba255('navigation.subtab.surface')};"
+        f" color: {_theme_hex('navigation.subtab.text')};"
+        " border-radius: 8px; padding: 6px 18px; min-width: 70px;"
+        f" border: 1px solid {_theme_hex('navigation.subtab.border')};"
+        " }"
+        "QPushButton:hover {"
+        f" background-color: {_theme_rgba255('navigation.subtab.hover_surface')};"
+        " }"
+        "QPushButton:checked {"
+        f" {NAV_TAB_FONT_STYLE_ACTIVE}"
+        f" background-color: {_theme_rgba255('navigation.subtab.selected_surface')};"
+        f" border: 1px solid {_theme_hex('navigation.subtab.border')};"
+        " }"
+    )
+
+
+WIDGET_NAV_PILL_STYLE = _build_widget_nav_pill_style()
+
+
+def _build_transition_nav_pill_style() -> str:
+    return (
+        "QPushButton {"
+        f" background-color: {_theme_rgba255('navigation.subtab.surface')};"
+        f" color: {_theme_hex('navigation.subtab.text')};"
+        f" border: 1px solid {_theme_hex('navigation.subtab.border')};"
+        " border-radius: 8px; padding: 5px 14px;"
+        " }"
+        "QPushButton:hover {"
+        f" background-color: {_theme_rgba255('navigation.subtab.hover_surface')};"
+        " }"
+        "QPushButton:checked {"
+        f" background-color: {_theme_rgba255('navigation.subtab.selected_surface')};"
+        " }"
+    )
+
+
+TRANSITION_NAV_PILL_STYLE = _build_transition_nav_pill_style()
+
+
+def _build_transition_setup_action_style() -> str:
+    return (
+        "QPushButton {"
+        f" background-color: {_theme_rgba255('control.setup_action.surface')};"
+        f" color: {_theme_hex('control.setup_action.text')};"
+        f" border: 1px solid {_theme_hex('control.setup_action.border')};"
+        " border-radius: 8px; padding: 6px 18px; min-width: 90px;"
+        " }"
+        "QPushButton:hover {"
+        f" background-color: {_theme_rgba255('control.setup_action.hover_surface')};"
+        " }"
+    )
+
+
+TRANSITION_SETUP_ACTION_STYLE = _build_transition_setup_action_style()
+
+
+def _build_widget_setup_action_style() -> str:
+    return (
+        _build_transition_setup_action_style()
+        + "QPushButton:pressed {"
+        f" background-color: {_theme_rgba255('control.setup_action.pressed_surface')};"
+        " }"
+    )
+
+
+WIDGET_SETUP_ACTION_STYLE = _build_widget_setup_action_style()
+
+
+def _build_source_action_button_style() -> str:
+    return (
+        "QPushButton {"
+        " font-family: 'Jost'; font-size: 12px; font-weight: 500;"
+        f" background-color: {_theme_rgba255('control.button.surface')};"
+        f" color: {_theme_hex('control.button.text')};"
+        " border-radius: 8px; padding: 7px 18px; min-width: 90px;"
+        f" border: 1px solid {_theme_hex('control.button.border')};"
+        " }"
+        "QPushButton:hover {"
+        f" background-color: {_theme_rgba255('control.button.hover_surface')};"
+        " }"
+        "QPushButton:pressed {"
+        f" background-color: {_theme_rgba255('control.button.pressed_surface')};"
+        f" border: 1px solid {_theme_rgba255('control.button.pressed_border')};"
+        " }"
+    )
+
+
+SOURCE_ACTION_BUTTON_STYLE = _build_source_action_button_style()
+
+
+def _build_source_ratio_active_style() -> str:
+    return (
+        "#ratioFrame {"
+        f" background-color: {_theme_hex('sources.ratio.surface')};"
+        f" border: 1px solid {_theme_hex('sources.ratio.border')};"
+        " border-radius: 6px; padding: 8px;"
+        " }"
+    )
+
+
+SOURCE_RATIO_ACTIVE_STYLE = _build_source_ratio_active_style()
+
+
+def _build_source_ratio_disabled_style() -> str:
+    return (
+        "#ratioFrame {"
+        f" background-color: {_theme_hex('sources.ratio.disabled_surface')};"
+        f" border: 1px solid {_theme_hex('sources.ratio.disabled_border')};"
+        " border-radius: 6px; padding: 8px;"
+        " }"
+    )
+
+
+SOURCE_RATIO_DISABLED_STYLE = _build_source_ratio_disabled_style()
+
+
+def _build_rss_input_style() -> str:
+    return (
+        "QLineEdit#rssFeedInput {"
+        f" border: 1px solid {_theme_rgba255('sources.rss_input.border')};"
+        " border-radius: 8px; padding: 8px 12px;"
+        f" background-color: {_theme_rgba255('sources.rss_input.surface')};"
+        " }"
+        "QLineEdit#rssFeedInput:focus {"
+        f" border-color: {_theme_rgba255('sources.rss_input.focus_border')};"
+        " }"
+    )
+
+
+RSS_INPUT_STYLE = _build_rss_input_style()
+
+
+def _build_ghost_action_button_style() -> str:
+    return (
+        "QPushButton {"
+        f" background-color: {_theme_rgba255('control.ghost_action.surface')};"
+        f" color: {_theme_hex('control.ghost_action.text')};"
+        f" border: 1px solid {_theme_rgba255('control.ghost_action.border')};"
+        " border-radius: 16px; padding: 0 16px;"
+        " font-size: 12px; font-weight: 600;"
+        " }"
+        "QPushButton:hover {"
+        f" background-color: {_theme_rgba255('control.ghost_action.hover_surface')};"
+        f" border-color: {_theme_rgba255('control.ghost_action.hover_border')};"
+        " }"
+        "QPushButton:pressed {"
+        f" background-color: {_theme_rgba255('control.ghost_action.pressed_surface')};"
+        " }"
+        "QPushButton:disabled {"
+        f" color: {_theme_rgba255('control.ghost_action.disabled_text')};"
+        f" background-color: {_theme_rgba255('control.ghost_action.disabled_surface')};"
+        f" border-color: {_theme_rgba255('control.ghost_action.disabled_border')};"
+        " }"
+    )
+
+
+GHOST_ACTION_BUTTON_STYLE = _build_ghost_action_button_style()
+
+
+def _build_shadow_direction_cell_style() -> str:
+    return (
+        "QPushButton {"
+        f" background-color: {_theme_rgba255('shadow.direction.surface')};"
+        f" border: 1px solid {_theme_rgba255('shadow.direction.border')};"
+        " border-radius: 6px; padding: 0px;"
+        " }"
+        "QPushButton:hover {"
+        f" background-color: {_theme_rgba255('shadow.direction.hover_surface')};"
+        f" border-color: {_theme_hex('shadow.direction.hover_border')};"
+        " }"
+        "QPushButton:pressed {"
+        f" background-color: {_theme_rgba255('shadow.direction.pressed_surface')};"
+        " }"
+        "QPushButton:checked {"
+        f" background-color: {_theme_rgba255('shadow.direction.checked_surface')};"
+        f" border: 2px solid {_theme_hex('shadow.direction.checked_border')};"
+        " }"
+    )
+
+
+SHADOW_DIRECTION_CELL_STYLE = _build_shadow_direction_cell_style()
+
+
+def _build_mode_toggle_button_style() -> str:
+    return (
+        "QPushButton {"
+        f" background-color: {_theme_hex('control.mode.surface')};"
+        f" color: {_theme_hex('control.mode.text')};"
+        f" border: 2px solid {_theme_hex('control.mode.border')};"
+        " border-radius: 18px; padding: 10px 20px;"
+        " font-weight: 600; min-height: 18px;"
+        " }"
+        "QPushButton:hover {"
+        f" background-color: {_theme_hex('control.mode.hover_surface')};"
+        " }"
+        "QPushButton:checked {"
+        f" background-color: {_theme_hex('control.mode.checked_surface')};"
+        f" border-color: {_theme_hex('control.mode.checked_border')};"
+        " }"
+        "QPushButton:disabled {"
+        f" color: {_theme_hex('control.mode.disabled_text')};"
+        f" border-color: {_theme_hex('control.mode.disabled_border')};"
+        " }"
+    )
+
+
+MODE_TOGGLE_BUTTON_STYLE = _build_mode_toggle_button_style()
+
+
+def _build_text_secondary_color_style() -> str:
+    return f"color: {_theme_hex('text.secondary')};"
+
+
+TEXT_SECONDARY_COLOR_STYLE = _build_text_secondary_color_style()
+
+
 STATUS_LABEL_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 600;"
@@ -1280,6 +1500,18 @@ _THEME_STYLE_BUILDERS = {
     "ADV_HELPER_LABEL_STYLE": _build_adv_helper_label_style,
     "INFO_LABEL_STYLE_DISABLED": _build_info_label_style_disabled,
     "NAV_PILL_STYLE": _build_nav_pill_style,
+    "WIDGET_NAV_PILL_STYLE": _build_widget_nav_pill_style,
+    "TRANSITION_NAV_PILL_STYLE": _build_transition_nav_pill_style,
+    "TRANSITION_SETUP_ACTION_STYLE": _build_transition_setup_action_style,
+    "WIDGET_SETUP_ACTION_STYLE": _build_widget_setup_action_style,
+    "SOURCE_ACTION_BUTTON_STYLE": _build_source_action_button_style,
+    "SOURCE_RATIO_ACTIVE_STYLE": _build_source_ratio_active_style,
+    "SOURCE_RATIO_DISABLED_STYLE": _build_source_ratio_disabled_style,
+    "RSS_INPUT_STYLE": _build_rss_input_style,
+    "GHOST_ACTION_BUTTON_STYLE": _build_ghost_action_button_style,
+    "SHADOW_DIRECTION_CELL_STYLE": _build_shadow_direction_cell_style,
+    "MODE_TOGGLE_BUTTON_STYLE": _build_mode_toggle_button_style,
+    "TEXT_SECONDARY_COLOR_STYLE": _build_text_secondary_color_style,
     "SLIDER_STYLE": _build_slider_style,
     "ACCESSIBILITY_TITLE_STYLE": _build_accessibility_title_style,
     "ACCESSIBILITY_DESC_STYLE": _build_accessibility_desc_style,
@@ -1339,20 +1571,6 @@ SCROLL_AREA_STYLE = """
 QScrollArea { border: none; background: transparent; }
 QScrollArea > QWidget > QWidget { background: transparent; }
 """
-
-# Sources-specific field styling
-RSS_INPUT_STYLE = (
-    "QLineEdit#rssFeedInput {"
-    " border: 1px solid rgba(70,70,70,0.6);"
-    " border-radius: 6px;"
-    " padding: 8px 10px;"
-    " background-color: #282828;"
-    " box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.45);"
-    " }"
-    "QLineEdit#rssFeedInput:focus {"
-    " border-color: rgba(200,200,200,0.85);"
-    " }"
-)
 
 def build_bucket_toggle(
     host_layout: QVBoxLayout,

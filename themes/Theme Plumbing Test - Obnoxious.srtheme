@@ -1,33 +1,33 @@
 {
   "format": "srpss.settings-theme",
   "schema_version": 3,
-  "name": "Default Dark",
+  "name": "Theme Plumbing Test (Obnoxious)",
   "acrylic": {
     "enabled": true,
     "tint": [
-      24,
-      24,
-      24,
-      80
+      180,
+      0,
+      255,
+      125
     ]
   },
   "colors": {
     "window.dialog_glass": [
-      60,
-      60,
-      60,
-      20
+      120,
+      0,
+      160,
+      90
     ],
     "window.titlebar.surface": [
-      12,
-      12,
-      12,
-      209
+      70,
+      0,
+      105,
+      230
     ],
     "window.titlebar.text": [
       255,
-      255,
-      255,
+      245,
+      0,
       255
     ],
     "window.titlebar.button.surface": [
@@ -55,28 +55,28 @@
       204
     ],
     "navigation.sidebar.surface": [
-      40,
-      40,
-      40,
-      32
+      0,
+      130,
+      150,
+      110
     ],
     "navigation.tab.surface": [
-      20,
-      20,
-      20,
-      48
+      255,
+      0,
+      150,
+      95
     ],
     "navigation.tab.text": [
-      204,
-      204,
-      204,
+      255,
+      255,
+      0,
       255
     ],
     "navigation.tab.hover_surface": [
-      62,
-      62,
-      62,
-      120
+      0,
+      220,
+      255,
+      150
     ],
     "navigation.tab.hover_text": [
       255,
@@ -85,46 +85,46 @@
       255
     ],
     "navigation.tab.selected_surface": [
-      62,
-      62,
-      62,
-      140
+      50,
+      255,
+      90,
+      180
     ],
     "navigation.tab.selected_text": [
-      255,
-      255,
-      255,
+      20,
+      0,
+      30,
       255
     ],
     "navigation.subtab.surface": [
-      42,
-      42,
-      42,
-      215
+      180,
+      0,
+      220,
+      230
     ],
     "navigation.subtab.text": [
       255,
       255,
-      255,
+      0,
       255
     ],
     "navigation.subtab.border": [
-      255,
+      0,
       255,
       255,
       255
     ],
     "navigation.subtab.hover_surface": [
-      52,
-      52,
-      52,
-      220
+      0,
+      180,
+      210,
+      240
     ],
     "navigation.subtab.selected_surface": [
-      58,
-      58,
-      58,
-      220
+      50,
+      255,
+      80,
+      240
     ],
     "content.surface": [
       0,
@@ -133,27 +133,27 @@
       0
     ],
     "panel.group.surface": [
-      60,
-      60,
-      60,
-      115
+      90,
+      0,
+      130,
+      180
     ],
     "panel.subsection.surface": [
-      60,
-      60,
-      60,
-      102
+      0,
+      110,
+      135,
+      180
     ],
     "panel.border": [
       255,
-      255,
-      255,
+      230,
+      0,
       255
     ],
     "text.primary": [
       255,
       255,
-      255,
+      0,
       255
     ],
     "text.disabled": [
@@ -163,22 +163,22 @@
       255
     ],
     "text.secondary": [
-      170,
-      170,
-      170,
+      0,
+      255,
+      255,
       255
     ],
     "text.tertiary": [
-      136,
-      136,
-      136,
+      255,
+      120,
+      220,
       255
     ],
     "text.helper": [
-      220,
-      220,
-      220,
-      153
+      120,
+      255,
+      170,
+      220
     ],
     "text.helper_disabled": [
       85,
@@ -187,31 +187,31 @@
       255
     ],
     "control.input.surface": [
-      31,
-      31,
-      31,
+      55,
+      0,
+      80,
       255
     ],
     "control.input.hover_surface": [
-      22,
-      22,
-      22,
+      0,
+      80,
+      100,
       255
     ],
     "control.input.focus_surface": [
-      20,
-      20,
-      20,
+      90,
+      0,
+      120,
       255
     ],
     "control.input.text": [
       255,
       255,
-      255,
+      0,
       255
     ],
     "control.input.border": [
-      255,
+      0,
       255,
       255,
       255
@@ -301,70 +301,70 @@
       255
     ],
     "control.list.surface": [
-      30,
-      30,
-      30,
-      215
+      40,
+      0,
+      70,
+      235
     ],
     "control.list.text": [
       255,
       255,
-      255,
+      0,
       255
     ],
     "control.list.border": [
-      80,
-      80,
-      80,
-      153
+      0,
+      255,
+      255,
+      255
     ],
     "control.list.selected_surface": [
-      70,
-      70,
-      70,
-      204
+      0,
+      160,
+      180,
+      230
     ],
     "control.list.selected_accent": [
       255,
-      255,
-      255,
-      180
+      0,
+      220,
+      255
     ],
     "control.list.hover_surface": [
-      55,
-      55,
-      55,
-      204
+      80,
+      0,
+      120,
+      235
     ],
     "control.button.surface": [
-      45,
-      45,
-      45,
-      215
+      150,
+      0,
+      200,
+      235
     ],
     "control.button.text": [
       255,
       255,
-      255,
+      0,
       255
     ],
     "control.button.border": [
-      255,
+      0,
       255,
       255,
       255
     ],
     "control.button.hover_surface": [
-      60,
-      60,
-      60,
-      220
+      0,
+      170,
+      200,
+      240
     ],
     "control.button.pressed_surface": [
-      35,
-      35,
-      35,
-      220
+      40,
+      255,
+      80,
+      240
     ],
     "control.button.pressed_border": [
       200,
@@ -373,40 +373,40 @@
       200
     ],
     "control.setup_action.surface": [
-      42,
-      42,
-      42,
-      215
+      255,
+      0,
+      150,
+      235
     ],
     "control.setup_action.text": [
       255,
       255,
-      255,
+      0,
       255
     ],
     "control.setup_action.border": [
-      255,
+      0,
       255,
       255,
       255
     ],
     "control.setup_action.hover_surface": [
-      58,
-      58,
-      58,
-      220
+      0,
+      190,
+      220,
+      240
     ],
     "control.setup_action.pressed_surface": [
-      70,
-      70,
-      70,
-      225
+      50,
+      255,
+      80,
+      245
     ],
     "control.ghost_action.surface": [
       255,
-      255,
-      255,
-      18
+      0,
+      200,
+      80
     ],
     "control.ghost_action.text": [
       255,
@@ -415,16 +415,16 @@
       255
     ],
     "control.ghost_action.border": [
+      0,
       255,
       255,
-      255,
-      92
+      220
     ],
     "control.ghost_action.hover_surface": [
+      0,
       255,
       255,
-      255,
-      30
+      90
     ],
     "control.ghost_action.hover_border": [
       255,
@@ -457,39 +457,39 @@
       35
     ],
     "control.mode.surface": [
-      35,
-      35,
-      35,
+      90,
+      0,
+      130,
       255
     ],
     "control.mode.text": [
       255,
       255,
-      255,
+      0,
       255
     ],
     "control.mode.border": [
-      241,
-      241,
-      241,
+      0,
+      255,
+      255,
       255
     ],
     "control.mode.hover_surface": [
-      42,
-      42,
-      42,
+      0,
+      130,
+      160,
       255
     ],
     "control.mode.checked_surface": [
-      74,
-      74,
-      74,
+      40,
+      255,
+      80,
       255
     ],
     "control.mode.checked_border": [
-      247,
-      247,
-      247,
+      255,
+      0,
+      220,
       255
     ],
     "control.mode.disabled_text": [
@@ -571,64 +571,64 @@
       255
     ],
     "sources.ratio.surface": [
-      42,
-      42,
-      42,
+      90,
+      0,
+      130,
       255
     ],
     "sources.ratio.border": [
-      58,
-      58,
-      58,
+      0,
+      255,
+      255,
       255
     ],
     "sources.ratio.disabled_surface": [
-      26,
-      26,
-      26,
+      30,
+      0,
+      50,
       255
     ],
     "sources.ratio.disabled_border": [
-      42,
-      42,
-      42,
+      130,
+      0,
+      180,
       255
     ],
     "sources.rss_input.surface": [
-      20,
-      20,
-      20,
-      220
+      60,
+      0,
+      90,
+      240
     ],
     "sources.rss_input.border": [
-      80,
-      80,
-      80,
-      153
+      0,
+      255,
+      255,
+      230
     ],
     "sources.rss_input.focus_border": [
-      200,
-      200,
-      200,
-      200
+      50,
+      255,
+      80,
+      255
     ],
     "shadow.direction.surface": [
-      32,
-      32,
-      32,
-      235
+      90,
+      0,
+      130,
+      245
     ],
     "shadow.direction.border": [
+      0,
       255,
       255,
-      255,
-      210
+      255
     ],
     "shadow.direction.hover_surface": [
-      56,
-      56,
-      56,
-      240
+      0,
+      150,
+      180,
+      245
     ],
     "shadow.direction.hover_border": [
       255,
@@ -643,10 +643,10 @@
       245
     ],
     "shadow.direction.checked_surface": [
+      50,
       255,
-      255,
-      255,
-      58
+      80,
+      230
     ],
     "shadow.direction.checked_border": [
       255,
@@ -1057,16 +1057,16 @@
       220
     ],
     "chrome.outer_border": [
+      50,
       255,
-      255,
-      255,
+      80,
       255
     ],
     "chrome.size_grip": [
       255,
       255,
-      255,
-      200
+      0,
+      255
     ]
   },
   "shadows": {
@@ -1076,9 +1076,9 @@
       "offset_y": 8.0,
       "color": [
         0,
-        0,
-        0,
-        120
+        255,
+        255,
+        210
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1087,10 +1087,10 @@
       "offset_x": 5.0,
       "offset_y": 6.0,
       "color": [
+        255,
         0,
-        0,
-        0,
-        95
+        220,
+        210
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1100,9 +1100,9 @@
       "offset_y": 6.0,
       "color": [
         0,
-        0,
-        0,
-        110
+        255,
+        255,
+        210
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1111,10 +1111,10 @@
       "offset_x": 3.0,
       "offset_y": 4.0,
       "color": [
+        255,
         0,
-        0,
-        0,
-        60
+        220,
+        210
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1124,9 +1124,9 @@
       "offset_y": 6.0,
       "color": [
         0,
-        0,
-        0,
-        105
+        255,
+        255,
+        210
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1135,10 +1135,10 @@
       "offset_x": 2.0,
       "offset_y": 2.0,
       "color": [
+        255,
         0,
-        0,
-        0,
-        125
+        220,
+        210
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1148,9 +1148,9 @@
       "offset_y": 3.0,
       "color": [
         0,
-        0,
-        0,
-        140
+        255,
+        255,
+        210
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1159,10 +1159,10 @@
       "offset_x": 3.0,
       "offset_y": 4.0,
       "color": [
+        255,
         0,
-        0,
-        0,
-        140
+        220,
+        210
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1172,9 +1172,9 @@
       "offset_y": 8.0,
       "color": [
         0,
-        0,
-        0,
-        96
+        255,
+        255,
+        210
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1183,10 +1183,10 @@
       "offset_x": 4.0,
       "offset_y": 5.0,
       "color": [
+        255,
         0,
-        0,
-        0,
-        110
+        220,
+        210
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1196,9 +1196,9 @@
       "offset_y": 8.0,
       "color": [
         0,
-        0,
-        0,
-        90
+        255,
+        255,
+        210
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1207,10 +1207,10 @@
       "offset_x": 0.0,
       "offset_y": 4.0,
       "color": [
+        255,
         0,
-        0,
-        0,
-        150
+        220,
+        210
       ],
       "disabled_alpha_scale": 0.4
     }
@@ -1221,37 +1221,37 @@
         {
           "position": 0.0,
           "color": [
-            8,
-            8,
-            8,
-            242
+            255,
+            0,
+            220,
+            255
           ]
         },
         {
           "position": 0.35,
           "color": [
-            20,
-            20,
-            20,
-            230
+            0,
+            255,
+            255,
+            255
           ]
         },
         {
           "position": 0.65,
           "color": [
-            30,
-            30,
-            30,
-            217
+            255,
+            0,
+            220,
+            255
           ]
         },
         {
           "position": 1.0,
           "color": [
-            45,
-            45,
-            45,
-            179
+            0,
+            255,
+            255,
+            255
           ]
         }
       ]
@@ -1261,28 +1261,28 @@
         {
           "position": 0.0,
           "color": [
-            50,
-            50,
-            50,
-            230
+            0,
+            255,
+            255,
+            255
           ]
         },
         {
           "position": 0.5,
           "color": [
-            65,
-            65,
-            65,
-            217
+            255,
+            0,
+            220,
+            255
           ]
         },
         {
           "position": 1.0,
           "color": [
-            50,
-            50,
-            50,
-            191
+            0,
+            255,
+            255,
+            255
           ]
         }
       ]
@@ -1292,27 +1292,27 @@
         {
           "position": 0.0,
           "color": [
-            46,
-            46,
-            46,
+            255,
+            0,
+            220,
             255
           ]
         },
         {
           "position": 0.85,
           "color": [
-            26,
-            26,
-            26,
+            0,
+            255,
+            255,
             255
           ]
         },
         {
           "position": 1.0,
           "color": [
-            17,
-            17,
-            17,
+            255,
+            0,
+            220,
             255
           ]
         }
@@ -1323,27 +1323,27 @@
         {
           "position": 0.0,
           "color": [
-            58,
-            58,
-            58,
+            0,
+            255,
+            255,
             255
           ]
         },
         {
           "position": 0.85,
           "color": [
-            36,
-            36,
-            36,
+            255,
+            0,
+            220,
             255
           ]
         },
         {
           "position": 1.0,
           "color": [
-            24,
-            24,
-            24,
+            0,
+            255,
+            255,
             255
           ]
         }
@@ -1354,18 +1354,18 @@
         {
           "position": 0.0,
           "color": [
-            34,
-            34,
-            34,
+            255,
+            0,
+            220,
             255
           ]
         },
         {
           "position": 1.0,
           "color": [
-            20,
-            20,
-            20,
+            0,
+            255,
+            255,
             255
           ]
         }
@@ -1376,27 +1376,27 @@
         {
           "position": 0.0,
           "color": [
-            46,
-            46,
-            46,
+            0,
+            255,
+            255,
             255
           ]
         },
         {
           "position": 0.85,
           "color": [
-            26,
-            26,
-            26,
+            255,
+            0,
+            220,
             255
           ]
         },
         {
           "position": 1.0,
           "color": [
-            17,
-            17,
-            17,
+            0,
+            255,
+            255,
             255
           ]
         }

@@ -390,7 +390,12 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Reddit 2
     reddit2_label = QLabel("Reddit 2 inherits typography and appearance from Reddit 1.")
-    reddit2_label.setStyleSheet("color: #aaaaaa; font-size: 11px; margin-top: 8px;")
+    shared_styles.bind_shared_styles(
+        reddit2_label,
+        "TEXT_SECONDARY_COLOR_STYLE",
+        base_style="",
+        trailing_style=" font-size: 11px; margin-top: 8px;",
+    )
     reddit2_layout.addWidget(reddit2_label)
 
     reddit2_enable_row = _aligned_row(reddit2_layout, "Reddit 2:")
