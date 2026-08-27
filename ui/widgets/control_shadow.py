@@ -1,4 +1,8 @@
-"""Central Settings drop-shadow policy for controls, buttons, buckets and frames."""
+"""Central Settings drop-shadow rendering for controls, text, buttons and frames.
+
+Shadow *values* come from the semantic Settings theme.  This module continues
+owning the proven QWidget rendering mechanisms and widget classification.
+"""
 from __future__ import annotations
 
 import math
@@ -19,101 +23,84 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollBar,
+    QStyle,
+    QStyleOptionButton,
     QToolButton,
     QWidget,
 )
 
+from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME
+
+
+_SETTINGS_THEME = DEFAULT_DARK_SETTINGS_THEME
+_DEFAULT_INPUT_STYLE = _SETTINGS_THEME.shadow("input.spin_combo")
+
 
 @dataclass(slots=True)
 class ShadowConfig:
-    """One deliberate, bounded widget-shadow style.
+    """One bounded renderer-facing widget-shadow style.
 
-    The default is now the approved Settings input language so custom combo
-    controls that attach their shadow during construction start with the same
-    crisp policy as the later centralized Settings pass.
+    The default remains the Settings input shadow for compatibility with custom
+    controls that attach a provisional shadow during construction, but those
+    values now come from the semantic theme rather than being repeated here.
     """
 
-    blur_radius: float = 0.0
-    offset: QPointF = field(default_factory=lambda: QPointF(6.0, 8.0))
-    color: QColor = field(default_factory=lambda: QColor(0, 0, 0, 120))
-    disabled_alpha_scale: float = 0.4
+    blur_radius: float = _DEFAULT_INPUT_STYLE.blur_radius
+    offset: QPointF = field(
+        default_factory=lambda: QPointF(
+            _DEFAULT_INPUT_STYLE.offset_x,
+            _DEFAULT_INPUT_STYLE.offset_y,
+        )
+    )
+    color: QColor = field(
+        default_factory=lambda: QColor(*_DEFAULT_INPUT_STYLE.color.as_tuple())
+    )
+    disabled_alpha_scale: float = _DEFAULT_INPUT_STYLE.disabled_alpha_scale
 
 
-# Settings control-shadow language.
-SPIN_COMBO_SHADOW = ShadowConfig(
-    blur_radius=0.0,
-    offset=QPointF(6.0, 8.0),
-    color=QColor(0, 0, 0, 120),
-)
-# Line edits deliberately retain their previous treatment until their own UI
-# refresh rather than being swept into the spin/combo experiment accidentally.
-LINE_EDIT_SHADOW = ShadowConfig(
-    blur_radius=26.0,
-    offset=QPointF(4.5, 7.5),
-    color=QColor(0, 0, 0, 210),
-)
-# One pixel farther right/down than the first centralized pass. FlowContainer
-# clearance is reserved automatically so the last wrapped row is not clipped.
-PILL_BUTTON_SHADOW = ShadowConfig(
-    blur_radius=0.0,
-    offset=QPointF(5.0, 6.0),
-    color=QColor(0, 0, 0, 95),
-)
+def _theme_shadow_config(token: str) -> ShadowConfig:
+    """Adapt one semantic theme shadow into the existing QWidget renderer type."""
+
+    style = _SETTINGS_THEME.shadow(token)
+    return ShadowConfig(
+        blur_radius=style.blur_radius,
+        offset=QPointF(style.offset_x, style.offset_y),
+        color=QColor(*style.color.as_tuple()),
+        disabled_alpha_scale=style.disabled_alpha_scale,
+    )
+
+
+# Settings control-shadow language.  Rendering remains local; visual policy is
+# semantic theme data.
+SPIN_COMBO_SHADOW = _theme_shadow_config("input.spin_combo")
+
+# The old line-edit treatment was the remaining soft/blurred input shadow.  The
+# Settings visual refresh now deliberately gives entry boxes the same crisp
+# cast as combo/spin input shells.  The legacy ``input.line_edit`` theme token
+# can be removed when settings_theme_spec.py next comes through migration.
+LINE_EDIT_SHADOW = SPIN_COMBO_SHADOW
+
+PILL_BUTTON_SHADOW = _theme_shadow_config("button.pill")
+
 # Main left-nav tabs are translucent; a normal graphics effect shadows their
-# border/text alpha and looks hollow. This config is instead rendered by a
-# solid geometry backing behind the painted tab body.
-NAV_TAB_SHADOW = ShadowConfig(
-    blur_radius=0.0,
-    offset=QPointF(5.0, 6.0),
-    color=QColor(0, 0, 0, 110),
-)
-BUCKET_CLOSED_SHADOW = ShadowConfig(
-    blur_radius=0.0,
-    offset=QPointF(3.0, 4.0),
-    color=QColor(0, 0, 0, 60),
-)
-BUCKET_OPEN_SHADOW = ShadowConfig(
-    blur_radius=0.0,
-    offset=QPointF(5.0, 6.0),
-    color=QColor(0, 0, 0, 105),
-)
-SECTION_TEXT_SHADOW = ShadowConfig(
-    blur_radius=0.0,
-    offset=QPointF(2.0, 2.0),
-    color=QColor(0, 0, 0, 125),
-)
-PAGE_TEXT_SHADOW = ShadowConfig(
-    blur_radius=0.0,
-    offset=QPointF(2.0, 3.0),
-    color=QColor(0, 0, 0, 140),
-)
-TITLE_TEXT_SHADOW = ShadowConfig(
-    blur_radius=0.0,
-    offset=QPointF(3.0, 4.0),
-    color=QColor(0, 0, 0, 140),
-)
-# Sidebar + right content shell casts. Both hosts already have enough outer
-# layout clearance to keep these inside the frameless Settings shell.
-SHELL_PANEL_SHADOW = ShadowConfig(
-    blur_radius=0.0,
-    offset=QPointF(6.0, 8.0),
-    color=QColor(0, 0, 0, 96),
-)
-# Scrollbars live in Qt-owned internal containers, so keep this intentionally
-# small. A zero-blur effect is safe for the non-text surface; if a platform
-# clips it, do not widen it into a layout workaround.
-SCROLLBAR_SHADOW = ShadowConfig(
-    blur_radius=0.0,
-    offset=QPointF(2.0, 3.0),
-    color=QColor(0, 0, 0, 82),
-)
-# Large rounded section frames get an outside-only cast shadow. It is painted
-# by a sibling backing widget, never by an effect on the QGroupBox itself.
-GROUP_FRAME_SHADOW = ShadowConfig(
-    blur_radius=0.0,
-    offset=QPointF(6.0, 8.0),
-    color=QColor(0, 0, 0, 90),
-)
+# border/text alpha and looks hollow.  Their body therefore remains a solid
+# geometry backing, while their label content gets a separate shadow-only pass.
+NAV_TAB_SHADOW = _theme_shadow_config("navigation.tab")
+NAV_TAB_CONTENT_SHADOW = _theme_shadow_config("text.section")
+
+BUCKET_CLOSED_SHADOW = _theme_shadow_config("bucket.closed")
+BUCKET_OPEN_SHADOW = _theme_shadow_config("bucket.open")
+SECTION_TEXT_SHADOW = _theme_shadow_config("text.section")
+PAGE_TEXT_SHADOW = _theme_shadow_config("text.page")
+TITLE_TEXT_SHADOW = _theme_shadow_config("text.title")
+SHELL_PANEL_SHADOW = _theme_shadow_config("shell.panel")
+SCROLLBAR_SHADOW = _theme_shadow_config("scrollbar")
+GROUP_FRAME_SHADOW = _theme_shadow_config("panel.group")
+
+# ``ratioFrame`` is a compact rounded panel rather than a control.  Until a
+# dedicated semantic token is warranted, reuse the existing panel-group cast
+# instead of inventing another local numeric shadow policy.
+RATIO_FRAME_SHADOW = GROUP_FRAME_SHADOW
 
 
 class _ControlShadowHelper(QObject):
@@ -205,7 +192,7 @@ def attach_control_shadow(
     the central spin/combo policy instead of preserving stale old defaults.
     """
 
-    cfg = config or ShadowConfig()
+    cfg = config or SPIN_COMBO_SHADOW
     existing = getattr(widget, "_control_shadow_helper", None)
     if isinstance(existing, _ControlShadowHelper):
         if replace_existing:
@@ -345,6 +332,116 @@ def attach_text_shadow(
         return
     helper = _TextShadowHelper(label, config)
     setattr(label, "_settings_text_shadow_helper", helper)
+
+
+class _ButtonContentShadowOverlay(QWidget):
+    """Paint a hard shadow for tab text/emoji without shadowing the translucent body."""
+
+    def __init__(self, helper: "_ButtonContentShadowHelper", owner: QPushButton) -> None:
+        super().__init__(owner)
+        self._helper = helper
+        self.setProperty("settingsShadowInternal", True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setStyleSheet("background: transparent; border: none;")
+        self.setGeometry(owner.rect())
+        self.show()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        del event
+        helper = self._helper
+        owner = helper.owner
+        if owner is None or owner.isHidden() or not owner.text():
+            return
+
+        option = QStyleOptionButton()
+        option.initFrom(owner)
+        option.rect = owner.rect()
+        option.text = owner.text()
+        option.icon = owner.icon()
+        option.iconSize = owner.iconSize()
+
+        content_rect = owner.style().subElementRect(
+            QStyle.SubElement.SE_PushButtonContents,
+            option,
+            owner,
+        )
+        shadow_rect = QRectF(content_rect)
+        shadow_rect.translate(helper.config.offset)
+
+        color = QColor(helper.config.color)
+        if not owner.isEnabled():
+            color.setAlpha(int(color.alpha() * helper.config.disabled_alpha_scale))
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        painter.setFont(owner.font())
+        painter.setPen(color)
+        painter.drawText(
+            shadow_rect,
+            int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+            owner.text(),
+        )
+        painter.end()
+
+
+class _ButtonContentShadowHelper(QObject):
+    """Keep a tab-label shadow child synchronized with its QPushButton owner."""
+
+    def __init__(self, owner: QPushButton, config: ShadowConfig) -> None:
+        super().__init__(owner)
+        self.owner = owner
+        self.config = config
+        self.overlay = _ButtonContentShadowOverlay(self, owner)
+        owner.installEventFilter(self)
+        owner.toggled.connect(self.overlay.update)
+        self._sync()
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # type: ignore[override]
+        if watched is self.owner:
+            etype = event.type()
+            if etype in (
+                QEvent.Type.Resize,
+                QEvent.Type.Show,
+                QEvent.Type.Hide,
+                QEvent.Type.EnabledChange,
+                QEvent.Type.StyleChange,
+                QEvent.Type.FontChange,
+                QEvent.Type.PaletteChange,
+                QEvent.Type.Enter,
+                QEvent.Type.Leave,
+                QEvent.Type.UpdateRequest,
+            ):
+                self._sync()
+            elif etype == QEvent.Type.Destroy:
+                self.overlay.deleteLater()
+        return super().eventFilter(watched, event)
+
+    def reconfigure(self, config: ShadowConfig) -> None:
+        self.config = config
+        self._sync()
+
+    def _sync(self) -> None:
+        self.overlay.setGeometry(self.owner.rect())
+        self.overlay.setVisible(not self.owner.isHidden())
+        self.overlay.raise_()
+        self.overlay.update()
+
+
+def attach_button_content_shadow(
+    button: QPushButton,
+    config: ShadowConfig,
+) -> None:
+    """Shadow only a button's text/emoji content, leaving its body renderer alone."""
+
+    existing = getattr(button, "_settings_button_content_shadow_helper", None)
+    if isinstance(existing, _ButtonContentShadowHelper):
+        existing.reconfigure(config)
+        return
+    helper = _ButtonContentShadowHelper(button, config)
+    setattr(button, "_settings_button_content_shadow_helper", helper)
 
 
 class _CastShadowOverlay(QWidget):
@@ -541,11 +638,9 @@ _FONT_SIZE_RE = re.compile(r"font-size\s*:\s*([0-9]+(?:\.[0-9]+)?)px", re.IGNORE
 
 
 def _input_shadow_config(widget: QWidget) -> ShadowConfig:
-    if isinstance(widget, (QAbstractSpinBox, QComboBox)):
+    if isinstance(widget, (QAbstractSpinBox, QComboBox, QLineEdit)):
         return SPIN_COMBO_SHADOW
-    if isinstance(widget, QLineEdit):
-        return LINE_EDIT_SHADOW
-    return ShadowConfig()
+    return SPIN_COMBO_SHADOW
 
 
 def _is_bucket_toggle(button: QToolButton) -> bool:
@@ -687,8 +782,9 @@ def _style_one_widget(
         if widget.objectName() in ("titleBarButton", "titleBarCloseButton"):
             return
         if widget.objectName() == "tabButton":
-            # SettingsDialog historically attaches a translucent-source graphics
-            # effect here; remove it so only the solid body cast remains.
+            # Never return to a whole-button graphics effect: the tab surface is
+            # translucent and that treatment produces a hollow alpha-following
+            # shadow. Keep the body cast and shadow only its text/emoji content.
             if widget.graphicsEffect() is not None:
                 widget.setGraphicsEffect(None)
             attach_cast_shadow(
@@ -697,6 +793,7 @@ def _style_one_widget(
                 radius=6.0,
                 insets=(3.0, 3.0, 5.0, 5.0),
             )
+            attach_button_content_shadow(widget, NAV_TAB_CONTENT_SHADOW)
         else:
             attach_control_shadow(widget, PILL_BUTTON_SHADOW, replace_existing=True)
             _reserve_flow_shadow_clearance(widget, PILL_BUTTON_SHADOW)
@@ -739,6 +836,12 @@ def _style_one_widget(
         attach_cast_shadow(
             widget,
             SHELL_PANEL_SHADOW,
+            radius=8.0,
+        )
+    elif name == "ratioFrame":
+        attach_cast_shadow(
+            widget,
+            RATIO_FRAME_SHADOW,
             radius=8.0,
         )
 
