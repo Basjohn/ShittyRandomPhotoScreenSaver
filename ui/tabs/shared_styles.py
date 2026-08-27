@@ -3,6 +3,7 @@
 Centralises repeated styling blocks and common widgets so individual tabs
 don't duplicate them.
 """
+import re
 import weakref
 from typing import Callable
 
@@ -28,6 +29,8 @@ from PySide6.QtWidgets import (
     QStyleOptionSlider,
 )
 
+from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME
+
 # Ensure UI resources (e.g., circle checkbox SVGs) are registered even when
 # shared_styles is imported before ui/__init__.py. Safe no-op if already loaded.
 try:  # pragma: no cover - defensive import
@@ -46,6 +49,100 @@ _INTER_FONT_PATHS = (
     ":/ui/assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf",
 )
 _FONTS_REGISTERED = False
+
+
+_SETTINGS_THEME = DEFAULT_DARK_SETTINGS_THEME
+
+_THEME_QSS_TOKEN_RE = re.compile(
+    r"@@(?P<mode>hex|rgba|rgba255|gradient):(?P<token>[a-zA-Z0-9_.-]+)@@"
+)
+
+
+def _theme_qcolor(token: str) -> QColor:
+    """Return one semantic theme colour as QColor for custom painters."""
+
+    value = _SETTINGS_THEME.color(token)
+    return QColor(*value.as_tuple())
+
+
+def _theme_hex(token: str) -> str:
+    """Render an opaque semantic colour in the same QSS form used historically."""
+
+    value = _SETTINGS_THEME.color(token)
+    if value.a != 255:
+        raise ValueError(f"Theme colour {token!r} is not opaque")
+    return f"#{value.r:02x}{value.g:02x}{value.b:02x}"
+
+
+def _unit_alpha_text(alpha: int) -> str:
+    """Preserve familiar QSS alpha spellings without losing arbitrary 8-bit values."""
+
+    # Existing shared_styles.py commonly used compact unit alpha values such as
+    # 0.95, 0.45 and 0.6. Prefer that spelling when it round-trips to the exact
+    # 8-bit alpha; otherwise retain precision for future user-authored themes.
+    unit = alpha / 255.0
+    compact = round(unit, 2)
+    if int(compact * 255.0 + 0.5) == alpha:
+        text = f"{compact:.2f}".rstrip("0").rstrip(".")
+        return text if "." in text else f"{text}.0"
+    return f"{unit:.6f}".rstrip("0").rstrip(".")
+
+
+def _theme_rgba(token: str) -> str:
+    """Render a semantic colour using the normalized-alpha QSS form."""
+
+    value = _SETTINGS_THEME.color(token)
+    return (
+        f"rgba({value.r}, {value.g}, {value.b}, "
+        f"{_unit_alpha_text(value.a)})"
+    )
+
+
+def _theme_rgba255(token: str) -> str:
+    """Render a semantic colour using Qt's integer-alpha QSS form."""
+
+    value = _SETTINGS_THEME.color(token)
+    return f"rgba({value.r}, {value.g}, {value.b}, {value.a})"
+
+
+def _theme_gradient(token: str) -> str:
+    """Render only gradient stops; direction and geometry remain component-owned."""
+
+    parts: list[str] = []
+    for stop in _SETTINGS_THEME.gradient(token).stops:
+        position = f"{stop.position:g}"
+        color = stop.color
+        if color.a == 255:
+            rendered = f"#{color.r:02x}{color.g:02x}{color.b:02x}"
+        else:
+            rendered = (
+                f"rgba({color.r}, {color.g}, {color.b}, "
+                f"{_unit_alpha_text(color.a)})"
+            )
+        parts.append(f"stop:{position} {rendered}")
+    return ",\n        ".join(parts)
+
+
+def _theme_qss(template: str) -> str:
+    """Resolve semantic colour placeholders while leaving QSS structure untouched."""
+
+    def replace(match: re.Match[str]) -> str:
+        mode = match.group("mode")
+        token = match.group("token")
+        if mode == "hex":
+            return _theme_hex(token)
+        if mode == "rgba":
+            return _theme_rgba(token)
+        if mode == "rgba255":
+            return _theme_rgba255(token)
+        if mode == "gradient":
+            return _theme_gradient(token)
+        raise AssertionError(f"Unhandled theme QSS mode: {mode}")
+
+    resolved = _THEME_QSS_TOKEN_RE.sub(replace, template)
+    if "@@" in resolved:
+        raise ValueError("Unresolved Settings theme QSS placeholder")
+    return resolved
 
 
 def _ensure_fonts_registered() -> None:
@@ -90,7 +187,7 @@ FORM_LABEL_STYLE = (
     "font-weight: 600;"
     "font-size: 14px;"
     "letter-spacing: 0.4px;"
-    "color: #ffffff;"
+    f"color: {_theme_hex('text.primary')};"
     f"min-height: {FORM_LABEL_HEIGHT}px;"
     "line-height: 34px;"
     "padding-top: 0px;"
@@ -105,7 +202,7 @@ FORM_ROW_LABEL_STYLE = (
     "font-weight: 500;"
     "font-size: 14px;"
     "letter-spacing: 0.35px;"
-    "color: #ffffff;"
+    f"color: {_theme_hex('text.primary')};"
     f"min-height: {FORM_LABEL_HEIGHT}px;"
     "line-height: 34px;"
     "padding-top: 0px;"
@@ -120,7 +217,7 @@ FORM_LABEL_STYLE_DISABLED = (
     "font-weight: 600;"
     "font-size: 14px;"
     "letter-spacing: 0.35px;"
-    "color: #666666;"
+    f"color: {_theme_hex('text.disabled')};"
     f"min-height: {FORM_LABEL_HEIGHT}px;"
     "line-height: 34px;"
     "padding-top: 0px;"
@@ -135,7 +232,7 @@ FORM_ROW_LABEL_STYLE_DISABLED = (
     "font-weight: 500;"
     "font-size: 14px;"
     "letter-spacing: 0.35px;"
-    "color: #666666;"
+    f"color: {_theme_hex('text.disabled')};"
     f"min-height: {FORM_LABEL_HEIGHT}px;"
     "line-height: 34px;"
     "padding-top: 0px;"
@@ -354,7 +451,7 @@ class RecommendedMarkSlider(NoWheelSlider):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._recommended_value: int | None = None
-        self._recommended_color = QColor(210, 210, 210, 170)
+        self._recommended_color = _theme_qcolor("slider.recommended_mark")
 
     def set_recommended_value(self, value: int | None) -> None:
         target = None if value is None else int(value)
@@ -422,24 +519,24 @@ class RecommendedMarkSlider(NoWheelSlider):
         )
         painter.end()
 
-SPINBOX_STYLE = """
+SPINBOX_STYLE = _theme_qss("""
 /* Rounded inputs with opaque borders + circular stepper controls */
 QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox {
     min-height: 34px;
     padding: 4px 48px 4px 16px;
     margin-bottom: 0px;
-    color: #ffffff;
+    color: @@hex:control.input.text@@;
     font-family: 'Jost';
     font-weight: 600;
-    background-color: #1f1f1f;
-    border: 2px solid #ffffff;
+    background-color: @@hex:control.input.surface@@;
+    border: 2px solid @@hex:control.input.border@@;
     border-radius: 18px;
 }
 
 QSpinBox > QLineEdit,
 QDoubleSpinBox > QLineEdit,
 QAbstractSpinBox > QLineEdit {
-    background-color: #1f1f1f;
+    background-color: @@hex:control.input.surface@@;
     border: none;
     padding: 0px;
     margin: 0px;
@@ -450,17 +547,17 @@ QLineEdit {
 }
 
 QSpinBox:hover, QDoubleSpinBox:hover, QLineEdit:hover, QAbstractSpinBox:hover {
-    border-color: #ffffff;
+    border-color: @@hex:control.input.border@@;
 }
 
 QSpinBox:focus, QDoubleSpinBox:focus, QLineEdit:focus, QAbstractSpinBox:focus {
-    border-color: #ffffff;
+    border-color: @@hex:control.input.border@@;
 }
 
 QSpinBox:disabled, QDoubleSpinBox:disabled, QLineEdit:disabled, QAbstractSpinBox:disabled {
-    color: rgba(255, 255, 255, 0.45);
-    border-color: #6a6a6a;
-    background-color: #1f1f1f;
+    color: @@rgba:control.input.disabled_text@@;
+    border-color: @@hex:control.input.disabled_border@@;
+    background-color: @@hex:control.input.surface@@;
 }
 
 QSpinBox::up-button, QDoubleSpinBox::up-button,
@@ -473,7 +570,7 @@ QSpinBox::down-button, QDoubleSpinBox::down-button {
     padding: 0px;
     border: none;
     border-radius: 5px;
-    background-color: #ffffff;
+    background-color: @@hex:control.stepper.surface@@;
 }
 
 QSpinBox::up-button, QDoubleSpinBox::up-button {
@@ -490,17 +587,17 @@ QSpinBox::down-button, QDoubleSpinBox::down-button {
 
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
 QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
-    background-color: #4d4d4d;
+    background-color: @@hex:control.stepper.hover_surface@@;
 }
 
 QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
 QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
-    background-color: #2d2d2d;
+    background-color: @@hex:control.stepper.pressed_surface@@;
 }
 
 QSpinBox::up-button:disabled, QDoubleSpinBox::up-button:disabled,
 QSpinBox::down-button:disabled, QDoubleSpinBox::down-button:disabled {
-    background-color: #6a6a6a;
+    background-color: @@hex:control.stepper.disabled_surface@@;
 }
 
 QSpinBox::up-arrow, QDoubleSpinBox::up-arrow,
@@ -509,7 +606,7 @@ QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
     height: 0px;
     border: none;
 }
-"""
+""")
 
 CIRCLE_CHECKBOX_STYLE = """
 /* Circular indicator prototype (feature flag via `circleIndicator` dynamic property). */
@@ -565,7 +662,7 @@ QCheckBox[circleIndicator='true']::indicator:disabled:checked {
 """
 
 
-COMBOBOX_STYLE = """
+COMBOBOX_STYLE = _theme_qss("""
 /* StyledComboBox base skin */
 QComboBox[customCombo='true'] {
     min-height: 34px;
@@ -576,27 +673,27 @@ QComboBox[customCombo='true'] {
     font-weight: 700;
     font-size: 14px;
     letter-spacing: 0.4px;
-    color: #ffffff;
-    border: 2px solid #ffffff;
+    color: @@hex:control.input.text@@;
+    border: 2px solid @@hex:control.input.border@@;
     border-radius: 18px;
-    background-color: #1f1f1f;
+    background-color: @@hex:control.input.surface@@;
 }
 
 QComboBox[customCombo='true']:hover {
-    background-color: #161616;
+    background-color: @@hex:control.input.hover_surface@@;
 }
 
 QComboBox[customCombo='true']:focus,
 QComboBox[customCombo='true']:on {
-    background-color: #141414;
-    border-color: #ffffff;
+    background-color: @@hex:control.input.focus_surface@@;
+    border-color: @@hex:control.input.border@@;
     outline: none;
 }
 
 QComboBox[customCombo='true']:disabled {
-    color: rgba(255, 255, 255, 0.45);
-    border-color: #6a6a6a;
-    background-color: #1f1f1f;
+    color: @@rgba:control.input.disabled_text@@;
+    border-color: @@hex:control.input.disabled_border@@;
+    background-color: @@hex:control.input.surface@@;
 }
 
 QComboBox[customCombo='true']::drop-down,
@@ -648,19 +745,19 @@ QComboBox[customCombo='true'][comboSize='hero'] {
     margin-top: 1px;
     margin-bottom: 10px;
 }
-"""
+""")
 
-COMBOBOX_POPUP_VIEW_STYLE = """
+COMBOBOX_POPUP_VIEW_STYLE = _theme_qss("""
 QListView[customComboPopup='true'],
 QListWidget[customComboPopup='true'] {
-    background-color: rgba(18, 18, 18, 0.95);
-    border: 2px solid #ffffff;
+    background-color: @@rgba:combo.popup.surface@@;
+    border: 2px solid @@hex:combo.popup.border@@;
     border-radius: 14px;
     padding: 8px 8px 12px 8px;
     outline: none;
-    selection-background-color: rgba(255, 255, 255, 0.22);
-    selection-color: #ffffff;
-    color: #ffffff;
+    selection-background-color: @@rgba:combo.popup.selection_surface@@;
+    selection-color: @@hex:combo.popup.selection_text@@;
+    color: @@hex:combo.popup.text@@;
     font-family: 'Jost';
     font-weight: 600;
     font-size: 14px;
@@ -675,24 +772,24 @@ QListWidget[customComboPopup='true']::item {
     border-radius: 8px;
     background: transparent;
 }
-"""
+""")
 
-TOOLTIP_STYLE = """
+TOOLTIP_STYLE = _theme_qss("""
 QToolTip {
-    background-color: #1e1e1e;
-    color: #ffffff;
-    border: 1px solid #ffffff;
+    background-color: @@hex:tooltip.surface@@;
+    color: @@hex:tooltip.text@@;
+    border: 1px solid @@hex:tooltip.border@@;
     padding: 6px;
     font-size: 12px;
 }
-"""
+""")
 
 PAGE_TITLE_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 700;"
     "font-size: 18px;"
     "letter-spacing: 0.5px;"
-    "color: #ffffff;"
+    f"color: {_theme_hex('text.primary')};"
 )
 
 SECTION_HEADING_STYLE = (
@@ -700,7 +797,7 @@ SECTION_HEADING_STYLE = (
     "font-weight: 800;"
     "font-size: 15px;"
     "letter-spacing: 0.6px;"
-    "color: #ffffff;"
+    f"color: {_theme_hex('text.primary')};"
     f"min-height: {FORM_LABEL_HEIGHT + 6}px;"
     "line-height: 36px;"
     "padding-top: 0px;"
@@ -715,7 +812,7 @@ SECTION_HEADING_STYLE_DISABLED = (
     "font-weight: 800;"
     "font-size: 15px;"
     "letter-spacing: 0.6px;"
-    "color: #666666;"
+    f"color: {_theme_hex('text.disabled')};"
     f"min-height: {FORM_LABEL_HEIGHT + 6}px;"
     "line-height: 36px;"
     "padding-top: 0px;"
@@ -730,7 +827,7 @@ SWATCH_LABEL_STYLE = (
     "font-weight: 500;"
     "font-size: 13px;"
     "letter-spacing: 0.4px;"
-    "color: #ffffff;"
+    f"color: {_theme_hex('text.primary')};"
     f"min-height: {SWATCH_LABEL_HEIGHT}px;"
     "line-height: 34px;"
     "padding-top: 0px;"
@@ -741,8 +838,8 @@ SWATCH_LABEL_STYLE = (
 )
 
 SUBSECTION_DIVIDER_STYLE = (
-    "background-color: rgba(60, 60, 60, 102);"
-    "border: 2px solid #ffffff;"
+    f"background-color: {_theme_rgba255('panel.subsection.surface')};"
+    f"border: 2px solid {_theme_hex('panel.border')};"
     "border-radius: 19px;"
 )
 
@@ -758,7 +855,7 @@ def style_group_box(box) -> None:
             "  subcontrol-position: top left;"
             "  padding: 2px 10px;"
             "  margin-top: 5px;"
-            "  color: #ffffff;"
+            f"  color: {_theme_hex('text.primary')};"
             "  font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
             "  font-weight: 800;"
             "  font-size: 16px;"
@@ -789,7 +886,7 @@ STATUS_LABEL_STYLE = (
 )
 
 INFO_LABEL_STYLE = (
-    "color: #aaaaaa;"
+    f"color: {_theme_hex('text.secondary')};"
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 500;"
     "font-size: 11px;"
@@ -797,7 +894,7 @@ INFO_LABEL_STYLE = (
 )
 
 ADV_HELPER_LABEL_STYLE = (
-    "color: rgba(220, 220, 220, 0.6);"
+    f"color: {_theme_rgba('text.helper')};"
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 500;"
     "font-size: 11px;"
@@ -805,14 +902,14 @@ ADV_HELPER_LABEL_STYLE = (
 )
 
 INFO_LABEL_STYLE_DISABLED = (
-    "color: #555555;"
+    f"color: {_theme_hex('text.helper_disabled')};"
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 500;"
     "font-size: 11px;"
     "letter-spacing: 0.3px;"
 )
 
-SLIDER_STYLE = """
+SLIDER_STYLE = _theme_qss("""
 /* Dark glass indented slider with pill-shaped notch handle */
 QSlider {
     min-height: 34px;
@@ -822,13 +919,10 @@ QSlider {
 QSlider::groove:horizontal {
     height: 4px;
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 rgba(8, 8, 8, 0.95),
-        stop:0.35 rgba(20, 20, 20, 0.9),
-        stop:0.65 rgba(30, 30, 30, 0.85),
-        stop:1 rgba(45, 45, 45, 0.7));
-    border: 1px solid rgba(12, 12, 12, 0.9);
-    border-top-color: rgba(0, 0, 0, 0.7);
-    border-bottom-color: rgba(70, 70, 70, 0.25);
+        @@gradient:slider.groove.surface@@);
+    border: 1px solid @@rgba:slider.groove.border@@;
+    border-top-color: @@rgba:slider.groove.top_border@@;
+    border-bottom-color: @@rgba:slider.groove.bottom_border@@;
     border-radius: 2px;
     margin: 0px 0;
 }
@@ -836,12 +930,10 @@ QSlider::groove:horizontal {
 QSlider::sub-page:horizontal {
     height: 4px;
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 rgba(50, 50, 50, 0.9),
-        stop:0.5 rgba(65, 65, 65, 0.85),
-        stop:1 rgba(50, 50, 50, 0.75));
-    border: 1px solid rgba(35, 35, 35, 0.85);
-    border-top-color: rgba(25, 25, 25, 0.7);
-    border-bottom-color: rgba(80, 80, 80, 0.25);
+        @@gradient:slider.fill.surface@@);
+    border: 1px solid @@rgba:slider.fill.border@@;
+    border-top-color: @@rgba:slider.fill.top_border@@;
+    border-bottom-color: @@rgba:slider.fill.bottom_border@@;
     border-radius: 2px;
 }
 
@@ -851,26 +943,26 @@ QSlider::handle:horizontal {
     margin: -4px 0;
     border-radius: 5px;
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #2e2e2e, stop:0.85 #1a1a1a, stop:1 #111111);
-    border: 1px solid #676767;
+        @@gradient:slider.handle.surface@@);
+    border: 1px solid @@hex:slider.handle.border@@;
     
 }
 
 QSlider::handle:horizontal:hover {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #3a3a3a, stop:0.85 #242424, stop:1 #181818);
-    border: 1px solid #999999;
+        @@gradient:slider.handle.hover_surface@@);
+    border: 1px solid @@hex:slider.handle.hover_border@@;
     
 }
 
 QSlider::handle:horizontal:pressed {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #222222, stop:1 #141414);
-    border: 1px solid #2a2a2a;
+        @@gradient:slider.handle.pressed_surface@@);
+    border: 1px solid @@hex:slider.handle.pressed_border@@;
 }
 
 QSlider::handle:horizontal:disabled {
-    background: #5a5a5a;
+    background: @@hex:slider.handle.disabled_surface@@;
 }
 
 QSlider#presetModeSlider {
@@ -901,11 +993,11 @@ QSlider[lastMoved="true"]::handle:horizontal {
     height: 6px;
     margin: -4px 0;
     border-radius: 5px;
-    border: 1.5px solid #111111;
+    border: 1.5px solid @@hex:slider.handle.active_border@@;
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #2e2e2e, stop:0.85 #1a1a1a, stop:1 #111111);
+        @@gradient:slider.handle.active_surface@@);
 }
-"""
+""")
 
 SCROLL_AREA_STYLE = """
 QScrollArea { border: none; background: transparent; }
