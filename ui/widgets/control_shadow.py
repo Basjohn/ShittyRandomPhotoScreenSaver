@@ -28,39 +28,53 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME
+from ui.settings_theme_runtime import (
+    get_active_settings_theme,
+    subscribe_settings_theme,
+)
+from ui.settings_theme_spec import SettingsThemeSpec
 
 
-_SETTINGS_THEME = DEFAULT_DARK_SETTINGS_THEME
-_DEFAULT_INPUT_STYLE = _SETTINGS_THEME.shadow("input.spin_combo")
+def _active_input_style():
+    """Return the currently active semantic input shadow."""
+
+    return get_active_settings_theme().shadow("input.spin_combo")
 
 
 @dataclass(slots=True)
 class ShadowConfig:
     """One bounded renderer-facing widget-shadow style.
 
-    The default remains the Settings input shadow for compatibility with custom
-    controls that attach a provisional shadow during construction, but those
-    values now come from the semantic theme rather than being repeated here.
+    Default construction remains compatible with provisional input shadows,
+    but those defaults are resolved from the active theme at construction time
+    rather than being frozen when this module is imported.
     """
 
-    blur_radius: float = _DEFAULT_INPUT_STYLE.blur_radius
+    blur_radius: float = field(
+        default_factory=lambda: _active_input_style().blur_radius
+    )
     offset: QPointF = field(
         default_factory=lambda: QPointF(
-            _DEFAULT_INPUT_STYLE.offset_x,
-            _DEFAULT_INPUT_STYLE.offset_y,
+            _active_input_style().offset_x,
+            _active_input_style().offset_y,
         )
     )
     color: QColor = field(
-        default_factory=lambda: QColor(*_DEFAULT_INPUT_STYLE.color.as_tuple())
+        default_factory=lambda: QColor(*_active_input_style().color.as_tuple())
     )
-    disabled_alpha_scale: float = _DEFAULT_INPUT_STYLE.disabled_alpha_scale
+    disabled_alpha_scale: float = field(
+        default_factory=lambda: _active_input_style().disabled_alpha_scale
+    )
 
 
-def _theme_shadow_config(token: str) -> ShadowConfig:
+def _theme_shadow_config(
+    token: str,
+    theme: SettingsThemeSpec | None = None,
+) -> ShadowConfig:
     """Adapt one semantic theme shadow into the existing QWidget renderer type."""
 
-    style = _SETTINGS_THEME.shadow(token)
+    resolved_theme = theme or get_active_settings_theme()
+    style = resolved_theme.shadow(token)
     return ShadowConfig(
         blur_radius=style.blur_radius,
         offset=QPointF(style.offset_x, style.offset_y),
@@ -69,36 +83,74 @@ def _theme_shadow_config(token: str) -> ShadowConfig:
     )
 
 
-# Settings control-shadow language.  Rendering remains local; visual policy is
-# semantic theme data.
-SPIN_COMBO_SHADOW = _theme_shadow_config("input.spin_combo")
+# These names remain stable renderer vocabulary for the rest of this module.
+# Their values are replaced atomically whenever the active ThemeSpec changes.
+SPIN_COMBO_SHADOW: ShadowConfig
+LINE_EDIT_SHADOW: ShadowConfig
+PILL_BUTTON_SHADOW: ShadowConfig
+NAV_TAB_SHADOW: ShadowConfig
+BUCKET_CLOSED_SHADOW: ShadowConfig
+BUCKET_OPEN_SHADOW: ShadowConfig
+SECTION_TEXT_SHADOW: ShadowConfig
+NAV_ICON_SHADOW: ShadowConfig
+PAGE_TEXT_SHADOW: ShadowConfig
+TITLE_TEXT_SHADOW: ShadowConfig
+SHELL_PANEL_SHADOW: ShadowConfig
+SCROLLBAR_SHADOW: ShadowConfig
+GROUP_FRAME_SHADOW: ShadowConfig
+RATIO_FRAME_SHADOW: ShadowConfig
 
-# Entry boxes deliberately share the same crisp input cast as combo/spin
-# shells.  There is no separate blurred line-edit visual authority anymore.
-LINE_EDIT_SHADOW = SPIN_COMBO_SHADOW
 
-PILL_BUTTON_SHADOW = _theme_shadow_config("button.pill")
+def _install_theme_shadow_configs(theme: SettingsThemeSpec) -> None:
+    """Replace renderer-facing shadow configs from one resolved ThemeSpec."""
 
-# Main left-nav tabs are translucent; a normal graphics effect shadows their
-# border/text alpha and looks hollow. Their body therefore remains a solid
-# geometry backing. TabButton renders icon/text separately; its text QLabel
-# naturally receives the proven sibling-painted text shadow below.
-NAV_TAB_SHADOW = _theme_shadow_config("navigation.tab")
+    global SPIN_COMBO_SHADOW
+    global LINE_EDIT_SHADOW
+    global PILL_BUTTON_SHADOW
+    global NAV_TAB_SHADOW
+    global BUCKET_CLOSED_SHADOW
+    global BUCKET_OPEN_SHADOW
+    global SECTION_TEXT_SHADOW
+    global NAV_ICON_SHADOW
+    global PAGE_TEXT_SHADOW
+    global TITLE_TEXT_SHADOW
+    global SHELL_PANEL_SHADOW
+    global SCROLLBAR_SHADOW
+    global GROUP_FRAME_SHADOW
+    global RATIO_FRAME_SHADOW
 
-BUCKET_CLOSED_SHADOW = _theme_shadow_config("bucket.closed")
-BUCKET_OPEN_SHADOW = _theme_shadow_config("bucket.open")
-SECTION_TEXT_SHADOW = _theme_shadow_config("text.section")
-NAV_ICON_SHADOW = SECTION_TEXT_SHADOW
-PAGE_TEXT_SHADOW = _theme_shadow_config("text.page")
-TITLE_TEXT_SHADOW = _theme_shadow_config("text.title")
-SHELL_PANEL_SHADOW = _theme_shadow_config("shell.panel")
-SCROLLBAR_SHADOW = _theme_shadow_config("scrollbar")
-GROUP_FRAME_SHADOW = _theme_shadow_config("panel.group")
+    SPIN_COMBO_SHADOW = _theme_shadow_config("input.spin_combo", theme)
 
-# ``ratioFrame`` is a compact rounded panel rather than a control.  Until a
-# dedicated semantic token is warranted, reuse the existing panel-group cast
-# instead of inventing another local numeric shadow policy.
-RATIO_FRAME_SHADOW = GROUP_FRAME_SHADOW
+    # Entry boxes deliberately share the same crisp input cast as combo/spin
+    # shells. There is no separate blurred line-edit visual authority anymore.
+    LINE_EDIT_SHADOW = SPIN_COMBO_SHADOW
+
+    PILL_BUTTON_SHADOW = _theme_shadow_config("button.pill", theme)
+
+    # Main left-nav tabs are translucent; the renderer still uses the proven
+    # outside-only body cast rather than an alpha-following graphics effect.
+    NAV_TAB_SHADOW = _theme_shadow_config("navigation.tab", theme)
+
+    BUCKET_CLOSED_SHADOW = _theme_shadow_config("bucket.closed", theme)
+    BUCKET_OPEN_SHADOW = _theme_shadow_config("bucket.open", theme)
+    SECTION_TEXT_SHADOW = _theme_shadow_config("text.section", theme)
+    NAV_ICON_SHADOW = SECTION_TEXT_SHADOW
+    PAGE_TEXT_SHADOW = _theme_shadow_config("text.page", theme)
+    TITLE_TEXT_SHADOW = _theme_shadow_config("text.title", theme)
+    SHELL_PANEL_SHADOW = _theme_shadow_config("shell.panel", theme)
+    SCROLLBAR_SHADOW = _theme_shadow_config("scrollbar", theme)
+    GROUP_FRAME_SHADOW = _theme_shadow_config("panel.group", theme)
+
+    # ratioFrame intentionally reuses the semantic panel-group cast.
+    RATIO_FRAME_SHADOW = GROUP_FRAME_SHADOW
+
+
+_install_theme_shadow_configs(get_active_settings_theme())
+
+
+# Settings roots that have actually used this renderer. Weak references keep
+# the runtime theme authority from extending any dialog/widget lifetime.
+_THEMED_ROOT_REFS: list[weakref.ReferenceType[QWidget]] = []
 
 
 class _ControlShadowHelper(QObject):
@@ -432,6 +484,22 @@ class _CastShadowHelper(QObject):
         left, top, right, bottom = self.insets
         return QRectF(owner.rect()).adjusted(left, top, -right, -bottom)
 
+    def reconfigure(
+        self,
+        config: ShadowConfig,
+        *,
+        radius: float,
+        insets: tuple[float, float, float, float],
+        group_box_frame: bool,
+    ) -> None:
+        """Apply new semantic values without changing the render mechanism."""
+
+        self.config = config
+        self.radius = float(radius)
+        self.insets = tuple(float(value) for value in insets)
+        self.group_box_frame = bool(group_box_frame)
+        self._sync()
+
     def _ensure_overlay_parent(self) -> None:
         parent = self.owner.parentWidget()
         if parent is None:
@@ -758,6 +826,12 @@ def attach_cast_shadow(
 
     existing = getattr(widget, "_settings_cast_shadow_helper", None)
     if isinstance(existing, _CastShadowHelper):
+        existing.reconfigure(
+            config,
+            radius=radius,
+            insets=insets,
+            group_box_frame=group_box_frame,
+        )
         if reserve_layout:
             _reserve_parent_layout_shadow_clearance(widget, config)
         return
@@ -1058,6 +1132,55 @@ class _SettingsShadowWatcher(QObject):
         return super().eventFilter(watched, event)
 
 
+def _register_shadow_root(root: QWidget) -> None:
+    """Remember the owning Settings window without extending its lifetime."""
+
+    try:
+        window = root.window()
+    except RuntimeError:
+        return
+    candidate = window if isinstance(window, QWidget) else root
+
+    live_refs: list[weakref.ReferenceType[QWidget]] = []
+    found = False
+    for ref in _THEMED_ROOT_REFS:
+        existing = ref()
+        if existing is None:
+            continue
+        live_refs.append(ref)
+        if existing is candidate:
+            found = True
+
+    if not found:
+        try:
+            live_refs.append(weakref.ref(candidate))
+        except TypeError:
+            return
+
+    _THEMED_ROOT_REFS[:] = live_refs
+
+
+def _iter_shadow_roots() -> tuple[QWidget, ...]:
+    """Return live registered roots while pruning dead weak references."""
+
+    roots: list[QWidget] = []
+    live_refs: list[weakref.ReferenceType[QWidget]] = []
+    seen: set[int] = set()
+
+    for ref in _THEMED_ROOT_REFS:
+        root = ref()
+        if root is None:
+            continue
+        live_refs.append(ref)
+        identity = id(root)
+        if identity not in seen:
+            roots.append(root)
+            seen.add(identity)
+
+    _THEMED_ROOT_REFS[:] = live_refs
+    return tuple(roots)
+
+
 def apply_shadows_to_existing(
     root: Optional[QWidget],
     *,
@@ -1072,6 +1195,8 @@ def apply_shadows_to_existing(
 
     if root is None:
         return
+
+    _register_shadow_root(root)
 
     target_types_list: list[Type[QWidget]] = list(_DEFAULT_TARGET_TYPES)
     if include_types:
@@ -1122,6 +1247,25 @@ def apply_shadows_to_inputs(
 def _ensure_styled_background(widget: QWidget) -> None:
     if not widget.testAttribute(Qt.WidgetAttribute.WA_StyledBackground):
         widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+
+def _refresh_registered_shadows(theme: SettingsThemeSpec) -> None:
+    """Reconfigure every existing Settings shadow for a live theme change."""
+
+    _install_theme_shadow_configs(theme)
+    for root in _iter_shadow_roots():
+        try:
+            apply_shadows_to_existing(root)
+        except RuntimeError:
+            # A QWidget may have been deleted at C++ level just before its
+            # Python weakref disappears. Dead roots are harmless on refresh.
+            continue
+
+
+# Stable module-level subscription. The runtime authority calls this
+# synchronously and will invoke it again with the previous ThemeSpec if another
+# renderer fails and the overall theme transaction rolls back.
+_THEME_UNSUBSCRIBE = subscribe_settings_theme(_refresh_registered_shadows)
 
 
 __all__ = [
