@@ -2389,6 +2389,60 @@ def test_custom_layout_manager_cross_display_transfer_updates_monitor_and_reload
     assert display1._runtime_reload_requests == 1
 
 
+def test_custom_layout_manager_retained_move_reuses_screen_threshold_and_route(
+    qtbot,
+    monkeypatch,
+):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "clock2": {"position": "Bottom Right", "monitor": "2"}
+    }
+    screen0 = _FakeScreen("screen0", QRect(0, 0, 800, 600))
+    screen1 = _FakeScreen("screen1", QRect(800, 0, 800, 600))
+    display1 = _DisplayStub(settings_stub, screen=screen1, screen_index=1)
+    qtbot.addWidget(display1)
+    display1.show()
+    display1.clock2_widget = _EditableTestWidget(display1, font_size=32)
+    qtbot.addWidget(display1.clock2_widget)
+
+    manager = CustomLayoutManager(display1)
+    _attach_manager(display1, manager)
+    monkeypatch.setattr(manager, "_get_available_screens", lambda: [screen0, screen1])
+    assert manager.start_session() is True
+    state = manager._shell_states["clock2"]
+    source_identity = state.item.current_display_identity
+
+    near_edge = QRect(
+        790,
+        100,
+        state.item.current_global_rect.width(),
+        state.item.current_global_rect.height(),
+    )
+    resolved = manager.resolve_retained_move(
+        state.item,
+        near_edge,
+        QPoint(795, 120),
+    )
+    assert state.item.current_display_identity == source_identity
+    assert resolved.left() >= screen1.geometry().left()
+
+    deliberate_push = QRect(
+        580,
+        100,
+        state.item.current_global_rect.width(),
+        state.item.current_global_rect.height(),
+    )
+    resolved = manager.resolve_retained_move(
+        state.item,
+        deliberate_push,
+        QPoint(760, 120),
+    )
+    assert state.item.current_display_identity == get_screen_signature(screen0)
+    assert state.item.current_monitor_route == "1"
+    assert screen0.geometry().contains(resolved.topLeft())
+
+
 def test_custom_layout_manager_persists_and_replays_complete_two_display_graph(
     qtbot,
     monkeypatch,

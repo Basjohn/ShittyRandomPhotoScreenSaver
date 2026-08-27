@@ -24,7 +24,7 @@ from rendering.custom_layout_session import (
 )
 
 
-GeometryResolver = Callable[[CustomLayoutSessionItem, QRect], QRect]
+GeometryResolver = Callable[[CustomLayoutSessionItem, QRect, QPoint], QRect]
 ItemChangePublisher = Callable[[CustomLayoutSessionItem], None]
 ResizeBeginHandler = Callable[[CustomLayoutSessionItem, str, QPoint], bool]
 ResizeUpdateHandler = Callable[[CustomLayoutSessionItem, str, QPoint, bool], bool]
@@ -128,8 +128,15 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         for item in session.items():
             self._publish_item_change(item)
 
-    @Slot(int, float, float)
-    def moveItem(self, row: int, local_x: float, local_y: float) -> None:
+    @Slot(int, float, float, float, float)
+    def moveItem(
+        self,
+        row: int,
+        local_x: float,
+        local_y: float,
+        cursor_local_x: float,
+        cursor_local_y: float,
+    ) -> None:
         """Move one item through the session's authoritative geometry seam."""
 
         if not 0 <= int(row) < len(self._items):
@@ -143,7 +150,12 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             current.height(),
         )
         resolver = self._geometry_resolver
-        resolved = QRect(resolver(item, proposed)) if resolver is not None else proposed
+        cursor = self._global_point(cursor_local_x, cursor_local_y)
+        resolved = (
+            QRect(resolver(item, proposed, cursor))
+            if resolver is not None
+            else proposed
+        )
         item.set_geometry(resolved)
         session = self._session
         if session is not None:
