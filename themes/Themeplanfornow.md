@@ -76,21 +76,28 @@ to compiled Default Dark rather than an unstyled window.
 - Theme Foundry is rebuilt around the semantic `SettingsThemeSpec` / strict
   `.srtheme` contract. The old source scanner and Apply-to-Sources mutation model
   are retired from the replacement tool.
-- Foundry edits colours, shadows, gradients and per-theme Acrylic enabled/tint
-  state; Off is explicit. Unsupported Mica/Glass-style runtime modes are shown
-  as unavailable rather than serialized dishonestly.
-- High-confidence simple alpha-over layer previews support click-to-target
-  reverse solving of the selected role RGB at its current alpha.
+- Semantic QSS colour rendering no longer treats historical hex-form call sites
+  as an opacity contract. Opaque values keep compact `#RRGGBB`; translucent
+  values render as integer-alpha `rgba(...)` through one central formatter.
+- The shared-style placeholder vocabulary now says `@@color:...@@`, not
+  `@@hex:...@@`, so future theme authors are not taught a false opacity rule.
+- Foundry work is paused until the native backdrop contract can truthfully expose
+  real **Off / Acrylic / Glass** runtime modes instead of tint presets pretending
+  to be different materials.
 
 ## Immediate remaining work
 
-1. Windows eyes-on smoke of rebuilt Theme Foundry: load Default/Obnoxious, edit
-   colour/shadow/gradient, test Acrylic Off/tint presets, click a reversible
-   predicted composite, Save As, strict-reload, then select the result in Settings.
-2. Build/release work replaces the temporary theme-directory stub and retires
+1. Windows smoke P34: Default Dark and Obnoxious remain visually stable; a theme
+   containing translucent formerly-hex colour roles applies without rollback.
+2. Add a real per-theme native backdrop mode: **Off / Acrylic / Glass**. Glass
+   must use the Windows blur-behind path, not lower Acrylic tint alpha. Bump the
+   semantic theme schema once for that durable contract and migrate built-ins.
+3. Update Theme Foundry against that final backdrop/alpha contract, then smoke
+   load/edit/save/reload and reversible composite authoring.
+4. Build/release work replaces the temporary theme-directory stub and retires
    the dev fallback as recorded in `Future_Cleanup.md`.
-3. Perform the deliberate `dark.qss` retirement pass: relocate required
+5. Perform the deliberate `dark.qss` retirement pass: relocate required
    structural/geometry/resource selectors, run with the file physically absent,
    then remove redundant anti-`dark.qss` compensation/comments before deletion.
-4. Remove the Obnoxious validation theme and this temporary plan after final
+6. Remove the Obnoxious validation theme and this temporary plan after final
    Foundry/dark.qss/build-path validation and durable documentation.

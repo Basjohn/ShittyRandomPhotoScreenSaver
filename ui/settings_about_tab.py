@@ -21,6 +21,7 @@ from ui.settings_theme_runtime import (
     subscribe_settings_theme,
 )
 from ui.settings_theme_spec import SettingsThemeSpec
+from ui.settings_theme_qss import render_qss_color, render_qss_rgba255
 
 if TYPE_CHECKING:
     from ui.settings_dialog import SettingsDialog
@@ -31,34 +32,30 @@ _SETTINGS_THEME = get_active_settings_theme()
 _LIVE_ABOUT_DIALOGS: weakref.WeakSet = weakref.WeakSet()
 
 
-def _theme_hex(token: str) -> str:
-    """Render one opaque About theme role as QSS hex."""
+def _theme_qss_color(token: str) -> str:
+    """Render one About theme role without requiring opacity."""
 
-    value = _SETTINGS_THEME.color(token)
-    if value.a != 255:
-        raise ValueError(f"About theme colour {token!r} is not opaque")
-    return f"#{value.r:02x}{value.g:02x}{value.b:02x}"
+    return render_qss_color(_SETTINGS_THEME.color(token))
 
 
 def _theme_rgba255(token: str) -> str:
     """Render one About theme role using Qt's integer-alpha rgba syntax."""
 
-    value = _SETTINGS_THEME.color(token)
-    return f"rgba({value.r}, {value.g}, {value.b}, {value.a})"
+    return render_qss_rgba255(_SETTINGS_THEME.color(token))
 
 
 def _about_content_card_style() -> str:
     return (
         "#aboutContentCard {"
         f"  background-color: {_theme_rgba255('about.card.surface')};"
-        f"  border: 1px solid {_theme_hex('about.card.border')};"
+        f"  border: 1px solid {_theme_qss_color('about.card.border')};"
         "  border-radius: 8px;"
         "}"
     )
 
 
 def _about_blurb_style() -> str:
-    return f"color: {_theme_hex('about.blurb.text')}; font-size: 12pt;"
+    return f"color: {_theme_qss_color('about.blurb.text')}; font-size: 12pt;"
 
 
 def _about_link_button_style() -> str:
@@ -68,8 +65,8 @@ def _about_link_button_style() -> str:
         "  font-weight: bold;"
         "  border-radius: 16px;"
         f"  background-color: {_theme_rgba255('about.link.surface')};"
-        f"  color: {_theme_hex('about.link.text')};"
-        f"  border: 1px solid {_theme_hex('about.link.border')};"
+        f"  color: {_theme_qss_color('about.link.text')};"
+        f"  border: 1px solid {_theme_qss_color('about.link.border')};"
         "}"
         "QPushButton:hover {"
         f"  background-color: {_theme_rgba255('about.link.hover_surface')};"
@@ -82,7 +79,7 @@ def _about_link_button_style() -> str:
 
 
 def _about_hotkeys_style() -> str:
-    return f"color: {_theme_hex('about.hotkeys.text')}; margin-top: 16px;"
+    return f"color: {_theme_qss_color('about.hotkeys.text')}; margin-top: 16px;"
 
 
 def _about_more_style() -> str:
@@ -104,7 +101,7 @@ def _about_more_style() -> str:
 
 def _about_notice_style() -> str:
     return (
-        f"color: {_theme_hex('about.notice.text')}; "
+        f"color: {_theme_qss_color('about.notice.text')}; "
         "font-size: 11px; padding: 4px 10px; "
         f"background-color: {_theme_rgba255('about.notice.surface')}; "
         "border-radius: 6px;"
