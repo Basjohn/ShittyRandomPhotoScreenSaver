@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-91c468e6ba1e87f2292a9c60813013cb266c7b1b
-Phase F8 caller-proof retirement landed and passed post-push self-audit
+b1ed9a91561cf5857b36830b607dc2ec2d1ebad8
+Phase F closed; exact G1 geometry/session owners inspected on current main
 ```
 
 Current phase state:
@@ -41,22 +41,21 @@ Source outranks this plan if a later checkpoint has landed.
 ## Immediate work — G1 session and multi-variant working-state contract
 
 ```text
-exact current geometry/persistence/edit-session ownership audit       ACTIVE
-presentation-neutral CustomLayoutSession contract                     PENDING
-variant-key + Clock digital/analogue no-drift bars                    PENDING
-working duplicate/enabled/X state bars                                PENDING
+presentation-neutral CustomLayoutSession contract                     ACTIVE
+variant-aware committed storage + exact Clock replay                  PENDING
 manager/session integration without QWidget pixel ownership           PENDING
 ```
 
-### G1.1 — ownership and caller audit (ACTIVE)
+### G1.1 — neutral session admission (ACTIVE)
 
-- trace exact current committed-geometry, screen identity, normalization/clamp/snap, Save/Cancel, duplicate and
-  ordinary-enabled owners from Settings/runtime through the old edit shell;
-- classify presentation-neutral logic to reuse versus QWidget/edit-grid pixel/session ownership to replace;
-- prove the accepted variant key `(widget_id, display_identity, geometry_variant)` can preserve independent Clock
-  digital/analogue rects and display-local state without compatibility replay;
-- identify the smallest neutral session boundary for working geometry, duplicate removal and ordinary-enabled OFF;
-- do not create Quick overlay pixels or retire old edit pixels until this ownership audit and contract tests are GREEN.
+- keep exact item identity, source/current display, geometry variant, baseline/current rect and size payload,
+  resize scale and working removed/enabled state in `CustomLayoutSession`, with no QWidget dependency;
+- replace the version-1 single-entry geometry map with exact variant-aware committed storage; old CUSTOM geometry may
+  invalidate rather than gaining compatibility replay;
+- cut `CustomLayoutManager` working-state ownership over to the neutral session while the old shell remains only the
+  temporary G1/G2 presentation adapter;
+- prove Clock digital -> analogue -> digital restores exact committed rects without derivation or drift;
+- do not create Quick overlay pixels or retire old edit pixels until the session/storage/manager contract is GREEN.
 
 Use `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`; exact current source outranks stale owner names.
 
@@ -159,6 +158,9 @@ Every adjustable edit-mode card gets `X`:
 
 Context-menu Save or Enter commits geometry, duplicate removals and ordinary enabled-state changes.
 Cancel restores pre-edit geometry, duplicate set and ordinary enabled state.
+
+G2 retained edit-overlay visual rule: centering guides are red so display/peer-centre alignment is immediately
+distinct from ordinary grid and edge guides.
 
 Old QWidget edit/grid pixels retire after G GREEN.
 
