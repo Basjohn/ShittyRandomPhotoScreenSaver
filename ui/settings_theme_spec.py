@@ -270,9 +270,9 @@ _DEFAULT_DARK_SHADOWS: dict[str, ShadowStyle] = {
     ),
     "scrollbar": ShadowStyle(
         blur_radius=0.0,
-        offset_x=2.0,
-        offset_y=3.0,
-        color=Rgba(0, 0, 0, 82),
+        offset_x=4.0,
+        offset_y=5.0,
+        color=Rgba(0, 0, 0, 110),
     ),
     "panel.group": ShadowStyle(
         blur_radius=0.0,
