@@ -36,6 +36,7 @@ from ui.styled_popup import StyledPopup
 from ui.tabs import shared_styles
 from ui.widgets.control_shadow import apply_shadows_to_inputs
 from ui.settings_dialog_cache import get_settings_dialog_cache
+from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME
 
 logger = get_logger(__name__)
 
@@ -49,11 +50,23 @@ def _record_diagnostic_stage(stage: str, **fields: object) -> None:
 
     record_diagnostic_stage(stage, **fields)
 
+_SETTINGS_THEME = DEFAULT_DARK_SETTINGS_THEME
+
+
+def _theme_qcolor(token: str) -> QColor:
+    """Convert one semantic Settings theme colour into Qt's QColor."""
+    value = _SETTINGS_THEME.color(token)
+    return QColor(*value.as_tuple())
+
+
+# Fragile forged-edge geometry remains renderer-owned by design.  Only its
+# colours come from the semantic Settings theme.
 SETTINGS_OUTER_CORNER_RADIUS = 6.5
 SETTINGS_OUTER_BORDER_WIDTH = 4.0
 SETTINGS_OUTER_BORDER_BACKING_WIDTH = 6.0
-SETTINGS_OUTER_BORDER_BACKING_COLOR = QColor(12, 12, 12, 255)
-SETTINGS_CORNER_COVER_COLOR = QColor(12, 12, 12, 255)
+SETTINGS_OUTER_BORDER_COLOR = _theme_qcolor("chrome.outer_border")
+SETTINGS_OUTER_BORDER_BACKING_COLOR = _theme_qcolor("chrome.outer_border_backing")
+SETTINGS_CORNER_COVER_COLOR = _theme_qcolor("chrome.corner_cover")
 
 
 class CustomTitleBar(QWidget):
@@ -1088,7 +1101,7 @@ class SettingsDialog(QDialog):
         try:
             restorer(view_state)
         except Exception:
-            logger.debug("Failed to restore view state for tab %s", key, exc_info=True)
+            logger.debug("Failed to restore tab view state for tab %s", key, exc_info=True)
 
     def _save_tab_state_cache(self) -> None:
         try:
@@ -1776,19 +1789,38 @@ class SettingsDialog(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
         _record_diagnostic_stage("settings_show_event_activation_enabled")
         self._start_background_tab_hydration()
-        # Enable Windows acrylic blur-behind on first show
+        # Apply the theme-requested Windows acrylic state on first show.
+        # Enabled themes pass their exact tint/strength into the existing DWM
+        # renderer; disabled themes use the real disable path rather than an
+        # unreliable alpha-zero acrylic request.
         if not self._acrylic_applied:
             self._acrylic_applied = True
             blur_start = time.perf_counter()
             try:
-                from core.windows.dwm_blur import enable_acrylic_blur
                 _record_diagnostic_stage("settings_show_event_before_winid")
                 hwnd = int(self.winId())
+                acrylic = _SETTINGS_THEME.acrylic
                 _record_diagnostic_stage(
                     "settings_show_event_before_acrylic",
                     hwnd=hwnd,
+                    requested=acrylic.enabled,
                 )
-                acrylic_enabled = enable_acrylic_blur(hwnd)
+                if acrylic.enabled:
+                    from core.windows.dwm_blur import enable_acrylic_blur
+
+                    tint = acrylic.tint
+                    acrylic_enabled = enable_acrylic_blur(
+                        hwnd,
+                        tint_r=tint.r,
+                        tint_g=tint.g,
+                        tint_b=tint.b,
+                        tint_alpha=tint.a,
+                    )
+                else:
+                    from core.windows.dwm_blur import disable_blur
+
+                    disable_blur(hwnd)
+                    acrylic_enabled = False
                 _record_diagnostic_stage(
                     "settings_show_event_after_acrylic",
                     enabled=acrylic_enabled,
@@ -1858,7 +1890,7 @@ class SettingsDialog(QDialog):
                 SETTINGS_OUTER_CORNER_RADIUS,
             )
 
-        border_pen = QPen(QColor(255, 255, 255, 255), SETTINGS_OUTER_BORDER_WIDTH)
+        border_pen = QPen(SETTINGS_OUTER_BORDER_COLOR, SETTINGS_OUTER_BORDER_WIDTH)
         border_pen.setJoinStyle(
             Qt.PenJoinStyle.MiterJoin if self._is_maximized else Qt.PenJoinStyle.RoundJoin
         )
