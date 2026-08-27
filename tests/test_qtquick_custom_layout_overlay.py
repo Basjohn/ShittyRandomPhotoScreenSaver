@@ -487,6 +487,132 @@ def test_cross_display_transfer_flips_one_visible_retained_family_owner(qt_app) 
 
 
 @pytest.mark.qt
+def test_visualizer_cross_display_transfer_rehomes_one_render_admission(
+    qt_app,
+    monkeypatch,
+) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    factory = QuickSceneFactory()
+    source_window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=107,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    target_window = QuickDisplayWindow(
+        screen_index=1,
+        runtime_generation=107,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    source_controller = QuickSceneController(window=source_window, factory=factory)
+    target_controller = QuickSceneController(window=target_window, factory=factory)
+    monkeypatch.setattr(
+        target_controller,
+        "_display_device_pixel_ratio",
+        lambda: 2.25,
+    )
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("spectrum"),
+        display_size=(1920.0, 1080.0),
+        outer_origin=(120.0, 90.0),
+        uniform_visual_scale=1.5,
+        scene_fade=0.8,
+    )
+    _outer_x, _outer_y, outer_width, outer_height = presentation.outer_rect
+
+    session = CustomLayoutSession()
+    visualizer = _item(
+        "spotify_visualizer",
+        "display:a",
+        QRect(120, 90, int(outer_width), int(outer_height)),
+        resizable=True,
+    )
+    session.add_item(visualizer)
+    source_controller.bind_custom_layout_session(
+        session,
+        display_identity="display:a",
+    )
+    target_controller.bind_custom_layout_session(
+        session,
+        display_identity="display:b",
+        display_origin=QPoint(800, 0),
+    )
+
+    bridge = VisualizerSnapshotBridge()
+    render_identity = bridge.begin_activation(
+        runtime_generation=107,
+        engine_generation=9,
+        activation_id=13,
+        mode_id="spectrum",
+    )
+    source_controller.set_visualizer_render_source(bridge, render_identity)
+    source_controller.apply_visualizer_presentation(presentation)
+    source_item_identity = id(source_controller.visualizer_item)
+
+    visualizer.set_current_display("display:b", monitor_route="2")
+    visualizer.set_geometry(
+        QRect(860, 140, int(outer_width), int(outer_height)),
+    )
+    assert source_controller.transfer_visualizer_to(target_controller) == render_identity
+    session.notify_item_changed(visualizer)
+
+    source_state = source_controller.describe_scene_state()["visualizer"]
+    target_state = target_controller.describe_scene_state()["visualizer"]
+    assert source_state["instantiated"] is False
+    assert source_state["render_identity"] is None
+    assert target_state["instantiated"] is True
+    assert target_controller.visualizer_item.render_identity == render_identity
+    assert target_controller.visualizer_item.presentation is not None
+    assert target_controller.visualizer_item.presentation.dpr == pytest.approx(2.25)
+    assert bridge.identity == render_identity
+    assert id(target_controller.visualizer_item) != source_item_identity
+    target_loader = target_controller.scene_root.findChild(
+        QQuickItem,
+        "visualizerPresentationLoader",
+    )
+    assert target_loader is not None
+    target_root = target_loader.property("item")
+    assert target_root is not None
+    assert (target_loader.x(), target_loader.y()) == (60.0, 140.0)
+    assert target_root.property("presentationActive") is True
+    assert target_root.property("customLayoutWorkingVisible") is True
+
+    session.restore_baseline()
+    assert target_root.property("customLayoutWorkingVisible") is False
+    assert target_controller.transfer_visualizer_to(source_controller) == render_identity
+    source_state = source_controller.describe_scene_state()["visualizer"]
+    target_state = target_controller.describe_scene_state()["visualizer"]
+    assert source_state["instantiated"] is True
+    assert target_state["instantiated"] is False
+    assert target_state["render_identity"] is None
+    assert source_controller.visualizer_item.render_identity == render_identity
+    assert source_controller.visualizer_item.presentation is not None
+    assert source_controller.visualizer_item.presentation.dpr == pytest.approx(
+        source_window.devicePixelRatio()
+    )
+    assert bridge.identity == render_identity
+    source_loader = source_controller.scene_root.findChild(
+        QQuickItem,
+        "visualizerPresentationLoader",
+    )
+    assert source_loader is not None
+    source_root = source_loader.property("item")
+    assert source_root is not None
+    assert (source_loader.x(), source_loader.y()) == (120.0, 90.0)
+    assert source_root.property("presentationActive") is True
+    assert source_root.property("customLayoutWorkingVisible") is True
+
+    source_controller.quiesce_for_retirement()
+    target_controller.quiesce_for_retirement()
+    source_window.deleteLater()
+    target_window.deleteLater()
+    factory.deleteLater()
+    qt_app.processEvents()
+
+
+@pytest.mark.qt
 def test_visualizer_custom_session_preserves_retained_item_and_render_identity(qt_app) -> None:
     screen = qt_app.primaryScreen()
     assert screen is not None

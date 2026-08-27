@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
+import math
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QPoint, QUrl, Signal, Qt
@@ -46,6 +47,16 @@ from .widgets.registry import (
     ordinary_widget_family_component,
 )
 from .window import QuickDisplayWindow
+
+
+@dataclass(frozen=True, slots=True)
+class VisualizerSceneTransfer:
+    """Detached logical/render admission used for one-window-at-a-time handoff."""
+
+    bridge: VisualizerSnapshotBridge
+    identity: VisualizerRenderIdentity
+    presentation: ResolvedVisualizerPresentation
+    active: bool
 
 
 class QuickSceneFactory(QObject):
@@ -242,6 +253,7 @@ class QuickSceneController(QObject):
         self._visualizer_root: QQuickItem | None = None
         self._visualizer_content_host: QQuickItem | None = None
         self._visualizer_item: VisualizerRenderItem | None = None
+        self._visualizer_bridge: VisualizerSnapshotBridge | None = None
         self._visualizer_telemetry = VisualizerRenderNodeTelemetry()
         self._last_transition_run_id = 0
         self._readiness = QuickSceneReadiness(
@@ -572,6 +584,82 @@ class QuickSceneController(QObject):
         if not self._readiness.admission_open:
             raise RuntimeError("Quick scene admission is closed")
         self._ensure_visualizer_items().bind_render_source(bridge, identity)
+        self._visualizer_bridge = bridge
+
+    def transfer_visualizer_to(
+        self,
+        target: "QuickSceneController",
+    ) -> VisualizerRenderIdentity:
+        """Move Visualizer presentation admission without moving logical ownership."""
+
+        if target is self:
+            item = self.visualizer_item
+            identity = item.render_identity
+            if identity is None:
+                raise RuntimeError("visualizer has no active render identity")
+            return identity
+        transfer = self._release_visualizer_for_transfer()
+        try:
+            target._adopt_visualizer_transfer(transfer)
+        except Exception:
+            self._adopt_visualizer_transfer(transfer)
+            raise
+        return transfer.identity
+
+    def _release_visualizer_for_transfer(self) -> VisualizerSceneTransfer:
+        item = self._visualizer_item
+        root = self._visualizer_root
+        loader = self._visualizer_loader
+        bridge = self._visualizer_bridge
+        if item is None or root is None or loader is None or bridge is None:
+            raise RuntimeError("visualizer transfer source is incomplete")
+        identity = item.render_identity
+        presentation = item.presentation
+        if identity is None or presentation is None:
+            raise RuntimeError("visualizer transfer source is not admitting")
+        transfer = VisualizerSceneTransfer(
+            bridge=bridge,
+            identity=identity,
+            presentation=presentation,
+            active=bool(root.property("presentationActive")),
+        )
+        root.setProperty("customLayoutWorkingVisible", False)
+        root.setProperty("presentationActive", False)
+        item.clear_render_source()
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        loader.setProperty("active", False)
+        root.deleteLater()
+        self._visualizer_item = None
+        self._visualizer_content_host = None
+        self._visualizer_root = None
+        self._visualizer_bridge = None
+        self._custom_layout_visualizer_baseline = None
+        return transfer
+
+    def _adopt_visualizer_transfer(
+        self,
+        transfer: VisualizerSceneTransfer,
+    ) -> None:
+        if not isinstance(transfer, VisualizerSceneTransfer):
+            raise TypeError("invalid visualizer scene transfer")
+        current = self._visualizer_item
+        if current is not None and current.render_identity is not None:
+            raise RuntimeError("target display already owns a visualizer admission")
+        presentation = replace(
+            transfer.presentation,
+            dpr=self._display_device_pixel_ratio(),
+        )
+        self.set_visualizer_render_source(transfer.bridge, transfer.identity)
+        self.apply_visualizer_presentation(
+            presentation,
+            active=transfer.active,
+        )
+
+    def _display_device_pixel_ratio(self) -> float:
+        ratio = float(self._window.devicePixelRatio())
+        return ratio if math.isfinite(ratio) and ratio > 0.0 else 1.0
 
     def apply_visualizer_presentation(
         self,
@@ -680,6 +768,7 @@ class QuickSceneController(QObject):
         self._publish_readiness(admission_open=False)
         if self._visualizer_item is not None:
             self._visualizer_item.clear_render_source()
+        self._visualizer_bridge = None
         if self._visualizer_root is not None:
             self._visualizer_root.setProperty("presentationActive", False)
         if (
@@ -868,6 +957,7 @@ class QuickSceneController(QObject):
         self._ordinary_widget_host = None
         self._custom_layout_overlay = None
         self._visualizer_item = None
+        self._visualizer_bridge = None
         self._visualizer_content_host = None
         self._visualizer_root = None
         self._visualizer_loader = None
