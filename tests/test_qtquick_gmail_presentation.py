@@ -35,7 +35,10 @@ from rendering.quick.widgets.registry import (
 )
 from rendering.widget_runtime_manager import WidgetRuntimeManager
 from widgets import gmail_runtime
-from widgets.gmail_runtime import GmailRuntimeSnapshot, reset_shared_gmail_runtime_for_tests
+from widgets.gmail_runtime import (
+    GmailRuntimeSnapshot,
+    reset_shared_gmail_runtime_for_tests,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -270,7 +273,9 @@ def _create_qml_item(model: GmailPresentationModel):
         error.toString() for error in component.errors()
     ]
     item = component.createWithInitialProperties({"gmailModel": model})
-    assert isinstance(item, QQuickItem), [error.toString() for error in component.errors()]
+    assert isinstance(item, QQuickItem), [
+        error.toString() for error in component.errors()
+    ]
     item.setWidth(620.0)
     item.setHeight(360.0)
     return engine, component, item
@@ -490,6 +495,7 @@ def test_real_gmail_runtime_drives_registered_scene_host_actions_and_state_in_pl
     )
     backend = _RuntimeBackend(client)
     manager = _QueuedRuntimeManager()
+    persisted = []
     monkeypatch.setattr(
         gmail_runtime.GmailBackend,
         "instance",
@@ -502,7 +508,17 @@ def test_real_gmail_runtime_drives_registered_scene_host_actions_and_state_in_pl
             cached, datetime.now(timezone.utc), "fresh"
         ),
     )
-    monkeypatch.setattr(gmail_runtime, "automatic_service_updates_enabled", lambda: False)
+    monkeypatch.setattr(
+        gmail_runtime, "automatic_service_updates_enabled", lambda: False
+    )
+    monkeypatch.setattr(gmail_runtime, "reserve_gmail_cache_write", lambda _path: 1)
+    monkeypatch.setattr(
+        gmail_runtime,
+        "write_gmail_email_cache",
+        lambda _path, emails, *, write_id: persisted.append(
+            (tuple(email.id for email in emails), write_id)
+        ),
+    )
     monkeypatch.setattr(
         gmail_runtime.ThreadManager,
         "run_on_ui_thread",
@@ -586,7 +602,11 @@ def test_real_gmail_runtime_drives_registered_scene_host_actions_and_state_in_pl
         qt_app.processEvents()
         assert model.viewState == "ready"
         assert service.current_snapshot().source == "live"
-        assert client.list_calls[-1]["max_results"] == service.config.fetch_window_capacity
+        assert (
+            client.list_calls[-1]["max_results"] == service.config.fetch_window_capacity
+        )
+        _run_runtime_task(manager.pop("gmail_cache_persist"))
+        assert persisted == [(("one", "two", "three"), 1)]
 
         presentation.apply_config(replace(config, limit=3), _style_values())
         presentation.set_geometry(OverlayWidgetGeometry(40.0, 50.0, 580.0, 420.0))
@@ -608,7 +628,8 @@ def test_real_gmail_runtime_drives_registered_scene_host_actions_and_state_in_pl
         _run_runtime_task(manager.pop("gmail_fetch"))
         qt_app.processEvents()
         assert model.viewState == "ready"
-        assert model.errorText == "offline"
+        assert service.current_snapshot().source == "error_fallback"
+        assert model.errorText == ""
         assert row_model.rowCount() == 3
 
         client.error = None
@@ -728,7 +749,9 @@ def test_gmail_qml_is_presentation_only_and_keeps_popup_height_independent() -> 
 
 
 @pytest.mark.qt
-def test_retained_gmail_wrapper_routes_semantic_actions_without_recreation(qt_app) -> None:
+def test_retained_gmail_wrapper_routes_semantic_actions_without_recreation(
+    qt_app,
+) -> None:
     owner = QObject()
     factory = QuickSceneFactory(owner)
     context, root, host, component = _create_retained_host(factory, owner)
@@ -763,14 +786,17 @@ def test_retained_gmail_wrapper_routes_semantic_actions_without_recreation(qt_ap
         assert service.auth_requests == 0
         assert service.actions == []
 
-        assert presentation.apply_input_state(
-            {
-                "admission_open": True,
-                "exiting": False,
-                "interaction_mode_enabled": True,
-                "ctrl_held": False,
-            }
-        ) is True
+        assert (
+            presentation.apply_input_state(
+                {
+                    "admission_open": True,
+                    "exiting": False,
+                    "interaction_mode_enabled": True,
+                    "ctrl_held": False,
+                }
+            )
+            is True
+        )
         item.openInboxRequested.emit()
         item.openMessageRequested.emit("one")
         item.openMessageRequested.emit("missing")
