@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-b1ed9a91561cf5857b36830b607dc2ec2d1ebad8
-Phase F closed; exact G1 geometry/session owners inspected on current main
+866f968487d32e2b4f6cf3b800f3265c543c2c3b
+G1 neutral session, variant-aware storage and capability-gated layout-slot contract landed
 ```
 
 Current phase state:
@@ -41,23 +41,17 @@ Source outranks this plan if a later checkpoint has landed.
 ## Immediate work — G1 session and multi-variant working-state contract
 
 ```text
-presentation-neutral CustomLayoutSession contract                     ACTIVE
-variant-aware committed storage + exact Clock replay                  PENDING
-manager/session integration without QWidget pixel ownership           PENDING
+manager/session integration without QWidget pixel ownership           ACTIVE
 ```
 
-### G1.1 — neutral session admission (ACTIVE)
+### G1.2 — manager/session ownership cutover (ACTIVE)
 
-- keep exact item identity, source/current display, geometry variant, baseline/current rect and size payload,
-  resize scale and working removed/enabled state in `CustomLayoutSession`, with no QWidget dependency;
-- replace the version-1 single-entry geometry map with exact variant-aware committed storage; old CUSTOM geometry may
-  invalidate rather than gaining compatibility replay;
-- cut `CustomLayoutManager` working-state ownership over to the neutral session while the old shell remains only the
-  temporary G1/G2 presentation adapter;
-- prove Clock digital -> analogue -> digital restores exact committed rects without derivation or drift;
-- keep layout-slot replay source-free while restoring ordinary ON/OFF only when the owning capability family remains
-  effective; a saved ordinary ON is never capability/family reactivation authority;
-- do not create Quick overlay pixels or retire old edit pixels until the session/storage/manager contract is GREEN.
+- give all active display managers one shared `CustomLayoutSession` for exact working item state;
+- remove duplicate mutable geometry/payload/display/resize/removed ownership from `_ShellState`; the old shell remains
+  only the temporary G1/G2 presentation adapter;
+- route drag, resize, transfer and X mutations through session items and prove Cancel restores session baselines;
+- preserve exact variant-aware Save/replay and capability-gated source-free layout-slot behavior;
+- do not create Quick overlay pixels or retire old edit pixels until the manager/session contract is GREEN.
 
 Use `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`; exact current source outranks stale owner names.
 

@@ -29,6 +29,9 @@ write committed geometry(widget_id, display_identity, variant, rect, size_payloa
 Missing target variant may initialize via documented default. Committed variant restores exactly subject to
 deterministic current-screen clamp. Never repeatedly derive one saved variant from another.
 
+The variant-aware CUSTOM map is version 2. Version-1 single-entry geometry is invalidated; do not add replay,
+conversion aliases or mode-to-mode reconstruction as a compatibility path.
+
 ### Clock digital / analogue
 
 First missing target: keep current center intent -> obtain target natural size -> center -> clamp once ->

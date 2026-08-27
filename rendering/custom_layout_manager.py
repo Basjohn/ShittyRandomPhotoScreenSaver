@@ -29,9 +29,7 @@ from rendering.custom_layout_contract import (
     get_widget_layout_variant_payload,
     get_screen_signature,
     get_screen_signature_aliases,
-    get_custom_layout_restore_entry,
     load_custom_layout_map,
-    load_custom_layout_restore_map,
     normalize_local_rect,
     remove_screen_layout_entry,
     resolve_snap_local_rect_for_edit,
@@ -49,7 +47,6 @@ from rendering.widget_descriptors import (
     get_custom_persistence_position_settings_key_for_widget,
     WidgetRuntimeDescriptor,
     get_effective_monitor_settings_key_for_widget,
-    get_effective_position_settings_key_for_widget,
     get_layout_edit_runtime_descriptors,
     get_widget_runtime_descriptor,
     is_custom_position_selected_for_widget,
@@ -1981,7 +1978,6 @@ class CustomLayoutManager:
                 grouped.setdefault(widget_id, []).append(state)
         for manager in CustomLayoutManager._active_managers:
             for widget_id, state in manager._shell_states.items():
-                descriptor = state.descriptor
                 survivors = [entry for entry in grouped.get(widget_id, ()) if not entry.removed]
                 removable = bool(
                     widget_writes_custom_monitor_key(widget_id)
