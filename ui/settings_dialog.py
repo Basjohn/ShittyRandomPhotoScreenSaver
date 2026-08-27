@@ -178,6 +178,7 @@ class TabButton(QPushButton):
 
     _ICON_PIXEL_SIZE = 17  # Previously inherited the 15px tab QSS: +2px.
     _ICON_BOX_SIZE = 26
+    _ICON_HOST_SIZE = 30  # Breathing room for the glyph + renderer-owned shadow.
     _TEXT_POINT_SIZE = 12.25  # 15px at 96 DPI is 11.25pt: requested +1pt.
     _MINIMUM_HEIGHT = 52  # Previous minimum was 50px: requested +2px.
 
@@ -216,23 +217,18 @@ class TabButton(QPushButton):
 
         if icon_text:
             self._tab_icon_host = QWidget(self)
-            self._tab_icon_host.setProperty("settingsShadowInternal", True)
             self._tab_icon_host.setAttribute(
                 Qt.WidgetAttribute.WA_TransparentForMouseEvents,
                 True,
             )
-
-            icon_shadow = _SETTINGS_THEME.shadow("text.section")
-            shadow_x = int(round(icon_shadow.offset_x))
-            shadow_y = int(round(icon_shadow.offset_y))
-            # Keep explicit room around the colour glyph and the zero-blur
-            # effect offset so neither the source nor its shadow can clip.
-            host_width = self._ICON_BOX_SIZE + max(0, shadow_x) + 2
-            host_height = self._ICON_BOX_SIZE + max(0, shadow_y) + 2
-            self._tab_icon_host.setFixedSize(host_width, host_height)
+            self._tab_icon_host.setFixedSize(
+                self._ICON_HOST_SIZE,
+                self._ICON_HOST_SIZE,
+            )
 
             self._tab_icon_label = QLabel(icon_text, self._tab_icon_host)
-            self._tab_icon_label.setProperty("settingsShadowInternal", True)
+            # Construction owns the icon; control_shadow.py owns its shadow.
+            self._tab_icon_label.setProperty("settingsNavIcon", True)
             self._tab_icon_label.setAttribute(
                 Qt.WidgetAttribute.WA_TransparentForMouseEvents,
                 True,
@@ -258,15 +254,6 @@ class TabButton(QPushButton):
             self._tab_icon_label.setStyleSheet(
                 "background: transparent; border: none; padding: 0px; margin: 0px;"
             )
-
-            # One source glyph, with Qt compositing its alpha shadow underneath.
-            # This avoids every previous failure mode caused by painting a
-            # second emoji/symbol as the "shadow".
-            icon_effect = QGraphicsDropShadowEffect(self._tab_icon_label)
-            icon_effect.setBlurRadius(float(icon_shadow.blur_radius))
-            icon_effect.setOffset(icon_shadow.offset_x, icon_shadow.offset_y)
-            icon_effect.setColor(QColor(*icon_shadow.color.as_tuple()))
-            self._tab_icon_label.setGraphicsEffect(icon_effect)
 
             content_layout.addWidget(
                 self._tab_icon_host,
@@ -347,7 +334,7 @@ class CornerSizeGrip(QSizeGrip):
     def paintEvent(self, event) -> None:  # type: ignore[override]
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-        color = QColor(255, 255, 255, 200)
+        color = _theme_qcolor("chrome.size_grip")
         pen = QPen(color)
         pen.setWidth(2)
         pen.setStyle(Qt.PenStyle.DotLine)
@@ -695,12 +682,6 @@ class SettingsDialog(QDialog):
         self._normal_geometry = None
 
         self._shadow_diagnostics_enabled = is_perf_metrics_enabled()
-        self._shell_shadow = QGraphicsDropShadowEffect(self)
-        self._shell_shadow.setBlurRadius(20)
-        self._shell_shadow.setXOffset(0)
-        self._shell_shadow.setYOffset(0)
-        self._shell_shadow.setColor(QColor(0, 0, 0, 180))
-        self._shadow_size = 0
 
         shared_styles.ensure_custom_fonts()
         self._apply_application_font()
@@ -779,14 +760,6 @@ class SettingsDialog(QDialog):
                 self.minimumHeight(),
             )
         
-        # Drop shadow effect (no global windowOpacity so controls stay fully opaque)
-        self._shell_shadow = getattr(self, "_shell_shadow", None) or QGraphicsDropShadowEffect(self)
-        self._shell_shadow.setBlurRadius(20)
-        self._shell_shadow.setXOffset(0)
-        self._shell_shadow.setYOffset(0)
-        self._shell_shadow.setColor(QColor(0, 0, 0, 180))
-        self._shadow_size = 0
-
         # Improve text antialiasing (smoother rendering without changing fonts)
         font = self.font()
         font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
@@ -814,6 +787,10 @@ class SettingsDialog(QDialog):
         
         # Custom title bar
         self.title_bar = CustomTitleBar(self)
+        # CustomTitleBar is also used by small popup dialogs and still carries
+        # their legacy local title shadow. The main Settings title is centrally
+        # shadow-managed, so remove that inherited effect before first paint.
+        self.title_bar.title_label.setGraphicsEffect(None)
 
         # Establish the approved main-title geometry before the window can ever
         # paint.  Shadow discovery must not mutate typography/layout later.
@@ -870,11 +847,6 @@ class SettingsDialog(QDialog):
         self.tab_buttons = [self._tab_button_by_key[key] for key in self._tab_keys]
         
         for btn in self.tab_buttons:
-            shadow = QGraphicsDropShadowEffect(btn)
-            shadow.setBlurRadius(6)
-            shadow.setOffset(1, 2)
-            shadow.setColor(QColor(0, 0, 0, 120))
-            btn.setGraphicsEffect(shadow)
             sidebar_layout.addWidget(btn)
         sidebar_layout.addStretch()
         
@@ -1094,17 +1066,6 @@ class SettingsDialog(QDialog):
             return
         try:
             apply_shadows_to_inputs(widget)
-            from ui.widgets.control_shadow import attach_control_shadow, ShadowConfig
-            from PySide6.QtCore import QPointF
-            btn_shadow_cfg = ShadowConfig(
-                blur_radius=6.0,
-                offset=QPointF(1.0, 2.0),
-                color=QColor(0, 0, 0, 120),
-            )
-            for btn in widget.findChildren(QPushButton):
-                if btn.objectName() in ("tabButton", "titleBarButton", "titleBarCloseButton"):
-                    continue
-                attach_control_shadow(btn, btn_shadow_cfg)
         except Exception:
             logger.debug("Failed to apply tab control shadows", exc_info=True)
             return
@@ -1901,8 +1862,6 @@ class SettingsDialog(QDialog):
         """Adjust layout margins and shadow visibility for current state."""
         if hasattr(self, "_outer_layout"):
             self._outer_layout.setContentsMargins(0, 0, 0, 0)
-        if hasattr(self, "_shell_shadow"):
-            self._shell_shadow.setEnabled(not self._is_maximized)
         if hasattr(self, "size_grip"):
             self.size_grip.setVisible(not self._is_maximized)
     
