@@ -105,20 +105,6 @@ from ui.tabs.media.technical_controls import load_per_mode_technical_controls
 logger = get_logger(__name__)
 
 
-# Theme-matched action button for the Widgets SETUP page (Enable/Disable All).
-SETUP_ACTION_BUTTON_STYLE = (
-    "QPushButton {"
-    " background-color: rgba(42, 42, 42, 215);"
-    " color: #ffffff;"
-    " border: 1px solid #ffffff;"
-    " border-radius: 8px;"
-    " padding: 6px 18px;"
-    " min-width: 90px;"
-    " }"
-    "QPushButton:hover { background-color: rgba(58, 58, 58, 220); }"
-    "QPushButton:pressed { background-color: rgba(70, 70, 70, 225); }"
-)
-
 
 class _RainbowGlowLabel(QWidget):
     """Overlay widget that paints per-letter rainbow text with matching coloured glow.
@@ -955,25 +941,8 @@ class WidgetsTab(QWidget):
         self._subtab_group = QButtonGroup(self)
         self._subtab_group.setExclusive(True)
 
-        button_style = (
-            "QPushButton {"
-            f" {NAV_TAB_FONT_STYLE}"
-            " background-color: rgba(42, 42, 42, 215);"
-            " color: #ffffff;"
-            " border-radius: 8px;"
-            " padding: 6px 18px;"
-            " min-width: 70px;"
-            " border: 1px solid #ffffff;"
-            " }"
-            "QPushButton:hover {"
-            " background-color: rgba(52, 52, 52, 220);"
-            " }"
-            "QPushButton:checked {"
-            f" {NAV_TAB_FONT_STYLE_ACTIVE}"
-            " background-color: rgba(58, 58, 58, 220);"
-            " border: 1px solid #ffffff;"
-            " }"
-        )
+        button_style = shared_styles.WIDGET_NAV_PILL_STYLE
+
 
         buttons = build_widget_section_buttons(
             self,
@@ -982,6 +951,9 @@ class WidgetsTab(QWidget):
             self._widget_section_descriptors,
         )
         for btn in buttons:
+            shared_styles.bind_shared_styles(
+                btn, "WIDGET_NAV_PILL_STYLE", base_style=""
+            )
             subtab_container.addWidget(btn)
 
         layout.addWidget(subtab_container)
@@ -1109,8 +1081,12 @@ class WidgetsTab(QWidget):
         action_host = FlowContainer(h_spacing=10, v_spacing=8)
         enable_all = QPushButton("Enable All")
         disable_all = QPushButton("Disable All")
-        enable_all.setStyleSheet(SETUP_ACTION_BUTTON_STYLE)
-        disable_all.setStyleSheet(SETUP_ACTION_BUTTON_STYLE)
+        shared_styles.bind_shared_styles(
+            enable_all, "WIDGET_SETUP_ACTION_STYLE", base_style=""
+        )
+        shared_styles.bind_shared_styles(
+            disable_all, "WIDGET_SETUP_ACTION_STYLE", base_style=""
+        )
         enable_all.clicked.connect(lambda: self._set_all_family_activation(True))
         disable_all.clicked.connect(lambda: self._set_all_family_activation(False))
         action_host.addWidget(enable_all)

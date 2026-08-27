@@ -66,11 +66,28 @@ This layer intentionally does **not** guess a frozen executable path. Settings a
   `ui/tabs/presets_tab.py`, disconnected legacy debris already logged for
   deletion. It is not a live migration target.
 
+## Current palette-audit state
+
+- `.srtheme` schema is now **v3** because newly centralized Settings chrome
+  roles are required members of a complete theme.
+- Sources ratio/RSS/action chrome, Transitions pills/actions, Widgets
+  pills/actions, General cache/shadow-direction controls and Spectrum/DevCurve
+  selector pills now consume live semantic roles rather than local colour
+  literals.
+- Status colours and user/widget-authored colours deliberately remain outside
+  Settings ThemeSpec; semantic product data is not Settings skin.
+- `Theme Plumbing Test - Obnoxious.srtheme` is a deliberately fluorescent
+  validation theme for eyes-on live switching. It is test data, not a proposed
+  product theme.
+
 ## Immediate remaining work
 
-1. Wire packaged themes directory from real startup/build authority.
-2. Add one deliberately obvious semantic test theme and perform Windows eyes-on
-   live switching, especially forged corners/acrylic/nav/shadows.
-3. Audit remaining local literal Settings palettes and legacy shadow styling.
-4. Rewrite Theme Foundry to edit/save this semantic `.srtheme` schema.
-5. Remove this temporary plan once durable docs own the final architecture.
+1. Wire packaged themes directory from real startup/build authority so file
+   themes are resolved before first Settings widget construction.
+2. Perform Windows eyes-on live switching between Default Dark and the
+   obnoxious test theme, especially forged corners/acrylic/nav/shadows.
+3. Finish the smaller remaining literal Settings-chrome audit (not semantic
+   status/user-content colours), including special popup/Steam surfaces where
+   appropriate.
+4. Rewrite Theme Foundry to edit/save semantic schema-v3 `.srtheme` files.
+5. Remove the test theme and this temporary plan after validation/durable docs.

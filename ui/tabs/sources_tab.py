@@ -133,12 +133,15 @@ class SourcesTab(QWidget):
         
         # Folder buttons
         folder_buttons = QHBoxLayout()
-        button_style = self._toggle_button_style()
         self.add_folder_btn = QPushButton("Add Folder...")
-        self.add_folder_btn.setStyleSheet(button_style)
+        shared_styles.bind_shared_styles(
+            self.add_folder_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
+        )
         self.add_folder_btn.clicked.connect(self._add_folder)
         self.remove_folder_btn = QPushButton("Remove Selected")
-        self.remove_folder_btn.setStyleSheet(button_style)
+        shared_styles.bind_shared_styles(
+            self.remove_folder_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
+        )
         self.remove_folder_btn.clicked.connect(self._remove_folder)
         folder_buttons.addWidget(self.add_folder_btn)
         folder_buttons.addWidget(self.remove_folder_btn)
@@ -158,14 +161,11 @@ class SourcesTab(QWidget):
 
         self.ratio_frame = QFrame()
         self.ratio_frame.setObjectName("ratioFrame")
-        self.ratio_frame.setStyleSheet("""
-            #ratioFrame {
-                background-color: rgba(35, 35, 35, 200);
-                border: 1px solid rgba(80, 80, 80, 130);
-                border-radius: 8px;
-                padding: 6px 10px;
-            }
-        """)
+        shared_styles.bind_shared_styles(
+            self.ratio_frame,
+            "SOURCE_RATIO_ACTIVE_STYLE",
+            base_style="",
+        )
         frame_layout = QHBoxLayout(self.ratio_frame)
         frame_layout.setContentsMargins(0, 0, 0, 0)
         frame_layout.setSpacing(12)
@@ -230,19 +230,13 @@ class SourcesTab(QWidget):
         self.rss_input.setPlaceholderText(
             "Enter RSS/JSON feed URL (e.g., https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=100)..."
         )
-        self.rss_input.setStyleSheet(
-            "QLineEdit#rssFeedInput {"
-            " border: 1px solid rgba(80, 80, 80, 153);"
-            " border-radius: 8px;"
-            " padding: 8px 12px;"
-            " background-color: rgba(20, 20, 20, 220);"
-            " }"
-            "QLineEdit#rssFeedInput:focus {"
-            " border-color: rgba(200, 200, 200, 200);"
-            " }"
+        shared_styles.bind_shared_styles(
+            self.rss_input, "RSS_INPUT_STYLE", base_style=""
         )
         self.add_rss_btn = QPushButton("Add Feed")
-        self.add_rss_btn.setStyleSheet(button_style)
+        shared_styles.bind_shared_styles(
+            self.add_rss_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
+        )
         self.add_rss_btn.clicked.connect(self._add_rss)
         rss_input.addWidget(self.rss_input)
         rss_input.addWidget(self.add_rss_btn)
@@ -251,17 +245,25 @@ class SourcesTab(QWidget):
         # RSS buttons
         rss_buttons = QHBoxLayout()
         self.clear_rss_cache_btn = QPushButton("Clear Cache")
-        self.clear_rss_cache_btn.setStyleSheet(button_style)
+        shared_styles.bind_shared_styles(
+            self.clear_rss_cache_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
+        )
         self.clear_rss_cache_btn.clicked.connect(self._on_clear_rss_cache_clicked)
         self.just_make_it_work_btn = QPushButton("Just Make It Work")
-        self.just_make_it_work_btn.setStyleSheet(button_style)
+        shared_styles.bind_shared_styles(
+            self.just_make_it_work_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
+        )
         self.just_make_it_work_btn.setToolTip("Reset to robust default feeds (Flickr, Wikimedia, Bing, NASA)")
         self.just_make_it_work_btn.clicked.connect(self._on_just_make_it_work_clicked)
         self.remove_rss_btn = QPushButton("Remove Selected")
-        self.remove_rss_btn.setStyleSheet(button_style)
+        shared_styles.bind_shared_styles(
+            self.remove_rss_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
+        )
         self.remove_rss_btn.clicked.connect(self._remove_rss)
         self.remove_all_rss_btn = QPushButton("Remove All")
-        self.remove_all_rss_btn.setStyleSheet(button_style)
+        shared_styles.bind_shared_styles(
+            self.remove_all_rss_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
+        )
         self.remove_all_rss_btn.clicked.connect(self._remove_all_rss)
         rss_buttons.addWidget(self.clear_rss_cache_btn)
         rss_buttons.addWidget(self.just_make_it_work_btn)
@@ -308,21 +310,6 @@ class SourcesTab(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
 
-    def _toggle_button_style(self) -> str:
-        return (
-            "QPushButton {"
-            " font-family: 'Jost'; font-size: 12px; font-weight: 500;"
-            " background-color: rgba(45, 45, 45, 215); color: #ffffff;"
-            " border-radius: 8px; padding: 7px 18px; min-width: 90px;"
-            " border: 1px solid #ffffff;"
-            " }"
-            "QPushButton:hover { background-color: rgba(60, 60, 60, 220); }"
-            "QPushButton:pressed {"
-            " background-color: rgba(35, 35, 35, 220);"
-            " border: 1px solid rgba(200, 200, 200, 200);"
-            " }"
-        )
-    
     def _load_sources(self) -> None:
         """Load sources from settings."""
         # Load folders using dot notation
@@ -740,26 +727,16 @@ class SourcesTab(QWidget):
         
         # Update styling to indicate disabled state
         if both_available:
-            self.ratio_frame.setStyleSheet("""
-                #ratioFrame {
-                    background-color: #2a2a2a;
-                    border: 1px solid #3a3a3a;
-                    border-radius: 6px;
-                    padding: 8px;
-                }
-            """)
+            shared_styles.bind_shared_styles(
+                self.ratio_frame, "SOURCE_RATIO_ACTIVE_STYLE", base_style=""
+            )
             shared_styles.apply_shared_label_style(
                 self.ratio_label, "SECTION_HEADING_STYLE"
             )
         else:
-            self.ratio_frame.setStyleSheet("""
-                #ratioFrame {
-                    background-color: #1a1a1a;
-                    border: 1px solid #2a2a2a;
-                    border-radius: 6px;
-                    padding: 8px;
-                }
-            """)
+            shared_styles.bind_shared_styles(
+                self.ratio_frame, "SOURCE_RATIO_DISABLED_STYLE", base_style=""
+            )
             shared_styles.apply_shared_label_style(
                 self.ratio_label, "SECTION_HEADING_STYLE_DISABLED"
             )

@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 2,
+  "schema_version": 3,
   "name": "Default Dark",
   "acrylic": {
     "enabled": true,
@@ -95,6 +95,36 @@
       255,
       255,
       255
+    ],
+    "navigation.subtab.surface": [
+      42,
+      42,
+      42,
+      215
+    ],
+    "navigation.subtab.text": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "navigation.subtab.border": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "navigation.subtab.hover_surface": [
+      52,
+      52,
+      52,
+      220
+    ],
+    "navigation.subtab.selected_surface": [
+      58,
+      58,
+      58,
+      220
     ],
     "content.surface": [
       0,
@@ -342,6 +372,138 @@
       200,
       200
     ],
+    "control.setup_action.surface": [
+      42,
+      42,
+      42,
+      215
+    ],
+    "control.setup_action.text": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "control.setup_action.border": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "control.setup_action.hover_surface": [
+      58,
+      58,
+      58,
+      220
+    ],
+    "control.setup_action.pressed_surface": [
+      70,
+      70,
+      70,
+      225
+    ],
+    "control.ghost_action.surface": [
+      255,
+      255,
+      255,
+      18
+    ],
+    "control.ghost_action.text": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "control.ghost_action.border": [
+      255,
+      255,
+      255,
+      92
+    ],
+    "control.ghost_action.hover_surface": [
+      255,
+      255,
+      255,
+      30
+    ],
+    "control.ghost_action.hover_border": [
+      255,
+      255,
+      255,
+      132
+    ],
+    "control.ghost_action.pressed_surface": [
+      255,
+      255,
+      255,
+      42
+    ],
+    "control.ghost_action.disabled_text": [
+      255,
+      255,
+      255,
+      90
+    ],
+    "control.ghost_action.disabled_surface": [
+      255,
+      255,
+      255,
+      8
+    ],
+    "control.ghost_action.disabled_border": [
+      255,
+      255,
+      255,
+      35
+    ],
+    "control.mode.surface": [
+      35,
+      35,
+      35,
+      255
+    ],
+    "control.mode.text": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "control.mode.border": [
+      241,
+      241,
+      241,
+      255
+    ],
+    "control.mode.hover_surface": [
+      42,
+      42,
+      42,
+      255
+    ],
+    "control.mode.checked_surface": [
+      74,
+      74,
+      74,
+      255
+    ],
+    "control.mode.checked_border": [
+      247,
+      247,
+      247,
+      255
+    ],
+    "control.mode.disabled_text": [
+      122,
+      122,
+      122,
+      255
+    ],
+    "control.mode.disabled_border": [
+      106,
+      106,
+      106,
+      255
+    ],
     "control.checkbox.text": [
       255,
       255,
@@ -403,6 +565,90 @@
       255
     ],
     "panel.group.title_text": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "sources.ratio.surface": [
+      42,
+      42,
+      42,
+      255
+    ],
+    "sources.ratio.border": [
+      58,
+      58,
+      58,
+      255
+    ],
+    "sources.ratio.disabled_surface": [
+      26,
+      26,
+      26,
+      255
+    ],
+    "sources.ratio.disabled_border": [
+      42,
+      42,
+      42,
+      255
+    ],
+    "sources.rss_input.surface": [
+      20,
+      20,
+      20,
+      220
+    ],
+    "sources.rss_input.border": [
+      80,
+      80,
+      80,
+      153
+    ],
+    "sources.rss_input.focus_border": [
+      200,
+      200,
+      200,
+      200
+    ],
+    "shadow.direction.surface": [
+      32,
+      32,
+      32,
+      235
+    ],
+    "shadow.direction.border": [
+      255,
+      255,
+      255,
+      210
+    ],
+    "shadow.direction.hover_surface": [
+      56,
+      56,
+      56,
+      240
+    ],
+    "shadow.direction.hover_border": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "shadow.direction.pressed_surface": [
+      18,
+      18,
+      18,
+      245
+    ],
+    "shadow.direction.checked_surface": [
+      255,
+      255,
+      255,
+      58
+    ],
+    "shadow.direction.checked_border": [
       255,
       255,
       255,

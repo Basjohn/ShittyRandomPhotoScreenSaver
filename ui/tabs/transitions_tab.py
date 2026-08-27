@@ -47,30 +47,6 @@ _TRANSITION_SETTING_NAMES = get_transition_setting_names()
 
 _SETUP_NAV_KEY = "__setup__"
 
-_NAV_PILL_STYLE = (
-    "QPushButton {"
-    " background-color: rgba(42, 42, 42, 215);"
-    " color: #ffffff;"
-    " border: 1px solid #ffffff;"
-    " border-radius: 8px;"
-    " padding: 5px 14px;"
-    " }"
-    "QPushButton:hover { background-color: rgba(52, 52, 52, 220); }"
-    "QPushButton:checked { background-color: rgba(58, 58, 58, 220); }"
-)
-
-_SETUP_ACTION_BUTTON_STYLE = (
-    "QPushButton {"
-    " background-color: rgba(42, 42, 42, 215);"
-    " color: #ffffff;"
-    " border: 1px solid #ffffff;"
-    " border-radius: 8px;"
-    " padding: 6px 18px;"
-    " min-width: 90px;"
-    " }"
-    "QPushButton:hover { background-color: rgba(58, 58, 58, 220); }"
-)
-
 
 class TransitionsTab(QWidget):
     """Transitions configuration tab."""
@@ -263,7 +239,9 @@ class TransitionsTab(QWidget):
         def _add_nav_pill(key: str, label: str) -> None:
             button = QPushButton(label)
             button.setCheckable(True)
-            button.setStyleSheet(_NAV_PILL_STYLE)
+            shared_styles.bind_shared_styles(
+                button, "TRANSITION_NAV_PILL_STYLE", base_style=""
+            )
             self._nav_buttons[key] = button
             self._nav_group.addButton(button)
             button.clicked.connect(lambda _checked=False, k=key: self._on_nav_selected(k))
@@ -391,8 +369,12 @@ class TransitionsTab(QWidget):
         action_host = FlowContainer(h_spacing=10, v_spacing=8)
         enable_all = QPushButton("Enable All")
         disable_all = QPushButton("Disable All")
-        enable_all.setStyleSheet(_SETUP_ACTION_BUTTON_STYLE)
-        disable_all.setStyleSheet(_SETUP_ACTION_BUTTON_STYLE)
+        shared_styles.bind_shared_styles(
+            enable_all, "TRANSITION_SETUP_ACTION_STYLE", base_style=""
+        )
+        shared_styles.bind_shared_styles(
+            disable_all, "TRANSITION_SETUP_ACTION_STYLE", base_style=""
+        )
         enable_all.clicked.connect(lambda: self._set_all_transition_activation(True))
         disable_all.clicked.connect(lambda: self._set_all_transition_activation(False))
         action_host.addWidget(enable_all)

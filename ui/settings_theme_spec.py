@@ -28,7 +28,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 
-SETTINGS_THEME_SCHEMA_VERSION = 2
+SETTINGS_THEME_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,9 +236,9 @@ class SettingsThemeSpec:
 #   * screensaver context-menu colours;
 #   * central/global QWidget fallback control colours.
 #
-# Intentionally deferred until their owning renderer/tab is migrated:
-#   * tab-local palettes (RSS/accessibility/etc.);
+# Intentionally not represented as theme data:
 #   * typography/spacing/geometry;
+#   * semantic status/user-content colours owned by product data;
 #   * resource-backed checkbox artwork;
 
 _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
@@ -259,6 +259,12 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "navigation.tab.hover_text": WHITE,
     "navigation.tab.selected_surface": Rgba(62, 62, 62, 140),
     "navigation.tab.selected_text": WHITE,
+    # Internal Settings sub-navigation pills (Widgets / Transitions).
+    "navigation.subtab.surface": Rgba(42, 42, 42, 215),
+    "navigation.subtab.text": WHITE,
+    "navigation.subtab.border": WHITE,
+    "navigation.subtab.hover_surface": Rgba(52, 52, 52, 220),
+    "navigation.subtab.selected_surface": Rgba(58, 58, 58, 220),
     "content.surface": TRANSPARENT,
 
     # Global + mature local panel layers. Both remain separate because the
@@ -315,6 +321,32 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "control.button.hover_surface": Rgba(60, 60, 60, 220),
     "control.button.pressed_surface": Rgba(35, 35, 35, 220),
     "control.button.pressed_border": Rgba(200, 200, 200, 200),
+    # Setup/action chrome whose approved Default Dark values differ from the
+    # ordinary control.button palette.
+    "control.setup_action.surface": Rgba(42, 42, 42, 215),
+    "control.setup_action.text": WHITE,
+    "control.setup_action.border": WHITE,
+    "control.setup_action.hover_surface": Rgba(58, 58, 58, 220),
+    "control.setup_action.pressed_surface": Rgba(70, 70, 70, 225),
+    # Translucent utility action buttons in Widgets > General.
+    "control.ghost_action.surface": Rgba(255, 255, 255, 18),
+    "control.ghost_action.text": WHITE,
+    "control.ghost_action.border": Rgba(255, 255, 255, 92),
+    "control.ghost_action.hover_surface": Rgba(255, 255, 255, 30),
+    "control.ghost_action.hover_border": Rgba(255, 255, 255, 132),
+    "control.ghost_action.pressed_surface": Rgba(255, 255, 255, 42),
+    "control.ghost_action.disabled_text": Rgba(255, 255, 255, 90),
+    "control.ghost_action.disabled_surface": Rgba(255, 255, 255, 8),
+    "control.ghost_action.disabled_border": Rgba(255, 255, 255, 35),
+    # Compact mode/layer selector pills used inside visualizer Settings pages.
+    "control.mode.surface": Rgba(35, 35, 35, 255),
+    "control.mode.text": WHITE,
+    "control.mode.border": Rgba(241, 241, 241, 255),
+    "control.mode.hover_surface": Rgba(42, 42, 42, 255),
+    "control.mode.checked_surface": Rgba(74, 74, 74, 255),
+    "control.mode.checked_border": Rgba(247, 247, 247, 255),
+    "control.mode.disabled_text": Rgba(122, 122, 122, 255),
+    "control.mode.disabled_border": Rgba(106, 106, 106, 255),
     "control.checkbox.text": WHITE,
     "control.checkbox.indicator.surface": Rgba(45, 45, 45, 204),
     "control.checkbox.indicator.highlight_border": Rgba(90, 90, 90, 191),
@@ -326,6 +358,26 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "control.checkbox.checked.bottom_shadow_border": Rgba(60, 60, 60, 191),
     "panel.group.text": WHITE,
     "panel.group.title_text": WHITE,
+
+    # Sources-tab chrome. These roles theme only Settings presentation; source
+    # URLs, source ratios and other user data remain ordinary settings values.
+    "sources.ratio.surface": Rgba(42, 42, 42, 255),
+    "sources.ratio.border": Rgba(58, 58, 58, 255),
+    "sources.ratio.disabled_surface": Rgba(26, 26, 26, 255),
+    "sources.ratio.disabled_border": Rgba(42, 42, 42, 255),
+    "sources.rss_input.surface": Rgba(20, 20, 20, 220),
+    "sources.rss_input.border": Rgba(80, 80, 80, 153),
+    "sources.rss_input.focus_border": Rgba(200, 200, 200, 200),
+
+    # General Widgets shadow-direction picker chrome. Shadow direction itself
+    # remains product/user data; only the Settings picker surface is themed.
+    "shadow.direction.surface": Rgba(32, 32, 32, 235),
+    "shadow.direction.border": Rgba(255, 255, 255, 210),
+    "shadow.direction.hover_surface": Rgba(56, 56, 56, 240),
+    "shadow.direction.hover_border": WHITE,
+    "shadow.direction.pressed_surface": Rgba(18, 18, 18, 245),
+    "shadow.direction.checked_surface": Rgba(255, 255, 255, 58),
+    "shadow.direction.checked_border": WHITE,
 
     # Shared slider colours that are not gradient stops.
     "slider.groove.border": Rgba(12, 12, 12, 230),

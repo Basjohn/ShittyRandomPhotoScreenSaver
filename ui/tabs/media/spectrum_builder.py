@@ -130,29 +130,6 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         )
         return content
 
-    _mode_button_style = """
-        QPushButton {
-            background-color: #232323;
-            color: #ffffff;
-            border: 2px solid #f1f1f1;
-            border-radius: 18px;
-            padding: 10px 20px;
-            font-weight: 600;
-            min-height: 18px;
-        }
-        QPushButton:hover {
-            background-color: #2a2a2a;
-        }
-        QPushButton:checked {
-            background-color: #4a4a4a;
-            border-color: #f7f7f7;
-        }
-        QPushButton:disabled {
-            color: #7a7a7a;
-            border-color: #6a6a6a;
-        }
-    """
-
     spotify_vis_fill_row = _swatch_row(appearance_bucket, "Bar Fill Color:")
     tab.vis_fill_color_btn = ColorSwatchButton(title="Choose Beat Bar Fill Color")
     bind_color_button(
@@ -322,7 +299,9 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     def _make_render_mode_button(text: str, mode: str) -> QPushButton:
         button = QPushButton(text)
         button.setCheckable(True)
-        button.setStyleSheet(_mode_button_style)
+        shared_styles.bind_shared_styles(
+            button, "MODE_TOGGLE_BUTTON_STYLE", base_style=""
+        )
         button.setProperty("renderMode", mode)
         button.clicked.connect(lambda _checked=False, selected=mode: _set_render_mode(selected))
         tab.spectrum_render_mode_group.addButton(button)
