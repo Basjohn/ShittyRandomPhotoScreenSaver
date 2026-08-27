@@ -53,6 +53,7 @@ from core.threading.manager import ThreadManager
 from core.windows.secure_url_launcher import open_url
 from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.styled_popup import ColorSwatchButton, StyledPopup
+from ui.settings_theme_runtime import get_active_settings_theme
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
@@ -385,40 +386,46 @@ def _show_api_key_dialog(tab: "WidgetsTab") -> None:
     )
     dialog.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     dialog.setMinimumWidth(430)
+    theme = get_active_settings_theme()
+
+    def rgba(token: str) -> str:
+        value = theme.color(token)
+        return f"rgba({value.r}, {value.g}, {value.b}, {value.a})"
+
     dialog.setStyleSheet(
-        """
-        #steamApiKeyDialogSurface {
-            background-color: rgba(30, 30, 36, 248);
-            border: 1px solid rgba(255, 255, 255, 38);
+        f"""
+        #steamApiKeyDialogSurface {{
+            background-color: {rgba('popup.container.surface')};
+            border: 1px solid {rgba('popup.container.border')};
             border-radius: 10px;
-        }
-        #steamApiKeyDialogSurface QLabel {
-            color: #eeeeee;
-        }
-        #steamApiKeyDialogSurface QLineEdit#steamApiKeyInput {
-            background-color: rgba(14, 14, 18, 220);
-            border: 1px solid rgba(255, 255, 255, 55);
+        }}
+        #steamApiKeyDialogSurface QLabel {{
+            color: {rgba('popup.message.text')};
+        }}
+        #steamApiKeyDialogSurface QLineEdit#steamApiKeyInput {{
+            background-color: {rgba('popup.input.surface')};
+            border: 1px solid {rgba('popup.input.border')};
             border-radius: 6px;
-            color: #ffffff;
+            color: {rgba('popup.input.text')};
             padding: 8px 10px;
-        }
-        #steamApiKeyDialogSurface QLineEdit#steamApiKeyInput:focus {
-            border-color: #6aa9d9;
-        }
-        #steamApiKeyDialogSurface QPushButton {
-            background-color: rgba(77, 119, 153, 210);
-            border: 1px solid rgba(255, 255, 255, 45);
+        }}
+        #steamApiKeyDialogSurface QLineEdit#steamApiKeyInput:focus {{
+            border-color: {rgba('popup.input.focus_border')};
+        }}
+        #steamApiKeyDialogSurface QPushButton {{
+            background-color: {rgba('popup.button.surface')};
+            border: 1px solid {rgba('popup.button.border')};
             border-radius: 6px;
-            color: #ffffff;
+            color: {rgba('popup.button.text')};
             min-height: 30px;
             padding: 3px 12px;
-        }
-        #steamApiKeyDialogSurface QPushButton:hover {
-            background-color: rgba(96, 145, 183, 235);
-        }
-        #steamApiKeyDialogSurface QPushButton:pressed {
-            background-color: rgba(57, 89, 117, 235);
-        }
+        }}
+        #steamApiKeyDialogSurface QPushButton:hover {{
+            background-color: {rgba('popup.button.hover_surface')};
+        }}
+        #steamApiKeyDialogSurface QPushButton:pressed {{
+            background-color: {rgba('popup.button.pressed_surface')};
+        }}
         """
     )
     dialog_layout = QVBoxLayout(dialog)
@@ -426,10 +433,11 @@ def _show_api_key_dialog(tab: "WidgetsTab") -> None:
 
     surface = QFrame(dialog)
     surface.setObjectName("steamApiKeyDialogSurface")
+    popup_shadow = theme.shadow("popup.dialog")
     shadow = QGraphicsDropShadowEffect(dialog)
-    shadow.setBlurRadius(20)
-    shadow.setColor(QColor(0, 0, 0, 150))
-    shadow.setOffset(0, 4)
+    shadow.setBlurRadius(popup_shadow.blur_radius)
+    shadow.setColor(QColor(*popup_shadow.color.as_tuple()))
+    shadow.setOffset(popup_shadow.offset_x, popup_shadow.offset_y)
     surface.setGraphicsEffect(shadow)
     dialog_layout.addWidget(surface)
 
@@ -438,7 +446,10 @@ def _show_api_key_dialog(tab: "WidgetsTab") -> None:
     layout.setSpacing(12)
 
     heading = QLabel("Steam Web API Key")
-    heading.setStyleSheet("font-size: 16px; font-weight: 700; color: #ffffff;")
+    heading.setStyleSheet(
+        f"font-size: 16px; font-weight: 700; "
+        f"color: {rgba('popup.title.text')};"
+    )
     layout.addWidget(heading)
 
     message = QLabel(

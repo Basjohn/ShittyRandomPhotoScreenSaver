@@ -247,6 +247,42 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                     border-bottom: 2px solid %(checkbox_checked_bottom_shadow_border)s;
                 }
 
+                /* Collapsible Settings buckets. Geometry and arrow behavior
+                   remain in dark.qss / Qt; ThemeSpec owns the palette. */
+                QToolButton[autoRaise="true"] {
+                    background-color: %(bucket_closed_surface)s;
+                    color: %(bucket_closed_text)s;
+                    border: 1px solid %(bucket_closed_border)s;
+                    border-radius: 3px;
+                    padding: 3px 8px;
+                    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+                    font-size: 11px;
+                    font-weight: 500;
+                }
+                QToolButton[autoRaise="true"]:hover {
+                    background-color: %(bucket_closed_hover_surface)s;
+                    border-color: %(bucket_closed_hover_border)s;
+                }
+                QToolButton[autoRaise="true"]:checked {
+                    background-color: %(bucket_open_surface)s;
+                    color: %(bucket_open_text)s;
+                    border-color: %(bucket_open_border)s;
+                }
+                QToolButton[autoRaise="true"]:checked:hover {
+                    background-color: %(bucket_open_hover_surface)s;
+                }
+
+                /* dark.qss still supplies base geometry; this later rule makes
+                   tooltip colours belong to the selected Settings theme. */
+                QToolTip {
+                    background-color: %(tooltip_surface)s;
+                    color: %(tooltip_text)s;
+                    border: 1px solid %(tooltip_border)s;
+                    border-radius: 4px;
+                    padding: 5px 10px;
+                    font-size: 12px;
+                }
+
                 QLabel {
                     color: %(label_text)s;
                     background-color: rgba(0, 0, 0, 0);
@@ -355,6 +391,24 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
             theme,
             "control.checkbox.checked.bottom_shadow_border",
         ),
+        "bucket_closed_surface": _theme_rgba(theme, "bucket.closed.surface"),
+        "bucket_closed_text": _theme_rgba(theme, "bucket.closed.text"),
+        "bucket_closed_border": _theme_rgba(theme, "bucket.closed.border"),
+        "bucket_closed_hover_surface": _theme_rgba(
+            theme, "bucket.closed.hover_surface"
+        ),
+        "bucket_closed_hover_border": _theme_rgba(
+            theme, "bucket.closed.hover_border"
+        ),
+        "bucket_open_surface": _theme_rgba(theme, "bucket.open.surface"),
+        "bucket_open_text": _theme_rgba(theme, "bucket.open.text"),
+        "bucket_open_border": _theme_rgba(theme, "bucket.open.border"),
+        "bucket_open_hover_surface": _theme_rgba(
+            theme, "bucket.open.hover_surface"
+        ),
+        "tooltip_surface": _theme_rgba(theme, "tooltip.surface"),
+        "tooltip_text": _theme_rgba(theme, "tooltip.text"),
+        "tooltip_border": _theme_rgba(theme, "tooltip.border"),
         "label_text": _theme_hex(theme, "text.primary"),
     }
 

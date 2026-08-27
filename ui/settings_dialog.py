@@ -391,164 +391,6 @@ class CornerSizeGrip(QSizeGrip):
                 painter.drawLine(x1, y1, x2, y2)
 
 
-class NoSourcesPopup(QDialog):
-    """Popup shown when user tries to close settings without any image sources configured.
-    
-    Offers two choices:
-    - "Just Make It Work" - adds curated RSS feeds as default sources
-    - "Ehhhh" - closes the application (no sources = can't run)
-    """
-    
-    # Signal emitted when user chooses to add default sources
-    add_defaults_requested = Signal()
-    # Signal emitted when user chooses to exit
-    exit_requested = Signal()
-    
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__(parent)
-        self._dragging = False
-
-        shared_styles.ensure_custom_fonts()
-        self._apply_application_font()
-
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setModal(True)
-        
-        outer_layout = QVBoxLayout(self)
-        outer_layout.setContentsMargins(0, 0, 0, 0)
-        outer_layout.setSpacing(0)
-        
-        card = QWidget(self)
-        card.setObjectName("noSourcesPopupCard")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(0)
-        
-        # Title bar
-        title_bar = CustomTitleBar(card)
-        title_bar.title_label.setText("No Image Sources")
-        title_bar.minimize_btn.hide()
-        title_bar.maximize_btn.hide()
-        title_bar.close_btn.hide()  # No close button - must choose an option
-        card_layout.addWidget(title_bar)
-        
-        # Body
-        body = QWidget(card)
-        body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(24, 20, 24, 24)
-        body_layout.setSpacing(16)
-        
-        # Warning message
-        message = QLabel(
-            "You haven't configured any image sources!\n\n"
-            "The screensaver needs at least one folder or RSS feed to display images.\n\n"
-            "What would you like to do?"
-        )
-        message.setWordWrap(True)
-        message.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        message.setStyleSheet("color: #ffffff; font-size: 14px;")
-        body_layout.addWidget(message)
-        
-        # Buttons
-        buttons_row = QHBoxLayout()
-        buttons_row.setSpacing(12)
-        
-        # "Just Make It Work" button - adds curated feeds
-        make_it_work_btn = QPushButton("Just Make It Work")
-        make_it_work_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-weight: bold;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-            QPushButton:pressed {
-                background-color: #3d8b40;
-            }
-        """)
-        make_it_work_btn.clicked.connect(self._on_make_it_work)
-        buttons_row.addWidget(make_it_work_btn)
-        
-        # "Ehhhh" button - exits application
-        exit_btn = QPushButton("Ehhhh")
-        exit_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #666666;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #555555;
-            }
-            QPushButton:pressed {
-                background-color: #444444;
-            }
-        """)
-        exit_btn.clicked.connect(self._on_exit)
-        buttons_row.addWidget(exit_btn)
-        
-        body_layout.addLayout(buttons_row)
-        card_layout.addWidget(body)
-        
-        # Shadow effect
-        shadow = QGraphicsDropShadowEffect(card)
-        shadow.setBlurRadius(30)
-        shadow.setXOffset(0)
-        shadow.setYOffset(5)
-        shadow.setColor(QColor(0, 0, 0, 200))
-        card.setGraphicsEffect(shadow)
-        
-        card.setStyleSheet(
-            "QWidget#noSourcesPopupCard {"
-            "background-color: rgba(20, 20, 20, 245);"
-            "border-radius: 12px;"
-            "border: 1px solid rgba(255, 255, 255, 30);"
-            "}"
-        )
-        
-        outer_layout.addWidget(card)
-        self.setFixedWidth(420)
-        self.adjustSize()
-    
-    def _apply_application_font(self) -> None:
-        font = QFont("Jost", 11)
-        font.setFamilies(["Jost", "Segoe UI", "Arial", "Sans Serif"])
-        font.setWeight(QFont.Weight.Normal)
-        QGuiApplication.setFont(font)
-
-    def _on_make_it_work(self) -> None:
-        """User chose to add default sources."""
-        self.add_defaults_requested.emit()
-        self.accept()
-    
-    def _on_exit(self) -> None:
-        """User chose to exit the application."""
-        self.exit_requested.emit()
-        self.reject()
-    
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        parent = self.parentWidget()
-        if parent is not None:
-            try:
-                geom = parent.rect()
-                self.move(
-                    parent.mapToGlobal(geom.center()) - self.rect().center()
-                )
-            except Exception as e:
-                logger.debug("[SETTINGS] Exception suppressed: %s", e)
-
-
 class ResetDefaultsDialog(QWidget):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -592,16 +434,22 @@ class ResetDefaultsDialog(QWidget):
 
         card_layout.addWidget(body)
 
+        theme = get_active_settings_theme()
+        popup_shadow = theme.shadow("popup.dialog")
         shadow = QGraphicsDropShadowEffect(card)
-        shadow.setBlurRadius(20)
-        shadow.setXOffset(0)
-        shadow.setYOffset(0)
-        shadow.setColor(QColor(0, 0, 0, 180))
+        shadow.setBlurRadius(popup_shadow.blur_radius)
+        shadow.setOffset(popup_shadow.offset_x, popup_shadow.offset_y)
+        shadow.setColor(QColor(*popup_shadow.color.as_tuple()))
         card.setGraphicsEffect(shadow)
 
+        popup_surface = theme.color("popup.container.surface")
+        popup_border = theme.color("popup.container.border")
         card.setStyleSheet(
             "QWidget#resetDefaultsDialogCard {"
-            "background-color: rgba(16, 16, 16, 230);"
+            f"background-color: rgba({popup_surface.r}, {popup_surface.g}, "
+            f"{popup_surface.b}, {popup_surface.a});"
+            f"border: 1px solid rgba({popup_border.r}, {popup_border.g}, "
+            f"{popup_border.b}, {popup_border.a});"
             "border-radius: 10px;"
             "}"
         )
@@ -1537,11 +1385,25 @@ class SettingsDialog(QDialog):
             return False
     
     def _show_no_sources_popup(self) -> None:
-        """Show popup when user tries to close without configuring sources."""
-        popup = NoSourcesPopup(self)
-        popup.add_defaults_requested.connect(self._on_add_default_sources)
-        popup.exit_requested.connect(self._on_exit_without_sources)
+        """Use the central themed popup when no image source is configured."""
+        popup = StyledPopup(
+            self,
+            "No Image Sources",
+            "You haven't configured any image sources!<br><br>"
+            "The screensaver needs at least one folder or RSS feed to display "
+            "images.<br><br>What would you like to do?",
+            icon_type="warning",
+            buttons=[
+                ("Just Make It Work", "defaults"),
+                ("Ehhhh", "exit"),
+            ],
+            default_button_index=0,
+        )
         popup.exec()
+        if popup.result_value == "defaults":
+            self._on_add_default_sources()
+        elif popup.result_value == "exit":
+            self._on_exit_without_sources()
     
     def _reload_all_tab_settings(self) -> None:
         """Reload settings in all tabs after preset change."""
@@ -1816,29 +1678,37 @@ class SettingsDialog(QDialog):
 
     @staticmethod
     def _more_options_menu_stylesheet() -> str:
-        return """
-            QMenu {
-                background-color: rgba(25, 25, 30, 240);
-                border: 1px solid rgba(80, 80, 90, 180);
+        """Use the same semantic context-menu palette as app menus."""
+        def rgba(token: str) -> str:
+            value = _SETTINGS_THEME.color(token)
+            return f"rgba({value.r}, {value.g}, {value.b}, {value.a})"
+
+        return f"""
+            QMenu {{
+                background-color: {rgba('context.menu.surface')};
+                border: 1px solid {rgba('context.menu.border')};
                 border-radius: 6px;
                 padding: 4px 2px;
-            }
-            QMenu::item {
+            }}
+            QMenu::item {{
                 background-color: transparent;
-                color: rgba(220, 220, 225, 230);
+                color: {rgba('context.menu.text')};
                 padding: 6px 16px;
                 margin: 1px 3px;
                 border-radius: 3px;
                 font-size: 11px;
-            }
-            QMenu::item:selected {
-                background-color: rgba(60, 60, 75, 200);
-            }
-            QMenu::separator {
+            }}
+            QMenu::item:selected {{
+                background-color: {rgba('context.menu.selected_surface')};
+            }}
+            QMenu::item:disabled {{
+                color: {rgba('context.menu.disabled_text')};
+            }}
+            QMenu::separator {{
                 height: 1px;
-                background-color: rgba(80, 80, 90, 120);
+                background-color: {rgba('context.menu.separator')};
                 margin: 3px 8px;
-            }
+            }}
         """
     
     def _open_logs_folder(self) -> None:

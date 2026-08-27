@@ -9,8 +9,8 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
-    QPushButton, QLineEdit, QFileDialog, QGroupBox, QMessageBox, QCheckBox,
-    QScrollArea, QDialog, QFrame, QSizePolicy,
+    QPushButton, QLineEdit, QFileDialog, QGroupBox, QCheckBox,
+    QScrollArea, QFrame, QSizePolicy,
 )
 from PySide6.QtGui import QPainter, QPen, QPalette
 from ui.tabs import shared_styles
@@ -24,6 +24,7 @@ from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
+from ui.styled_popup import StyledPopup
 
 logger = get_logger(__name__)
 
@@ -275,6 +276,11 @@ class SourcesTab(QWidget):
         # RSS save to disk option
         self.rss_save_to_disk = QCheckBox("Save RSS Images To Disk")
         self.rss_save_to_disk.setProperty("circleIndicator", True)
+        shared_styles.bind_shared_styles(
+            self.rss_save_to_disk,
+            "CIRCLE_CHECKBOX_STYLE",
+            base_style="",
+        )
         self.rss_save_to_disk.setToolTip("Hope you have space! All RSS feed images will be permanently saved to a folder of your choosing.")
         self.rss_save_to_disk.stateChanged.connect(self._on_rss_save_toggled)
         rss_layout.addWidget(self.rss_save_to_disk)
@@ -391,7 +397,7 @@ class SourcesTab(QWidget):
                 self._emit_sources_changed()
                 logger.info(f"Added folder source: {folder}")
             else:
-                QMessageBox.information(self, "Duplicate", "This folder is already added.")
+                StyledPopup.show_info(self, "Duplicate", "This folder is already added.")
     
     def _remove_folder(self) -> None:
         """Remove selected folder source.
@@ -434,17 +440,25 @@ class SourcesTab(QWidget):
         url = raw_url
 
         if not url.startswith(("http://", "https://")):
-            # Offer to autocorrect common mistakes such as missing
-            # scheme or malformed hosts using a styled subsettings
-            # dialog that follows our QSS design.
-            dlg = RssAutocorrectDialog(self)
-            dlg.exec()
-            if not dlg.accepted:
+            # Use the same themed confirmation surface as the rest of Settings.
+            if not StyledPopup.question(
+                self,
+                "Invalid RSS/JSON",
+                "Invalid RSS/JSON - Try Autocorrect?",
+                yes_text="Try Autocorrect",
+                no_text="Fuck This (No)",
+                default_to_yes=True,
+            ):
                 return
 
             url = self._autocorrect_feed_url(raw_url).strip()
             if not url or not url.startswith(("http://", "https://")):
-                QMessageBox.warning(self, "Invalid URL", "Could not autocorrect feed URL. Please enter a full http:// or https:// address.")
+                StyledPopup.show_warning(
+                    self,
+                    "Invalid URL",
+                    "Could not autocorrect feed URL. Please enter a full "
+                    "http:// or https:// address.",
+                )
                 return
 
         # Get current RSS feeds using dot notation
@@ -460,7 +474,7 @@ class SourcesTab(QWidget):
             self._emit_sources_changed()
             logger.info(f"Added RSS feed: {url}")
         else:
-            QMessageBox.information(self, "Duplicate", "This RSS feed is already added.")
+            StyledPopup.show_info(self, "Duplicate", "This RSS feed is already added.")
     
     def _remove_rss(self) -> None:
         """Remove selected RSS feed source.
@@ -499,7 +513,6 @@ class SourcesTab(QWidget):
             return
         
         # Confirm with user using styled popup
-        from ui.styled_popup import StyledPopup
         confirmed = StyledPopup.question(
             self,
             "Remove All Feeds",
@@ -603,8 +616,6 @@ class SourcesTab(QWidget):
         
         Shows a confirmation dialog before deleting to prevent accidental data loss.
         """
-        from PySide6.QtWidgets import QMessageBox
-        
         # Count files before asking
         from core.settings.storage_paths import get_rss_cache_dir
         cache_dir = get_rss_cache_dir()
@@ -616,31 +627,33 @@ class SourcesTab(QWidget):
             logger.debug("[MISC] Exception suppressed: %s", e)
         
         if file_count == 0:
-            QMessageBox.information(
-                self, "Cache Empty",
-                "The RSS image cache is already empty."
+            StyledPopup.show_info(
+                self,
+                "Cache Empty",
+                "The RSS image cache is already empty.",
             )
             return
-        
-        # Confirm before deleting
-        reply = QMessageBox.question(
-            self, "Clear RSS Cache",
-            f"This will delete {file_count} cached RSS images.\n\n"
-            "The images will be re-downloaded on the next refresh.\n\n"
+
+        # Confirm before deleting using the central themed popup.
+        if not StyledPopup.question(
+            self,
+            "Clear RSS Cache",
+            f"This will delete {file_count} cached RSS images.<br><br>"
+            "The images will be re-downloaded on the next refresh.<br><br>"
             "Continue?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if reply != QMessageBox.Yes:
+            yes_text="Yes",
+            no_text="No",
+            default_to_yes=False,
+        ):
             return
         
         removed = self._clear_rss_cache()
         logger.info(f"RSS cache cleared via SourcesTab button: {removed} files removed")
         
-        QMessageBox.information(
-            self, "Cache Cleared",
-            f"Successfully removed {removed} cached images."
+        StyledPopup.show_success(
+            self,
+            "Cache Cleared",
+            f"Successfully removed {removed} cached images.",
         )
 
     def _on_just_make_it_work_clicked(self) -> None:
@@ -765,77 +778,4 @@ class SourcesTab(QWidget):
         self._settings.save()
         logger.info(f"Usage ratio saved: {local_ratio}% local, {100 - local_ratio}% RSS")
         self._emit_sources_changed()
-
-
-class RssAutocorrectDialog(QDialog):
-    """Small, styled dialog for RSS/JSON URL autocorrection.
-
-    Uses the ``subsettingsDialog`` QSS block so it matches the rest of
-    the application's dark, frameless dialogs.
-    """
-
-    def __init__(self, parent: Optional[QWidget] = None) -> None:  # type: ignore[name-defined]
-        super().__init__(parent)
-        self.setObjectName("subsettingsDialog")
-        self.setModal(True)
-        self._accepted: bool = False
-        self._setup_ui()
-
-    def _setup_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        title_frame = QFrame(self)
-        title_frame.setObjectName("titleFrame")
-        title_layout = QHBoxLayout(title_frame)
-        title_layout.setContentsMargins(12, 8, 12, 8)
-        title_layout.setSpacing(8)
-
-        title_label = QLabel("Invalid RSS/JSON", title_frame)
-        title_label.setObjectName("titleLabel")
-        title_layout.addWidget(title_label)
-        title_layout.addStretch()
-
-        close_label = QLabel("×", title_frame)
-        close_label.setObjectName("closeButton")
-        close_label.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        def _on_close(event):  # type: ignore[override]
-            self.reject()
-        close_label.mousePressEvent = _on_close  # type: ignore[assignment]
-
-        title_layout.addWidget(close_label)
-        layout.addWidget(title_frame)
-
-        content_frame = QFrame(self)
-        content_frame.setObjectName("settingsContentFrame")
-        content_layout = QVBoxLayout(content_frame)
-        content_layout.setContentsMargins(20, 20, 20, 20)
-        content_layout.setSpacing(12)
-
-        text_label = QLabel("Invalid RSS/JSON - Try Autocorrect?", content_frame)
-        text_label.setWordWrap(True)
-        content_layout.addWidget(text_label)
-
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        yes_btn = QPushButton("Try Autocorrect", content_frame)
-        no_btn = QPushButton("Fuck This (No)", content_frame)
-        yes_btn.clicked.connect(self._on_accept)
-        no_btn.clicked.connect(self.reject)
-        btn_row.addWidget(yes_btn)
-        btn_row.addWidget(no_btn)
-        content_layout.addLayout(btn_row)
-
-        layout.addWidget(content_frame)
-        self.adjustSize()
-
-    def _on_accept(self) -> None:
-        self._accepted = True
-        self.accept()
-
-    @property
-    def accepted(self) -> bool:
-        return self._accepted
 

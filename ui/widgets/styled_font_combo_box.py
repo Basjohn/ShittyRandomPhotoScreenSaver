@@ -25,7 +25,7 @@ class StyledFontComboBox(QFontComboBox):
         super().__init__(parent)
         shared_styles.ensure_custom_fonts()
         self._size_variant: SizeVariant = size_variant
-        self._popup_stylesheet = popup_stylesheet or shared_styles.COMBOBOX_POPUP_VIEW_STYLE
+        self._popup_stylesheet = popup_stylesheet
         self._apply_base_properties()
         self._knob_overlay = ComboKnobController(self)
         attach_control_shadow(self)
@@ -62,3 +62,11 @@ class StyledFontComboBox(QFontComboBox):
         popup_view.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         if self._popup_stylesheet:
             popup_view.setStyleSheet(self._popup_stylesheet)
+        else:
+            # Do not snapshot the construction-time rendered string. Bind the
+            # popup view to the live semantic role so theme switches propagate.
+            shared_styles.bind_shared_styles(
+                popup_view,
+                "COMBOBOX_POPUP_VIEW_STYLE",
+                base_style="",
+            )

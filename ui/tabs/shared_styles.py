@@ -938,10 +938,11 @@ COMBOBOX_POPUP_VIEW_STYLE = _build_combobox_popup_view_style()
 def _build_tooltip_style() -> str:
     return _theme_qss("""
     QToolTip {
-        background-color: @@hex:tooltip.surface@@;
-        color: @@hex:tooltip.text@@;
-        border: 1px solid @@hex:tooltip.border@@;
-        padding: 6px;
+        background-color: @@rgba:tooltip.surface@@;
+        color: @@rgba:tooltip.text@@;
+        border: 1px solid @@rgba:tooltip.border@@;
+        border-radius: 4px;
+        padding: 5px 10px;
         font-size: 12px;
     }
     """)

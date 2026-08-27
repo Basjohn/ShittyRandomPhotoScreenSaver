@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 3,
+  "schema_version": 4,
   "name": "Default Dark",
   "acrylic": {
     "enabled": true,
@@ -125,6 +125,60 @@
       58,
       58,
       220
+    ],
+    "bucket.closed.surface": [
+      50,
+      50,
+      50,
+      255
+    ],
+    "bucket.closed.text": [
+      220,
+      220,
+      220,
+      255
+    ],
+    "bucket.closed.border": [
+      80,
+      80,
+      80,
+      153
+    ],
+    "bucket.closed.hover_surface": [
+      60,
+      60,
+      60,
+      255
+    ],
+    "bucket.closed.hover_border": [
+      100,
+      100,
+      100,
+      204
+    ],
+    "bucket.open.surface": [
+      20,
+      20,
+      20,
+      255
+    ],
+    "bucket.open.text": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "bucket.open.border": [
+      100,
+      100,
+      100,
+      204
+    ],
+    "bucket.open.hover_surface": [
+      30,
+      30,
+      30,
+      255
     ],
     "content.surface": [
       0,
@@ -283,10 +337,10 @@
       255
     ],
     "tooltip.surface": [
-      30,
-      30,
-      30,
-      255
+      32,
+      32,
+      32,
+      179
     ],
     "tooltip.text": [
       255,
@@ -905,6 +959,30 @@
       50,
       60,
       220
+    ],
+    "popup.input.surface": [
+      14,
+      14,
+      18,
+      220
+    ],
+    "popup.input.border": [
+      255,
+      255,
+      255,
+      55
+    ],
+    "popup.input.text": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "popup.input.focus_border": [
+      106,
+      169,
+      217,
+      255
     ],
     "swatch.hover_mix": [
       255,
