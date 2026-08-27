@@ -167,7 +167,9 @@ neutral selection/cache/provider/preparation/generation/lifecycle contracts plus
 F8 model admission adds `tests/test_qtquick_abandonment_issues_presentation.py`. It protects exact shared-Steam
 and Abandonment config projection, stable shared Steam field-row/image/style primitives, accepted artwork
 identity/desaturation state, runtime attach/retire behavior, capability-gated refresh/rotation, and transition-
-deferred state/action commitment without admitting provider or cadence work into retained presentation.
+deferred state/action commitment without admitting provider or cadence work into retained presentation. Its
+QML extension protects the archival header/tab/artwork shelf/age stamp/two-column ledger, no-art/connect variants,
+bounded text fit and retained delegate identity across accepted updates.
 
 At the reviewed checkpoint the repository contains:
 

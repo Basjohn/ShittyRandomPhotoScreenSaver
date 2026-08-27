@@ -19,6 +19,9 @@ Item {
     property int verticalAlignment: Text.AlignTop
     property bool wrap: false
     property int elide: Text.ElideNone
+    property int fontSizeMode: Text.FixedSize
+    property real minimumPointSize: 6.0
+    property int maximumLineCount: 2147483647
 
     property bool shadowEnabled: true
     property color shadowColor: "#96000000"
@@ -45,6 +48,9 @@ Item {
         verticalAlignment: shadowedText.verticalAlignment
         wrapMode: shadowedText.wrap ? Text.WordWrap : Text.NoWrap
         elide: shadowedText.elide
+        fontSizeMode: shadowedText.fontSizeMode
+        minimumPointSize: shadowedText.minimumPointSize
+        maximumLineCount: shadowedText.maximumLineCount
         z: 0
     }
 
@@ -60,6 +66,9 @@ Item {
         verticalAlignment: shadowedText.verticalAlignment
         wrapMode: shadowedText.wrap ? Text.WordWrap : Text.NoWrap
         elide: shadowedText.elide
+        fontSizeMode: shadowedText.fontSizeMode
+        minimumPointSize: shadowedText.minimumPointSize
+        maximumLineCount: shadowedText.maximumLineCount
         z: 1
     }
 }
