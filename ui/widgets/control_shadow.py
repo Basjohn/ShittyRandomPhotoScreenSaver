@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Sequence, Tuple, Type
 
 from PySide6.QtCore import QObject, QPointF, QEvent, QRectF, QTimer, Qt
-from PySide6.QtGui import QColor, QPainter, QPainterPath
+from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath
 from PySide6.QtWidgets import (
     QAbstractButton,
     QAbstractSpinBox,
@@ -74,10 +74,8 @@ def _theme_shadow_config(token: str) -> ShadowConfig:
 # semantic theme data.
 SPIN_COMBO_SHADOW = _theme_shadow_config("input.spin_combo")
 
-# The old line-edit treatment was the remaining soft/blurred input shadow.  The
-# Settings visual refresh now deliberately gives entry boxes the same crisp
-# cast as combo/spin input shells.  The legacy ``input.line_edit`` theme token
-# can be removed when settings_theme_spec.py next comes through migration.
+# Entry boxes deliberately share the same crisp input cast as combo/spin
+# shells.  There is no separate blurred line-edit visual authority anymore.
 LINE_EDIT_SHADOW = SPIN_COMBO_SHADOW
 
 PILL_BUTTON_SHADOW = _theme_shadow_config("button.pill")
@@ -335,18 +333,16 @@ def attach_text_shadow(
 
 
 class _ButtonContentShadowOverlay(QWidget):
-    """Paint a hard shadow for tab text/emoji without shadowing the translucent body."""
+    """Paint an alpha-masked tab-content shadow beneath the translucent button."""
 
-    def __init__(self, helper: "_ButtonContentShadowHelper", owner: QPushButton) -> None:
-        super().__init__(owner)
+    def __init__(self, helper: "_ButtonContentShadowHelper", parent: QWidget) -> None:
+        super().__init__(parent)
         self._helper = helper
         self.setProperty("settingsShadowInternal", True)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setStyleSheet("background: transparent; border: none;")
-        self.setGeometry(owner.rect())
-        self.show()
 
     def paintEvent(self, event) -> None:  # noqa: N802
         del event
@@ -354,6 +350,17 @@ class _ButtonContentShadowOverlay(QWidget):
         owner = helper.owner
         if owner is None or owner.isHidden() or not owner.text():
             return
+        if owner.width() <= 0 or owner.height() <= 0:
+            return
+
+        # Render Qt's real push-button label (including colour emoji / QIcon)
+        # into an off-screen alpha mask.  Recolouring that mask avoids the
+        # checkpoint-4 failure where colour emoji were visibly duplicated.
+        label_image = QImage(
+            owner.size(),
+            QImage.Format.Format_ARGB32_Premultiplied,
+        )
+        label_image.fill(0)
 
         option = QStyleOptionButton()
         option.initFrom(owner)
@@ -362,47 +369,56 @@ class _ButtonContentShadowOverlay(QWidget):
         option.icon = owner.icon()
         option.iconSize = owner.iconSize()
 
-        content_rect = owner.style().subElementRect(
-            QStyle.SubElement.SE_PushButtonContents,
+        label_painter = QPainter(label_image)
+        label_painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        label_painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        owner.style().drawControl(
+            QStyle.ControlElement.CE_PushButtonLabel,
             option,
+            label_painter,
             owner,
         )
-        shadow_rect = QRectF(content_rect)
-        shadow_rect.translate(helper.config.offset)
+        label_painter.end()
 
         color = QColor(helper.config.color)
         if not owner.isEnabled():
             color.setAlpha(int(color.alpha() * helper.config.disabled_alpha_scale))
 
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
-        painter.setFont(owner.font())
-        painter.setPen(color)
-        painter.drawText(
-            shadow_rect,
-            int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
-            owner.text(),
+        shadow_image = QImage(
+            label_image.size(),
+            QImage.Format.Format_ARGB32_Premultiplied,
         )
+        shadow_image.fill(0)
+        mask_painter = QPainter(shadow_image)
+        mask_painter.drawImage(0, 0, label_image)
+        mask_painter.setCompositionMode(
+            QPainter.CompositionMode.CompositionMode_SourceIn
+        )
+        mask_painter.fillRect(shadow_image.rect(), color)
+        mask_painter.end()
+
+        painter = QPainter(self)
+        painter.drawImage(helper.config.offset, shadow_image)
         painter.end()
 
 
 class _ButtonContentShadowHelper(QObject):
-    """Keep a tab-label shadow child synchronized with its QPushButton owner."""
+    """Keep a true underlay shadow synchronized with one navigation button."""
 
     def __init__(self, owner: QPushButton, config: ShadowConfig) -> None:
         super().__init__(owner)
         self.owner = owner
         self.config = config
-        self.overlay = _ButtonContentShadowOverlay(self, owner)
+        self.overlay: _ButtonContentShadowOverlay | None = None
         owner.installEventFilter(self)
-        owner.toggled.connect(self.overlay.update)
+        owner.toggled.connect(self._sync)
         self._sync()
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # type: ignore[override]
         if watched is self.owner:
             etype = event.type()
             if etype in (
+                QEvent.Type.Move,
                 QEvent.Type.Resize,
                 QEvent.Type.Show,
                 QEvent.Type.Hide,
@@ -410,31 +426,60 @@ class _ButtonContentShadowHelper(QObject):
                 QEvent.Type.StyleChange,
                 QEvent.Type.FontChange,
                 QEvent.Type.PaletteChange,
+                QEvent.Type.ParentChange,
                 QEvent.Type.Enter,
                 QEvent.Type.Leave,
                 QEvent.Type.UpdateRequest,
             ):
                 self._sync()
             elif etype == QEvent.Type.Destroy:
-                self.overlay.deleteLater()
+                if self.overlay is not None:
+                    self.overlay.deleteLater()
+                    self.overlay = None
         return super().eventFilter(watched, event)
 
     def reconfigure(self, config: ShadowConfig) -> None:
         self.config = config
         self._sync()
 
-    def _sync(self) -> None:
-        self.overlay.setGeometry(self.owner.rect())
-        self.overlay.setVisible(not self.owner.isHidden())
-        self.overlay.raise_()
-        self.overlay.update()
+    def _ensure_overlay_parent(self) -> None:
+        parent = self.owner.parentWidget()
+        if parent is None:
+            if self.overlay is not None:
+                self.overlay.hide()
+            return
+        if self.overlay is None:
+            self.overlay = _ButtonContentShadowOverlay(self, parent)
+        elif self.overlay.parentWidget() is not parent:
+            self.overlay.setParent(parent)
+
+    def _sync(self, *_args) -> None:
+        self._ensure_overlay_parent()
+        overlay = self.overlay
+        if overlay is None:
+            return
+        offset = self.config.offset
+        pad_x = max(2, int(math.ceil(max(0.0, float(offset.x())))) + 2)
+        pad_y = max(2, int(math.ceil(max(0.0, float(offset.y())))) + 2)
+        geom = self.owner.geometry()
+        overlay.setGeometry(
+            geom.x(),
+            geom.y(),
+            geom.width() + pad_x,
+            geom.height() + pad_y,
+        )
+        overlay.setVisible(not self.owner.isHidden())
+        # This is the crucial difference from checkpoint 4: the shadow is a
+        # sibling *under* the translucent button, never a child raised above it.
+        overlay.stackUnder(self.owner)
+        overlay.update()
 
 
 def attach_button_content_shadow(
     button: QPushButton,
     config: ShadowConfig,
 ) -> None:
-    """Shadow only a button's text/emoji content, leaving its body renderer alone."""
+    """Shadow only a button's label silhouette beneath its body renderer."""
 
     existing = getattr(button, "_settings_button_content_shadow_helper", None)
     if isinstance(existing, _ButtonContentShadowHelper):
@@ -573,6 +618,23 @@ class _CastShadowHelper(QObject):
         overlay.update()
 
 
+def _layout_containing_widget(layout, widget: QWidget):
+    """Return the nested layout that directly contains ``widget``, if any."""
+
+    for index in range(layout.count()):
+        item = layout.itemAt(index)
+        if item is None:
+            continue
+        if item.widget() is widget:
+            return layout
+        child_layout = item.layout()
+        if child_layout is not None:
+            found = _layout_containing_widget(child_layout, widget)
+            if found is not None:
+                return found
+    return None
+
+
 def _reserve_parent_layout_shadow_clearance(widget: QWidget, config: ShadowConfig) -> None:
     """Reserve right/bottom room when a cast would otherwise be clipped by layout bounds."""
 
@@ -582,12 +644,17 @@ def _reserve_parent_layout_shadow_clearance(widget: QWidget, config: ShadowConfi
     parent = widget.parentWidget()
     while parent is not None:
         layout = parent.layout()
-        if layout is not None and layout.indexOf(child) >= 0:
-            margins = layout.contentsMargins()
+        target_layout = (
+            _layout_containing_widget(layout, child)
+            if layout is not None
+            else None
+        )
+        if target_layout is not None:
+            margins = target_layout.contentsMargins()
             next_right = max(margins.right(), required_right)
             next_bottom = max(margins.bottom(), required_bottom)
             if next_right != margins.right() or next_bottom != margins.bottom():
-                layout.setContentsMargins(
+                target_layout.setContentsMargins(
                     margins.left(),
                     margins.top(),
                     next_right,
@@ -843,6 +910,7 @@ def _style_one_widget(
             widget,
             RATIO_FRAME_SHADOW,
             radius=8.0,
+            reserve_layout=True,
         )
 
 
