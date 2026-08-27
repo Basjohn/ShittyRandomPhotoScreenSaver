@@ -70,7 +70,12 @@ def test_overlay_model_mutates_shared_session_items_without_copying_authority() 
         QRect(320, 240, 220, 100),
         duplicate=True,
     )
-    foreign = _item("gmail", "display:b", QRect(900, 40, 400, 180))
+    foreign = _item(
+        "weather",
+        "display:b",
+        QRect(900, 40, 220, 100),
+        duplicate=True,
+    )
     for item in (singleton, duplicate, foreign):
         session.add_item(item)
 
@@ -348,7 +353,8 @@ def test_visualizer_custom_session_preserves_retained_item_and_render_identity(q
     assert render_item.render_identity == render_identity
 
     model.closeItem(0)
-    assert visualizer.current_enabled is False
+    assert visualizer.removed is True
+    assert visualizer.current_enabled is True
     assert visualizer_root.property("presentationActive") is True
     assert visualizer_root.property("customLayoutWorkingVisible") is False
     assert id(controller.visualizer_item) == render_item_identity

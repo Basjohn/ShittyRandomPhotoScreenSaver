@@ -523,6 +523,15 @@ class CustomLayoutManager:
                 grouped_states.setdefault(widget_id, []).append((manager, state))
 
         for widget_id, entries in grouped_states.items():
+            ordinary_enabled = any(
+                state.item.current_enabled and not state.item.removed
+                for _manager, state in entries
+            )
+            section = widgets_map.get(widget_id, {})
+            if not isinstance(section, dict):
+                section = {}
+                widgets_map[widget_id] = section
+            section["enabled"] = ordinary_enabled
             survivors = [(manager, state) for manager, state in entries if not state.item.removed]
             if not survivors:
                 continue
@@ -2004,18 +2013,13 @@ class CustomLayoutManager:
         )
 
     def _refresh_duplicate_shell_remove_affordances_global(self) -> None:
-        grouped: dict[str, list[_ShellState]] = {}
+        if self._session is not None:
+            self._session.refresh_duplicate_state()
         for manager in CustomLayoutManager._active_managers:
             for widget_id, state in manager._shell_states.items():
-                grouped.setdefault(widget_id, []).append(state)
-        for manager in CustomLayoutManager._active_managers:
-            for widget_id, state in manager._shell_states.items():
-                state.item.is_duplicate = len(grouped.get(widget_id, ())) > 1
-                survivors = [entry for entry in grouped.get(widget_id, ()) if not entry.item.removed]
                 removable = bool(
                     widget_writes_custom_monitor_key(widget_id)
-                    and len(survivors) > 1
-                    and not state.item.removed
+                    and state.item.is_duplicate
                 )
                 state.shell.set_remove_enabled(removable)
 

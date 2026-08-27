@@ -1386,6 +1386,93 @@ def test_custom_layout_manager_duplicate_all_shell_can_be_removed_to_single_disp
     assert payload["resize_mode"] == "clock_font"
 
 
+def test_custom_layout_manager_singleton_x_commits_ordinary_off_without_touching_source_settings(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "clock": {
+            "enabled": True,
+            "position": "Top Left",
+            "monitor": "1",
+            "provider": "local-clock",
+            "account": "desk",
+            "source": {"timezone": "Africa/Johannesburg"},
+        }
+    }
+    original_source_settings = deepcopy(settings_stub._widgets_map["clock"])
+
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    clock = _EditableTestWidget(display, font_size=48)
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["clock"]
+    manager._on_shell_remove_requested("clock")
+
+    assert state.item.removed is False
+    assert state.item.current_enabled is False
+    assert manager.save_session() is True
+
+    clock_settings = settings_stub.get_widgets_map()["clock"]
+    assert clock_settings["enabled"] is False
+    assert clock_settings["provider"] == original_source_settings["provider"]
+    assert clock_settings["account"] == original_source_settings["account"]
+    assert clock_settings["source"] == original_source_settings["source"]
+
+
+def test_custom_layout_manager_last_duplicate_x_becomes_ordinary_off(qtbot, monkeypatch):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "clock": {"enabled": True, "position": "Top Left", "monitor": "ALL"}
+    }
+
+    screen_a = _FakeScreen("Display-A", QRect(0, 0, 800, 600))
+    screen_b = _FakeScreen("Display-B", QRect(800, 0, 800, 600))
+    display_a = _DisplayStub(settings_stub, screen=screen_a, screen_index=0)
+    display_b = _DisplayStub(settings_stub, screen=screen_b, screen_index=1)
+    qtbot.addWidget(display_a)
+    qtbot.addWidget(display_b)
+    display_a.show()
+    display_b.show()
+
+    display_a.clock_widget = _EditableTestWidget(display_a, font_size=48)
+    display_b.clock_widget = _EditableTestWidget(display_b, font_size=48)
+    qtbot.addWidget(display_a.clock_widget)
+    qtbot.addWidget(display_b.clock_widget)
+
+    manager_a = CustomLayoutManager(display_a)
+    manager_b = CustomLayoutManager(display_b)
+    _attach_manager(display_a, manager_a)
+    _attach_manager(display_b, manager_b)
+
+    class _CoordinatorStub:
+        def get_all_instances(self):
+            return [display_a, display_b]
+
+    monkeypatch.setattr("rendering.custom_layout_manager.get_coordinator", lambda: _CoordinatorStub())
+
+    assert manager_a.start_session() is True
+    state_a = manager_a._shell_states["clock"]
+    state_b = manager_b._shell_states["clock"]
+
+    manager_b._on_shell_remove_requested("clock")
+    assert state_b.item.removed is True
+    assert state_a.item.is_duplicate is False
+
+    manager_a._on_shell_remove_requested("clock")
+    assert state_a.item.removed is False
+    assert state_a.item.current_enabled is False
+    assert manager_a.save_session() is True
+    assert settings_stub.get_widgets_map()["clock"]["enabled"] is False
+
+
 def test_custom_layout_manager_creates_and_destroys_grid_overlay(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()

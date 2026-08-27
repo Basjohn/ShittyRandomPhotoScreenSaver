@@ -100,6 +100,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         session = self._session
         if session is None:
             return
+        session.refresh_duplicate_state()
         next_items = [
             item
             for item in session.items()
@@ -144,11 +145,16 @@ class CustomLayoutOverlayModel(QAbstractListModel):
 
         if not 0 <= int(row) < len(self._items):
             return
+        session = self._session
+        if session is None:
+            return
+        session.refresh_duplicate_state()
         item = self._items[int(row)]
         widget_id = item.source_key.widget_id
         item.apply_remove_action()
         removed = item.removed
         enabled = item.current_enabled
+        session.refresh_duplicate_state()
         self.refresh()
         self.item_closed.emit(widget_id, removed, enabled)
 

@@ -163,6 +163,21 @@ class CustomLayoutSession:
     def active_items(self) -> tuple[CustomLayoutSessionItem, ...]:
         return tuple(item for item in self._items.values() if not item.removed)
 
+    def refresh_duplicate_state(self) -> None:
+        """Derive duplicate status from current enabled, non-removed survivors."""
+
+        grouped: dict[str, list[CustomLayoutSessionItem]] = {}
+        for item in self._items.values():
+            if item.current_enabled and not item.removed:
+                grouped.setdefault(item.model_identity, []).append(item)
+        for item in self._items.values():
+            item.is_duplicate = (
+                item.current_enabled
+                and not item.removed
+                and len(grouped.get(item.model_identity, ())) > 1
+            )
+
     def restore_baseline(self) -> None:
         for item in self._items.values():
             item.restore_baseline()
+        self.refresh_duplicate_state()

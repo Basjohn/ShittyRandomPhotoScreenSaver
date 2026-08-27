@@ -65,6 +65,19 @@ def test_random_action_disabled_when_pool_empty(qapp, qtbot):
     assert menu._transition_actions["Random"].isEnabled() is True
 
 
+def test_context_menu_save_action_emits_semantic_edit_session_request(qapp, qtbot):
+    menu = ScreensaverContextMenu()
+    qtbot.addWidget(menu)
+    requests: list[str] = []
+    menu.save_edit_mode_requested.connect(lambda: requests.append("save"))
+
+    menu.update_edit_mode_state(True)
+    assert menu._save_edit_mode_action.isVisible() is True
+    menu._save_edit_mode_action.trigger()
+
+    assert requests == ["save"]
+
+
 # --- Handler persistence + admission ---------------------------------------
 
 
