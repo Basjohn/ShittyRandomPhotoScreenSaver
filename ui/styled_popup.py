@@ -13,8 +13,25 @@ from PySide6.QtGui import QColor, QPalette, QPainter, QPen, QBrush, QLinearGradi
 
 from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
+from ui.settings_theme_runtime import get_active_settings_theme
+from ui.settings_theme_spec import SettingsThemeSpec
+from ui.widgets import control_shadow
 
 logger = get_logger(__name__)
+
+
+def _theme_qcolor(theme: SettingsThemeSpec, token: str) -> QColor:
+    """Return one semantic popup/swatch colour as QColor."""
+
+    value = theme.color(token)
+    return QColor(*value.as_tuple())
+
+
+def _theme_rgba255(theme: SettingsThemeSpec, token: str) -> str:
+    """Return one semantic popup colour using Qt integer-alpha QSS."""
+
+    value = theme.color(token)
+    return f"rgba({value.r}, {value.g}, {value.b}, {value.a})"
 
 
 ButtonDef = Tuple[str, str]
@@ -67,23 +84,29 @@ class StyledPopup(QDialog):
             ThreadManager.single_shot(auto_close_ms, self._auto_accept)
     
     def _setup_ui(self) -> None:
-        """Build the popup UI."""
+        """Build the popup UI from the currently active Settings theme."""
+
+        theme = get_active_settings_theme()
+
         # Main container with styling
         container = QWidget(self)
         container.setObjectName("popupContainer")
-        container.setStyleSheet("""
-            #popupContainer {
-                background-color: rgba(25, 25, 30, 235);
-                border: 1px solid rgba(80, 80, 90, 180);
+        container.setStyleSheet(
+            f"""
+            #popupContainer {{
+                background-color: {_theme_rgba255(theme, 'popup.container.surface')};
+                border: 1px solid {_theme_rgba255(theme, 'popup.container.border')};
                 border-radius: 10px;
-            }
-        """)
-        
-        # Drop shadow
+            }}
+        """
+        )
+
+        # Existing popup-specific renderer; visual values are ThemeSpec-owned.
+        popup_shadow = theme.shadow("popup.dialog")
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(20)
-        shadow.setColor(QColor(0, 0, 0, 150))
-        shadow.setOffset(0, 4)
+        shadow.setBlurRadius(popup_shadow.blur_radius)
+        shadow.setColor(QColor(*popup_shadow.color.as_tuple()))
+        shadow.setOffset(popup_shadow.offset_x, popup_shadow.offset_y)
         container.setGraphicsEffect(shadow)
         
         main_layout = QVBoxLayout(self)
@@ -106,27 +129,30 @@ class StyledPopup(QDialog):
             "success": "✓",
             "question": "?",
         }
-        icon_colors = {
-            "info": "rgba(100, 180, 255, 255)",
-            "warning": "rgba(255, 200, 80, 255)",
-            "error": "rgba(255, 100, 100, 255)",
-            "success": "rgba(100, 220, 140, 255)",
-            "question": "rgba(180, 180, 255, 255)",
+        icon_tokens = {
+            "info": "popup.icon.info",
+            "warning": "popup.icon.warning",
+            "error": "popup.icon.error",
+            "success": "popup.icon.success",
+            "question": "popup.icon.question",
         }
+        icon_token = icon_tokens.get(self._icon_type, "popup.icon.info")
         
         icon_label = QLabel(icon_map.get(self._icon_type, "ℹ"))
         icon_label.setStyleSheet(f"""
             font-size: 16px;
-            color: {icon_colors.get(self._icon_type, icon_colors['info'])};
+            color: {_theme_rgba255(theme, icon_token)};
         """)
         title_bar.addWidget(icon_label)
         
         title_label = QLabel(self._title)
-        title_label.setStyleSheet("""
+        title_label.setStyleSheet(
+            f"""
             font-size: 13px;
             font-weight: bold;
-            color: rgba(240, 240, 245, 240);
-        """)
+            color: {_theme_rgba255(theme, 'popup.title.text')};
+        """
+        )
         title_bar.addWidget(title_label)
         title_bar.addStretch()
         
@@ -137,11 +163,13 @@ class StyledPopup(QDialog):
             msg_label = QLabel(self._message)
             msg_label.setTextFormat(Qt.TextFormat.RichText)
             msg_label.setWordWrap(True)
-            msg_label.setStyleSheet("""
+            msg_label.setStyleSheet(
+                f"""
                 font-size: 12px;
-                color: rgba(200, 200, 210, 220);
+                color: {_theme_rgba255(theme, 'popup.message.text')};
                 padding: 4px 0;
-            """)
+            """
+            )
             container_layout.addWidget(msg_label)
         
         # OK button
@@ -152,22 +180,24 @@ class StyledPopup(QDialog):
             button = QPushButton(label)
             button.setFixedHeight(28)
             button.setMinimumWidth(90)
-            button.setStyleSheet("""
-                QPushButton {
-                    background-color: rgba(60, 60, 70, 200);
-                    border: 1px solid rgba(100, 100, 110, 180);
+            button.setStyleSheet(
+                f"""
+                QPushButton {{
+                    background-color: {_theme_rgba255(theme, 'popup.button.surface')};
+                    border: 1px solid {_theme_rgba255(theme, 'popup.button.border')};
                     border-radius: 4px;
-                    color: rgba(240, 240, 245, 230);
+                    color: {_theme_rgba255(theme, 'popup.button.text')};
                     font-size: 12px;
                     padding: 4px 16px;
-                }
-                QPushButton:hover {
-                    background-color: rgba(80, 80, 95, 220);
-                }
-                QPushButton:pressed {
-                    background-color: rgba(50, 50, 60, 220);
-                }
-            """)
+                }}
+                QPushButton:hover {{
+                    background-color: {_theme_rgba255(theme, 'popup.button.hover_surface')};
+                }}
+                QPushButton:pressed {{
+                    background-color: {_theme_rgba255(theme, 'popup.button.pressed_surface')};
+                }}
+            """
+            )
             button.clicked.connect(lambda _=False, val=value: self._on_button(val))
             if index == self._default_button_index:
                 button.setDefault(True)
@@ -379,7 +409,7 @@ class _ColorPickerDialog(QDialog):
 
 
 class ColorSwatchButton(QPushButton):
-    """Burn-style colour chip with white border + drop shadow."""
+    """Burn-style colour chip using the central semantic button cast."""
 
     color_changed = Signal(QColor)
 
@@ -409,11 +439,11 @@ class ColorSwatchButton(QPushButton):
         self.setMaximumHeight(self._MIN_HEIGHT + 4)
         self.setStyleSheet("border: none; background: transparent; margin-bottom: 0px;")
 
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(18)
-        shadow.setOffset(2.5, 5.0)
-        shadow.setColor(QColor(0, 0, 0, 170))
-        self.setGraphicsEffect(shadow)
+        control_shadow.attach_control_shadow(
+            self,
+            control_shadow.PILL_BUTTON_SHADOW,
+            replace_existing=True,
+        )
 
         if self._auto_picker:
             self.clicked.connect(self._open_picker)
@@ -456,10 +486,16 @@ class ColorSwatchButton(QPushButton):
         if not self.isEnabled():
             base.setAlpha(int(base.alpha() * 0.4))
             return base
+
+        theme = get_active_settings_theme()
         if self._pressed:
-            return self._blend(base, QColor(0, 0, 0, base.alpha()), 0.18)
+            target = _theme_qcolor(theme, "swatch.pressed_mix")
+            target.setAlpha(base.alpha())
+            return self._blend(base, target, 0.18)
         if self._hovered:
-            return self._blend(base, QColor(255, 255, 255, base.alpha()), 0.12)
+            target = _theme_qcolor(theme, "swatch.hover_mix")
+            target.setAlpha(base.alpha())
+            return self._blend(base, target, 0.12)
         return base
 
     def _blend(self, color: QColor, target: QColor, strength: float) -> QColor:
@@ -482,22 +518,24 @@ class ColorSwatchButton(QPushButton):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(outer, radius, radius)
 
+        theme = get_active_settings_theme()
+
         # Inner accent for contrast (helps white colours stand out)
         inner = outer.adjusted(1, 1, -1, -1)
         gradient = QLinearGradient(inner.topLeft(), inner.bottomLeft())
-        gradient.setColorAt(0, QColor(255, 255, 255, 30))
-        gradient.setColorAt(1, QColor(0, 0, 0, 35))
+        gradient.setColorAt(0, _theme_qcolor(theme, "swatch.inner_highlight"))
+        gradient.setColorAt(1, _theme_qcolor(theme, "swatch.inner_shade"))
         painter.setBrush(QBrush(gradient))
         painter.drawRoundedRect(inner, radius - 1, radius - 1)
 
-        # Border (white) + inner stroke depending on luminance
+        # Border + inner stroke depending on luminance
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QPen(QColor(255, 255, 255, 230), 1))
+        painter.setPen(QPen(_theme_qcolor(theme, "swatch.border"), 1))
         painter.drawRoundedRect(outer, radius, radius)
 
         lum = 0.299 * fill.red() + 0.587 * fill.green() + 0.114 * fill.blue()
-        accent = QColor(0, 0, 0, 90) if lum > 180 else QColor(255, 255, 255, 70)
-        painter.setPen(QPen(accent, 1))
+        accent_token = "swatch.dark_accent" if lum > 180 else "swatch.light_accent"
+        painter.setPen(QPen(_theme_qcolor(theme, accent_token), 1))
         painter.drawRoundedRect(inner.adjusted(1, 1, -1, -1), radius - 2, radius - 2)
 
         painter.end()
@@ -565,13 +603,32 @@ class StyledColorPicker:
 
     @staticmethod
     def _apply_dark_palette(dialog: QColorDialog) -> None:
+        theme = get_active_settings_theme()
         palette = dialog.palette()
-        palette.setColor(QPalette.ColorRole.Window, QColor(30, 30, 35))
-        palette.setColor(QPalette.ColorRole.WindowText, QColor(220, 220, 225))
-        palette.setColor(QPalette.ColorRole.Base, QColor(45, 45, 50))
-        palette.setColor(QPalette.ColorRole.Text, QColor(220, 220, 225))
-        palette.setColor(QPalette.ColorRole.Button, QColor(55, 55, 65))
-        palette.setColor(QPalette.ColorRole.ButtonText, QColor(220, 220, 225))
+        palette.setColor(
+            QPalette.ColorRole.Window,
+            _theme_qcolor(theme, "color_picker.window"),
+        )
+        palette.setColor(
+            QPalette.ColorRole.WindowText,
+            _theme_qcolor(theme, "color_picker.window_text"),
+        )
+        palette.setColor(
+            QPalette.ColorRole.Base,
+            _theme_qcolor(theme, "color_picker.base"),
+        )
+        palette.setColor(
+            QPalette.ColorRole.Text,
+            _theme_qcolor(theme, "color_picker.text"),
+        )
+        palette.setColor(
+            QPalette.ColorRole.Button,
+            _theme_qcolor(theme, "color_picker.button"),
+        )
+        palette.setColor(
+            QPalette.ColorRole.ButtonText,
+            _theme_qcolor(theme, "color_picker.button_text"),
+        )
         dialog.setPalette(palette)
 
 

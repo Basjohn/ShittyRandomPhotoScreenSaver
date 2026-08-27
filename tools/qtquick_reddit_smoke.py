@@ -27,9 +27,11 @@ from PySide6.QtQuick import QQuickItem, QQuickWindow  # noqa: E402
 
 from core.reddit_preparation import RedditPost  # noqa: E402
 from rendering.quick.scene_controller import QuickSceneFactory  # noqa: E402
-from rendering.quick.widgets import (  # noqa: E402
+from rendering.quick.widgets.host import (  # noqa: E402
     OrdinaryWidgetPresentationHost,
     OverlayWidgetGeometry,
+)
+from rendering.quick.widgets.reddit import (  # noqa: E402
     RedditPresentationConfig,
     RedditPresentationModel,
     RedditPresentationStyle,

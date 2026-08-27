@@ -45,6 +45,65 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
     assert _run_fresh_process_probe(probe) == []
 
 
+def test_common_quick_scene_import_keeps_ordinary_families_dormant() -> None:
+    probe = r"""
+import json
+import sys
+
+import rendering.quick.scene_controller  # noqa: F401
+
+forbidden = {
+    "rendering.quick.widgets.clock",
+    "rendering.quick.widgets.weather",
+    "rendering.quick.widgets.media",
+    "rendering.quick.widgets.reddit",
+    "rendering.quick.widgets.gmail",
+    "widgets.clock_ticker",
+    "widgets.weather_runtime",
+    "widgets.media_runtime",
+    "widgets.media_volume_runtime",
+    "widgets.system_mute_runtime",
+    "widgets.reddit_runtime",
+    "widgets.gmail_runtime",
+    "widgets.weather_widget",
+    "widgets.media_widget",
+    "widgets.gmail_widget",
+    "core.reddit_post_provider",
+    "core.gmail.gmail_backend",
+    "core.gmail.gmail_client",
+    "core.gmail.gmail_imap",
+    "core.gmail.gmail_oauth",
+    "core.media.media_controller",
+    "core.media.spotify_volume",
+    "core.media.system_mute",
+}
+print(json.dumps(sorted(forbidden & set(sys.modules))))
+"""
+
+    assert _run_fresh_process_probe(probe) == []
+
+
+def test_gmail_presentation_import_keeps_runtime_backend_dormant() -> None:
+    probe = r"""
+import json
+import sys
+
+import rendering.quick.widgets.gmail  # noqa: F401
+
+    forbidden = {
+        "widgets.gmail_runtime",
+        "widgets.gmail_widget",
+        "core.gmail.gmail_backend",
+        "core.gmail.gmail_imap",
+        "core.gmail.gmail_oauth",
+        "core.audio.notification_sound",
+    }
+print(json.dumps(sorted(forbidden & set(sys.modules))))
+"""
+
+    assert _run_fresh_process_probe(probe) == []
+
+
 def test_deactivated_media_setup_keeps_all_media_implementations_dormant() -> None:
     probe = r"""
 import json

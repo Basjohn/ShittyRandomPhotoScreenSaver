@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import (
     QAbstractListModel,
@@ -27,7 +27,9 @@ from widgets.gmail_components import (
     shorten_subject,
     smart_title_case_subject,
 )
-from widgets.gmail_runtime import GmailRuntimeSnapshot
+
+if TYPE_CHECKING:
+    from widgets.gmail_runtime import GmailRuntimeSnapshot
 
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,

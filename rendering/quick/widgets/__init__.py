@@ -1,4 +1,4 @@
-"""Per-display retained ordinary-widget presentation host and style records."""
+"""Dormant shared retained-widget host and static family metadata."""
 
 from __future__ import annotations
 
@@ -9,46 +9,6 @@ from .host import (
     OverlayCardStyle,
     OverlayWidgetGeometry,
     RetainedOverlayWidget,
-)
-from .weather import (
-    RetainedWeatherPresentation,
-    WeatherPresentationConfig,
-    WeatherPresentationModel,
-    WeatherPresentationSnapshot,
-    WeatherPresentationStyle,
-)
-from .media import (
-    MediaPresentationConfig,
-    MediaPresentationModel,
-    MediaPresentationSnapshot,
-    MediaPresentationStyle,
-    RetainedMediaPresentation,
-)
-from .reddit import (
-    RedditPresentationConfig,
-    RedditPresentationModel,
-    RedditPresentationRow,
-    RedditPresentationSnapshot,
-    RedditPresentationStyle,
-    RedditRowListModel,
-    RetainedRedditPresentation,
-)
-from .gmail import (
-    GmailPresentationConfig,
-    GmailPresentationModel,
-    GmailPresentationRow,
-    GmailPresentationSnapshot,
-    GmailPresentationStyle,
-    GmailRowListModel,
-)
-from .clock import (
-    ClockGeometryVariantStore,
-    ClockPresentationConfig,
-    ClockPresentationModel,
-    ClockPresentationSnapshot,
-    ClockPresentationStyle,
-    RetainedClockPresentation,
-    normalize_clock_display_mode,
 )
 from .registry import (
     ORDINARY_WIDGET_FAMILY_COMPONENTS,
@@ -63,36 +23,6 @@ __all__ = [
     "OverlayCardStyle",
     "OverlayWidgetGeometry",
     "RetainedOverlayWidget",
-    "ClockGeometryVariantStore",
-    "ClockPresentationConfig",
-    "ClockPresentationModel",
-    "ClockPresentationSnapshot",
-    "ClockPresentationStyle",
-    "RetainedClockPresentation",
-    "normalize_clock_display_mode",
-    "RetainedWeatherPresentation",
-    "WeatherPresentationConfig",
-    "WeatherPresentationModel",
-    "WeatherPresentationSnapshot",
-    "WeatherPresentationStyle",
-    "MediaPresentationConfig",
-    "MediaPresentationModel",
-    "MediaPresentationSnapshot",
-    "MediaPresentationStyle",
-    "RetainedMediaPresentation",
-    "RedditPresentationConfig",
-    "RedditPresentationModel",
-    "RedditPresentationRow",
-    "RedditPresentationSnapshot",
-    "RedditPresentationStyle",
-    "RedditRowListModel",
-    "RetainedRedditPresentation",
-    "GmailPresentationConfig",
-    "GmailPresentationModel",
-    "GmailPresentationRow",
-    "GmailPresentationSnapshot",
-    "GmailPresentationStyle",
-    "GmailRowListModel",
     "ORDINARY_WIDGET_FAMILY_COMPONENTS",
     "OrdinaryWidgetFamilyComponent",
     "ordinary_widget_family_component",

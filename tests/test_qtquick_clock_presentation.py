@@ -14,14 +14,16 @@ from PySide6.QtQuick import QQuickItem
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.scene_controller import QuickSceneController
 from rendering.quick.state import QuickWindowPolicy
-from rendering.quick.widgets import (
+from rendering.quick.widgets.clock import (
     ClockGeometryVariantStore,
     ClockPresentationConfig,
     ClockPresentationModel,
     ClockPresentationStyle,
+    RetainedClockPresentation,
+)
+from rendering.quick.widgets.host import (
     OrdinaryWidgetPresentationHost,
     OverlayWidgetGeometry,
-    RetainedClockPresentation,
 )
 from rendering.quick.window import QuickDisplayWindow
 from widgets.clock_ticker import GlobalClockTicker

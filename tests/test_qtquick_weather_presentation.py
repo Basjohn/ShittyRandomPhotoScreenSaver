@@ -12,9 +12,11 @@ from PySide6.QtQuick import QQuickItem
 
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
-from rendering.quick.widgets import (
+from rendering.quick.widgets.host import (
     OrdinaryWidgetPresentationHost,
     OverlayWidgetGeometry,
+)
+from rendering.quick.widgets.weather import (
     RetainedWeatherPresentation,
     WeatherPresentationConfig,
     WeatherPresentationModel,

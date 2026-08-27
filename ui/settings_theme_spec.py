@@ -238,7 +238,6 @@ class SettingsThemeSpec:
 #
 # Intentionally deferred until their owning renderer/tab is migrated:
 #   * tab-local palettes (RSS/accessibility/etc.);
-#   * Settings-dialog local popup palettes;
 #   * typography/spacing/geometry;
 #   * resource-backed checkbox artwork;
 
@@ -362,6 +361,40 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "about.more.hover_surface": Rgba(60, 60, 70, 220),
     "about.notice.surface": Rgba(16, 16, 16, 230),
     "about.notice.text": WHITE,
+
+    # Shared styled-popup / colour-picker presentation.
+    "popup.container.surface": Rgba(25, 25, 30, 235),
+    "popup.container.border": Rgba(80, 80, 90, 180),
+    "popup.icon.info": Rgba(100, 180, 255, 255),
+    "popup.icon.warning": Rgba(255, 200, 80, 255),
+    "popup.icon.error": Rgba(255, 100, 100, 255),
+    "popup.icon.success": Rgba(100, 220, 140, 255),
+    "popup.icon.question": Rgba(180, 180, 255, 255),
+    "popup.title.text": Rgba(240, 240, 245, 240),
+    "popup.message.text": Rgba(200, 200, 210, 220),
+    "popup.button.surface": Rgba(60, 60, 70, 200),
+    "popup.button.border": Rgba(100, 100, 110, 180),
+    "popup.button.text": Rgba(240, 240, 245, 230),
+    "popup.button.hover_surface": Rgba(80, 80, 95, 220),
+    "popup.button.pressed_surface": Rgba(50, 50, 60, 220),
+
+    # ColorSwatchButton keeps its user-selected fill colour local; these roles
+    # theme only the reusable chrome/accent treatment around that user data.
+    "swatch.hover_mix": WHITE,
+    "swatch.pressed_mix": BLACK,
+    "swatch.inner_highlight": Rgba(255, 255, 255, 30),
+    "swatch.inner_shade": Rgba(0, 0, 0, 35),
+    "swatch.border": Rgba(255, 255, 255, 230),
+    "swatch.light_accent": Rgba(255, 255, 255, 70),
+    "swatch.dark_accent": Rgba(0, 0, 0, 90),
+
+    # Non-native QColorDialog palette.
+    "color_picker.window": Rgba(30, 30, 35, 255),
+    "color_picker.window_text": Rgba(220, 220, 225, 255),
+    "color_picker.base": Rgba(45, 45, 50, 255),
+    "color_picker.text": Rgba(220, 220, 225, 255),
+    "color_picker.button": Rgba(55, 55, 65, 255),
+    "color_picker.button_text": Rgba(220, 220, 225, 255),
 
     # Screensaver context-menu palette from widgets/context_menu.py.
     # Main-menu and submenu roles remain distinct even where Default Dark
@@ -504,6 +537,14 @@ _DEFAULT_DARK_SHADOWS: dict[str, ShadowStyle] = {
         offset_x=6.0,
         offset_y=8.0,
         color=Rgba(0, 0, 0, 90),
+    ),
+    # Existing StyledPopup container cast. Its rendering mechanism stays local
+    # to the separate frameless popup surface.
+    "popup.dialog": ShadowStyle(
+        blur_radius=20.0,
+        offset_x=0.0,
+        offset_y=4.0,
+        color=Rgba(0, 0, 0, 150),
     ),
 }
 

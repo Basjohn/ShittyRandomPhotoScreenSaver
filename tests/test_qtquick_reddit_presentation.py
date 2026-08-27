@@ -14,9 +14,11 @@ from core.reddit_post_provider import RedditProviderResult
 from core.reddit_preparation import RedditPost
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
-from rendering.quick.widgets import (
+from rendering.quick.widgets.host import (
     OrdinaryWidgetPresentationHost,
     OverlayWidgetGeometry,
+)
+from rendering.quick.widgets.reddit import (
     RedditPresentationConfig,
     RedditPresentationModel,
     RedditPresentationStyle,

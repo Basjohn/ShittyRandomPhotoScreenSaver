@@ -15,11 +15,11 @@ from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
 from rendering.quick.media_artwork import MediaArtworkImageProvider
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
 from rendering.quick.state import QuickInputState, QuickWindowPolicy
-from rendering.quick.widgets import (
+from rendering.quick.widgets.host import OverlayWidgetGeometry
+from rendering.quick.widgets.media import (
     MediaPresentationConfig,
     MediaPresentationModel,
     MediaPresentationStyle,
-    OverlayWidgetGeometry,
     RetainedMediaPresentation,
 )
 from rendering.quick.widgets.registry import (
