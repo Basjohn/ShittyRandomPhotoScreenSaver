@@ -1,6 +1,6 @@
 # 10 — Ordinary Widget Family Port Decomposition
 
-Status: **Phase F ACTIVE — F1–F5 CLOSED; F6 Gmail ACTIVE**
+Status: **Phase F ACTIVE — F1–F6 CLOSED; F7 Achievement Pulse ACTIVE**
 Last updated: 2026-08-27
 
 This owns Phase-F family decomposition, not closed implementation narrative. `Current_Plan.md` owns exact
@@ -19,8 +19,8 @@ F2 Weather                                     CLOSED
 F3 Media core                                  CLOSED
 F4 Media controls / volume / mute / progress   CLOSED
 F5 Reddit / Reddit2                            CLOSED
-F6 Gmail                                       ACTIVE / PARTIAL
-F7 Achievement Pulse
+F6 Gmail                                       CLOSED
+F7 Achievement Pulse                          ACTIVE
 F8 Abandonment Issues
 ```
 
@@ -49,52 +49,30 @@ Media anchor remains only for old physical-host/Visualizer relationships until H
 F5 Reddit/Reddit2: one retained family component; independent stable model/runtime per configured member;
 shared rate-limit policy; old pixels/caches/hit/hover presentation deleted.
 
-Integrated F2–F5 independent review GREEN; see current audit under `Docs/audits/`.
+F6 Gmail keeps its runtime-generation shared Gmail owner/backend and display lease, with a stable retained
+model/list model, static QML family, semantic actions and real manager/host ownership. The real-OpenGL matrix
+proved grouped/popup/auth/error/card variants at effective DPR 1.0, 1.5 and 2.25. Old Gmail QWidget pixels,
+cache/input seams and presentation-only tests are caller-proven retired; neutral runtime/backend/preparation/
+cache/settings/notification/sound contracts remain.
 
-## F6 Gmail — ACTIVE
+Integrated F2–F5 independent review GREEN; see current audit under `Docs/audits/`. F6 completed under the
+current self-audit policy.
 
-Preserve existing shared Gmail backend/runtime owner.
+## F7 Achievement Pulse — ACTIVE
 
-Required retained product behavior: stable bounded message/thread identity, sender/subject/date cleanup and
-grouping, loading/ready/cached/error/auth/empty, unread/read styling and envelope/header behavior, configured
-capacity/dynamic height, explicit refresh and blank-space double-click refresh, current three-dot popup action
-menu with icons, semantic open/auth/refresh/read-unread/archive/spam/delete, notification/sound Python-owned.
+Use the exact current neutral achievement runtime/preparation/cache/selection foundations and immutable card
+view model. Preserve cache/privacy/provenance/selection and existing Steam data ownership. Use the old
+presenter as the visual/interaction oracle, including its established menu behavior, while mapping only
+bounded presentation state and semantic actions into retained Quick.
 
-### Retained presentation — GREEN
+Current admission order:
 
-- stable GmailPresentationModel + GmailRowListModel;
-- GmailPresentation.qml with the old presenter as its visual/interaction oracle;
-- RetainedGmailPresentation wrapper;
-- semantic QML -> Python routing;
-- floating three-dot popup with current icon/label identity and conditional Archive;
-- popup state independent of committed row/card height and CUSTOM geometry;
-- card-derived header border, real no-unread desaturation and blank-space double-click refresh;
-- accepted-row dynamic height and retained item/model/list-model/engine identity;
-- static registry admission and real `QuickSceneController` host creation;
-- pre-activation dormant then display-generation-bound manager-owned `GmailRuntimeService` injection;
-- runtime-shaped cache/live/error-fallback/auth and semantic inbox/open/auth/message-action gates;
-- practical real-OpenGL eyes-on at effective DPR 1.0, 1.5 and 2.25, including grouped long text, popup,
-  no-unread desaturation, auth/error and card/no-card cases.
-
-### Shared Quick import dormancy — GREEN
-
-`rendering.quick.widgets` now exports only the light retained host/style records and static family metadata.
-Family tests/tools import their implementation modules directly, common `scene_controller` imports only host and
-registry modules, Gmail runtime snapshot annotations are type-only, and the Gmail integration package initializer
-no longer eagerly imports OAuth/IMAP/backend modules. Fresh-process gates prove common Quick scene import keeps
-inactive Clock, Weather, Media, Reddit and Gmail presentation/runtime/backend trees dormant. No second registry
-or plugin architecture was added.
-
-### Complete F6
-
-Caller proof -> delete old Gmail QWidget pixel/cache/input presentation/tests while preserving neutral
-runtime/backend/preparation/settings/notification/sound.
-
-## F7 Achievement Pulse
-
-Use existing neutral achievement/runtime/preparation foundations and immutable card view model. Preserve
-cache/privacy/provenance/selection; do not duplicate Steam data ownership. Predominantly presentation mapping/
-fidelity. After GREEN+caller proof delete old pixels.
+- exact ownership/caller audit;
+- stable retained config/model/image projection;
+- retained card and existing interaction/menu fidelity;
+- static registry and real manager/host runtime injection;
+- deterministic lifecycle/action/image tests plus effective-DPR 1.0/1.5/2.25 eyes-on evidence;
+- caller proof and old pixel/cache/input retirement only after GREEN.
 
 ## F8 Abandonment Issues
 

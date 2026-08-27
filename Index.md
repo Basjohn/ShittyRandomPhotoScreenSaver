@@ -1,6 +1,6 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 ## Start here
 
@@ -11,8 +11,7 @@ exact current source
 -> tests/evidence for the claim
 ```
 
-Current migration: **Phase F active; F1–F5 closed/independently GREEN; F6 Gmail ACTIVE with partial retained
-QML/wrapper checkpoint.**
+Current migration: **Phase F active; F1–F6 closed; F7 Achievement Pulse ACTIVE.**
 
 ## Current authority
 

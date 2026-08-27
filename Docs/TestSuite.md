@@ -5,8 +5,8 @@ Last updated: 2026-08-27
 Reviewed source basis:
 
 ```text
-test-inventory basis = F6 retained Gmail QML fidelity checkpoint
-Phase F0/F0.5/F1/F2/F3/F4/F5 CLOSED; 353 test modules; F6 Gmail active
+test-inventory basis = F6 Gmail retirement checkpoint
+Phase F0/F0.5/F1/F2/F3/F4/F5/F6 CLOSED; 351 test modules; F7 Achievement Pulse active
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -133,9 +133,14 @@ dynamic height and stable item/model/list-model/runtime/engine identity. `tools/
 grouped long text, no-unread desaturation, auth/error, popup and card/no-card cases through threaded OpenGL at
 effective DPR 1.0, 1.5 and 2.25.
 
+F6 closure caller-proofs and deletes the old `GmailWidget`/factory/pixel/cache/input presentation together
+with `tests/test_gmail_widget.py` and its single-purpose effect-cache contract. Neutral backend/runtime,
+preparation, asset/packaging, settings, notification and sound contracts remain under their focused suites;
+the retained Quick suite is the permanent Gmail presentation authority.
+
 At the reviewed checkpoint the repository contains:
 
-- **353 test-module files**: 352 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **351 test-module files**: 350 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -146,7 +151,7 @@ Inventory status is **not an execution result**. `KEEP` does not mean a test was
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 354 top-level modules was manually
+This is deliberately **not** a claim that every assertion in all 350 top-level modules was manually
 read line-by-line or executed during this review. The inventory is complete; semantic inspection was
 concentrated where migration status could change whether a test remains authority.
 
@@ -331,7 +336,7 @@ Permanent E4 coverage protects: one canonical eight-direction authority; all eig
 
 The E4 host test necessarily injected already-resolved signed offsets before a real family was Quick-presented. F1 Clock subsequently supplied the end-to-end proof that an actual family projection reads the canonical direction plus the two canonical user buckets, applies the deliberate destination card/text base-distance policy in Python, and updates retained properties without presentation or runtime-owner recreation. Do not resurrect sidecar-era `text_large`/header tuning profiles.
 
-### F — widget family ports — ACTIVE; F1–F5 CLOSED, F6 Gmail ACTIVE
+### F — widget family ports — ACTIVE; F1–F6 CLOSED, F7 Achievement Pulse ACTIVE
 
 F0 deleted deprecated Imgur instead of porting it. F0.5 is the bounded QWidget Settings slice that completes the canonical global shadow controls before F1 Clock. For each later family, preserve provider/model/behavior/settings tests and rehome direct QWidget presentation assertions to retained Quick items.
 
@@ -384,7 +389,7 @@ High-value groups that must **not** become destination authority:
 
 - **F0 (done):** the three Imgur test modules were deleted with the Imgur removal.
 - **F0.5 (done):** deleted `test_shadow_tuning_paths.py` and `test_base_overlay_shadow_cache.py`; trimmed the tuning-payload assertion from `test_shadow_utils.py`.
-- **E4/F remaining:** QWidget opacity/effect implementations such as `test_widget_effects.py`, `test_widget_effects_contract.py`; remaining `ShadowFadeProfile` coverage retires with its presentation owners.
+- **E4/F remaining:** QWidget opacity/effect implementations such as `test_widget_effects.py`; remaining `ShadowFadeProfile` coverage retires with its presentation owners.
 - **H/I:** legacy renderer backend/software fallback (`test_rendering_backends.py`, `test_gl_fallback_policy.py`), GLCompositor retained-base/fallback/presenter tests, QRhiWidget P4 surface tests, old SpotifyBarsGLOverlay presentation tests.
 - **J:** architecture-selection/spike benchmark suites where no ongoing product regression remains.
 
@@ -583,7 +588,6 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_widget_capability_persist_repair.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_widget_descriptors.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_effects.py` | **WILL BE OBSOLETE — E4/F** | Keep only until owning QWidget effect/shadow path is replaced. |
-| `tests/test_widget_effects_contract.py` | **WILL BE OBSOLETE — E4/F** | Keep only until owning QWidget effect/shadow path is replaced. |
 | `tests/test_widget_factories.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_family_catalog.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_lifecycle.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
@@ -646,12 +650,12 @@ The inventory below accounts for every executable test file present at the revie
 
 | File | Status | Note |
 | --- | --- | --- |
-| `tests/test_gmail_assets.py` | **KEEP** | Retain; no migration-specific retirement identified. |
+| `tests/test_gmail_assets.py` | **KEEP — PERMANENT** | Retained Quick asset identity plus packaging/notification-sound coverage. |
 | `tests/test_gmail_backend_bootstrap.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_backend_smoke.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_client.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_gmail_runtime.py` | **MIGRATION-CRITICAL — F** | Shared Gmail owner/lease/bootstrap/cache/fetch/action/generation/production-wiring contract; rehome only the presenter edge in F. |
-| `tests/test_gmail_components.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
+| `tests/test_gmail_runtime.py` | **KEEP — PERMANENT** | Shared Gmail owner/lease/bootstrap/cache/fetch/action/generation contract after presenter-edge retirement. |
+| `tests/test_gmail_components.py` | **KEEP — PERMANENT** | Presentation-neutral sender/subject/date/grouping preparation used by the retained model. |
 | `tests/test_gmail_deeplinks.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_imap_actions.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_oauth.py` | **KEEP** | Retain; no migration-specific retirement identified. |
@@ -659,7 +663,6 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_qtquick_gmail_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Gmail config/style, stable accepted-state row projection, static QML popup/height/visual fidelity, real manager-owned runtime/host state and action routing, and no-recreation lifecycle coverage. |
 | `tests/test_gmail_retiring_runtime.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_settings_roundtrip.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_gmail_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 
 ### 10.8 Reddit
 

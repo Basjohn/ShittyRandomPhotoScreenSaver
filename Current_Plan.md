@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-2816379fe383021aa9328312ad9fbf7da90fd34a
-Phase F6 partial real-owner integration on current main
+cf1d3a13ce69728eacf9ed513835e30a00db9eac
+Phase F6 Gmail retirement landed on current main
 ```
 
 Current phase state:
@@ -21,8 +21,8 @@ F2    Weather                                    CLOSED / independently GREEN
 F3    Media core                                 CLOSED / independently GREEN
 F4    Media controls / volume / mute / progress  CLOSED / independently GREEN
 F5    Reddit / Reddit2                           CLOSED / independently GREEN
-F6    Gmail                                      ACTIVE / PARTIAL
-F7    Achievement Pulse                          NEXT after F6
+F6    Gmail                                      CLOSED
+F7    Achievement Pulse                          ACTIVE
 F8    Abandonment Issues                         after F7
 G     CUSTOM / input / auxiliary pixels          after F
 H     settings epoch + physical Quick cutover    after G
@@ -31,32 +31,35 @@ J     final installed / physical validation      final
 ```
 
 Integrated audit: `Docs/audits/QtQuick_Phase_F_F2_F6_Independent_Audit_2026-08-26.md`.
-F2–F5 remain GREEN. F6 is incomplete; old Gmail caller proof and presentation retirement remain.
+F2–F5 remain independently GREEN. F6 is GREEN after retained owner/host/visual proof and caller-proven
+retirement of the old Gmail QWidget presentation.
 
 Source outranks this plan if a later checkpoint has landed.
 
 ---
 
-## Immediate work — F6 Gmail
+## Immediate work — F7 Achievement Pulse
 
 ```text
-neutral Gmail runtime/preparation/notification ownership audit     GREEN
-retained config/style + stable message projection model            GREEN
-static QML + retained presentation wrapper                         GREEN
-Gmail pointer + visual parity                                      GREEN
-shared Quick import-dormancy correction                            GREEN
-registry + real owner injection + runtime-shaped gates             GREEN
-caller proof + old Gmail pixel/cache/input retirement              ACTIVE
+exact runtime/preparation/cache/action/presentation ownership audit  ACTIVE
+stable retained config/model/image projection                       PENDING
+retained QML card + interaction/menu fidelity                       PENDING
+registry + real owner injection + runtime-shaped gates              PENDING
+effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                    PENDING
+caller proof + old Achievement Pulse pixel/cache/input retirement   PENDING
 ```
 
-### F6.4 — retirement (ACTIVE)
+### F7.1 — ownership and retained-model admission (ACTIVE)
 
-Only after all F6 gates GREEN:
+- inspect the exact current Achievement Pulse runtime, preparation, cache, selection/provenance and action
+  surfaces before changing ownership;
+- use the old presenter as the visual/interaction oracle, including its existing menu behavior;
+- preserve cache/privacy/provenance/selection and existing Steam data authority;
+- define the smallest stable bounded presentation model and image seam needed by retained Quick;
+- keep QML presentation-only: no Steam provider/cache/persistence/cadence authority;
+- add focused deterministic ownership/model/lifecycle tests before admitting QML pixels.
 
-- caller-proof old Gmail presentation/pixel/cache/input callers absent;
-- delete old Gmail QWidget/QPainter presentation and presentation-only tests;
-- preserve neutral Gmail runtime/backend/preparation/cache/settings/notification/sound contracts;
-- mark F6 CLOSED and begin F7 immediately.
+Do not port Steam Journey/Progress or Friend Pulse scaffolds as part of F7.
 
 ---
 
@@ -196,6 +199,4 @@ docs closure.
 
 ## Current acceptance debt
 
-- `Docs/TestSuite.md` says 353 test modules at the F6 model checkpoint but contains one stale sentence saying
-  354 top-level modules; reconcile on the next test-ledger update.
 - unrelated logging and Reddit-helper focused-test debt remains in `Future_Cleanup.md`.
