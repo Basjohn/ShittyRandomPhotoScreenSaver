@@ -45,7 +45,16 @@ The new pill style is ThemeSpec-backed/live. Existing Widgets/Transitions pills 
 
 ## Packaged / frozen themes directory
 
-This layer intentionally does **not** guess a frozen executable path. Settings accepts an explicit `themes_directory` from startup/build authority, and resolves the persisted theme before Settings widgets are constructed. Build/Codex/Claude work can choose the correct packaged-directory policy beside the build scripts. Do not add `cwd()`, hard-coded Program Files paths, `_MEIPASS` guesses or source-tree assumptions to semantic theme modules.
+`ui/settings_theme_paths.py` is a deliberately temporary test seam. Resolution order is:
+
+1. explicit `themes_directory` from the caller;
+2. nonblank `THEMES_DIRECTORY_BUILD_REPLACE_BLANK`;
+3. repository-local `themes/` for source/dev testing.
+
+Settings resolves that directory and the persisted theme **before** constructing its first QWidget. The
+repository fallback is not the final frozen-build contract; build/release work must replace/wire the stub
+and the cleanup ledger tracks removing the temporary seam afterward. Missing external files still resolve
+to compiled Default Dark rather than an unstyled window.
 
 ## Existing `/themes` files
 
@@ -82,12 +91,13 @@ This layer intentionally does **not** guess a frozen executable path. Settings a
 
 ## Immediate remaining work
 
-1. Wire packaged themes directory from real startup/build authority so file
-   themes are resolved before first Settings widget construction.
-2. Perform Windows eyes-on live switching between Default Dark and the
+1. Perform Windows eyes-on live switching between Default Dark and the
    obnoxious test theme, especially forged corners/acrylic/nav/shadows.
-3. Finish the smaller remaining literal Settings-chrome audit (not semantic
-   status/user-content colours), including special popup/Steam surfaces where
-   appropriate.
-4. Rewrite Theme Foundry to edit/save semantic schema-v3 `.srtheme` files.
+2. Finish the smaller remaining literal Settings-chrome audit (not semantic
+   status/user-content colours), including the special SettingsDialog
+   no-sources popup / bespoke popup shadow / More Options menu and remaining
+   Steam form chrome where appropriate.
+3. Rewrite Theme Foundry to edit/save semantic schema-v3 `.srtheme` files.
+4. Build/release work replaces the temporary theme-directory stub; then remove
+   the stub/dev fallback per `Future_Cleanup.md`.
 5. Remove the test theme and this temporary plan after validation/durable docs.

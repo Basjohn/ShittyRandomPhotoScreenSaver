@@ -669,19 +669,32 @@ class SettingsDialog(QDialog):
             animation_manager: Animation manager for UI animations
             parent: Parent widget
             themes_directory: Optional caller-resolved packaged themes directory.
-                No install/frozen-build path is guessed by Settings itself.
+                When omitted, the temporary path seam uses its build-replace
+                stub and then the repository-local themes/ fallback.
         """
-        # Resolve a supplied persisted selection before this QWidget or any
-        # Settings child exists. The resolver never installs Default Dark as
-        # an intermediate step before a valid custom theme.
-        if themes_directory is not None:
-            try:
-                from ui.settings_theme_catalog import activate_persisted_settings_theme
-                activate_persisted_settings_theme(settings_manager, themes_directory)
-            except Exception:
-                # Runtime activation is transactional and retains the previous
-                # valid theme, which is compiled Default Dark on a cold start.
-                logger.warning("Failed to resolve persisted Settings theme before UI construction", exc_info=True)
+        # Resolve the final persisted selection before this QWidget or any
+        # Settings child exists. There is no intermediate Default Dark
+        # activation before a valid custom theme, so this cannot create a
+        # Default->custom first-paint flash.
+        try:
+            from ui.settings_theme_catalog import activate_persisted_settings_theme
+            from ui.settings_theme_paths import resolve_settings_themes_directory
+
+            resolved_themes_directory = resolve_settings_themes_directory(
+                themes_directory
+            )
+            activate_persisted_settings_theme(
+                settings_manager,
+                resolved_themes_directory,
+            )
+        except Exception:
+            # Runtime activation is transactional; cold startup already owns
+            # compiled Default Dark, so disk themes can never leave Settings
+            # without a valid style.
+            logger.warning(
+                "Failed to resolve persisted Settings theme before UI construction",
+                exc_info=True,
+            )
 
         super().__init__(parent)
 

@@ -6,6 +6,7 @@ Item {
     objectName: "visualizerPresentationRoot"
 
     property bool presentationActive: false
+    property bool customLayoutWorkingVisible: true
     property bool cardShellEnabled: true
     property color cardBackgroundColor: "#b3101010"
     property color cardBorderColor: "#e6ffffff"
@@ -18,7 +19,7 @@ Item {
     property real cardShadowOffsetY: 4.0
     property real cardShadowSpread: 0.0
 
-    visible: presentationActive
+    visible: presentationActive && customLayoutWorkingVisible
 
     RectangularShadow {
         id: cardShadow

@@ -38,6 +38,11 @@ ordinary family checkpoint. Real product resilience is not migration debris.
   with stale comments such as the lazy Presets-tab signal-wiring note in `ui/settings_dialog.py`.
 - This is **not** the active visualizer preset system. Preserve the live visualizer preset UI, transfer/
   import/export paths, preset data and runtime behavior.
+- `ui/settings_theme_paths.py` contains temporary `THEMES_DIRECTORY_BUILD_REPLACE_BLANK` packaging wiring
+  plus a repository-local `themes/` fallback so source/dev builds can exercise `.srtheme` loading now.
+  Before release, build/startup authority must wire the real packaged themes directory (replace the blank
+  or pass an explicit path), then remove the temporary stub/dev fallback once that resource-path contract
+  is durable. Preserve compiled `DEFAULT_DARK_SETTINGS_THEME` as the unconditional no-file fallback.
 
 ## Phase-F family retirement
 
