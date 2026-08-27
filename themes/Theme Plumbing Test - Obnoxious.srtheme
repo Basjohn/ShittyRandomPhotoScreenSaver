@@ -1,310 +1,364 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 3,
-  "name": "Theme Plumbing Test (Obnoxious)",
+  "schema_version": 4,
+  "name": "Theme Plumbing Test - Obnoxious",
   "acrylic": {
     "enabled": true,
     "tint": [
       180,
       0,
       255,
-      125
+      115
     ]
   },
   "colors": {
     "window.dialog_glass": [
-      120,
+      255,
       0,
-      160,
-      90
+      255,
+      20
     ],
     "window.titlebar.surface": [
-      70,
       0,
-      105,
-      230
+      255,
+      255,
+      209
     ],
     "window.titlebar.text": [
       255,
-      245,
+      255,
       0,
       255
     ],
     "window.titlebar.button.surface": [
       0,
-      0,
-      0,
+      255,
+      80,
       0
     ],
     "window.titlebar.button.hover": [
-      62,
-      62,
-      62,
+      255,
+      80,
+      0,
       204
     ],
     "window.titlebar.button.pressed": [
-      50,
-      50,
-      50,
+      110,
+      0,
+      255,
       220
     ],
     "window.titlebar.close.hover": [
-      232,
-      17,
-      35,
+      0,
+      120,
+      255,
       204
     ],
     "navigation.sidebar.surface": [
-      0,
-      130,
-      150,
-      110
+      255,
+      20,
+      120,
+      32
     ],
     "navigation.tab.surface": [
       255,
       0,
-      150,
-      95
+      255,
+      48
     ],
     "navigation.tab.text": [
-      255,
-      255,
       0,
+      255,
+      255,
       255
     ],
     "navigation.tab.hover_surface": [
-      0,
-      220,
       255,
-      150
+      255,
+      0,
+      120
     ],
     "navigation.tab.hover_text": [
+      0,
       255,
-      255,
-      255,
+      80,
       255
     ],
     "navigation.tab.selected_surface": [
-      50,
       255,
-      90,
-      180
+      80,
+      0,
+      140
     ],
     "navigation.tab.selected_text": [
-      20,
+      110,
       0,
-      30,
+      255,
       255
     ],
     "navigation.subtab.surface": [
-      180,
       0,
-      220,
-      230
+      120,
+      255,
+      215
     ],
     "navigation.subtab.text": [
       255,
-      255,
-      0,
+      20,
+      120,
       255
     ],
     "navigation.subtab.border": [
-      0,
       255,
+      0,
       255,
       255
     ],
     "navigation.subtab.hover_surface": [
       0,
-      180,
-      210,
-      240
+      255,
+      255,
+      220
     ],
     "navigation.subtab.selected_surface": [
-      50,
+      255,
+      255,
+      0,
+      220
+    ],
+    "bucket.closed.surface": [
+      0,
       255,
       80,
-      240
+      255
+    ],
+    "bucket.closed.text": [
+      255,
+      80,
+      0,
+      255
+    ],
+    "bucket.closed.border": [
+      110,
+      0,
+      255,
+      153
+    ],
+    "bucket.closed.hover_surface": [
+      0,
+      120,
+      255,
+      255
+    ],
+    "bucket.closed.hover_border": [
+      255,
+      20,
+      120,
+      204
+    ],
+    "bucket.open.surface": [
+      255,
+      0,
+      255,
+      255
+    ],
+    "bucket.open.text": [
+      0,
+      255,
+      255,
+      255
+    ],
+    "bucket.open.border": [
+      255,
+      255,
+      0,
+      204
+    ],
+    "bucket.open.hover_surface": [
+      0,
+      255,
+      80,
+      255
     ],
     "content.surface": [
-      0,
-      0,
+      255,
+      80,
       0,
       0
     ],
     "panel.group.surface": [
-      90,
+      110,
       0,
-      130,
-      180
+      255,
+      115
     ],
     "panel.subsection.surface": [
       0,
-      110,
-      135,
-      180
+      120,
+      255,
+      102
     ],
     "panel.border": [
       255,
-      230,
-      0,
+      20,
+      120,
       255
     ],
     "text.primary": [
       255,
-      255,
       0,
+      255,
       255
     ],
     "text.disabled": [
-      102,
-      102,
-      102,
+      0,
+      255,
+      255,
       255
     ],
     "text.secondary": [
+      255,
+      255,
       0,
-      255,
-      255,
       255
     ],
     "text.tertiary": [
+      0,
       255,
-      120,
-      220,
+      80,
       255
     ],
     "text.helper": [
-      120,
       255,
-      170,
-      220
+      80,
+      0,
+      153
     ],
     "text.helper_disabled": [
-      85,
-      85,
-      85,
+      110,
+      0,
+      255,
       255
     ],
     "control.input.surface": [
-      55,
       0,
-      80,
+      120,
+      255,
       255
     ],
     "control.input.hover_surface": [
-      0,
-      80,
-      100,
-      255
-    ],
-    "control.input.focus_surface": [
-      90,
-      0,
+      255,
+      20,
       120,
       255
     ],
-    "control.input.text": [
-      255,
+    "control.input.focus_surface": [
       255,
       0,
+      255,
+      255
+    ],
+    "control.input.text": [
+      0,
+      255,
+      255,
       255
     ],
     "control.input.border": [
+      255,
+      255,
       0,
-      255,
-      255,
       255
     ],
     "control.input.disabled_text": [
+      0,
       255,
-      255,
-      255,
+      80,
       115
     ],
     "control.input.disabled_border": [
-      106,
-      106,
-      106,
+      255,
+      80,
+      0,
       255
     ],
     "control.stepper.surface": [
-      255,
-      255,
+      110,
+      0,
       255,
       255
     ],
     "control.stepper.hover_surface": [
-      77,
-      77,
-      77,
+      0,
+      120,
+      255,
       255
     ],
     "control.stepper.pressed_surface": [
-      45,
-      45,
-      45,
+      255,
+      20,
+      120,
       255
     ],
     "control.stepper.disabled_surface": [
-      106,
-      106,
-      106,
+      255,
+      0,
+      255,
       255
     ],
     "combo.popup.surface": [
-      18,
-      18,
-      18,
+      0,
+      255,
+      255,
       242
     ],
     "combo.popup.border": [
       255,
       255,
-      255,
+      0,
       255
     ],
     "combo.popup.selection_surface": [
+      0,
       255,
-      255,
-      255,
+      80,
       56
     ],
     "combo.popup.text": [
       255,
-      255,
-      255,
+      80,
+      0,
       255
     ],
     "combo.popup.selection_text": [
-      255,
-      255,
+      110,
+      0,
       255,
       255
     ],
     "tooltip.surface": [
-      30,
-      30,
-      30,
-      255
+      0,
+      120,
+      255,
+      179
     ],
     "tooltip.text": [
       255,
-      255,
-      255,
+      20,
+      120,
       255
     ],
     "tooltip.border": [
       255,
-      255,
+      0,
       255,
       255
     ],
     "control.list.surface": [
-      40,
       0,
-      70,
-      235
+      255,
+      255,
+      215
     ],
     "control.list.text": [
       255,
@@ -315,37 +369,37 @@
     "control.list.border": [
       0,
       255,
-      255,
-      255
+      80,
+      153
     ],
     "control.list.selected_surface": [
-      0,
-      160,
-      180,
-      230
-    ],
-    "control.list.selected_accent": [
       255,
-      0,
-      220,
-      255
-    ],
-    "control.list.hover_surface": [
       80,
       0,
+      204
+    ],
+    "control.list.selected_accent": [
+      110,
+      0,
+      255,
+      180
+    ],
+    "control.list.hover_surface": [
+      0,
       120,
-      235
+      255,
+      204
     ],
     "control.button.surface": [
-      150,
-      0,
-      200,
-      235
+      255,
+      20,
+      120,
+      215
     ],
     "control.button.text": [
       255,
-      255,
       0,
+      255,
       255
     ],
     "control.button.border": [
@@ -355,97 +409,97 @@
       255
     ],
     "control.button.hover_surface": [
+      255,
+      255,
       0,
-      170,
-      200,
-      240
+      220
     ],
     "control.button.pressed_surface": [
-      40,
+      0,
       255,
       80,
-      240
+      220
     ],
     "control.button.pressed_border": [
-      200,
-      200,
-      200,
+      255,
+      80,
+      0,
       200
     ],
     "control.setup_action.surface": [
-      255,
+      110,
       0,
-      150,
-      235
+      255,
+      215
     ],
     "control.setup_action.text": [
-      255,
-      255,
       0,
+      120,
+      255,
       255
     ],
     "control.setup_action.border": [
-      0,
       255,
-      255,
+      20,
+      120,
       255
     ],
     "control.setup_action.hover_surface": [
-      0,
-      190,
-      220,
-      240
-    ],
-    "control.setup_action.pressed_surface": [
-      50,
-      255,
-      80,
-      245
-    ],
-    "control.ghost_action.surface": [
       255,
       0,
-      200,
-      80
-    ],
-    "control.ghost_action.text": [
-      255,
-      255,
-      255,
-      255
-    ],
-    "control.ghost_action.border": [
-      0,
-      255,
       255,
       220
     ],
-    "control.ghost_action.hover_surface": [
+    "control.setup_action.pressed_surface": [
       0,
       255,
       255,
-      90
+      225
+    ],
+    "control.ghost_action.surface": [
+      255,
+      255,
+      0,
+      18
+    ],
+    "control.ghost_action.text": [
+      0,
+      255,
+      80,
+      255
+    ],
+    "control.ghost_action.border": [
+      255,
+      80,
+      0,
+      92
+    ],
+    "control.ghost_action.hover_surface": [
+      110,
+      0,
+      255,
+      30
     ],
     "control.ghost_action.hover_border": [
-      255,
-      255,
+      0,
+      120,
       255,
       132
     ],
     "control.ghost_action.pressed_surface": [
       255,
-      255,
-      255,
+      20,
+      120,
       42
     ],
     "control.ghost_action.disabled_text": [
       255,
-      255,
+      0,
       255,
       90
     ],
     "control.ghost_action.disabled_surface": [
-      255,
+      0,
       255,
       255,
       8
@@ -453,620 +507,644 @@
     "control.ghost_action.disabled_border": [
       255,
       255,
-      255,
+      0,
       35
     ],
     "control.mode.surface": [
-      90,
       0,
-      130,
+      255,
+      80,
       255
     ],
     "control.mode.text": [
       255,
-      255,
+      80,
       0,
       255
     ],
     "control.mode.border": [
+      110,
       0,
-      255,
       255,
       255
     ],
     "control.mode.hover_surface": [
       0,
-      130,
-      160,
+      120,
+      255,
       255
     ],
     "control.mode.checked_surface": [
-      40,
       255,
-      80,
+      20,
+      120,
       255
     ],
     "control.mode.checked_border": [
       255,
       0,
-      220,
+      255,
       255
     ],
     "control.mode.disabled_text": [
-      122,
-      122,
-      122,
+      0,
+      255,
+      255,
       255
     ],
     "control.mode.disabled_border": [
-      106,
-      106,
-      106,
+      255,
+      255,
+      0,
       255
     ],
     "control.checkbox.text": [
+      0,
       255,
-      255,
-      255,
+      80,
       255
     ],
     "control.checkbox.indicator.surface": [
-      45,
-      45,
-      45,
+      255,
+      80,
+      0,
       204
     ],
     "control.checkbox.indicator.highlight_border": [
-      90,
-      90,
-      90,
+      110,
+      0,
+      255,
       191
     ],
     "control.checkbox.indicator.right_shadow_border": [
       0,
-      0,
-      0,
+      120,
+      255,
       179
     ],
     "control.checkbox.indicator.bottom_shadow_border": [
-      0,
-      0,
-      0,
+      255,
+      20,
+      120,
       191
     ],
     "control.checkbox.checked.surface": [
-      210,
-      210,
-      210,
+      255,
+      0,
+      255,
       217
     ],
     "control.checkbox.checked.highlight_border": [
-      200,
-      200,
-      200,
+      0,
+      255,
+      255,
       204
     ],
     "control.checkbox.checked.right_shadow_border": [
-      60,
-      60,
-      60,
+      255,
+      255,
+      0,
       179
     ],
     "control.checkbox.checked.bottom_shadow_border": [
-      60,
-      60,
-      60,
+      0,
+      255,
+      80,
       191
     ],
     "panel.group.text": [
       255,
-      255,
-      255,
+      80,
+      0,
       255
     ],
     "panel.group.title_text": [
-      255,
-      255,
+      110,
+      0,
       255,
       255
     ],
     "sources.ratio.surface": [
-      90,
       0,
-      130,
+      120,
+      255,
       255
     ],
     "sources.ratio.border": [
-      0,
       255,
-      255,
+      20,
+      120,
       255
     ],
     "sources.ratio.disabled_surface": [
-      30,
+      255,
       0,
-      50,
+      255,
       255
     ],
     "sources.ratio.disabled_border": [
-      130,
       0,
-      180,
+      255,
+      255,
       255
     ],
     "sources.rss_input.surface": [
-      60,
+      255,
+      255,
       0,
-      90,
-      240
+      220
     ],
     "sources.rss_input.border": [
       0,
       255,
-      255,
-      230
+      80,
+      153
     ],
     "sources.rss_input.focus_border": [
-      50,
       255,
       80,
-      255
+      0,
+      200
     ],
     "shadow.direction.surface": [
-      90,
+      110,
       0,
-      130,
-      245
+      255,
+      235
     ],
     "shadow.direction.border": [
       0,
+      120,
       255,
-      255,
-      255
+      210
     ],
     "shadow.direction.hover_surface": [
-      0,
-      150,
-      180,
-      245
+      255,
+      20,
+      120,
+      240
     ],
     "shadow.direction.hover_border": [
       255,
-      255,
+      0,
       255,
       255
     ],
     "shadow.direction.pressed_surface": [
-      18,
-      18,
-      18,
+      0,
+      255,
+      255,
       245
     ],
     "shadow.direction.checked_surface": [
-      50,
       255,
-      80,
-      230
+      255,
+      0,
+      58
     ],
     "shadow.direction.checked_border": [
+      0,
       255,
-      255,
-      255,
+      80,
       255
     ],
     "slider.groove.border": [
-      12,
-      12,
-      12,
+      255,
+      80,
+      0,
       230
     ],
     "slider.groove.top_border": [
+      110,
       0,
-      0,
-      0,
+      255,
       179
     ],
     "slider.groove.bottom_border": [
-      70,
-      70,
-      70,
+      0,
+      120,
+      255,
       64
     ],
     "slider.fill.border": [
-      35,
-      35,
-      35,
+      255,
+      20,
+      120,
       217
     ],
     "slider.fill.top_border": [
-      25,
-      25,
-      25,
+      255,
+      0,
+      255,
       179
     ],
     "slider.fill.bottom_border": [
-      80,
-      80,
-      80,
+      0,
+      255,
+      255,
       64
     ],
     "slider.handle.border": [
-      103,
-      103,
-      103,
+      255,
+      255,
+      0,
       255
     ],
     "slider.handle.hover_border": [
-      153,
-      153,
-      153,
+      0,
+      255,
+      80,
       255
     ],
     "slider.handle.pressed_border": [
-      42,
-      42,
-      42,
+      255,
+      80,
+      0,
       255
     ],
     "slider.handle.disabled_surface": [
-      90,
-      90,
-      90,
+      110,
+      0,
+      255,
       255
     ],
     "slider.handle.active_border": [
-      17,
-      17,
-      17,
+      0,
+      120,
+      255,
       255
     ],
     "slider.recommended_mark": [
-      210,
-      210,
-      210,
+      255,
+      20,
+      120,
       170
     ],
     "about.card.surface": [
-      31,
-      31,
-      31,
+      255,
+      0,
+      255,
       200
     ],
     "about.card.border": [
-      255,
+      0,
       255,
       255,
       255
     ],
     "about.blurb.text": [
-      221,
-      221,
-      221,
+      255,
+      255,
+      0,
       255
     ],
     "about.hotkeys.text": [
-      204,
-      204,
-      204,
+      0,
+      255,
+      80,
       255
     ],
     "about.link.surface": [
-      47,
-      47,
-      47,
+      255,
+      80,
+      0,
       215
     ],
     "about.link.text": [
-      255,
-      255,
+      110,
+      0,
       255,
       255
     ],
     "about.link.border": [
-      255,
-      255,
+      0,
+      120,
       255,
       255
     ],
     "about.link.hover_surface": [
-      58,
-      58,
-      58,
+      255,
+      20,
+      120,
       220
     ],
     "about.link.pressed_surface": [
-      38,
-      38,
-      38,
+      255,
+      0,
+      255,
       220
     ],
     "about.link.pressed_border": [
-      200,
-      200,
-      200,
+      0,
+      255,
+      255,
       200
     ],
     "about.more.surface": [
-      40,
-      40,
-      45,
+      255,
+      255,
+      0,
       200
     ],
     "about.more.text": [
-      200,
-      200,
-      210,
+      0,
+      255,
+      80,
       220
     ],
     "about.more.border": [
+      255,
       80,
-      80,
-      90,
+      0,
       150
     ],
     "about.more.hover_surface": [
-      60,
-      60,
-      70,
+      110,
+      0,
+      255,
       220
     ],
     "about.notice.surface": [
-      16,
-      16,
-      16,
+      0,
+      120,
+      255,
       230
     ],
     "about.notice.text": [
       255,
-      255,
-      255,
+      20,
+      120,
       255
     ],
     "popup.container.surface": [
-      25,
-      25,
-      30,
+      255,
+      0,
+      255,
       235
     ],
     "popup.container.border": [
-      80,
-      80,
-      90,
+      0,
+      255,
+      255,
       180
     ],
     "popup.icon.info": [
-      100,
-      180,
       255,
+      255,
+      0,
       255
     ],
     "popup.icon.warning": [
+      0,
       255,
-      200,
       80,
       255
     ],
     "popup.icon.error": [
       255,
-      100,
-      100,
+      80,
+      0,
       255
     ],
     "popup.icon.success": [
-      100,
-      220,
-      140,
+      110,
+      0,
+      255,
       255
     ],
     "popup.icon.question": [
-      180,
-      180,
+      0,
+      120,
       255,
       255
     ],
     "popup.title.text": [
-      240,
-      240,
-      245,
+      255,
+      20,
+      120,
       240
     ],
     "popup.message.text": [
-      200,
-      200,
-      210,
+      255,
+      0,
+      255,
       220
     ],
     "popup.button.surface": [
-      60,
-      60,
-      70,
+      0,
+      255,
+      255,
       200
     ],
     "popup.button.border": [
-      100,
-      100,
-      110,
+      255,
+      255,
+      0,
       180
     ],
     "popup.button.text": [
-      240,
-      240,
-      245,
+      0,
+      255,
+      80,
       230
     ],
     "popup.button.hover_surface": [
+      255,
       80,
-      80,
-      95,
+      0,
       220
     ],
     "popup.button.pressed_surface": [
-      50,
-      50,
-      60,
+      110,
+      0,
+      255,
       220
+    ],
+    "popup.input.surface": [
+      0,
+      120,
+      255,
+      220
+    ],
+    "popup.input.border": [
+      255,
+      20,
+      120,
+      55
+    ],
+    "popup.input.text": [
+      255,
+      0,
+      255,
+      255
+    ],
+    "popup.input.focus_border": [
+      0,
+      255,
+      255,
+      255
     ],
     "swatch.hover_mix": [
       255,
       255,
-      255,
+      0,
       255
     ],
     "swatch.pressed_mix": [
       0,
-      0,
-      0,
+      255,
+      80,
       255
     ],
     "swatch.inner_highlight": [
       255,
-      255,
-      255,
+      80,
+      0,
       30
     ],
     "swatch.inner_shade": [
+      110,
       0,
-      0,
-      0,
+      255,
       35
     ],
     "swatch.border": [
-      255,
-      255,
+      0,
+      120,
       255,
       230
     ],
     "swatch.light_accent": [
       255,
-      255,
-      255,
+      20,
+      120,
       70
     ],
     "swatch.dark_accent": [
+      255,
       0,
-      0,
-      0,
+      255,
       90
     ],
     "color_picker.window": [
-      30,
-      30,
-      35,
+      0,
+      255,
+      255,
       255
     ],
     "color_picker.window_text": [
-      220,
-      220,
-      225,
+      255,
+      255,
+      0,
       255
     ],
     "color_picker.base": [
-      45,
-      45,
-      50,
+      0,
+      255,
+      80,
       255
     ],
     "color_picker.text": [
-      220,
-      220,
-      225,
+      255,
+      80,
+      0,
       255
     ],
     "color_picker.button": [
-      55,
-      55,
-      65,
+      110,
+      0,
+      255,
       255
     ],
     "color_picker.button_text": [
-      220,
-      220,
-      225,
+      0,
+      120,
+      255,
       255
     ],
     "context.menu.surface": [
-      25,
-      25,
-      25,
+      255,
+      20,
+      120,
       205
     ],
     "context.menu.border": [
       255,
-      255,
+      0,
       255,
       255
     ],
     "context.menu.text": [
-      255,
+      0,
       255,
       255,
       255
     ],
     "context.menu.selected_surface": [
-      62,
-      62,
-      62,
+      255,
+      255,
+      0,
       220
     ],
     "context.menu.disabled_text": [
-      120,
-      120,
-      130,
+      0,
+      255,
+      80,
       150
     ],
     "context.menu.separator": [
-      90,
-      90,
-      90,
+      255,
+      80,
+      0,
       150
     ],
     "context.submenu.surface": [
-      25,
-      25,
-      25,
+      110,
+      0,
+      255,
       205
     ],
     "context.submenu.border": [
-      255,
-      255,
+      0,
+      120,
       255,
       255
     ],
     "context.submenu.text": [
       255,
-      255,
-      255,
+      20,
+      120,
       255
     ],
     "context.submenu.selected_surface": [
-      62,
-      62,
-      62,
+      255,
+      0,
+      255,
       220
     ],
     "context.submenu.checked_text": [
-      255,
+      0,
       255,
       255,
       255
     ],
     "context.submenu.checked_surface": [
-      62,
-      62,
-      62,
+      255,
+      255,
+      0,
       220
     ],
     "chrome.outer_border": [
-      50,
+      0,
       255,
       80,
       255
     ],
     "chrome.size_grip": [
       255,
-      255,
+      80,
       0,
-      255
+      200
     ]
   },
   "shadows": {
@@ -1077,8 +1155,8 @@
       "color": [
         0,
         255,
-        255,
-        210
+        80,
+        120
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1088,9 +1166,9 @@
       "offset_y": 6.0,
       "color": [
         255,
+        80,
         0,
-        220,
-        210
+        95
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1099,10 +1177,10 @@
       "offset_x": 5.0,
       "offset_y": 6.0,
       "color": [
+        110,
         0,
         255,
-        255,
-        210
+        110
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1111,10 +1189,10 @@
       "offset_x": 3.0,
       "offset_y": 4.0,
       "color": [
-        255,
         0,
-        220,
-        210
+        120,
+        255,
+        90
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1123,10 +1201,10 @@
       "offset_x": 5.0,
       "offset_y": 6.0,
       "color": [
-        0,
         255,
-        255,
-        210
+        20,
+        120,
+        105
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1137,8 +1215,8 @@
       "color": [
         255,
         0,
-        220,
-        210
+        255,
+        125
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1150,7 +1228,7 @@
         0,
         255,
         255,
-        210
+        140
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1160,9 +1238,9 @@
       "offset_y": 4.0,
       "color": [
         255,
+        255,
         0,
-        220,
-        210
+        140
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1173,8 +1251,8 @@
       "color": [
         0,
         255,
-        255,
-        210
+        80,
+        96
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1184,9 +1262,9 @@
       "offset_y": 5.0,
       "color": [
         255,
+        80,
         0,
-        220,
-        210
+        110
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1195,10 +1273,10 @@
       "offset_x": 6.0,
       "offset_y": 8.0,
       "color": [
+        110,
         0,
         255,
-        255,
-        210
+        90
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1207,10 +1285,10 @@
       "offset_x": 0.0,
       "offset_y": 4.0,
       "color": [
-        255,
         0,
-        220,
-        210
+        120,
+        255,
+        150
       ],
       "disabled_alpha_scale": 0.4
     }
@@ -1221,37 +1299,37 @@
         {
           "position": 0.0,
           "color": [
-            255,
             0,
-            220,
-            255
+            255,
+            255,
+            242
           ]
         },
         {
           "position": 0.35,
           "color": [
+            255,
+            255,
             0,
-            255,
-            255,
-            255
+            230
           ]
         },
         {
           "position": 0.65,
           "color": [
-            255,
             0,
-            220,
-            255
+            255,
+            80,
+            217
           ]
         },
         {
           "position": 1.0,
           "color": [
+            255,
+            80,
             0,
-            255,
-            255,
-            255
+            179
           ]
         }
       ]
@@ -1261,28 +1339,28 @@
         {
           "position": 0.0,
           "color": [
+            255,
+            255,
             0,
-            255,
-            255,
-            255
+            230
           ]
         },
         {
           "position": 0.5,
           "color": [
-            255,
             0,
-            220,
-            255
+            255,
+            80,
+            217
           ]
         },
         {
           "position": 1.0,
           "color": [
+            255,
+            80,
             0,
-            255,
-            255,
-            255
+            191
           ]
         }
       ]
@@ -1292,27 +1370,27 @@
         {
           "position": 0.0,
           "color": [
-            255,
             0,
-            220,
+            255,
+            80,
             255
           ]
         },
         {
           "position": 0.85,
           "color": [
+            255,
+            80,
             0,
-            255,
-            255,
             255
           ]
         },
         {
           "position": 1.0,
           "color": [
-            255,
+            110,
             0,
-            220,
+            255,
             255
           ]
         }
@@ -1323,18 +1401,18 @@
         {
           "position": 0.0,
           "color": [
+            255,
+            80,
             0,
-            255,
-            255,
             255
           ]
         },
         {
           "position": 0.85,
           "color": [
-            255,
+            110,
             0,
-            220,
+            255,
             255
           ]
         },
@@ -1342,7 +1420,7 @@
           "position": 1.0,
           "color": [
             0,
-            255,
+            120,
             255,
             255
           ]
@@ -1354,9 +1432,9 @@
         {
           "position": 0.0,
           "color": [
-            255,
+            110,
             0,
-            220,
+            255,
             255
           ]
         },
@@ -1364,7 +1442,7 @@
           "position": 1.0,
           "color": [
             0,
-            255,
+            120,
             255,
             255
           ]
@@ -1377,7 +1455,7 @@
           "position": 0.0,
           "color": [
             0,
-            255,
+            120,
             255,
             255
           ]
@@ -1386,16 +1464,16 @@
           "position": 0.85,
           "color": [
             255,
-            0,
-            220,
+            20,
+            120,
             255
           ]
         },
         {
           "position": 1.0,
           "color": [
-            0,
             255,
+            0,
             255,
             255
           ]

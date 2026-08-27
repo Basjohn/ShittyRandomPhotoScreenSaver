@@ -64,40 +64,41 @@ to compiled Default Dark rather than an unstyled window.
 
 ## Current checkpoint state
 
-- Themes sidebar surface exists with two pills: **Setting Themes** and
+- Themes sidebar surface exists with **Setting Themes** and intentionally-empty
   **Widget Themes**.
-- Setting Themes is the landing page; Widget Themes is intentionally empty.
-- Both theme pills now have authored minimum width and the catalogue list text
-  is enlarged for readability without overriding semantic list colours.
-- The previously deferred live rendered-style consumers in `widgets_tab.py`
-  and `widgets_tab_steam.py` are migrated.
-- Whole-UI frozen rendered-style scan now leaves only
-  `ui/tabs/presets_tab.py`, disconnected legacy debris already logged for
-  deletion. It is not a live migration target.
-
-## Current palette-audit state
-
-- `.srtheme` schema is now **v3** because newly centralized Settings chrome
-  roles are required members of a complete theme.
-- Sources ratio/RSS/action chrome, Transitions pills/actions, Widgets
-  pills/actions, General cache/shadow-direction controls and Spectrum/DevCurve
-  selector pills now consume live semantic roles rather than local colour
-  literals.
-- Status colours and user/widget-authored colours deliberately remain outside
-  Settings ThemeSpec; semantic product data is not Settings skin.
-- `Theme Plumbing Test - Obnoxious.srtheme` is a deliberately fluorescent
-  validation theme for eyes-on live switching. It is test data, not a proposed
-  product theme.
+- Source/dev builds can discover file themes through the temporary explicit /
+  build-stub / repository-local path seam before first Settings QWidget paint.
+- Theme schema **v4** adds the remaining bucket open/closed palette and popup
+  form-input palette.
+- Sources uses the established circular Save RSS checkbox and central
+  `StyledPopup` for duplicate, autocorrect and RSS-cache notices/questions.
+- The no-sources close guard uses `StyledPopup`; the bespoke popup/shadow is
+  gone. The legacy ResetDefaults toast API is retained but its visuals now use
+  the popup semantic palette/shadow rather than another hardcoded skin.
+- Settings More/Import menus use semantic `context.menu.*` roles.
+- Styled combo/font-combo popup views bind to the live
+  `COMBOBOX_POPUP_VIEW_STYLE` rather than freezing construction-time colours.
+- Tooltips are consistent: both root and local tooltip QSS consume the same
+  alpha-aware ThemeSpec roles and preserve the old global geometry.
+- Bucket closed/open surfaces are ThemeSpec-owned while existing geometry,
+  arrows and semantic bucket-shadow renderer stay unchanged.
+- The Steam API-key input dialog keeps its form mechanics but uses the same
+  popup container/input/button/shadow vocabulary as `StyledPopup`.
+- The non-native wrapped Qt colour picker already consumes semantic
+  `color_picker.*` roles and is now exercised by the full-role validation theme.
+- The validation theme changes every semantic colour role, every shadow role
+  and every gradient role so apparently-unaffected UI is meaningful evidence.
 
 ## Immediate remaining work
 
-1. Perform Windows eyes-on live switching between Default Dark and the
-   obnoxious test theme, especially forged corners/acrylic/nav/shadows.
-2. Finish the smaller remaining literal Settings-chrome audit (not semantic
-   status/user-content colours), including the special SettingsDialog
-   no-sources popup / bespoke popup shadow / More Options menu and remaining
-   Steam form chrome where appropriate.
-3. Rewrite Theme Foundry to edit/save semantic schema-v3 `.srtheme` files.
-4. Build/release work replaces the temporary theme-directory stub; then remove
-   the stub/dev fallback per `Future_Cleanup.md`.
-5. Remove the test theme and this temporary plan after validation/durable docs.
+1. Windows eyes-on live-switch audit with schema-v4 Obnoxious: bucket closed/open,
+   About `⋮`, Sources popups/Save RSS, combo dropdowns, tooltips, More/Import
+   menus, Steam API-key form and colour picker.
+2. Fix any remaining stubborn Settings chrome revealed by that full-role test;
+   leave semantic status and user/widget-authored colours alone.
+3. Rewrite Theme Foundry around the semantic schema-v4 `.srtheme` model.
+4. Build/release work replaces the temporary theme-directory stub and retires
+   the dev fallback as already recorded in `Future_Cleanup.md`.
+5. Keep `dark.qss` until its remaining geometry/resource/base-selector ownership
+   is deliberately retired or relocated; it is not selectable theme authority.
+6. Remove the validation theme and this temporary plan after final validation.

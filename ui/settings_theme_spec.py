@@ -28,7 +28,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 
-SETTINGS_THEME_SCHEMA_VERSION = 3
+SETTINGS_THEME_SCHEMA_VERSION = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,6 +265,19 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "navigation.subtab.border": WHITE,
     "navigation.subtab.hover_surface": Rgba(52, 52, 52, 220),
     "navigation.subtab.selected_surface": Rgba(58, 58, 58, 220),
+
+    # Collapsible Settings bucket/tool-button chrome. Values preserve the
+    # historical dark.qss visuals while moving palette authority into ThemeSpec.
+    "bucket.closed.surface": Rgba(50, 50, 50, 255),
+    "bucket.closed.text": Rgba(220, 220, 220, 255),
+    "bucket.closed.border": Rgba(80, 80, 80, 153),
+    "bucket.closed.hover_surface": Rgba(60, 60, 60, 255),
+    "bucket.closed.hover_border": Rgba(100, 100, 100, 204),
+    "bucket.open.surface": Rgba(20, 20, 20, 255),
+    "bucket.open.text": WHITE,
+    "bucket.open.border": Rgba(100, 100, 100, 204),
+    "bucket.open.hover_surface": Rgba(30, 30, 30, 255),
+
     "content.surface": TRANSPARENT,
 
     # Global + mature local panel layers. Both remain separate because the
@@ -303,7 +316,7 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "combo.popup.selection_text": WHITE,
 
     # Shared tooltip palette.
-    "tooltip.surface": Rgba(30, 30, 30, 255),
+    "tooltip.surface": Rgba(32, 32, 32, 179),
     "tooltip.text": WHITE,
     "tooltip.border": WHITE,
 
@@ -429,6 +442,11 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "popup.button.text": Rgba(240, 240, 245, 230),
     "popup.button.hover_surface": Rgba(80, 80, 95, 220),
     "popup.button.pressed_surface": Rgba(50, 50, 60, 220),
+    # Input chrome for popup forms that need more than message/buttons.
+    "popup.input.surface": Rgba(14, 14, 18, 220),
+    "popup.input.border": Rgba(255, 255, 255, 55),
+    "popup.input.text": WHITE,
+    "popup.input.focus_border": Rgba(106, 169, 217, 255),
 
     # ColorSwatchButton keeps its user-selected fill colour local; these roles
     # theme only the reusable chrome/accent treatment around that user data.
