@@ -833,6 +833,9 @@ class RetainedClockPresentation:
             geometry,
         )
         self._retained.add_retirement_callback(model.retire)
+        self._retained.set_custom_layout_size_payload_handler(
+            self._apply_custom_layout_size_payload
+        )
         toggle_signal = getattr(self._retained.item, "toggleModeRequested", None)
         if toggle_signal is not None and hasattr(toggle_signal, "connect"):
             toggle_signal.connect(self.toggle_display_mode)
@@ -864,6 +867,13 @@ class RetainedClockPresentation:
             self._model.config.display_mode,
             geometry,
         )
+
+    def _apply_custom_layout_size_payload(
+        self,
+        payload: Mapping[str, object],
+    ) -> None:
+        font_size = int(payload.get("font_size", self._model.config.font_size))
+        self._model.apply_config(replace(self._model.config, font_size=font_size))
 
     def set_display_mode(self, mode: object) -> bool:
         target = normalize_clock_display_mode(mode)

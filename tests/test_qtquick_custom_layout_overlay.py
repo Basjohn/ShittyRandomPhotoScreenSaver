@@ -47,6 +47,7 @@ def _item(
     rect: QRect,
     *,
     duplicate: bool = False,
+    resizable: bool = False,
 ) -> CustomLayoutSessionItem:
     return CustomLayoutSessionItem(
         source_key=CustomLayoutKey(widget_id, display_identity),
@@ -58,6 +59,7 @@ def _item(
         baseline_enabled=True,
         current_enabled=True,
         is_duplicate=duplicate,
+        resize_capable=resizable,
     )
 
 
@@ -102,6 +104,69 @@ def test_overlay_model_mutates_shared_session_items_without_copying_authority() 
     assert model.rowCount() == 0
     assert foreign.current_enabled is True
     assert foreign.removed is False
+
+
+def test_overlay_resize_requests_route_through_python_and_keep_item_identity() -> None:
+    session = CustomLayoutSession()
+    clock = _item(
+        "clock",
+        "display:a",
+        QRect(110, 220, 180, 80),
+        resizable=True,
+    )
+    session.add_item(clock)
+    events: list[tuple[object, ...]] = []
+
+    def _begin(item, corner, cursor):
+        events.append(("begin", id(item), corner, QPoint(cursor)))
+        return True
+
+    def _update(item, corner, cursor, finalize):
+        events.append(("update", id(item), corner, QPoint(cursor), finalize))
+        item.set_geometry(
+            QRect(100, 200, 270, 120),
+            size_payload={"font_size": 72},
+            resize_scale=1.5,
+        )
+        return True
+
+    def _wheel(item, delta):
+        events.append(("wheel", id(item), delta))
+        item.set_geometry(
+            QRect(95, 200, 288, 128),
+            size_payload={"font_size": 77},
+            resize_scale=1.6,
+        )
+        return True
+
+    model = CustomLayoutOverlayModel(
+        session=session,
+        display_identity="display:a",
+        display_origin=QPoint(100, 200),
+        resize_begin_handler=_begin,
+        resize_update_handler=_update,
+        resize_wheel_handler=_wheel,
+    )
+    identity = id(clock)
+
+    assert model.beginResize(0, "bottom_right", 190.0, 100.0) is True
+    assert model.resizeItem(0, "bottom_right", 280.0, 140.0, False) is True
+    assert model.resizeWheel(0, 120) is True
+
+    assert events == [
+        ("begin", identity, "bottom_right", QPoint(290, 300)),
+        ("update", identity, "bottom_right", QPoint(380, 340), False),
+        ("wheel", identity, 120),
+    ]
+    assert id(session.item(clock.source_key)) == identity
+    assert clock.current_global_rect == QRect(95, 200, 288, 128)
+    assert clock.current_size_payload == {"font_size": 77}
+    assert clock.resize_scale == pytest.approx(1.6)
+
+    clock.resize_capable = False
+    assert model.beginResize(0, "bottom_right", 0.0, 0.0) is False
+    assert model.resizeItem(0, "bottom_right", 0.0, 0.0, True) is False
+    assert model.resizeWheel(0, -120) is False
 
 
 @pytest.mark.qt
@@ -227,7 +292,12 @@ def test_scene_binding_moves_hides_and_restores_same_retained_family_item(qt_app
     retained_identity = id(presentation_item)
 
     session = CustomLayoutSession()
-    clock = _item("clock", "display:a", QRect(130, 250, 200, 90))
+    clock = _item(
+        "clock",
+        "display:a",
+        QRect(130, 250, 200, 90),
+        resizable=True,
+    )
     session.add_item(clock)
     model = controller.bind_custom_layout_session(
         session,
@@ -240,6 +310,24 @@ def test_scene_binding_moves_hides_and_restores_same_retained_family_item(qt_app
     assert (presentation_item.width(), presentation_item.height()) == (200.0, 90.0)
     assert presentation_item.property("workingVisible") is True
     assert presentation_item.opacity() == pytest.approx(0.35)
+    qt_app.processEvents()
+    resize_handles = [
+        item
+        for item in _quick_items_named(
+            controller.custom_layout_overlay.item,
+            "customLayoutResize-clock-top_left",
+        )
+    ]
+    assert len(resize_handles) == 1
+    assert sum(
+        len(
+            _quick_items_named(
+                controller.custom_layout_overlay.item,
+                f"customLayoutResize-clock-{corner}",
+            )
+        )
+        for corner in ("top_left", "top_right", "bottom_left", "bottom_right")
+    ) == 4
 
     model.moveItem(0, 70.0, 95.0)
     assert clock.current_global_rect == QRect(170, 295, 200, 90)
@@ -301,6 +389,7 @@ def test_visualizer_custom_session_preserves_retained_item_and_render_identity(q
             int(outer_width),
             int(outer_height),
         ),
+        resizable=True,
     )
     foreign_duplicate = _item(
         "spotify_visualizer",
@@ -310,10 +399,23 @@ def test_visualizer_custom_session_preserves_retained_item_and_render_identity(q
     )
     session.add_item(visualizer)
     session.add_item(foreign_duplicate)
+    def _resize_wheel(item, _delta):
+        rect = item.current_global_rect
+        item.set_geometry(
+            QRect(rect.x(), rect.y(), int(outer_width * 1.5), int(outer_height * 1.5)),
+            size_payload={
+                "width": int(outer_width * 1.5),
+                "height": int(outer_height * 1.5),
+            },
+            resize_scale=1.5,
+        )
+        return True
+
     model = controller.bind_custom_layout_session(
         session,
         display_identity="display:a",
         display_origin=QPoint(100, 200),
+        resize_wheel_handler=_resize_wheel,
     )
     assert controller.describe_scene_state()["visualizer"]["instantiated"] is False
 
@@ -345,11 +447,25 @@ def test_visualizer_custom_session_preserves_retained_item_and_render_identity(q
     assert render_item.presentation is presentation
     assert render_item.render_identity == render_identity
 
+    assert model.resizeWheel(0, 120) is True
+    resized_presentation = render_item.presentation
+    assert resized_presentation is not None
+    assert resized_presentation.uniform_visual_scale == pytest.approx(2.25)
+    assert resized_presentation.viewport_extent == presentation.viewport_extent
+    assert (loader.width(), loader.height()) == pytest.approx(
+        (outer_width * 1.5, outer_height * 1.5)
+    )
+    assert id(controller.visualizer_item) == render_item_identity
+    assert render_item.render_identity == render_identity
+
     model.moveItem(0, outer_x + 80.0, outer_y + 45.0)
     assert (loader.x(), loader.y()) == (outer_x + 80.0, outer_y + 45.0)
     assert id(controller.visualizer_item) == render_item_identity
     assert id(visualizer_root) == root_identity
-    assert render_item.presentation is presentation
+    moved_presentation = render_item.presentation
+    assert moved_presentation is not None
+    assert moved_presentation.uniform_visual_scale == pytest.approx(2.25)
+    assert moved_presentation.viewport_extent == resized_presentation.viewport_extent
     assert render_item.render_identity == render_identity
 
     model.closeItem(0)
@@ -367,6 +483,10 @@ def test_visualizer_custom_session_preserves_retained_item_and_render_identity(q
     assert (loader.x(), loader.y()) == (outer_x, outer_y)
     assert id(controller.visualizer_item) == render_item_identity
     assert render_item.render_identity == render_identity
+    restored_presentation = render_item.presentation
+    assert restored_presentation is not None
+    assert restored_presentation.uniform_visual_scale == pytest.approx(1.5)
+    assert restored_presentation.viewport_extent == presentation.viewport_extent
 
     controller.clear_custom_layout_session()
     assert visualizer_root.property("customLayoutWorkingVisible") is True

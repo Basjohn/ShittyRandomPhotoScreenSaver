@@ -1048,6 +1048,9 @@ class RetainedMediaPresentation:
             card_style=model.style.card_style,
         )
         self._retained.add_retirement_callback(model.retire)
+        self._retained.set_custom_layout_size_payload_handler(
+            self._apply_custom_layout_size_payload
+        )
         refresh = getattr(self._retained.item, "refreshRequested", None)
         if refresh is not None and hasattr(refresh, "connect"):
             refresh.connect(model.request_refresh)
@@ -1084,6 +1087,21 @@ class RetainedMediaPresentation:
 
     def set_geometry(self, geometry: OverlayWidgetGeometry) -> None:
         self._retained.set_geometry(geometry)
+
+    def _apply_custom_layout_size_payload(
+        self,
+        payload: Mapping[str, object],
+    ) -> None:
+        config = self._model.config
+        self._model.apply_config(
+            replace(
+                config,
+                font_size=int(payload.get("font_size", config.font_size)),
+                artwork_size=int(
+                    payload.get("artwork_size", config.artwork_size)
+                ),
+            )
+        )
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

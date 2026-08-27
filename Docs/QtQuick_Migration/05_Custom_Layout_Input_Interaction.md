@@ -1,7 +1,7 @@
 # 05 — CUSTOM Layout, Input, Interaction and Auxiliary Runtime Pixels
 
 Status: **Phase-G destination contract; some geometry semantics already proven during F**  
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 `Current_Plan.md` owns work admission.
 
@@ -79,6 +79,9 @@ singleton X changes working ordinary enabled state, never capability activation.
 
 Quick handles emit deltas; Python session/geometry math owns min size, aspect constraints, anchors, family
 size payload, active variant and display/DPR projection. No QML-only persisted geometry.
+
+Corner handles and wheel resize are shared retained Quick material. Family size payloads project onto the same
+retained presentation models during preview; Cancel restores their baseline payload without item/model recreation.
 
 Visualizer keeps `uniform_visual_scale` separate from `content_viewport_size`; never anisotropically stretch
 finished pixels.

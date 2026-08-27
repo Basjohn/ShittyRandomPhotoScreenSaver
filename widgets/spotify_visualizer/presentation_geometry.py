@@ -188,8 +188,63 @@ def resolve_visualizer_presentation(
     )
 
 
+def resize_visualizer_presentation_uniformly(
+    baseline: ResolvedVisualizerPresentation,
+    *,
+    display_size: Sequence[object],
+    outer_origin: Sequence[object],
+    relative_scale: float,
+) -> ResolvedVisualizerPresentation:
+    """Resize one resolved presentation without inventing a second style owner."""
+
+    if not isinstance(baseline, ResolvedVisualizerPresentation):
+        raise TypeError("baseline must be a ResolvedVisualizerPresentation")
+    factor = _finite(relative_scale, name="relative scale")
+    if factor <= 0.0:
+        raise ValueError("relative scale must be positive")
+    baseline_scale = baseline.uniform_visual_scale
+    style = baseline.shell_style
+    policy = VisualizerModePresentationPolicy(
+        shell_policy=baseline.shell_policy,
+        clip_policy=baseline.clip_policy,
+        viewport_resize_capable=baseline.viewport_resize_capable,
+    )
+
+    def _authored_scalar(name: str, default: float = 0.0) -> float:
+        return float(style.get(name, default)) / baseline_scale
+
+    shadow_offset = style.get("shadow_offset", (0.0, 0.0))
+    return resolve_visualizer_presentation(
+        policy=policy,
+        display_size=display_size,
+        outer_origin=outer_origin,
+        dpr=baseline.dpr,
+        uniform_visual_scale=baseline_scale * factor,
+        viewport_extent=baseline.viewport_extent,
+        scene_fade=baseline.scene_fade,
+        content_fade=baseline.content_fade,
+        border_width=baseline.border_width / baseline_scale,
+        corner_radius=_authored_scalar("corner_radius"),
+        content_inset=_authored_scalar("content_inset"),
+        background_color=style.get(
+            "background_color",
+            _DEFAULT_BACKGROUND_COLOR,
+        ),
+        border_color=style.get("border_color", _DEFAULT_BORDER_COLOR),
+        shadow_enabled=bool(style.get("shadow_enabled", False)),
+        shadow_color=style.get("shadow_color", _DEFAULT_SHADOW_COLOR),
+        shadow_blur=_authored_scalar("shadow_blur"),
+        shadow_offset=(
+            float(shadow_offset[0]) / baseline_scale,
+            float(shadow_offset[1]) / baseline_scale,
+        ),
+        shadow_spread=_authored_scalar("shadow_spread"),
+    )
+
+
 __all__ = [
     "CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO",
     "CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE",
+    "resize_visualizer_presentation_uniformly",
     "resolve_visualizer_presentation",
 ]

@@ -26,6 +26,9 @@ from rendering.custom_layout_session import (
 
 GeometryResolver = Callable[[CustomLayoutSessionItem, QRect], QRect]
 ItemChangePublisher = Callable[[CustomLayoutSessionItem], None]
+ResizeBeginHandler = Callable[[CustomLayoutSessionItem, str, QPoint], bool]
+ResizeUpdateHandler = Callable[[CustomLayoutSessionItem, str, QPoint, bool], bool]
+ResizeWheelHandler = Callable[[CustomLayoutSessionItem, int], bool]
 
 
 class CustomLayoutOverlayModel(QAbstractListModel):
@@ -39,6 +42,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     _GEOMETRY_WIDTH_ROLE = _WIDGET_ID_ROLE + 3
     _GEOMETRY_HEIGHT_ROLE = _WIDGET_ID_ROLE + 4
     _DUPLICATE_ROLE = _WIDGET_ID_ROLE + 5
+    _RESIZABLE_ROLE = _WIDGET_ID_ROLE + 6
 
     def __init__(
         self,
@@ -48,6 +52,9 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         display_origin: QPoint | None = None,
         geometry_resolver: GeometryResolver | None = None,
         item_change_publisher: ItemChangePublisher | None = None,
+        resize_begin_handler: ResizeBeginHandler | None = None,
+        resize_update_handler: ResizeUpdateHandler | None = None,
+        resize_wheel_handler: ResizeWheelHandler | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -58,6 +65,9 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._display_origin = QPoint(display_origin or QPoint())
         self._geometry_resolver = geometry_resolver
         self._item_change_publisher = item_change_publisher
+        self._resize_begin_handler = resize_begin_handler
+        self._resize_update_handler = resize_update_handler
+        self._resize_wheel_handler = resize_wheel_handler
         self._items: list[CustomLayoutSessionItem] = []
         self.refresh()
 
@@ -69,6 +79,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             self._GEOMETRY_WIDTH_ROLE: QByteArray(b"geometryWidth"),
             self._GEOMETRY_HEIGHT_ROLE: QByteArray(b"geometryHeight"),
             self._DUPLICATE_ROLE: QByteArray(b"duplicate"),
+            self._RESIZABLE_ROLE: QByteArray(b"resizable"),
         }
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # type: ignore[override]
@@ -91,6 +102,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return rect.height()
         if role == self._DUPLICATE_ROLE:
             return item.is_duplicate
+        if role == self._RESIZABLE_ROLE:
+            return item.resize_capable
         return None
 
     @Slot()
@@ -158,13 +171,93 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self.refresh()
         self.item_closed.emit(widget_id, removed, enabled)
 
+    @Slot(int, str, float, float, result=bool)
+    def beginResize(
+        self,
+        row: int,
+        corner: str,
+        local_x: float,
+        local_y: float,
+    ) -> bool:
+        """Begin a retained resize through the Python-owned geometry seam."""
+
+        item = self._resizable_item(row)
+        handler = self._resize_begin_handler
+        if item is None or handler is None:
+            return False
+        cursor = self._global_point(local_x, local_y)
+        return bool(handler(item, str(corner), cursor))
+
+    @Slot(int, str, float, float, bool, result=bool)
+    def resizeItem(
+        self,
+        row: int,
+        corner: str,
+        local_x: float,
+        local_y: float,
+        finalize: bool,
+    ) -> bool:
+        """Apply one live/final retained resize sample without QML geometry ownership."""
+
+        item = self._resizable_item(row)
+        handler = self._resize_update_handler
+        if item is None or handler is None:
+            return False
+        cursor = self._global_point(local_x, local_y)
+        if not handler(item, str(corner), cursor, bool(finalize)):
+            return False
+        self._publish_resize(item, row)
+        return True
+
+    @Slot(int, int, result=bool)
+    def resizeWheel(self, row: int, angle_delta_y: int) -> bool:
+        """Apply one uniform wheel-resize request through the canonical owner."""
+
+        item = self._resizable_item(row)
+        handler = self._resize_wheel_handler
+        if item is None or handler is None:
+            return False
+        if not handler(item, int(angle_delta_y)):
+            return False
+        self._publish_resize(item, row)
+        return True
+
     def retire(self) -> None:
         self.beginResetModel()
         self._items = []
         self._session = None
         self._geometry_resolver = None
         self._item_change_publisher = None
+        self._resize_begin_handler = None
+        self._resize_update_handler = None
+        self._resize_wheel_handler = None
         self.endResetModel()
+
+    def _resizable_item(self, row: int) -> CustomLayoutSessionItem | None:
+        if not 0 <= int(row) < len(self._items):
+            return None
+        item = self._items[int(row)]
+        return item if item.resize_capable else None
+
+    def _global_point(self, local_x: float, local_y: float) -> QPoint:
+        return QPoint(
+            self._display_origin.x() + int(round(float(local_x))),
+            self._display_origin.y() + int(round(float(local_y))),
+        )
+
+    def _publish_resize(self, item: CustomLayoutSessionItem, row: int) -> None:
+        self._publish_item_change(item)
+        model_index = self.index(int(row), 0)
+        self.dataChanged.emit(
+            model_index,
+            model_index,
+            [
+                self._GEOMETRY_X_ROLE,
+                self._GEOMETRY_Y_ROLE,
+                self._GEOMETRY_WIDTH_ROLE,
+                self._GEOMETRY_HEIGHT_ROLE,
+            ],
+        )
 
     def _publish_item_change(self, item: CustomLayoutSessionItem) -> None:
         publisher = self._item_change_publisher
@@ -201,6 +294,9 @@ class RetainedCustomLayoutOverlay:
         display_origin: QPoint | None = None,
         geometry_resolver: GeometryResolver | None = None,
         item_change_publisher: ItemChangePublisher | None = None,
+        resize_begin_handler: ResizeBeginHandler | None = None,
+        resize_update_handler: ResizeUpdateHandler | None = None,
+        resize_wheel_handler: ResizeWheelHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         self.clear_session()
         model = CustomLayoutOverlayModel(
@@ -209,6 +305,9 @@ class RetainedCustomLayoutOverlay:
             display_origin=display_origin,
             geometry_resolver=geometry_resolver,
             item_change_publisher=item_change_publisher,
+            resize_begin_handler=resize_begin_handler,
+            resize_update_handler=resize_update_handler,
+            resize_wheel_handler=resize_wheel_handler,
             parent=self.item,
         )
         self._model = model

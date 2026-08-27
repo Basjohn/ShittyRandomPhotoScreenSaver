@@ -940,6 +940,56 @@ def test_custom_layout_manager_enter_saves_active_session(qtbot, monkeypatch):
     assert manager.is_active() is False
 
 
+def test_retained_quick_resize_uses_canonical_clock_anchor_and_payload_rules(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display, font_size=48)
+    display.clock_widget.setGeometry(300, 70, 180, 80)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    state = manager._shell_states["clock"]
+    item = state.item
+    origin_rect = QRect(item.current_global_rect)
+    origin_top_center = manager._top_center_anchor_for_rect(origin_rect)
+
+    assert item.resize_capable is True
+    assert manager.begin_retained_resize(
+        item,
+        "bottom_right",
+        origin_rect.bottomRight(),
+    ) is True
+    assert manager.update_retained_resize(
+        item,
+        "bottom_right",
+        origin_rect.bottomRight() + QPoint(90, 40),
+        False,
+    ) is True
+
+    assert item.resize_scale > 1.0
+    assert item.current_size_payload["font_size"] > 48
+    grown_anchor = manager._top_center_anchor_for_rect(item.current_global_rect)
+    assert abs(grown_anchor[0] - origin_top_center[0]) <= 0.5
+    assert grown_anchor[1] == origin_top_center[1]
+    grown_rect = QRect(item.current_global_rect)
+    grown_scale = item.resize_scale
+
+    assert manager.wheel_retained_resize(item, 120) is True
+    assert item.resize_scale > grown_scale
+    assert item.current_global_rect.width() > grown_rect.width()
+    wheel_anchor = manager._top_center_anchor_for_rect(item.current_global_rect)
+    assert abs(wheel_anchor[0] - origin_top_center[0]) <= 1.0
+    assert wheel_anchor[1] == origin_top_center[1]
+    assert manager.cancel_session() is True
+    assert item.current_global_rect == origin_rect
+    assert item.current_size_payload == {"font_size": 48}
+
+
 def test_custom_layout_manager_raises_dimming_to_minimum_during_edit_mode(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()

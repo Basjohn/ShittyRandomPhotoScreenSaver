@@ -782,6 +782,9 @@ class RetainedGmailPresentation:
             card_style=model.style.card_style,
         )
         self._retained.add_retirement_callback(model.retire)
+        self._retained.set_custom_layout_size_payload_handler(
+            self._apply_custom_layout_size_payload
+        )
         self._connect("openInboxRequested", self._handle_open_inbox_requested)
         self._connect("openMessageRequested", model.request_open)
         self._connect("refreshRequested", model.request_refresh)
@@ -806,6 +809,13 @@ class RetainedGmailPresentation:
 
     def set_geometry(self, geometry: OverlayWidgetGeometry) -> None:
         self._retained.set_geometry(geometry)
+
+    def _apply_custom_layout_size_payload(
+        self,
+        payload: Mapping[str, object],
+    ) -> None:
+        font_size = int(payload.get("font_size", self._model.config.font_size))
+        self._model.apply_config(replace(self._model.config, font_size=font_size))
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

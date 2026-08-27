@@ -17,6 +17,7 @@ from core.settings.visualizer_mode_registry import (
 from widgets.spotify_visualizer.presentation_geometry import (
     CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO,
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
+    resize_visualizer_presentation_uniformly,
     resolve_visualizer_presentation,
 )
 
@@ -67,6 +68,39 @@ def test_uniform_scale_changes_shell_and_viewport_coherently() -> None:
     assert state.shell_style["content_inset"] == 3.0
     assert state.shell_style["shadow_blur"] == 27.0
     assert state.shell_style["shadow_offset"] == (3.0, 6.0)
+
+
+@pytest.mark.parametrize("target_scale", (1.0, 1.5, 2.25))
+def test_retained_uniform_resize_preserves_viewport_and_rescales_authored_chrome(
+    target_scale,
+) -> None:
+    baseline = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("spectrum"),
+        display_size=(2560.0, 1440.0),
+        outer_origin=(40.0, 60.0),
+        border_width=4.0,
+        corner_radius=8.0,
+        content_inset=2.0,
+        shadow_blur=18.0,
+        shadow_offset=(2.0, 4.0),
+    )
+
+    resized = resize_visualizer_presentation_uniformly(
+        baseline,
+        display_size=(2560.0, 1440.0),
+        outer_origin=(120.0, 90.0),
+        relative_scale=target_scale,
+    )
+
+    assert resized.uniform_visual_scale == pytest.approx(target_scale)
+    assert resized.viewport_extent == baseline.viewport_extent
+    assert resized.outer_rect == pytest.approx(
+        (120.0, 90.0, 420.0 * target_scale, 280.0 * target_scale)
+    )
+    assert resized.border_width == pytest.approx(4.0 * target_scale)
+    assert resized.shell_style["shadow_blur"] == pytest.approx(
+        18.0 * target_scale
+    )
 
 
 def test_screen_fit_reduces_uniformly_and_clamps_display_local_origin() -> None:

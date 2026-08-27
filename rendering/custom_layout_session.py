@@ -60,6 +60,7 @@ class CustomLayoutSessionItem:
     baseline_enabled: bool
     current_enabled: bool
     is_duplicate: bool = False
+    resize_capable: bool = False
     resize_scale: float = 1.0
     removed: bool = False
     current_display_identity: str = ""
@@ -75,6 +76,7 @@ class CustomLayoutSessionItem:
         self.baseline_enabled = bool(self.baseline_enabled)
         self.current_enabled = bool(self.current_enabled)
         self.is_duplicate = bool(self.is_duplicate)
+        self.resize_capable = bool(self.resize_capable)
         self.resize_scale = float(self.resize_scale)
         self.removed = bool(self.removed)
         self.current_display_identity = (

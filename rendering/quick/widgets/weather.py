@@ -696,6 +696,9 @@ class RetainedWeatherPresentation:
             card_style=model.style.card_style,
         )
         self._retained.add_retirement_callback(model.retire)
+        self._retained.set_custom_layout_size_payload_handler(
+            self._apply_custom_layout_size_payload
+        )
         signal = getattr(self._retained.item, "settingsRequested", None)
         if signal is not None and hasattr(signal, "connect"):
             signal.connect(self._handle_settings_requested)
@@ -716,6 +719,22 @@ class RetainedWeatherPresentation:
 
     def set_geometry(self, geometry: OverlayWidgetGeometry) -> None:
         self._retained.set_geometry(geometry)
+
+    def _apply_custom_layout_size_payload(
+        self,
+        payload: Mapping[str, object],
+    ) -> None:
+        config = self._model.config
+        self._model.apply_config(
+            replace(
+                config,
+                font_size=int(payload.get("font_size", config.font_size)),
+                icon_size=int(payload.get("icon_size", config.icon_size)),
+                detail_icon_size=int(
+                    payload.get("detail_icon_size", config.detail_icon_size)
+                ),
+            )
+        )
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

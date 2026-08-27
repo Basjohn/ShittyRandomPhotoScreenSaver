@@ -94,6 +94,7 @@ Item {
             required property real geometryWidth
             required property real geometryHeight
             required property bool duplicate
+            required property bool resizable
 
             objectName: "customLayoutEditFrame-" + widgetId
             x: geometryX
@@ -157,6 +158,80 @@ Item {
                         point.x - pressOffsetX,
                         point.y - pressOffsetY
                     )
+                }
+                onWheel: function(wheel) {
+                    if (!editFrame.resizable)
+                        return
+                    wheel.accepted = customLayoutOverlay.sessionModel.resizeWheel(
+                        editFrame.index,
+                        wheel.angleDelta.y
+                    )
+                }
+            }
+
+            Repeater {
+                model: editFrame.resizable
+                       ? ["top_left", "top_right", "bottom_left", "bottom_right"]
+                       : []
+
+                delegate: Rectangle {
+                    required property string modelData
+                    property string corner: modelData
+                    property bool leftSide: corner.endsWith("left")
+                    property bool topSide: corner.startsWith("top")
+
+                    objectName: "customLayoutResize-" + editFrame.widgetId + "-" + corner
+                    width: 14
+                    height: 14
+                    radius: 3
+                    x: leftSide ? -width / 2 : editFrame.width - width / 2
+                    y: topSide ? -height / 2 : editFrame.height - height / 2
+                    color: "#fff4f4f4"
+                    border.width: 1
+                    border.color: "#ff222222"
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: parent.leftSide === parent.topSide
+                                     ? Qt.SizeFDiagCursor
+                                     : Qt.SizeBDiagCursor
+
+                        function overlayPoint(mouse) {
+                            return mapToItem(customLayoutOverlay, mouse.x, mouse.y)
+                        }
+
+                        onPressed: function(mouse) {
+                            const point = overlayPoint(mouse)
+                            customLayoutOverlay.sessionModel.beginResize(
+                                editFrame.index,
+                                parent.corner,
+                                point.x,
+                                point.y
+                            )
+                        }
+                        onPositionChanged: function(mouse) {
+                            if (!pressed)
+                                return
+                            const point = overlayPoint(mouse)
+                            customLayoutOverlay.sessionModel.resizeItem(
+                                editFrame.index,
+                                parent.corner,
+                                point.x,
+                                point.y,
+                                false
+                            )
+                        }
+                        onReleased: function(mouse) {
+                            const point = overlayPoint(mouse)
+                            customLayoutOverlay.sessionModel.resizeItem(
+                                editFrame.index,
+                                parent.corner,
+                                point.x,
+                                point.y,
+                                true
+                            )
+                        }
+                    }
                 }
             }
         }

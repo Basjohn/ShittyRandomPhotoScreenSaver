@@ -763,6 +763,9 @@ class RetainedRedditPresentation:
             card_style=model.style.card_style,
         )
         self._retained.add_retirement_callback(model.retire)
+        self._retained.set_custom_layout_size_payload_handler(
+            self._apply_custom_layout_size_payload
+        )
         open_signal = getattr(self._retained.item, "openPostRequested", None)
         if open_signal is not None and hasattr(open_signal, "connect"):
             open_signal.connect(self._handle_open_requested)
@@ -783,6 +786,13 @@ class RetainedRedditPresentation:
 
     def set_geometry(self, geometry: OverlayWidgetGeometry) -> None:
         self._retained.set_geometry(geometry)
+
+    def _apply_custom_layout_size_payload(
+        self,
+        payload: Mapping[str, object],
+    ) -> None:
+        font_size = int(payload.get("font_size", self._model.config.font_size))
+        self._model.apply_config(replace(self._model.config, font_size=font_size))
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-7ef1c463458f5813381afee4536dc6a21483448c
-G3 Save/Cancel and enabled/duplicate persistence is validated in the current checkpoint
+3bc98ca142ac478020cb71562261351bb4cac85c
+G4 retained resize semantics is validated in the current checkpoint
 ```
 
 Current phase state:
@@ -38,20 +38,20 @@ Source outranks this plan if a later checkpoint has landed.
 
 ---
 
-## Immediate work — G4 retained resize semantics
+## Immediate work — G5 retained cross-monitor transfer
 
 ```text
-Quick handles -> Python session geometry/payload authority            ACTIVE
+one live retained pixel owner across display transfer                 ACTIVE
 ```
 
-### G4 — resize semantics (ACTIVE)
+### G5 — cross-monitor transfer (ACTIVE)
 
-- add retained Quick resize handles that emit semantic deltas into Python-owned session geometry;
-- reuse the canonical minimum-size, anchor, aspect and wheel-resize rules already proven by each family;
-- update only the active geometry variant and its family-specific size payload; preserve inactive variants exactly;
-- keep Visualizer uniform scale separate from viewport extent and never anisotropically stretch finished pixels;
-- preserve the same retained item/model/render identity through resize, Cancel and Save without runtime recreation;
-- prove wheel/corner resize, minimums, active-variant persistence and retained identity with focused Quick/runtime tests.
+- route retained drag transfer through the existing screen-choice threshold, clamp and monitor-route rules;
+- keep one live retained pixel owner while source presentation detaches and the target display adopts/reprojects it;
+- preserve the logical model/runtime and update only session current display/monitor plus the active variant rect;
+- never overwrite unrelated target variants or create simultaneous source/target Visualizer render owners;
+- make Cancel restore source display, rect and route; make Save persist the canonical target monitor/bucket;
+- prove single- and multi-display transfer, DPR projection, retained identity and Visualizer lifecycle with focused gates.
 
 Use `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`; exact current source outranks stale owner names.
 

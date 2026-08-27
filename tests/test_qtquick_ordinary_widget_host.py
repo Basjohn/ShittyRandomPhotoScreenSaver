@@ -137,6 +137,13 @@ def test_host_creates_updates_and_retires_synthetic_item_without_new_engine_or_w
     assert background.property("color").alpha() == 120
     assert background.property("color").alpha() != card.property("borderColor").alpha()
 
+    projected_payloads: list[dict[str, object]] = []
+    widget.set_custom_layout_size_payload_handler(
+        lambda payload: projected_payloads.append(dict(payload))
+    )
+    widget.apply_custom_layout_size_payload({"font_size": 72})
+    assert projected_payloads == [{"font_size": 72}]
+
     # Retire without retaining the display generation: the item detaches, the
     # host reports no live widgets, and the retained wrapper fails closed.
     assert host.retire_widget(widget) is True
