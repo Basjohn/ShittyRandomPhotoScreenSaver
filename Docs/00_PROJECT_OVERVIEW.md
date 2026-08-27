@@ -1,45 +1,60 @@
 # Project Overview
 
-Last updated: 2026-08-26
+Last updated: 2026-08-28
 
-SRPSS is a Windows screensaver/media runtime with multi-display image presentation, accelerated transitions,
-a high-fidelity multi-mode visualizer, configurable runtime overlays and durable settings.
+SRPSS is a Windows screensaver/media runtime with multi-display image presentation, accelerated transitions, a
+high-fidelity multi-mode visualizer, configurable runtime overlays and durable settings.
 
-## Current architecture epoch
+## Accepted architecture
 
 ```text
 one selected physical display
+-> one QuickDisplayRuntime
 -> one standalone threaded QQuickWindow
 -> one retained Quick scene
 -> inline custom GL for transitions/visualizer
--> retained Quick ordinary widgets
+-> retained Quick ordinary widgets / CUSTOM / auxiliary pixels
 ```
 
-Settings, providers, persistence, media/business orchestration and logical runtimes remain Python/QWidget
-where appropriate.
+Settings, providers, persistence, media/business orchestration and logical runtimes remain Python/QWidget where
+appropriate.
 
-The old `DisplayWidget` / QRhiWidget / `GLCompositorWidget` physical path remains temporary current-legacy
-until H. It is not a supported fallback presenter.
+The old `DisplayWidget` / QRhiWidget / `GLCompositorWidget` physical path may still exist in source until H. It is
+migration scaffolding, not a supported fallback and not something agents should preserve to keep the partially migrated
+application runnable.
 
 ## Current migration position
 
-Exact reviewed checkpoint:
+Reviewed source checkpoint: `59f4a3c98235215a9ff89fc09e4cc979d1831e89`.
 
-```text
-c6af1260b695e35b802e7b70ddcbb2277ef0100a
-5.0.0 - Phase F6 Partial
-```
-
-- F0/F0.5 closed;
-- F1 Clock through F5 Reddit/Reddit2 closed;
-- F2–F5 independently re-audited GREEN as an integrated run;
-- F6 Gmail active: stable retained model plus partial retained QML/wrapper landed;
-- one shared Quick import-dormancy correction is required in F6 before real Gmail owner injection;
-- G handles CUSTOM/input;
-- H is normal-production Quick physical cutover;
-- I is residue; J is final installed/physical closure.
+- F0–F8 closed;
+- G1 neutral session/variants/layout slots closed;
+- G2 retained edit overlay/family binding closed;
+- G3 Save/Cancel/enabled persistence closed;
+- G4 retained corner/wheel uniform resize landed, but independent visualizer viewport-edge resize was missed and is now
+  the first correction;
+- G5 cross-display retained transfer closed;
+- G6 retained input/semantic family actions closed;
+- G7 retained dimming/pixel shift, halo and context menu landed and is near closure;
+- G8 MC/focus closure follows;
+- H finalizes production Quick orchestration and removes the remaining physical host;
+- I is residue; J is final installed/physical acceptance.
 
 `Current_Plan.md` owns exact sequence.
+
+## Important visualizer geometry correction
+
+All five current visualizer modes must support independent viewport extent as well as uniform whole-size scale:
+
+```text
+wheel/corners -> uniform scale
+left/right    -> viewport width
+top/bottom    -> viewport height
+```
+
+Bubble is included. Its current source capability gate is unfinished migration state, not intended product behavior.
+Viewport changes reconfigure the spatial domain while preserving BTF; they never stretch finished pixels or redefine
+simulation cadence.
 
 ## Ordinary widget pattern
 
@@ -49,24 +64,10 @@ neutral runtime/backend
 -> stable presentation model
 -> retained family QML
 -> OrdinaryWidgetPresentationHost
--> OverlayWidget / OverlayCard / ShadowedText
--> display's one QQuickWindow
 ```
 
-Delete old family pixels after replacement GREEN + caller proof; do not keep them to H merely as fallback.
-See `Docs/10_WIDGET_GUIDELINES.md`.
+## Migration continuity policy
 
-## Visualizer
-
-`VisualizerLogicalRuntime` remains the one mode-general authored visualizer clock. Quick changes the
-presentation consumer, not authored logical cadence. Bubble fidelity remains governed by
-`Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
-
-## Read order
-
-```text
-exact source
--> Current_Plan.md
--> relevant focused current contract
--> tests/evidence
-```
+A fully functioning legacy screensaver between migration slices is not required. Do not rebuild caller-dead QWidget/
+compositor presentation merely for temporary continuity. Destination ownership and focused proof come first; full
+product acceptance is J.

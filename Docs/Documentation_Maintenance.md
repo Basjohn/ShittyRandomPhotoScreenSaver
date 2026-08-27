@@ -1,91 +1,96 @@
 # Documentation Maintenance
 
-Last updated: 2026-08-26
+Last updated: 2026-08-28
 
 ## Roles
 
 | Document | Role |
 | --- | --- |
-| `Current_Plan.md` | current checkpoint, active work, next/future sequence, current acceptance debt |
+| `Current_Plan.md` | current checkpoint, active blocker/work, next sequence, live acceptance debt |
 | `Spec.md` | durable product/architecture |
 | focused docs/guardrails | durable subsystem contracts |
 | `Index.md` / `Docs/Contracts.md` | routing/current owner map |
 | `Docs/audits/` | independent audit findings and closure evidence |
 | `Docs/TestSuite.md` | live test inventory/status ledger |
 | `Future_Cleanup.md` | deferred deletion/debt |
-| `Future_Work.md` | deferred features/experiments |
+| `Future_Work.md` | genuinely deferred features/experiments |
 | historical plans/reports/bugs/evidence | history only |
 
-## Current Plan stays lean
+## These are not changelogs
 
-Do not retain completed phase implementation narratives in `Current_Plan.md`.
+Current authority documents describe **what is true now and what must be true next**. Do not append chronological
+implementation diaries, commit-by-commit narratives or “then we did X” history to living contracts.
 
-When a slice/family closes:
+When a slice closes:
 
-1. keep only durable invariant in appropriate current contract;
-2. put useful independent review/closure detail in `Docs/audits/` or historical evidence;
-3. remove completed task lists from Current Plan;
-4. spend Current Plan length on current/next/future work and live debt.
+1. keep the durable invariant in the relevant current contract;
+2. keep only the current checkpoint/next blocker in `Current_Plan.md`;
+3. put useful closure narrative/evidence under `Docs/audits/` or historical evidence;
+4. remove superseded future-tense assumptions from living docs.
 
-A coding agent working F6 should not parse F2 implementation history to discover today's task.
+A new agent should not need to mentally subtract old phases from a current document.
+
+## Contract/source disagreement
+
+Do not make documentation “consistent” by deleting an intended product requirement merely because current source failed
+to implement it. Determine which side is authoritative:
+
+- explicit current product/destination intent -> keep the contract and promote the source gap into `Current_Plan.md`;
+- genuinely superseded design -> rewrite the contract cleanly to the new destination;
+- uncertain historical wording -> inspect source/evidence/operator intent before changing either.
+
+The 2026-08-28 visualizer viewport-resize correction is the canonical example: the destination contract requires edge
+viewport reflow for all five modes, so the missing Bubble/source affordance is migration debt, not prose to erase.
 
 ## Focused docs after closure
 
-A technical decomposition may remain current if it is still the best subsystem authoring contract. Reframe
-future-tense task language into landed invariant/current authoring rule.
+A technical decomposition may remain current if it is still the best subsystem authoring contract. Reframe task language
+into present-tense owner/invariant language.
 
 ```text
 old: implement/add/prove this Phase-X item
-new: current owner/contract; change only if evidence requires it
+new: current owner/contract; named open debt only where it actually remains
 ```
 
 ## Migration-epoch wording
 
-Distinguish destination authority, temporary current-legacy implementation, temporary visual/behavior
-reference, and historical evidence.
+Distinguish destination authority, temporary source scaffolding, temporary visual/behavior reference and historical
+evidence.
 
 Current retirement policy:
 
-- ordinary family pixels -> family GREEN under current audit policy + caller proof in F;
-- transition/visualizer old pixel-only owners -> caller-proof early when possible;
-- old CUSTOM pixels -> after G;
-- physical presenter/backend -> H;
+- ordinary family pixels -> already retired during F after destination proof/caller proof;
+- transition/visualizer old pixel-only owners -> caller-proof as soon as dead;
+- old CUSTOM/auxiliary pixels -> caller-proof during G;
+- remaining physical presenter/backend -> H;
 - residue -> I.
 
-Do not use blanket H/I retirement labels.
+Do not preserve old presentation to maintain temporary product continuity. Do not use blanket H/I retirement labels for
+caller-dead components that can already leave.
 
 ## Source reality / phase labels
 
-A closed phase must not remain described as `ACTIVE`, `candidate`, `awaiting audit` or `will be removed` in
-a live authority document.
-
-A partial checkpoint must be called **partial** and name what is still unproven. Do not promote model-only
-or QML-only work into caller-proof/closure language.
-
-## Family-authored
-
-A value/relationship is family-authored only when independently owned by family. Clock analogue qualifies;
-retired `shadowtuning.json` card/text/icon/control/volume profiles do not.
+A closed phase must not remain described as `ACTIVE`, `candidate`, `awaiting audit` or future work in a live authority
+document. A partial checkpoint must name exactly what remains unproven.
 
 ## Import dormancy wording
 
-Capability dormancy includes import boundaries. Current docs must not teach common registries/packages to
-eagerly import inactive family provider/runtime/backend implementation trees. Cheap catalog/static
-presentation metadata is allowed; heavy family implementation resolves at real activation/caller boundary.
+Capability dormancy includes import boundaries. Current docs must not teach common registries/packages to eagerly import
+inactive family provider/runtime/backend implementation trees. Cheap catalog/static presentation metadata is allowed;
+heavy family implementation resolves at real activation/caller boundary.
 
 ## Major owner-change sweep
 
-Inspect at least `Current_Plan.md`, `Spec.md`, `Index.md`, `Docs/Contracts.md`, `Future_Cleanup.md`, relevant
-focused QtQuick docs, `Docs/10_WIDGET_GUIDELINES.md` when ordinary-family patterns changed, feature plans
-naming concrete owners, and `Docs/TestSuite.md` when test ownership/inventory materially changed.
+Inspect at least `Current_Plan.md`, `Spec.md`, `Index.md`, `Docs/Contracts.md`, `Future_Cleanup.md`, relevant focused
+QtQuick docs, `Docs/10_WIDGET_GUIDELINES.md` when ordinary-family patterns changed, feature plans naming concrete owners,
+and `Docs/TestSuite.md` when test ownership/inventory materially changed.
 
 Historical bodies need not be modernized if clearly evidence-scoped.
 
 ## Test docs
 
-`Docs/TestSuite.md` is inventory/status authority, not sequence authority. Update it when adding/deleting/
-renaming a test module, changing asserted owner/retirement classification, or discovering stale/vacuous tests.
-Do not churn whole inventory just to refresh a phase label when ownership did not change.
+`Docs/TestSuite.md` is inventory/status authority, not sequence authority. Keep current gates and test-file ownership
+truthful; do not turn its introduction into a phase diary.
 
 ## Closure check
 
@@ -94,8 +99,8 @@ Before docs are reconciled:
 - current routing identifies current work unambiguously;
 - no current-authority doc teaches a retired owner as destination;
 - no closed phase is described as future work;
+- no intended requirement has been erased merely because source missed it;
 - Current Plan is not bloated with completed implementation narrative;
-- audit evidence is available without becoming sequence authority;
 - deletion timing matches current owner policy;
 - test inventory remains truthful;
-- historical evidence is available but fenced from execution authority.
+- historical evidence remains available but fenced from execution authority.

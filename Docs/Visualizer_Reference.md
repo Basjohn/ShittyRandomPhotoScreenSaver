@@ -1,6 +1,6 @@
 # Visualizer Reference
 
-Last updated: 2026-08-22
+Last updated: 2026-08-28
 
 Current visualizer behavior and accepted presentation destination.
 
@@ -58,10 +58,8 @@ source / engine
     -> one standalone QQuickWindow per physical display
 ```
 
-During migration, old GUI `present_tick`/compositor code may still exist as reference/current
-production.
-
-It is not destination architecture.
+During migration, old GUI `present_tick`/compositor code may still exist as source scaffolding or historical reference.
+It is not destination architecture and need not remain runnable merely to preserve intermediate product continuity.
 
 ## 4. Presentation ownership
 
@@ -224,8 +222,8 @@ layout, not a universal invariant. Distinguish three concepts:
 - **resolved runtime size** — for normal non-CUSTOM layout the layout owner resolves an appropriate
   width from widget/media/free-space rules and derives height from the 1.5 baseline aspect (screen-fit
   clamps uniformly); mode presets tune authored visual behaviour, never viewport/card dimensions;
-- **explicit viewport extent** — the logical/render world, which the Phase-G edge operation may
-  intentionally push off 1.5 (modes reflow, never anisotropic final-pixel stretch).
+- **explicit viewport extent** — the logical/render world, which required CUSTOM edge operations intentionally push off
+  1.5 (all modes reflow, never anisotropic final-pixel stretch).
 
 The literal `420x280` (`CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE`) arose from layout history and is
 **not** a required/sacred visible or runtime size. It is retained only as an internal reference
@@ -253,7 +251,7 @@ scroll-wheel resize -> uniform scale
 corner-handle resize -> uniform scale
 ```
 
-Later Phase-G edge operations intentionally change viewport playroom at the same scale:
+Required retained CUSTOM edge operations change viewport playroom at the same scale:
 
 ```text
 left/right edge -> viewport width only
@@ -263,14 +261,13 @@ top/bottom edge -> viewport height only
 Expected adaptation at constant scale:
 
 - Spectrum reflows/redistributes bars across available width/height;
-- Bubble changes domain/aspect without stretching circles/velocities;
+- Bubble changes domain/aspect without stretching circles or changing velocity/radius semantics;
 - Oscilloscope/Sine/DevCurve adapt domain while keeping stroke scale;
-- a 3D sphere uses aspect-correct projection and stays round.
+- a future 3D sphere uses aspect-correct projection and stays round.
 
-Phase D builds/tests the geometry seam. Phase G owns the interactive edge-resize QoL.
-
-If a mode cannot safely support viewport resizing without harming authored behavior, ordinary whole-size
-scale remains valid and that mode may be marked viewport-resize-incapable.
+All five current modes must support this operation. The current Bubble false capability gate is incomplete migration
+state, not destination product intent. The geometry seam was proven earlier; G must expose and persist the actual edge
+affordance for every mode.
 
 ## 12. Bubble / BTF
 
@@ -302,7 +299,7 @@ Control UI may remain QWidget if appropriate.
 Live runtime pixels belong to the Quick scene after migration; edit plumbing must not recreate a
 second accelerated presentation surface.
 
-Phase-G preferred visualizer resize semantics:
+Required visualizer resize semantics:
 
 ```text
 scroll wheel   -> uniform visual scale
@@ -311,7 +308,8 @@ left/right     -> viewport width
 top/bottom     -> viewport height
 ```
 
-Viewport resizing is non-blocking QoL, not permission to stretch a rendered image.
+Viewport resizing is part of the destination CUSTOM contract, not optional QoL and not permission to stretch a
+rendered image. Save/Cancel and layout slots preserve scale and extent separately.
 
 ## 15. Validation
 

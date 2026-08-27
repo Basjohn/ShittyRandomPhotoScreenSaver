@@ -1,174 +1,102 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-08-22
+Last updated: 2026-08-28
 
-Use for visualizer settings, presets, logical analysis, activation, rendering, card geometry,
-fade/readiness, playback or CUSTOM work.
+Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavior or presentation.
 
-Read:
+## 1. Read first
 
-- `Current_Plan.md`
-- `Docs/QtQuick_Migration/03_Visualizer.md` during migration
+- `Docs/QtQuick_Migration/03_Visualizer.md`
 - `Docs/Guardrails/Visualizer_Presentation.md`
-- `Docs/Guardrails/Bubble_Temporal_Fidelity.md` for Bubble
+- `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
+- `Docs/Visualizer_Reference.md`
+- `Current_Plan.md`
 
-## 1. Logical runtime
+If source contradicts these durable destination contracts, determine whether source is missing implementation before
+weakening the contract.
 
-`VisualizerLogicalRuntime` remains current/destination authored cadence owner.
+## 2. One authored clock
 
-Exactly one runtime per enabled generation.
+`VisualizerLogicalRuntime` remains sole mode-general authored cadence. No QML/render-thread/per-mode replacement clock,
+paint acknowledgement, catch-up queue or display-rate divisor.
 
-No GUI/Quick/render clock advances simulation.
+## 3. One presentation surface
 
-## 2. Worker ownership
+Visualizer content stays inside the owning display's single retained `QQuickWindow`/scene. No separate native overlay,
+`QQuickWidget`, second accelerated surface or old-presenter fallback.
 
-Logical code does not mutate QWidget, Quick items, GPU resources, or presentation geometry.
+## 4. Immutable/latest render boundary
 
-## 3. Quick migration presentation seam
+Render-thread state is detached, generation/activation fenced and latest-state oriented. Do not pass live
+`SpotifyVisualizerWidget`, provider, SettingsManager or mutable heavy arrays to the render thread.
 
-```text
-logical/source
--> immutable latest snapshot
--> Quick visualizer item synchronization
--> render-thread QSGRenderNode
--> QQuickWindow
-```
+## 5. Shell / clip
 
-Do not let the render node read live `SpotifyVisualizerWidget`/QObject mutable state.
+Current modes are CARD + CARD_INTERIOR. Custom GL stays above card fill, below border and inside the rounded inner path.
+Use the selected render-node-local SDF/stencil host; do not revive the failed QSGClipNode handoff or shrink authored
+content geometry to hide bleed.
 
-## 4. Modes and presentation policy
+## 6. Geometry authority
 
-Preserve all five current mode personalities:
-
-- Spectrum;
-- Oscilloscope;
-- Sine;
-- Bubble;
-- DevCurve.
-
-All five remain `CARD + CARD_INTERIOR`.
-
-Future explicitly authored modes may use `FRAMELESS + VIEWPORT_RECT` without a second window or
-renderer architecture.
-
-## 5. Retired legacy card-height controls
-
-Do **not** port these into Quick geometry, snapshots, presets or mode descriptors:
-
-```text
-spectrum_growth
-osc_growth
-sine_wave_growth
-bubble_growth
-devcurve_growth
-```
-
-They are pre-Quick presentation customization, not authored mode behavior.
-
-The Quick baseline uses one canonical viewport aspect for every current mode. Mode/preset changes do
-not resize that baseline viewport.
-
-## 6. Source/readiness
-
-Separate:
-
-```text
-presentation_ready
-reactive_source_ready
-```
-
-Paused Spectrum idle remains perceptibly visible without fabricated source identity.
-
-## 7. Card / clipping
-
-For carded modes, custom GL remains above card fill, below frame/border, and inside the rounded inner
-card path.
-
-Clip ownership is one render-node-local SDF/stencil host inside the same `QSGRenderNode`; the failed
-`QSGClipNode` handoff is not selectable and not a fallback. The host composes with valid inherited
-scissor/stencil state and restores it. Do not shrink authored content to hide bleed and do not copy old
-centred-QPainter mask constants into Quick.
-
-## 8. Geometry
-
-One authority feeds Quick item, shell/card, clip, GL viewport/resolution, DPR and CUSTOM.
+One presentation-neutral geometry record feeds retained shell, clip, render node, DPR and CUSTOM.
 
 Keep distinct:
 
 ```text
-canonical baseline viewport/aspect
-uniform visual scale
-viewport extent
+baseline aspect / reference extent
+uniform_visual_scale
+viewport_extent
 ```
 
-Whole-size operations:
+The 420x280 value is a reference coordinate extent, not a required visible size. Default/baseline aspect is 1.5.
+
+## 7. Required CUSTOM resize semantics
 
 ```text
-scroll wheel -> uniform scale, baseline aspect preserved
-corner drag  -> uniform scale, baseline aspect preserved
+scroll wheel   -> uniform scale; extent unchanged
+corner handles -> uniform scale; extent unchanged
+left/right     -> viewport width; scale unchanged
+top/bottom     -> viewport height; scale unchanged
 ```
 
-Future Phase-G viewport operations:
+Viewport expansion changes available world/layout and current aspect; it never stretches final pixels independently on
+X/Y.
 
-```text
-left/right edge -> viewport width only
-top/bottom edge -> viewport height only
-```
+**All five current modes must support viewport resizing, including Bubble.** A current false capability gate is
+migration debt, not a permitted destination exception.
 
-Viewport expansion changes available world/layout, never final-pixel X/Y stretching.
+Expected adaptation:
 
-## 9. Cadence
+- Spectrum redistributes/reflows bars;
+- Oscilloscope/Sine/DevCurve adapt domains while stroke scale stays coherent;
+- Bubble changes spatial bounds while circles stay circles and velocity/radius/collision/BTF semantics remain coherent.
 
-No pending-until-paint, paint acknowledgement, producer/display divisor, render self-loop, second
-logical clock, or second accelerated surface.
+Persist and restore uniform scale and viewport extent separately through Save/Cancel, geometry variants and layout slots.
 
-Presentation pacer may request Quick frames while custom GL content is dynamic.
+## 8. Bubble
 
-## 10. Playback
+BTF is binding. Geometry changes are configuration, never another clock. Do not retune Bubble simulation to hide
+presentation or resize defects. Preserve continuous positional evolution, collisions, trails, ghosts/pop/transients,
+protected renderer-visible consequences and source freshness.
 
-Pause/Play preserves logical runtime and warm source semantics.
+## 9. Fade / readiness
 
-Do not make QML state a second playback authority.
+One authored fade progress may derive scene/content layer values; it must not create a second fade clock. Keep
+`presentation_ready` distinct from `reactive_source_ready`; paused Spectrum may reveal idle presentation without a fake
+source identity.
 
-## 11. Bubble
+## 10. Playback / lifecycle
 
-BTF remains binding.
+Pause/Play preserves runtime identity and warm-source semantics. Generation zero is valid. Stale snapshots are rejected.
+GPU resources retire on the legal render owner.
 
-Viewport-bound changes enter as geometry/configuration and may not become another clock.
-
-No algorithm retune to compensate for presentation defects.
-
-## 12. Lifecycle
-
-- generation zero valid;
-- logical runtime joins;
-- stale snapshots rejected;
-- render resources destroyed on render owner;
-- hidden state does not erase destruction authority.
-
-## 13. CUSTOM
-
-Use real Quick presentation geometry/session.
-
-No permanent QWidget snapshot shell.
-
-If viewport-edge resizing lands, persist uniform scale and viewport extent separately and preserve
-corner/scroll whole-size behavior.
-
-## 14. Installed gates
+## 11. Required proof for geometry changes
 
 - all five modes;
-- shared canonical baseline aspect;
-- baseline aspect preserved by uniform scale;
-- wide/tall compatibility without anisotropic stretching;
-- carded rounded clipping;
-- frameless-policy scene proof;
-- Bubble eyes-on/BTF;
-- Pause/Play;
-- Spectrum idle;
-- Settings/recreate;
-- CUSTOM Save/Cancel;
-- mixed refresh;
-- clean shutdown.
-
-Commit and push each landed visualizer slice.
+- baseline + wide + tall extents;
+- no anisotropic final-pixel stretch;
+- separate scale/extent round-trip;
+- retained item/model/render identity where required;
+- CUSTOM Save/Cancel and layout-slot replay;
+- cross-display/DPR projection;
+- Bubble deterministic/BTF + eyes-on evidence when spatial behavior changes.

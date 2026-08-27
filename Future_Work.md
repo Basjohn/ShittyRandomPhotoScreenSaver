@@ -347,9 +347,9 @@ It should appear as a free-standing 3D object with no rectangular card fill, fra
 shadow. It still renders inside the normal visualizer Quick item/QSGRenderNode, participates in the
 same fade/lifecycle/generation ownership, and stays inside its assigned transparent viewport.
 
-If Phase-G visualizer viewport resizing lands, the sphere must use aspect-correct projection so wider
-or taller viewports reveal/reframe more space without turning the sphere into an ellipse. Whole-size
-corner/scroll resize still scales it uniformly; only edge-only viewport resize changes framing/aspect.
+Visualizer viewport resizing is a current destination requirement. Any future sphere must therefore use aspect-correct
+projection so wider/taller viewports reveal or reframe more space without turning the sphere into an ellipse. Whole-size
+corner/scroll resize scales it uniformly; edge viewport resize changes framing/aspect.
 
 Cheap shape:
 

@@ -1,7 +1,7 @@
 # 03 — Visualizer Qt Quick Migration
 
-Status: **Phase-D landed architecture / visualizer migration reference**  
-Last updated: 2026-08-22
+Status: **Phase-D architecture landed; G4 viewport-resize correction currently required**  
+Last updated: 2026-08-28
 
 Cross-links:
 
@@ -14,10 +14,9 @@ Cross-links:
 - historical painted-card bleed: `Docs/Historical_Bugs/R-21_Visualizer_Painted_Card_GL_Boundary.md`
 - deferred deletion: `Future_Cleanup.md`
 
-Phase D is **complete**. D1–D9 and the Phase-D documentation closure landed. This file keeps the
-technical rationale and integration contract for later Phase-G/H work; it does not admit another
-visualizer migration pass. Reopen the landed boundary only when concrete contradictory evidence exposes
-a specific defect.
+Phase D is **complete**. D1–D9 and its render/logical architecture remain closed. This file is also the durable
+geometry contract consumed by G. The current G4 correction does not reopen Phase-D architecture: it completes the
+missing retained CUSTOM edge affordance against the already-proven wide/tall geometry seam.
 
 Remaining installed Bubble cadence, eyes-on parity and mixed-refresh checks are operator-scheduled
 acceptance debt. They are not permission to fabricate a pass and are not by themselves unfinished
@@ -341,8 +340,8 @@ devcurve_growth
 are not authored mode behavior and are not part of the Quick controller, immutable render state, mode
 presentation descriptor, retained shell geometry or new preset authoring.
 
-They may remain temporarily while the old presenter/settings surface still has callers. H0 establishes
-the final Quick settings epoch and later deletion removes caller-proven legacy authority.
+Any remaining legacy presentation-setting callers are migration scaffolding only. Caller-dead growth controls may be
+removed before H; do not preserve them merely to keep the half-migrated old presenter runnable.
 
 ### 8.3 Uniform whole-size scale
 
@@ -357,22 +356,20 @@ This is not an X/Y stretch.
 
 ### 8.4 Viewport extent
 
-`viewport_extent` is separate from whole-size scale. The later Phase-G edge-only operation may change
-one axis while keeping visual scale constant:
+`viewport_extent` is separate from whole-size scale. The required retained CUSTOM edge operation changes one axis
+while keeping visual scale constant:
 
 ```text
 left/right edge -> viewport width only
 top/bottom edge -> viewport height only
 ```
 
-That intentionally changes available world/layout playroom and may produce a wide/tall aspect other
-than 1.5. Modes reflow/adapt; final rendered pixels are not anisotropically stretched.
+That intentionally changes available world/layout playroom and may produce a wide/tall aspect other than 1.5. Modes
+reflow/adapt; final rendered pixels are not anisotropically stretched.
 
-A mode may remain `viewport_resize_capable = false` when free extent would threaten authored fidelity.
-That does not remove ordinary uniform whole-size scaling or collapse the geometry authority.
-
-Bubble is allowed to remain conservatively capability-gated until focused Phase-G evidence earns
-free viewport resizing.
+All five current production modes must be viewport-resize-capable, including Bubble. A current false Bubble capability
+flag is unfinished G4 migration state. Focused G proof must remove that gate while preserving Bubble spatial/BTF
+semantics; it is not a durable exception.
 
 ### 8.5 Spatial logical modes
 
@@ -440,7 +437,8 @@ Expected semantics at constant visual scale remain:
 - camera/projection uses current viewport aspect;
 - round geometry remains round.
 
-These compatibility probes did not make freeform edge resizing a Phase-D shipping requirement.
+These compatibility probes established that wide/tall rendering is viable. Interactive edge resizing is a G CUSTOM
+requirement and must now expose that geometry seam for every current mode.
 
 ## 11. Mode contracts
 
@@ -523,14 +521,13 @@ Shell policy does not become playback authority.
 
 ## 13. CUSTOM participation
 
-The visualizer participates in the later Quick edit scene through the same committed geometry
-authority.
+The visualizer participates in the retained Quick edit scene through the same committed geometry authority.
 
-Phase G owns edit handles/session behavior. It must use the real retained Quick presentation rather
-than a permanent QWidget screenshot shell.
+CUSTOM edit handles/session behavior use the real retained Quick presentation, never a permanent QWidget screenshot
+shell.
 
-Persist/restore whole-size scale and viewport extent as separate values if edge-resize QoL is admitted.
-A mode that is not viewport-resize-capable still supports ordinary uniform scale.
+Persist/restore whole-size scale and viewport extent as separate values. Edge resize is required for all five current
+modes; no current production mode is a destination opt-out.
 
 ## 14. Lifecycle
 

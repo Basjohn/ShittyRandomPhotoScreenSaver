@@ -1,158 +1,163 @@
 # 05 — CUSTOM Layout, Input, Interaction and Auxiliary Runtime Pixels
 
-Status: **Phase-G destination contract; some geometry semantics already proven during F**  
-Last updated: 2026-08-27
+Status: **G1–G6 closed; G4 viewport-resize correction required; G7 near closure; G8 pending**  
+Last updated: 2026-08-28
 
 `Current_Plan.md` owns work admission.
 
-## Preserve neutral CUSTOM data
+## Neutral CUSTOM authority
 
-Preserve/rehome screen signatures/aliases, normalize/denormalize, clamp/snap/gutters/grid, display ownership,
-restore maps, Save/Cancel, slot persistence and family-specific size payload semantics. Move presentation/
-session ownership away from QWidget edit shells.
+`CustomLayoutSession` is presentation-neutral. Working state retains exact item/model identity, source/current display,
+geometry variant, baseline/current global rect, baseline/current family size payload, resize state and working removed/
+ordinary-enabled state. Session semantics do not depend on QWidget.
 
-## `CustomLayoutSession`
-
-Working state per edited item includes widget/model identity, source/current display, geometry variant,
-baseline/current global rect, baseline/current size payload, resize scale and working removed/enabled state.
-Session does not require QWidget. Editing one variant does not silently mutate another.
+Preserve screen signatures/aliases, normalize/denormalize, clamp/snap/gutters/grid, display ownership, restore maps,
+Save/Cancel, layout slots and family-specific size payload semantics.
 
 ## Geometry variants
-
-Conceptually:
 
 ```text
 read committed geometry(widget_id, display_identity, variant)
 write committed geometry(widget_id, display_identity, variant, rect, size_payload)
 ```
 
-Missing target variant may initialize via documented default. Committed variant restores exactly subject to
-deterministic current-screen clamp. Never repeatedly derive one saved variant from another.
+The variant-aware CUSTOM map is version 2. Version-1 single-entry geometry is invalidated; do not add compatibility
+replay or reconstruct one mode from another.
 
-The variant-aware CUSTOM map is version 2. Version-1 single-entry geometry is invalidated; do not add replay,
-conversion aliases or mode-to-mode reconstruction as a compatibility path.
+Clock digital/analogue: first missing target may initialize once from current center intent + target natural size +
+clamp. Once committed, A->B->A restores exact independent rects without drift. Cross-display sets remain independent.
 
-### Clock digital / analogue
+## Edit real retained presentation
 
-First missing target: keep current center intent -> obtain target natural size -> center -> clamp once ->
-establish target baseline. Once both exist, A->B->A restores exact committed rects without drift. Moving/
-resizing one changes that variant only; cross-display sets independent.
+The live retained item remains the presentation. One shared Quick edit overlay/handles layer sits above it and session
+geometry temporarily overrides placement. Provider/model state may keep publishing. No screenshot shell, duplicate
+visual owner or second accelerated edit window.
 
-## Edit the real Quick presentation
+## Edit-mode X
 
-Live retained item stays visible; one shared Quick edit overlay/handles layer sits above it; session geometry
-temporarily overrides placement; model/provider may keep publishing; persistence unchanged until Save.
-No screenshot shell, duplicate visual owner or second accelerated edit window.
-
-## Edit-mode X — REQUIRED
-
-Every adjustable edit-mode card gets X. Clicking changes **working session only**:
+Every adjustable edit card gets X. It changes **working session only**:
 
 - duplicate -> remove that duplicate from working layout;
-- singleton -> working ordinary enabled OFF, exactly as normal Settings checkbox;
+- singleton -> ordinary widget OFF, exactly as its normal Settings checkbox;
 - never family/capability deactivation;
 - no immediate settings persistence;
-- no committed provider/runtime destruction merely because preview disappeared.
+- no committed provider/runtime destruction merely because preview disappears.
 
-Singleton closed then cancelled reappears exactly as before.
+Cancel restores it exactly.
 
 ## Save / Cancel
 
-Context-menu Save or Enter commits active geometry variant, final display, duplicate removals, ordinary
-enabled changes from X, and canonical monitor/position settings where product semantics require.
+Save/Enter commits active geometry variant, final display, family size payload, duplicate removals, ordinary enabled
+changes and canonical monitor/position settings where product semantics require.
 
-Cancel restores active variant, duplicate set, ordinary enabled state and visualizer scale+viewport together
-where applicable. Do not mutate inactive variants or replay destructive setters for never-committed state.
+Cancel restores active variant, duplicate set, ordinary enabled state and all family size payload dimensions. Do not
+mutate inactive variants or replay destructive setters for never-committed state.
 
 ## Layout slots
 
-`Shift+1` through `Shift+0` save slots; `1` through `0` load them. A slot is a source-free snapshot of the ordinary
-visible layout, including committed geometry/size and ordinary ON/OFF state. Loading saved ordinary ON turns an
-ordinarily-OFF widget ON only while its owning capability family and dependencies remain effective; loading saved
-ordinary OFF turns an ordinarily-ON widget OFF.
+`Shift+1` through `Shift+0` save slots; `1` through `0` load them. A slot is a source-free ordinary visible-layout
+snapshot including committed geometry/size and ordinary ON/OFF state.
 
-Ordinary `enabled` is never authority to activate a fully deactivated family/capability. Slot replay leaves
-family-activation, provider, account and source settings untouched. This is the same distinction used by edit-mode X:
-singleton X changes working ordinary enabled state, never capability activation.
+Loading saved ordinary ON turns an ordinarily-OFF widget ON only while its capability family/dependencies remain
+effective. Loading saved ordinary OFF turns an ordinarily-ON widget OFF. Slot replay never activates a deactivated
+family/capability and never overwrites provider/account/source configuration.
 
-## Resize
+## Resize — two distinct visualizer operations
 
-Quick handles emit deltas; Python session/geometry math owns min size, aspect constraints, anchors, family
-size payload, active variant and display/DPR projection. No QML-only persisted geometry.
+Ordinary family resize and visualizer whole-size resize remain Python/session-owned. QML handles emit semantic deltas;
+Python owns minimums, anchors, family payloads, active variant, display/DPR projection and persistence.
 
-Corner handles and wheel resize are shared retained Quick material. Family size payloads project onto the same
-retained presentation models during preview; Cancel restores their baseline payload without item/model recreation.
+### Uniform whole-size resize — LANDED G4
 
-Visualizer keeps `uniform_visual_scale` separate from `content_viewport_size`; never anisotropically stretch
-finished pixels.
+```text
+wheel
+corner handles
+    -> uniform_visual_scale / family uniform size semantics
+```
 
-## Cross-monitor transfer
+Visualizer final pixels remain uniformly scaled and the committed viewport extent is unchanged.
 
-One live pixel owner: resolve target -> detach/retire source presentation -> target creates/adopts -> logical
-runtime/model survives unless product semantics require otherwise -> target-local variant rect -> update
-session display. No simultaneous source/target copies. Do not overwrite all target variants silently.
+### Visualizer viewport-extent resize — REQUIRED G4 CORRECTION
 
-The retained move request includes both the proposed global rect and actual pointer position. Python routes those
-through the canonical screen-choice threshold, clamp, snap-guide and monitor-route owner; QML does not choose a
-screen or commit geometry. Shared session publication flips ordinary retained display-local visibility without
-recreating those items.
+The destination contract also requires retained **edge** handles:
 
-Visualizer transfer preserves the same snapshot bridge and render identity, explicitly retires the source
-window's render item/presentation root, creates the target-window item, and reprojects presentation DPR from the
-target window. The shared Quick CUSTOM scene coordinator performs the same handoff when Cancel restores the source
-display. A missing or already-occupied target is rejected before handoff and restores the prior working display,
-monitor route and rect rather than leaving a partial transfer.
+```text
+left/right edge -> viewport extent width only
+top/bottom edge -> viewport extent height only
+```
+
+This changes world/layout playroom and current aspect while keeping `uniform_visual_scale` constant. It is not X/Y
+stretch of a rendered image.
+
+All five current modes must support it: Spectrum, Oscilloscope, Sine, Bubble and DevCurve. A temporary source
+`viewport_resize_capable=False` for Bubble is unfinished migration gating, not accepted destination behavior.
+
+Bubble must receive committed viewport bounds as spatial configuration, preserving circles/radii/velocity units,
+trajectories/collisions, trails/transients and BTF. Pointer/render cadence may not become simulation cadence.
+
+Save/Cancel, committed CUSTOM geometry and layout slots must round-trip `uniform_visual_scale` and viewport extent as
+separate values. Corner/wheel operations may not silently rewrite extent; edge operations may not silently rewrite
+scale. Implementation sequencing and legal seams are decomposed in
+`Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md`.
+
+## Cross-monitor transfer — CLOSED G5
+
+One live pixel owner: resolve target -> detach source presentation -> target adopts/reprojects -> logical runtime/model
+survives -> target-local active-variant rect -> session display update. No simultaneous source/target copies and no
+silent overwrite of unrelated target variants.
+
+Retained move requests include proposed global rect and actual pointer position. Python owns screen-choice threshold,
+clamp, snap guides and monitor route. Visualizer transfer preserves snapshot bridge/logical render identity while the
+source window render item retires and target-window item is created with target DPR.
+
+## Input / semantic actions — CLOSED G6
+
+Generation-scoped `QuickInputState` is projected through the matching scene and retained ordinary-widget host. Scene
+rejects mismatched screen/generation state and closed admission. Interactive family QML emits semantic requests only;
+Python owns mode/provider/settings/actions and accepted runtime state remains authoritative.
+
+Clock mode, Media transport/seek/volume/mute, Weather, Reddit, Gmail and Steam-family actions route through existing
+Python owners. Unsupported capabilities remain inert. A retained double-click suppresses global next-image fallback
+only while its own action is admitted.
+
+## G7 retained context / auxiliary state
+
+Landed destination presentation:
+
+- dimming is one retained same-scene overlay;
+- pixel shift is one retained shared scene transform/cadence owner;
+- cursor halo is retained same-scene presentation driven by generation-scoped input state and inactivity;
+- context menu is a retained Quick model/QML surface with Python semantic command authority.
+
+No auxiliary feature gets a second translucent top-level accelerated window. A QWidget context menu is no longer a
+destination option; any remaining old context/halo/pixel-shift QWidget owner is caller-proof migration debris.
+
+G7 closure is exact caller audit + retirement of superseded legacy auxiliary pixels/helpers + focused same-window,
+generation and focus proof. Do not keep dual implementations for temporary product continuity. Follow
+`Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` for the caller classification and focus/input closure sequence.
 
 ## Edit overlay pixels
 
-One shared retained Quick overlay layer per display: grid, snap guides, selection outline, handles, widget
-label/control chrome including X.
+One shared retained Quick overlay layer per display owns grid, snap guides, selection outline, handles and widget
+label/control chrome including X. Centering guides are red so display/peer-centre alignment is distinct from ordinary
+grid/edge guides.
 
-Centering guides use red so display/peer-centre alignment remains visually distinct from ordinary grid and edge
-guides.
+## G8 MC / focus gates
 
-## Input / actions
+Stress two displays focus A->B->A, Ctrl/interaction, retained context menu, Clock switching, Media controls/seek/volume,
+Gmail/Reddit interactions, halo/shadows, activation toggles, Settings/CUSTOM transition, cross-monitor transfer,
+visualizer uniform+viewport resize and edit-mode X Save/Cancel. Do not reintroduce focus-driven shadow corruption.
 
-Quick may own hit regions/pointer handlers and emit semantic actions. Python owns mode changes, provider
-actions, persistence, CUSTOM session commands and context/global shortcuts. Enter=Save, Esc=Cancel. Clock
-double-click mode toggle is semantic; QML writes neither Settings nor committed geometry.
-
-G6 is closed. `QuickInputState` is projected from each generation-scoped input controller through its matching
-scene and retained ordinary-widget host. The scene rejects mismatched screen/generation state and closed
-admission; the host stores the latest accepted state so newly created retained family presenters receive the
-same admission facts without item recreation. Interactive family models derive only bounded pointer admission
-from those facts.
-
-Retained QML hit regions emit semantic requests only. Clock mode changes, Media transport/seek/app-volume/
-system-mute, Weather refresh/settings, Reddit URL/refresh, Gmail message/auth/actions and both Steam-family
-refresh/settings paths terminate in Python presentation admission and the existing neutral runtime/settings/
-provider owners. Unsupported capabilities remain inert, accepted runtime/provider state remains authoritative,
-and every retained double-click hit region explicitly suppresses the global next-image fallback only while its
-own action is admitted.
-
-## Context menu / auxiliary pixels
-
-A QWidget context menu may remain temporarily if decoupled from `DisplayWidget` and not a second runtime
-presenter/lifecycle owner. If popup focus blocks, migrate once; no permanent dual menu implementations.
-
-Halo/dimming/pixel shift are retained pixels/transforms in same Quick scene, not extra translucent top-level
-windows.
-
-## MC / focus gates
-
-Stress two displays focus A->B->A, Ctrl interaction, context menu, Clock switching, media controls/seek/
-volume, Gmail/Reddit interactions, halo/shadows, activation toggles, Settings/CUSTOM transition, cross-monitor
-transfer and edit-mode X Save/Cancel. Do not reintroduce focus-driven shadow corruption.
-
-## Suggested G boundaries
+## Phase summary
 
 ```text
-G1 session + multi-variant/working-state contract
-G2 Quick edit overlays + ordinary geometry + X
-G3 Save/Cancel + exact variant/enabled/duplicate persistence
-G4 resize semantics
-G5 cross-monitor transfer
-G6 runtime-neutral input/action routing
-G7 context/halo/dimming/pixel-shift
-G8 MC/focus closure
+G1 session + multi-variant/working-state contract                   CLOSED
+G2 Quick edit overlays + ordinary geometry + X                    CLOSED
+G3 Save/Cancel + exact variant/enabled/duplicate persistence      CLOSED
+G4 uniform resize                                                 CLOSED
+G4 correction: visualizer independent viewport extent            REQUIRED FIRST
+G5 cross-monitor transfer                                         CLOSED
+G6 runtime-neutral input/action routing                           CLOSED
+G7 context/halo/dimming/pixel-shift                               NEAR CLOSURE
+G8 MC/focus closure                                               PENDING
 ```

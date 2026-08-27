@@ -1,6 +1,6 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-08-27
+Last updated: 2026-08-28
 
 ## Start here
 
@@ -11,7 +11,8 @@ exact current source
 -> tests/evidence for the claim
 ```
 
-Current migration: **Phase F closed; Phase G CUSTOM/input ACTIVE at G1 ownership audit.**
+Current migration: **Phase F closed; Phase G is at the tail of G7, with a required G4 visualizer viewport-resize
+correction promoted ahead of G7/G8 closure.**
 
 ## Current authority
 
@@ -19,49 +20,59 @@ Current migration: **Phase F closed; Phase G CUSTOM/input ACTIVE at G1 ownership
 | --- | --- |
 | current work / sequence | `Current_Plan.md` |
 | durable product/architecture | `Spec.md` |
-| physical presenter architecture | `Docs/Compositor_Architecture.md` |
-| current owner map | `Docs/Contracts.md` |
+| fast current owner map | `Docs/Contracts.md` |
+| physical scene/presenter architecture | `Docs/Compositor_Architecture.md` |
+| CUSTOM/edit/input/auxiliary | `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md` |
+| runtime host/lifecycle/H | `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md` |
+| visualizer migration architecture | `Docs/QtQuick_Migration/03_Visualizer.md` |
+| visualizer presentation invariant | `Docs/Guardrails/Visualizer_Presentation.md` |
+| Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
+| visualizer authored/reference behavior | `Docs/Visualizer_Reference.md` |
 | ordinary widget authoring | `Docs/10_WIDGET_GUIDELINES.md` |
 | safety | `Docs/Guardrails.md` |
 | test inventory/retirement | `Docs/TestSuite.md` |
 | deferred deletion/debt | `Future_Cleanup.md` |
 | deferred features | `Future_Work.md` |
+| current handoff/orientation | `Docs/QtQuick_Migration/Reorientation_2026-08-28.md` |
+| G4 viewport-resize implementation route | `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` |
+| G7/G8 auxiliary/focus implementation route | `Docs/QtQuick_Migration/Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` |
+| H production cutover implementation route | `Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md` |
 
-## Phase-F routing
+## Closed ordinary-family migration
 
-- family sequence: `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md`
-- retained shell/style: `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`
-- model/state/action/image bridge: `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
-- runtime ownership/cardinality/threading: `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md`
-- capability/dormancy: `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
-- runtime style/shadows: `Docs/Custom_Style_Implementation.md`
-- Clock analogue: `Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md`
-- latest integrated audit: `Docs/audits/QtQuick_Phase_F_F2_F6_Independent_Audit_2026-08-26.md`
+Phase F F1–F8 is closed. The decomposition remains a reference, not current work admission:
+`Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md`.
 
-## G / H
+Steam Journey/Progress and Friend Pulse remain future-product scaffolds; Achievement Pulse and Abandonment Issues are
+the two substantive migrated Steam families.
 
-- CUSTOM/edit/input: `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`
-- runtime host/lifecycle/cutover: `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md`
-- physical scene/render: `Docs/Compositor_Architecture.md`
+## G / H / I / J
+
+G1–G6 are closed; G7 retained dimming/pixel shift, halo and context menu have landed. Before G7/G8 closure, complete
+the missed visualizer independent viewport-extent resize contract for **all five modes including Bubble**.
+
+H is final production owner/orchestration wiring plus remaining old physical-host deletion. It does not require the
+legacy half-migrated app to remain functional. I is residue. J is final installed/physical acceptance.
 
 ## Transitions
 
-Quick transition architecture is landed. Read `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`
-and `Docs/Transition_Change_Checklist.md`. Old compositor transition pixels are migration debris after
-caller proof, not new-work visual authority.
+Quick transition architecture is landed. Read `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md` and
+`Docs/Transition_Change_Checklist.md`. Old compositor transition pixels are migration debris after caller proof, not
+new-work visual authority.
 
 ## Visualizer
 
-Read `Docs/QtQuick_Migration/03_Visualizer.md`, `Docs/Guardrails/Visualizer_Presentation.md`,
-`Docs/Guardrails/Bubble_Temporal_Fidelity.md`, and `Docs/Visualizer_Reference.md`.
+For any geometry/CUSTOM change read all four current contracts together:
 
-## Steam
+- `Docs/QtQuick_Migration/03_Visualizer.md`
+- `Docs/Guardrails/Visualizer_Presentation.md`
+- `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
+- `Docs/Visualizer_Reference.md`
 
-Achievement Pulse and Abandonment Issues are substantive F7/F8 ports. Steam Journey/Progress and Friend
-Pulse are unfinished dev-gated future-product scaffolds, not migration ports.
+Do not infer destination behavior from a temporary `viewport_resize_capable=False` source gate.
 
 ## Historical evidence
 
 Closed rationale and old owner maps belong under `Docs/Historical_Plans/`, `Docs/Historical_Bugs/`,
-`Docs/phase_reports/`, `Docs/Performance_Evidence/`, or `Docs/audits/`. Historical wording does not define
-current work admission or ownership.
+`Docs/phase_reports/`, `Docs/Performance_Evidence/`, or `Docs/audits/`. Historical wording does not define current work
+admission or ownership and is not rewritten merely to sound current.

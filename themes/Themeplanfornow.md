@@ -69,25 +69,28 @@ to compiled Default Dark rather than an unstyled window.
 - Source/dev builds discover file themes through the temporary explicit /
   build-stub / repository-local path seam before first Settings QWidget paint.
 - Theme schema **v4** owns the current semantic Settings visual vocabulary.
-- Full-role Obnoxious Windows testing has exercised bucket states, tooltips,
-  popup/dialog language, combo popup views, menus, About controls and the
-  custom non-native Qt colour picker.
-- The picker wrapper now explicitly fills its owned content frame from
-  `color_picker.window`; QColorDialog's actual colour wells/sliders/preview
-  remain Qt-owned and truthful to the selected colour.
-- The frameless picker wrapper permits transparent outer corners so the
-  existing rounded title/content frames can define the visible shell.
-- Themes navigation now uses a dedicated `_ThemePillButton` whose own
-  `sizeHint()` / `minimumSizeHint()` reserve the full rendered label plus
-  generous padding. FlowLayout therefore receives the correct width directly.
+- Full-role Obnoxious Windows testing is green for bucket states, tooltips,
+  popup/dialog language, combo popup views, menus, About controls, Themes pill
+  geometry and the custom non-native Qt colour picker including its button/X
+  shadow clearance.
+- Theme Foundry is rebuilt around the semantic `SettingsThemeSpec` / strict
+  `.srtheme` contract. The old source scanner and Apply-to-Sources mutation model
+  are retired from the replacement tool.
+- Foundry edits colours, shadows, gradients and per-theme Acrylic enabled/tint
+  state; Off is explicit. Unsupported Mica/Glass-style runtime modes are shown
+  as unavailable rather than serialized dishonestly.
+- High-confidence simple alpha-over layer previews support click-to-target
+  reverse solving of the selected role RGB at its current alpha.
 
 ## Immediate remaining work
 
-1. One final Windows eyes-on check that picker OK/Cancel casts now clear the
-   actual QDialogButtonBox clip boundary; close-X alignment is already green.
-2. Rewrite Theme Foundry around semantic schema-v4 `.srtheme` files.
-3. Build/release work replaces the temporary theme-directory stub and retires
+1. Windows eyes-on smoke of rebuilt Theme Foundry: load Default/Obnoxious, edit
+   colour/shadow/gradient, test Acrylic Off/tint presets, click a reversible
+   predicted composite, Save As, strict-reload, then select the result in Settings.
+2. Build/release work replaces the temporary theme-directory stub and retires
    the dev fallback as recorded in `Future_Cleanup.md`.
-4. Keep `dark.qss` until remaining geometry/resource/base-selector ownership is
-   deliberately retired or relocated; it is not selectable theme authority.
-5. Remove the validation theme and this temporary plan after final validation.
+3. Perform the deliberate `dark.qss` retirement pass: relocate required
+   structural/geometry/resource selectors, run with the file physically absent,
+   then remove redundant anti-`dark.qss` compensation/comments before deletion.
+4. Remove the Obnoxious validation theme and this temporary plan after final
+   Foundry/dark.qss/build-path validation and durable documentation.

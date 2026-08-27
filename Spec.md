@@ -1,9 +1,9 @@
 # SRPSS Specification
 
-Last updated: 2026-08-26
+Last updated: 2026-08-28
 
-Canonical durable architecture and product-behavior contracts. `Current_Plan.md` owns sequence; independent
-closure narrative belongs under `Docs/audits/` or historical evidence.
+Canonical durable architecture and product-behavior contracts. `Current_Plan.md` owns sequence; independent closure
+narrative belongs under `Docs/audits/` or historical evidence.
 
 ## Product priorities
 
@@ -29,33 +29,33 @@ Python / QWidget application shell
 -> one retained Quick scene + inline QSGRenderNode custom GL
 ```
 
-Hard: one accelerated runtime surface per selected display; standalone `QQuickWindow`, never `QQuickWidget`;
-threaded Quick scene graph; Settings may remain QWidget; business/runtime ownership remains Python;
-transition+visualizer GL remains inline in the one Quick scene; no permanent old/software presenter fallback.
+Hard: one accelerated runtime surface per selected display; standalone `QQuickWindow`, never `QQuickWidget`; threaded
+Quick scene graph; Settings may remain QWidget; business/runtime ownership remains Python; transition+visualizer GL
+remains inline in the one Quick scene; no permanent old/software presenter fallback.
 
-## Migration epoch / retirement
+## Migration epoch
 
-Old `DisplayWidget` / QRhiWidget / `GLCompositorWidget` is current-legacy until H, not rollback architecture.
+The legacy `DisplayWidget` / QRhiWidget / `GLCompositorWidget` path may still exist in source until H removes the final
+physical-host routing. It is scaffolding, not rollback architecture.
 
-```text
-ordinary family QWidget pixels -> family GREEN + caller proof in F
-old CUSTOM/edit pixels          -> G replacement GREEN
-old transition/visualizer pixels-> caller-proof early; H maximum if physical-host bound
-old physical presenter/backend  -> H cutover + deletion
-residual debris                 -> I only
-```
+**Pre-H product continuity is not a migration requirement.** The old path must not be preserved, rebuilt or expanded
+merely to keep a half-migrated screensaver functional. Caller-dead old pixels/helpers should retire as soon as their
+replacement owns the contract. H wires the destination production owner and removes the remaining physical host; I is
+residue only; J is full installed/physical acceptance.
 
-## Capability / instance state
+## Capability / ordinary instance state
 
-Family activation/deactivation is different from ordinary instance enabled/disabled. Capability
-deactivation preserves detail settings and suppresses family-exclusive ownership; ordinary `enabled=False`
-is the casual per-widget off state inside an activated family.
+Family activation/deactivation is different from ordinary instance ON/OFF. Capability deactivation preserves detail
+settings and suppresses family-exclusive ownership; ordinary `enabled=False` is the casual per-widget off state inside
+an activated family.
+
+CUSTOM X and layout-slot replay may change ordinary ON/OFF only. They never activate a deactivated capability/family.
 
 ## Import dormancy
 
-Common Quick scene/host imports must not eagerly import inactive family business/runtime/backend trees.
-Family implementation resolves at actual family caller/activation. Static presentation-only registry
-metadata is fine. Common Quick import must not bootstrap provider/controller/runtime/backend singletons.
+Common Quick scene/host imports must not eagerly import inactive family business/runtime/backend trees. Family
+implementation resolves at actual family caller/activation. Static presentation-only registry metadata is fine.
+Common Quick import must not bootstrap provider/controller/runtime/backend singletons.
 
 ## Ordinary widgets
 
@@ -69,23 +69,20 @@ Current proven patterns are deliberately heterogeneous:
 
 - Clock: shared `GlobalClockTicker` + stable models; no invented service;
 - Weather: neutral manager-owned runtime service + retained model;
-- Media: runtime-generation shared owner with display leases, separate narrow volume/mute owners and a
-  process-engine artwork provider;
+- Media: runtime-generation shared owner with display leases, separate narrow volume/mute owners and a process-engine
+  artwork provider;
 - Reddit/Reddit2: separate configured member runtime services/models using shared family policy;
-- Gmail: runtime-generation shared Gmail owner/backend with per-display lease; retained model/QML complete and
-  old QWidget presentation retired.
-- Achievement Pulse: existing neutral Steam runtime/preparation/cache/selection ownership; retained model/QML
-  complete and old QWidget presentation retired.
-- Abandonment Issues: existing neutral Steam runtime/data/cache/rotation ownership; retained model/QML complete
-  and old QWidget presentation retired.
+- Gmail: runtime-generation shared Gmail owner/backend with per-display lease;
+- Achievement Pulse: neutral Steam runtime/preparation/cache/selection ownership;
+- Abandonment Issues: neutral Steam runtime/data/cache/rotation ownership.
 
 Do not create services/managers merely for naming symmetry.
 
 ## State / actions
 
-Producers integrate work then publish coherent accepted current state. Presentation consumes bounded latest
-state with generation/request fencing. No producer wait for paint, paint acknowledgement, FIFO render backlog,
-catch-up replay or display-rate division of authored cadence.
+Producers integrate work then publish coherent accepted current state. Presentation consumes bounded latest state with
+generation/request fencing. No producer wait for paint, paint acknowledgement, FIFO render backlog, catch-up replay or
+display-rate division of authored cadence.
 
 ```text
 QML semantic action
@@ -111,52 +108,82 @@ No QPixmap worker transport, base64 churn, tempfile-per-update or unchanged-imag
 
 ## Shadows / fade
 
-Canonical direction is NW/N/NE/W/E/SW/S/SE, default SE, resolved in Python.
-No Text Blur, Intense mode, `widgets.shadows.offset`, `shadowtuning.json`, or replacement hidden tuning.
-Ordinary card = cached retained `RectangularShadow`; ordinary text = duplicate glyph + signed offset;
-whole-widget fade = one retained root opacity. Clock analogue hard shadows are permanent family-authored
-exceptions under doc 11.
+Canonical direction is NW/N/NE/W/E/SW/S/SE, default SE, resolved in Python. No Text Blur, Intense mode,
+`widgets.shadows.offset`, `shadowtuning.json`, or replacement hidden tuning. Ordinary card = cached retained
+`RectangularShadow`; ordinary text = duplicate glyph + signed offset; whole-widget fade = one retained root opacity.
+Clock analogue hard shadows are permanent family-authored exceptions under doc 11.
 
 ## Geometry / CUSTOM
 
 Outer geometry is Python/session-owned. Variant key supports `(widget_id, display_identity, geometry_variant)`.
-Clock digital/analogue are first required example.
+Clock digital/analogue are the first required example.
 
-Edit-mode X changes working session only: duplicate removal or singleton ordinary-enabled OFF. Never family
-capability deactivation. Save/Enter commits; Cancel restores pre-edit geometry/instances/enabled state.
+Edit-mode X changes working session only: duplicate removal or singleton ordinary-enabled OFF. Never family capability
+deactivation. Save/Enter commits; Cancel restores pre-edit geometry/instances/enabled state.
 
-## Visualizer / transitions
+Layout slots save/load ordinary visible-layout state, including ordinary ON/OFF, but never capability activation or
+provider/account/source settings.
 
-`VisualizerLogicalRuntime` remains sole mode-general authored visualizer clock. Quick presentation does not
-own simulation cadence.
+## Visualizer geometry
 
-Transitions resolve canonical settings/admission into immutable request/run state and lazy Quick rendering.
-Old `GLCompositor*Transition` pixels are not destination authority after caller proof.
+`VisualizerLogicalRuntime` remains sole mode-general authored visualizer clock. Quick presentation does not own
+simulation cadence.
+
+All five current modes share a default/baseline 1.5 aspect and support two distinct CUSTOM operations:
+
+```text
+uniform_visual_scale
+    wheel/corner -> whole visualizer scales uniformly; viewport extent unchanged
+
+viewport_extent
+    left/right edge -> width only
+    top/bottom edge -> height only
+```
+
+Viewport extent is world/layout playroom, not final-pixel X/Y stretch. All five current modes—Spectrum,
+Oscilloscope, Sine, Bubble and DevCurve—must reflow/adapt to wide/tall extents. Bubble's viewport bounds are spatial
+configuration to its logical side; changing them must preserve round geometry, motion/collision semantics and BTF and
+must not create another clock.
+
+A temporary source capability flag that disables Bubble viewport resizing is migration debt, not destination product
+behavior.
+
+## Transitions
+
+Transitions resolve canonical settings/admission into immutable request/run state and lazy Quick rendering. Old
+`GLCompositor*Transition` pixels are not destination authority after caller proof.
 
 ## Lifecycle
 
 Old generation loses admission before replacement gains authority; generation 0 is valid. GPU resources are
-created/used/destroyed by legal render/context owner. No `glFinish()`, `DwmFlush()`, GUI sleeps or nested
-event pumping as cadence repair. Shared `QQmlEngine` is component/cache owner, not hidden runtime-generation
-owner.
+created/used/destroyed by legal render/context owner. No `glFinish()`, `DwmFlush()`, GUI sleeps or nested event pumping
+as cadence repair. Shared `QQmlEngine` is component/cache owner, not hidden runtime-generation owner.
 
-## H production cutover
+## H production authority
 
-Before normal startup switches to Quick, prove:
+H makes the existing Quick destination the sole production owner:
 
 ```text
 selected display
 -> one QuickDisplayRuntime
 -> one display-owned WidgetRuntimeManager
--> canonical capability/instance resolution
+-> canonical capability/ordinary-instance resolution
 -> existing neutral runtime/service leases
 -> stable family presentation models
 -> QuickSceneController
 -> retained family items
 ```
 
-Do not run old/new production runtime managers in parallel. Preserve semantic cardinality. H deletes the old
-physical presenter/backend in the same audited cutover boundary; no product switch back.
+Do not run old/new production runtime managers in parallel. Preserve semantic cardinality. H deletes the remaining old
+physical presenter/backend in the same audited owner-cutover boundary; it does not need to preserve a fully working
+legacy application or provide a product switch back.
+
+## Validation epochs
+
+- G: focused implementation/runtime-shaped proof;
+- H: destination production ownership + lifecycle/caller proof and physical-host deletion;
+- I: residue only;
+- J: compiled/installed and physical 1/2/N-display/DPR/topology/eyes-on/performance closure.
 
 ## Documentation roles
 

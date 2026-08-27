@@ -1,7 +1,7 @@
 # 06 — Build, Tooling, Tests, Installed Validation and Cutover Evidence
 
-Status: technical decomposition; E2/E2.7 landed, E1 active  
-Last updated: 2026-08-23
+Status: **current validation contract; implementation migration at tail of G**  
+Last updated: 2026-08-28
 
 Cross-links:
 
@@ -15,13 +15,14 @@ build/tooling/installed-validation shape, not a competing test manifest.
 
 ## 1. Build risk is handled early; build execution is deferred
 
-During Phases E–G, update build scripts, packaging declarations, and `build_runner.py` as required and
-validate with focused static/script tests.
+During implementation migration through G/H, update build scripts, packaging declarations and `build_runner.py` only
+when required, validating with focused static/script/runtime-shaped tests.
 
 Do not initiate a compiled/full product build merely as routine migration validation.
 
-Executable/product validation runs after migration implementation is complete and the operator
-explicitly schedules it, unless the operator explicitly asks for an earlier build.
+Comprehensive executable/product validation belongs to J after H/I unless the operator explicitly schedules an earlier
+build. H may use focused runtime-shaped proof to establish destination ownership; it does not require the full installed
+physical acceptance matrix.
 
 ## 2. Test/workflow environment
 
@@ -122,9 +123,9 @@ transition, scene teardown and generation recreation.
 Synthetic/offline models for widget families showing normal/extreme valid styling, shadows, borders,
 artwork, controls, visualizer card and two-display focus stress.
 
-E2 is already landed: the gallery/settings harness must preserve activated/deactivated family
-navigation, live pill removal/re-addition and lazy page behavior without eagerly constructing all
-settings pages. E1 adds proof that the actual provider/model/resource owner goes dormant or retires.
+The gallery/settings harness preserves activated/deactivated family navigation, live pill removal/re-addition and lazy
+page behavior without eagerly constructing all settings pages. Provider/model/resource dormancy remains a permanent
+owner contract.
 
 ### Lifecycle harness
 
@@ -172,15 +173,18 @@ Add/update focused tests for:
 - visual style;
 - CUSTOM;
 - actions;
-- landed E2 capability activation + SETUP/live lazy navigation;
+- capability activation + SETUP/live lazy navigation;
 - lazy settings-page hydration safety;
-- active E1 provider/model/resource dormancy and retirement at the real owner.
+- provider/model/resource dormancy and retirement at the real owner;
+- G CUSTOM/session/input/auxiliary retained ownership.
 
 ### visualizer
 
 - existing permanent gates + Quick snapshot/render ownership;
-- E2.7 global singleton failover/reclaim contract remains regressed;
-- physical dual-display wake/late-return acceptance remains a separate hardware gate.
+- all five modes support separate uniform scale and viewport extent;
+- Bubble wide/tall viewport reflow remains BTF-clean;
+- global singleton failover/reclaim contract remains regressed;
+- physical dual-display wake/late-return acceptance remains a J hardware gate.
 
 ### build
 
@@ -204,8 +208,8 @@ python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
 
 Do not run the entire suite after every small edit.
 
-Do run the bounded suite before production cutover, major legacy deletion, and final migration closure
-when the environment is appropriate.
+Run the bounded suite when useful before H owner cutover/major legacy deletion and again as part of final closure when
+the environment is appropriate. Do not turn every G slice into a full-suite/build gate.
 
 A red old-presenter test is not automatically a current defect. Classify it against
 `Docs/TestSuite.md`; likewise, do not delete a `WILL BE OBSOLETE` test before its replacement-owner
@@ -317,12 +321,10 @@ Never use destructive Git to make the tree convenient.
 Low-risk work may continue after green push. High-risk/audit-required work stops after push for
 independent review.
 
-## 16. Final cutover checklist
+## 16. H owner-cutover checklist
 
-Production owner is Quick only.
-
-The following are **CURRENT-LEGACY — WILL BE OBSOLETE at H/I** and must have no active runtime callers
-before deletion:
+H ends with Quick as the only production presenter/runtime owner. The remaining physical-host source must have no live
+runtime caller before deletion:
 
 ```text
 DisplayWidget runtime presenter
@@ -333,12 +335,10 @@ GUI present_tick physical owner
 legacy software/backend-demotion presenter path
 ```
 
-`QQuickWidget` is prohibited rather than a tolerated legacy presenter.
+`QQuickWidget` is prohibited. Historical evidence may still name these owners. Do not keep them executable merely to
+preserve a half-migrated product path; caller-dead pieces can leave earlier, while the final host edge leaves at H.
 
-Historical evidence may still name all of the above. Current tests that exist only for those owners are
-retired according to `Docs/TestSuite.md`, not preserved as a compatibility layer.
-
-After caller proof, remove dead production files through `Future_Cleanup.md`.
+J then performs the comprehensive installed/physical matrix against the Quick-only product.
 
 ## 17. Documentation/tool closure
 

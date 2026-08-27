@@ -1,7 +1,7 @@
 # 04 — Retained Quick Runtime Widgets
 
-Status: **landed ordinary-widget presentation architecture / Phase-F authority**  
-Last updated: 2026-08-26
+Status: **landed ordinary-widget presentation architecture; Phase F closed**  
+Last updated: 2026-08-28
 
 ## Core rule
 
