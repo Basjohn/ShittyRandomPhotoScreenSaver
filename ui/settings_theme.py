@@ -16,6 +16,7 @@ from ui.settings_theme_runtime import (
     subscribe_settings_theme,
 )
 from ui.settings_theme_spec import SettingsThemeSpec
+from ui.settings_theme_qss import render_qss_color, render_qss_rgba255
 
 logger = get_logger(__name__)
 
@@ -25,17 +26,13 @@ _THEMED_WIDGETS: WeakSet = WeakSet()
 def _theme_rgba(theme: SettingsThemeSpec, token: str) -> str:
     """Render one semantic Settings colour as Qt's integer-alpha rgba syntax."""
 
-    value = theme.color(token)
-    return f"rgba({value.r}, {value.g}, {value.b}, {value.a})"
+    return render_qss_rgba255(theme.color(token))
 
 
-def _theme_hex(theme: SettingsThemeSpec, token: str) -> str:
-    """Render one opaque semantic Settings colour in legacy QSS hex form."""
+def _theme_qss_color(theme: SettingsThemeSpec, token: str) -> str:
+    """Render one semantic Settings colour without requiring opacity."""
 
-    value = theme.color(token)
-    if value.a != 255:
-        raise ValueError(f"Settings theme colour {token!r} is not opaque")
-    return f"#{value.r:02x}{value.g:02x}{value.b:02x}"
+    return render_qss_color(theme.color(token))
 
 
 def _load_base_stylesheet() -> str | None:
@@ -326,10 +323,10 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
         "content_surface": _theme_rgba(theme, "content.surface"),
         "group_surface": _theme_rgba(theme, "panel.group.surface"),
         "panel_border": _theme_rgba(theme, "panel.border"),
-        "group_text": _theme_hex(theme, "panel.group.text"),
-        "group_title_text": _theme_hex(theme, "panel.group.title_text"),
+        "group_text": _theme_qss_color(theme, "panel.group.text"),
+        "group_title_text": _theme_qss_color(theme, "panel.group.title_text"),
         "list_surface": _theme_rgba(theme, "control.list.surface"),
-        "list_text": _theme_hex(theme, "control.list.text"),
+        "list_text": _theme_qss_color(theme, "control.list.text"),
         "list_border": _theme_rgba(theme, "control.list.border"),
         "list_selected_surface": _theme_rgba(
             theme,
@@ -344,8 +341,8 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
             "control.list.hover_surface",
         ),
         "button_surface": _theme_rgba(theme, "control.button.surface"),
-        "button_text": _theme_hex(theme, "control.button.text"),
-        "button_border": _theme_hex(theme, "control.button.border"),
+        "button_text": _theme_qss_color(theme, "control.button.text"),
+        "button_border": _theme_qss_color(theme, "control.button.border"),
         "button_hover_surface": _theme_rgba(
             theme,
             "control.button.hover_surface",
@@ -358,7 +355,7 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
             theme,
             "control.button.pressed_border",
         ),
-        "checkbox_text": _theme_hex(theme, "control.checkbox.text"),
+        "checkbox_text": _theme_qss_color(theme, "control.checkbox.text"),
         "checkbox_surface": _theme_rgba(
             theme,
             "control.checkbox.indicator.surface",
@@ -409,7 +406,7 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
         "tooltip_surface": _theme_rgba(theme, "tooltip.surface"),
         "tooltip_text": _theme_rgba(theme, "tooltip.text"),
         "tooltip_border": _theme_rgba(theme, "tooltip.border"),
-        "label_text": _theme_hex(theme, "text.primary"),
+        "label_text": _theme_qss_color(theme, "text.primary"),
     }
 
 

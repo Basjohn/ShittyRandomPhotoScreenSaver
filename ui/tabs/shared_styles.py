@@ -34,6 +34,7 @@ from ui.settings_theme_runtime import (
     subscribe_settings_theme,
 )
 from ui.settings_theme_spec import SettingsThemeSpec
+from ui.settings_theme_qss import render_qss_color, render_qss_rgba255
 
 # Ensure UI resources (e.g., circle checkbox SVGs) are registered even when
 # shared_styles is imported before ui/__init__.py. Safe no-op if already loaded.
@@ -63,7 +64,7 @@ _LIVE_STYLE_BUNDLES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _SETTINGS_THEME = get_active_settings_theme()
 
 _THEME_QSS_TOKEN_RE = re.compile(
-    r"@@(?P<mode>hex|rgba|rgba255|gradient):(?P<token>[a-zA-Z0-9_.-]+)@@"
+    r"@@(?P<mode>color|rgba|rgba255|gradient):(?P<token>[a-zA-Z0-9_.-]+)@@"
 )
 
 
@@ -78,13 +79,10 @@ def _theme_qcolor(
     return QColor(*value.as_tuple())
 
 
-def _theme_hex(token: str) -> str:
-    """Render an opaque semantic colour in the same QSS form used historically."""
+def _theme_qss_color(token: str) -> str:
+    """Render a semantic QSS colour without imposing an opacity restriction."""
 
-    value = _SETTINGS_THEME.color(token)
-    if value.a != 255:
-        raise ValueError(f"Theme colour {token!r} is not opaque")
-    return f"#{value.r:02x}{value.g:02x}{value.b:02x}"
+    return render_qss_color(_SETTINGS_THEME.color(token))
 
 
 def _unit_alpha_text(alpha: int) -> str:
@@ -114,8 +112,7 @@ def _theme_rgba(token: str) -> str:
 def _theme_rgba255(token: str) -> str:
     """Render a semantic colour using Qt's integer-alpha QSS form."""
 
-    value = _SETTINGS_THEME.color(token)
-    return f"rgba({value.r}, {value.g}, {value.b}, {value.a})"
+    return render_qss_rgba255(_SETTINGS_THEME.color(token))
 
 
 def _theme_gradient(token: str) -> str:
@@ -142,8 +139,8 @@ def _theme_qss(template: str) -> str:
     def replace(match: re.Match[str]) -> str:
         mode = match.group("mode")
         token = match.group("token")
-        if mode == "hex":
-            return _theme_hex(token)
+        if mode == "color":
+            return _theme_qss_color(token)
         if mode == "rgba":
             return _theme_rgba(token)
         if mode == "rgba255":
@@ -201,7 +198,7 @@ def _build_form_label_style() -> str:
         "font-weight: 600;"
         "font-size: 14px;"
         "letter-spacing: 0.4px;"
-        f"color: {_theme_hex('text.primary')};"
+        f"color: {_theme_qss_color('text.primary')};"
         f"min-height: {FORM_LABEL_HEIGHT}px;"
         "line-height: 34px;"
         "padding-top: 0px;"
@@ -220,7 +217,7 @@ def _build_form_row_label_style() -> str:
         "font-weight: 500;"
         "font-size: 14px;"
         "letter-spacing: 0.35px;"
-        f"color: {_theme_hex('text.primary')};"
+        f"color: {_theme_qss_color('text.primary')};"
         f"min-height: {FORM_LABEL_HEIGHT}px;"
         "line-height: 34px;"
         "padding-top: 0px;"
@@ -239,7 +236,7 @@ def _build_form_label_style_disabled() -> str:
         "font-weight: 600;"
         "font-size: 14px;"
         "letter-spacing: 0.35px;"
-        f"color: {_theme_hex('text.disabled')};"
+        f"color: {_theme_qss_color('text.disabled')};"
         f"min-height: {FORM_LABEL_HEIGHT}px;"
         "line-height: 34px;"
         "padding-top: 0px;"
@@ -258,7 +255,7 @@ def _build_form_row_label_style_disabled() -> str:
         "font-weight: 500;"
         "font-size: 14px;"
         "letter-spacing: 0.35px;"
-        f"color: {_theme_hex('text.disabled')};"
+        f"color: {_theme_qss_color('text.disabled')};"
         f"min-height: {FORM_LABEL_HEIGHT}px;"
         "line-height: 34px;"
         "padding-top: 0px;"
@@ -675,18 +672,18 @@ def _build_spinbox_style() -> str:
         min-height: 34px;
         padding: 4px 48px 4px 16px;
         margin-bottom: 0px;
-        color: @@hex:control.input.text@@;
+        color: @@color:control.input.text@@;
         font-family: 'Jost';
         font-weight: 600;
-        background-color: @@hex:control.input.surface@@;
-        border: 2px solid @@hex:control.input.border@@;
+        background-color: @@color:control.input.surface@@;
+        border: 2px solid @@color:control.input.border@@;
         border-radius: 18px;
     }
     
     QSpinBox > QLineEdit,
     QDoubleSpinBox > QLineEdit,
     QAbstractSpinBox > QLineEdit {
-        background-color: @@hex:control.input.surface@@;
+        background-color: @@color:control.input.surface@@;
         border: none;
         padding: 0px;
         margin: 0px;
@@ -697,17 +694,17 @@ def _build_spinbox_style() -> str:
     }
     
     QSpinBox:hover, QDoubleSpinBox:hover, QLineEdit:hover, QAbstractSpinBox:hover {
-        border-color: @@hex:control.input.border@@;
+        border-color: @@color:control.input.border@@;
     }
     
     QSpinBox:focus, QDoubleSpinBox:focus, QLineEdit:focus, QAbstractSpinBox:focus {
-        border-color: @@hex:control.input.border@@;
+        border-color: @@color:control.input.border@@;
     }
     
     QSpinBox:disabled, QDoubleSpinBox:disabled, QLineEdit:disabled, QAbstractSpinBox:disabled {
         color: @@rgba:control.input.disabled_text@@;
-        border-color: @@hex:control.input.disabled_border@@;
-        background-color: @@hex:control.input.surface@@;
+        border-color: @@color:control.input.disabled_border@@;
+        background-color: @@color:control.input.surface@@;
     }
     
     QSpinBox::up-button, QDoubleSpinBox::up-button,
@@ -720,7 +717,7 @@ def _build_spinbox_style() -> str:
         padding: 0px;
         border: none;
         border-radius: 5px;
-        background-color: @@hex:control.stepper.surface@@;
+        background-color: @@color:control.stepper.surface@@;
     }
     
     QSpinBox::up-button, QDoubleSpinBox::up-button {
@@ -737,17 +734,17 @@ def _build_spinbox_style() -> str:
     
     QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
     QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
-        background-color: @@hex:control.stepper.hover_surface@@;
+        background-color: @@color:control.stepper.hover_surface@@;
     }
     
     QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
     QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
-        background-color: @@hex:control.stepper.pressed_surface@@;
+        background-color: @@color:control.stepper.pressed_surface@@;
     }
     
     QSpinBox::up-button:disabled, QDoubleSpinBox::up-button:disabled,
     QSpinBox::down-button:disabled, QDoubleSpinBox::down-button:disabled {
-        background-color: @@hex:control.stepper.disabled_surface@@;
+        background-color: @@color:control.stepper.disabled_surface@@;
     }
     
     QSpinBox::up-arrow, QDoubleSpinBox::up-arrow,
@@ -827,27 +824,27 @@ def _build_combobox_style() -> str:
         font-weight: 700;
         font-size: 14px;
         letter-spacing: 0.4px;
-        color: @@hex:control.input.text@@;
-        border: 2px solid @@hex:control.input.border@@;
+        color: @@color:control.input.text@@;
+        border: 2px solid @@color:control.input.border@@;
         border-radius: 18px;
-        background-color: @@hex:control.input.surface@@;
+        background-color: @@color:control.input.surface@@;
     }
     
     QComboBox[customCombo='true']:hover {
-        background-color: @@hex:control.input.hover_surface@@;
+        background-color: @@color:control.input.hover_surface@@;
     }
     
     QComboBox[customCombo='true']:focus,
     QComboBox[customCombo='true']:on {
-        background-color: @@hex:control.input.focus_surface@@;
-        border-color: @@hex:control.input.border@@;
+        background-color: @@color:control.input.focus_surface@@;
+        border-color: @@color:control.input.border@@;
         outline: none;
     }
     
     QComboBox[customCombo='true']:disabled {
         color: @@rgba:control.input.disabled_text@@;
-        border-color: @@hex:control.input.disabled_border@@;
-        background-color: @@hex:control.input.surface@@;
+        border-color: @@color:control.input.disabled_border@@;
+        background-color: @@color:control.input.surface@@;
     }
     
     QComboBox[customCombo='true']::drop-down,
@@ -909,13 +906,13 @@ def _build_combobox_popup_view_style() -> str:
     QListView[customComboPopup='true'],
     QListWidget[customComboPopup='true'] {
         background-color: @@rgba:combo.popup.surface@@;
-        border: 2px solid @@hex:combo.popup.border@@;
+        border: 2px solid @@color:combo.popup.border@@;
         border-radius: 14px;
         padding: 8px 8px 12px 8px;
         outline: none;
         selection-background-color: @@rgba:combo.popup.selection_surface@@;
-        selection-color: @@hex:combo.popup.selection_text@@;
-        color: @@hex:combo.popup.text@@;
+        selection-color: @@color:combo.popup.selection_text@@;
+        color: @@color:combo.popup.text@@;
         font-family: 'Jost';
         font-weight: 600;
         font-size: 14px;
@@ -956,7 +953,7 @@ def _build_page_title_style() -> str:
         "font-weight: 700;"
         "font-size: 18px;"
         "letter-spacing: 0.5px;"
-        f"color: {_theme_hex('text.primary')};"
+        f"color: {_theme_qss_color('text.primary')};"
     )
 
 
@@ -968,7 +965,7 @@ def _build_section_heading_style() -> str:
         "font-weight: 800;"
         "font-size: 15px;"
         "letter-spacing: 0.6px;"
-        f"color: {_theme_hex('text.primary')};"
+        f"color: {_theme_qss_color('text.primary')};"
         f"min-height: {FORM_LABEL_HEIGHT + 6}px;"
         "line-height: 36px;"
         "padding-top: 0px;"
@@ -987,7 +984,7 @@ def _build_section_heading_style_disabled() -> str:
         "font-weight: 800;"
         "font-size: 15px;"
         "letter-spacing: 0.6px;"
-        f"color: {_theme_hex('text.disabled')};"
+        f"color: {_theme_qss_color('text.disabled')};"
         f"min-height: {FORM_LABEL_HEIGHT + 6}px;"
         "line-height: 36px;"
         "padding-top: 0px;"
@@ -1006,7 +1003,7 @@ def _build_swatch_label_style() -> str:
         "font-weight: 500;"
         "font-size: 13px;"
         "letter-spacing: 0.4px;"
-        f"color: {_theme_hex('text.primary')};"
+        f"color: {_theme_qss_color('text.primary')};"
         f"min-height: {SWATCH_LABEL_HEIGHT}px;"
         "line-height: 34px;"
         "padding-top: 0px;"
@@ -1022,7 +1019,7 @@ SWATCH_LABEL_STYLE = _build_swatch_label_style()
 def _build_subsection_divider_style() -> str:
     return (
         f"background-color: {_theme_rgba255('panel.subsection.surface')};"
-        f"border: 2px solid {_theme_hex('panel.border')};"
+        f"border: 2px solid {_theme_qss_color('panel.border')};"
         "border-radius: 19px;"
     )
 
@@ -1042,7 +1039,7 @@ def style_group_box(box) -> None:
             "  subcontrol-position: top left;"
             "  padding: 2px 10px;"
             "  margin-top: 5px;"
-            f"  color: {_theme_hex('text.primary')};"
+            f"  color: {_theme_qss_color('text.primary')};"
             "  font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
             "  font-weight: 800;"
             "  font-size: 16px;"
@@ -1073,21 +1070,21 @@ def _build_nav_pill_style() -> str:
         "QPushButton {"
         f" {NAV_TAB_FONT_STYLE}"
         f" background-color: {_theme_rgba255('control.button.surface')};"
-        f" color: {_theme_hex('control.button.text')};"
-        f" border: 1px solid {_theme_hex('control.button.border')};"
+        f" color: {_theme_qss_color('control.button.text')};"
+        f" border: 1px solid {_theme_qss_color('control.button.border')};"
         " border-radius: 8px;"
         " padding: 6px 18px;"
         " min-width: 70px;"
         " }"
         "QPushButton:hover {"
         f" background-color: {_theme_rgba255('control.button.hover_surface')};"
-        f" border: 1px solid {_theme_hex('control.button.border')};"
+        f" border: 1px solid {_theme_qss_color('control.button.border')};"
         " }"
         "QPushButton:checked {"
         f" {NAV_TAB_FONT_STYLE_ACTIVE}"
         f" background-color: {_theme_rgba255('control.button.hover_surface')};"
-        f" color: {_theme_hex('control.button.text')};"
-        f" border: 1px solid {_theme_hex('control.button.border')};"
+        f" color: {_theme_qss_color('control.button.text')};"
+        f" border: 1px solid {_theme_qss_color('control.button.border')};"
         " }"
     )
 
@@ -1100,9 +1097,9 @@ def _build_widget_nav_pill_style() -> str:
         "QPushButton {"
         f" {NAV_TAB_FONT_STYLE}"
         f" background-color: {_theme_rgba255('navigation.subtab.surface')};"
-        f" color: {_theme_hex('navigation.subtab.text')};"
+        f" color: {_theme_qss_color('navigation.subtab.text')};"
         " border-radius: 8px; padding: 6px 18px; min-width: 70px;"
-        f" border: 1px solid {_theme_hex('navigation.subtab.border')};"
+        f" border: 1px solid {_theme_qss_color('navigation.subtab.border')};"
         " }"
         "QPushButton:hover {"
         f" background-color: {_theme_rgba255('navigation.subtab.hover_surface')};"
@@ -1110,7 +1107,7 @@ def _build_widget_nav_pill_style() -> str:
         "QPushButton:checked {"
         f" {NAV_TAB_FONT_STYLE_ACTIVE}"
         f" background-color: {_theme_rgba255('navigation.subtab.selected_surface')};"
-        f" border: 1px solid {_theme_hex('navigation.subtab.border')};"
+        f" border: 1px solid {_theme_qss_color('navigation.subtab.border')};"
         " }"
     )
 
@@ -1122,8 +1119,8 @@ def _build_transition_nav_pill_style() -> str:
     return (
         "QPushButton {"
         f" background-color: {_theme_rgba255('navigation.subtab.surface')};"
-        f" color: {_theme_hex('navigation.subtab.text')};"
-        f" border: 1px solid {_theme_hex('navigation.subtab.border')};"
+        f" color: {_theme_qss_color('navigation.subtab.text')};"
+        f" border: 1px solid {_theme_qss_color('navigation.subtab.border')};"
         " border-radius: 8px; padding: 5px 14px;"
         " }"
         "QPushButton:hover {"
@@ -1142,8 +1139,8 @@ def _build_transition_setup_action_style() -> str:
     return (
         "QPushButton {"
         f" background-color: {_theme_rgba255('control.setup_action.surface')};"
-        f" color: {_theme_hex('control.setup_action.text')};"
-        f" border: 1px solid {_theme_hex('control.setup_action.border')};"
+        f" color: {_theme_qss_color('control.setup_action.text')};"
+        f" border: 1px solid {_theme_qss_color('control.setup_action.border')};"
         " border-radius: 8px; padding: 6px 18px; min-width: 90px;"
         " }"
         "QPushButton:hover {"
@@ -1172,9 +1169,9 @@ def _build_source_action_button_style() -> str:
         "QPushButton {"
         " font-family: 'Jost'; font-size: 12px; font-weight: 500;"
         f" background-color: {_theme_rgba255('control.button.surface')};"
-        f" color: {_theme_hex('control.button.text')};"
+        f" color: {_theme_qss_color('control.button.text')};"
         " border-radius: 8px; padding: 7px 18px; min-width: 90px;"
-        f" border: 1px solid {_theme_hex('control.button.border')};"
+        f" border: 1px solid {_theme_qss_color('control.button.border')};"
         " }"
         "QPushButton:hover {"
         f" background-color: {_theme_rgba255('control.button.hover_surface')};"
@@ -1192,8 +1189,8 @@ SOURCE_ACTION_BUTTON_STYLE = _build_source_action_button_style()
 def _build_source_ratio_active_style() -> str:
     return (
         "#ratioFrame {"
-        f" background-color: {_theme_hex('sources.ratio.surface')};"
-        f" border: 1px solid {_theme_hex('sources.ratio.border')};"
+        f" background-color: {_theme_qss_color('sources.ratio.surface')};"
+        f" border: 1px solid {_theme_qss_color('sources.ratio.border')};"
         " border-radius: 6px; padding: 8px;"
         " }"
     )
@@ -1205,8 +1202,8 @@ SOURCE_RATIO_ACTIVE_STYLE = _build_source_ratio_active_style()
 def _build_source_ratio_disabled_style() -> str:
     return (
         "#ratioFrame {"
-        f" background-color: {_theme_hex('sources.ratio.disabled_surface')};"
-        f" border: 1px solid {_theme_hex('sources.ratio.disabled_border')};"
+        f" background-color: {_theme_qss_color('sources.ratio.disabled_surface')};"
+        f" border: 1px solid {_theme_qss_color('sources.ratio.disabled_border')};"
         " border-radius: 6px; padding: 8px;"
         " }"
     )
@@ -1235,7 +1232,7 @@ def _build_ghost_action_button_style() -> str:
     return (
         "QPushButton {"
         f" background-color: {_theme_rgba255('control.ghost_action.surface')};"
-        f" color: {_theme_hex('control.ghost_action.text')};"
+        f" color: {_theme_qss_color('control.ghost_action.text')};"
         f" border: 1px solid {_theme_rgba255('control.ghost_action.border')};"
         " border-radius: 16px; padding: 0 16px;"
         " font-size: 12px; font-weight: 600;"
@@ -1267,14 +1264,14 @@ def _build_shadow_direction_cell_style() -> str:
         " }"
         "QPushButton:hover {"
         f" background-color: {_theme_rgba255('shadow.direction.hover_surface')};"
-        f" border-color: {_theme_hex('shadow.direction.hover_border')};"
+        f" border-color: {_theme_qss_color('shadow.direction.hover_border')};"
         " }"
         "QPushButton:pressed {"
         f" background-color: {_theme_rgba255('shadow.direction.pressed_surface')};"
         " }"
         "QPushButton:checked {"
         f" background-color: {_theme_rgba255('shadow.direction.checked_surface')};"
-        f" border: 2px solid {_theme_hex('shadow.direction.checked_border')};"
+        f" border: 2px solid {_theme_qss_color('shadow.direction.checked_border')};"
         " }"
     )
 
@@ -1285,22 +1282,22 @@ SHADOW_DIRECTION_CELL_STYLE = _build_shadow_direction_cell_style()
 def _build_mode_toggle_button_style() -> str:
     return (
         "QPushButton {"
-        f" background-color: {_theme_hex('control.mode.surface')};"
-        f" color: {_theme_hex('control.mode.text')};"
-        f" border: 2px solid {_theme_hex('control.mode.border')};"
+        f" background-color: {_theme_qss_color('control.mode.surface')};"
+        f" color: {_theme_qss_color('control.mode.text')};"
+        f" border: 2px solid {_theme_qss_color('control.mode.border')};"
         " border-radius: 18px; padding: 10px 20px;"
         " font-weight: 600; min-height: 18px;"
         " }"
         "QPushButton:hover {"
-        f" background-color: {_theme_hex('control.mode.hover_surface')};"
+        f" background-color: {_theme_qss_color('control.mode.hover_surface')};"
         " }"
         "QPushButton:checked {"
-        f" background-color: {_theme_hex('control.mode.checked_surface')};"
-        f" border-color: {_theme_hex('control.mode.checked_border')};"
+        f" background-color: {_theme_qss_color('control.mode.checked_surface')};"
+        f" border-color: {_theme_qss_color('control.mode.checked_border')};"
         " }"
         "QPushButton:disabled {"
-        f" color: {_theme_hex('control.mode.disabled_text')};"
-        f" border-color: {_theme_hex('control.mode.disabled_border')};"
+        f" color: {_theme_qss_color('control.mode.disabled_text')};"
+        f" border-color: {_theme_qss_color('control.mode.disabled_border')};"
         " }"
     )
 
@@ -1309,7 +1306,7 @@ MODE_TOGGLE_BUTTON_STYLE = _build_mode_toggle_button_style()
 
 
 def _build_text_secondary_color_style() -> str:
-    return f"color: {_theme_hex('text.secondary')};"
+    return f"color: {_theme_qss_color('text.secondary')};"
 
 
 TEXT_SECONDARY_COLOR_STYLE = _build_text_secondary_color_style()
@@ -1324,7 +1321,7 @@ STATUS_LABEL_STYLE = (
 
 def _build_info_label_style() -> str:
     return (
-        f"color: {_theme_hex('text.secondary')};"
+        f"color: {_theme_qss_color('text.secondary')};"
         "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
         "font-weight: 500;"
         "font-size: 11px;"
@@ -1348,7 +1345,7 @@ ADV_HELPER_LABEL_STYLE = _build_adv_helper_label_style()
 
 def _build_info_label_style_disabled() -> str:
     return (
-        f"color: {_theme_hex('text.helper_disabled')};"
+        f"color: {_theme_qss_color('text.helper_disabled')};"
         "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
         "font-weight: 500;"
         "font-size: 11px;"
@@ -1394,25 +1391,25 @@ def _build_slider_style() -> str:
         border-radius: 5px;
         background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
             @@gradient:slider.handle.surface@@);
-        border: 1px solid @@hex:slider.handle.border@@;
+        border: 1px solid @@color:slider.handle.border@@;
         
     }
     
     QSlider::handle:horizontal:hover {
         background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
             @@gradient:slider.handle.hover_surface@@);
-        border: 1px solid @@hex:slider.handle.hover_border@@;
+        border: 1px solid @@color:slider.handle.hover_border@@;
         
     }
     
     QSlider::handle:horizontal:pressed {
         background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
             @@gradient:slider.handle.pressed_surface@@);
-        border: 1px solid @@hex:slider.handle.pressed_border@@;
+        border: 1px solid @@color:slider.handle.pressed_border@@;
     }
     
     QSlider::handle:horizontal:disabled {
-        background: @@hex:slider.handle.disabled_surface@@;
+        background: @@color:slider.handle.disabled_surface@@;
     }
     
     QSlider#presetModeSlider {
@@ -1443,7 +1440,7 @@ def _build_slider_style() -> str:
         height: 6px;
         margin: -4px 0;
         border-radius: 5px;
-        border: 1.5px solid @@hex:slider.handle.active_border@@;
+        border: 1.5px solid @@color:slider.handle.active_border@@;
         background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
             @@gradient:slider.handle.active_surface@@);
     }
@@ -1456,7 +1453,7 @@ SLIDER_STYLE = _build_slider_style()
 def _build_accessibility_title_style() -> str:
     return (
         "font-size: 18px; font-weight: bold; "
-        f"color: {_theme_hex('text.primary')};"
+        f"color: {_theme_qss_color('text.primary')};"
     )
 
 
@@ -1465,7 +1462,7 @@ ACCESSIBILITY_TITLE_STYLE = _build_accessibility_title_style()
 
 def _build_accessibility_desc_style() -> str:
     return (
-        f"color: {_theme_hex('text.secondary')};"
+        f"color: {_theme_qss_color('text.secondary')};"
         " font-size: 11px; margin-bottom: 10px;"
     )
 
@@ -1475,7 +1472,7 @@ ACCESSIBILITY_DESC_STYLE = _build_accessibility_desc_style()
 
 def _build_accessibility_section_desc_style() -> str:
     return (
-        f"color: {_theme_hex('text.tertiary')};"
+        f"color: {_theme_qss_color('text.tertiary')};"
         " font-size: 10px; margin-top: 5px;"
     )
 
