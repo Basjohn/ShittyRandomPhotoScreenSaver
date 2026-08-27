@@ -208,7 +208,7 @@ def test_lifecycle_filter_matches_lifecycle_and_supervisor_records():
         exc_info=None,
     )
     unrelated_record = logging.LogRecord(
-        "widgets.gmail_widget",
+        "widgets.example_widget",
         logging.INFO,
         __file__,
         1,

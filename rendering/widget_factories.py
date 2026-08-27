@@ -192,123 +192,6 @@ class SpotifyVisualizerFactory(WidgetFactory):
             return None
 
 
-class GmailWidgetFactory(WidgetFactory):
-    """Factory for creating GmailWidget instances."""
-
-    def get_widget_name(self) -> str:
-        return "gmail"
-
-    def create(self, parent: QWidget, config: Dict[str, Any]) -> Optional[QWidget]:
-        """Create and configure a GmailWidget."""
-        from widgets.gmail_widget import GmailWidget
-        from widgets.gmail_components import GmailPosition
-
-        if not SettingsManager.to_bool(config.get("enabled", False), False):
-            return None
-
-        border_width = BaseOverlayWidget.get_global_border_width()
-
-        try:
-            # Gmail only supports 4 corners — map other positions to nearest corner.
-            raw_pos = str(config.get('position', 'Top Left')).lower().replace(' ', '_')
-            corner_map = {
-                'top_left': GmailPosition.TOP_LEFT,
-                'top_center': GmailPosition.TOP_LEFT,
-                'top_right': GmailPosition.TOP_RIGHT,
-                'middle_left': GmailPosition.TOP_LEFT,
-                'center': GmailPosition.TOP_LEFT,
-                'middle_right': GmailPosition.TOP_RIGHT,
-                'bottom_left': GmailPosition.BOTTOM_LEFT,
-                'bottom_center': GmailPosition.BOTTOM_LEFT,
-                'bottom_right': GmailPosition.BOTTOM_RIGHT,
-                'custom': GmailPosition.TOP_LEFT,
-            }
-            position = corner_map.get(raw_pos, GmailPosition.TOP_LEFT)
-
-            widget = GmailWidget(
-                parent=parent,
-                position=position,
-                settings=config,
-                build_default_runtime=False,
-            )
-
-            # Thread manager (required — Gmail performs network I/O)
-            if self._thread_manager and hasattr(widget, "set_thread_manager"):
-                widget.set_thread_manager(self._thread_manager)
-
-            # Font
-            font_family = config.get('font_family', 'Segoe UI')
-            font_size = int(config.get('font_size', 14))
-            if hasattr(widget, 'set_font_family'):
-                widget.set_font_family(font_family)
-            if hasattr(widget, 'set_font_size'):
-                widget.set_font_size(font_size)
-
-            # Margin
-            margin = int(config.get('margin', 30))
-            if hasattr(widget, 'set_margin'):
-                widget.set_margin(margin)
-
-            # Text color
-            text_color = config.get('color', [255, 255, 255, 230])
-            qcolor = parse_color_to_qcolor(text_color)
-            if qcolor and hasattr(widget, 'set_text_color'):
-                widget.set_text_color(qcolor)
-
-            # Background frame
-            show_background = SettingsManager.to_bool(config.get('show_background', True), True)
-            if hasattr(widget, 'set_show_background'):
-                widget.set_show_background(show_background)
-
-            bg_color = config.get('bg_color', [35, 35, 35, 255])
-            bg_qcolor = parse_color_to_qcolor(bg_color)
-            if bg_qcolor and hasattr(widget, 'set_background_color'):
-                widget.set_background_color(bg_qcolor)
-
-            try:
-                bg_opacity = float(config.get('bg_opacity', 0.6))
-            except (TypeError, ValueError):
-                bg_opacity = 0.6
-            if hasattr(widget, 'set_background_opacity'):
-                widget.set_background_opacity(bg_opacity)
-
-            # Border
-            border_color = config.get('border_color', [255, 255, 255, 255])
-            try:
-                border_opacity = float(config.get('border_opacity', 1.0))
-            except (TypeError, ValueError):
-                border_opacity = 1.0
-            border_qcolor = parse_color_to_qcolor(border_color, opacity_override=border_opacity)
-            if border_qcolor and hasattr(widget, 'set_background_border'):
-                widget.set_background_border(border_width, border_qcolor)
-
-            # Notification sound
-            from core.audio.sound_paths import default_notification_sound_path
-            if hasattr(widget, 'set_play_sound_on_new_mail'):
-                widget.set_play_sound_on_new_mail(
-                    SettingsManager.to_bool(config.get('play_sound_on_new_mail', False), False)
-                )
-            if hasattr(widget, 'set_sound_file_path'):
-                widget.set_sound_file_path(config.get('sound_file_path', default_notification_sound_path()))
-            if hasattr(widget, 'set_sound_volume_percent'):
-                widget.set_sound_volume_percent(int(config.get('sound_volume_percent', 50)))
-
-            # Shadow config
-            try:
-                shadows_config = config.get('_shadows_config') or {}
-                if hasattr(widget, "set_shadow_config"):
-                    widget.set_shadow_config(shadows_config)
-            except Exception as exc:
-                logger.debug("[GMAIL_FACTORY] Shadow apply suppressed: %s", exc)
-
-            logger.debug("[GMAIL_FACTORY] Created GmailWidget at %s", position.value)
-            return widget
-
-        except Exception as exc:
-            logger.error("[GMAIL_FACTORY] Failed to create GmailWidget: %s", exc, exc_info=True)
-            return None
-
-
 def _coerce_optional_appid(value: Any) -> int | None:
     try:
         appid = int(value)
@@ -625,7 +508,6 @@ class WidgetFactoryRegistry:
     def _register_default_factories(self) -> None:
         """Register all default widget factories."""
         self.register(MediaWidgetFactory(self._settings, self._thread_manager))
-        self.register(GmailWidgetFactory(self._settings, self._thread_manager))
         self.register(SpotifyVisualizerFactory(self._settings, self._thread_manager))
         try:
             from core.dev_gates import is_steam_enabled

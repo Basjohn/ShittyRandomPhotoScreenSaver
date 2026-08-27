@@ -154,12 +154,6 @@ FACTORY_WIDGET_DESCRIPTORS: tuple[FactoryWidgetDescriptor, ...] = (
         factory_shadows_kwarg=True,
     ),
     FactoryWidgetDescriptor(
-        settings_key="gmail",
-        attr_name="gmail_widget",
-        factory_name="gmail",
-        inject_shadows_into_config=True,
-    ),
-    FactoryWidgetDescriptor(
         settings_key="steam_progress",
         attr_name="steam_progress_widget",
         factory_name="steam_progress",

@@ -8,8 +8,8 @@ message actions.
 
 ``GmailRuntimeService`` is the per-display lease stored by that display's
 ``WidgetRuntimeManager``.  Production leases in one runtime generation join one
-``_SharedGmailRuntimeOwner``.  A directly constructed ``GmailWidget`` receives
-an isolated service for standalone/test compatibility.
+``_SharedGmailRuntimeOwner``. Directly constructed isolated services remain
+available for focused backend/runtime tests.
 
 The owner deliberately contains no QWidget, QPixmap, layout, transition, menu,
 or hit-testing code.  Presenters receive immutable raw-email snapshots and own

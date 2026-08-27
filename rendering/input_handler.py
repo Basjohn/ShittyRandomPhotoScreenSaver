@@ -400,7 +400,6 @@ class InputHandler(RuntimeInputOwner):
     def route_widget_click(
         self,
         event: QMouseEvent,
-        gmail_widget=None,
         spotify_visualizer_widget=None,
         steam_widgets=(),
         weather_widget=None,
@@ -471,40 +470,6 @@ class InputHandler(RuntimeInputOwner):
                         self.settings_requested.emit()
             except Exception:
                 logger.debug("[INPUT] Weather click routing failed", exc_info=True)
-        
-        # Gmail widget
-        if not handled and gmail_widget is not None:
-            try:
-                gw = gmail_widget
-                if gw.isVisible() and gw.geometry().contains(pos):
-                    geom = gw.geometry()
-                    local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
-                    url = None
-                    if hasattr(gw, "resolve_click_target"):
-                        try:
-                            url = gw.resolve_click_target(local_pos)
-                        except Exception:
-                            logger.debug("[INPUT] Gmail resolve_click_target failed", exc_info=True)
-                    if url:
-                        handled = True
-                        reddit_handled = True
-                        reddit_url = url
-                        logger.debug("[INPUT] Gmail resolved central URL click: %s", url)
-                    elif hasattr(gw, 'handle_click'):
-                        action_menu_point = False
-                        if hasattr(gw, "is_action_menu_point"):
-                            try:
-                                action_menu_point = bool(gw.is_action_menu_point(local_pos))
-                            except Exception:
-                                logger.debug("[INPUT] Gmail action-menu hit test failed", exc_info=True)
-                        result = gw.handle_click(local_pos)
-                        logger.debug("[INPUT] Gmail handle_click returned: %s", result)
-                        if result:
-                            handled = True
-                            if action_menu_point:
-                                self._defer_focus_restore_after_widget_click = True
-            except Exception:
-                logger.debug("[INPUT] Gmail click routing failed", exc_info=True)
         
         logger.debug(
             "[INPUT] route_widget_click returning: handled=%s reddit_handled=%s reddit_url=%s",

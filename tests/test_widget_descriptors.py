@@ -89,20 +89,6 @@ def test_widget_descriptors_accept_named_steam_dev_gate():
         force_gate(steam=prior_steam_gate)
 
 
-def test_gmail_descriptor_injects_shadow_config_into_widget_config():
-    descriptor = next(
-        item for item in get_factory_widget_descriptors() if item.settings_key == "gmail"
-    )
-
-    config = descriptor.build_widget_config(
-        {"enabled": True, "monitor": "ALL"},
-        shadows_config={"enabled": True, "blur_radius": 18},
-    )
-
-    assert config["enabled"] is True
-    assert config["_shadows_config"] == {"enabled": True, "blur_radius": 18}
-
-
 def test_widget_settings_section_descriptors_default_order():
     descriptors = get_widget_settings_section_descriptors()
 

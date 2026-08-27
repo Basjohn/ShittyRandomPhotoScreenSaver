@@ -373,100 +373,11 @@ def test_factory_widget_descriptors_cover_factory_backed_widget_families():
 
     expected = [
         "media",
-        "gmail",
         "achievement_pulse",
         "abandonment_issues",
     ]
 
     assert descriptor_names == expected
-
-    gmail = next(descriptor for descriptor in descriptors if descriptor.settings_key == "gmail")
-
-    assert gmail.inject_shadows_into_config is True
-
-
-def test_setup_all_widgets_routes_gmail_through_descriptor_shadow_injection(monkeypatch):
-    manager = _create_manager()
-    settings = _StubSettingsManager({
-        "gmail": {
-            "enabled": True,
-            "monitor": "ALL",
-        },
-        "shadows": {
-            "enabled": True,
-            "blur_radius": 19,
-        },
-    })
-
-    captured: dict = {}
-
-    class _StubGmailWidget(_BaseStubWidget):
-        def __init__(self):
-            super().__init__()
-            self._runtime_generation = 17
-            self._thread_manager = None
-            self.runtime_service = None
-
-        def set_thread_manager(self, *_args, **_kwargs):
-            return
-
-        def set_runtime_service(self, service):
-            self.runtime_service = service
-            service.attach_consumer(self)
-
-        def is_gmail_consumer_alive(self):
-            return True
-
-    def _fake_create(self, parent, config):
-        captured["config"] = dict(config)
-        return _StubGmailWidget()
-
-    monkeypatch.setattr("rendering.widget_factories.GmailWidgetFactory.create", _fake_create)
-
-    created = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
-
-    assert "gmail_widget" in created
-    assert captured["config"]["_shadows_config"] == {"enabled": True, "blur_radius": 19}
-    assert created["gmail_widget"].runtime_service is not None
-    assert manager._runtime_manager.get_widget_service("gmail") is created["gmail_widget"].runtime_service
-
-
-def test_gmail_fails_closed_when_required_runtime_service_build_fails(monkeypatch):
-    from widgets import gmail_runtime
-
-    class _StubGmailWidget(_BaseStubWidget):
-        def __init__(self):
-            super().__init__()
-            self._runtime_generation = 17
-            self._thread_manager = None
-
-        def set_thread_manager(self, *_args, **_kwargs):
-            return None
-
-    def _fake_create(self, parent, config):
-        return _StubGmailWidget()
-
-    def _boom(*_args, **_kwargs):
-        raise RuntimeError("Gmail service build failed")
-
-    monkeypatch.setattr(
-        "rendering.widget_factories.GmailWidgetFactory.create",
-        _fake_create,
-    )
-    monkeypatch.setattr(gmail_runtime, "GmailRuntimeService", _boom)
-    manager, created = _setup_widgets(
-        {
-            "gmail": {
-                "enabled": True,
-                "monitor": "ALL",
-                "position": "WidgetPosition.TOP_LEFT",
-            }
-        }
-    )
-
-    assert "gmail_widget" not in created
-    assert manager.get_widget("gmail") is None
-    assert manager._runtime_manager.get_widget_service("gmail") is None
 
 
 def test_setup_all_widgets_runs_spotify_setup_phases_in_explicit_order(monkeypatch):
