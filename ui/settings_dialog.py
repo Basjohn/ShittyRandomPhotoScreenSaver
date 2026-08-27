@@ -59,14 +59,23 @@ def _theme_qcolor(token: str) -> QColor:
     return QColor(*value.as_tuple())
 
 
-# Fragile forged-edge geometry remains renderer-owned by design.  Only its
-# colours come from the semantic Settings theme.
+def _theme_opaque_qcolor(token: str) -> QColor:
+    """Use a theme surface's RGB as an opaque renderer camouflage colour."""
+    value = _SETTINGS_THEME.color(token)
+    return QColor(value.r, value.g, value.b, 255)
+
+
+# Fragile forged-edge geometry remains renderer-owned by design.  The forged
+# backing/corner camouflage is not independently themeable: it follows the
+# shell surface immediately inside the native edge, forced opaque so the fake
+# rounded corner continues to hide the rectangular acrylic HWND underneath.
 SETTINGS_OUTER_CORNER_RADIUS = 6.5
 SETTINGS_OUTER_BORDER_WIDTH = 4.0
 SETTINGS_OUTER_BORDER_BACKING_WIDTH = 6.0
 SETTINGS_OUTER_BORDER_COLOR = _theme_qcolor("chrome.outer_border")
-SETTINGS_OUTER_BORDER_BACKING_COLOR = _theme_qcolor("chrome.outer_border_backing")
-SETTINGS_CORNER_COVER_COLOR = _theme_qcolor("chrome.corner_cover")
+SETTINGS_FORGED_EDGE_COLOR = _theme_opaque_qcolor("window.titlebar.surface")
+SETTINGS_OUTER_BORDER_BACKING_COLOR = SETTINGS_FORGED_EDGE_COLOR
+SETTINGS_CORNER_COVER_COLOR = SETTINGS_FORGED_EDGE_COLOR
 
 
 class CustomTitleBar(QWidget):
