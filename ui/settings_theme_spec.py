@@ -8,9 +8,11 @@ rendering mechanisms in their existing owners:
 * ``ui/settings_dialog.py`` owns frameless-window lifecycle and the forged
   outer-edge painter.
 * QSS/component modules own how Qt controls are rendered.
+* ``widgets/context_menu.py`` owns context-menu QSS structure/geometry.
 
 Renderers consume values from :data:`DEFAULT_DARK_SETTINGS_THEME` instead of
-inventing their own colour/opacity/shadow constants. Geometry that is known to
+inventing their own colour/opacity/shadow constants, including the
+screensaver context-menu palette. Geometry that is known to
 be fragile (the forged acrylic outer-corner radius/overlap maths in particular)
 is intentionally not theme data.
 
@@ -230,14 +232,14 @@ class SettingsThemeSpec:
 # Intentionally represented here before shared_styles.py consumes it:
 #   * reusable input/combo/tooltip/text colours;
 #   * slider state colours + gradient stop palettes;
-#   * the recommended-slider marker colour.
+#   * the recommended-slider marker colour;
+#   * screensaver context-menu colours.
 #
 # Intentionally deferred until their owning renderer/tab is migrated:
 #   * tab-local palettes (RSS/accessibility/etc.);
 #   * Settings-dialog local popup palettes;
 #   * typography/spacing/geometry;
 #   * resource-backed checkbox artwork;
-#   * context-menu theme data.
 
 _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     # Top-level/window layering from ui/settings_theme.py.
@@ -333,6 +335,22 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "about.more.hover_surface": Rgba(60, 60, 70, 220),
     "about.notice.surface": Rgba(16, 16, 16, 230),
     "about.notice.text": WHITE,
+
+    # Screensaver context-menu palette from widgets/context_menu.py.
+    # Main-menu and submenu roles remain distinct even where Default Dark
+    # currently shares values, so future themes may diverge them freely.
+    "context.menu.surface": Rgba(25, 25, 25, 205),
+    "context.menu.border": WHITE,
+    "context.menu.text": WHITE,
+    "context.menu.selected_surface": Rgba(62, 62, 62, 220),
+    "context.menu.disabled_text": Rgba(120, 120, 130, 150),
+    "context.menu.separator": Rgba(90, 90, 90, 150),
+    "context.submenu.surface": Rgba(25, 25, 25, 205),
+    "context.submenu.border": WHITE,
+    "context.submenu.text": WHITE,
+    "context.submenu.selected_surface": Rgba(62, 62, 62, 220),
+    "context.submenu.checked_text": WHITE,
+    "context.submenu.checked_surface": Rgba(62, 62, 62, 220),
 
     # The visible forged outer border may be themed. The backing/corner
     # camouflage is intentionally absent: settings_dialog.py derives opaque RGB
