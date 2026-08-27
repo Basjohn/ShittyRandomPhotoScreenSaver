@@ -5,6 +5,7 @@ OverlayWidget {
     objectName: "clockPresentation"
 
     required property var clockModel
+    semanticDoubleClickEnabled: true
     signal toggleModeRequested()
 
     ClockDigitalFace {

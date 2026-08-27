@@ -13,6 +13,7 @@ Item {
 
     property real fadeOpacity: 1.0
     property bool workingVisible: true
+    property bool semanticDoubleClickEnabled: false
     opacity: fadeOpacity
     // Never clip the composed card/text shadows or their negative offsets.
     clip: false

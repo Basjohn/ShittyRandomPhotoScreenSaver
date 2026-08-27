@@ -7,10 +7,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, QPoint, Qt
 from PySide6.QtQml import QQmlEngine
 from PySide6.QtQuick import QQuickItem
+from PySide6.QtTest import QTest
 
+from rendering.quick.input_controller import QuickInputController
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.scene_controller import QuickSceneController
 from rendering.quick.state import QuickWindowPolicy
@@ -426,6 +428,70 @@ def test_clock_geometry_variants_round_trip_exactly_and_first_target_centers_onc
         factory.deleteLater()
         owner.deleteLater()
         qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_quick_window_gives_clock_double_tap_first_refusal_before_next_fallback(
+    qt_app,
+) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    factory = QuickSceneFactory()
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=117,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    window.setGeometry(0, 0, 160, 160)
+    input_controller = QuickInputController(
+        screen_index=0,
+        runtime_generation=117,
+        interaction_mode_provider=lambda: True,
+    )
+    window.bind_input_controller(input_controller)
+    scene = QuickSceneController(window=window, factory=factory)
+    ticker = _FakeTicker()
+    now_box = [datetime(2026, 8, 25, 13, 24, 30)]
+    model = _model(now_box, ticker)
+    toggles: list[str] = []
+    next_requests: list[bool] = []
+    presentation = RetainedClockPresentation(
+        host=scene.ordinary_widget_host,
+        model=model,
+        geometry=OverlayWidgetGeometry(10.0, 10.0, 100.0, 80.0),
+        display_bounds=OverlayWidgetGeometry(0.0, 0.0, 160.0, 160.0),
+        display_identity="screen:a",
+        on_mode_toggle=toggles.append,
+    )
+    input_controller.next_image_requested.connect(
+        lambda: next_requests.append(True)
+    )
+    QTest.mouseDClick(
+        window,
+        Qt.MouseButton.LeftButton,
+        pos=QPoint(145, 145),
+    )
+    qt_app.processEvents()
+    assert next_requests == [True]
+
+    QTest.mouseDClick(
+        window,
+        Qt.MouseButton.LeftButton,
+        pos=QPoint(50, 50),
+    )
+    qt_app.processEvents()
+
+    assert model.displayMode == "analog"
+    assert toggles == ["analog"]
+    assert next_requests == [True]
+
+    presentation.retire()
+    scene.quiesce_for_retirement()
+    window.deleteLater()
+    input_controller.deleteLater()
+    factory.deleteLater()
+    qt_app.processEvents()
 
 
 @pytest.mark.qt
