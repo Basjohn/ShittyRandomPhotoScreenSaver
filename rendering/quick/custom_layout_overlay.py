@@ -25,6 +25,7 @@ from rendering.custom_layout_session import (
 
 
 GeometryResolver = Callable[[CustomLayoutSessionItem, QRect], QRect]
+ItemChangePublisher = Callable[[CustomLayoutSessionItem], None]
 
 
 class CustomLayoutOverlayModel(QAbstractListModel):
@@ -46,15 +47,17 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         display_identity: str,
         display_origin: QPoint | None = None,
         geometry_resolver: GeometryResolver | None = None,
+        item_change_publisher: ItemChangePublisher | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
-        self._session = session
+        self._session: CustomLayoutSession | None = session
         self._display_identity = str(display_identity or "").strip()
         if not self._display_identity:
             raise ValueError("display_identity must not be empty")
         self._display_origin = QPoint(display_origin or QPoint())
         self._geometry_resolver = geometry_resolver
+        self._item_change_publisher = item_change_publisher
         self._items: list[CustomLayoutSessionItem] = []
         self.refresh()
 
@@ -94,9 +97,12 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     def refresh(self) -> None:
         """Re-evaluate display membership without copying working state."""
 
+        session = self._session
+        if session is None:
+            return
         next_items = [
             item
-            for item in self._session.items()
+            for item in session.items()
             if item.current_display_identity == self._display_identity
             and item.current_enabled
             and not item.removed
@@ -104,6 +110,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self.beginResetModel()
         self._items = next_items
         self.endResetModel()
+        for item in session.items():
+            self._publish_item_change(item)
 
     @Slot(int, float, float)
     def moveItem(self, row: int, local_x: float, local_y: float) -> None:
@@ -122,6 +130,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         resolver = self._geometry_resolver
         resolved = QRect(resolver(item, proposed)) if resolver is not None else proposed
         item.set_geometry(resolved)
+        self._publish_item_change(item)
         model_index = self.index(int(row), 0)
         self.dataChanged.emit(
             model_index,
@@ -142,6 +151,19 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         enabled = item.current_enabled
         self.refresh()
         self.item_closed.emit(widget_id, removed, enabled)
+
+    def retire(self) -> None:
+        self.beginResetModel()
+        self._items = []
+        self._session = None
+        self._geometry_resolver = None
+        self._item_change_publisher = None
+        self.endResetModel()
+
+    def _publish_item_change(self, item: CustomLayoutSessionItem) -> None:
+        publisher = self._item_change_publisher
+        if publisher is not None:
+            publisher(item)
 
 
 class RetainedCustomLayoutOverlay:
@@ -172,6 +194,7 @@ class RetainedCustomLayoutOverlay:
         display_identity: str,
         display_origin: QPoint | None = None,
         geometry_resolver: GeometryResolver | None = None,
+        item_change_publisher: ItemChangePublisher | None = None,
     ) -> CustomLayoutOverlayModel:
         self.clear_session()
         model = CustomLayoutOverlayModel(
@@ -179,6 +202,7 @@ class RetainedCustomLayoutOverlay:
             display_identity=display_identity,
             display_origin=display_origin,
             geometry_resolver=geometry_resolver,
+            item_change_publisher=item_change_publisher,
             parent=self.item,
         )
         self._model = model
@@ -217,6 +241,7 @@ class RetainedCustomLayoutOverlay:
             item.setProperty("verticalGuides", [])
             item.setProperty("horizontalGuides", [])
         if model is not None:
+            model.retire()
             model.deleteLater()
 
     def retire(self) -> None:

@@ -776,6 +776,7 @@ class RetainedGmailPresentation:
             "gmail",
             initial_properties={"gmailModel": model},
             object_name="gmail",
+            model_identity="gmail",
             geometry=geometry,
             fade_opacity=fade_opacity,
             card_style=model.style.card_style,

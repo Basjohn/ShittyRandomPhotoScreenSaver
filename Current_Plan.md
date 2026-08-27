@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-3beb2996572eb8feaf99ecdd28a852de0e750079
-G1 neutral shared-session ownership is landed/GREEN; G2.1 retained overlay bootstrap validated
+3159febf0a4f486afd3c0b89bf3d8f42a02b746a
+G2.1 single retained overlay/session-model bootstrap landed and passed post-push self-audit
 ```
 
 Current phase state:
@@ -44,14 +44,14 @@ Source outranks this plan if a later checkpoint has landed.
 one retained Quick edit overlay per display                           ACTIVE
 ```
 
-### G2.2 — session/presentation integration (ACTIVE)
+### G2.3 — visualizer participation and G2 closure (ACTIVE)
 
-- bind each display's retained overlay to the one shared `CustomLayoutSession` at edit-session admission;
-- keep the real retained family item visible and driven by the session rect while editing; no screenshot shell or copied geometry;
-- route Python snap/clamp results and guide state back through the overlay model without giving QML persistence authority;
-- make X hide the corresponding working presentation immediately while preserving duplicate-versus-singleton semantics;
-- prove Cancel restores the same retained presentation identity and ordinary enabled state;
-- do not retire old edit/grid pixels until this integration is GREEN under focused retained runtime tests.
+- route the retained Visualizer shell/item through the same session geometry and working-visibility seam without eager activation;
+- preserve visualizer scale/viewport and compositor identity while session rects temporarily override placement;
+- prove move/X/Cancel reuse the same retained visualizer shell and render item;
+- close remaining admission/refresh wiring required by the future physical Quick runtime without binding G2 back to QWidget;
+- self-audit all adjustable retained families against duplicate-versus-singleton X and ordinary-enabled semantics;
+- do not retire old edit/grid pixels until the complete retained integration is GREEN.
 
 Use `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`; exact current source outranks stale owner names.
 

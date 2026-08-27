@@ -6,12 +6,16 @@ from collections.abc import Mapping
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QUrl, Signal, Qt
+from PySide6.QtCore import QObject, QPoint, QUrl, Signal, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlComponent, QQmlContext, QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
 from core.settings.visualizer_mode_registry import VisualizerShellPolicy
+from rendering.custom_layout_session import (
+    CustomLayoutSession,
+    CustomLayoutSessionItem,
+)
 from widgets.spotify_visualizer.render_bridge import (
     VisualizerRenderIdentity,
     VisualizerSnapshotBridge,
@@ -19,14 +23,18 @@ from widgets.spotify_visualizer.render_bridge import (
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
 
 from .bootstrap import quick_qml_root
-from .custom_layout_overlay import RetainedCustomLayoutOverlay
+from .custom_layout_overlay import (
+    CustomLayoutOverlayModel,
+    GeometryResolver,
+    RetainedCustomLayoutOverlay,
+)
 from .image_state import PresentationImage
 from .media_artwork import MediaArtworkImageProvider
 from .render import BackgroundRenderItem, RenderNodeTelemetry
 from .state import QuickSceneReadiness
 from .transitions.state import TransitionRun
 from .visualizer import VisualizerRenderItem, VisualizerRenderNodeTelemetry
-from .widgets.host import OrdinaryWidgetPresentationHost
+from .widgets.host import OrdinaryWidgetPresentationHost, OverlayWidgetGeometry
 from .widgets.registry import (
     ORDINARY_WIDGET_FAMILY_COMPONENTS,
     ordinary_widget_family_component,
@@ -220,6 +228,8 @@ class QuickSceneController(QObject):
         self._background_item: BackgroundRenderItem | None = None
         self._ordinary_widget_host: OrdinaryWidgetPresentationHost | None = None
         self._custom_layout_overlay: RetainedCustomLayoutOverlay | None = None
+        self._custom_layout_display_identity = ""
+        self._custom_layout_display_origin = QPoint()
         self._visualizer_loader: QQuickItem | None = None
         self._visualizer_root: QQuickItem | None = None
         self._visualizer_content_host: QQuickItem | None = None
@@ -321,6 +331,72 @@ class QuickSceneController(QObject):
         if overlay is None:
             raise RuntimeError("CUSTOM layout overlay has retired")
         return overlay
+
+    def bind_custom_layout_session(
+        self,
+        session: CustomLayoutSession,
+        *,
+        display_identity: str,
+        display_origin: QPoint | None = None,
+        geometry_resolver: GeometryResolver | None = None,
+    ) -> CustomLayoutOverlayModel:
+        """Bind this display's retained pixels to shared CUSTOM working state."""
+
+        identity = str(display_identity or "").strip()
+        if not identity:
+            raise ValueError("display_identity must not be empty")
+        self._custom_layout_display_identity = identity
+        self._custom_layout_display_origin = QPoint(display_origin or QPoint())
+        return self.custom_layout_overlay.bind_session(
+            session,
+            display_identity=identity,
+            display_origin=self._custom_layout_display_origin,
+            geometry_resolver=geometry_resolver,
+            item_change_publisher=self._apply_custom_layout_item,
+        )
+
+    def refresh_custom_layout_session(self) -> None:
+        """Reproject current session state onto the same retained items."""
+
+        self.custom_layout_overlay.model.refresh()
+
+    def clear_custom_layout_session(self) -> None:
+        """Remove transient edit state without recreating family presentations."""
+
+        host = self.ordinary_widget_host
+        for model_identity in host.model_identities():
+            presentation = host.presentation_for_model_identity(model_identity)
+            if presentation is not None:
+                presentation.set_working_visible(True)
+        self.custom_layout_overlay.clear_session()
+        self._custom_layout_display_identity = ""
+        self._custom_layout_display_origin = QPoint()
+
+    def _apply_custom_layout_item(self, item: CustomLayoutSessionItem) -> None:
+        host = self._ordinary_widget_host
+        if host is None:
+            return
+        presentation = host.presentation_for_model_identity(item.model_identity)
+        if presentation is None:
+            return
+        belongs_here = (
+            item.current_display_identity == self._custom_layout_display_identity
+            and item.current_enabled
+            and not item.removed
+        )
+        presentation.set_working_visible(belongs_here)
+        if not belongs_here:
+            return
+        rect = item.current_global_rect
+        origin = self._custom_layout_display_origin
+        presentation.set_geometry(
+            OverlayWidgetGeometry(
+                float(rect.x() - origin.x()),
+                float(rect.y() - origin.y()),
+                float(rect.width()),
+                float(rect.height()),
+            )
+        )
 
     @property
     def telemetry(self) -> RenderNodeTelemetry:
@@ -648,6 +724,8 @@ class QuickSceneController(QObject):
             self._ordinary_widget_host.retire_all()
         if self._custom_layout_overlay is not None:
             self._custom_layout_overlay.retire()
+        self._custom_layout_display_identity = ""
+        self._custom_layout_display_origin = QPoint()
         root = self._scene_root
         context = self._context
         # Detach and queue the C++-owned root while every Python child wrapper

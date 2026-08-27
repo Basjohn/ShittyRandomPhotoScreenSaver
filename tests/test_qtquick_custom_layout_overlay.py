@@ -20,6 +20,7 @@ from rendering.quick.custom_layout_overlay import (
 )
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
+from rendering.quick.widgets.host import OverlayWidgetGeometry
 from rendering.quick.window import QuickDisplayWindow
 
 
@@ -189,6 +190,71 @@ def test_scene_controller_owns_overlay_for_exact_display_generation(qt_app) -> N
     with pytest.raises(RuntimeError):
         _ = controller.custom_layout_overlay
 
+    window.deleteLater()
+    factory.deleteLater()
+    qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_scene_binding_moves_hides_and_restores_same_retained_family_item(qt_app) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=97,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    presentation = controller.ordinary_widget_host.create_widget(
+        object_name="clock",
+        model_identity="clock",
+        geometry=OverlayWidgetGeometry(4.0, 5.0, 180.0, 80.0),
+        fade_opacity=0.35,
+    )
+    presentation_item = presentation.item
+    retained_identity = id(presentation_item)
+
+    session = CustomLayoutSession()
+    clock = _item("clock", "display:a", QRect(130, 250, 200, 90))
+    session.add_item(clock)
+    model = controller.bind_custom_layout_session(
+        session,
+        display_identity="display:a",
+        display_origin=QPoint(100, 200),
+    )
+
+    assert controller.ordinary_widget_host.presentation_for_model_identity("clock") is presentation
+    assert (presentation_item.x(), presentation_item.y()) == (30.0, 50.0)
+    assert (presentation_item.width(), presentation_item.height()) == (200.0, 90.0)
+    assert presentation_item.property("workingVisible") is True
+    assert presentation_item.opacity() == pytest.approx(0.35)
+
+    model.moveItem(0, 70.0, 95.0)
+    assert clock.current_global_rect == QRect(170, 295, 200, 90)
+    assert (presentation_item.x(), presentation_item.y()) == (70.0, 95.0)
+    assert id(presentation.item) == retained_identity
+
+    model.closeItem(0)
+    assert clock.current_enabled is False
+    assert presentation_item.property("workingVisible") is False
+    assert presentation_item.opacity() == pytest.approx(0.35)
+    assert id(presentation.item) == retained_identity
+
+    session.restore_baseline()
+    controller.refresh_custom_layout_session()
+    assert clock.current_enabled is True
+    assert presentation_item.property("workingVisible") is True
+    assert (presentation_item.x(), presentation_item.y()) == (30.0, 50.0)
+    assert id(presentation.item) == retained_identity
+
+    controller.clear_custom_layout_session()
+    assert controller.custom_layout_overlay.item.property("editActive") is False
+    assert presentation_item.property("workingVisible") is True
+    assert id(presentation.item) == retained_identity
+
+    controller.quiesce_for_retirement()
     window.deleteLater()
     factory.deleteLater()
     qt_app.processEvents()
