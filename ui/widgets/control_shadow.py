@@ -581,33 +581,6 @@ def _label_font_size_px(label: QLabel) -> float:
     return 0.0
 
 
-def _prepare_title_label(label: QLabel) -> None:
-    """Apply the approved enlarged Settings-title treatment exactly once."""
-
-    if label.text().strip() != "SRPSS SETTINGS":
-        return
-    if label.property("settingsTitleShadowPrepared"):
-        return
-
-    font = label.font()
-    point_size = font.pointSizeF()
-    if point_size > 0:
-        # Original base 15pt + first approved 2pt + this follow-up 2pt.
-        font.setPointSizeF(point_size + 4.0)
-    else:
-        pixel_size = font.pixelSize()
-        if pixel_size > 0:
-            font.setPixelSize(pixel_size + 5)
-    label.setFont(font)
-    label.setProperty("settingsTitleShadowPrepared", True)
-
-    parent = label.parentWidget()
-    if parent is not None and parent.objectName() == "customTitleBar":
-        # Give the 19pt-class title, its 3px top padding and 3x4px hard cast
-        # generous room so neither glyphs nor shadow can clip.
-        parent.setFixedHeight(max(52, parent.height()))
-
-
 def _heading_shadow_config(label: QLabel) -> ShadowConfig | None:
     text = (label.text() or "").strip()
     if not text:
@@ -618,7 +591,8 @@ def _heading_shadow_config(label: QLabel) -> ShadowConfig | None:
         return None
 
     if label.objectName() == "titleBarLabel":
-        _prepare_title_label(label)
+        # Typography/geometry are established synchronously by SettingsDialog.
+        # This renderer owns only the shadow and must never move the title.
         return TITLE_TEXT_SHADOW
 
     size_px = _label_font_size_px(label)

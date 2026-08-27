@@ -814,6 +814,14 @@ class SettingsDialog(QDialog):
         
         # Custom title bar
         self.title_bar = CustomTitleBar(self)
+
+        # Establish the approved main-title geometry before the window can ever
+        # paint.  Shadow discovery must not mutate typography/layout later.
+        title_font = self.title_bar.title_label.font()
+        title_font.setPointSizeF(19.0)
+        self.title_bar.title_label.setFont(title_font)
+        self.title_bar.setFixedHeight(52)
+
         # The content row puts the sidebar frame at +10px. The title QLabel
         # already owns 10px of left QSS padding, so remove only this main
         # title bar's extra 10px layout inset. Popup title bars are unaffected.
