@@ -6,7 +6,7 @@ Provides dark glass themed popup dialogs that match the application's visual sty
 from typing import Optional, Sequence, Tuple
 from PySide6.QtWidgets import (
     QDialog, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QWidget,
-    QGraphicsDropShadowEffect, QColorDialog, QFrame,
+    QGraphicsDropShadowEffect, QColorDialog, QDialogButtonBox, QFrame,
 )
 from PySide6.QtCore import Qt, QPoint, Signal
 from PySide6.QtGui import QColor, QPalette, QPainter, QPen, QBrush, QLinearGradient
@@ -360,6 +360,10 @@ class _ColorPickerDialog(QDialog):
 
         close_label = QLabel("×", title_frame)
         close_label.setObjectName("closeButton")
+        # dark.qss gives subsettings close labels an asymmetric margin. The
+        # sibling text-shadow painter intentionally does not parse QSS margins,
+        # so zero it on this owned label to keep source glyph + cast aligned.
+        close_label.setStyleSheet("margin: 0; padding: 0;")
         close_label.setCursor(Qt.CursorShape.PointingHandCursor)
         close_label.mousePressEvent = lambda event: self.reject()  # type: ignore[assignment]
         title_layout.addWidget(close_label)
@@ -409,6 +413,42 @@ class _ColorPickerDialog(QDialog):
             )
         self._color_dialog.setWindowFlags(Qt.WindowType.Widget)
         StyledColorPicker._apply_dark_palette(self._color_dialog)
+
+        # QColorDialog's OK/Cancel QPushButtons live inside a QDialogButtonBox.
+        # Their QGraphicsDropShadowEffect is clipped by that intermediate
+        # container before outer QColorDialog margins can help. Reserve the
+        # semantic +X/+Y cast inside the button-box layout itself.
+        pill_shadow = picker_theme.shadow("button.pill")
+        reserve_right = int(max(0.0, pill_shadow.offset_x)) + 8
+        reserve_bottom = int(max(0.0, pill_shadow.offset_y)) + 8
+
+        button_box = self._color_dialog.findChild(QDialogButtonBox)
+        if button_box is not None:
+            # dark.qss applies QDialogButtonBox { margin: 10px; }. That QSS
+            # margin does not expand the child paint clip, so neutralize it on
+            # this owned picker and use real layout margins instead.
+            button_box.setStyleSheet("QDialogButtonBox { margin: 0; padding: 0; }")
+            button_box_layout = button_box.layout()
+            if button_box_layout is not None:
+                margins = button_box_layout.contentsMargins()
+                button_box_layout.setContentsMargins(
+                    margins.left(),
+                    margins.top(),
+                    max(margins.right(), reserve_right),
+                    max(margins.bottom(), reserve_bottom),
+                )
+
+        # Keep modest outer clearance too, so the expanded button box itself
+        # is not pinned against the QColorDialog edge.
+        picker_layout = self._color_dialog.layout()
+        if picker_layout is not None:
+            margins = picker_layout.contentsMargins()
+            picker_layout.setContentsMargins(
+                margins.left(),
+                margins.top(),
+                max(margins.right(), reserve_right),
+                max(margins.bottom(), reserve_bottom),
+            )
 
         self._color_dialog.accepted.connect(self.accept)
         self._color_dialog.rejected.connect(self.reject)
