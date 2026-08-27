@@ -71,8 +71,8 @@ Current admission order:
 - stable retained config/model/image projection — GREEN;
 - retained card and existing interaction/menu fidelity — GREEN;
 - static registry and real manager/host runtime injection — GREEN;
-- deterministic lifecycle/action/image tests plus effective-DPR 1.0/1.5/2.25 eyes-on evidence — ACTIVE;
-- caller proof and old pixel/cache/input retirement only after GREEN.
+- deterministic lifecycle/action/image tests plus effective-DPR 1.0/1.5/2.25 eyes-on evidence — GREEN;
+- caller proof and old pixel/cache/input retirement — ACTIVE.
 
 ## F8 Abandonment Issues
 

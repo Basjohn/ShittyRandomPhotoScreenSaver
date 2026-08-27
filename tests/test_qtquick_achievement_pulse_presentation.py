@@ -377,6 +377,7 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app) -> None:
         header = _find_visual_item(item, "achievementHeaderFrame")
         artwork = _find_visual_item(item, "achievementArtworkFrame")
         metric = _find_visual_item(item, "achievementMetric")
+        subtitle = _find_visual_item(item, "achievementSubtitle")
         rarity = _find_visual_item(item, "achievementField_rarity")
         rarity_detail = _find_visual_item(
             item, "achievementCapsuleDetail_rarity"
@@ -385,6 +386,7 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app) -> None:
         assert header is not None
         assert artwork is not None
         assert metric is not None
+        assert subtitle is not None
         assert rarity is not None
         assert rarity_detail is not None
         assert float(item.property("contentScale")) == pytest.approx(1.0)
@@ -401,6 +403,7 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app) -> None:
             196.0,
         )
         assert metric.y() == pytest.approx(216.0)
+        assert subtitle.isVisible() is False
         assert rarity_detail.isVisible() is True
 
         card = build_mock_steam_view_model("achievement_pulse")
@@ -415,6 +418,16 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app) -> None:
         qt_app.processEvents()
         assert _find_visual_item(item, "achievementField_rarity") is rarity
         assert QQmlEngine.contextForObject(item).engine() is engine
+
+        model.on_achievement_presentation(
+            AchievementPulsePreparedPresentation(
+                model=replace(changed_card, latest_unlocks=())
+            ),
+            animate=False,
+        )
+        qt_app.processEvents()
+        assert _find_visual_item(item, "achievementSubtitle") is subtitle
+        assert subtitle.isVisible() is True
 
         item.setWidth(model.authoredWidth * 1.5)
         item.setHeight(model.authoredHeight * 1.5)

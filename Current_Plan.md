@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-cf1d3a13ce69728eacf9ed513835e30a00db9eac
-Phase F6 Gmail retirement landed on current main
+b6c559f916c581ba948a17374d779defaf275f9c
+Phase F7 Achievement Pulse retained owner integration landed on current main
 ```
 
 Current phase state:
@@ -45,20 +45,21 @@ exact runtime/preparation/cache/action/presentation ownership audit  GREEN
 stable retained config/model/image projection                       GREEN
 retained QML card + interaction/menu fidelity                       GREEN
 registry + real owner injection + runtime-shaped gates              GREEN
-effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                    ACTIVE
-caller proof + old Achievement Pulse pixel/cache/input retirement   PENDING
+effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                    GREEN
+caller proof + old Achievement Pulse pixel/cache/input retirement   ACTIVE
 ```
 
-### F7.4 — real-OpenGL visual proof (ACTIVE)
+### F7.5 — caller proof and old-pixel retirement (ACTIVE)
 
-- preserve cache/privacy/provenance/selection and existing Steam data authority;
-- keep QML presentation-only: no Steam provider/cache/persistence/cadence authority;
-- render representative portrait/square/wide/no-art/connect/unavailable/connection-attention states through
-  one real threaded-OpenGL Quick window;
-- run the visual matrix at effective DPR 1.0, 1.5 and 2.25;
-- inspect card/no-card alpha, artwork crop/border, header/title hierarchy, latest unlocks, capsule rails,
-  text/capsule shadows and uniform geometry scaling;
-- correct only retained presentation defects exposed by deterministic or eyes-on evidence.
+- prove every enabled Achievement Pulse caller resolves through the static retained family registry and the
+  real manager-owned Steam service;
+- preserve neutral runtime/preparation/cache/privacy/provenance/selection/settings contracts and any shared
+  Abandonment Issues dependency;
+- delete only caller-proven old Achievement Pulse QWidget paint/cache/input/factory plumbing and rehome or
+  remove presentation-only tests;
+- run focused destination, neutral Steam runtime, shared manager/input and import/compile gates;
+- scan production callers and retired markers, inspect the full diff/status, then self-audit the pushed
+  checkpoint before admitting F8.
 
 Do not port Steam Journey/Progress or Friend Pulse scaffolds as part of F7.
 

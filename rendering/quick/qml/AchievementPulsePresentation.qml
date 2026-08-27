@@ -241,7 +241,9 @@ OverlayWidget {
 
             ShadowedText {
                 objectName: "achievementSubtitle"
-                visible: text.length > 0
+                // The legacy presenter treated the latest-unlock stack as the
+                // subtitle area's content, rather than painting both layers.
+                visible: text.length > 0 && unlockRepeater.count === 0
                 x: 18.0
                 y: 100.0
                 width: normalContent.titleWidth
