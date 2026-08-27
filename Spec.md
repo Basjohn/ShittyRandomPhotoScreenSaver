@@ -76,7 +76,8 @@ Current proven patterns are deliberately heterogeneous:
   old QWidget presentation retired.
 - Achievement Pulse: existing neutral Steam runtime/preparation/cache/selection ownership; retained model/QML
   complete and old QWidget presentation retired.
-- Abandonment Issues: existing neutral Steam runtime/data/cache/rotation ownership; retained port active.
+- Abandonment Issues: existing neutral Steam runtime/data/cache/rotation ownership; retained model/QML complete
+  and old QWidget presentation retired.
 
 Do not create services/managers merely for naming symmetry.
 

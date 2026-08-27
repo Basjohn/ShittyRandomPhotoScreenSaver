@@ -91,7 +91,7 @@ SettingsManager, network or cadence.
 | Reddit/Reddit2 | independent configured `RedditRuntimeService` per member | separate stable models, one family QML |
 | Gmail | runtime-generation shared Gmail + `GmailBackend.instance()` + display lease | retained model/QML; old QWidget presenter retired |
 | Achievement Pulse | existing neutral Steam runtime/preparation/cache/selection owners | retained model/QML; old QWidget presenter retired |
-| Abandonment Issues | existing neutral Steam runtime/data/cache/rotation owners | retained port active |
+| Abandonment Issues | existing neutral Steam runtime/data/cache/rotation owners | retained model/QML; old QWidget presenter retired |
 
 Presentation destruction does not automatically mean backend destruction; shared owners use real consumer
 cardinality.

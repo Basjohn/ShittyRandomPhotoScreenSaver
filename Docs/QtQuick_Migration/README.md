@@ -7,7 +7,8 @@ Sequence/work admission comes only from `Current_Plan.md`.
 Current state:
 
 ```text
-Phase F active
+Phase F closed
+Phase G CUSTOM/input active
 F0.5 closed
 F1 Clock closed
 F2 Weather closed
@@ -16,7 +17,7 @@ F4 Media controls closed
 F5 Reddit closed
 F6 Gmail closed
 F7 Achievement Pulse closed
-F8 Abandonment Issues active
+F8 Abandonment Issues closed
 ```
 
 Closed A–E history is intentionally not repeated here.
