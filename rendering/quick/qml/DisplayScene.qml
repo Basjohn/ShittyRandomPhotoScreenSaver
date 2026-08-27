@@ -6,27 +6,53 @@ Item {
     property string runtimeRole: "display-scene"
     property int screenIndex: -1
     property var runtimeGeneration: null
+    property bool dimmingEnabled: false
+    property real dimmingOpacity: 0.0
+    property real pixelShiftX: 0.0
+    property real pixelShiftY: 0.0
 
-    // Per-display retained ordinary-widget presentation host. The Python
-    // QuickSceneController owns creation/retirement of the OverlayWidget items
-    // parented here; the scene itself stays free of any per-widget if/elif
-    // dispatch. It sits above the background render item and below the
-    // visualizer presentation.
-    Item {
-        id: ordinaryWidgetHost
-        objectName: "ordinaryWidgetHost"
+    Rectangle {
+        id: backgroundDimming
+        objectName: "backgroundDimming"
         anchors.fill: parent
-        clip: false
-        z: 5
+        color: "black"
+        opacity: displayScene.dimmingEnabled
+            ? Math.max(0.0, Math.min(1.0, displayScene.dimmingOpacity))
+            : 0.0
+        visible: opacity > 0.0
+        enabled: false
+        z: 1
     }
 
-    Loader {
-        id: visualizerPresentationLoader
-        objectName: "visualizerPresentationLoader"
-        active: false
-        asynchronous: false
-        source: "VisualizerPresentation.qml"
-        z: 10
+    Item {
+        id: pixelShiftLayer
+        objectName: "pixelShiftLayer"
+        anchors.fill: parent
+        z: 5
+        transform: Translate {
+            x: displayScene.pixelShiftX
+            y: displayScene.pixelShiftY
+        }
+
+        // Per-display retained ordinary-widget presentation host. The Python
+        // QuickSceneController owns creation/retirement of the OverlayWidget
+        // items parented here; pixel shift remains one shared transform.
+        Item {
+            id: ordinaryWidgetHost
+            objectName: "ordinaryWidgetHost"
+            anchors.fill: parent
+            clip: false
+            z: 0
+        }
+
+        Loader {
+            id: visualizerPresentationLoader
+            objectName: "visualizerPresentationLoader"
+            active: false
+            asynchronous: false
+            source: "VisualizerPresentation.qml"
+            z: 5
+        }
     }
 
     CustomLayoutOverlay {
