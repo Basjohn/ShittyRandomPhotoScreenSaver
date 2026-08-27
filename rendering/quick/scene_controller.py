@@ -25,9 +25,9 @@ from .render import BackgroundRenderItem, RenderNodeTelemetry
 from .state import QuickSceneReadiness
 from .transitions.state import TransitionRun
 from .visualizer import VisualizerRenderItem, VisualizerRenderNodeTelemetry
-from .widgets import (
+from .widgets.host import OrdinaryWidgetPresentationHost
+from .widgets.registry import (
     ORDINARY_WIDGET_FAMILY_COMPONENTS,
-    OrdinaryWidgetPresentationHost,
     ordinary_widget_family_component,
 )
 from .window import QuickDisplayWindow

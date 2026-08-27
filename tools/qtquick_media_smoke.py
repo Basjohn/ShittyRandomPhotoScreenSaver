@@ -27,12 +27,14 @@ from PySide6.QtQuick import QQuickItem, QQuickWindow  # noqa: E402
 
 from core.media.media_controller import MediaPlaybackState, MediaTrackInfo  # noqa: E402
 from rendering.quick.scene_controller import QuickSceneFactory  # noqa: E402
-from rendering.quick.widgets import (  # noqa: E402
+from rendering.quick.widgets.host import (  # noqa: E402
+    OrdinaryWidgetPresentationHost,
+    OverlayWidgetGeometry,
+)
+from rendering.quick.widgets.media import (  # noqa: E402
     MediaPresentationConfig,
     MediaPresentationModel,
     MediaPresentationStyle,
-    OrdinaryWidgetPresentationHost,
-    OverlayWidgetGeometry,
     RetainedMediaPresentation,
 )
 from widgets.media_runtime import MediaRuntimeSnapshot, PreparedMediaArtwork  # noqa: E402

@@ -20,7 +20,7 @@ from core.settings.shadow_direction import ShadowDirection, resolve_signed_offse
 from rendering.quick.bootstrap import quick_qml_root
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
-from rendering.quick.widgets import (
+from rendering.quick.widgets.host import (
     OrdinaryWidgetPresentationHost,
     OverlayCardStyle,
     OverlayWidgetGeometry,
