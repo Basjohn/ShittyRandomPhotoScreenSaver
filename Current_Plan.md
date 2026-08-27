@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-f85a7e8e26a8b89cafaa0004f14ce2145abec2e2
-Phase F8 Abandonment retained archive card landed on current main
+d99e83e84f0c99434b9940a242b593df52a94eda
+Phase F8 Abandonment retained owner integration landed on current main
 ```
 
 Current phase state:
@@ -45,19 +45,21 @@ exact runtime/data/cache/rotation/action/presentation ownership audit  GREEN
 stable retained config/model/image projection                         GREEN
 retained QML card + interaction fidelity                               GREEN
 registry + real owner injection + runtime-shaped gates                GREEN
-effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                      ACTIVE
-caller proof + old Abandonment pixel/cache/input retirement           PENDING
+effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                      GREEN
+caller proof + old Abandonment pixel/cache/input retirement           ACTIVE
 ```
 
-### F8.5 — effective-DPR visual and lifecycle proof (ACTIVE)
+### F8.6 — caller proof and old-pixel retirement (ACTIVE)
 
-- extend the real threaded-OpenGL ordinary-widget smoke with portrait, wide, no-art, unavailable and connect
-  archive-card states;
-- render and inspect at exact effective DPR 1.0, 1.5 and 2.25 against the old archival presenter oracle;
-- make the archive tab, artwork shelf/hatch, age stamp, rediscovery text and ledger shelves inspectable without
-  changing their distinct visual treatment;
-- prove geometry/image/cache/transition behavior and one-window/one-engine lifecycle without item recreation;
-- record deterministic screenshots/logs and keep the tool reusable for later Steam-family visual checks.
+- prove every enabled Abandonment caller resolves through the retained registry/model and the real manager-owned
+  neutral service;
+- preserve neutral selection/cache/rotation/privacy/provenance/preparation and reusable Steam-family contracts;
+- delete only caller-proven old Abandonment QWidget factory/input/runtime bridge, DPR image cache, layout/painter
+  and presentation-only tests;
+- keep Steam Journey/Progress and Friend Pulse future scaffolds provider-inert without retaining Abandonment
+  compatibility aliases or a generic god-card presenter;
+- run focused destination/runtime/shared-manager/import gates, retired-marker scans, full diff/status review and
+  post-push self-audit before closing Phase F.
 
 Do not port Steam Journey/Progress or Friend Pulse scaffolds as part of F8.
 
