@@ -289,6 +289,9 @@ class QuickSceneController(QObject):
             create_overlay_item=factory.create_overlay_widget,
             create_family_item=factory.create_ordinary_widget_family,
         )
+        window.bind_semantic_double_click_hit_test(
+            self._ordinary_widget_host.handles_semantic_double_click_at
+        )
         custom_layout_overlay_item = root.findChild(
             QQuickItem,
             "customLayoutOverlay",
@@ -770,6 +773,7 @@ class QuickSceneController(QObject):
 
         if not self._readiness.admission_open:
             return
+        self._window.bind_semantic_double_click_hit_test(None)
         self._publish_readiness(admission_open=False)
         if self._visualizer_item is not None:
             self._visualizer_item.clear_render_source()

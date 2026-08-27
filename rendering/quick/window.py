@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import QMetaObject, Signal, Qt
+from PySide6.QtCore import QMetaObject, QPointF, Signal, Qt
 from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QScreen
 from PySide6.QtQuick import QQuickWindow
 
@@ -55,6 +56,7 @@ class QuickDisplayWindow(QQuickWindow):
         self._display_identity: QuickDisplayIdentity | None = None
         self._binding_loss: QuickDisplayBindingLoss | None = None
         self._input_controller: QuickInputController | None = None
+        self._semantic_double_click_hit_test: Callable[[QPointF], bool] | None = None
         self._desired_visible = False
         self._close_queued = False
 
@@ -115,6 +117,12 @@ class QuickDisplayWindow(QQuickWindow):
         ):
             raise ValueError("Quick input identity does not match its display window")
         self._input_controller = controller
+
+    def bind_semantic_double_click_hit_test(
+        self,
+        hit_test: Callable[[QPointF], bool] | None,
+    ) -> None:
+        self._semantic_double_click_hit_test = hit_test
 
     def show_on_screen(self) -> None:
         """Commit exact physical-screen placement before making the window visible."""
@@ -225,11 +233,18 @@ class QuickDisplayWindow(QQuickWindow):
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        # Retained Quick hit regions own family-specific double-click semantics
+        # (Clock mode, Media refresh). Let QML admit those first; the neutral
+        # runtime input owner remains the unhandled-display fallback.
+        event.ignore()
+        super().mouseDoubleClickEvent(event)
+        hit_test = self._semantic_double_click_hit_test
+        if hit_test is not None and hit_test(event.position()):
+            event.accept()
+            return
         controller = self._input_controller
         if controller is not None and controller.handle_mouse_double_click(event):
             event.accept()
-            return
-        super().mouseDoubleClickEvent(event)
 
     def _bind_screen(self, screen: QScreen, *, apply_geometry: bool) -> None:
         if screen is self._bound_screen:

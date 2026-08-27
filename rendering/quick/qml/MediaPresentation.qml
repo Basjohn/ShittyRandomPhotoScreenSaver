@@ -6,6 +6,7 @@ OverlayWidget {
     objectName: "mediaPresentation"
 
     required property var mediaModel
+    semanticDoubleClickEnabled: true
     signal refreshRequested()
     signal playPauseRequested()
     signal previousRequested()

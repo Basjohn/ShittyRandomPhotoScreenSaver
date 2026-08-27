@@ -18,6 +18,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
+from PySide6.QtCore import QPointF
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlContext
 from PySide6.QtQuick import QQuickItem
@@ -326,6 +327,22 @@ class OrdinaryWidgetPresentationHost:
 
     def model_identities(self) -> tuple[str, ...]:
         return tuple(self._by_model_identity)
+
+    def handles_semantic_double_click_at(self, scene_position: QPointF) -> bool:
+        """Return whether the topmost retained item owns this double click."""
+
+        point = QPointF(scene_position)
+        for widget in reversed(self._live):
+            item = widget.item
+            if (
+                not item.isVisible()
+                or not item.isEnabled()
+                or not bool(item.property("semanticDoubleClickEnabled"))
+            ):
+                continue
+            if item.contains(item.mapFromScene(point)):
+                return True
+        return False
 
     def retire_widget(self, widget: RetainedOverlayWidget) -> bool:
         """Retire one live widget mid-generation without retiring the host."""
