@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-bda06f043ecd81a89cab18f64ccf99d6979833d2
-Phase F8 Abandonment ownership/reuse audit landed on current main
+f5d881e1c0c768ba04019e6c3a7cff8a81297d5b
+Phase F8 Abandonment retained model landed on current main
 ```
 
 Current phase state:
@@ -43,22 +43,22 @@ Source outranks this plan if a later checkpoint has landed.
 ```text
 exact runtime/data/cache/rotation/action/presentation ownership audit  GREEN
 stable retained config/model/image projection                         GREEN
-retained QML card + interaction fidelity                               ACTIVE
-registry + real owner injection + runtime-shaped gates                PENDING
+retained QML card + interaction fidelity                               GREEN
+registry + real owner injection + runtime-shaped gates                ACTIVE
 effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                      PENDING
 caller proof + old Abandonment pixel/cache/input retirement           PENDING
 ```
 
-### F8.3 — retained archive card and interaction fidelity (ACTIVE)
+### F8.4 — registry and real owner integration (ACTIVE)
 
-- reproduce the old archival card as the visual oracle: header plate, archive tab, artwork shelf, age stamp,
-  rediscovery copy and two-column ledger shelves;
-- keep the Abandonment archive/ledger treatment explicit and distinct from Achievement capsules; if a visual
-  shelf primitive is shared, its style must be an explicit choice rather than flattening either family;
-- bind the stable field model without delegate recreation and commit animated runtime updates through the
-  retained content-transition handshake;
-- route double-click refresh and connection/settings targets only through admitted semantic actions;
-- add focused QML identity/geometry/pixel-state tests before owner integration.
+- register the retained Abandonment component statically and add one presentation wrapper that routes QML
+  refresh/settings signals to capability-gated model actions;
+- make the existing runtime-service injection/reuse contract accept the retained model without weakening the
+  still-live QWidget edge during this checkpoint;
+- admit enabled Abandonment through the ordinary retained host with the canonical geometry/style/input state;
+- prove real manager-owned service reuse, stable item/model/list/engine identity, one timer and late-callback
+  fencing under runtime-shaped setup/retire/rebuild;
+- keep all provider/cache/rotation cadence work in `AbandonmentRuntimeService`.
 
 Do not port Steam Journey/Progress or Friend Pulse scaffolds as part of F8.
 

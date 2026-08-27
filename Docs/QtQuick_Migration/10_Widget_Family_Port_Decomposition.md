@@ -74,8 +74,8 @@ Current admission order:
 
 - exact runtime/data/cache/rotation/action/presentation ownership and reuse audit — GREEN;
 - stable retained config/model/image projection — GREEN;
-- retained card/action fidelity — ACTIVE;
-- static registry, real manager/host injection and runtime-shaped gates — PENDING;
+- retained card/action fidelity — GREEN;
+- static registry, real manager/host injection and runtime-shaped gates — ACTIVE;
 - effective-DPR 1.0/1.5/2.25 eyes-on evidence — PENDING;
 - caller proof and old pixel/cache/input retirement — PENDING.
 
