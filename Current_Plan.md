@@ -7,8 +7,8 @@ Last updated: 2026-08-27
 Exact pushed `main` reviewed through:
 
 ```text
-aca1087813d15b38dc9fa1c4ed2f8e0bd6567000
-Phase F7 Achievement Pulse retirement is caller-proven and self-audited on current main
+bda06f043ecd81a89cab18f64ccf99d6979833d2
+Phase F8 Abandonment ownership/reuse audit landed on current main
 ```
 
 Current phase state:
@@ -42,25 +42,23 @@ Source outranks this plan if a later checkpoint has landed.
 
 ```text
 exact runtime/data/cache/rotation/action/presentation ownership audit  GREEN
-stable retained config/model/image projection                         ACTIVE
-retained QML card + interaction fidelity                               PENDING
+stable retained config/model/image projection                         GREEN
+retained QML card + interaction fidelity                               ACTIVE
 registry + real owner injection + runtime-shaped gates                PENDING
 effective-DPR eyes-on matrix at 1.0 / 1.5 / 2.25                      PENDING
 caller proof + old Abandonment pixel/cache/input retirement           PENDING
 ```
 
-### F8.2 — stable retained model and image projection (ACTIVE)
+### F8.3 — retained archive card and interaction fidelity (ACTIVE)
 
-- project the existing normalized selection, shelf visibility, artwork/desaturation and shared Steam settings
-  into one immutable retained config;
-- consume `AbandonmentPreparedPresentation` directly; keep accepted card/artwork identity and rotation state in
-  one stable presentation model without provider, cache or cadence work;
-- reuse a presentation-neutral retained Steam field-list model and image-source projection rather than cloning
-  the Achievement Pulse technique; keep archive/ledger policy and geometry Abandonment-specific;
-- preserve double-click manual refresh, cache-only rotation admission, fade completion and settings actions as
-  capability-gated semantic calls;
-- prove stable object/list identity, runtime attach/retire behavior, honest unavailable states and no work before
-  activation before admitting QML pixels.
+- reproduce the old archival card as the visual oracle: header plate, archive tab, artwork shelf, age stamp,
+  rediscovery copy and two-column ledger shelves;
+- keep the Abandonment archive/ledger treatment explicit and distinct from Achievement capsules; if a visual
+  shelf primitive is shared, its style must be an explicit choice rather than flattening either family;
+- bind the stable field model without delegate recreation and commit animated runtime updates through the
+  retained content-transition handshake;
+- route double-click refresh and connection/settings targets only through admitted semantic actions;
+- add focused QML identity/geometry/pixel-state tests before owner integration.
 
 Do not port Steam Journey/Progress or Friend Pulse scaffolds as part of F8.
 
