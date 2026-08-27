@@ -5,7 +5,6 @@ files = [
     r'ui/tabs/shared_styles.py',
     r'ui/tabs/widgets_tab_gmail.py',
     r'ui/tabs/widgets_tab.py',
-    r'widgets/gmail_widget.py',
 ]
 
 ok = True

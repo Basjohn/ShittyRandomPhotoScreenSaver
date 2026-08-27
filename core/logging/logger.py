@@ -3050,7 +3050,6 @@ def setup_logging(
         # Gmail modules - logs on every fetch/auth
         "core.auth.gmail_oauth",
         "core.gmail.gmail_client",
-        "widgets.gmail_widget",
     )
     internal_noisy_level = logging.DEBUG if verbose else logging.INFO
     for name in NOISY_INTERNAL_MODULES:

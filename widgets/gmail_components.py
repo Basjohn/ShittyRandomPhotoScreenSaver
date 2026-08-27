@@ -1,56 +1,15 @@
-"""Gmail widget helper components.
-
-Extracted from gmail_widget.py to keep the main widget under the 1500-line
-monolith threshold. Contains:
-- GmailPosition — enum for widget screen position
-- _format_relative_time — lightweight datetime formatting
-- _smart_title_case — title casing utility (reuses Reddit logic)
-"""
+"""Presentation preparation helpers shared by the retained Gmail model."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from email.header import decode_header, make_header
 from email.utils import parseaddr
-from enum import Enum
 import re
 import unicodedata
 from typing import Any, List, Optional
 
-from core.gmail.gmail_preparation import deserialize_email_cache, serialize_email_cache
-from core.logging.logger import get_logger
 from core.gmail.gmail_client import EmailMetadata
-
-logger = get_logger(__name__)
-
-
-class GmailPosition(Enum):
-    """Gmail widget position on screen."""
-
-    TOP_LEFT = "top_left"
-    TOP_CENTER = "top_center"
-    TOP_RIGHT = "top_right"
-    MIDDLE_LEFT = "middle_left"
-    CENTER = "center"
-    MIDDLE_RIGHT = "middle_right"
-    BOTTOM_LEFT = "bottom_left"
-    BOTTOM_CENTER = "bottom_center"
-    BOTTOM_RIGHT = "bottom_right"
-
-    @classmethod
-    def from_string(cls, value: str) -> "GmailPosition":
-        """Convert string to GmailPosition, with fallback to TOP_LEFT."""
-        if not value:
-            logger.warning("[GMAIL] Unknown position '%s', defaulting to TOP_LEFT", value)
-            return cls.TOP_LEFT
-        normalized = value.lower().replace(" ", "_")
-        if normalized == "custom":
-            return cls.TOP_LEFT
-        try:
-            return cls(normalized)
-        except ValueError:
-            logger.warning("[GMAIL] Unknown position '%s', defaulting to TOP_LEFT", value)
-            return cls.TOP_LEFT
 
 
 _TITLE_FILTER_RE = re.compile(r"\b(daily|weekly|question thread)\b", re.IGNORECASE)

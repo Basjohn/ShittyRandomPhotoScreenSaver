@@ -3,16 +3,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-
-def test_gmail_widget_apply_settings_basic() -> None:
-    """Verify GmailWidget.apply_settings() correctly parses flat settings dict."""
-    # This test would need Qt app, so we'll skip for now
-    # The actual widget test (P6.3) will cover this with Qt app
-    pytest.skip("Requires Qt app - covered in test_gmail_widget.py")
-
-
 def test_gmail_settings_keys_exist() -> None:
     """Verify Gmail settings keys are defined in default_settings.py."""
     from core.settings.default_settings import DEFAULT_SETTINGS
@@ -49,21 +39,6 @@ def test_gmail_settings_flat_dict_structure() -> None:
                 # This is just a sanity check - complex nested structures should be avoided
                 for k, v in value.items():
                     assert not isinstance(v, dict), f"Nested dict in {key}.{k}"
-
-
-def test_gmail_position_enum_values() -> None:
-    """Verify GmailPosition enum values are lowercase snake_case."""
-    from widgets.gmail_components import GmailPosition
-
-    # Check that all GmailPosition values are lowercase snake_case
-    valid_positions = [
-        "top_left", "top_center", "top_right",
-        "middle_left", "center", "middle_right",
-        "bottom_left", "bottom_center", "bottom_right",
-    ]
-
-    for pos in GmailPosition:
-        assert pos.value in valid_positions, f"Invalid position value: {pos.value}"
 
 
 def test_gmail_settings_type_safety() -> None:

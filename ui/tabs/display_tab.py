@@ -17,11 +17,8 @@ from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
+from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
-    SPINBOX_STYLE,
-    CIRCLE_CHECKBOX_STYLE,
-    COMBOBOX_STYLE,
-    PAGE_TITLE_STYLE,
     create_inline_label,
     add_aligned_row,
     style_group_box,
@@ -75,8 +72,7 @@ class DisplayTab(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.NoFrame)
-        from ui.tabs.shared_styles import SCROLL_AREA_STYLE
-        scroll.setStyleSheet(SCROLL_AREA_STYLE)
+        scroll.setStyleSheet(shared_styles.SCROLL_AREA_STYLE)
 
         # Create content widget
         content = QWidget()
@@ -86,7 +82,7 @@ class DisplayTab(QWidget):
         
         # Title
         title = QLabel("Display Settings")
-        title.setStyleSheet(PAGE_TITLE_STYLE)
+        shared_styles.apply_shared_label_style(title, "PAGE_TITLE_STYLE")
         layout.addWidget(title)
         
         # Monitor selection group
@@ -306,11 +302,11 @@ class DisplayTab(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
 
-        self.setStyleSheet(
-            self.styleSheet()
-            + SPINBOX_STYLE
-            + CIRCLE_CHECKBOX_STYLE
-            + COMBOBOX_STYLE
+        shared_styles.bind_shared_styles(
+            self,
+            "SPINBOX_STYLE",
+            "CIRCLE_CHECKBOX_STYLE",
+            "COMBOBOX_STYLE",
         )
     
     def _load_settings(self) -> None:

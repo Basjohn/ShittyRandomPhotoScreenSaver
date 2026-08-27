@@ -57,6 +57,7 @@ _FONTS_REGISTERED = False
 _LIVE_GROUP_BOXES: weakref.WeakSet = weakref.WeakSet()
 _LIVE_RECOMMENDED_SLIDERS: weakref.WeakSet = weakref.WeakSet()
 _LIVE_STYLED_LABELS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_LIVE_STYLE_BUNDLES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
 _SETTINGS_THEME = get_active_settings_theme()
@@ -304,6 +305,56 @@ def _remember_live_label(label: QLabel, role: str | None) -> None:
         _LIVE_STYLED_LABELS.pop(label, None)
         return
     _LIVE_STYLED_LABELS[label] = role
+
+
+def apply_shared_label_style(label: QLabel, role: str) -> None:
+    """Apply and live-bind one shared label style without changing geometry."""
+
+    style_sheet = globals().get(role)
+    if not isinstance(style_sheet, str) or role not in _SHARED_LABEL_STYLE_ROLES:
+        raise KeyError(f"Unknown shared label style role: {role!r}")
+    label.setStyleSheet(style_sheet)
+    _remember_live_label(label, role)
+
+
+def _render_shared_style_bundle(
+    base_style: str,
+    style_roles: tuple[str, ...],
+) -> str:
+    """Compose one widget stylesheet from current shared style roles."""
+
+    parts = [base_style]
+    for role in style_roles:
+        style_sheet = globals().get(role)
+        if not isinstance(style_sheet, str):
+            raise KeyError(f"Unknown shared style role: {role!r}")
+        parts.append(style_sheet)
+    return "".join(parts)
+
+
+def bind_shared_styles(
+    widget: QWidget,
+    *style_roles: str,
+    base_style: str | None = None,
+) -> None:
+    """Apply shared style roles and keep the same widget bundle live.
+
+    ``base_style`` defaults to the widget's stylesheet before the first shared
+    bundle is attached. Rebinding the same widget reuses that original base so
+    repeated setup/refresh calls cannot accumulate duplicate QSS.
+    """
+
+    if not style_roles:
+        raise ValueError("At least one shared style role is required")
+    existing = _LIVE_STYLE_BUNDLES.get(widget)
+    if base_style is None:
+        resolved_base = existing[0] if existing is not None else widget.styleSheet()
+    else:
+        resolved_base = str(base_style)
+    roles = tuple(style_roles)
+    rendered = _render_shared_style_bundle(resolved_base, roles)
+    _LIVE_STYLE_BUNDLES[widget] = (resolved_base, roles)
+    widget.setStyleSheet(rendered)
 
 
 def apply_section_heading_style(
@@ -1175,6 +1226,13 @@ def _refresh_live_shared_widgets(theme: SettingsThemeSpec) -> None:
             style_sheet = globals().get(role)
             if isinstance(style_sheet, str):
                 label.setStyleSheet(style_sheet)
+
+    for widget, binding in tuple(_LIVE_STYLE_BUNDLES.items()):
+        if _is_live_qobject(widget):
+            base_style, style_roles = binding
+            widget.setStyleSheet(
+                _render_shared_style_bundle(base_style, style_roles)
+            )
 
     for box in tuple(_LIVE_GROUP_BOXES):
         if _is_live_qobject(box):

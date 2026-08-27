@@ -3,29 +3,37 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from widgets.gmail_widget import GMAIL_ACTION_ICON_PATHS, GMAIL_IMAGE_ASSETS
+from rendering.quick.widgets.gmail import (
+    _GMAIL_ACTION_ICONS,
+    _GMAIL_LOGO,
+    _GMAIL_READ_ENVELOPE,
+    _GMAIL_UNREAD_ENVELOPE,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _presentation_assets() -> set[Path]:
+    return {
+        _GMAIL_LOGO,
+        _GMAIL_READ_ENVELOPE,
+        _GMAIL_UNREAD_ENVELOPE,
+        *_GMAIL_ACTION_ICONS.values(),
+    }
+
+
 def test_gmail_required_image_assets_exist():
-    """Every Gmail image referenced by the widget should be present in the repo."""
-    missing = [
-        asset_path
-        for asset_path in GMAIL_IMAGE_ASSETS
-        if not (ROOT / asset_path).is_file()
-    ]
+    """Every image referenced by the retained Gmail presenter is packaged."""
+    missing = [asset_path for asset_path in _presentation_assets() if not asset_path.is_file()]
 
     assert missing == []
 
 
 def test_gmail_asset_resolver_finds_logo_without_repo_cwd(monkeypatch, tmp_path):
-    """Standard onefile/SCR builds should not depend only on the process cwd."""
-    from widgets.gmail_widget import _gmail_asset_path
-
+    """The retained presenter resolves its logo independently of process cwd."""
     monkeypatch.chdir(tmp_path)
-    assert _gmail_asset_path("images/google-gmail.png").is_file()
+    assert _GMAIL_LOGO.is_file()
 
 
 def test_gmail_envelope_png_sources_are_high_resolution(qt_app):
@@ -56,13 +64,9 @@ def test_gmail_unread_envelope_is_inverse_white_asset():
 
 
 def test_gmail_action_icon_paths_are_covered_by_asset_manifest():
-    """The menu icon loader should only reference tracked Gmail asset paths."""
-    manifest = set(GMAIL_IMAGE_ASSETS)
-    referenced = {
-        path
-        for path_options in GMAIL_ACTION_ICON_PATHS.values()
-        for path in path_options
-    }
+    """The retained menu icon loader only references tracked Gmail assets."""
+    manifest = _presentation_assets()
+    referenced = set(_GMAIL_ACTION_ICONS.values())
 
     assert referenced <= manifest
 

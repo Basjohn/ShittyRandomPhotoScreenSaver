@@ -2174,7 +2174,6 @@ class DisplayWidget(QWidget):
             return
         self._transition_work_pending = pending
         for attr_name in (
-            "gmail_widget",
             "media_widget",
         ):
             widget = getattr(self, attr_name, None)

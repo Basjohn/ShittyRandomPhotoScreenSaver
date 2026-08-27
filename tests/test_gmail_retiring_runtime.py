@@ -13,9 +13,9 @@ barrier was doing its job: it refuses to build a replacement while retired work
 is still alive.
 
 The original correction taught `GmailClient.list_messages()` to observe its
-owner during traversal. Phase E1 moved that cancellation authority out of
-`GmailWidget`: the neutral shared Gmail owner now fences every traversal with
-runtime-generation and request identity while presenters own no network task.
+owner during traversal. Phase E1 moved that cancellation authority to the
+neutral shared Gmail owner, which now fences every traversal with runtime-
+generation and request identity while presenters own no network task.
 
 The correction is cancellation ownership, not a longer timeout and not ignoring
 the task. These bars hold a controllable request in flight across the retirement
