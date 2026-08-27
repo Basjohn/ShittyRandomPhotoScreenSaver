@@ -1064,6 +1064,36 @@ NAV_TAB_FONT_STYLE_ACTIVE = (
     "letter-spacing: 0.5px;"
 )
 
+
+def _build_nav_pill_style() -> str:
+    """Theme-aware checkable pill used for Settings sub-navigation."""
+
+    return (
+        "QPushButton {"
+        f" {NAV_TAB_FONT_STYLE}"
+        f" background-color: {_theme_rgba255('control.button.surface')};"
+        f" color: {_theme_hex('control.button.text')};"
+        f" border: 1px solid {_theme_hex('control.button.border')};"
+        " border-radius: 8px;"
+        " padding: 6px 18px;"
+        " min-width: 70px;"
+        " }"
+        "QPushButton:hover {"
+        f" background-color: {_theme_rgba255('control.button.hover_surface')};"
+        f" border: 1px solid {_theme_hex('control.button.border')};"
+        " }"
+        "QPushButton:checked {"
+        f" {NAV_TAB_FONT_STYLE_ACTIVE}"
+        f" background-color: {_theme_rgba255('control.button.hover_surface')};"
+        f" color: {_theme_hex('control.button.text')};"
+        f" border: 1px solid {_theme_hex('control.button.border')};"
+        " }"
+    )
+
+
+NAV_PILL_STYLE = _build_nav_pill_style()
+
+
 STATUS_LABEL_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 600;"
@@ -1249,6 +1279,7 @@ _THEME_STYLE_BUILDERS = {
     "INFO_LABEL_STYLE": _build_info_label_style,
     "ADV_HELPER_LABEL_STYLE": _build_adv_helper_label_style,
     "INFO_LABEL_STYLE_DISABLED": _build_info_label_style_disabled,
+    "NAV_PILL_STYLE": _build_nav_pill_style,
     "SLIDER_STYLE": _build_slider_style,
     "ACCESSIBILITY_TITLE_STYLE": _build_accessibility_title_style,
     "ACCESSIBILITY_DESC_STYLE": _build_accessibility_desc_style,
