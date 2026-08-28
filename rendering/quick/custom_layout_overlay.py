@@ -30,6 +30,16 @@ ResizeBeginHandler = Callable[[CustomLayoutSessionItem, str, QPoint], bool]
 ResizeUpdateHandler = Callable[[CustomLayoutSessionItem, str, QPoint, bool], bool]
 ResizeWheelHandler = Callable[[CustomLayoutSessionItem, int], bool]
 
+# Semantic edge-handle ids for the viewport-extent (aspect/world) operation.
+# Corner ids (``top_left`` .. ``bottom_right``) drive the uniform whole-size
+# operation; the four edges below change one viewport axis at constant uniform
+# scale. QML emits these verbatim; only Python owns the geometry math.
+_VIEWPORT_EDGE_HANDLES = frozenset({"left", "right", "top", "bottom"})
+
+
+def _is_viewport_edge_handle(handle: str) -> bool:
+    return str(handle) in _VIEWPORT_EDGE_HANDLES
+
 
 class CustomLayoutOverlayModel(QAbstractListModel):
     """Display-local view over shared, presentation-neutral session items."""
@@ -43,6 +53,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     _GEOMETRY_HEIGHT_ROLE = _WIDGET_ID_ROLE + 4
     _DUPLICATE_ROLE = _WIDGET_ID_ROLE + 5
     _RESIZABLE_ROLE = _WIDGET_ID_ROLE + 6
+    _VIEWPORT_RESIZE_ROLE = _WIDGET_ID_ROLE + 7
 
     def __init__(
         self,
@@ -81,6 +92,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             self._GEOMETRY_HEIGHT_ROLE: QByteArray(b"geometryHeight"),
             self._DUPLICATE_ROLE: QByteArray(b"duplicate"),
             self._RESIZABLE_ROLE: QByteArray(b"resizable"),
+            self._VIEWPORT_RESIZE_ROLE: QByteArray(b"viewportResizeCapable"),
         }
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # type: ignore[override]
@@ -105,6 +117,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return item.is_duplicate
         if role == self._RESIZABLE_ROLE:
             return item.resize_capable
+        if role == self._VIEWPORT_RESIZE_ROLE:
+            return item.viewport_resize_capable
         return None
 
     @Slot()
@@ -190,7 +204,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     ) -> bool:
         """Begin a retained resize through the Python-owned geometry seam."""
 
-        item = self._resizable_item(row)
+        item = self._resize_handle_item(row, corner)
         handler = self._resize_begin_handler
         if item is None or handler is None:
             return False
@@ -208,7 +222,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     ) -> bool:
         """Apply one live/final retained resize sample without QML geometry ownership."""
 
-        item = self._resizable_item(row)
+        item = self._resize_handle_item(row, corner)
         handler = self._resize_update_handler
         if item is None or handler is None:
             return False
@@ -251,6 +265,26 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         item = self._items[int(row)]
         return item if item.resize_capable else None
 
+    def _resize_handle_item(
+        self,
+        row: int,
+        handle: str,
+    ) -> CustomLayoutSessionItem | None:
+        """Gate a resize handle by its semantic role.
+
+        Corner handles use the uniform (whole-size) resize role; the four
+        viewport edges use the distinct viewport-extent role. The two are
+        separate so an ordinary resizable widget never gains edge (aspect)
+        handles.
+        """
+
+        if not 0 <= int(row) < len(self._items):
+            return None
+        item = self._items[int(row)]
+        if _is_viewport_edge_handle(handle):
+            return item if item.viewport_resize_capable else None
+        return item if item.resize_capable else None
+
     def _global_point(self, local_x: float, local_y: float) -> QPoint:
         return QPoint(
             self._display_origin.x() + int(round(float(local_x))),
@@ -289,6 +323,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
                 self._GEOMETRY_HEIGHT_ROLE,
                 self._DUPLICATE_ROLE,
                 self._RESIZABLE_ROLE,
+                self._VIEWPORT_RESIZE_ROLE,
             ],
         )
 

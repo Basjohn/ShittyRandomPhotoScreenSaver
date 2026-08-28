@@ -95,6 +95,7 @@ Item {
             required property real geometryHeight
             required property bool duplicate
             required property bool resizable
+            required property bool viewportResizeCapable
 
             objectName: "customLayoutEditFrame-" + widgetId
             x: geometryX
@@ -228,6 +229,93 @@ Item {
                             customLayoutOverlay.sessionModel.resizeItem(
                                 editFrame.index,
                                 parent.corner,
+                                point.x,
+                                point.y,
+                                true
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Viewport-extent edge handles. Distinct from the uniform corner
+            // handles above: left/right change viewport width only, top/bottom
+            // change viewport height only, at constant uniform scale. Only the
+            // viewport-resize-capable visualizer shows these; QML emits the
+            // semantic edge id and Python owns all geometry/aspect math.
+            Repeater {
+                model: editFrame.viewportResizeCapable
+                       ? ["left", "right", "top", "bottom"]
+                       : []
+
+                delegate: Rectangle {
+                    required property string modelData
+                    property string edge: modelData
+                    property bool horizontalEdge: edge === "left" || edge === "right"
+                    // Inset the strips so they never sit on top of the corner
+                    // handles or the close control.
+                    property int edgeInset: 20
+                    property int edgeThickness: 10
+
+                    objectName: "customLayoutViewportEdge-" + editFrame.widgetId + "-" + edge
+                    color: "#c85ec8ff"
+                    border.width: 1
+                    border.color: "#ff10324b"
+                    radius: 2
+
+                    width: horizontalEdge
+                           ? edgeThickness
+                           : Math.max(0, editFrame.width - (2 * edgeInset))
+                    height: horizontalEdge
+                            ? Math.max(0, editFrame.height - (2 * edgeInset))
+                            : edgeThickness
+                    x: edge === "left"
+                       ? -edgeThickness / 2
+                       : (edge === "right"
+                          ? editFrame.width - edgeThickness / 2
+                          : edgeInset)
+                    y: edge === "top"
+                       ? -edgeThickness / 2
+                       : (edge === "bottom"
+                          ? editFrame.height - edgeThickness / 2
+                          : edgeInset)
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: parent.horizontalEdge
+                                     ? Qt.SizeHorCursor
+                                     : Qt.SizeVerCursor
+
+                        function overlayPoint(mouse) {
+                            return mapToItem(customLayoutOverlay, mouse.x, mouse.y)
+                        }
+
+                        onPressed: function(mouse) {
+                            const point = overlayPoint(mouse)
+                            customLayoutOverlay.sessionModel.beginResize(
+                                editFrame.index,
+                                parent.edge,
+                                point.x,
+                                point.y
+                            )
+                        }
+                        onPositionChanged: function(mouse) {
+                            if (!pressed)
+                                return
+                            const point = overlayPoint(mouse)
+                            customLayoutOverlay.sessionModel.resizeItem(
+                                editFrame.index,
+                                parent.edge,
+                                point.x,
+                                point.y,
+                                false
+                            )
+                        }
+                        onReleased: function(mouse) {
+                            const point = overlayPoint(mouse)
+                            customLayoutOverlay.sessionModel.resizeItem(
+                                editFrame.index,
+                                parent.edge,
                                 point.x,
                                 point.y,
                                 true
