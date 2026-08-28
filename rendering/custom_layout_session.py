@@ -10,6 +10,27 @@ from PySide6.QtCore import QRect
 
 DEFAULT_GEOMETRY_VARIANT = "default"
 
+ViewportExtent = tuple[float, float]
+
+
+def normalize_viewport_extent(value: object) -> ViewportExtent | None:
+    """Return a canonical positive ``(world_width, world_height)`` pair or None.
+
+    The extent is the visualizer's logical/render world before uniform visual
+    scale.  ``None`` means "no independent extent committed"; callers fall back
+    to the canonical baseline aspect.  This is deliberately generic session
+    state: only viewport-resize-capable items ever populate it.
+    """
+
+    if value is None:
+        return None
+    width, height = value  # type: ignore[misc]
+    width = float(width)
+    height = float(height)
+    if not (width > 0.0 and height > 0.0):
+        raise ValueError("viewport extent must be positive")
+    return (width, height)
+
 
 def normalize_geometry_variant(value: object) -> str:
     """Return the canonical storage/session name for one geometry variant."""
@@ -67,6 +88,14 @@ class CustomLayoutSessionItem:
     current_display_identity: str = ""
     source_monitor_route: str = "ALL"
     current_monitor_route: str = ""
+    # Viewport-extent (edge) resize working state. ``resize_scale`` above stays
+    # the uniform (wheel/corner) operation and is never repurposed as extent.
+    # These carry the visualizer's logical world width/height so uniform scale
+    # and viewport extent resolve independently; ``None`` means the canonical
+    # baseline aspect. Only viewport-resize-capable items populate them.
+    viewport_resize_capable: bool = False
+    baseline_viewport_extent: ViewportExtent | None = None
+    current_viewport_extent: ViewportExtent | None = None
 
     def __post_init__(self) -> None:
         self.model_identity = str(self.model_identity or self.source_key.widget_id)
@@ -80,6 +109,15 @@ class CustomLayoutSessionItem:
         self.resize_capable = bool(self.resize_capable)
         self.resize_scale = float(self.resize_scale)
         self.removed = bool(self.removed)
+        self.viewport_resize_capable = bool(self.viewport_resize_capable)
+        self.baseline_viewport_extent = normalize_viewport_extent(
+            self.baseline_viewport_extent
+        )
+        self.current_viewport_extent = normalize_viewport_extent(
+            self.current_viewport_extent
+            if self.current_viewport_extent is not None
+            else self.baseline_viewport_extent
+        )
         self.current_display_identity = (
             str(self.current_display_identity or "").strip()
             or self.source_key.display_identity
@@ -104,12 +142,20 @@ class CustomLayoutSessionItem:
         *,
         size_payload: Mapping[str, Any] | None = None,
         resize_scale: float | None = None,
+        viewport_extent: ViewportExtent | None = None,
     ) -> None:
         self.current_global_rect = QRect(global_rect)
         if size_payload is not None:
             self.current_size_payload = dict(size_payload)
         if resize_scale is not None:
             self.resize_scale = float(resize_scale)
+        if viewport_extent is not None:
+            self.current_viewport_extent = normalize_viewport_extent(viewport_extent)
+
+    def set_viewport_extent(self, width: float, height: float) -> None:
+        """Set the current logical world (edge operation) without touching scale."""
+
+        self.current_viewport_extent = normalize_viewport_extent((width, height))
 
     def transfer_to_display(self, display_identity: str, global_rect: QRect) -> None:
         self.set_current_display(display_identity)
@@ -143,6 +189,7 @@ class CustomLayoutSessionItem:
         self.current_size_payload = dict(self.baseline_size_payload)
         self.current_enabled = self.baseline_enabled
         self.resize_scale = 1.0
+        self.current_viewport_extent = self.baseline_viewport_extent
         self.removed = False
 
 

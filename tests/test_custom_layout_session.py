@@ -144,6 +144,82 @@ def test_cancel_restores_geometry_payload_display_enabled_and_removed_working_st
     assert item.removed is False
 
 
+def test_viewport_extent_defaults_to_baseline_and_is_independent_of_scale():
+    item = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("spotify_visualizer", "display:a"),
+        model_identity="spotify_visualizer",
+        baseline_global_rect=QRect(200, 150, 630, 420),
+        current_global_rect=QRect(200, 150, 630, 420),
+        baseline_size_payload={"width": 630, "height": 420},
+        current_size_payload={"width": 630, "height": 420},
+        baseline_enabled=True,
+        current_enabled=True,
+        viewport_resize_capable=True,
+        baseline_viewport_extent=(420.0, 280.0),
+    )
+
+    # Admission seeds current extent from baseline when not given explicitly.
+    assert item.viewport_resize_capable is True
+    assert item.baseline_viewport_extent == (420.0, 280.0)
+    assert item.current_viewport_extent == (420.0, 280.0)
+
+    # A uniform (wheel/corner) change touches scale only, never the extent.
+    item.set_geometry(QRect(200, 150, 945, 630), resize_scale=1.5)
+    assert item.resize_scale == 1.5
+    assert item.current_viewport_extent == (420.0, 280.0)
+
+    # An edge change touches the extent only, never the uniform scale.
+    item.set_viewport_extent(630.0, 280.0)
+    assert item.current_viewport_extent == (630.0, 280.0)
+    assert item.resize_scale == 1.5
+
+
+def test_cancel_restores_viewport_extent_and_scale_exactly():
+    session = CustomLayoutSession()
+    key = CustomLayoutKey("spotify_visualizer", "display:a")
+    baseline_rect = QRect(200, 150, 630, 420)
+    item = CustomLayoutSessionItem(
+        source_key=key,
+        model_identity="spotify_visualizer",
+        baseline_global_rect=baseline_rect,
+        current_global_rect=baseline_rect,
+        baseline_size_payload={"width": 630, "height": 420},
+        current_size_payload={"width": 630, "height": 420},
+        baseline_enabled=True,
+        current_enabled=True,
+        viewport_resize_capable=True,
+        baseline_viewport_extent=(420.0, 280.0),
+    )
+    session.add_item(item)
+
+    item.set_geometry(
+        QRect(200, 150, 1200, 630),
+        size_payload={"width": 1200, "height": 630},
+        resize_scale=1.5,
+        viewport_extent=(560.0, 280.0),
+    )
+    assert item.current_viewport_extent == (560.0, 280.0)
+
+    session.restore_baseline()
+
+    assert item.current_viewport_extent == (420.0, 280.0)
+    assert item.resize_scale == 1.0
+    assert item.current_global_rect == baseline_rect
+
+
+def test_normalize_viewport_extent_rejects_non_positive():
+    import pytest
+
+    from rendering.custom_layout_session import normalize_viewport_extent
+
+    assert normalize_viewport_extent(None) is None
+    assert normalize_viewport_extent((420, 280)) == (420.0, 280.0)
+    with pytest.raises(ValueError):
+        normalize_viewport_extent((0, 280))
+    with pytest.raises(ValueError):
+        normalize_viewport_extent((420, -1))
+
+
 def test_session_copies_mutable_geometry_and_payload_inputs():
     rect = QRect(10, 20, 300, 120)
     payload = {"font_size": 48}
