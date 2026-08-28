@@ -1,6 +1,6 @@
 # Future Work
 
-Last updated: 2026-08-24
+Last updated: 2026-08-28
 
 Long-horizon feature / new-implementation backlog.
 
@@ -479,70 +479,233 @@ their first prototypes are abandoned. Their intended identities should not colla
 
 ---
 
-# 10. Frosted / glass ordinary-widget cards
+# 10. Ordinary-widget card materials — default translucency, optional Glass/Acrylic
 
-**Status: far-future optional customization. This is not migration parity and is not admitted merely
-because Qt Quick makes it possible.** The ordinary-widget migration should first finish on the simple
-retained `OverlayCard` path.
+**Status: far-future optional customization for the Glass/Acrylic modes. The ordinary translucent card
+is the baseline and must remain the default.** This feature is not migration parity and must not turn
+every ordinary widget into an effect-bearing card simply because Qt Quick makes that possible.
 
-Goal: optionally let the transparent/translucent area of an ordinary widget card blur the screensaver
-image/transition behind it so the card reads as real frosted/glass material rather than only a tinted
-transparent rectangle.
+## 10.1 Baseline that must remain cheap
 
-Conceptual destination:
+Current source already has the expected simple retained-card architecture: `OverlayCard.qml` paints one
+ordinary `Rectangle` background with independent alpha, border and cached shadow, while family content
+stays above it. Its current default background (`#b3101010`) is already translucent. Treat that as the
+source-level baseline even if runtime visual acceptance is temporarily unavailable during migration.
+
+The default material mode is therefore:
 
 ```text
-base image / transition scene for one display
+material_mode = translucent   # DEFAULT
+
+ordinary OverlayCard
+    -> one alpha/tinted Rectangle fill
+    -> ordinary border
+    -> existing cached shadow
+    -> retained family content
+```
+
+Requirements for `translucent`:
+
+- no backdrop capture;
+- no offscreen texture/FBO created for card materials;
+- no blur pass;
+- no `ShaderEffectSource` / `MultiEffect` solely for the card;
+- no additional render cadence or timer;
+- preserve current whole-widget root-fade semantics;
+- cost should remain essentially the ordinary retained `OverlayCard` cost that exists now.
+
+A future Widget Theme (`.srwtheme`) may change the simple card's RGB/alpha/border/shadow, but choosing a
+Widget Theme must **not** silently enable Glass or Acrylic. Existing/Dark behavior remains the default.
+
+## 10.2 Material modes
+
+The eventual card-material choice should be explicit and small:
+
+```text
+translucent   # default; current simple alpha card
+Glass         # optional scene-local frosted material
+Acrylic       # optional scene-local stronger material
+```
+
+Glass and Acrylic are **Qt Quick scene-local materials**. They are not Windows native backdrop modes and
+must not use the Settings HWND implementation (`SetWindowCompositionAttribute`, AccentPolicy state 3/4)
+on the screensaver `QQuickWindow` or attempt one native backdrop per widget. The Settings solution is
+valuable architecture evidence about separating material ownership, but its HWND primitive is the wrong
+mechanism for cards that live inside one Quick scene.
+
+Suggested visual recipes:
+
+```text
+Glass
+    shared blurred screensaver backdrop
+    + weak / highly translucent card tint
+    + border
+    + existing shadow/content
+
+Acrylic
+    same shared blurred screensaver backdrop
+    + stronger material tint
+    + optional restrained noise/luminosity treatment if it materially helps
+    + border
+    + existing shadow/content
+```
+
+Glass/Acrylic should preferably share the same blurred backdrop representation. Their visible
+difference should primarily come from cheap card-local material parameters. Do not create separate
+full-display blur pipelines merely because the names differ. If eyes-on work eventually proves distinct
+blur strengths are necessary, prefer a small bounded set of shared per-display blur tiers rather than
+one arbitrary blur pass per card.
+
+## 10.3 Shared/lazy backdrop contract
+
+When at least one Glass/Acrylic card is visible on a display:
+
+```text
+base image / current transition for that display
         ↓
-one lazy shared per-display backdrop source
+ONE lazy shared per-display backdrop source
         ↓
-optional bounded downsample / shared blur representation
+optional deliberate downsample
         ↓
-card-local crop/sample + rounded mask
+ONE shared bounded blur representation (or bounded shared tiers if proven necessary)
         ↓
-translucent tint + border
+card-local display-space crop/sample + rounded mask
+        ↓
+Glass/Acrylic local material parameters
         ↓
 normal cached card shadow + retained family content
 ```
 
-The important optimization is **shared per display, not one full-screen capture per widget**.
+When the final Glass/Acrylic consumer disappears, the optional backdrop resources should retire and the
+display returns to the plain `translucent` cost path.
 
-Rules for a future implementation:
-- NEVER DELETE THE OPERATOR BOX FROM THIS DOCUMENT OR ANY OTHER IT IS FOUND IN, ONLY IMPORT IT INTO ACTIVE OR NEAR FUTURE WORK AND CLEAN IT.
-- do not create one full-display `ShaderEffectSource`, FBO/capture or equivalent backdrop copy for every
-  glass widget;
-- when at least one glass card is active, establish the smallest legal shared backdrop source for that
-  display and let cards sample bounded regions from it;
-- if all active glass cards use the same blur policy/radius, prefer one blurred/downsampled backdrop per
-  display and crop/sample it per card rather than repeating the blur pass for each widget;
-- if authored cards genuinely require different blur strengths, still share the underlying backdrop
-  source and bound any per-card effect work to the card region where practical;
-- the backdrop represents the scene **below ordinary widgets** (normally base image/transition pixels),
-  not an already-composited capture of the widgets themselves; avoid feedback recursion, double-blur,
-  and accidentally blurring later z-layers such as the Visualizer/control overlays;
-- no glass-enabled cards means no backdrop capture/layer/effect work: the optional feature should return
-  to the ordinary `OverlayCard` cost when disabled;
-- keep the path GPU/Quick-native. Do not introduce Python pixel readback, QWidget screenshots, QPixmap
-  bridges or a second app-managed FBO/pixmap cache merely to create glass;
-- `MultiEffect`, a purpose-built shader/effect, or another final-Qt-Quick mechanism may be used if final
-  architecture/performance evidence earns it. This future permission does not reopen ordinary text
-  shadow blur or the QWidget one-effect workaround architecture;
-- preserve the single production `QQuickWindow`/retained-scene architecture and normal root-fade
-  semantics;
-- measure full-scene GPU time, offscreen-pass cost, texture memory, batching impact and p95/p99/tails on
-  representative multi-display/DPR setups with several simultaneous glass cards;
-- bound blur radius/sample count and consider deliberate backdrop downsampling when the visual result is
-  acceptable;
-- only add polished Settings controls after the visual path is proven worthwhile and cheap enough.
+Hard rules:
 
-The final implementation should inspect the then-current Qt/PySide capabilities before selecting
-`ShaderEffectSource`, `MultiEffect`, custom shader composition or another mechanism. The durable product
-contract is the shared/lazy/bounded architecture above, not a particular provisional Qt type.
+- never create one full-display `ShaderEffectSource`, capture, FBO or blur chain per widget;
+- never capture the already-composited widget layer: the source is the scene **below ordinary widgets**;
+- do not capture the Visualizer, other cards, CUSTOM overlays, cursor halo or context menu into the
+  backdrop; avoid recursion, feedback and double blur;
+- keep all expensive material work GPU/Quick/render-thread native; no Python pixel readback, QWidget
+  screenshots, QPixmap bridges or CPU blur;
+- one optional render-thread-owned per-display offscreen target is acceptable if that proves to be the
+  cheapest production solution. The prohibition is against per-widget/CPU/duplicate capture ownership,
+  not against the single shared texture that a real blur material necessarily needs;
+- card-local tint, mask, border and any subtle Acrylic noise should remain cheap even with many cards;
+- preserve the single production `QQuickWindow` and retained scene; do not add another accelerated
+  top-level/window merely for material effects.
+
+## 10.4 Prototype path versus production path
+
+Do not prematurely build a complicated custom texture bridge before proving the look and measuring it.
+Recommended order:
+
+### Prototype / visual proof
+
+Use **one per-display `ShaderEffectSource` targeting the background presentation only**, deliberately
+reduced in resolution, feeding one shared blur (`MultiEffect` or an equivalent bounded Quick effect).
+Cards sample/crop that shared result.
+
+This prototype is acceptable because there is still only one backdrop source/blur owner per display.
+Measure it before replacing it simply because a lower-level design sounds faster.
+
+### Production optimization only if measurements justify it
+
+The existing `BackgroundRenderItem` / `BackgroundRenderNode` already owns the real image/transition
+pixels and current source/destination textures. If the Quick capture/effect path is measurably too
+expensive, prefer moving shared-backdrop production beside that existing render owner rather than
+capturing the whole Quick scene repeatedly.
+
+Candidate shape:
+
+```text
+BackgroundRenderNode
+    draws normal full-resolution background/transition
+    + when material consumers exist only:
+        produces one reduced per-display material backdrop from the SAME frame state
+        performs/feeds one bounded shared blur
+        exposes that shared result through the smallest legal Quick/render bridge
+```
+
+Do not assume a raw OpenGL texture can simply be handed to arbitrary QML. The concrete bridge
+(QSGTexture provider, custom material item, shared render node, `ShaderEffectSource`, or another supported
+Qt mechanism) must be chosen against the Qt/PySide version that exists when this feature is implemented.
+Prefer the simplest measured solution that obeys the ownership rules above.
+
+## 10.5 Temporal and geometry correctness
+
+A frosted card must show the background that is actually behind that card **on the same presented
+frame**.
+
+During transitions:
+
+- backdrop production must use the same `TransitionRun` and the same per-frame transition sample as the
+  full-resolution background;
+- if backdrop generation is moved into the custom background renderer, sample canonical transition time
+  once and use that exact sample for both the display draw and material-backdrop draw;
+- do not let the card blur lag a frame behind or independently sample monotonic time, because even a
+  small mismatch will read as the card swimming/slipping over the transition.
+
+For geometry:
+
+- crop/sample coordinates must be resolved in final display space, including current CUSTOM placement,
+  resize and pixel-shift transform;
+- do not use stale stored geometry to choose backdrop UVs;
+- rounded masking belongs to the card-local material stage, not the shared full-display backdrop.
+
+Background dimming currently lives below ordinary widgets. A card should therefore visually agree with
+the dimmed background beneath it. If the dimming operation remains uniform black/opacity, it can be
+reapplied cheaply in the material sample path rather than forcing a second composited scene capture.
+
+## 10.6 Widget Theme ownership
+
+The eventual `.srwtheme` contract should own visual decisions such as:
+
+- `material_mode`: `translucent` / `glass` / `acrylic`;
+- ordinary card tint/opacity;
+- Glass/Acrylic tint strength;
+- border colour/opacity/width where supported;
+- shadow visual parameters already exposed by the final widget-style contract;
+- optional bounded material parameters that have actually earned their place through visual/performance
+  testing.
+
+Widget Themes do **not** own widget activation, ordinary ON/OFF, provider/account/source state, geometry,
+refresh cadence or runtime business logic.
+
+Default/Dark Widget Theme must resolve to `material_mode = translucent` and reproduce the existing simple
+card appearance as closely as practical. Glass/Acrylic are opt-in modes.
+
+## 10.7 Performance / acceptance gates
+
+Measure with representative simultaneous cards and real transitions on 1/2/N displays and relevant DPRs:
+
+- full-scene GPU time;
+- extra offscreen/capture/blur pass cost;
+- texture memory;
+- batching impact;
+- p95/p99/tail frame cost;
+- transition temporal coherence inside and outside cards;
+- cost when one card uses a material versus many cards;
+- proof that zero Glass/Acrylic consumers returns to the plain translucent cost path.
+
+Bound blur radius/sample count and use deliberate downsampling when the visual result survives it. Only
+add polished Settings controls after the material path is visually worthwhile and cheap enough.
+
+The durable contract is therefore:
+
+```text
+DEFAULT = current cheap translucent OverlayCard
+OPTIONAL Glass/Acrylic = lazy shared per-display backdrop + bounded scene-local material
+NO per-widget capture pipelines
+NO native HWND backdrop mechanism for Quick cards
+```
+
+The exact Qt effect/texture type is provisional; the ownership, default behavior, laziness, temporal
+coherence and bounded-cost rules are not.
 
 !OPERATOR BOX!
 Ideas put in this box are to be added to work asap but at a lower priotiy than future cleanup or current plan work, unless existing in those as well.
 ############
 1. Give SettingsGUI Display section a Pill style look like widgets/transitions for its sections as they are quite large.
 2. Add two options in the Interaction Pill for Display. "Widget Glow on Hover" "Widget Glow On Click" with a shared swatch colour selector. These will cause a small pulse in glow effect when triggered in relation to the cursor halo and pulse out when hover leaves or click leaves. This must not introduce timers or any thread contention/starvation.
-3. Check if Settings GUI Theme support has completely landed and if it has its own tab yet. Ideal goal Settings GUI loadable themes and a second pill for Widget Themes. Widget Themes would control the choice of colours for widgets (not their on/off state or geo positions, only visual customization) and if they are using glass cards/opacity/shadows/acrylic or anything else available to them visually. Existing will be default as it already is (Dark). Widget themes will be .srwtheme files.
+3. Check if Settings GUI Theme support has completely landed and if it has its own tab yet. Ideal goal Settings GUI loadable themes and a second pill for Widget Themes. Widget Themes would control widget visual customization only and use `.srwtheme` files. The existing/Dark Widget Theme remains the default and resolves to the current cheap `translucent` card architecture; optional `glass` and `acrylic` material modes use the shared/lazy Qt Quick backdrop contract in section 10. Widget Themes may own colours, opacity, borders, shadows and proven material parameters, but never widget activation/ordinary ON/OFF, provider/account/source state, geometry or refresh/runtime business logic.
 5. [LOW] Give more SettingsGUI sections Flowcontainers where it would benefit well aligned space usage.
