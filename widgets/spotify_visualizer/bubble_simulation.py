@@ -22,6 +22,9 @@ from core.logging.logger import (
     is_verbose_logging,
     is_viz_diagnostics_enabled,
 )
+from widgets.spotify_visualizer.render_state import (
+    CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
+)
 from widgets.spotify_visualizer.signal_contract import burst_authority, soft_ceiling
 
 _SWIRL_DIRECTIONS = {"swirl_cw", "swirl_ccw"}
@@ -132,32 +135,49 @@ def _get_stream_vector(direction: str) -> Tuple[float, float]:
     return _DIRECTION_VECTORS.get(direction, (0.0, 1.0))
 
 
-def _spawn_position(direction: str, is_big: bool) -> Tuple[float, float]:
-    """Spawn at the opposite edge of the stream direction."""
+def _spawn_position(
+    direction: str,
+    is_big: bool,
+    domain_w: float = 1.0,
+    domain_h: float = 1.0,
+) -> Tuple[float, float]:
+    """Spawn at the opposite edge of the stream direction.
+
+    ``domain_w``/``domain_h`` are the baseline-relative logical bounds (1x1 at
+    the canonical viewport). All spatial constants scale with them, so the entry
+    lane spans the full logical world; at 1x1 every value is the legacy literal
+    and the random draw sequence is byte-identical.
+    """
     margin = 0.05 if is_big else 0.02
     if direction == "up":
-        return (random.uniform(margin, 1.0 - margin), 1.0 + margin)
+        return (random.uniform(margin, domain_w - margin), domain_h + margin)
     elif direction == "down":
-        return (random.uniform(margin, 1.0 - margin), -margin)
+        return (random.uniform(margin, domain_w - margin), -margin)
     elif direction == "left":
-        return (1.0 + margin, random.uniform(margin, 1.0 - margin))
+        return (domain_w + margin, random.uniform(margin, domain_h - margin))
     elif direction == "right":
-        return (-margin, random.uniform(margin, 1.0 - margin))
+        return (-margin, random.uniform(margin, domain_h - margin))
     elif direction in {"top_left", "top_right", "bottom_left", "bottom_right", "diagonal"}:
         dx, dy = _get_stream_vector(direction)
         # Spawn on the edge opposite to the travel direction
         if random.random() < 0.5:
             # Spawn on the horizontal edge opposite to dy
-            edge_y = (1.0 + margin) if dy > 0 else -margin
-            return (random.uniform(margin, 1.0 - margin), edge_y)
+            edge_y = (domain_h + margin) if dy > 0 else -margin
+            return (random.uniform(margin, domain_w - margin), edge_y)
         else:
             # Spawn on the vertical edge opposite to dx
-            edge_x = (-margin) if dx > 0 else (1.0 + margin)
-            return (edge_x, random.uniform(margin, 1.0 - margin))
+            edge_x = (-margin) if dx > 0 else (domain_w + margin)
+            return (edge_x, random.uniform(margin, domain_h - margin))
     elif direction == "none":
-        return (random.uniform(0.1, 0.9), random.uniform(0.1, 0.9))
+        return (
+            random.uniform(0.1 * domain_w, 0.9 * domain_w),
+            random.uniform(0.1 * domain_h, 0.9 * domain_h),
+        )
     else:  # random
-        return (random.uniform(0.1, 0.9), random.uniform(0.1, 0.9))
+        return (
+            random.uniform(0.1 * domain_w, 0.9 * domain_w),
+            random.uniform(0.1 * domain_h, 0.9 * domain_h),
+        )
 
 
 def _stream_mode_uses_in_card_initial_fill(stream_dir: str, drift_dir: str) -> bool:
@@ -176,6 +196,8 @@ def _directional_entry_position(
     is_big: bool,
     *,
     startup: bool = False,
+    domain_w: float = 1.0,
+    domain_h: float = 1.0,
 ) -> Tuple[float, float]:
     """Spawn off-card with randomized depth so directional streams avoid columns.
 
@@ -185,7 +207,7 @@ def _directional_entry_position(
     off-card depth preserves side-entry semantics while helping the stream read
     as a flowing field rather than synchronized lanes.
     """
-    x, y = _spawn_position(direction, is_big)
+    x, y = _spawn_position(direction, is_big, domain_w, domain_h)
     if direction in {"none", "random"}:
         return (x, y)
 
@@ -208,6 +230,14 @@ class BubbleSimulation:
         self._bubbles: List[BubbleState] = []
         self._time: float = 0.0
         self._last_tick_dt: float = 0.016
+        # Baseline-relative logical domain. 1x1 is the canonical 420x280 world
+        # and is a strict no-op path: every spatial site reduces to the exact
+        # legacy unit-square values and the render arrays are emitted unchanged.
+        # A non-baseline committed viewport extent widens/heightens this domain
+        # so bubbles fill the extra logical world at baseline density; the render
+        # seam then normalizes back to [0,1] so the shader keeps circles round.
+        self._domain_w: float = 1.0
+        self._domain_h: float = 1.0
         self._big_size_max: float = 0.038
         self._small_size_max: float = 0.018
         self._diag_tick_count: int = 0
@@ -249,6 +279,8 @@ class BubbleSimulation:
         self._bubbles.clear()
         self._time = 0.0
         self._last_tick_dt = 0.016
+        self._domain_w = 1.0
+        self._domain_h = 1.0
         self._diag_tick_count = 0
         self._smoothed_speed_energy = 0.0
         self._sustained_loud_energy = 0.0
@@ -299,12 +331,45 @@ class BubbleSimulation:
         """Return the latest Bubble-owned perf breakdown for audit logging."""
         return dict(self._last_perf_diag)
 
+    def _apply_viewport_domain(self, extent: object) -> None:
+        """Set the baseline-relative logical domain from the committed extent.
+
+        ``None`` / a canonical ``(420, 280)`` extent yields exactly ``1.0 x 1.0``
+        so the whole tick stays on the legacy unit-square path. A non-canonical
+        extent widens/heightens the logical world proportionally.
+        """
+
+        if extent is None:
+            self._domain_w = 1.0
+            self._domain_h = 1.0
+            return
+        try:
+            extent_w = float(extent[0])
+            extent_h = float(extent[1])
+        except (TypeError, ValueError, IndexError):
+            self._domain_w = 1.0
+            self._domain_h = 1.0
+            return
+        baseline_w, baseline_h = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+        domain_w = extent_w / baseline_w if baseline_w > 0.0 else 1.0
+        domain_h = extent_h / baseline_h if baseline_h > 0.0 else 1.0
+        self._domain_w = domain_w if (math.isfinite(domain_w) and domain_w > 0.0) else 1.0
+        self._domain_h = domain_h if (math.isfinite(domain_h) and domain_h > 0.0) else 1.0
+
+    def _is_baseline_domain(self) -> bool:
+        """True on the canonical 1x1 world - the strict legacy no-op path."""
+
+        return self._domain_w == 1.0 and self._domain_h == 1.0
+
     def tick(self, dt: float, energy_bands: Optional[object], settings: Dict) -> None:
         """Advance simulation by *dt* seconds."""
         if dt <= 0.0 or dt > 1.0:
             return
         self._last_tick_dt = dt
         tick_start = time.perf_counter()
+
+        # Latest committed CUSTOM viewport extent (spatial config, not a clock).
+        self._apply_viewport_domain(settings.get("_bubble_viewport_extent"))
 
         self._time += dt
 
@@ -1067,8 +1132,8 @@ class BubbleSimulation:
 
             # Check if bubble exited the card
             margin = 0.1
-            head_outside = (b.x < -margin or b.x > 1.0 + margin or
-                            b.y < -margin or b.y > 1.0 + margin)
+            head_outside = (b.x < -margin or b.x > self._domain_w + margin or
+                            b.y < -margin or b.y > self._domain_h + margin)
 
             if head_outside and b.reaches_surface and not b.exiting:
                 # Bubble head left the visible area — start exit phase.
@@ -1081,8 +1146,8 @@ class BubbleSimulation:
                 # Accelerate trail fade so it drains away smoothly
                 b.trail_strength = max(0.0, b.trail_strength - dt * 2.5)
                 # Check if trail tail is also outside the card (primary exit)
-                tail_outside = (b.trail_tail_x < -margin or b.trail_tail_x > 1.0 + margin or
-                                b.trail_tail_y < -margin or b.trail_tail_y > 1.0 + margin)
+                tail_outside = (b.trail_tail_x < -margin or b.trail_tail_x > self._domain_w + margin or
+                                b.trail_tail_y < -margin or b.trail_tail_y > self._domain_h + margin)
                 # Destroy when: trail tail is offscreen OR trail fully faded,
                 # OR grace period exceeded (safety net, ~0.8s)
                 if tail_outside or b.trail_strength <= 0.001 or b.exit_timer > 0.8:
@@ -1129,8 +1194,8 @@ class BubbleSimulation:
             and big_spawn_budget > 0
         ):
             if allow_initial_fill:
-                bx = random.uniform(0.08, 0.92)
-                by = random.uniform(0.08, 0.92)
+                bx = random.uniform(0.08 * self._domain_w, 0.92 * self._domain_w)
+                by = random.uniform(0.08 * self._domain_h, 0.92 * self._domain_h)
                 self._spawn_bubble_at(True, bx, by, stream_dir, surface_reach, drift_dir,
                                       initial_fill=True)
             else:
@@ -1152,16 +1217,22 @@ class BubbleSimulation:
             count = random.randint(2, 3) if cluster else 1
             if is_initial:
                 # First fill: scatter across card area
-                base_x = random.uniform(0.05, 0.95)
-                base_y = random.uniform(0.05, 0.95)
+                base_x = random.uniform(0.05 * self._domain_w, 0.95 * self._domain_w)
+                base_y = random.uniform(0.05 * self._domain_h, 0.95 * self._domain_h)
             elif drift_dir in _SWIRL_DIRECTIONS:
-                # Swirl: spawn near center so bubbles spiral outward
+                # Swirl: spawn near the logical-world centre so bubbles spiral out
                 _angle = random.uniform(0.0, math.tau)
                 _spawn_r = random.uniform(0.02, 0.10)
-                base_x = 0.5 + math.cos(_angle) * _spawn_r
-                base_y = 0.5 + math.sin(_angle) * _spawn_r
+                base_x = self._domain_w / 2.0 + math.cos(_angle) * _spawn_r
+                base_y = self._domain_h / 2.0 + math.sin(_angle) * _spawn_r
             else:
-                base_x, base_y = _directional_entry_position(stream_dir, False, startup=False)
+                base_x, base_y = _directional_entry_position(
+                    stream_dir,
+                    False,
+                    startup=False,
+                    domain_w=self._domain_w,
+                    domain_h=self._domain_h,
+                )
             for c in range(count):
                 if (
                     small_count >= small_target
@@ -1190,13 +1261,19 @@ class BubbleSimulation:
     def _spawn_bubble(self, is_big: bool, stream_dir: str,
                       surface_reach: float, drift_dir: str) -> None:
         if drift_dir in _SWIRL_DIRECTIONS:
-            # Swirl: spawn near center so bubbles spiral outward.
+            # Swirl: spawn near the logical-world centre so bubbles spiral out.
             angle = random.uniform(0.0, math.tau)
             spawn_r = random.uniform(0.02, 0.10)
-            x = 0.5 + math.cos(angle) * spawn_r
-            y = 0.5 + math.sin(angle) * spawn_r
+            x = self._domain_w / 2.0 + math.cos(angle) * spawn_r
+            y = self._domain_h / 2.0 + math.sin(angle) * spawn_r
         else:
-            x, y = _directional_entry_position(stream_dir, is_big, startup=False)
+            x, y = _directional_entry_position(
+                stream_dir,
+                is_big,
+                startup=False,
+                domain_w=self._domain_w,
+                domain_h=self._domain_h,
+            )
         self._spawn_bubble_at(is_big, x, y, stream_dir, surface_reach, drift_dir)
 
     def _predict_stream_position(
@@ -1331,8 +1408,8 @@ class BubbleSimulation:
 
         def _in_view(bubble: BubbleState) -> bool:
             return (
-                -view_margin <= bubble.x <= 1.0 + view_margin
-                and -view_margin <= bubble.y <= 1.0 + view_margin
+                -view_margin <= bubble.x <= self._domain_w + view_margin
+                and -view_margin <= bubble.y <= self._domain_h + view_margin
             )
 
         for _ in range(passes):
@@ -2187,9 +2264,9 @@ class BubbleSimulation:
         computed by the main tick loop.  It drives both angular velocity and
         radial push so the Stream Reactivity slider works in swirl mode.
         """
-        # Vector from centre in screen space (0,0 = top-left).
-        sx = bubble.x - 0.5
-        sy = bubble.y - 0.5
+        # Vector from the logical-world centre in screen space (0,0 = top-left).
+        sx = bubble.x - self._domain_w / 2.0
+        sy = bubble.y - self._domain_h / 2.0
 
         # Flip to math-Y-up for rotation math.
         mx =  sx
@@ -2340,6 +2417,16 @@ class BubbleSimulation:
             "avg_big_render_radius": 0.0,
         }
 
+        # Render-result projection: the logical world is baseline-relative, but
+        # the renderer/shader consume viewport-normalized [0,1] positions with a
+        # height-normalized radius. At the canonical 1x1 world this is a strict
+        # no-op and the legacy arrays are emitted unchanged; otherwise positions
+        # and radius normalize by the domain so physical scale and circularity
+        # are preserved (the shader keeps circles round via its own aspect fix).
+        baseline_domain = self._is_baseline_domain()
+        inv_domain_w = 1.0 / self._domain_w
+        inv_domain_h = 1.0 / self._domain_h
+
         for idx, b in enumerate(self._bubbles):
             # Pulse: smoothed energy drives visible size thump.
             # Multipliers: big 4.0x, small 3.0x at max slider (slider 0-1).
@@ -2408,9 +2495,14 @@ class BubbleSimulation:
             spec_factor = min(spec_factor, spec_cap)
 
             pos_base = idx * 4
-            pos_data[pos_base] = b.x
-            pos_data[pos_base + 1] = b.y
-            pos_data[pos_base + 2] = r
+            if baseline_domain:
+                pos_data[pos_base] = b.x
+                pos_data[pos_base + 1] = b.y
+                pos_data[pos_base + 2] = r
+            else:
+                pos_data[pos_base] = b.x * inv_domain_w
+                pos_data[pos_base + 1] = b.y * inv_domain_h
+                pos_data[pos_base + 2] = r * inv_domain_h
             pos_data[pos_base + 3] = b.alpha
             extra_data[pos_base] = spec_factor
             extra_data[pos_base + 1] = b.rotation
@@ -2431,8 +2523,14 @@ class BubbleSimulation:
                     sample_y = b.trail_tail_y + dy * seg_t
                     falloff = 0.45 + 0.55 * seg_t
                     step_base = trail_base + step * 3
-                    trail_data[step_base] = sample_x
-                    trail_data[step_base + 1] = sample_y
+                    # Trails follow the same domain projection as heads so the
+                    # smear stays attached and correctly scaled.
+                    if baseline_domain:
+                        trail_data[step_base] = sample_x
+                        trail_data[step_base + 1] = sample_y
+                    else:
+                        trail_data[step_base] = sample_x * inv_domain_w
+                        trail_data[step_base + 1] = sample_y * inv_domain_h
                     trail_data[step_base + 2] = b.trail_strength * falloff
 
         if big_render_diag["big_render_count"] > 0.0:
