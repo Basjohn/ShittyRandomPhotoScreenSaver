@@ -100,6 +100,14 @@ Historical bodies need not be modernized if clearly evidence-scoped.
 `Docs/TestSuite.md` is inventory/status authority, not sequence authority. Keep current gates and test-file ownership
 truthful; do not turn its introduction into a phase diary.
 
+Do not hard-code aggregate test/module/status counts into the live prose unless they are generated from the same current
+tree in that checkpoint and have a durable reason to exist. Row-level ownership is the useful authority; hand-maintained
+counts become contradictory almost immediately during an active migration.
+
+When a caller-dead feature island is intentionally retired, remove its implementation and implementation-only tombstone
+tests together rather than preserving zero-value modules merely because an old inventory row still exists. Preserve a
+separate neutral module only when a real surviving caller/contract still owns it.
+
 ## Closure check
 
 Before docs are reconciled:

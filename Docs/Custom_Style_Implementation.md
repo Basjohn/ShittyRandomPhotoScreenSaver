@@ -16,6 +16,17 @@ material behavior into QSS or use native backdrop changes to compensate for sema
 `themes/dark.qss` is temporary legacy base-QSS residue, not palette authority. Its safe structural-selector retirement
 is recorded in `Future_Cleanup.md`; do not remove it by recreating its old colour literals in component code.
 
+## Settings theme selection and sectional navigation
+
+The landed Themes tab owns live `.srtheme` selection for the Settings GUI and reserves a separate **Widget Themes** pill
+for future `.srwtheme` work. Settings-theme selection must continue through the schema-v5 catalog/runtime path above;
+individual Settings tabs do not own private palettes.
+
+Sectional pill navigation is renderer/layout structure, not a new theme semantic. The Display tab now uses the same
+sectional pill language as other large Settings tabs and consumes the existing `navigation.subtab.*` colour roles. Future
+sectional rearrangements should reuse those semantic roles unless a genuinely distinct visual concept appears. Different
+geometry/padding may have a narrow component style owner without expanding every `.srtheme`.
+
 ## Canonical runtime shadow controls — F0.5 CLOSED / independently GREEN
 
 Widgets → General → Appearance owns:

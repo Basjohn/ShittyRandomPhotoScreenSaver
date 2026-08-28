@@ -26,8 +26,6 @@ pixel/presentation ownership.
 
 ## Unrelated focused-test debt
 
-- `tests/test_logging_config.py::test_diagnostic_build_enables_every_family_beside_frozen_executable` has independent
-  handler-policy/assertion debt.
 - Reddit helper recovery/installer/watcher tests contain stale helper-era expectations; reconcile separately from the
   retained Reddit presentation.
 - Three physical two-display `tests/test_qtquick_runtime.py` smoke cases can miss only the second screen's 250 ms
@@ -36,8 +34,6 @@ pixel/presentation ownership.
 
 ## Settings GUI residue
 
-- `ui/tabs/presets_tab.py` is the disconnected legacy top-level Settings **Presets** tab. Delete after caller proof;
-  preserve the live visualizer preset system.
 - `ui/settings_theme_paths.py` contains temporary theme-directory packaging/dev-fallback wiring. Before release, wire the
   real packaged themes directory and remove temporary fallback once that resource-path contract is durable. Preserve
   compiled Default Dark as unconditional no-file fallback.
