@@ -33,19 +33,14 @@ class VisualizerModePresentationPolicy:
     viewport_resize_capable: bool
 
 
-_CURRENT_CARDED_POLICY = VisualizerModePresentationPolicy(
-    shell_policy=VisualizerShellPolicy.CARD,
-    clip_policy=VisualizerClipPolicy.CARD_INTERIOR,
-    # Phase D proves non-default viewport extents mode by mode. Do not claim
-    # the later Phase-G affordance before its renderer/fidelity bar is green.
-    viewport_resize_capable=False,
-)
-
 _REFLOWING_CARDED_POLICY = VisualizerModePresentationPolicy(
     shell_policy=VisualizerShellPolicy.CARD,
     clip_policy=VisualizerClipPolicy.CARD_INTERIOR,
-    # Proven Quick mode renderers recompute their domain from committed
-    # geometry; Phase G may safely expose edge resizing for these modes.
+    # All five current modes recompute their domain from committed geometry
+    # (Bubble via its baseline-relative logical domain), so every mode is
+    # viewport-resize-capable. The deterministic G4 implementation is complete;
+    # installed eyes-on acceptance is deferred until Quick is production
+    # authoritative after H.
     viewport_resize_capable=True,
 )
 
@@ -89,7 +84,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         "Bubble",
         "_bubble_preset_slider",
         ("bubble_",),
-        _CURRENT_CARDED_POLICY,
+        _REFLOWING_CARDED_POLICY,
     ),
     VisualizerModeDescriptor(
         "devcurve",

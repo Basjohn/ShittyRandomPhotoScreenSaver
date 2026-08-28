@@ -363,20 +363,11 @@ def test_spectrum_layout_uniformly_scales_and_reflows_wide_tall_viewports() -> N
     assert right_guard == pytest.approx(11.0)
 
 
-def test_only_proven_quick_modes_claim_viewport_resize_capability() -> None:
-    assert get_visualizer_presentation_policy("spectrum").viewport_resize_capable
-    assert get_visualizer_presentation_policy(
-        "oscilloscope"
-    ).viewport_resize_capable
-    assert get_visualizer_presentation_policy(
-        "sine_wave"
-    ).viewport_resize_capable
-    assert get_visualizer_presentation_policy(
-        "devcurve"
-    ).viewport_resize_capable
-    assert not get_visualizer_presentation_policy(
-        "bubble"
-    ).viewport_resize_capable
+def test_all_five_modes_claim_viewport_resize_capability() -> None:
+    # G4 deterministic reflow is complete for every mode, including Bubble's
+    # baseline-relative logical domain, so all five are viewport-resize-capable.
+    for mode_id in ("spectrum", "oscilloscope", "sine_wave", "devcurve", "bubble"):
+        assert get_visualizer_presentation_policy(mode_id).viewport_resize_capable
 
 
 def test_quick_spectrum_registry_is_static_and_lazy() -> None:
