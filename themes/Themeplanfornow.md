@@ -81,23 +81,47 @@ to compiled Default Dark rather than an unstyled window.
   values render as integer-alpha `rgba(...)` through one central formatter.
 - The shared-style placeholder vocabulary now says `@@color:...@@`, not
   `@@hex:...@@`, so future theme authors are not taught a false opacity rule.
-- Theme schema v5 owns a truthful per-theme native backdrop request: **Off / Acrylic / Glass**.
-  Acrylic keeps the proven tintable AccentPolicy path. Glass uses Windows 11
-  `DWMWA_SYSTEMBACKDROP_TYPE = DWMSBT_TRANSIENTWINDOW` (Desktop Acrylic), not
-  the obsolete/flickery `ACCENT_ENABLE_BLURBEHIND` state. Off clears both.
+- Theme schema v5 owns a per-theme native backdrop request: **Off / Acrylic / Glass**.
+- P38 native-state diagnostics proved the Settings HWND is `WS_EX_LAYERED` for
+  its lifetime and that successful `DWMWA_SYSTEMBACKDROP_TYPE` writes did not
+  correlate with a visibly composed Glass material.
+- Physical P39/P40 testing then isolated the regression: persisted Acrylic again
+  works on first startup through the original AccentPolicy path, while persisted
+  Glass still fails on first startup and only appears after a later theme
+  application. The shared QWidget startup/persistence path is therefore not the
+  remaining defect.
+- Qt's frameless alpha Settings window is presented as a layered HWND. The
+  retired Glass experiment targeted Windows' system/redirection-backdrop model,
+  including `DWMWA_REDIRECTIONBITMAP_ALPHA`; that is not treated as the
+  presentation surface owned by this QWidget architecture.
+- Acrylic and Glass now stay on one layered-HWND-compatible AccentPolicy
+  composition family. Acrylic keeps its theme-tinted native underlay. Glass uses
+  an invariant near-clear native Acrylic underlay while semantic Qt RGBA
+  surfaces own the visible Glass palette and per-surface opacity.
+- Native material ownership remains transition-based. Same-mode changes never
+  tear down the active primitive; Glass->Glass is a native no-op because its
+  native underlay is invariant, Acrylic->Acrylic updates only its tint, and only
+  a genuine Off/Acrylic/Glass mode change disables the previous primitive.
+- Failed experiments are removed rather than stacked: no P37 post-show retry,
+  no production P38 diagnostic hooks, no P40 QWindow Expose filter, and no
+  active `DWMWA_REDIRECTIONBITMAP_ALPHA` Glass path.
 
 ## Immediate remaining work
 
-1. Windows smoke P36: switch live Default Dark Acrylic -> Graphite Frost Glass
-   -> Matte Graphite Off -> Default Dark. Glass must stay stable while moving/
-   resizing; Off should remain translucent but comfortably legible.
-2. Update Theme Foundry against schema v5: expose real **Off / Acrylic / Glass**
-   material selection, remove the temporary unavailable-Glass fiction, and keep
-   reversible composite authoring on ordinary Qt alpha-over relationships only.
-3. Build/release work replaces the temporary theme-directory stub and retires
+1. Windows smoke the AccentPolicy-backed Glass candidate. Persist **Ghost Glass**
+   and fresh-start Settings: blur must be present on first show without a theme
+   retry. Persist **Slate Lavender** Acrylic and fresh-start again: its recovered
+   first-try behavior must remain unchanged.
+2. With Glass activation reliable, compare Ghost / Smoke Quartz / Sea Glass Teal
+   over the same desktop background. Their native underlay is intentionally
+   invariant, so visible opacity differences must come from the semantic Qt
+   surface alpha values rather than a hidden native tint change.
+3. Update Theme Foundry against the final schema-v5 product contract, then smoke
+   load/edit/save/reload and reversible composite authoring.
+4. Build/release work replaces the temporary theme-directory stub and retires
    the dev fallback as recorded in `Future_Cleanup.md`.
-4. Perform the deliberate `dark.qss` retirement pass: relocate required
+5. Perform the deliberate `dark.qss` retirement pass: relocate required
    structural/geometry/resource selectors, run with the file physically absent,
    then remove redundant anti-`dark.qss` compensation/comments before deletion.
-5. Remove the Obnoxious validation theme and this temporary plan after final
+6. Remove the Obnoxious validation theme and this temporary plan after final
    Foundry/dark.qss/build-path validation and durable documentation.
