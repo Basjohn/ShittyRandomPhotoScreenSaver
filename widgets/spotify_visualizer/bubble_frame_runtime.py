@@ -138,8 +138,15 @@ class BubbleFrameRuntime:
         source_generation: int,
         source_activation_id: int,
         edge_token: int,
+        viewport_extent: tuple[float, float] | None = None,
     ) -> BubbleResolvedFrame | None:
-        """Integrate exactly one authored step and freeze its visible result."""
+        """Integrate exactly one authored step and freeze its visible result.
+
+        ``viewport_extent`` is the latest committed CUSTOM logical world (or
+        ``None`` for the canonical baseline). It is spatial configuration, not an
+        authored temporal event: it enters the current step and coalesces freely,
+        never creating a step or altering cadence.
+        """
 
         with self._lock:
             if self._retired:
@@ -159,6 +166,7 @@ class BubbleFrameRuntime:
                 source_generation=source_generation,
                 source_activation_id=source_activation_id,
                 edge_token=edge_token,
+                viewport_extent=viewport_extent,
             )
 
     def _advance_locked(
@@ -178,6 +186,7 @@ class BubbleFrameRuntime:
         source_generation: int,
         source_activation_id: int,
         edge_token: int,
+        viewport_extent: tuple[float, float] | None = None,
     ) -> BubbleResolvedFrame:
 
         identity = (
@@ -192,6 +201,10 @@ class BubbleFrameRuntime:
         energy_payload = dict(energy)
         pulse_payload = dict(pulse)
         settings_payload = dict(settings)
+        # Latest spatial configuration for this authored step. The simulation
+        # treats a canonical/None extent as a strict baseline no-op; a non-baseline
+        # extent expands its logical domain. This is state, not a clock.
+        settings_payload["_bubble_viewport_extent"] = viewport_extent
         event_recorder: _EventRecorder | None = None
         scheduler = settings_payload.get("_event_scheduler")
         if bool(playing) and not bool(source_ready):

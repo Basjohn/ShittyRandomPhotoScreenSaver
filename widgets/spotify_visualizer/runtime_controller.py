@@ -329,6 +329,32 @@ class VisualizerRuntimeController:
         with self._lock:
             return self._presentation_viewport_extent
 
+    def set_presentation_viewport_extent(
+        self,
+        extent: tuple[float, float] | None,
+    ) -> None:
+        """Publish the latest CUSTOM viewport extent as logical spatial config.
+
+        This is the presentation-neutral seam for the retained CUSTOM edge
+        operation: the GUI-owned CUSTOM session pushes its committed logical
+        world here, and the next authored logical step consumes it. Viewport
+        extent is state, not an authored temporal event, so the latest value
+        coalesces freely - there is no queue, no clock and no acknowledgement.
+        ``None`` restores the canonical baseline. Only plain typed floats cross
+        this boundary; no QQuickItem/QScreen/render-thread object ever does.
+        """
+
+        if extent is None:
+            resolved = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+        else:
+            width = float(extent[0])
+            height = float(extent[1])
+            if not (width > 0.0 and height > 0.0):
+                raise ValueError("viewport extent must be positive")
+            resolved = (width, height)
+        with self._lock:
+            self._presentation_viewport_extent = resolved
+
     def commit_presentation_metrics(
         self,
         presentation: ResolvedVisualizerPresentation,

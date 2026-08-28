@@ -782,6 +782,14 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         and source_generation == engine_generation
         and source_activation == engine_activation
     )
+    # Latest committed CUSTOM viewport extent (baseline default until a retained
+    # edge drag publishes a wide/tall world). Read as configuration only; it never
+    # ticks or gates the authored Bubble step.
+    viewport_extent = None
+    try:
+        viewport_extent = controller.presentation_viewport_extent
+    except Exception:
+        viewport_extent = None
     step_token = cadence.begin_step()
     try:
         resolved = runtime.advance(
@@ -801,6 +809,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
             source_generation=source_generation,
             source_activation_id=source_activation,
             edge_token=int(step_token[1]),
+            viewport_extent=viewport_extent,
         )
     except Exception:
         cadence.note_step_failed()

@@ -430,6 +430,60 @@ def test_scene_controller_owns_overlay_for_exact_display_generation(qt_app) -> N
 
 
 @pytest.mark.qt
+def test_scene_controller_pushes_live_custom_viewport_extent_to_config_sink(qt_app) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=131,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+
+    session = CustomLayoutSession()
+    visualizer = _item(
+        "spotify_visualizer",
+        "display:a",
+        QRect(120, 90, 630, 420),
+        viewport_capable=True,
+        baseline_viewport_extent=(420.0, 280.0),
+    )
+    visualizer.current_monitor_route = "1"
+    session.add_item(visualizer)
+    controller.bind_custom_layout_session(
+        session,
+        display_identity="display:a",
+        display_origin=QPoint(0, 0),
+    )
+
+    published: list[object] = []
+    controller.set_visualizer_viewport_config_sink(published.append)
+    # Binding the sink republishes the current CUSTOM extent immediately.
+    assert published[-1] == (420.0, 280.0)
+
+    # A live edge drag (extent-only) reaches the sink as the latest config.
+    visualizer.set_viewport_extent(630.0, 280.0)
+    session.notify_item_changed(visualizer)
+    assert published[-1] == (630.0, 280.0)
+
+    # A vertical edge drag likewise coalesces to the latest committed world.
+    visualizer.set_viewport_extent(630.0, 420.0)
+    session.notify_item_changed(visualizer)
+    assert published[-1] == (630.0, 420.0)
+
+    # Ending CUSTOM restores the baseline world (None) for the next authored step.
+    controller.clear_custom_layout_session()
+    assert published[-1] is None
+
+    controller.quiesce_for_retirement()
+    window.deleteLater()
+    factory.deleteLater()
+    qt_app.processEvents()
+
+
+@pytest.mark.qt
 def test_scene_binding_moves_hides_and_restores_same_retained_family_item(qt_app) -> None:
     screen = qt_app.primaryScreen()
     assert screen is not None

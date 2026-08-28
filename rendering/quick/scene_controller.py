@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, replace
 import math
 from pathlib import Path
@@ -251,6 +251,14 @@ class QuickSceneController(QObject):
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
         self._custom_layout_visualizer_baseline: ResolvedVisualizerPresentation | None = None
+        # Optional presentation-neutral sink for the retained CUSTOM viewport
+        # extent. The destination orchestration binds the visualizer logical
+        # runtime's viewport-config setter here so a live edge drag reaches the
+        # next authored logical step. Plain typed floats only; no scene/render
+        # object crosses it.
+        self._visualizer_viewport_config_sink: (
+            Callable[[tuple[float, float] | None], None] | None
+        ) = None
         self._visualizer_loader: QQuickItem | None = None
         self._visualizer_root: QQuickItem | None = None
         self._visualizer_content_host: QQuickItem | None = None
@@ -461,6 +469,8 @@ class QuickSceneController(QObject):
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
         self._custom_layout_visualizer_baseline = None
+        # Ending CUSTOM restores the baseline logical world for the next step.
+        self._publish_visualizer_viewport_config()
 
     def _apply_custom_layout_item(self, item: CustomLayoutSessionItem) -> None:
         if item.model_identity == "spotify_visualizer":
@@ -510,7 +520,41 @@ class QuickSceneController(QObject):
             None,
         )
 
+    def set_visualizer_viewport_config_sink(
+        self,
+        sink: Callable[[tuple[float, float] | None], None] | None,
+    ) -> None:
+        """Bind the logical viewport-config seam that consumes the CUSTOM extent.
+
+        The destination orchestration passes the visualizer runtime controller's
+        ``set_presentation_viewport_extent`` here so a live retained edge drag
+        publishes its committed logical world to the next authored logical step.
+        Binding it immediately republishes the current CUSTOM extent so the sink
+        starts from truth rather than a stale baseline.
+        """
+
+        self._visualizer_viewport_config_sink = sink
+        if sink is not None:
+            self._publish_visualizer_viewport_config()
+
+    def _publish_visualizer_viewport_config(self) -> None:
+        """Push the current CUSTOM logical extent (or baseline) to the sink."""
+
+        sink = self._visualizer_viewport_config_sink
+        if sink is None:
+            return
+        extent: tuple[float, float] | None = None
+        if self._custom_layout_session is not None:
+            active_item = self._active_custom_layout_item("spotify_visualizer")
+            if active_item is not None:
+                extent = active_item.current_viewport_extent
+        sink(extent)
+
     def _sync_custom_layout_visualizer(self) -> None:
+        # Publish the latest logical viewport extent even when there is no Quick
+        # visualizer item yet: the extent is spatial config for the logical step,
+        # independent of render-item existence.
+        self._publish_visualizer_viewport_config()
         root = self._visualizer_root
         loader = self._visualizer_loader
         if root is None or loader is None:
