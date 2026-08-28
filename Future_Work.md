@@ -658,21 +658,31 @@ reapplied cheaply in the material sample path rather than forcing a second compo
 
 ## 10.6 Widget Theme ownership
 
-The eventual `.srwtheme` contract should own visual decisions such as:
+The eventual `.srwtheme` contract should primarily **serialize/apply the mature visual settings already exposed in
+Settings** instead of inventing a parallel palette system. Existing widget swatches, opacity, border and shadow controls
+remain the normal editing surface; a Widget Theme is a named visual bundle over those same authorities. Family-specific
+visual values may participate where they are genuinely appearance-only.
+
+Candidate visual ownership includes:
 
 - `material_mode`: `translucent` / `glass` / `acrylic`;
-- ordinary card tint/opacity;
-- Glass/Acrylic tint strength;
-- border colour/opacity/width where supported;
+- ordinary card tint/opacity and existing card/background swatches;
+- Glass/Acrylic tint/material strength once those scene-local materials are physically proven;
+- border colour/opacity/width where already supported;
 - shadow visual parameters already exposed by the final widget-style contract;
-- optional bounded material parameters that have actually earned their place through visual/performance
-  testing.
+- other existing appearance-only values that can round-trip without altering runtime behaviour;
+- optional bounded material parameters that have actually earned their place through visual/performance testing.
+
+Manual edits after selecting a theme must have one explicit ownership rule (for example, the selected theme becomes
+modified/custom rather than silently fighting the user's swatches). Do not create two independent authorities for the
+same visual value.
 
 Widget Themes do **not** own widget activation, ordinary ON/OFF, provider/account/source state, geometry,
 refresh cadence or runtime business logic.
 
 Default/Dark Widget Theme must resolve to `material_mode = translucent` and reproduce the existing simple
-card appearance as closely as practical. Glass/Acrylic are opt-in modes.
+card appearance as closely as practical. Glass/Acrylic remain opt-in and **must not become selectable merely because
+the file schema can name them**; the shared/lazy Qt Quick material path needs runtime visual/performance proof first.
 
 ## 10.7 Performance / acceptance gates
 
@@ -705,7 +715,6 @@ coherence and bounded-cost rules are not.
 !OPERATOR BOX!
 Ideas put in this box are to be added to work asap but at a lower priotiy than future cleanup or current plan work, unless existing in those as well.
 ############
-1. Give SettingsGUI Display section a Pill style look like widgets/transitions for its sections as they are quite large.
-2. Add two options in the Interaction Pill for Display. "Widget Glow on Hover" "Widget Glow On Click" with a shared swatch colour selector. These will cause a small pulse in glow effect when triggered in relation to the cursor halo and pulse out when hover leaves or click leaves. This must not introduce timers or any thread contention/starvation.
-3. Check if Settings GUI Theme support has completely landed and if it has its own tab yet. Ideal goal Settings GUI loadable themes and a second pill for Widget Themes. Widget Themes would control widget visual customization only and use `.srwtheme` files. The existing/Dark Widget Theme remains the default and resolves to the current cheap `translucent` card architecture; optional `glass` and `acrylic` material modes use the shared/lazy Qt Quick backdrop contract in section 10. Widget Themes may own colours, opacity, borders, shadows and proven material parameters, but never widget activation/ordinary ON/OFF, provider/account/source state, geometry or refresh/runtime business logic.
-5. [LOW] Give more SettingsGUI sections Flowcontainers where it would benefit well aligned space usage.
+1. Add two options in the Interaction Pill for Display. "Widget Glow on Hover" "Widget Glow On Click" with a shared swatch colour selector. These will cause a small pulse in glow effect when triggered in relation to the cursor halo and pulse out when hover leaves or click leaves. This must not introduce timers or any thread contention/starvation.
+2. Finish the already-reserved Widget Themes pill in the landed Themes tab. Prefer serializing/applying the mature existing widget visual settings (swatches, opacity, borders, shadows and other proven visual-only values) rather than inventing parallel presentation controls. Widget Themes use `.srwtheme` files and never own widget activation/ordinary ON/OFF, provider/account/source state, geometry, refresh cadence or runtime business logic. The existing/Dark Widget Theme remains the default and resolves to the current cheap `translucent` card architecture. Optional `glass` and `acrylic` material modes remain blocked on the shared/lazy Qt Quick material contract in section 10 and require runtime visual/performance proof before becoming selectable.
+3. [LOW] Give more SettingsGUI sections Flowcontainers where it would benefit well aligned space usage.

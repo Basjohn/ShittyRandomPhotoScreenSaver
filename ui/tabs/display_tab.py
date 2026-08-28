@@ -11,7 +11,8 @@ Allows users to configure display settings:
 from typing import Optional, List
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel,
-    QSpinBox, QGroupBox, QCheckBox, QScrollArea, QComboBox
+    QSpinBox, QGroupBox, QCheckBox, QScrollArea, QComboBox,
+    QButtonGroup, QPushButton,
 )
 from PySide6.QtCore import Signal, Qt
 
@@ -23,6 +24,7 @@ from ui.tabs.shared_styles import (
     add_aligned_row,
     style_group_box,
 )
+from ui.flow_layout import FlowContainer
 from ui.widgets import StyledComboBox
 from utils.monitors import get_screen_count
 
@@ -65,36 +67,141 @@ class DisplayTab(QWidget):
         logger.debug("[DISPLAY_TAB] Reloaded from settings")
     
     def _setup_ui(self) -> None:
-        """Setup tab UI with scroll area."""
-        # Create scroll area
+        """Build the Display tab and its pill-section navigation.
+
+        ``SettingsDialog`` already owns DisplayTab construction at the
+        top-level tab lifecycle (selected immediately when needed, otherwise
+        eligible for the existing background hydration queue). The five Display
+        sections below are deliberately built together once DisplayTab itself
+        is constructed: they are all cheap QWidget controls, have no independent
+        workers/timers, and the existing load/save contract is intentionally
+        whole-tab atomic. Making these individual pages lazy would add
+        partial-hydration/save hazards for no meaningful benefit.
+        """
         scroll = QScrollArea(self)
+        self._scroll_area = scroll
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.NoFrame)
         scroll.setStyleSheet(shared_styles.SCROLL_AREA_STYLE)
 
-        # Create content widget
         content = QWidget()
         layout = QVBoxLayout(content)
         layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(12)
-        
-        # Title
+        layout.setSpacing(16)
+
         title = QLabel("Display Settings")
         shared_styles.apply_shared_label_style(title, "PAGE_TITLE_STYLE")
         layout.addWidget(title)
-        
-        # Monitor selection group
-        monitor_group = QGroupBox("Monitor Configuration")
-        style_group_box(monitor_group)
-        monitor_layout = QVBoxLayout(monitor_group)
-        monitor_layout.setContentsMargins(0, 12, 0, 0)
-        monitor_layout.setSpacing(12)
 
-        # Show On section (per-monitor checkboxes)
+        # Reuse the existing semantic Settings sub-navigation tokens rather
+        # than creating Display-specific theme roles. Current .srtheme files
+        # therefore style these pills without a schema migration.
+        nav = FlowContainer(h_spacing=8, v_spacing=8)
+        self._section_group = QButtonGroup(self)
+        self._section_group.setExclusive(True)
+        self._section_buttons: list[QPushButton] = []
+
+        section_specs = (
+            ("monitors", "Monitors", self._build_monitor_section),
+            ("display_mode", "Display Mode", self._build_display_mode_section),
+            ("timing", "Timing", self._build_timing_section),
+            ("quality", "Quality", self._build_quality_section),
+            ("interaction", "Interaction", self._build_interaction_section),
+        )
+        self._section_keys = tuple(key for key, _label, _builder in section_specs)
+
+        self._section_pages: list[QWidget] = []
+        for index, (_key, label, builder) in enumerate(section_specs):
+            button = QPushButton(label)
+            button.setCheckable(True)
+            shared_styles.bind_shared_styles(
+                button,
+                "WIDGET_NAV_PILL_STYLE",
+                base_style="",
+            )
+            self._section_group.addButton(button, index)
+            self._section_buttons.append(button)
+            nav.addWidget(button)
+
+            page = builder()
+            self._section_pages.append(page)
+
+        layout.addWidget(nav)
+        for page in self._section_pages:
+            layout.addWidget(page)
+        layout.addStretch()
+
+        self._section_group.idClicked.connect(self._on_section_changed)
+        self._section_buttons[0].setChecked(True)
+        self._on_section_changed(0, reset_scroll=False)
+
+        scroll.setWidget(content)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+
+        shared_styles.bind_shared_styles(
+            self,
+            "SPINBOX_STYLE",
+            "CIRCLE_CHECKBOX_STYLE",
+            "COMBOBOX_STYLE",
+        )
+
+    def _on_section_changed(self, index: int, *, reset_scroll: bool = True) -> None:
+        """Show exactly one Display section without rebuilding its controls."""
+
+        if not 0 <= index < len(self._section_pages):
+            return
+        for page_index, page in enumerate(self._section_pages):
+            page.setVisible(page_index == index)
+        self._active_section_index = index
+        if reset_scroll and hasattr(self, "_scroll_area"):
+            self._scroll_area.verticalScrollBar().setValue(0)
+
+    def get_view_state(self) -> dict[str, str]:
+        """Return the selected Display subsection for dialog-level state caching."""
+
+        index = getattr(self, "_active_section_index", 0)
+        if 0 <= index < len(getattr(self, "_section_keys", ())):
+            return {"section": self._section_keys[index]}
+        return {"section": "monitors"}
+
+    def restore_view_state(self, state: dict) -> None:
+        """Restore a previously selected Display subsection when available."""
+
+        if not isinstance(state, dict):
+            return
+        key = state.get("section")
+        if not isinstance(key, str):
+            return
+        try:
+            index = self._section_keys.index(key)
+        except (AttributeError, ValueError):
+            return
+        button = self._section_group.button(index)
+        if button is not None:
+            button.setChecked(True)
+        self._on_section_changed(index, reset_scroll=False)
+
+    @staticmethod
+    def _new_section_group(title: str) -> tuple[QGroupBox, QVBoxLayout]:
+        """Create one existing-style Display section group."""
+
+        group = QGroupBox(title)
+        style_group_box(group)
+        layout = QVBoxLayout(group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setSpacing(12)
+        return group, layout
+
+    def _build_monitor_section(self) -> QWidget:
+        group, layout = self._new_section_group("Monitor Configuration")
+
         show_row, _ = add_aligned_row(
-            monitor_layout,
+            layout,
             "Show screensaver on:",
             label_width=self._LABEL_WIDTH,
         )
@@ -115,9 +222,8 @@ class DisplayTab(QWidget):
         show_row.addSpacing(12)
         show_row.addStretch()
 
-        # Same image toggle
         same_image_row, _ = add_aligned_row(
-            monitor_layout,
+            layout,
             "",
             label_width=self._LABEL_WIDTH,
             wrap=False,
@@ -128,18 +234,14 @@ class DisplayTab(QWidget):
         self.same_image_check.stateChanged.connect(self._save_settings)
         same_image_row.addWidget(self.same_image_check)
         same_image_row.addStretch()
-        
-        layout.addWidget(monitor_group)
-        
-        # Display mode group
-        mode_group = QGroupBox("Display Mode")
-        style_group_box(mode_group)
-        mode_layout = QVBoxLayout(mode_group)
-        mode_layout.setContentsMargins(0, 12, 0, 0)
-        mode_layout.setSpacing(12)
-        
+
+        return group
+
+    def _build_display_mode_section(self) -> QWidget:
+        group, layout = self._new_section_group("Display Mode")
+
         mode_row, _ = add_aligned_row(
-            mode_layout,
+            layout,
             "Mode:",
             label_width=self._LABEL_WIDTH,
         )
@@ -147,24 +249,19 @@ class DisplayTab(QWidget):
         self.mode_combo.addItems([
             "Fill — Crop to fill",
             "Fit — Show all (may letterbox)",
-            "Shrink — Never enlarge"
+            "Shrink — Never enlarge",
         ])
         self.mode_combo.currentIndexChanged.connect(self._save_settings)
         mode_row.addWidget(self.mode_combo)
         mode_row.addStretch()
-        
-        layout.addWidget(mode_group)
-        
-        # Timing group
-        timing_group = QGroupBox("Image Timing")
-        style_group_box(timing_group)
-        timing_layout = QVBoxLayout(timing_group)
-        timing_layout.setContentsMargins(0, 12, 0, 0)
-        timing_layout.setSpacing(12)
-        
-        # Rotation interval
+
+        return group
+
+    def _build_timing_section(self) -> QWidget:
+        group, layout = self._new_section_group("Image Timing")
+
         interval_row, _ = add_aligned_row(
-            timing_layout,
+            layout,
             "Change image every:",
             label_width=self._LABEL_WIDTH,
         )
@@ -179,10 +276,9 @@ class DisplayTab(QWidget):
         interval_row.addWidget(self.interval_spin)
         interval_row.addWidget(create_inline_label("seconds"))
         interval_row.addStretch()
-        
-        # Shuffle toggle
+
         shuffle_row, _ = add_aligned_row(
-            timing_layout,
+            layout,
             "",
             label_width=self._LABEL_WIDTH,
             wrap=False,
@@ -193,58 +289,53 @@ class DisplayTab(QWidget):
         self.shuffle_check.stateChanged.connect(self._save_settings)
         shuffle_row.addWidget(self.shuffle_check)
         shuffle_row.addStretch()
-        
-        layout.addWidget(timing_group)
-        
-        # Image quality group
-        quality_group = QGroupBox("Image Quality")
-        style_group_box(quality_group)
-        quality_layout = QVBoxLayout(quality_group)
-        quality_layout.setContentsMargins(0, 12, 0, 0)
-        quality_layout.setSpacing(12)
-        
+
+        return group
+
+    def _build_quality_section(self) -> QWidget:
+        group, layout = self._new_section_group("Image Quality")
+
         lanczos_row, _ = add_aligned_row(
-            quality_layout,
+            layout,
             "",
             label_width=self._LABEL_WIDTH,
             wrap=False,
         )
-        self.lanczos_check = QCheckBox("Use Lanczos Scaling (Higher Quality, More CPU)")
+        self.lanczos_check = QCheckBox(
+            "Use Lanczos Scaling (Higher Quality, More CPU)"
+        )
         self.lanczos_check.setProperty("circleIndicator", True)
         self.lanczos_check.setChecked(True)
         self.lanczos_check.setToolTip(
-            "Lanczos provides better image quality when scaling, especially for downscaling. "
-            "Disable if experiencing performance issues during transitions."
+            "Lanczos provides better image quality when scaling, especially for "
+            "downscaling. Disable if experiencing performance issues during transitions."
         )
         self.lanczos_check.stateChanged.connect(self._save_settings)
         lanczos_row.addWidget(self.lanczos_check)
         lanczos_row.addStretch()
-        
+
         sharpen_row, _ = add_aligned_row(
-            quality_layout,
+            layout,
             "",
             label_width=self._LABEL_WIDTH,
             wrap=False,
         )
-        self.sharpen_check = QCheckBox("Apply Sharpening Filter When Downscaling")
+        self.sharpen_check = QCheckBox(
+            "Apply Sharpening Filter When Downscaling"
+        )
         self.sharpen_check.setProperty("circleIndicator", True)
         self.sharpen_check.setChecked(False)
         self.sharpen_check.stateChanged.connect(self._save_settings)
         sharpen_row.addWidget(self.sharpen_check)
         sharpen_row.addStretch()
-        
-        layout.addWidget(quality_group)
-        
-        # Pan and Scan has been removed in v1.2; no dedicated UI group remains.
 
-        # Interaction group
-        input_group = QGroupBox("Interaction")
-        style_group_box(input_group)
-        input_layout = QVBoxLayout(input_group)
-        input_layout.setContentsMargins(0, 12, 0, 0)
-        input_layout.setSpacing(12)
+        return group
+
+    def _build_interaction_section(self) -> QWidget:
+        group, layout = self._new_section_group("Interaction")
+
         interaction_mode_row, _ = add_aligned_row(
-            input_layout,
+            layout,
             "",
             label_width=self._LABEL_WIDTH,
             wrap=False,
@@ -252,7 +343,8 @@ class DisplayTab(QWidget):
         self.interaction_mode_check = QCheckBox("Interaction Mode (ESC Only)")
         self.interaction_mode_check.setProperty("circleIndicator", True)
         self.interaction_mode_check.setToolTip(
-            "Keeps the screensaver active during simple mouse movement or clicks so you can interact with widgets until you press Escape."
+            "Keeps the screensaver active during simple mouse movement or clicks "
+            "so you can interact with widgets until you press Escape."
         )
         self.interaction_mode_check.setChecked(False)
         if self._is_mc_profile:
@@ -264,9 +356,8 @@ class DisplayTab(QWidget):
         interaction_mode_row.addWidget(self.interaction_mode_check)
         interaction_mode_row.addStretch()
 
-        # Cursor Halo Shape
         halo_row, _ = add_aligned_row(
-            input_layout,
+            layout,
             "Cursor Halo Shape:",
             label_width=self._LABEL_WIDTH,
         )
@@ -284,31 +375,18 @@ class DisplayTab(QWidget):
                 "Cursor Pointer (Dark)",
             ]
         )
-        self.halo_shape_combo.setToolTip("Visual shape of the cursor halo in Interaction / Ctrl-Held Mode.")
-        self.halo_shape_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.halo_shape_combo.setToolTip(
+            "Visual shape of the cursor halo in Interaction / Ctrl-Held Mode."
+        )
+        self.halo_shape_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToContents
+        )
         self.halo_shape_combo.currentIndexChanged.connect(self._save_settings)
         halo_row.addWidget(self.halo_shape_combo)
         halo_row.addStretch()
-        
-        layout.addWidget(input_group)
-        
-        # Add stretch at bottom
-        layout.addStretch()
-        
-        # Set scroll area widget and add to main layout
-        scroll.setWidget(content)
-        
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll)
 
-        shared_styles.bind_shared_styles(
-            self,
-            "SPINBOX_STYLE",
-            "CIRCLE_CHECKBOX_STYLE",
-            "COMBOBOX_STYLE",
-        )
-    
+        return group
+
     def _load_settings(self) -> None:
         """Load settings from settings manager."""
         # Block signals during load to prevent triggering saves

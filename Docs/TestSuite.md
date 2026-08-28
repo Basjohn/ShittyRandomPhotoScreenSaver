@@ -5,7 +5,7 @@ Last updated: 2026-08-28
 Reviewed source basis:
 
 ```text
-source checkpoint = 59f4a3c9
+source checkpoint = 8642c60e
 F0–F8 closed; G1–G6 closed; G7 near closure
 active correction = visualizer independent viewport-extent resize for all five modes
 ```
@@ -23,8 +23,8 @@ identity/presentation duplication.
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 351 top-level modules was manually
-read line-by-line or executed during this review. The inventory is complete; semantic inspection was
+This is deliberately **not** a claim that every assertion in every top-level test module was manually
+read line-by-line or executed during this review. The row-level inventory is the useful current authority; semantic inspection was
 concentrated where migration status could change whether a test remains authority.
 
 ### Status vocabulary
@@ -40,28 +40,12 @@ concentrated where migration status could change whether a test remains authorit
 
 **Do not use filename age or phase prefixes as the decision rule.** `test_p2_logical_runtime.py`, for example, is permanent logical-runtime coverage, while some newer-looking files encode presenter paths intentionally scheduled for deletion.
 
-### Inventory status counts
+### Inventory count policy
 
-This table is the pre-family-retirement classification snapshot and is not an executable-file count. The
-current 352-module count above is authoritative; Phase J owns the final row-by-row ledger reconciliation.
-Closed-phase labels below preserve why a test entered the ledger and do not reopen that phase.
-
-| Status | Files |
-| --- | ---: |
-| `KEEP` | 116 |
-| `KEEP — MIGRATION PERMANENT` | 91 |
-| `MIGRATION-CRITICAL — H/I` | 47 |
-| `WILL BE OBSOLETE — H/I` | 23 |
-| `MIGRATION-CRITICAL — F` | 38 |
-| `MIGRATION-CRITICAL — G/H` | 16 |
-| `MIGRATION-CRITICAL — G` | 12 |
-| `KEEP — PERMANENT` | 5 |
-| `WILL BE OBSOLETE — J` | 4 |
-| `UPDATE REQUIRED NOW` | 3 |
-| `WILL BE OBSOLETE — E4/F` | 2 |
-| `OBSOLETE NOW` | 2 |
-| `MIGRATION-CRITICAL — E3/F` | 1 |
-| **Total** | **360** |
+Do not maintain hand-written aggregate module/status totals in this live document. During migration they become stale as
+soon as a test is added, removed or reclassified and can contradict the row-level inventory in the same file. The tables
+under section 10 are the authority for current test ownership. Generate counts from the current tree only when a specific
+audit actually needs them.
 
 ## 2. Standard commands and evidence levels
 
@@ -490,7 +474,6 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_capability_activation_neutrality.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_default_settings_editor.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_general_preset_gate_isolation.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_presets.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_regenerate_sst_defaults.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_settings_binding.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_settings_defaults_parity.py` | **KEEP** | Retain; no migration-specific retirement identified. |
@@ -503,6 +486,7 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_settings_schema.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_settings_shared_styles.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_settings_sync.py` | **OBSOLETE NOW** | Tombstone only; contains no executable tests. |
+| `tests/test_theme_foundry_model.py` | **KEEP — PERMANENT** | Pure schema-v5 Theme Foundry model coverage, including exact-RGBA bulk replacement and most-used-colour ranking/alpha separation. |
 
 ### 10.6 Media / audio
 
@@ -694,7 +678,7 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_events.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_flow_layout.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_fresh_start_logging.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_logging_config.py` | **KEEP** | Retain; no migration-specific retirement identified. |
+| `tests/test_logging_config.py` | **KEEP — PERMANENT** | Logging bootstrap/family routing and exact rotating-handler policy; Diagnostic uses 2 MiB chunks with deliberately deeper bounded main/usage/lifecycle retention. |
 | `tests/test_logging_console_encoding.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_logging_routing.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_main_run_lifetime.py` | **KEEP** | Retain; no migration-specific retirement identified. |
@@ -786,6 +770,9 @@ Whenever a checkpoint:
 
 update the relevant inventory row in `Docs/TestSuite.md` **in the same checkpoint**.
 
+Do not add hand-maintained aggregate counts as a second authority over the row inventory. If a count is useful for an
+audit, generate it from that exact tree and keep it in the audit/evidence rather than letting it become stale living prose.
+
 When a `WILL BE OBSOLETE` source owner is actually deleted, do one of three explicit things:
 
 1. delete the test because the behavior itself was implementation-only;
@@ -793,6 +780,10 @@ When a `WILL BE OBSOLETE` source owner is actually deleted, do one of three expl
 3. retain the file only if it has been rewritten so completely that its name/status no longer misrepresents ownership.
 
 Do not leave zero-test tombstones behind merely to record history; Git and historical docs already provide history.
+
+When a whole caller-dead feature island has no surviving neutral caller/contract, retire the implementation and its
+implementation-only regression together instead of keeping one solely to justify the other. This is the rule applied to
+the retired global/general Presets island; visualizer presets are a separate live system.
 
 ## 14. Completion rule
 

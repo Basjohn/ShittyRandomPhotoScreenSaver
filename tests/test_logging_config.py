@@ -290,8 +290,35 @@ def test_diagnostic_build_enables_every_family_beside_frozen_executable(
         if isinstance(handler, RotatingFileHandler)
     ]
     assert rotating
-    assert all(handler.maxBytes == 1 * 1024 * 1024 for handler in rotating)
-    assert all(1 <= handler.backupCount <= 5 for handler in rotating)
+
+    # Production + Logging_Guide contract: all rotating logs use 2 MiB chunks.
+    # Diagnostic extends bounded history for the main/usage/lifecycle spines;
+    # it does not globally force every family down to <=5 backups.
+    expected_backup_counts = {
+        "screensaver.log": 11,
+        "screensaver_verbose.log": 3,
+        "screensaver_perf.log": 5,
+        "perf_widgets.log": 5,
+        "screensaver_usage.log": 11,
+        "screensaver_spotify_vis.log": 5,
+        "screensaver_spotify_vol.log": 5,
+        "screensaver_geometry.log": 5,
+        "screensaver_settings.log": 5,
+        "screensaver_lifecycle.log": 11,
+        "screensaver_cache.log": 5,
+        "screensaver_steam.log": 5,
+    }
+    rotating_by_name = {
+        Path(handler.baseFilename).name: handler
+        for handler in rotating
+    }
+    assert set(rotating_by_name) == set(expected_backup_counts)
+    assert all(handler.maxBytes == 2 * 1024 * 1024 for handler in rotating)
+    assert {
+        name: handler.backupCount
+        for name, handler in rotating_by_name.items()
+    } == expected_backup_counts
+
     assert logger_mod.is_verbose_logging() is True
     assert logger_mod.is_perf_metrics_enabled() is True
     assert logger_mod.is_gpu_timing_enabled() is True
