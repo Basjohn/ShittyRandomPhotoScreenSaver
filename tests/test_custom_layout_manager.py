@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 from core.settings.models._enums import WidgetPosition, coerce_widget_position
 from rendering.custom_layout_manager import CustomLayoutManager
 from rendering.custom_layout_contract import get_screen_signature, resolve_snap_local_rect_for_edit
+from rendering.custom_layout_session import normalize_viewport_extent
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.edit_shell_widget import EditShellWidget
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
@@ -4028,6 +4029,72 @@ def test_visualizer_edge_resize_respects_minimum_outer_size_without_scaling(qtbo
     assert item.resize_scale == 1.0
     assert item.current_viewport_extent[1] == pytest.approx(280.0)
     assert manager.cancel_session() is True
+
+
+def test_visualizer_viewport_extent_round_trips_through_save_and_reopen(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("A", QRect(0, 0, 6000, 4000))
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"spotify_visualizer": {"position": "Custom", "monitor": "1"}}
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    visualizer._vis_mode_str = "spectrum"
+    visualizer._custom_layout_local_rect = QRect(200, 200, 630, 420)
+    visualizer.setGeometry(200, 200, 630, 420)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    item = manager._shell_states["spotify_visualizer"].item
+    origin_rect = QRect(item.current_global_rect)
+
+    right_edge = QPoint(origin_rect.x() + origin_rect.width(), origin_rect.center().y())
+    assert manager.begin_retained_resize(item, "right", right_edge) is True
+    assert manager.update_retained_resize(
+        item, "right", right_edge + QPoint(300, 0), True
+    ) is True
+    expected_extent_w = (origin_rect.width() + 300) / 1.5
+
+    assert manager.save_session() is True
+    widgets_map = settings_stub.get_widgets_map()
+    payload = next(iter(widgets_map["custom_layout"]["displays"].values()))["spotify_visualizer"]["default"]
+    assert payload["resize_mode"] == "visualizer_rect"
+    persisted_extent = payload["size_payload"]["viewport_extent"]
+    assert persisted_extent[0] == pytest.approx(expected_extent_w)
+    assert persisted_extent[1] == pytest.approx(280.0)
+
+    # Reopen: a fresh display/manager sharing the saved settings restores the
+    # committed extent as the new baseline, not the 1.5 baseline aspect.
+    _reset_custom_layout_manager_state()
+    display2 = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display2)
+    display2.show()
+    visualizer2 = _VisualizerLikeTestWidget(display2)
+    visualizer2._vis_mode_str = "spectrum"
+    display2.spotify_visualizer_widget = visualizer2
+    qtbot.addWidget(visualizer2)
+    manager2 = CustomLayoutManager(display2)
+    _attach_manager(display2, manager2)
+    manager2.apply_saved_layouts_to_display()
+
+    restored_extent = normalize_viewport_extent(
+        getattr(visualizer2, "_custom_layout_viewport_extent", None)
+    )
+    assert restored_extent is not None
+    assert restored_extent[0] == pytest.approx(expected_extent_w)
+    assert restored_extent[1] == pytest.approx(280.0)
+
+    assert manager2.start_session() is True
+    item2 = manager2._shell_states["spotify_visualizer"].item
+    assert item2.baseline_viewport_extent[0] == pytest.approx(expected_extent_w)
+    assert item2.baseline_viewport_extent[1] == pytest.approx(280.0)
+    assert item2.current_viewport_extent == item2.baseline_viewport_extent
+    assert manager2.cancel_session() is True
 
 
 def test_custom_layout_manager_visualizer_legacy_scale_payload_rebaselines_to_committed_rect(qtbot):

@@ -789,6 +789,17 @@ class CustomLayoutManager:
         size_payload = dict(state.item.current_size_payload)
         if state.descriptor.custom_layout_resize_mode == "clock_font":
             size_payload.pop("display_mode", None)
+        if (
+            state.descriptor.custom_layout_resize_mode == "visualizer_rect"
+            and state.item.current_viewport_extent is not None
+            and not self._is_canonical_baseline_extent(state.item.current_viewport_extent)
+        ):
+            # Persist the committed logical world separately from uniform scale so
+            # a reopened / slot-replayed visualizer restores its exact extent and
+            # aspect, not the 1.5 baseline. A never-edge-resized visualizer stays
+            # on the canonical baseline aspect and writes no redundant extent.
+            extent = state.item.current_viewport_extent
+            size_payload["viewport_extent"] = [float(extent[0]), float(extent[1])]
         entry = CustomLayoutEntry(
             widget_id=widget_id,
             geometry_variant=geometry_variant,
@@ -2041,6 +2052,13 @@ class CustomLayoutManager:
             state.resize_origin_scale = state.item.resize_scale
             state.resize_corner = None
 
+    @staticmethod
+    def _is_canonical_baseline_extent(extent: tuple[float, float]) -> bool:
+        return (
+            abs(float(extent[0]) - float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[0])) < 0.5
+            and abs(float(extent[1]) - float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1])) < 0.5
+        )
+
     def _admission_viewport_extent(
         self,
         baseline_payload: dict[str, Any],
@@ -2815,20 +2833,35 @@ class CustomLayoutManager:
                 "track_margin": int(getattr(widget, "_track_margin", 6)),
             }
         if mode == "visualizer_rect":
+            committed_extent = normalize_viewport_extent(
+                getattr(widget, "_custom_layout_viewport_extent", None)
+            )
             committed_rect = getattr(widget, "_custom_layout_local_rect", None)
             if isinstance(committed_rect, QRect) and committed_rect.width() > 0 and committed_rect.height() > 0:
-                return {
+                payload: dict[str, Any] = {
                     "width": int(committed_rect.width()),
                     "height": int(committed_rect.height()),
                 }
+                if committed_extent is not None:
+                    payload["viewport_extent"] = [
+                        float(committed_extent[0]),
+                        float(committed_extent[1]),
+                    ]
+                return payload
             try:
                 live_rect = QRect(widget.geometry())
             except Exception:
                 live_rect = QRect()
-            return {
+            payload = {
                 "width": max(10, int(live_rect.width() or 100)),
                 "height": max(_MIN_CUSTOM_WIDGET_HEIGHT, int(live_rect.height() or 80)),
             }
+            if committed_extent is not None:
+                payload["viewport_extent"] = [
+                    float(committed_extent[0]),
+                    float(committed_extent[1]),
+                ]
+            return payload
         return {}
 
     def _scale_size_payload(
@@ -2924,7 +2957,11 @@ class CustomLayoutManager:
                 delattr(widget, "_custom_layout_local_rect")
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to clear custom rect", exc_info=True)
-        for attr_name in ("_custom_layout_widget_id", "_custom_layout_runtime_vertical_content_resize"):
+        for attr_name in (
+            "_custom_layout_widget_id",
+            "_custom_layout_runtime_vertical_content_resize",
+            "_custom_layout_viewport_extent",
+        ):
             try:
                 if hasattr(widget, attr_name):
                     delattr(widget, attr_name)
@@ -3411,6 +3448,21 @@ class CustomLayoutManager:
             "_custom_layout_runtime_vertical_content_resize",
             bool(descriptor.custom_layout_runtime_vertical_content_resize),
         )
+        if descriptor.custom_layout_resize_mode == "visualizer_rect":
+            committed_extent = normalize_viewport_extent(
+                entry.size_payload.get("viewport_extent")
+            )
+            if committed_extent is not None:
+                setattr(widget, "_custom_layout_viewport_extent", committed_extent)
+            else:
+                try:
+                    if hasattr(widget, "_custom_layout_viewport_extent"):
+                        delattr(widget, "_custom_layout_viewport_extent")
+                except Exception:
+                    logger.debug(
+                        "[CUSTOM_LAYOUT] Failed to clear stale committed viewport extent",
+                        exc_info=True,
+                    )
         try:
             # Prime the real committed rect before any min/max constraint lock
             # can resize the widget in-place at a stale authored/startup origin.
