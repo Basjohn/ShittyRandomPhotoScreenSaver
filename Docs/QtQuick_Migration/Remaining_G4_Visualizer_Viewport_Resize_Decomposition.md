@@ -1,9 +1,12 @@
 # Remaining G4 — Visualizer Viewport-Extent Resize Technical Decomposition
 
-Status: **section 7 (Bubble logical reflow) + policy flip + all-mode eyes-on gate remaining**  
-Landed and test-gated: geometry projection (§2/§5/§6), session scale/extent working state (§3), overlay + QML
-edge handles (§4), scene-controller preview projection (§6), manager viewport-edge adapter (§5) and the
-persistence round-trip (§9). The four proven modes reflow already; Bubble (§7) is the remaining destination gap.  
+Status: **deterministic implementation COMPLETE; only the deferred all-five-mode installed/eyes-on gate remains (after H)**  
+Landed and test-gated for all five modes: geometry projection (§2/§5/§6), session scale/extent working state (§3),
+overlay + QML edge handles (§4), scene-controller preview projection (§6), the manager viewport-edge adapter (§5),
+the persistence round-trip incl. canonical-reset (§9), the live `presentation_viewport_extent` config route from a
+CUSTOM edge drag into the next authored Bubble step, and Bubble's baseline-relative logical-domain reflow (§7) with
+`viewport_resize_capable=True` flipped on. Canonical `(420,280)` stays a strict byte-identical no-op. Do not reopen
+the deterministic work; the remaining eyes-on gate is correctly blocked on H.  
 Checkpoint basis: `59f4a3c98235215a9ff89fc09e4cc979d1831e89`  
 Work admission: `Current_Plan.md`
 
