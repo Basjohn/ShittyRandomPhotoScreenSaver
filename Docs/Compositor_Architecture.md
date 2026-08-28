@@ -207,8 +207,9 @@ border-mask constants into Quick.
 
 ### 7.3 Geometry
 
-One committed visualizer geometry authority feeds retained shell/chrome, clip geometry, custom GL,
-DPR and CUSTOM/Edit.
+One visualizer geometry authority feeds retained shell/chrome, clip geometry, custom GL, DPR and CUSTOM/Edit. Its ordinary
+runtime base is the committed presentation geometry; an active CUSTOM session may supply a temporary working override.
+Those are precedence levels within one geometry/configuration contract, not competing writable authorities.
 
 All five current modes share one canonical baseline viewport aspect. Mode changes and visualizer
 presets do not change it.
@@ -238,8 +239,11 @@ Required retained CUSTOM left/right edge resize changes viewport width only, whi
 viewport height only, at unchanged visual scale. That changes available mode playroom rather than stretching final
 rendered pixels. All five current modes must support it, including Bubble.
 
-Where a logical mode needs spatial bounds, committed viewport metrics are configuration input to the logical side and
-never another clock; Bubble must preserve round geometry, motion/collision semantics and BTF as the domain changes.
+Where a logical mode needs spatial bounds, the effective viewport metrics are configuration input to the logical side and
+never another clock. Outside CUSTOM the committed extent is truth; while editing, the working CUSTOM extent temporarily
+overrides it. Save leaves the newly committed extent active, Cancel restores the pre-edit committed extent, and ending
+CUSTOM does not imply canonical `(420,280)`. Bubble must preserve round geometry, motion/collision semantics and BTF as the
+domain changes.
 
 ## 8. Runtime overlays
 

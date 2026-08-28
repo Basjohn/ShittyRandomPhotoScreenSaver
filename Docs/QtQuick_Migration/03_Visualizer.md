@@ -1,7 +1,7 @@
 # 03 — Visualizer Qt Quick Migration
 
-Status: **Phase-D architecture landed; G4 viewport-resize correction currently required**  
-Last updated: 2026-08-28
+Status: **Phase-D architecture landed; G4 core viewport resize landed; bounded post-checkpoint corrections are current priority**  
+Last updated: 2026-08-29
 
 Cross-links:
 
@@ -15,8 +15,10 @@ Cross-links:
 - deferred deletion: `Future_Cleanup.md`
 
 Phase D is **complete**. D1–D9 and its render/logical architecture remain closed. This file is also the durable
-geometry contract consumed by G. The current G4 correction does not reopen Phase-D architecture: it completes the
-missing retained CUSTOM edge affordance against the already-proven wide/tall geometry seam.
+geometry contract consumed by G. The core G4 edge operation, Bubble logical reflow and all-five-mode capability policy are
+landed. The current post-checkpoint G4 corrections do not reopen Phase-D architecture; they close bounded viewport
+ownership/spatial omissions against that landed design. See
+`Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md`.
 
 Remaining installed Bubble cadence, eyes-on parity and mixed-refresh checks are operator-scheduled
 acceptance debt. They are not permission to fabricate a pass and are not by themselves unfinished
@@ -367,14 +369,16 @@ top/bottom edge -> viewport height only
 That intentionally changes available world/layout playroom and may produce a wide/tall aspect other than 1.5. Modes
 reflow/adapt; final rendered pixels are not anisotropically stretched.
 
-All five current production modes must be viewport-resize-capable, including Bubble. A current false Bubble capability
-flag is unfinished G4 migration state. Focused G proof must remove that gate while preserving Bubble spatial/BTF
-semantics; it is not a durable exception.
+All five current production modes must be viewport-resize-capable, including Bubble. That policy flip and the core Bubble
+reflow are landed; do not re-gate Bubble to avoid fixing a viewport defect. Focused G proof must preserve Bubble spatial/BTF
+semantics and the canonical baseline path.
 
 ### 8.5 Spatial logical modes
 
-When Bubble or another logical mode needs viewport bounds, committed `VisualizerViewportMetrics` (or
-source-equivalent) is configuration input to the logical side.
+When Bubble or another logical mode needs viewport bounds, presentation-neutral viewport configuration enters the logical
+side as state. Ordinary committed extent is the baseline runtime truth; while CUSTOM is active its working extent may
+temporarily override that value. Save commits the new value, Cancel restores the old committed value, and ending CUSTOM
+must remove the override without assuming canonical `(420,280)`.
 
 Geometry changes are never another authored clock and mouse-move/render frequency never becomes
 simulation cadence.

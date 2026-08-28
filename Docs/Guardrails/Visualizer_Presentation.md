@@ -1,6 +1,6 @@
 # Visualizer Presentation Guardrails
 
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
 Read for visualizer cadence, source freshness, render state, fade/readiness, shell/clip policy,
 geometry, and presentation work.
@@ -204,15 +204,17 @@ left/right edge -> viewport width only
 top/bottom edge -> viewport height only
 ```
 
-All five current production modes must support this destination operation, including Bubble. A temporary
-`viewport_resize_capable=False` source policy is unfinished migration gating, not permission to omit the feature.
+All five current production modes must support this destination operation, including Bubble. The core capability policy is
+landed for all five modes; do not reintroduce a false Bubble gate as a workaround for viewport defects.
 
 Do not implement wide/tall visualizers by stretching a rendered texture or scaling X and Y independently. Do not use a
 retired per-mode growth value as a hidden viewport-extent alias.
 
-Where a logical mode needs spatial bounds, committed viewport metrics enter the logical runtime as configuration. Bubble
-is the strict case: circles/radii/velocity/collision/BTF semantics stay coherent as its domain changes. Geometry input
-does not become another clock.
+Where a logical mode needs spatial bounds, viewport metrics enter the logical runtime as configuration. Ordinary committed
+extent is truth outside edit mode; an active CUSTOM working extent is a temporary higher-precedence override. Save commits
+the new extent, Cancel restores the old committed extent, and ending CUSTOM removes the override without assuming canonical
+`(420,280)`. Bubble is the strict case: circles/radii/velocity/collision/BTF semantics stay coherent as its domain changes.
+Geometry input does not become another clock.
 
 ## 10. Readiness
 

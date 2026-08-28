@@ -148,8 +148,13 @@ uniform_visual_scale     # wheel/corners
 viewport_extent          # left/right width; top/bottom height
 ```
 
-All five current modes must support viewport extent. Bubble is not a destination exception; current false capability
-gating is migration debt and must be removed with focused BTF/reflow proof.
+All five current modes must support viewport extent and the core capability policy is now all-five-mode capable. Bubble is
+not a destination exception and must not be re-gated to hide a defect. Preserve focused BTF/reflow proof.
+
+Viewport configuration has two precedence levels, not two persistence owners: ordinary committed extent is runtime truth;
+an active CUSTOM session may provide a temporary working override. Save promotes the new value into committed truth, Cancel
+restores the old committed value, and ending CUSTOM removes only the override. Inactive CUSTOM does not imply canonical
+`(420,280)`.
 
 ## Geometry / CUSTOM
 

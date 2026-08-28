@@ -1,24 +1,24 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
 ## Start here
 
 ```text
 exact current source
 -> Current_Plan.md
--> relevant focused current contract
+-> relevant focused current contract/decomposition
 -> tests/evidence for the claim
 ```
 
-Current migration: **Phase F closed; Phase G is at the tail of G7, with a required G4 visualizer viewport-resize
-correction promoted ahead of G7/G8 closure.**
+Current migration: **Phase F closed. Phase G has a bounded post-checkpoint G4 correction batch first, then G7 closure and
+G8 focus/MC closure. One independent audit gates the complete checkpointed G state before H.**
 
 ## Current authority
 
 | Need | Read |
 | --- | --- |
-| current work / sequence | `Current_Plan.md` |
+| current work / sequence / G audit gate | `Current_Plan.md` |
 | durable product/architecture | `Spec.md` |
 | fast current owner map | `Docs/Contracts.md` |
 | Settings theme / Acrylic / Glass architecture | `Docs/Settings_Theme_Architecture.md` |
@@ -33,12 +33,16 @@ correction promoted ahead of G7/G8 closure.**
 | ordinary widget authoring | `Docs/10_WIDGET_GUIDELINES.md` |
 | safety | `Docs/Guardrails.md` |
 | test inventory/retirement | `Docs/TestSuite.md` |
+| harness/command routing | `Docs/Harness_Index.md` |
 | deferred deletion/debt | `Future_Cleanup.md` |
 | deferred features | `Future_Work.md` |
-| current handoff/orientation | `Docs/QtQuick_Migration/Reorientation_2026-08-28.md` |
-| G4 viewport-resize implementation route | `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` |
+| G4 durable scale/extent contract | `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` |
+| G4 post-checkpoint correction playbook | `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` |
 | G7/G8 auxiliary/focus implementation route | `Docs/QtQuick_Migration/Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` |
 | H production cutover implementation route | `Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md` |
+
+Reorientation/handoff files are conversation/operator artifacts, not repository architecture. Do not add a current
+reorientation file under `Docs/` unless the operator explicitly asks for a repository handoff artifact.
 
 ## Settings themes
 
@@ -58,11 +62,14 @@ the two substantive migrated Steam families.
 
 ## G / H / I / J
 
-G1–G6 are closed; G7 retained dimming/pixel shift, halo and context menu have landed. Before G7/G8 closure, complete
-the missed visualizer independent viewport-extent resize contract for **all five modes including Bubble**.
+G1–G6 are closed. The core G4 viewport-edge implementation, Bubble logical reflow and all-five-mode capability policy are
+landed, but the independent post-checkpoint audit found bounded ownership/spatial corrections which are the immediate
+priority. After those are GREEN, continue directly through G7 caller-proof closure and G8 focus/MC closure. Do **not** stop
+for independent audit between ordinary GREEN G slices; checkpoint all of G, then stop once for independent audit before H.
 
-H is final production owner/orchestration wiring plus remaining old physical-host deletion. It does not require the
-legacy half-migrated app to remain functional. I is residue. J is final installed/physical acceptance.
+H is final production owner/orchestration wiring plus remaining old physical-host deletion. It must bind the existing G
+viewport-config ownership correctly; it does not get to reset committed non-baseline extent merely because CUSTOM is
+inactive. I is residue. J is final installed/physical acceptance, including the deferred all-five-mode viewport eyes-on gate.
 
 ## Transitions
 
@@ -72,14 +79,17 @@ new-work visual authority.
 
 ## Visualizer
 
-For any geometry/CUSTOM change read all four current contracts together:
+For geometry/CUSTOM work read these together:
 
 - `Docs/QtQuick_Migration/03_Visualizer.md`
 - `Docs/Guardrails/Visualizer_Presentation.md`
 - `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - `Docs/Visualizer_Reference.md`
+- `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md`
+- while the current audit corrections remain open: `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md`
 
-Do not infer destination behavior from a temporary `viewport_resize_capable=False` source gate.
+The all-five-mode capability policy is landed. Do not reintroduce a Bubble false gate to avoid correcting viewport
+ownership or spatial-domain defects.
 
 ## Historical evidence
 

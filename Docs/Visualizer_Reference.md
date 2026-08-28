@@ -265,9 +265,10 @@ Expected adaptation at constant scale:
 - Oscilloscope/Sine/DevCurve adapt domain while keeping stroke scale;
 - a future 3D sphere uses aspect-correct projection and stays round.
 
-All five current modes must support this operation. The current Bubble false capability gate is incomplete migration
-state, not destination product intent. The geometry seam was proven earlier; G must expose and persist the actual edge
-affordance for every mode.
+All five current modes support this destination operation and the core Bubble capability/reflow path is landed. Do not
+reintroduce a Bubble false gate to conceal an implementation defect. Current G4 audit work is narrower: keep committed
+viewport truth separate from the temporary CUSTOM working override and close the remaining nonbaseline Bubble spatial edge
+cases without changing authored behavior. `Current_Plan.md` owns the exact open correction list.
 
 ## 12. Bubble / BTF
 

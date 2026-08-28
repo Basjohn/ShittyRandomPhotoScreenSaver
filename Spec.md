@@ -1,6 +1,6 @@
 # SRPSS Specification
 
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
 Canonical durable architecture and product-behavior contracts. `Current_Plan.md` owns sequence; independent closure
 narrative belongs under `Docs/audits/` or historical evidence.
@@ -174,8 +174,12 @@ Oscilloscope, Sine, Bubble and DevCurve—must reflow/adapt to wide/tall extents
 configuration to its logical side; changing them must preserve round geometry, motion/collision semantics and BTF and
 must not create another clock.
 
-A temporary source capability flag that disables Bubble viewport resizing is migration debt, not destination product
-behavior.
+The all-five-mode viewport capability policy is part of the destination contract and the core Bubble reflow path has landed.
+Do not reintroduce a Bubble false capability gate to conceal a viewport ownership or spatial-domain defect.
+
+Committed viewport extent is ordinary runtime truth. While CUSTOM is active, its working extent may temporarily override
+that committed value. Ending CUSTOM removes the temporary override: Save leaves the newly committed extent authoritative;
+Cancel restores the pre-edit committed extent. "No active CUSTOM session" is not synonymous with canonical `(420,280)`.
 
 ## Transitions
 
@@ -203,9 +207,11 @@ selected display
 -> retained family items
 ```
 
-Do not run old/new production runtime managers in parallel. Preserve semantic cardinality. H deletes the remaining old
-physical presenter/backend in the same audited owner-cutover boundary; it does not need to preserve a fully working
-legacy application or provide a product switch back.
+Do not run old/new production runtime managers in parallel. Preserve semantic cardinality. H binds the existing G owners
+exactly once, including the visualizer viewport-config route: ordinary committed extent remains authoritative outside CUSTOM
+and the temporary CUSTOM working override wins only while editing. H deletes the remaining old physical presenter/backend
+in the same audited owner-cutover boundary; it does not need to preserve a fully working legacy application or provide a
+product switch back. H begins only after the complete checkpointed G state passes its independent audit.
 
 ## Validation epochs
 

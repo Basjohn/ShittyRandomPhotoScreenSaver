@@ -62,8 +62,12 @@ top/bottom     -> viewport height; scale unchanged
 Viewport expansion changes available world/layout and current aspect; it never stretches final pixels independently on
 X/Y.
 
-**All five current modes must support viewport resizing, including Bubble.** A current false capability gate is
-migration debt, not a permitted destination exception.
+**All five current modes must support viewport resizing, including Bubble.** The all-five-mode capability policy is landed;
+do not reintroduce a false Bubble gate to mask a resize/reflow bug.
+
+For viewport changes also verify ownership precedence: ordinary committed extent remains truth outside CUSTOM, the working
+CUSTOM extent overrides only while editing, Save preserves the new committed extent, and Cancel restores the pre-edit
+committed extent. Inactive CUSTOM is not an implicit reset to canonical.
 
 Expected adaptation:
 

@@ -1,6 +1,6 @@
 # Future Cleanup — Migration Deletion Ledger
 
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
 This tracks deferred/caller-proven deletion work and does not admit work ahead of `Current_Plan.md`.
 
@@ -17,8 +17,8 @@ A working legacy product during migration is not a retention reason.
 
 ## Current first-order migration cleanup
 
-Do **not** perform this instead of the active G4 visualizer viewport-resize correction. After that correction, finish G7
-caller proof and remove any remaining old QWidget/top-level context-menu, halo, dimming or pixel-shift presentation that
+Do **not** perform this instead of the active bounded G4 post-checkpoint audit corrections. After those corrections, finish
+G7 caller proof and remove any remaining old QWidget/top-level context-menu, halo, dimming or pixel-shift presentation that
 has no live destination-independent responsibility.
 
 Preserve Python semantic command/settings authority and neutral configuration/runtime logic; delete only superseded
@@ -59,13 +59,14 @@ an edge inseparable from the old physical host waits for H.
 
 Preserve destination-used `VisualizerLogicalRuntime`, mode frame runtimes/authored algorithms, BeatEngine/source
 ownership, immutable render state, snapshot bridge/adapters and shaders/math used by Quick. Delete caller-proven old
-compositor/card/overlay pixels. Do not mistake the required G4 viewport-edge feature for legacy cleanup.
+compositor/card/overlay pixels. The core G4 viewport-edge feature is landed; do not mistake the current bounded viewport
+ownership/Bubble spatial corrections for legacy cleanup.
 
 ## Phase G
 
 Before G closes:
 
-- complete required visualizer viewport extent resizing for all five modes;
+- complete the bounded post-checkpoint G4 viewport ownership/Bubble spatial corrections while preserving the landed all-five-mode edge-resize architecture;
 - close G7 auxiliary/context caller proof and retire superseded old pixels;
 - complete G8 MC/focus gates;
 - no old QWidget edit/grid/auxiliary presentation remains as a destination fallback.
