@@ -75,14 +75,16 @@ class NativeBackdropStyle:
 
     ``mode`` is one of ``off``, ``acrylic`` or ``glass``:
 
-    * ``off`` disables the composition accent entirely;
-    * ``acrylic`` uses Windows Acrylic blur-behind and requires non-zero tint
-      alpha because alpha-zero Acrylic is an unreliable/degenerate state;
-    * ``glass`` uses the older/native blur-behind material and may use a fully
-      transparent tint.
+    * ``off`` disables the native composition backdrop;
+    * ``acrylic`` uses theme-tinted AccentPolicy Acrylic and requires non-zero
+      tint alpha because alpha-zero Acrylic is an unreliable/degenerate state;
+    * ``glass`` uses a near-clear AccentPolicy blur underlay compatible with the
+      frameless layered Settings HWND. The semantic Qt surfaces own the visible
+      Glass tint and opacity, so the stored Glass backdrop tint may be fully
+      transparent.
 
-    The platform adapter owns how each native mode is applied. Theme data owns
-    only the requested material and tint.
+    The platform adapter owns how each mode is rendered. Theme data owns the
+    requested product mode and its schema-level tint value.
     """
 
     mode: str

@@ -564,6 +564,10 @@ class SettingsDialog(QDialog):
         self._background_hydration_step_delay_ms = 150
         self._closing = False
         self._backdrop_applied = False
+        # Native backdrop state is dialog-owned. Acrylic and Glass both use one
+        # AccentPolicy owner; the target state replaces the previous one directly,
+        # while same-mode Glass changes stay native no-ops because Qt owns tint.
+        self._native_backdrop_mode: str | None = None
         cache = get_settings_dialog_cache()
         stored_scroll = self._settings.get('ui.last_tab_scroll', {})
         if isinstance(stored_scroll, dict):
@@ -701,26 +705,34 @@ class SettingsDialog(QDialog):
     def _apply_native_backdrop_theme(
         self,
         theme: SettingsThemeSpec,
-        *,
-        record_diagnostics: bool = False,
     ) -> bool:
-        """Apply one theme's native backdrop through the Windows adapter."""
+        """Apply one theme's native backdrop through one AccentPolicy owner.
 
-        self._backdrop_applied = True
+        Acrylic and Glass now share the same Windows composition mechanism.
+        Applying a new AccentPolicy state atomically replaces the old one, so
+        cross-mode theme changes do not need a disable/re-enable sequence.
+        Glass-to-Glass remains a native no-op because its theme-specific colour
+        and opacity live entirely in Qt semantic surfaces.
+        """
+
         try:
-            if record_diagnostics:
-                _record_diagnostic_stage("settings_show_event_before_winid")
             hwnd = int(self.winId())
             backdrop = theme.backdrop
-            if record_diagnostics:
-                _record_diagnostic_stage(
-                    "settings_show_event_before_backdrop",
-                    hwnd=hwnd,
-                    mode=backdrop.mode,
-                )
-
+            mode = backdrop.mode
             tint = backdrop.tint
-            if backdrop.mode == "acrylic":
+            previous_mode = self._native_backdrop_mode
+
+            if (
+                mode == "glass"
+                and previous_mode == "glass"
+                and self._backdrop_applied
+            ):
+                logger.info(
+                    "Native Settings backdrop unchanged (glass -> glass); "
+                    "skipping redundant AccentPolicy rewrite"
+                )
+                native_enabled = True
+            elif mode == "acrylic":
                 from core.windows.dwm_blur import enable_acrylic_blur
 
                 native_enabled = enable_acrylic_blur(
@@ -730,37 +742,31 @@ class SettingsDialog(QDialog):
                     tint_b=tint.b,
                     tint_alpha=tint.a,
                 )
-            elif backdrop.mode == "glass":
+            elif mode == "glass":
                 from core.windows.dwm_blur import enable_glass_blur
 
-                native_enabled = enable_glass_blur(
-                    hwnd,
-                    tint_r=tint.r,
-                    tint_g=tint.g,
-                    tint_b=tint.b,
-                    tint_alpha=tint.a,
-                )
-            elif backdrop.mode == "off":
+                native_enabled = enable_glass_blur(hwnd)
+            elif mode == "off":
                 from core.windows.dwm_blur import disable_blur
 
-                disable_blur(hwnd)
+                # Off is the one state transition that actually tears down the
+                # shared AccentPolicy mechanism.
                 native_enabled = False
+                disable_blur(hwnd)
             else:
                 raise ValueError(
-                    f"Unsupported Settings native backdrop mode: {backdrop.mode!r}"
+                    f"Unsupported Settings native backdrop mode: {mode!r}"
                 )
 
-            if record_diagnostics:
-                _record_diagnostic_stage(
-                    "settings_show_event_after_backdrop",
-                    mode=backdrop.mode,
-                    enabled=native_enabled,
-                )
+            applied = mode == "off" or bool(native_enabled)
+            self._backdrop_applied = applied
+            if applied:
+                self._native_backdrop_mode = mode
+
             return bool(native_enabled)
         except Exception:
+            self._backdrop_applied = False
             logger.debug("Native Settings backdrop not available", exc_info=True)
-            if record_diagnostics:
-                _record_diagnostic_stage("settings_show_event_backdrop_exception")
             return False
 
     def _refresh_live_shell_theme(self, theme: SettingsThemeSpec) -> None:
@@ -1959,17 +1965,16 @@ class SettingsDialog(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
         _record_diagnostic_stage("settings_show_event_activation_enabled")
         self._start_background_tab_hydration()
-        # Apply the theme-requested Windows native backdrop on first show.
-        # Enabled themes pass their exact tint/strength into the existing DWM
-        # renderer; disabled themes use the real disable path rather than an
-        # explicit backdrop mode rather than an alpha-zero Acrylic workaround.
+
+        # AccentPolicy is the native composition contract for this layered
+        # QWidget. Apply the selected material once during the normal first-show
+        # lifecycle; unlike the discarded DWM system-backdrop experiment it does
+        # not depend on a redirection-bitmap/expose boundary.
         if not self._backdrop_applied:
             blur_start = time.perf_counter()
-            self._apply_native_backdrop_theme(
-                _SETTINGS_THEME,
-                record_diagnostics=True,
-            )
+            self._apply_native_backdrop_theme(_SETTINGS_THEME)
             self._log_perf_event("SettingsDialog.showEvent.blur", blur_start)
+
         # Reset cached width so images rescale on every show
         try:
             self._about_last_card_width = 0
