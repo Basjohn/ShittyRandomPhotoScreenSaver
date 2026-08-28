@@ -259,11 +259,19 @@ owner/lifecycle correctness of the destination and leave only Quick production a
 ## I / J
 
 I is residue only: expired adapters/aliases, caller-dead old-presenter utilities, obsolete tests/tools/comments and abandoned
-migration spikes.
+migration spikes. **I intentionally has no standing prewritten decomposition.** Its exact deletion list must be derived from
+the post-H caller graph so a speculative pre-cutover checklist cannot become a stale authority. Use exact source,
+`Docs/TestSuite.md`, `Future_Cleanup.md` and caller proof. If I unexpectedly exposes a cross-owner architectural problem rather
+than residue, write a bounded source-specific decomposition at that point.
 
-J owns comprehensive installed/compiled and physical acceptance: real 1/2/N-display, DPR/topology/off-wake, continuity,
-widget/Visualizer eyes-on parity, the deferred G4 all-mode viewport gate, performance/tail checks, clean shutdown,
-test-ledger reconciliation and documentation closure.
+J owns comprehensive installed/compiled and physical acceptance. Follow:
+
+`Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md`
+
+It covers build/frozen packaging, real 1/2/N-display refresh/DPR/topology/off-wake, lifecycle/recreation, MC/screensaver input,
+widget/Visualizer eyes-on parity, the deferred G4 all-mode viewport gate, physical cadence/performance tails, long-soak resource
+stability, clean shutdown, test/debt reconciliation and final documentation closure. J is acceptance/sign-off, not another
+presentation migration.
 
 ## Current unrelated acceptance debt
 
