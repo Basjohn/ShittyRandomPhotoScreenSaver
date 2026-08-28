@@ -3,12 +3,12 @@
   "schema_version": 5,
   "name": "Monochrome Frost",
   "backdrop": {
-    "mode": "acrylic",
+    "mode": "glass",
     "tint": [
       36,
       40,
       42,
-      70
+      0
     ]
   },
   "colors": {

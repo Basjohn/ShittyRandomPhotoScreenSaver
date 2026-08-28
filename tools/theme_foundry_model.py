@@ -334,6 +334,28 @@ def relations_for(token: str) -> tuple[LayerRelation, ...]:
     )
 
 
+def matching_color_tokens(
+    colors: dict[str, Rgba],
+    value: Rgba,
+) -> tuple[str, ...]:
+    """Return semantic colour roles whose full 8-bit RGBA exactly matches ``value``."""
+
+    return tuple(token for token, candidate in colors.items() if candidate == value)
+
+
+def replace_matching_color_roles(
+    colors: dict[str, Rgba],
+    match: Rgba,
+    replacement: Rgba,
+) -> tuple[str, ...]:
+    """Replace exact-matching semantic colour roles and return the changed tokens."""
+
+    tokens = matching_color_tokens(colors, match)
+    for token in tokens:
+        colors[token] = replacement
+    return tokens
+
+
 def solve_layer_for_target(
     *,
     selected_token: str,

@@ -66,7 +66,6 @@ from PySide6.QtWidgets import (  # noqa: E402
     QFrame,
     QGraphicsDropShadowEffect,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -78,6 +77,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QSizePolicy,
     QSlider,
     QSpinBox,
+    QToolButton,
     QSplitter,
     QStackedWidget,
     QStatusBar,
@@ -97,6 +97,8 @@ from theme_foundry_model import (  # noqa: E402
     friendly_token_label,
     gradient_summary,
     matching_acrylic_preset,
+    matching_color_tokens,
+    replace_matching_color_roles,
     nearest_composite_relation,
     relations_for,
     rgba_summary,
@@ -283,6 +285,46 @@ class SwatchButton(QPushButton):
         )
 
 
+class CollapsibleSection(QWidget):
+    """Foundry disclosure section that removes its body from layout when closed."""
+
+    def __init__(
+        self,
+        title: str,
+        content: QWidget,
+        parent: QWidget | None = None,
+        *,
+        expanded: bool = True,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("collapsibleSection")
+        self._content = content
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        self.header = QToolButton(self)
+        self.header.setObjectName("collapsibleHeader")
+        self.header.setText(title)
+        self.header.setCheckable(True)
+        self.header.setChecked(bool(expanded))
+        self.header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.header.setArrowType(
+            Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
+        )
+        self.header.toggled.connect(self.set_expanded)
+        layout.addWidget(self.header)
+        layout.addWidget(content)
+        content.setVisible(bool(expanded))
+
+    def set_expanded(self, expanded: bool) -> None:
+        self._content.setVisible(bool(expanded))
+        self.header.setArrowType(
+            Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
+        )
+
+
 class ThemeFoundryWindow(QMainWindow):
     COL_FAV = 0
     COL_TOKEN = 1
@@ -317,6 +359,7 @@ class ThemeFoundryWindow(QMainWindow):
         self._prefs = prefs
 
         self.setWindowTitle(APP_TITLE)
+        self._collapsible_sections: list[CollapsibleSection] = []
         icon_path = self.repo_root / "images" / "foundries" / "SRPSSTheme.ico"
         if not icon_path.is_file():
             icon_path = self.repo_root / "SRPSS.ico"
@@ -327,8 +370,7 @@ class ThemeFoundryWindow(QMainWindow):
             if app is not None:
                 app.setWindowIcon(icon)
 
-        self.resize(1480, 930)
-        self.setMinimumSize(1120, 720)
+        self._fit_initial_window_to_screen()
         self._build_ui()
         self._apply_internal_style()
         self._refresh_backdrop_ui()
@@ -342,6 +384,34 @@ class ThemeFoundryWindow(QMainWindow):
                 "Editing compiled Default Dark. Use Save As to create a selectable custom .srtheme."
             )
         self._update_dirty_status()
+
+    def _fit_initial_window_to_screen(self) -> None:
+        """Choose a useful initial size without exceeding the available display."""
+
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            self.resize(1280, 820)
+            self.setMinimumSize(900, 600)
+            return
+        available = screen.availableGeometry()
+        min_width = max(600, min(1120, available.width() - 80))
+        min_height = max(480, min(720, available.height() - 80))
+        self.setMinimumSize(min_width, min_height)
+        self.resize(
+            max(min_width, min(1480, available.width() - 40)),
+            max(min_height, min(930, available.height() - 40)),
+        )
+
+    def _collapsible(
+        self,
+        title: str,
+        content: QWidget,
+        *,
+        expanded: bool = True,
+    ) -> CollapsibleSection:
+        section = CollapsibleSection(title, content, expanded=expanded)
+        self._collapsible_sections.append(section)
+        return section
 
     def _build_ui(self) -> None:
         root = QWidget(self)
@@ -399,7 +469,13 @@ class ThemeFoundryWindow(QMainWindow):
         scope.setWordWrap(True)
         scope.setObjectName("scopeBanner")
         outer.addWidget(scope)
-        outer.addWidget(self._build_backdrop_box())
+        outer.addWidget(
+            self._collapsible(
+                "NATIVE BACKDROP",
+                self._build_backdrop_box(),
+                expanded=False,
+            )
+        )
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_tree_pane())
@@ -420,8 +496,8 @@ class ThemeFoundryWindow(QMainWindow):
         self.launch_btn.clicked.connect(self.launch_settings)
         self.name_edit.textEdited.connect(self._theme_name_changed)
 
-    def _build_backdrop_box(self) -> QGroupBox:
-        box = QGroupBox("NATIVE BACKDROP")
+    def _build_backdrop_box(self) -> QWidget:
+        box = QWidget()
         box.setObjectName("backdropBox")
         layout = QGridLayout(box)
         layout.setHorizontalSpacing(12)
@@ -531,18 +607,23 @@ class ThemeFoundryWindow(QMainWindow):
         row.addWidget(self.favorite_btn)
         layout.addLayout(row)
 
+        details = QWidget()
+        details_layout = QVBoxLayout(details)
+        details_layout.setContentsMargins(0, 0, 0, 0)
+        details_layout.setSpacing(6)
         self.token_official = QLabel("")
         self.token_official.setObjectName("muted")
         self.token_official.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(self.token_official)
+        details_layout.addWidget(self.token_official)
         self.token_description = QLabel("")
         self.token_description.setObjectName("descriptionBox")
         self.token_description.setWordWrap(True)
-        layout.addWidget(self.token_description)
+        details_layout.addWidget(self.token_description)
         self.state_banner = QLabel("")
         self.state_banner.setObjectName("stateBanner")
         self.state_banner.setWordWrap(True)
-        layout.addWidget(self.state_banner)
+        details_layout.addWidget(self.state_banner)
+        layout.addWidget(self._collapsible("ROLE DETAILS", details, expanded=False))
 
         self.editor_stack = QStackedWidget()
         self.blank_editor = QLabel("Select a colour, shadow or gradient semantic role from the tree.")
@@ -553,18 +634,26 @@ class ThemeFoundryWindow(QMainWindow):
         self.gradient_editor = self._build_gradient_editor()
         for page in (self.blank_editor, self.color_editor, self.shadow_editor, self.gradient_editor):
             self.editor_stack.addWidget(page)
-        layout.addWidget(self.editor_stack)
+        editor_holder = QWidget()
+        editor_holder_layout = QVBoxLayout(editor_holder)
+        editor_holder_layout.setContentsMargins(0, 0, 0, 0)
+        editor_holder_layout.addWidget(self.editor_stack)
+        layout.addWidget(self._collapsible("VALUE EDITOR", editor_holder, expanded=True))
 
+        layers_content = QWidget()
+        layers_layout = QVBoxLayout(layers_content)
+        layers_layout.setContentsMargins(0, 0, 0, 0)
+        layers_layout.setSpacing(6)
         heading = QLabel("KNOWN VISUAL / STYLE LAYERS")
         heading.setObjectName("sectionHeading")
-        layout.addWidget(heading)
+        layers_layout.addWidget(heading)
         help_label = QLabel(
             "High-confidence semantic relationships only. Double-click a related role to jump to it. "
             "For simple alpha-over mappings the predicted colour preview can solve backwards."
         )
         help_label.setWordWrap(True)
         help_label.setObjectName("muted")
-        layout.addWidget(help_label)
+        layers_layout.addWidget(help_label)
         self.layers_tree = QTreeWidget()
         self.layers_tree.setObjectName("layersTree")
         self.layers_tree.setHeaderLabels(["Relationship", "Other role", "Why it matters"])
@@ -576,20 +665,28 @@ class ThemeFoundryWindow(QMainWindow):
         h.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         h.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.layers_tree.itemDoubleClicked.connect(self._layer_item_activated)
-        layout.addWidget(self.layers_tree)
+        layers_layout.addWidget(self.layers_tree)
+        layout.addWidget(
+            self._collapsible("RELATIONSHIPS / COMPOSITING", layers_content, expanded=False)
+        )
 
+        reset_content = QWidget()
+        reset_layout = QVBoxLayout(reset_content)
+        reset_layout.setContentsMargins(0, 0, 0, 0)
+        reset_layout.setSpacing(6)
         row = QHBoxLayout()
         self.reset_opened_btn = QPushButton("Reset Selected to Opened")
         self.reset_default_btn = QPushButton("Reset Selected to Default Dark")
         row.addWidget(self.reset_opened_btn)
         row.addWidget(self.reset_default_btn)
-        layout.addLayout(row)
+        reset_layout.addLayout(row)
         row = QHBoxLayout()
         self.reset_all_opened_btn = QPushButton("Reset ALL to Opened")
         self.reset_all_default_btn = QPushButton("Reset ALL to Default Dark")
         row.addWidget(self.reset_all_opened_btn)
         row.addWidget(self.reset_all_default_btn)
-        layout.addLayout(row)
+        reset_layout.addLayout(row)
+        layout.addWidget(self._collapsible("RESET ACTIONS", reset_content, expanded=False))
         self.reset_opened_btn.clicked.connect(self._reset_selected_opened)
         self.reset_default_btn.clicked.connect(self._reset_selected_default)
         self.reset_all_opened_btn.clicked.connect(self._reset_all_opened)
@@ -619,9 +716,18 @@ class ThemeFoundryWindow(QMainWindow):
         preview_grid.setColumnStretch(0, 1)
         preview_grid.setColumnStretch(1, 1)
         layout.addLayout(preview_grid)
+        color_actions = QHBoxLayout()
         self.color_swatch = SwatchButton()
         self.color_swatch.colorRequested.connect(self._choose_selected_color)
-        layout.addWidget(self.color_swatch)
+        color_actions.addWidget(self.color_swatch, 1)
+        self.bulk_color_btn = QPushButton("Change All Matching…")
+        self.bulk_color_btn.setToolTip(
+            "Replace every semantic colour role whose full RGBA exactly matches the selected role. "
+            "Shadow colours and gradient stops remain separate semantic editors."
+        )
+        self.bulk_color_btn.clicked.connect(self._choose_all_matching_colors)
+        color_actions.addWidget(self.bulk_color_btn)
+        layout.addLayout(color_actions)
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         self.r_spin = self._channel_spin()
@@ -725,11 +831,17 @@ class ThemeFoundryWindow(QMainWindow):
             QMainWindow { background: #0d181e; color: #f4f0e6; }
             QWidget { color: #f4f0e6; font-family: 'Jost', 'Segoe UI', sans-serif; }
             QWidget#themeFoundryRoot { background: #111a1e; }
-            QWidget#themeFoundryPane, QWidget#themeFoundryEditor, QGroupBox#backdropBox {
+            QWidget#themeFoundryPane, QWidget#themeFoundryEditor, QWidget#backdropBox {
                 background: rgba(10,15,17,220); border: 1px solid rgba(225,193,127,100); border-radius: 10px;
             }
-            QGroupBox#backdropBox { margin-top: 11px; padding: 9px; font-weight: 700; color: #f4c66d; }
-            QGroupBox#backdropBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }
+            QWidget#backdropBox { padding: 7px; }
+            QToolButton#collapsibleHeader {
+                background: rgba(20,31,33,220); color: #f4c66d; border: 1px solid rgba(225,193,127,100);
+                border-radius: 7px; padding: 6px 9px; font-weight: 700; text-align: left;
+            }
+            QToolButton#collapsibleHeader:hover {
+                background: rgba(38,59,58,230); border-color: #f4c66d;
+            }
             QLabel#themeFoundryTitle { color: #f4c66d; letter-spacing: 2px; }
             QLabel#themeFoundrySubtitle { color: #c8d4d1; font-size: 12px; padding-bottom: 3px; }
             QLabel#scopeBanner, QLabel#descriptionBox, QLabel#stateBanner {
@@ -927,6 +1039,9 @@ class ThemeFoundryWindow(QMainWindow):
         self.a_spin.setValue(value.a)
         self.a_slider.setValue(value.a)
         self.alpha_pct.setText(f"{value.a * 100.0 / 255.0:.1f}%")
+        matching = matching_color_tokens(self.draft.colors, value)
+        self.bulk_color_btn.setText(f"Change All Matching ({len(matching)})…")
+        self.bulk_color_btn.setEnabled(len(matching) > 1)
         relation = nearest_composite_relation(token)
         if relation is None:
             predicted = alpha_over(value, Rgba(24, 30, 31, 255))
@@ -1024,6 +1139,34 @@ class ThemeFoundryWindow(QMainWindow):
         chosen = self._choose_qcolor(self.draft.colors[token], f"Choose {friendly_token_label(token)}")
         if chosen:
             self._set_color(token, chosen)
+
+    def _choose_all_matching_colors(self) -> None:
+        if self.selected_entry is None or self.selected_entry[0] != "color":
+            return
+        token = self.selected_entry[1]
+        current = self.draft.colors[token]
+        matches = matching_color_tokens(self.draft.colors, current)
+        if len(matches) <= 1:
+            self._set_status("No other semantic colour roles exactly match this RGBA value.")
+            return
+        chosen = self._choose_qcolor(
+            current,
+            f"Replace {len(matches)} Matching Colour Roles",
+        )
+        if chosen is None or chosen == current:
+            return
+        replaced = replace_matching_color_roles(
+            self.draft.colors,
+            current,
+            chosen,
+        )
+        self._rebuild_tree(self.selected_entry)
+        self._refresh_editor()
+        self._update_dirty_status()
+        self._set_status(
+            f"Changed {len(replaced)} exact-matching semantic colour roles from "
+            f"{rgba_summary(current)} to {rgba_summary(chosen)}."
+        )
 
     def _choose_composite_target(self) -> None:
         if not self.selected_entry or self.selected_entry[0] != "color":
