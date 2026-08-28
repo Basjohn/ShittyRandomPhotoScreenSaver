@@ -188,14 +188,24 @@ def resolve_visualizer_presentation(
     )
 
 
-def resize_visualizer_presentation_uniformly(
+def resize_visualizer_presentation(
     baseline: ResolvedVisualizerPresentation,
     *,
     display_size: Sequence[object],
     outer_origin: Sequence[object],
     relative_scale: float,
+    viewport_extent: Sequence[object] | None = None,
 ) -> ResolvedVisualizerPresentation:
-    """Resize one resolved presentation without inventing a second style owner."""
+    """Reproject one resolved presentation at a new uniform scale and/or extent.
+
+    ``relative_scale`` multiplies the baseline uniform scale (the wheel / corner
+    operation).  ``viewport_extent`` overrides the logical world before uniform
+    scale (the CUSTOM edge operation); ``None`` keeps the baseline extent.  The
+    two operations are independent: changing extent never touches uniform scale,
+    and changing scale never touches extent.  Authored chrome scalars are
+    recovered from the baseline by de-scaling, so no second style owner is
+    invented and finished pixels are never anisotropically stretched.
+    """
 
     if not isinstance(baseline, ResolvedVisualizerPresentation):
         raise TypeError("baseline must be a ResolvedVisualizerPresentation")
@@ -203,6 +213,11 @@ def resize_visualizer_presentation_uniformly(
     if factor <= 0.0:
         raise ValueError("relative scale must be positive")
     baseline_scale = baseline.uniform_visual_scale
+    target_extent = (
+        baseline.viewport_extent
+        if viewport_extent is None
+        else _positive_size(viewport_extent, name="viewport extent")
+    )
     style = baseline.shell_style
     policy = VisualizerModePresentationPolicy(
         shell_policy=baseline.shell_policy,
@@ -220,7 +235,7 @@ def resize_visualizer_presentation_uniformly(
         outer_origin=outer_origin,
         dpr=baseline.dpr,
         uniform_visual_scale=baseline_scale * factor,
-        viewport_extent=baseline.viewport_extent,
+        viewport_extent=target_extent,
         scene_fade=baseline.scene_fade,
         content_fade=baseline.content_fade,
         border_width=baseline.border_width / baseline_scale,
@@ -242,9 +257,28 @@ def resize_visualizer_presentation_uniformly(
     )
 
 
+def resize_visualizer_presentation_uniformly(
+    baseline: ResolvedVisualizerPresentation,
+    *,
+    display_size: Sequence[object],
+    outer_origin: Sequence[object],
+    relative_scale: float,
+) -> ResolvedVisualizerPresentation:
+    """Resize one resolved presentation uniformly (baseline extent preserved)."""
+
+    return resize_visualizer_presentation(
+        baseline,
+        display_size=display_size,
+        outer_origin=outer_origin,
+        relative_scale=relative_scale,
+        viewport_extent=None,
+    )
+
+
 __all__ = [
     "CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO",
     "CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE",
+    "resize_visualizer_presentation",
     "resize_visualizer_presentation_uniformly",
     "resolve_visualizer_presentation",
 ]
