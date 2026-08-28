@@ -1,6 +1,9 @@
 # Remaining G4 — Visualizer Viewport-Extent Resize Technical Decomposition
 
-Status: **required correction before G7/G8 closure**  
+Status: **section 7 (Bubble logical reflow) + policy flip + all-mode eyes-on gate remaining**  
+Landed and test-gated: geometry projection (§2/§5/§6), session scale/extent working state (§3), overlay + QML
+edge handles (§4), scene-controller preview projection (§6), manager viewport-edge adapter (§5) and the
+persistence round-trip (§9). The four proven modes reflow already; Bubble (§7) is the remaining destination gap.  
 Checkpoint basis: `59f4a3c98235215a9ff89fc09e4cc979d1831e89`  
 Work admission: `Current_Plan.md`
 

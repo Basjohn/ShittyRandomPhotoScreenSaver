@@ -21,7 +21,7 @@ F0–F8   ordinary-family migration                         CLOSED
 G1      neutral CUSTOM session / variants / layout slots CLOSED
 G2      retained edit overlay / X / family binding       CLOSED
 G3      Save/Cancel + enabled/duplicate persistence      CLOSED
-G4      retained uniform resize                          CLOSED, CORRECTION REQUIRED
+G4      retained uniform + viewport-extent resize     LANDED; Bubble logical reflow remaining
 G5      retained cross-display transfer                  CLOSED
 G6      retained input / semantic family actions         CLOSED
 G7      retained context + auxiliary pixels              NEAR CLOSURE
@@ -31,42 +31,39 @@ I       residue only                                     after H
 J       final installed / physical validation            final
 ```
 
-## Immediate blocker — complete the missed G4 visualizer viewport-resize contract
+## Remaining G4 blocker — Bubble logical viewport reflow
 
-This is the first migration task before declaring G7/G complete.
+The retained viewport-extent (edge) resize operation is landed and gated by tests for the geometry projection,
+session working state, overlay/QML edge handles, scene-controller preview projection, the manager edge adapter and
+the persistence round-trip. The four proven modes (Spectrum, Oscilloscope, Sine, DevCurve) reflow because their
+Quick renderers already recompute their domain from committed geometry and the shader keeps circles round.
 
-G4 landed retained **corner-handle + wheel uniform scaling**, but the accepted visualizer geometry contract
-also requires independent viewport-extent resizing:
+One piece remains before G4 closes: **Bubble logical viewport reflow**.
 
-```text
-corner handles / wheel -> uniform_visual_scale only
-left/right edge        -> viewport extent width only
-top/bottom edge        -> viewport extent height only
-```
+Bubble's simulation runs in a unit square `[0,1]^2`; the shader maps that to the card and keeps circles round via
+aspect correction. The accepted **baseline (1.5) look is a BTF golden and must stay byte-identical**. The reflow
+must be a strict no-op at the baseline aspect and expand the logical domain only for a wide/tall committed extent
+(baseline-relative domain extension), never anisotropically stretching finished pixels, and never retuning Bubble
+speed/collision/elasticity/personality or adding a second clock. The committed viewport extent is already available
+at the runtime-controller boundary (`presentation_viewport_extent`); Bubble must consume it as latest spatial
+configuration.
 
-The edge operation changes visualizer playroom/aspect; it must **not** anisotropically stretch finished pixels.
-All five current modes must support it: Spectrum, Oscilloscope, Sine, Bubble and DevCurve.
+Remaining proof:
 
-Bubble is not an intended exception. The current `viewport_resize_capable=False` Bubble policy is unfinished
-migration gating, not destination product behavior. Bubble must accept wide/tall committed viewport metrics as
-spatial configuration while preserving circles, radii/velocity semantics, trajectories, collision feel,
-transients/trails and the Bubble Temporal Fidelity contract. Geometry changes never become another simulation
-clock.
+- wire the committed viewport extent into the Bubble simulation as latest spatial configuration (no pointer/geometry
+  clock); domain defaults to the baseline square so BTF goldens stay byte-identical;
+- a wide/tall extent expands the Bubble logical domain (bubbles fill the extra space at baseline density) rather than
+  texture-stretching positions; circles/radii/velocity/collision stay coherent and BTF-clean;
+- flip Bubble's `viewport_resize_capable` mode policy to `True` (and update the two policy tests) once the reflow
+  lands, so all five modes are destination-capable;
+- all-five-mode eyes-on gate at baseline, wide and tall extents (this piece needs installed/manual visual
+  acceptance — deterministic tests alone do not close Bubble visual/timing fidelity).
 
-Required correction proof:
+Because this modifies BTF-binding simulation code and needs eyes-on acceptance, it is an audit/eyes-on boundary.
 
-- retained left/right and top/bottom edit handles route semantic resize to Python-owned session/geometry math;
-- horizontal edge changes viewport width without changing uniform scale; vertical edge changes viewport height;
-- corner/wheel resize keeps its existing uniform-scale behavior and does not mutate viewport extent;
-- all five modes reflow/adapt at baseline, wide and tall extents without final-pixel X/Y stretch;
-- Bubble becomes viewport-resize-capable and remains BTF-clean;
-- Save/Cancel, committed CUSTOM geometry and layout slots round-trip visual scale and viewport extent separately;
-- active geometry variant only is changed; other variants/displays remain untouched;
-- retained item/model/render ownership survives resize without creating another accelerated surface.
-
-Use `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` as the implementation route,
-with `Docs/QtQuick_Migration/03_Visualizer.md`, `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`,
-`Docs/Guardrails/Visualizer_Presentation.md` and `Docs/Visualizer_Reference.md` as binding destination contracts.
+Use `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` section 7 as the route, with
+`Docs/Guardrails/Visualizer_Presentation.md` (§9, §14), `Docs/Guardrails/Bubble_Temporal_Fidelity.md` and
+`Docs/QtQuick_Migration/03_Visualizer.md` as binding destination contracts.
 
 ## Resume G7 closure after the G4 correction
 
