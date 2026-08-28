@@ -26,6 +26,7 @@ No other R-series record is current implementation sequencing. Current migration
 
 ## Standalone R Records
 
+- [R-61 — Settings Glass Used The Wrong Composition Family For A Layered QWidget](Historical_Bugs/R-61_Settings_Glass_Layered_HWND_Backdrop_Mismatch.md)
 - [R-60 — ImagePresenter DPR Split Rekeyed The Retained Current Texture](Historical_Bugs/R-60_ImagePresenter_DPR_Texture_Identity.md)
 - [R-59 — Frozen Settings/Edit Recreation Retained Compiled Bound Methods](Historical_Bugs/R-59_Runtime_Settings_Request_Input_Stack_Teardown.md)
 - [R-58 — Move To Custom Copied Stale Backing Values Instead Of The Curated Runtime State](Historical_Bugs/R-58_Visualizer_Move_To_Custom_Preset_Authority.md)

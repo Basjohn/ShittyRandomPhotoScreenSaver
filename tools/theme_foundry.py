@@ -1,30 +1,19 @@
 #!/usr/bin/env python3
-"""SRPSS Theme Foundry — semantic Settings theme editor.
+"""SRPSS Theme Foundry — schema-v5 semantic Settings theme editor.
 
-Theme Foundry now edits the exact schema-v4 ``SettingsThemeSpec`` consumed by
-Settings.  It does **not** scan Python/QSS colour literals and does **not**
-rewrite runtime source files.
+The Foundry edits the exact :class:`SettingsThemeSpec` consumed by Settings. It
+never scans Python/QSS literals, never rewrites runtime source files and never
+maintains a private compatibility schema.
 
-What it authors
----------------
-* complete semantic colour-role maps;
-* semantic shadow styles;
-* semantic gradient stop lists;
-* per-theme native backdrop state (Off/Acrylic) and Acrylic tint/strength.
+Authored native modes:
+* Off — no native backdrop;
+* Acrylic — AccentPolicy state 4 at runtime; backdrop.tint is meaningful;
+* Glass — AccentPolicy state 3 at runtime; native tint is ignored and semantic
+  Qt RGBA surfaces own visible Glass colour/opacity.
 
-What it writes
---------------
-Only complete, strictly validated ``.srtheme`` files through
-``ui.settings_theme_io.save_settings_theme_file``.  ``Default Dark.srtheme`` is
-protected as the canonical mirror of compiled ``DEFAULT_DARK_SETTINGS_THEME``;
-changed themes must be saved under another name.
-
-The old Foundry's useful discovery UX survives in semantic form: filtering,
-favourites, working/opened/default comparisons, known-layer explanations and
-predicted alpha-composite previews.  For simple known alpha-over relationships,
-the predicted preview is clickable: choose the visible colour you want and
-Foundry solves the selected layer RGB backwards while preserving its current
-alpha.
+Only complete, strictly validated ``.srtheme`` snapshots are written through
+``ui.settings_theme_io``. ``Default Dark.srtheme`` remains the protected mirror
+of compiled ``DEFAULT_DARK_SETTINGS_THEME``.
 """
 
 from __future__ import annotations
@@ -39,8 +28,6 @@ from typing import Any
 
 
 def _early_repo_root() -> Path:
-    """Put the requested/source repository on sys.path before semantic imports."""
-
     explicit: str | None = None
     argv = sys.argv[1:]
     for index, arg in enumerate(argv):
@@ -52,12 +39,9 @@ def _early_repo_root() -> Path:
             break
     if explicit:
         return Path(explicit).expanduser().resolve()
-
     script = Path(__file__).resolve()
-    if len(script.parents) >= 2:
-        candidate = script.parents[1]
-        if (candidate / "ui").is_dir():
-            return candidate
+    if len(script.parents) >= 2 and (script.parents[1] / "ui").is_dir():
+        return script.parents[1]
     cwd = Path.cwd().resolve()
     if (cwd / "ui").is_dir():
         return cwd
@@ -68,16 +52,8 @@ _BOOTSTRAP_REPO_ROOT = _early_repo_root()
 if str(_BOOTSTRAP_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_BOOTSTRAP_REPO_ROOT))
 
-from PySide6.QtCore import QRect, QSize, Qt, Signal  # noqa: E402
-from PySide6.QtGui import (  # noqa: E402
-    QColor,
-    QFont,
-    QIcon,
-    QLinearGradient,
-    QPainter,
-    QPen,
-    QStandardItemModel,
-)
+from PySide6.QtCore import QRect, Qt, Signal  # noqa: E402
+from PySide6.QtGui import QColor, QFont, QIcon, QLinearGradient, QPainter, QPen  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QAbstractItemView,
     QApplication,
@@ -113,6 +89,8 @@ from PySide6.QtWidgets import (  # noqa: E402
 
 from theme_foundry_model import (  # noqa: E402
     ACRYLIC_TINT_PRESETS,
+    BACKDROP_MODE_DESCRIPTIONS,
+    BACKDROP_MODE_LABELS,
     ThemeDraft,
     alpha_over,
     color_category,
@@ -129,15 +107,14 @@ from theme_foundry_model import (  # noqa: E402
 from ui.settings_theme_io import (  # noqa: E402
     SETTINGS_THEME_FILE_EXTENSION,
     SettingsThemeFileError,
-    discover_settings_theme_files,
     load_settings_theme_file,
     save_settings_theme_file,
     settings_theme_from_json,
     settings_theme_to_json,
 )
 from ui.settings_theme_spec import (  # noqa: E402
-    AcrylicStyle,
     DEFAULT_DARK_SETTINGS_THEME,
+    SETTINGS_THEME_SCHEMA_VERSION,
     GradientStop,
     GradientStyle,
     Rgba,
@@ -145,20 +122,14 @@ from ui.settings_theme_spec import (  # noqa: E402
     ShadowStyle,
 )
 
-
 APP_TITLE = "SRPSS Theme Foundry"
-PREFERENCES_VERSION = 2
+PREFERENCES_VERSION = 3
 CANONICAL_DEFAULT_FILENAME = "Default Dark.srtheme"
 
 
-# ---------------------------------------------------------------------------
-# Foundry-only preferences
-# ---------------------------------------------------------------------------
-
-
 def _foundry_data_dir() -> Path:
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    base = Path(local_app_data) if local_app_data else Path.home() / "AppData" / "Local"
+    local = os.environ.get("LOCALAPPDATA")
+    base = Path(local) if local else Path.home() / "AppData" / "Local"
     return base / "SRPSS" / "ThemeFoundry"
 
 
@@ -171,9 +142,7 @@ def _load_preferences() -> dict[str, Any]:
         payload = json.loads(_preferences_path().read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         return {}
-    if not isinstance(payload, dict):
-        return {}
-    return payload
+    return payload if isinstance(payload, dict) else {}
 
 
 def _save_preferences(payload: dict[str, Any]) -> None:
@@ -184,13 +153,7 @@ def _save_preferences(payload: dict[str, Any]) -> None:
         temp.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         os.replace(temp, path)
     except OSError:
-        # QoL state must never block actual theme authoring.
         pass
-
-
-# ---------------------------------------------------------------------------
-# Small preview/editor widgets
-# ---------------------------------------------------------------------------
 
 
 class ColorPreview(QWidget):
@@ -203,8 +166,7 @@ class ColorPreview(QWidget):
         self.setMinimumWidth(150)
         self.setFixedHeight(78)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        if clickable:
-            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.set_clickable(clickable)
 
     def set_rgba(self, value: Rgba) -> None:
         self._color = value
@@ -321,11 +283,6 @@ class SwatchButton(QPushButton):
         )
 
 
-# ---------------------------------------------------------------------------
-# Theme Foundry main window
-# ---------------------------------------------------------------------------
-
-
 class ThemeFoundryWindow(QMainWindow):
     COL_FAV = 0
     COL_TOKEN = 1
@@ -346,6 +303,11 @@ class ThemeFoundryWindow(QMainWindow):
         self.tree_items: dict[str, QTreeWidgetItem] = {}
         self._updating = False
         self._gradient_stop_index = 0
+        self._last_acrylic_tint = (
+            self.draft.backdrop_tint
+            if self.draft.backdrop_tint.a > 0
+            else ACRYLIC_TINT_PRESETS[0].tint
+        )
 
         prefs = _load_preferences()
         raw_favorites = prefs.get("favorites", [])
@@ -369,7 +331,7 @@ class ThemeFoundryWindow(QMainWindow):
         self.setMinimumSize(1120, 720)
         self._build_ui()
         self._apply_internal_style()
-        self._refresh_acrylic_ui()
+        self._refresh_backdrop_ui()
         self._rebuild_tree()
         self._check_default_mirror()
 
@@ -379,8 +341,8 @@ class ThemeFoundryWindow(QMainWindow):
             self._set_status(
                 "Editing compiled Default Dark. Use Save As to create a selectable custom .srtheme."
             )
+        self._update_dirty_status()
 
-    # ----- UI -----------------------------------------------------------
     def _build_ui(self) -> None:
         root = QWidget(self)
         root.setObjectName("themeFoundryRoot")
@@ -391,14 +353,15 @@ class ThemeFoundryWindow(QMainWindow):
 
         title = QLabel("THEME FOUNDRY")
         title.setObjectName("themeFoundryTitle")
-        title_font = QFont(title.font())
-        title_font.setPointSize(max(16, title_font.pointSize() + 6))
-        title_font.setBold(True)
-        title.setFont(title_font)
+        font = QFont(title.font())
+        font.setPointSize(max(16, font.pointSize() + 6))
+        font.setBold(True)
+        title.setFont(font)
         outer.addWidget(title)
 
         subtitle = QLabel(
-            "Semantic SettingsThemeSpec editor · schema-v4 .srtheme files · no source scanning or Python/QSS rewriting"
+            f"Semantic SettingsThemeSpec editor · schema-v{SETTINGS_THEME_SCHEMA_VERSION} .srtheme files · "
+            "Off / Acrylic / Glass · no source scanning or Python/QSS rewriting"
         )
         subtitle.setObjectName("themeFoundrySubtitle")
         outer.addWidget(subtitle)
@@ -411,12 +374,8 @@ class ThemeFoundryWindow(QMainWindow):
         self.validate_btn = QPushButton("Validate Draft")
         self.launch_btn = QPushButton("Launch Settings (--s)")
         self.save_as_btn.setObjectName("themeFoundryPrimary")
-        toolbar.addWidget(self.new_btn)
-        toolbar.addWidget(self.open_btn)
-        toolbar.addSpacing(8)
-        toolbar.addWidget(self.save_btn)
-        toolbar.addWidget(self.save_as_btn)
-        toolbar.addWidget(self.validate_btn)
+        for button in (self.new_btn, self.open_btn, self.save_btn, self.save_as_btn, self.validate_btn):
+            toolbar.addWidget(button)
         toolbar.addStretch(1)
         toolbar.addWidget(self.launch_btn)
         outer.addLayout(toolbar)
@@ -435,19 +394,18 @@ class ThemeFoundryWindow(QMainWindow):
 
         scope = QLabel(
             "Theme files are complete semantic snapshots. Default Dark remains compiled runtime fallback. "
-            "Saving a custom theme never changes Python source or the compiled default."
+            "Glass is native untinted state-3 blur plus semantic Qt surface composition; Acrylic uses native tint."
         )
         scope.setWordWrap(True)
         scope.setObjectName("scopeBanner")
         outer.addWidget(scope)
-
-        outer.addWidget(self._build_acrylic_box())
+        outer.addWidget(self._build_backdrop_box())
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        outer.addWidget(splitter, 1)
         splitter.addWidget(self._build_tree_pane())
         splitter.addWidget(self._build_editor_pane())
         splitter.setSizes([820, 620])
+        outer.addWidget(splitter, 1)
 
         status = QStatusBar(self)
         self.setStatusBar(status)
@@ -462,64 +420,49 @@ class ThemeFoundryWindow(QMainWindow):
         self.launch_btn.clicked.connect(self.launch_settings)
         self.name_edit.textEdited.connect(self._theme_name_changed)
 
-    def _build_acrylic_box(self) -> QGroupBox:
-        box = QGroupBox("NATIVE BACKDROP / ACRYLIC")
-        box.setObjectName("acrylicBox")
+    def _build_backdrop_box(self) -> QGroupBox:
+        box = QGroupBox("NATIVE BACKDROP")
+        box.setObjectName("backdropBox")
         layout = QGridLayout(box)
         layout.setHorizontalSpacing(12)
         layout.setVerticalSpacing(7)
 
-        layout.addWidget(QLabel("Runtime effect"), 0, 0)
-        self.acrylic_mode = QComboBox()
-        model = QStandardItemModel(self.acrylic_mode)
-        self.acrylic_mode.setModel(model)
-        self.acrylic_mode.addItem("Off", "off")
-        self.acrylic_mode.addItem("Acrylic (supported)", "acrylic")
-        self.acrylic_mode.insertSeparator(2)
-        for label, key in (
-            ("Mica (future runtime — unavailable)", "mica"),
-            ("Mica Alt / Tabbed (future runtime — unavailable)", "mica_alt"),
-            ("Glass / legacy blur-behind (future runtime — unavailable)", "glass"),
-        ):
-            self.acrylic_mode.addItem(label, key)
-            item = model.item(self.acrylic_mode.count() - 1)
-            if item is not None:
-                item.setEnabled(False)
-        self.acrylic_mode.setMinimumWidth(300)
-        layout.addWidget(self.acrylic_mode, 0, 1)
+        layout.addWidget(QLabel("Material"), 0, 0)
+        self.backdrop_mode = QComboBox()
+        for mode in ("off", "acrylic", "glass"):
+            self.backdrop_mode.addItem(BACKDROP_MODE_LABELS[mode], mode)
+        self.backdrop_mode.setMinimumWidth(220)
+        layout.addWidget(self.backdrop_mode, 0, 1)
 
-        self.acrylic_runtime_note = QLabel(
-            "Runtime currently implements only Off and tintable Acrylic. The disabled entries document plausible future backdrops without lying in .srtheme files."
-        )
-        self.acrylic_runtime_note.setWordWrap(True)
-        self.acrylic_runtime_note.setObjectName("muted")
-        layout.addWidget(self.acrylic_runtime_note, 0, 2, 1, 3)
+        self.backdrop_note = QLabel("")
+        self.backdrop_note.setWordWrap(True)
+        self.backdrop_note.setObjectName("muted")
+        layout.addWidget(self.backdrop_note, 0, 2, 1, 3)
 
-        layout.addWidget(QLabel("Tint preset"), 1, 0)
+        layout.addWidget(QLabel("Acrylic tint preset"), 1, 0)
         self.acrylic_preset = QComboBox()
         for preset in ACRYLIC_TINT_PRESETS:
             self.acrylic_preset.addItem(preset.name, preset.name)
         self.acrylic_preset.addItem("Custom", "Custom")
-        self.acrylic_preset.setMinimumWidth(260)
+        self.acrylic_preset.setMinimumWidth(240)
         layout.addWidget(self.acrylic_preset, 1, 1)
 
-        self.acrylic_swatch = SwatchButton("Acrylic Tint…")
-        layout.addWidget(self.acrylic_swatch, 1, 2)
+        self.backdrop_swatch = SwatchButton("Acrylic Tint…")
+        layout.addWidget(self.backdrop_swatch, 1, 2)
+        layout.addWidget(QLabel("Native tint alpha"), 1, 3)
+        self.backdrop_alpha = QSpinBox()
+        self.backdrop_alpha.setRange(1, 255)
+        self.backdrop_alpha.setMinimumWidth(88)
+        layout.addWidget(self.backdrop_alpha, 1, 4)
 
-        layout.addWidget(QLabel("Tint strength / alpha"), 1, 3)
-        self.acrylic_alpha = QSpinBox()
-        self.acrylic_alpha.setRange(0, 255)
-        self.acrylic_alpha.setMinimumWidth(88)
-        layout.addWidget(self.acrylic_alpha, 1, 4)
+        self.backdrop_value_label = QLabel("")
+        self.backdrop_value_label.setObjectName("muted")
+        layout.addWidget(self.backdrop_value_label, 2, 1, 1, 4)
 
-        self.acrylic_value_label = QLabel("")
-        self.acrylic_value_label.setObjectName("muted")
-        layout.addWidget(self.acrylic_value_label, 2, 1, 1, 4)
-
-        self.acrylic_mode.currentIndexChanged.connect(self._acrylic_mode_changed)
+        self.backdrop_mode.currentIndexChanged.connect(self._backdrop_mode_changed)
         self.acrylic_preset.currentIndexChanged.connect(self._acrylic_preset_changed)
-        self.acrylic_swatch.colorRequested.connect(self._choose_acrylic_tint)
-        self.acrylic_alpha.valueChanged.connect(self._acrylic_alpha_changed)
+        self.backdrop_swatch.colorRequested.connect(self._choose_backdrop_tint)
+        self.backdrop_alpha.valueChanged.connect(self._backdrop_alpha_changed)
         return box
 
     def _build_tree_pane(self) -> QWidget:
@@ -528,7 +471,6 @@ class ThemeFoundryWindow(QMainWindow):
         layout = QVBoxLayout(pane)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
-
         search_row = QHBoxLayout()
         search_row.addWidget(QLabel("Filter"))
         self.search = QLineEdit()
@@ -553,14 +495,8 @@ class ThemeFoundryWindow(QMainWindow):
         header = self.tree.header()
         header.setSectionResizeMode(self.COL_FAV, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(self.COL_TOKEN, QHeaderView.ResizeMode.Stretch)
-        for column in (
-            self.COL_KIND,
-            self.COL_STATE,
-            self.COL_WORKING,
-            self.COL_OPENED,
-            self.COL_DEFAULT,
-        ):
-            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        for col in (self.COL_KIND, self.COL_STATE, self.COL_WORKING, self.COL_OPENED, self.COL_DEFAULT):
+            header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.tree, 1)
 
         self.search.textChanged.connect(self._filter_tree)
@@ -581,30 +517,28 @@ class ThemeFoundryWindow(QMainWindow):
         layout.setContentsMargins(14, 8, 10, 8)
         layout.setSpacing(10)
 
-        title_row = QHBoxLayout()
+        row = QHBoxLayout()
         self.token_title = QLabel("Select a semantic role")
         self.token_title.setObjectName("tokenTitle")
         font = QFont(self.token_title.font())
         font.setPointSize(font.pointSize() + 3)
         font.setBold(True)
         self.token_title.setFont(font)
-        title_row.addWidget(self.token_title, 1)
+        row.addWidget(self.token_title, 1)
         self.favorite_btn = QPushButton("☆ Favorite")
         self.favorite_btn.setObjectName("favoriteButton")
         self.favorite_btn.clicked.connect(self._toggle_selected_favorite)
-        title_row.addWidget(self.favorite_btn)
-        layout.addLayout(title_row)
+        row.addWidget(self.favorite_btn)
+        layout.addLayout(row)
 
         self.token_official = QLabel("")
         self.token_official.setObjectName("muted")
         self.token_official.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.token_official)
-
         self.token_description = QLabel("")
         self.token_description.setObjectName("descriptionBox")
         self.token_description.setWordWrap(True)
         layout.addWidget(self.token_description)
-
         self.state_banner = QLabel("")
         self.state_banner.setObjectName("stateBanner")
         self.state_banner.setWordWrap(True)
@@ -617,47 +551,45 @@ class ThemeFoundryWindow(QMainWindow):
         self.color_editor = self._build_color_editor()
         self.shadow_editor = self._build_shadow_editor()
         self.gradient_editor = self._build_gradient_editor()
-        self.editor_stack.addWidget(self.blank_editor)
-        self.editor_stack.addWidget(self.color_editor)
-        self.editor_stack.addWidget(self.shadow_editor)
-        self.editor_stack.addWidget(self.gradient_editor)
+        for page in (self.blank_editor, self.color_editor, self.shadow_editor, self.gradient_editor):
+            self.editor_stack.addWidget(page)
         layout.addWidget(self.editor_stack)
 
-        layers_heading = QLabel("KNOWN VISUAL / STYLE LAYERS")
-        layers_heading.setObjectName("sectionHeading")
-        layout.addWidget(layers_heading)
-        layers_help = QLabel(
+        heading = QLabel("KNOWN VISUAL / STYLE LAYERS")
+        heading.setObjectName("sectionHeading")
+        layout.addWidget(heading)
+        help_label = QLabel(
             "High-confidence semantic relationships only. Double-click a related role to jump to it. "
-            "For simple alpha-over mappings, the predicted colour preview can solve backwards."
+            "For simple alpha-over mappings the predicted colour preview can solve backwards."
         )
-        layers_help.setWordWrap(True)
-        layers_help.setObjectName("muted")
-        layout.addWidget(layers_help)
+        help_label.setWordWrap(True)
+        help_label.setObjectName("muted")
+        layout.addWidget(help_label)
         self.layers_tree = QTreeWidget()
         self.layers_tree.setObjectName("layersTree")
         self.layers_tree.setHeaderLabels(["Relationship", "Other role", "Why it matters"])
         self.layers_tree.setRootIsDecorated(False)
         self.layers_tree.setAlternatingRowColors(True)
         self.layers_tree.setMinimumHeight(150)
-        layers_header = self.layers_tree.header()
-        layers_header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        layers_header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        layers_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        h = self.layers_tree.header()
+        h.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        h.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        h.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.layers_tree.itemDoubleClicked.connect(self._layer_item_activated)
         layout.addWidget(self.layers_tree)
 
-        reset_row = QHBoxLayout()
+        row = QHBoxLayout()
         self.reset_opened_btn = QPushButton("Reset Selected to Opened")
         self.reset_default_btn = QPushButton("Reset Selected to Default Dark")
+        row.addWidget(self.reset_opened_btn)
+        row.addWidget(self.reset_default_btn)
+        layout.addLayout(row)
+        row = QHBoxLayout()
         self.reset_all_opened_btn = QPushButton("Reset ALL to Opened")
         self.reset_all_default_btn = QPushButton("Reset ALL to Default Dark")
-        reset_row.addWidget(self.reset_opened_btn)
-        reset_row.addWidget(self.reset_default_btn)
-        layout.addLayout(reset_row)
-        all_row = QHBoxLayout()
-        all_row.addWidget(self.reset_all_opened_btn)
-        all_row.addWidget(self.reset_all_default_btn)
-        layout.addLayout(all_row)
+        row.addWidget(self.reset_all_opened_btn)
+        row.addWidget(self.reset_all_default_btn)
+        layout.addLayout(row)
         self.reset_opened_btn.clicked.connect(self._reset_selected_opened)
         self.reset_default_btn.clicked.connect(self._reset_selected_default)
         self.reset_all_opened_btn.clicked.connect(self._reset_all_opened)
@@ -669,13 +601,11 @@ class ThemeFoundryWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-
         preview_grid = QGridLayout()
         preview_grid.addWidget(self._heading("Isolated role"), 0, 0)
-        predicted_label = self._heading("Predicted visible composite")
-        predicted_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        preview_grid.addWidget(predicted_label, 0, 1)
+        predicted = self._heading("Predicted visible composite")
+        predicted.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        preview_grid.addWidget(predicted, 0, 1)
         self.color_preview = ColorPreview()
         self.composite_preview = ColorPreview(clickable=True)
         self.composite_preview.clicked.connect(self._choose_composite_target)
@@ -689,11 +619,9 @@ class ThemeFoundryWindow(QMainWindow):
         preview_grid.setColumnStretch(0, 1)
         preview_grid.setColumnStretch(1, 1)
         layout.addLayout(preview_grid)
-
         self.color_swatch = SwatchButton()
         self.color_swatch.colorRequested.connect(self._choose_selected_color)
         layout.addWidget(self.color_swatch)
-
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         self.r_spin = self._channel_spin()
@@ -702,18 +630,18 @@ class ThemeFoundryWindow(QMainWindow):
         form.addRow("Red", self.r_spin)
         form.addRow("Green", self.g_spin)
         form.addRow("Blue", self.b_spin)
-        alpha_wrap = QWidget()
-        alpha_row = QHBoxLayout(alpha_wrap)
-        alpha_row.setContentsMargins(0, 0, 0, 0)
+        wrap = QWidget()
+        row = QHBoxLayout(wrap)
+        row.setContentsMargins(0, 0, 0, 0)
         self.a_slider = QSlider(Qt.Orientation.Horizontal)
         self.a_slider.setRange(0, 255)
         self.a_spin = self._channel_spin()
         self.alpha_pct = QLabel("100.0%")
         self.alpha_pct.setMinimumWidth(60)
-        alpha_row.addWidget(self.a_slider, 1)
-        alpha_row.addWidget(self.a_spin)
-        alpha_row.addWidget(self.alpha_pct)
-        form.addRow("Opacity", alpha_wrap)
+        row.addWidget(self.a_slider, 1)
+        row.addWidget(self.a_spin)
+        row.addWidget(self.alpha_pct)
+        form.addRow("Opacity", wrap)
         layout.addLayout(form)
         for spin in (self.r_spin, self.g_spin, self.b_spin):
             spin.valueChanged.connect(self._color_channels_changed)
@@ -750,18 +678,18 @@ class ThemeFoundryWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         self.gradient_preview = GradientPreview()
         layout.addWidget(self.gradient_preview)
-        stop_row = QHBoxLayout()
-        stop_row.addWidget(QLabel("Stop"))
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Stop"))
         self.gradient_stop_combo = QComboBox()
         self.gradient_stop_combo.currentIndexChanged.connect(self._gradient_stop_selected)
-        stop_row.addWidget(self.gradient_stop_combo, 1)
+        row.addWidget(self.gradient_stop_combo, 1)
         self.gradient_add_btn = QPushButton("Add Stop")
         self.gradient_remove_btn = QPushButton("Remove Stop")
         self.gradient_add_btn.clicked.connect(self._gradient_add_stop)
         self.gradient_remove_btn.clicked.connect(self._gradient_remove_stop)
-        stop_row.addWidget(self.gradient_add_btn)
-        stop_row.addWidget(self.gradient_remove_btn)
-        layout.addLayout(stop_row)
+        row.addWidget(self.gradient_add_btn)
+        row.addWidget(self.gradient_remove_btn)
+        layout.addLayout(row)
         self.gradient_swatch = SwatchButton("Stop Colour…")
         self.gradient_swatch.colorRequested.connect(self._choose_gradient_stop_color)
         layout.addWidget(self.gradient_swatch)
@@ -783,36 +711,25 @@ class ThemeFoundryWindow(QMainWindow):
         spin.setMinimumWidth(88)
         return spin
 
-    def _double_spin(
-        self,
-        minimum: float,
-        maximum: float,
-        step: float,
-        decimals: int,
-    ) -> QDoubleSpinBox:
+    def _double_spin(self, low: float, high: float, step: float, decimals: int) -> QDoubleSpinBox:
         spin = QDoubleSpinBox()
-        spin.setRange(minimum, maximum)
+        spin.setRange(low, high)
         spin.setSingleStep(step)
         spin.setDecimals(decimals)
         spin.setMinimumWidth(100)
         return spin
 
     def _apply_internal_style(self) -> None:
-        # Foundry's own stable developer-tool skin is intentionally independent
-        # of whichever target theme is being authored.
         self.setStyleSheet(
             """
             QMainWindow { background: #0d181e; color: #f4f0e6; }
             QWidget { color: #f4f0e6; font-family: 'Jost', 'Segoe UI', sans-serif; }
-            QWidget#themeFoundryRoot {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 rgba(13,24,30,255), stop:0.55 rgba(24,30,31,255), stop:1 rgba(41,34,24,255));
+            QWidget#themeFoundryRoot { background: #111a1e; }
+            QWidget#themeFoundryPane, QWidget#themeFoundryEditor, QGroupBox#backdropBox {
+                background: rgba(10,15,17,220); border: 1px solid rgba(225,193,127,100); border-radius: 10px;
             }
-            QWidget#themeFoundryPane, QWidget#themeFoundryEditor, QGroupBox#acrylicBox {
-                background: rgba(10,15,17,165); border: 1px solid rgba(225,193,127,100); border-radius: 10px;
-            }
-            QGroupBox#acrylicBox { margin-top: 11px; padding: 9px; font-weight: 700; color: #f4c66d; }
-            QGroupBox#acrylicBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }
+            QGroupBox#backdropBox { margin-top: 11px; padding: 9px; font-weight: 700; color: #f4c66d; }
+            QGroupBox#backdropBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }
             QLabel#themeFoundryTitle { color: #f4c66d; letter-spacing: 2px; }
             QLabel#themeFoundrySubtitle { color: #c8d4d1; font-size: 12px; padding-bottom: 3px; }
             QLabel#scopeBanner, QLabel#descriptionBox, QLabel#stateBanner {
@@ -821,59 +738,36 @@ class ThemeFoundryWindow(QMainWindow):
             }
             QLabel#stateBanner { color: #f4c66d; }
             QLabel#muted { color: #9fb2ad; }
-            QLabel#previewLabel, QLabel#sectionHeading { color: #f4c66d; font-weight: 700; letter-spacing: 0.6px; }
-            QLabel#tokenTitle { color: #f4f0e6; }
+            QLabel#previewLabel, QLabel#sectionHeading { color: #f4c66d; font-weight: 700; }
             QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-                background: #1f2626; color: #f4f0e6; border: 1px solid #8f7950;
-                border-radius: 7px; padding: 5px;
+                background: #1f2626; color: #f4f0e6; border: 1px solid #8f7950; border-radius: 7px; padding: 5px;
             }
             QTreeWidget#themeFoundryTree, QTreeWidget#layersTree {
                 background-color: rgba(10,15,17,218); alternate-background-color: rgba(31,38,38,205);
                 border: 1px solid rgba(225,193,127,150); border-radius: 10px; color: #edf1ed; outline: none;
             }
-            QTreeWidget#themeFoundryTree::item, QTreeWidget#layersTree::item { min-height: 28px; padding: 2px 5px; }
-            QTreeWidget#themeFoundryTree::item:selected, QTreeWidget#layersTree::item:selected { background: rgba(60,108,103,210); }
-            QHeaderView::section {
-                background: rgba(31,47,48,245); color: #f4c66d; border: none;
-                border-right: 1px solid rgba(255,255,255,35); padding: 7px; font-weight: 700;
-            }
-            QPushButton {
-                background: #263b3a; color: #f4f0e6; border: 1px solid #8f7950;
-                border-radius: 7px; padding: 7px 12px; font-weight: 600;
-            }
+            QTreeWidget::item { min-height: 28px; padding: 2px 5px; }
+            QTreeWidget::item:selected { background: rgba(60,108,103,210); }
+            QHeaderView::section { background: #1f2f30; color: #f4c66d; border: none; padding: 7px; font-weight: 700; }
+            QPushButton { background: #263b3a; color: #f4f0e6; border: 1px solid #8f7950;
+                border-radius: 7px; padding: 7px 12px; font-weight: 600; }
             QPushButton:hover { background: #33504d; border-color: #f4c66d; }
             QPushButton:disabled { color: #6f7e7b; border-color: #4f554e; background: #1b2424; }
             QPushButton#themeFoundryPrimary { background: #d59b42; color: #101719; border-color: #f4c66d; }
-            QPushButton#themeFoundryPrimary:hover { background: #efb65a; }
-            QPushButton#favoriteButton { min-width: 105px; }
-            QCheckBox { spacing: 6px; }
-            QSlider::groove:horizontal { height: 5px; background: #11191b; border: 1px solid #8f7950; border-radius: 2px; }
-            QSlider::handle:horizontal { width: 14px; margin: -5px 0; border-radius: 7px; background: #f4c66d; border: 1px solid #fff0c5; }
-            QStatusBar { background: #0a0f11; color: #c8d4d1; border-top: 1px solid rgba(225,193,127,90); }
+            QSlider::groove:horizontal { height: 5px; background: #11191b; border: 1px solid #8f7950; }
+            QSlider::handle:horizontal { width: 14px; margin: -5px 0; border-radius: 7px; background: #f4c66d; }
+            QStatusBar { background: #0a0f11; color: #c8d4d1; }
             """
         )
 
-    # ----- semantic value access --------------------------------------
     def _entry_id(self, kind: str, token: str) -> str:
         return f"{kind}:{token}"
 
     def _value_for_draft(self, kind: str, token: str) -> Any:
-        if kind == "color":
-            return self.draft.colors[token]
-        if kind == "shadow":
-            return self.draft.shadows[token]
-        if kind == "gradient":
-            return self.draft.gradients[token]
-        raise KeyError(kind)
+        return {"color": self.draft.colors, "shadow": self.draft.shadows, "gradient": self.draft.gradients}[kind][token]
 
     def _value_for_spec(self, spec: SettingsThemeSpec, kind: str, token: str) -> Any:
-        if kind == "color":
-            return spec.colors[token]
-        if kind == "shadow":
-            return spec.shadows[token]
-        if kind == "gradient":
-            return spec.gradients[token]
-        raise KeyError(kind)
+        return {"color": spec.colors, "shadow": spec.shadows, "gradient": spec.gradients}[kind][token]
 
     def _summary(self, kind: str, value: Any) -> str:
         if kind == "color":
@@ -890,25 +784,19 @@ class ThemeFoundryWindow(QMainWindow):
         default = self._value_for_spec(self.default_spec, kind, token)
         if working == opened:
             if working == default:
-                return "UNCHANGED", "Working value equals both opened theme and compiled Default Dark."
+                return "UNCHANGED", "Working value equals opened theme and compiled Default Dark."
             return "OPENED", "Working value equals the opened theme."
         if working == default:
             return "DEFAULT", "Working value differs from opened theme and equals compiled Default Dark."
         return "EDITED", "Working value differs from the opened theme."
 
-    # ----- tree -------------------------------------------------------
     def _rebuild_tree(self, select_entry: tuple[str, str] | None = None) -> None:
         self.tree.clear()
         self.tree_items.clear()
-
         entries: list[tuple[str, str, str]] = []
-        for token in self.draft.colors:
-            entries.append((color_category(token), "color", token))
-        for token in self.draft.shadows:
-            entries.append(("Shadows", "shadow", token))
-        for token in self.draft.gradients:
-            entries.append(("Gradients", "gradient", token))
-
+        entries += [(color_category(token), "color", token) for token in self.draft.colors]
+        entries += [("Shadows", "shadow", token) for token in self.draft.shadows]
+        entries += [("Gradients", "gradient", token) for token in self.draft.gradients]
         categories = sorted({category for category, _kind, _token in entries})
         current_filter = self.category_filter.currentText()
         self.category_filter.blockSignals(True)
@@ -918,62 +806,39 @@ class ThemeFoundryWindow(QMainWindow):
         if current_filter in {"All categories", *categories}:
             self.category_filter.setCurrentText(current_filter)
         self.category_filter.blockSignals(False)
-
         parents: dict[str, QTreeWidgetItem] = {}
         for category in categories:
             parent = QTreeWidgetItem(["", category])
-            font = parent.font(self.COL_TOKEN)
-            font.setBold(True)
-            parent.setFont(self.COL_TOKEN, font)
+            f = parent.font(self.COL_TOKEN)
+            f.setBold(True)
+            parent.setFont(self.COL_TOKEN, f)
             self.tree.addTopLevelItem(parent)
             parents[category] = parent
-
-        for category, kind, token in sorted(
-            entries,
-            key=lambda item: (item[0], friendly_token_label(item[2]).lower(), item[2]),
-        ):
+        for category, kind, token in sorted(entries, key=lambda x: (x[0], friendly_token_label(x[2]).lower())):
             entry_id = self._entry_id(kind, token)
             state, detail = self._state_for(kind, token)
             working = self._value_for_draft(kind, token)
             opened = self._value_for_spec(self.opened_spec, kind, token)
             default = self._value_for_spec(self.default_spec, kind, token)
-            item = QTreeWidgetItem(
-                [
-                    "★" if entry_id in self.favorites else "☆",
-                    friendly_token_label(token),
-                    kind.capitalize(),
-                    state,
-                    self._summary(kind, working),
-                    self._summary(kind, opened),
-                    self._summary(kind, default),
-                ]
-            )
+            item = QTreeWidgetItem([
+                "★" if entry_id in self.favorites else "☆",
+                friendly_token_label(token), kind.title(), state,
+                self._summary(kind, working), self._summary(kind, opened), self._summary(kind, default),
+            ])
             item.setData(self.COL_FAV, Qt.ItemDataRole.UserRole, (kind, token))
-            item.setToolTip(self.COL_TOKEN, semantic_description(kind, token))
+            item.setToolTip(self.COL_TOKEN, token)
             item.setToolTip(self.COL_STATE, detail)
             parents[category].addChild(item)
             self.tree_items[entry_id] = item
-
-        for parent in parents.values():
-            parent.setExpanded(True)
-        self._filter_tree()
-
+        self.tree.expandAll()
         target = select_entry or self.selected_entry
-        if target is not None:
+        if target:
             item = self.tree_items.get(self._entry_id(*target))
             if item is not None:
                 self.tree.setCurrentItem(item)
-                self.tree.scrollToItem(item)
-                return
-        # Pick the first real child.
-        for index in range(self.tree.topLevelItemCount()):
-            parent = self.tree.topLevelItem(index)
-            if parent.childCount():
-                self.tree.setCurrentItem(parent.child(0))
-                break
+        self._filter_tree()
 
-    def _filter_tree(self, *args) -> None:
-        del args
+    def _filter_tree(self, *_args) -> None:
         text = self.search.text().strip().lower()
         category = self.category_filter.currentText()
         favorites_only = self.favorites_only.isChecked()
@@ -985,53 +850,34 @@ class ThemeFoundryWindow(QMainWindow):
                 item = parent.child(j)
                 data = item.data(self.COL_FAV, Qt.ItemDataRole.UserRole)
                 if not data:
-                    item.setHidden(True)
                     continue
-                kind, token = data
+                kind, token = str(data[0]), str(data[1])
                 entry_id = self._entry_id(kind, token)
-                state, detail = self._state_for(kind, token)
-                haystack = " ".join(
-                    (
-                        token,
-                        friendly_token_label(token),
-                        semantic_description(kind, token),
-                        kind,
-                        state,
-                        detail,
-                    )
-                ).lower()
+                haystack = f"{token} {friendly_token_label(token)} {kind} {category_name}".lower()
                 visible = (
                     (category == "All categories" or category == category_name)
                     and (not favorites_only or entry_id in self.favorites)
                     and (not text or text in haystack)
                 )
                 item.setHidden(not visible)
-                if visible:
-                    visible_children += 1
+                visible_children += int(visible)
             parent.setHidden(visible_children == 0)
 
-    def _tree_selection_changed(
-        self,
-        current: QTreeWidgetItem | None,
-        previous: QTreeWidgetItem | None,
-    ) -> None:
+    def _tree_selection_changed(self, current: QTreeWidgetItem | None, previous: QTreeWidgetItem | None) -> None:
         del previous
         if current is None:
             return
         data = current.data(self.COL_FAV, Qt.ItemDataRole.UserRole)
-        if not data:
-            return
-        kind, token = data
-        self.selected_entry = (str(kind), str(token))
-        self._refresh_editor()
+        if data:
+            self.selected_entry = (str(data[0]), str(data[1]))
+            self._refresh_editor()
 
     def _tree_item_clicked(self, item: QTreeWidgetItem, column: int) -> None:
         if column != self.COL_FAV:
             return
         data = item.data(self.COL_FAV, Qt.ItemDataRole.UserRole)
-        if not data:
-            return
-        self._toggle_favorite(self._entry_id(str(data[0]), str(data[1])))
+        if data:
+            self._toggle_favorite(self._entry_id(str(data[0]), str(data[1])))
 
     def _toggle_favorite(self, entry_id: str) -> None:
         if entry_id in self.favorites:
@@ -1042,10 +888,9 @@ class ThemeFoundryWindow(QMainWindow):
         self._rebuild_tree(self.selected_entry)
 
     def _toggle_selected_favorite(self) -> None:
-        if self.selected_entry is not None:
+        if self.selected_entry:
             self._toggle_favorite(self._entry_id(*self.selected_entry))
 
-    # ----- editor refresh ---------------------------------------------
     def _refresh_editor(self) -> None:
         if self.selected_entry is None:
             self.editor_stack.setCurrentWidget(self.blank_editor)
@@ -1058,20 +903,16 @@ class ThemeFoundryWindow(QMainWindow):
             self.token_description.setText(semantic_description(kind, token))
             state, detail = self._state_for(kind, token)
             self.state_banner.setText(f"{state} · {detail}")
-            entry_id = self._entry_id(kind, token)
-            self.favorite_btn.setText("★ Favorite" if entry_id in self.favorites else "☆ Favorite")
-
+            self.favorite_btn.setText("★ Favorite" if self._entry_id(kind, token) in self.favorites else "☆ Favorite")
             if kind == "color":
                 self.editor_stack.setCurrentWidget(self.color_editor)
                 self._refresh_color_editor(token)
             elif kind == "shadow":
                 self.editor_stack.setCurrentWidget(self.shadow_editor)
                 self._refresh_shadow_editor(token)
-            elif kind == "gradient":
+            else:
                 self.editor_stack.setCurrentWidget(self.gradient_editor)
                 self._refresh_gradient_editor(token)
-            else:
-                self.editor_stack.setCurrentWidget(self.blank_editor)
             self._refresh_layers()
         finally:
             self._updating = False
@@ -1086,27 +927,18 @@ class ThemeFoundryWindow(QMainWindow):
         self.a_spin.setValue(value.a)
         self.a_slider.setValue(value.a)
         self.alpha_pct.setText(f"{value.a * 100.0 / 255.0:.1f}%")
-
         relation = nearest_composite_relation(token)
         if relation is None:
             predicted = alpha_over(value, Rgba(24, 30, 31, 255))
             self.composite_preview.set_rgba(predicted)
             self.composite_preview.set_clickable(False)
-            self.composite_preview.setToolTip("")
-            self.composite_note.setText(
-                "No mapped neighbour; preview uses Foundry's neutral dark reference."
-            )
+            self.composite_note.setText("No mapped neighbour; preview uses Foundry's neutral dark reference.")
         else:
             lower = self.draft.colors[relation.lower]
             upper = self.draft.colors[relation.upper]
             predicted = alpha_over(upper, lower)
             self.composite_preview.set_rgba(predicted)
             self.composite_preview.set_clickable(relation.reverse_solve)
-            self.composite_preview.setToolTip(
-                "Click to choose a desired visible RGB and solve the selected layer backwards at its current alpha."
-                if relation.reverse_solve
-                else "This relationship is preview-only."
-            )
             other = relation.upper if token == relation.lower else relation.lower
             self.composite_note.setText(
                 f"{relation.explanation}\nComposite with: {friendly_token_label(other)}"
@@ -1157,29 +989,25 @@ class ThemeFoundryWindow(QMainWindow):
             other = relation.upper if token == relation.lower else relation.lower
             if other not in self.draft.colors:
                 continue
-            if relation.kind == "composite":
-                relation_text = "BELOW THIS" if token == relation.upper else "ABOVE THIS"
-            elif relation.kind == "state":
-                relation_text = "STATE VARIANT"
-            else:
-                relation_text = relation.kind.upper()
-            item = QTreeWidgetItem(
-                [relation_text, friendly_token_label(other), relation.explanation]
+            relation_text = (
+                "BELOW THIS" if relation.kind == "composite" and token == relation.upper
+                else "ABOVE THIS" if relation.kind == "composite"
+                else "STATE VARIANT" if relation.kind == "state"
+                else relation.kind.upper()
             )
+            item = QTreeWidgetItem([relation_text, friendly_token_label(other), relation.explanation])
             item.setData(0, Qt.ItemDataRole.UserRole, other)
             self.layers_tree.addTopLevelItem(item)
 
     def _layer_item_activated(self, item: QTreeWidgetItem, column: int) -> None:
         del column
         token = item.data(0, Qt.ItemDataRole.UserRole)
-        if not token:
-            return
-        tree_item = self.tree_items.get(self._entry_id("color", str(token)))
-        if tree_item is not None:
-            self.tree.setCurrentItem(tree_item)
-            self.tree.scrollToItem(tree_item)
+        if token:
+            target = self.tree_items.get(self._entry_id("color", str(token)))
+            if target is not None:
+                self.tree.setCurrentItem(target)
+                self.tree.scrollToItem(target)
 
-    # ----- colour editing ---------------------------------------------
     def _choose_qcolor(self, initial: Rgba, title: str, *, alpha: bool = True) -> Rgba | None:
         options = QColorDialog.ColorDialogOption.DontUseNativeDialog
         if alpha:
@@ -1190,35 +1018,26 @@ class ThemeFoundryWindow(QMainWindow):
         return Rgba(chosen.red(), chosen.green(), chosen.blue(), chosen.alpha())
 
     def _choose_selected_color(self) -> None:
-        if self.selected_entry is None or self.selected_entry[0] != "color":
+        if not self.selected_entry or self.selected_entry[0] != "color":
             return
         token = self.selected_entry[1]
         chosen = self._choose_qcolor(self.draft.colors[token], f"Choose {friendly_token_label(token)}")
-        if chosen is not None:
+        if chosen:
             self._set_color(token, chosen)
 
     def _choose_composite_target(self) -> None:
-        if self.selected_entry is None or self.selected_entry[0] != "color":
+        if not self.selected_entry or self.selected_entry[0] != "color":
             return
         token = self.selected_entry[1]
         relation = nearest_composite_relation(token)
         if relation is None or not relation.reverse_solve:
             return
-        current = alpha_over(
-            self.draft.colors[relation.upper],
-            self.draft.colors[relation.lower],
-        )
-        chosen = self._choose_qcolor(
-            Rgba(current.r, current.g, current.b, 255),
-            "Desired Visible Composite",
-            alpha=False,
-        )
-        if chosen is None:
+        current = alpha_over(self.draft.colors[relation.upper], self.draft.colors[relation.lower])
+        chosen = self._choose_qcolor(Rgba(current.r, current.g, current.b, 255), "Desired Visible Composite", alpha=False)
+        if not chosen:
             return
         solved, note = solve_layer_for_target(
-            selected_token=token,
-            relation=relation,
-            colors=self.draft.colors,
+            selected_token=token, relation=relation, colors=self.draft.colors,
             target_rgb=(chosen.r, chosen.g, chosen.b),
         )
         if solved is None:
@@ -1227,26 +1046,22 @@ class ThemeFoundryWindow(QMainWindow):
         self._set_color(token, solved)
         self._set_status(note)
 
-    def _color_channels_changed(self, value: int) -> None:
-        del value
-        if self._updating or self.selected_entry is None or self.selected_entry[0] != "color":
+    def _color_channels_changed(self, _value: int) -> None:
+        if self._updating or not self.selected_entry or self.selected_entry[0] != "color":
             return
         token = self.selected_entry[1]
         old = self.draft.colors[token]
-        self._set_color(
-            token,
-            Rgba(self.r_spin.value(), self.g_spin.value(), self.b_spin.value(), old.a),
-        )
+        self._set_color(token, Rgba(self.r_spin.value(), self.g_spin.value(), self.b_spin.value(), old.a))
 
     def _color_alpha_spin_changed(self, value: int) -> None:
-        if self._updating or self.selected_entry is None or self.selected_entry[0] != "color":
+        if self._updating or not self.selected_entry or self.selected_entry[0] != "color":
             return
         token = self.selected_entry[1]
         old = self.draft.colors[token]
         self._set_color(token, Rgba(old.r, old.g, old.b, int(value)))
 
     def _color_alpha_slider_changed(self, value: int) -> None:
-        if self._updating or self.selected_entry is None or self.selected_entry[0] != "color":
+        if self._updating or not self.selected_entry or self.selected_entry[0] != "color":
             return
         token = self.selected_entry[1]
         old = self.draft.colors[token]
@@ -1256,36 +1071,25 @@ class ThemeFoundryWindow(QMainWindow):
         self.draft.colors[token] = value
         self._after_value_change("color", token)
 
-    # ----- shadow editing ---------------------------------------------
     def _choose_shadow_color(self) -> None:
-        if self.selected_entry is None or self.selected_entry[0] != "shadow":
+        if not self.selected_entry or self.selected_entry[0] != "shadow":
             return
         token = self.selected_entry[1]
         old = self.draft.shadows[token]
         chosen = self._choose_qcolor(old.color, f"Choose {friendly_token_label(token)} Colour")
-        if chosen is not None:
-            self.draft.shadows[token] = ShadowStyle(
-                blur_radius=old.blur_radius,
-                offset_x=old.offset_x,
-                offset_y=old.offset_y,
-                color=chosen,
-                disabled_alpha_scale=old.disabled_alpha_scale,
-            )
+        if chosen:
+            self.draft.shadows[token] = ShadowStyle(old.blur_radius, old.offset_x, old.offset_y, chosen, old.disabled_alpha_scale)
             self._after_value_change("shadow", token)
 
-    def _shadow_numbers_changed(self, value: float) -> None:
-        del value
-        if self._updating or self.selected_entry is None or self.selected_entry[0] != "shadow":
+    def _shadow_numbers_changed(self, _value: float) -> None:
+        if self._updating or not self.selected_entry or self.selected_entry[0] != "shadow":
             return
         token = self.selected_entry[1]
         old = self.draft.shadows[token]
         try:
             changed = ShadowStyle(
-                blur_radius=self.shadow_blur.value(),
-                offset_x=self.shadow_x.value(),
-                offset_y=self.shadow_y.value(),
-                color=old.color,
-                disabled_alpha_scale=self.shadow_disabled.value(),
+                blur_radius=self.shadow_blur.value(), offset_x=self.shadow_x.value(), offset_y=self.shadow_y.value(),
+                color=old.color, disabled_alpha_scale=self.shadow_disabled.value(),
             )
         except (TypeError, ValueError) as exc:
             self._set_status(f"Invalid shadow value: {exc}")
@@ -1293,9 +1097,8 @@ class ThemeFoundryWindow(QMainWindow):
         self.draft.shadows[token] = changed
         self._after_value_change("shadow", token)
 
-    # ----- gradient editing -------------------------------------------
     def _gradient_stop_selected(self, index: int) -> None:
-        if index < 0 or self.selected_entry is None or self.selected_entry[0] != "gradient":
+        if index < 0 or not self.selected_entry or self.selected_entry[0] != "gradient":
             return
         self._gradient_stop_index = index
         if not self._updating:
@@ -1306,29 +1109,26 @@ class ThemeFoundryWindow(QMainWindow):
                 self._updating = False
 
     def _choose_gradient_stop_color(self) -> None:
-        if self.selected_entry is None or self.selected_entry[0] != "gradient":
+        if not self.selected_entry or self.selected_entry[0] != "gradient":
             return
         token = self.selected_entry[1]
         gradient = self.draft.gradients[token]
-        index = self._gradient_stop_index
-        stop = gradient.stops[index]
+        stop = gradient.stops[self._gradient_stop_index]
         chosen = self._choose_qcolor(stop.color, f"Choose {friendly_token_label(token)} Stop Colour")
-        if chosen is None:
-            return
-        stops = list(gradient.stops)
-        stops[index] = GradientStop(stop.position, chosen)
-        self.draft.gradients[token] = GradientStyle(stops=tuple(stops))
-        self._after_value_change("gradient", token)
+        if chosen:
+            stops = list(gradient.stops)
+            stops[self._gradient_stop_index] = GradientStop(stop.position, chosen)
+            self.draft.gradients[token] = GradientStyle(stops=tuple(stops))
+            self._after_value_change("gradient", token)
 
     def _gradient_position_changed(self, value: float) -> None:
-        if self._updating or self.selected_entry is None or self.selected_entry[0] != "gradient":
+        if self._updating or not self.selected_entry or self.selected_entry[0] != "gradient":
             return
         token = self.selected_entry[1]
         gradient = self.draft.gradients[token]
-        index = self._gradient_stop_index
         stops = list(gradient.stops)
-        stop = stops[index]
-        stops[index] = GradientStop(float(value), stop.color)
+        stop = stops[self._gradient_stop_index]
+        stops[self._gradient_stop_index] = GradientStop(float(value), stop.color)
         try:
             self.draft.gradients[token] = GradientStyle(stops=tuple(stops))
         except (TypeError, ValueError) as exc:
@@ -1337,109 +1137,121 @@ class ThemeFoundryWindow(QMainWindow):
         self._after_value_change("gradient", token)
 
     def _gradient_add_stop(self) -> None:
-        if self.selected_entry is None or self.selected_entry[0] != "gradient":
+        if not self.selected_entry or self.selected_entry[0] != "gradient":
             return
         token = self.selected_entry[1]
-        gradient = self.draft.gradients[token]
-        stops = list(gradient.stops)
-        # Add in the largest gap; use the left stop's colour as a predictable
-        # starting point instead of inventing a new visual authority.
-        best_index = 0
-        best_gap = -1.0
-        for index in range(len(stops) - 1):
-            gap = stops[index + 1].position - stops[index].position
-            if gap > best_gap:
-                best_gap = gap
-                best_index = index
-        left = stops[best_index]
-        right = stops[best_index + 1]
-        position = (left.position + right.position) / 2.0
-        stops.insert(best_index + 1, GradientStop(position, left.color))
+        stops = list(self.draft.gradients[token].stops)
+        best = max(range(len(stops) - 1), key=lambda i: stops[i + 1].position - stops[i].position)
+        left, right = stops[best], stops[best + 1]
+        stops.insert(best + 1, GradientStop((left.position + right.position) / 2.0, left.color))
         self.draft.gradients[token] = GradientStyle(stops=tuple(stops))
-        self._gradient_stop_index = best_index + 1
+        self._gradient_stop_index = best + 1
         self._after_value_change("gradient", token)
 
     def _gradient_remove_stop(self) -> None:
-        if self.selected_entry is None or self.selected_entry[0] != "gradient":
+        if not self.selected_entry or self.selected_entry[0] != "gradient":
             return
         token = self.selected_entry[1]
-        gradient = self.draft.gradients[token]
-        if len(gradient.stops) <= 2:
+        stops = list(self.draft.gradients[token].stops)
+        if len(stops) <= 2:
             return
-        stops = list(gradient.stops)
         del stops[self._gradient_stop_index]
         self._gradient_stop_index = min(self._gradient_stop_index, len(stops) - 1)
         self.draft.gradients[token] = GradientStyle(stops=tuple(stops))
         self._after_value_change("gradient", token)
 
-    # ----- acrylic -----------------------------------------------------
-    def _refresh_acrylic_ui(self) -> None:
+    # Backdrop ---------------------------------------------------------
+    def _refresh_backdrop_ui(self) -> None:
         self._updating = True
         try:
-            self.acrylic_mode.setCurrentIndex(1 if self.draft.acrylic_enabled else 0)
-            preset_name = matching_acrylic_preset(self.draft.acrylic_tint) or "Custom"
-            index = self.acrylic_preset.findData(preset_name)
-            self.acrylic_preset.setCurrentIndex(max(0, index))
-            self.acrylic_swatch.set_rgba(self.draft.acrylic_tint)
-            self.acrylic_alpha.setValue(self.draft.acrylic_tint.a)
-            self.acrylic_value_label.setText(
-                f"Stored tint: {rgba_summary(self.draft.acrylic_tint)} · "
-                f"{'Acrylic enabled' if self.draft.acrylic_enabled else 'Backdrop disabled'}"
-            )
+            mode = self.draft.backdrop_mode
+            idx = self.backdrop_mode.findData(mode)
+            self.backdrop_mode.setCurrentIndex(max(0, idx))
+            self.backdrop_note.setText(BACKDROP_MODE_DESCRIPTIONS[mode])
+            is_acrylic = mode == "acrylic"
+            self.acrylic_preset.setEnabled(is_acrylic)
+            self.backdrop_swatch.setEnabled(is_acrylic)
+            self.backdrop_alpha.setEnabled(is_acrylic)
+            tint = self.draft.backdrop_tint
+            self.backdrop_swatch.set_rgba(tint)
+            self.backdrop_alpha.setValue(max(1, tint.a))
+            preset_name = matching_acrylic_preset(tint) or "Custom"
+            pidx = self.acrylic_preset.findData(preset_name)
+            self.acrylic_preset.setCurrentIndex(max(0, pidx))
+            if is_acrylic:
+                self.backdrop_value_label.setText(
+                    f"Native Acrylic tint: {rgba_summary(tint)} · alpha {tint.a}/255"
+                )
+            elif mode == "glass":
+                self.backdrop_value_label.setText(
+                    f"Stored schema tint: {rgba_summary(tint)} · ignored by native Glass; edit semantic surface roles below."
+                )
+            else:
+                self.backdrop_value_label.setText(
+                    f"Stored schema tint: {rgba_summary(tint)} · ignored while backdrop is Off."
+                )
         finally:
             self._updating = False
 
-    def _acrylic_mode_changed(self, index: int) -> None:
+    def _backdrop_mode_changed(self, index: int) -> None:
         if self._updating:
             return
-        mode = self.acrylic_mode.itemData(index)
-        if mode not in {"off", "acrylic"}:
+        mode = str(self.backdrop_mode.itemData(index))
+        if mode not in BACKDROP_MODE_LABELS:
             return
-        enabled = mode == "acrylic"
-        tint = self.draft.acrylic_tint
-        if enabled and tint.a == 0:
-            tint = Rgba(tint.r, tint.g, tint.b, 80)
-        self.draft.acrylic_enabled = enabled
-        self.draft.acrylic_tint = tint
-        self._refresh_acrylic_ui()
+        old_mode = self.draft.backdrop_mode
+        if old_mode == "acrylic" and self.draft.backdrop_tint.a > 0:
+            self._last_acrylic_tint = self.draft.backdrop_tint
+        self.draft.backdrop_mode = mode
+        if mode == "acrylic" and self.draft.backdrop_tint.a == 0:
+            self.draft.backdrop_tint = self._last_acrylic_tint
+        elif mode == "glass" and old_mode != "glass":
+            # Make newly-authored Glass files visibly honest: native Glass does
+            # not consume this tint. Keep RGB for reversible authoring but zero
+            # alpha rather than pretending it is a native Glass strength.
+            t = self.draft.backdrop_tint
+            self.draft.backdrop_tint = Rgba(t.r, t.g, t.b, 0)
+        self._refresh_backdrop_ui()
         self._update_dirty_status()
+        self._set_status(BACKDROP_MODE_DESCRIPTIONS[mode])
 
     def _acrylic_preset_changed(self, index: int) -> None:
-        if self._updating:
+        if self._updating or self.draft.backdrop_mode != "acrylic":
             return
         name = self.acrylic_preset.itemData(index)
         for preset in ACRYLIC_TINT_PRESETS:
             if preset.name == name:
-                self.draft.acrylic_tint = preset.tint
-                self._refresh_acrylic_ui()
+                self.draft.backdrop_tint = preset.tint
+                self._last_acrylic_tint = preset.tint
+                self._refresh_backdrop_ui()
                 self._update_dirty_status()
                 self._set_status(preset.description)
                 return
 
-    def _choose_acrylic_tint(self) -> None:
-        chosen = self._choose_qcolor(self.draft.acrylic_tint, "Choose Acrylic Tint / Strength")
+    def _choose_backdrop_tint(self) -> None:
+        if self.draft.backdrop_mode != "acrylic":
+            return
+        chosen = self._choose_qcolor(self.draft.backdrop_tint, "Choose Native Acrylic Tint / Strength")
         if chosen is None:
             return
-        if self.draft.acrylic_enabled and chosen.a == 0:
-            # Off is an explicit runtime state; alpha-zero acrylic is forbidden.
-            self.draft.acrylic_enabled = False
-            self._set_status("Alpha 0 selected: switched Backdrop to Off instead of creating invalid acrylic.")
-        self.draft.acrylic_tint = chosen
-        self._refresh_acrylic_ui()
+        if chosen.a == 0:
+            chosen = Rgba(chosen.r, chosen.g, chosen.b, 1)
+            self._set_status("Acrylic requires non-zero native tint alpha; clamped to 1/255.")
+        self.draft.backdrop_tint = chosen
+        self._last_acrylic_tint = chosen
+        self._refresh_backdrop_ui()
         self._update_dirty_status()
 
-    def _acrylic_alpha_changed(self, value: int) -> None:
-        if self._updating:
+    def _backdrop_alpha_changed(self, value: int) -> None:
+        if self._updating or self.draft.backdrop_mode != "acrylic":
             return
-        tint = self.draft.acrylic_tint
-        if self.draft.acrylic_enabled and value == 0:
-            self.draft.acrylic_enabled = False
-            self._set_status("Acrylic alpha 0 means Backdrop Off; the runtime never receives alpha-zero acrylic.")
-        self.draft.acrylic_tint = Rgba(tint.r, tint.g, tint.b, int(value))
-        self._refresh_acrylic_ui()
+        tint = self.draft.backdrop_tint
+        self.draft.backdrop_tint = Rgba(tint.r, tint.g, tint.b, max(1, int(value)))
+        self._last_acrylic_tint = self.draft.backdrop_tint
+        self._refresh_backdrop_ui()
         self._update_dirty_status()
 
-    # ----- common state updates ---------------------------------------
+    # Common updates ---------------------------------------------------
     def _after_value_change(self, kind: str, token: str) -> None:
         self._updating = True
         try:
@@ -1448,7 +1260,7 @@ class ThemeFoundryWindow(QMainWindow):
                     self._refresh_color_editor(token)
                 elif kind == "shadow":
                     self._refresh_shadow_editor(token)
-                elif kind == "gradient":
+                else:
                     self._refresh_gradient_editor(token)
                 state, detail = self._state_for(kind, token)
                 self.state_banner.setText(f"{state} · {detail}")
@@ -1476,7 +1288,6 @@ class ThemeFoundryWindow(QMainWindow):
         self.draft.name = self.name_edit.text()
         try:
             spec = self.draft.to_spec()
-            # Exercise the exact strict semantic JSON codec too.
             encoded = settings_theme_to_json(spec)
             decoded = settings_theme_from_json(encoded)
             if decoded != spec:
@@ -1499,18 +1310,13 @@ class ThemeFoundryWindow(QMainWindow):
         self.setWindowTitle(f"{APP_TITLE} — {path_name}{suffix}")
         self.save_btn.setEnabled(dirty or self.theme_path is not None)
 
-    # ----- reset -------------------------------------------------------
     def _reset_selected_opened(self) -> None:
-        if self.selected_entry is None:
-            return
-        kind, token = self.selected_entry
-        self._set_selected_from_spec(self.opened_spec, kind, token)
+        if self.selected_entry:
+            self._set_selected_from_spec(self.opened_spec, *self.selected_entry)
 
     def _reset_selected_default(self) -> None:
-        if self.selected_entry is None:
-            return
-        kind, token = self.selected_entry
-        self._set_selected_from_spec(self.default_spec, kind, token)
+        if self.selected_entry:
+            self._set_selected_from_spec(self.default_spec, *self.selected_entry)
 
     def _set_selected_from_spec(self, spec: SettingsThemeSpec, kind: str, token: str) -> None:
         value = self._value_for_spec(spec, kind, token)
@@ -1518,7 +1324,7 @@ class ThemeFoundryWindow(QMainWindow):
             self.draft.colors[token] = value
         elif kind == "shadow":
             self.draft.shadows[token] = value
-        elif kind == "gradient":
+        else:
             self.draft.gradients[token] = value
         self._after_value_change(kind, token)
 
@@ -1526,7 +1332,7 @@ class ThemeFoundryWindow(QMainWindow):
         name = self.draft.name
         self.draft = ThemeDraft.from_spec(self.opened_spec)
         self.draft.name = name
-        self._refresh_acrylic_ui()
+        self._reset_backdrop_helper()
         self._rebuild_tree(self.selected_entry)
         self._update_dirty_status()
 
@@ -1534,11 +1340,16 @@ class ThemeFoundryWindow(QMainWindow):
         name = self.draft.name
         self.draft = ThemeDraft.from_spec(self.default_spec)
         self.draft.name = name
-        self._refresh_acrylic_ui()
+        self._reset_backdrop_helper()
         self._rebuild_tree(self.selected_entry)
         self._update_dirty_status()
 
-    # ----- file lifecycle ---------------------------------------------
+    def _reset_backdrop_helper(self) -> None:
+        if self.draft.backdrop_tint.a > 0:
+            self._last_acrylic_tint = self.draft.backdrop_tint
+        self._refresh_backdrop_ui()
+
+    # File lifecycle ---------------------------------------------------
     def new_from_default(self) -> None:
         if not self._confirm_discard_if_dirty():
             return
@@ -1548,7 +1359,7 @@ class ThemeFoundryWindow(QMainWindow):
         self.theme_path = None
         self.name_edit.setText(self.draft.name)
         self.file_label.setText("New unsaved theme based on compiled Default Dark")
-        self._refresh_acrylic_ui()
+        self._reset_backdrop_helper()
         self._rebuild_tree(self.selected_entry)
         self._update_dirty_status()
 
@@ -1556,10 +1367,8 @@ class ThemeFoundryWindow(QMainWindow):
         if not self._confirm_discard_if_dirty():
             return
         directory = self.theme_path.parent if self.theme_path else self.repo_root / "themes"
-        path_str, _filter = QFileDialog.getOpenFileName(
-            self,
-            "Open semantic SRPSS Theme",
-            str(directory),
+        path_str, _ = QFileDialog.getOpenFileName(
+            self, "Open semantic SRPSS Theme", str(directory),
             f"SRPSS Theme (*{SETTINGS_THEME_FILE_EXTENSION});;All Files (*)",
         )
         if path_str:
@@ -1569,19 +1378,18 @@ class ThemeFoundryWindow(QMainWindow):
         try:
             spec = load_settings_theme_file(path)
         except Exception as exc:
-            legacy_note = self._legacy_theme_note(path)
-            self._error("Open Theme failed", f"{exc}{legacy_note}")
+            self._error("Open Theme failed", f"{exc}{self._legacy_theme_note(path)}")
             return
         self.opened_spec = spec
         self.draft = ThemeDraft.from_spec(spec)
         self.theme_path = path
         self.name_edit.setText(spec.name)
         self.file_label.setText(str(path))
-        self._refresh_acrylic_ui()
+        self._reset_backdrop_helper()
         self._rebuild_tree(self.selected_entry)
         self._update_dirty_status()
         self._save_prefs(last_theme=str(path))
-        self._set_status(f"Loaded strict semantic theme: {path.name}")
+        self._set_status(f"Loaded schema-v{spec.schema_version} semantic theme: {path.name}")
 
     def _legacy_theme_note(self, path: Path) -> str:
         try:
@@ -1591,7 +1399,7 @@ class ThemeFoundryWindow(QMainWindow):
         if isinstance(payload, dict) and payload.get("format") != "srpss.settings-theme":
             return (
                 "\n\nThis looks like an old source-scanner Theme Foundry file. "
-                "It cannot be safely mapped automatically to semantic schema-v4 roles."
+                f"It cannot be safely mapped automatically to semantic schema-v{SETTINGS_THEME_SCHEMA_VERSION} roles."
             )
         return ""
 
@@ -1602,15 +1410,14 @@ class ThemeFoundryWindow(QMainWindow):
         spec = self._current_spec_or_error()
         if spec is None:
             return
-        if self.theme_path.name.casefold() == CANONICAL_DEFAULT_FILENAME.casefold():
-            if spec != self.default_spec:
-                self._warning(
-                    "Default Dark is protected",
-                    "Default Dark.srtheme is the canonical mirror of compiled DEFAULT_DARK_SETTINGS_THEME. "
-                    "Save your edited theme under another filename instead.",
-                )
-                self.save_theme_as()
-                return
+        if self.theme_path.name.casefold() == CANONICAL_DEFAULT_FILENAME.casefold() and spec != self.default_spec:
+            self._warning(
+                "Default Dark is protected",
+                "Default Dark.srtheme is the canonical mirror of compiled DEFAULT_DARK_SETTINGS_THEME. "
+                "Save the edited theme under another filename instead.",
+            )
+            self.save_theme_as()
+            return
         self._write_theme(spec, self.theme_path)
 
     def save_theme_as(self) -> None:
@@ -1621,10 +1428,8 @@ class ThemeFoundryWindow(QMainWindow):
         themes_dir.mkdir(parents=True, exist_ok=True)
         safe_name = "".join(ch for ch in spec.name if ch not in '<>:"/\\|?*').strip() or "SRPSS Theme"
         initial = self.theme_path or (themes_dir / f"{safe_name}{SETTINGS_THEME_FILE_EXTENSION}")
-        path_str, _filter = QFileDialog.getSaveFileName(
-            self,
-            "Save semantic SRPSS Theme",
-            str(initial),
+        path_str, _ = QFileDialog.getSaveFileName(
+            self, "Save semantic SRPSS Theme", str(initial),
             f"SRPSS Theme (*{SETTINGS_THEME_FILE_EXTENSION});;All Files (*)",
         )
         if not path_str:
@@ -1633,10 +1438,7 @@ class ThemeFoundryWindow(QMainWindow):
         if path.suffix.lower() != SETTINGS_THEME_FILE_EXTENSION:
             path = path.with_suffix(SETTINGS_THEME_FILE_EXTENSION)
         if path.name.casefold() == CANONICAL_DEFAULT_FILENAME.casefold() and spec != self.default_spec:
-            self._warning(
-                "Default Dark is protected",
-                "Choose another filename. The canonical Default Dark mirror must remain exactly equal to the compiled fallback.",
-            )
+            self._warning("Default Dark is protected", "Choose another filename; the canonical mirror must remain exact.")
             return
         self._write_theme(spec, path)
 
@@ -1654,8 +1456,8 @@ class ThemeFoundryWindow(QMainWindow):
         self.draft = ThemeDraft.from_spec(spec)
         self.name_edit.setText(spec.name)
         self.file_label.setText(str(path))
+        self._reset_backdrop_helper()
         self._rebuild_tree(self.selected_entry)
-        self._refresh_acrylic_ui()
         self._update_dirty_status()
         self._save_prefs(last_theme=str(path))
         self._set_status(f"Saved and strict-reloaded complete semantic theme: {path.name}")
@@ -1664,20 +1466,22 @@ class ThemeFoundryWindow(QMainWindow):
         spec = self._current_spec_or_error()
         if spec is None:
             return
+        material = BACKDROP_MODE_LABELS[spec.backdrop.mode]
+        native = (
+            f"native tint {rgba_summary(spec.backdrop.tint)}" if spec.backdrop.mode == "acrylic"
+            else "native tint ignored; Qt semantic surfaces own Glass appearance" if spec.backdrop.mode == "glass"
+            else "native backdrop disabled"
+        )
         self._info(
             "Theme draft is valid",
-            f"{spec.name}\n\nSchema: {spec.schema_version}\n"
-            f"Colours: {len(spec.colors)}\nShadows: {len(spec.shadows)}\n"
-            f"Gradients: {len(spec.gradients)}\n"
-            f"Backdrop: {'Acrylic' if spec.acrylic.enabled else 'Off'}",
+            f"{spec.name}\n\nSchema: {spec.schema_version}\nColours: {len(spec.colors)}\n"
+            f"Shadows: {len(spec.shadows)}\nGradients: {len(spec.gradients)}\nBackdrop: {material}\n{native}",
         )
 
     def _check_default_mirror(self) -> None:
         path = self.repo_root / "themes" / CANONICAL_DEFAULT_FILENAME
         if not path.is_file():
-            self._set_status(
-                "Canonical Default Dark.srtheme is missing; compiled fallback still remains authoritative."
-            )
+            self._set_status("Canonical Default Dark.srtheme is missing; compiled fallback remains authoritative.")
             return
         try:
             mirror = load_settings_theme_file(path)
@@ -1685,16 +1489,13 @@ class ThemeFoundryWindow(QMainWindow):
             self._set_status(f"Canonical Default Dark mirror is invalid: {exc}")
             return
         if mirror != self.default_spec:
-            self._set_status(
-                "WARNING: Default Dark.srtheme does not equal compiled DEFAULT_DARK_SETTINGS_THEME."
-            )
+            self._set_status("WARNING: Default Dark.srtheme does not equal compiled DEFAULT_DARK_SETTINGS_THEME.")
 
     def _confirm_discard_if_dirty(self) -> bool:
         if not self._is_dirty():
             return True
         answer = QMessageBox.question(
-            self,
-            "Discard unsaved Theme Foundry changes?",
+            self, "Discard unsaved Theme Foundry changes?",
             "The working theme has unsaved changes. Discard them?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
@@ -1702,12 +1503,8 @@ class ThemeFoundryWindow(QMainWindow):
         return answer == QMessageBox.StandardButton.Yes
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
-        if self._confirm_discard_if_dirty():
-            event.accept()
-        else:
-            event.ignore()
+        event.accept() if self._confirm_discard_if_dirty() else event.ignore()
 
-    # ----- Settings launch / preferences -------------------------------
     def launch_settings(self) -> None:
         main_py = self.repo_root / "main.py"
         if not main_py.is_file():
@@ -1725,9 +1522,7 @@ class ThemeFoundryWindow(QMainWindow):
             self._error("Cannot launch Settings", str(exc))
             return
         current = self.theme_path.name if self.theme_path else "Default Dark"
-        self._set_status(
-            f"Launched Settings with --s · select {current!r} from the Themes tab to test it."
-        )
+        self._set_status(f"Launched Settings with --s · select {current!r} from Themes to test it.")
 
     def _save_prefs(self, *, last_theme: str | None = None) -> None:
         self._prefs["version"] = PREFERENCES_VERSION
@@ -1736,7 +1531,6 @@ class ThemeFoundryWindow(QMainWindow):
             self._prefs["last_theme"] = last_theme
         _save_preferences(self._prefs)
 
-    # ----- utility -----------------------------------------------------
     def _set_status(self, text: str) -> None:
         self.status_label.setText(text)
 
@@ -1748,11 +1542,6 @@ class ThemeFoundryWindow(QMainWindow):
 
     def _info(self, title: str, text: str) -> None:
         QMessageBox.information(self, title, text)
-
-
-# ---------------------------------------------------------------------------
-# CLI / validation helpers
-# ---------------------------------------------------------------------------
 
 
 def _find_repo_root(script_path: Path, explicit: str | None) -> Path:
@@ -1774,10 +1563,9 @@ def _validate_file(path: Path) -> int:
         print(f"INVALID: {path}\n{exc}", file=sys.stderr)
         return 2
     print(
-        f"VALID: {path}\n"
-        f"name={theme.name!r} schema={theme.schema_version} "
+        f"VALID: {path}\nname={theme.name!r} schema={theme.schema_version} "
         f"colors={len(theme.colors)} shadows={len(theme.shadows)} gradients={len(theme.gradients)} "
-        f"acrylic={'on' if theme.acrylic.enabled else 'off'}"
+        f"backdrop={theme.backdrop.mode} tint={theme.backdrop.tint.as_list()}"
     )
     return 0
 
@@ -1785,7 +1573,10 @@ def _validate_file(path: Path) -> int:
 def _dump_schema() -> int:
     theme = DEFAULT_DARK_SETTINGS_THEME
     print(f"SettingsThemeSpec schema {theme.schema_version}")
-    print(f"Acrylic: enabled={theme.acrylic.enabled} tint={theme.acrylic.tint.as_list()}")
+    print(f"Backdrop: mode={theme.backdrop.mode} tint={theme.backdrop.tint.as_list()}")
+    print("Modes: off, acrylic, glass")
+    print("  acrylic: state-4 native tint is meaningful and alpha must be non-zero")
+    print("  glass: state-3 native blur is untinted; backdrop.tint is ignored by the native adapter")
     print("\nColours:")
     for token in theme.colors:
         print(f"  {token}")
@@ -1799,28 +1590,11 @@ def _dump_schema() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="SRPSS semantic SettingsThemeSpec/.srtheme authoring tool"
-    )
-    parser.add_argument(
-        "--repo",
-        help="SRPSS repository root (auto-detected when installed under tools/)",
-    )
-    parser.add_argument(
-        "--open",
-        dest="open_theme",
-        help="Open one strict semantic .srtheme on startup",
-    )
-    parser.add_argument(
-        "--validate",
-        metavar="THEME",
-        help="Validate one .srtheme and exit",
-    )
-    parser.add_argument(
-        "--dump-schema",
-        action="store_true",
-        help="List current semantic schema roles and exit",
-    )
+    parser = argparse.ArgumentParser(description="SRPSS semantic SettingsThemeSpec/.srtheme authoring tool")
+    parser.add_argument("--repo", help="SRPSS repository root (auto-detected under tools/)")
+    parser.add_argument("--open", dest="open_theme", help="Open one strict semantic .srtheme on startup")
+    parser.add_argument("--validate", metavar="THEME", help="Validate one .srtheme and exit")
+    parser.add_argument("--dump-schema", action="store_true", help="List current semantic schema roles and exit")
     args = parser.parse_args(argv)
 
     repo_root = _find_repo_root(Path(__file__), args.repo)
@@ -1831,7 +1605,6 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-
     if args.validate:
         return _validate_file(Path(args.validate).expanduser().resolve())
     if args.dump_schema:

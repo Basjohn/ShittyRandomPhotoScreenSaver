@@ -1,11 +1,20 @@
 # Custom Style Implementation
 
-Last updated: 2026-08-26
+Last updated: 2026-08-28
 
 ## Settings UI
 
 Settings remains QWidget-based. Settings-window shadows under `ui/widgets/control_shadow.py` are Settings
 styling, separate from runtime widget shadow authority.
+
+Settings visual values are owned by schema-v5 `SettingsThemeSpec`; permanent architecture is
+`Docs/Settings_Theme_Architecture.md`. The frameless translucent Settings top-level is a layered HWND on Windows.
+Acrylic and Glass deliberately stay on the same AccentPolicy composition family: Acrylic uses state 4 with native theme
+tint; Glass uses untinted state 3 and semantic Qt RGBA surfaces supply its visible palette/opacity. Do not move native
+material behavior into QSS or use native backdrop changes to compensate for semantic stylesheet defects.
+
+`themes/dark.qss` is temporary legacy base-QSS residue, not palette authority. Its safe structural-selector retirement
+is recorded in `Future_Cleanup.md`; do not remove it by recreating its old colour literals in component code.
 
 ## Canonical runtime shadow controls — F0.5 CLOSED / independently GREEN
 

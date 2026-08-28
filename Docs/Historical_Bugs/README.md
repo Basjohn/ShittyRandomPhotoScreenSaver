@@ -1,6 +1,6 @@
 # Historical Bug Records
 
-Last updated: 2026-08-23
+Last updated: 2026-08-28
 
 Authoritative standalone incident records for significant SRPSS regressions.
 `Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory own the full
@@ -28,11 +28,11 @@ Rehome surviving regression coverage before deleting an old owner.
 
 - [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN at `5b3cbaef`; only physical dual-display acceptance remains.
 
-Current migration implementation sequencing is **not** owned by this folder. At the 2026-08-23
-reconciliation E1 is active in `Current_Plan.md`.
+Current migration implementation sequencing is **not** owned by this folder. Read `Current_Plan.md` for current status.
 
 ## R Records
 
+- [R-61 — Settings Glass Used The Wrong Composition Family For A Layered QWidget](R-61_Settings_Glass_Layered_HWND_Backdrop_Mismatch.md)
 - [R-60 — ImagePresenter DPR Split Rekeyed The Retained Current Texture](R-60_ImagePresenter_DPR_Texture_Identity.md)
 - [R-59 — Frozen Settings/Edit Recreation Retained Compiled Bound Methods](R-59_Runtime_Settings_Request_Input_Stack_Teardown.md)
 - [R-58 — Move To Custom Copied Stale Backing Values Instead Of The Curated Runtime State](R-58_Visualizer_Move_To_Custom_Preset_Authority.md)
