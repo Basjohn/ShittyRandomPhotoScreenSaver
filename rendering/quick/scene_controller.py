@@ -23,7 +23,7 @@ from widgets.spotify_visualizer.render_bridge import (
 )
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
 from widgets.spotify_visualizer.presentation_geometry import (
-    resize_visualizer_presentation_uniformly,
+    resize_visualizer_presentation,
 )
 
 from .bootstrap import quick_qml_root
@@ -545,13 +545,19 @@ class QuickSceneController(QObject):
                 max(1.0, float(self._window.width())),
                 max(1.0, float(self._window.height())),
             )
+        # CUSTOM carries two independent working operations: resize_scale is the
+        # uniform (wheel/corner) whole-size factor; current_viewport_extent is
+        # the edge operation's committed logical world (None -> baseline aspect).
+        # Both resolve here through the one canonical geometry projection; the
+        # scene controller never infers extent from the QML frame.
+        effective_extent = active_item.current_viewport_extent or baseline.viewport_extent
         target_width = (
-            baseline.viewport_extent[0]
+            effective_extent[0]
             * baseline.uniform_visual_scale
             * active_item.resize_scale
         )
         target_height = (
-            baseline.viewport_extent[1]
+            effective_extent[1]
             * baseline.uniform_visual_scale
             * active_item.resize_scale
         )
@@ -561,11 +567,12 @@ class QuickSceneController(QObject):
             max(display_size[0], local_origin[0] + target_width),
             max(display_size[1], local_origin[1] + target_height),
         )
-        resized = resize_visualizer_presentation_uniformly(
+        resized = resize_visualizer_presentation(
             baseline,
             display_size=display_size,
             outer_origin=local_origin,
             relative_scale=active_item.resize_scale,
+            viewport_extent=effective_extent,
         )
         self._apply_visualizer_presentation_items(
             resized,

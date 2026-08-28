@@ -3919,6 +3919,117 @@ def test_custom_layout_manager_visualizer_uniform_resize_uses_committed_rect_bas
     assert scaled.size() == QSize(410, 304)
 
 
+def test_visualizer_edge_resize_changes_one_extent_axis_without_touching_scale(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("A", QRect(0, 0, 6000, 4000))
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"spotify_visualizer": {"position": "Custom", "monitor": "1"}}
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    visualizer._vis_mode_str = "spectrum"
+    # A baseline-consistent 1.5-aspect committed rect: 630x420 == 420x280 world
+    # at uniform scale 1.5.
+    visualizer._custom_layout_local_rect = QRect(200, 200, 630, 420)
+    visualizer.setGeometry(200, 200, 630, 420)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    state = manager._shell_states["spotify_visualizer"]
+    item = state.item
+
+    assert item.viewport_resize_capable is True
+    assert item.baseline_viewport_extent == (420.0, 280.0)
+    assert item.current_viewport_extent == (420.0, 280.0)
+
+    origin_rect = QRect(item.current_global_rect)
+    # Faithful outer scale is derived from the width axis (=1.5).
+    scale = origin_rect.width() / 420.0
+    assert scale == pytest.approx(1.5)
+
+    # Drag the RIGHT edge outward by +300px: width grows, extent width grows by
+    # 300/1.5=200, and neither uniform scale nor the height extent move.
+    right_edge = QPoint(origin_rect.x() + origin_rect.width(), origin_rect.center().y())
+    assert manager.begin_retained_resize(item, "right", right_edge) is True
+    assert manager.update_retained_resize(
+        item, "right", right_edge + QPoint(300, 0), True
+    ) is True
+
+    assert item.resize_scale == 1.0
+    assert item.current_global_rect.x() == origin_rect.x()  # left anchor fixed
+    assert item.current_global_rect.width() == origin_rect.width() + 300
+    assert item.current_global_rect.height() == 420  # true height, unchanged
+    assert item.current_viewport_extent[0] == pytest.approx(
+        (origin_rect.width() + 300) / scale
+    )
+    assert item.current_viewport_extent[1] == pytest.approx(280.0)
+
+    # Now drag the BOTTOM edge outward by +150px at constant scale: height extent
+    # grows by 150/1.5=100, width extent preserved, scale untouched.
+    after_right = QRect(item.current_global_rect)
+    width_extent_after_right = item.current_viewport_extent[0]
+    bottom_edge = QPoint(after_right.center().x(), after_right.y() + 420)
+    assert manager.begin_retained_resize(item, "bottom", bottom_edge) is True
+    assert manager.update_retained_resize(
+        item, "bottom", bottom_edge + QPoint(0, 150), True
+    ) is True
+
+    assert item.resize_scale == 1.0
+    assert item.current_global_rect.y() == after_right.y()  # top anchor fixed
+    assert item.current_global_rect.width() == after_right.width()  # unchanged
+    assert item.current_global_rect.height() == 420 + 150
+    assert item.current_viewport_extent[0] == pytest.approx(width_extent_after_right)
+    assert item.current_viewport_extent[1] == pytest.approx((420 + 150) / scale)
+
+    # Cancel restores baseline scale AND extent exactly.
+    assert manager.cancel_session() is True
+    assert item.current_viewport_extent == (420.0, 280.0)
+    assert item.resize_scale == 1.0
+
+
+def test_visualizer_edge_resize_respects_minimum_outer_size_without_scaling(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("A", QRect(0, 0, 6000, 4000))
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"spotify_visualizer": {"position": "Custom", "monitor": "1"}}
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    visualizer._vis_mode_str = "spectrum"
+    visualizer._custom_layout_local_rect = QRect(200, 200, 630, 420)
+    visualizer.setGeometry(200, 200, 630, 420)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    state = manager._shell_states["spotify_visualizer"]
+    item = state.item
+    origin_rect = QRect(item.current_global_rect)
+    min_width = manager._min_size_for_state(state).width()
+
+    # Drag the RIGHT edge far past the left anchor: width clamps to the minimum
+    # outer size, uniform scale is never touched to satisfy the minimum.
+    right_edge = QPoint(origin_rect.x() + origin_rect.width(), origin_rect.center().y())
+    assert manager.begin_retained_resize(item, "right", right_edge) is True
+    assert manager.update_retained_resize(
+        item, "right", QPoint(origin_rect.x() - 500, origin_rect.center().y()), True
+    ) is True
+
+    assert item.current_global_rect.width() == min_width
+    assert item.resize_scale == 1.0
+    assert item.current_viewport_extent[1] == pytest.approx(280.0)
+    assert manager.cancel_session() is True
+
+
 def test_custom_layout_manager_visualizer_legacy_scale_payload_rebaselines_to_committed_rect(qtbot):
     _reset_custom_layout_manager_state()
     screen = _FakeScreen("A", QRect(0, 0, 1600, 1200))
