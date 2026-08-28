@@ -9,9 +9,13 @@ Cross-links:
 - `Docs/TestSuite.md`
 - `Docs/Harness_Index.md`
 - `Future_Cleanup.md`
+- `Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md`
 
 `Docs/TestSuite.md` is the canonical live test inventory and retirement ledger. This document owns
 build/tooling/installed-validation shape, not a competing test manifest.
+
+The J decomposition owns the final **execution matrix/sign-off order** across build, installed, physical, lifecycle and
+performance evidence. This document remains the durable build/tooling contract beneath it.
 
 ## 1. Build risk is handled early; build execution is deferred
 

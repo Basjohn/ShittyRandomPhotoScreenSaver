@@ -36,6 +36,7 @@ J final installed/physical validation
 | `G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` | current bounded G4 ownership/spatial correction playbook |
 | `Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` | G7 caller retirement + G8 focus/MC/input closure |
 | `Remaining_H_Production_Cutover_Decomposition.md` | H owner wiring, viewport-config binding, cardinality and old-host deletion |
+| `Remaining_J_Final_Installed_Acceptance_Decomposition.md` | J compiled/installed/physical acceptance and closure matrix |
 
 ## Current scaffolding rule
 
@@ -54,6 +55,13 @@ viewport extent, deterministic committed-vs-temporary CUSTOM ownership, Bubble B
 Do not stop for an independent audit after each GREEN G slice. Finish the bounded G4 corrections, G7 and G8 with focused
 tests/self-audit, checkpoint the complete G state, then stop once for independent audit before H. Real RED/YELLOW blockers
 still stop immediately.
+
+## Final-phase decomposition rule
+
+H already has a decomposition because it changes production ownership. J has a decomposition because physical/build acceptance
+spans many environments and cannot safely live as a prose footnote. I deliberately does **not** have a standing decomposition:
+post-H residue must be derived from the exact caller graph. If I ceases to be residue-only, create a bounded decomposition from
+that exact source rather than following a speculative pre-H deletion list.
 
 ## Off-rails rule
 

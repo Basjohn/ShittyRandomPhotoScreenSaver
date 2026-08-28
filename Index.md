@@ -40,6 +40,7 @@ G8 focus/MC closure. One independent audit gates the complete checkpointed G sta
 | G4 post-checkpoint correction playbook | `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` |
 | G7/G8 auxiliary/focus implementation route | `Docs/QtQuick_Migration/Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` |
 | H production cutover implementation route | `Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md` |
+| J final installed/physical acceptance route | `Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md` |
 
 Reorientation/handoff files are conversation/operator artifacts, not repository architecture. Do not add a current
 reorientation file under `Docs/` unless the operator explicitly asks for a repository handoff artifact.
@@ -69,7 +70,9 @@ for independent audit between ordinary GREEN G slices; checkpoint all of G, then
 
 H is final production owner/orchestration wiring plus remaining old physical-host deletion. It must bind the existing G
 viewport-config ownership correctly; it does not get to reset committed non-baseline extent merely because CUSTOM is
-inactive. I is residue. J is final installed/physical acceptance, including the deferred all-five-mode viewport eyes-on gate.
+inactive. I is deliberately source-driven residue and has no standing pre-H decomposition. J is final installed/physical
+acceptance, including the deferred all-five-mode viewport eyes-on gate; use
+`Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md`.
 
 ## Transitions
 

@@ -728,6 +728,9 @@ no current test inventory row or product gate should restore the family.
 
 ## 11. Physical and acceptance evidence
 
+Final J execution/sign-off follows `Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md`. This
+section remains the test-ledger rule for distinguishing deterministic status from physical evidence.
+
 Physical display/refresh/DPR/GPU/subjective claims remain separate from deterministic test status.
 
 Report per display as relevant:
