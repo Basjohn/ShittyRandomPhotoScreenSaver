@@ -49,6 +49,8 @@ def _item(
     *,
     duplicate: bool = False,
     resizable: bool = False,
+    viewport_capable: bool = False,
+    baseline_viewport_extent: tuple[float, float] | None = None,
 ) -> CustomLayoutSessionItem:
     return CustomLayoutSessionItem(
         source_key=CustomLayoutKey(widget_id, display_identity),
@@ -61,6 +63,8 @@ def _item(
         current_enabled=True,
         is_duplicate=duplicate,
         resize_capable=resizable,
+        viewport_resize_capable=viewport_capable,
+        baseline_viewport_extent=baseline_viewport_extent,
     )
 
 
@@ -168,6 +172,68 @@ def test_overlay_resize_requests_route_through_python_and_keep_item_identity() -
     assert model.beginResize(0, "bottom_right", 0.0, 0.0) is False
     assert model.resizeItem(0, "bottom_right", 0.0, 0.0, True) is False
     assert model.resizeWheel(0, -120) is False
+
+
+def test_overlay_exposes_viewport_capability_and_gates_edges_from_uniform_widgets() -> None:
+    session = CustomLayoutSession()
+    clock = _item("clock", "display:a", QRect(110, 220, 180, 80), resizable=True)
+    visualizer = _item(
+        "spotify_visualizer",
+        "display:a",
+        QRect(300, 240, 630, 420),
+        resizable=True,
+        viewport_capable=True,
+        baseline_viewport_extent=(420.0, 280.0),
+    )
+    session.add_item(clock)
+    session.add_item(visualizer)
+    begins: list[tuple[str, str]] = []
+    updates: list[tuple[str, str, bool]] = []
+
+    def _begin(item, handle, cursor):
+        begins.append((item.source_key.widget_id, handle))
+        return True
+
+    def _update(item, handle, cursor, finalize):
+        updates.append((item.source_key.widget_id, handle, finalize))
+        return True
+
+    model = CustomLayoutOverlayModel(
+        session=session,
+        display_identity="display:a",
+        resize_begin_handler=_begin,
+        resize_update_handler=_update,
+    )
+    role_names = {bytes(v).decode(): k for k, v in model.roleNames().items()}
+    assert "viewportResizeCapable" in role_names
+    viewport_role = role_names["viewportResizeCapable"]
+    clock_row = next(
+        r for r in range(model.rowCount())
+        if model.data(model.index(r, 0), role_names["widgetId"]) == "clock"
+    )
+    vis_row = next(
+        r for r in range(model.rowCount())
+        if model.data(model.index(r, 0), role_names["widgetId"]) == "spotify_visualizer"
+    )
+    assert model.data(model.index(clock_row, 0), viewport_role) is False
+    assert model.data(model.index(vis_row, 0), viewport_role) is True
+
+    # The uniform clock accepts corners but is refused every viewport edge.
+    assert model.beginResize(clock_row, "bottom_right", 1.0, 1.0) is True
+    for edge in ("left", "right", "top", "bottom"):
+        assert model.beginResize(clock_row, edge, 1.0, 1.0) is False
+        assert model.resizeItem(clock_row, edge, 1.0, 1.0, False) is False
+
+    # The visualizer accepts both corner (uniform) and edge (viewport) handles.
+    assert model.beginResize(vis_row, "top_left", 1.0, 1.0) is True
+    for edge in ("left", "right", "top", "bottom"):
+        assert model.beginResize(vis_row, edge, 1.0, 1.0) is True
+        assert model.resizeItem(vis_row, edge, 2.0, 2.0, True) is True
+
+    assert ("clock", "bottom_right") in begins
+    assert all(widget == "spotify_visualizer" for widget, edge in begins
+               if edge in {"left", "right", "top", "bottom"})
+    assert {edge for widget, edge, _ in updates} == {"left", "right", "top", "bottom"}
 
 
 def test_shared_session_transfer_moves_frame_between_display_models_and_cancel_restores() -> None:
