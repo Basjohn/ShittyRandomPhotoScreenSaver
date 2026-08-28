@@ -18,10 +18,28 @@ Last updated: 2026-08-28
 | custom transition pixels | inline display `QSGRenderNode` |
 | custom visualizer pixels | inline visualizer `QSGRenderNode` |
 | Settings UI | existing QWidget/settings owners |
+| Settings theme semantics/backdrop contract | `Docs/Settings_Theme_Architecture.md`; `SettingsThemeSpec` + Settings renderers + `core/windows/dwm_blur.py` |
 
 `QQuickWidget`, selectable old-presenter fallback and a second accelerated runtime surface are prohibited.
 Engine startup may still reference legacy `DisplayWidget` until H; that is a temporary routing fact, not a requirement
 that the legacy half-migrated runtime remain functional.
+
+## Settings theme ownership
+
+```text
+SettingsThemeSpec / strict .srtheme
+-> ui/settings_theme_runtime.py
+-> QWidget semantic renderers
+-> ui/settings_dialog.py shell/native-mode ownership
+-> core/windows/dwm_blur.py AccentPolicy adapter
+```
+
+On the current frameless translucent Settings HWND, Acrylic and Glass deliberately share the AccentPolicy composition
+family. Acrylic = state 4 with theme native tint. Glass = untinted state 3; semantic Qt RGBA surfaces own its visible
+colour/opacity. Off = state 0. Do not conflate AccentPolicy state 3 with the documented `DwmEnableBlurBehindWindow` API.
+
+`themes/dark.qss` is legacy base-stylesheet residue, not visual authority. Its audited retirement is owned by
+`Future_Cleanup.md`; do not alter native backdrop or forged-edge geometry merely to delete it.
 
 ## H production runtime chain
 

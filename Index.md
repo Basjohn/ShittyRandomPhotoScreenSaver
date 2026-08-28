@@ -21,6 +21,7 @@ correction promoted ahead of G7/G8 closure.**
 | current work / sequence | `Current_Plan.md` |
 | durable product/architecture | `Spec.md` |
 | fast current owner map | `Docs/Contracts.md` |
+| Settings theme / Acrylic / Glass architecture | `Docs/Settings_Theme_Architecture.md` |
 | physical scene/presenter architecture | `Docs/Compositor_Architecture.md` |
 | CUSTOM/edit/input/auxiliary | `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md` |
 | runtime host/lifecycle/H | `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md` |
@@ -37,6 +38,13 @@ correction promoted ahead of G7/G8 closure.**
 | G4 viewport-resize implementation route | `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` |
 | G7/G8 auxiliary/focus implementation route | `Docs/QtQuick_Migration/Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` |
 | H production cutover implementation route | `Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md` |
+
+## Settings themes
+
+`Docs/Settings_Theme_Architecture.md` is the permanent Settings-theme contract. It owns schema-v5 theme semantics,
+layered-QWidget native backdrop mapping, Acrylic/Glass division of responsibility, Theme Foundry authoring rules and the
+boundary around future `dark.qss` retirement. Historical Glass investigation is R-61; temporary theme planning notes are
+not current authority.
 
 ## Closed ordinary-family migration
 

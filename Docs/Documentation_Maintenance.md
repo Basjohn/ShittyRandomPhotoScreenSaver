@@ -9,12 +9,17 @@ Last updated: 2026-08-28
 | `Current_Plan.md` | current checkpoint, active blocker/work, next sequence, live acceptance debt |
 | `Spec.md` | durable product/architecture |
 | focused docs/guardrails | durable subsystem contracts |
+| `Docs/Settings_Theme_Architecture.md` | permanent Settings theme / Acrylic / Glass / Foundry contract |
 | `Index.md` / `Docs/Contracts.md` | routing/current owner map |
 | `Docs/audits/` | independent audit findings and closure evidence |
 | `Docs/TestSuite.md` | live test inventory/status ledger |
 | `Future_Cleanup.md` | deferred deletion/debt |
 | `Future_Work.md` | genuinely deferred features/experiments |
 | historical plans/reports/bugs/evidence | history only |
+
+Temporary working/theme-plan files may help an active migration but are not durable architecture. When a focused current
+contract exists, route permanent invariants there and retire the temporary plan rather than making other docs depend on
+it.
 
 ## These are not changelogs
 
@@ -84,6 +89,9 @@ heavy family implementation resolves at real activation/caller boundary.
 Inspect at least `Current_Plan.md`, `Spec.md`, `Index.md`, `Docs/Contracts.md`, `Future_Cleanup.md`, relevant focused
 QtQuick docs, `Docs/10_WIDGET_GUIDELINES.md` when ordinary-family patterns changed, feature plans naming concrete owners,
 and `Docs/TestSuite.md` when test ownership/inventory materially changed.
+
+For Settings theme/backdrop ownership changes, also inspect `Docs/Settings_Theme_Architecture.md`, Theme Foundry,
+`ui/settings_theme_spec.py`, `ui/settings_theme.py`, `ui/settings_dialog.py` and `core/windows/dwm_blur.py` together.
 
 Historical bodies need not be modernized if clearly evidence-scoped.
 

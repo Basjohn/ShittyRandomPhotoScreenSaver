@@ -43,6 +43,32 @@ merely to keep a half-migrated screensaver functional. Caller-dead old pixels/he
 replacement owns the contract. H wires the destination production owner and removes the remaining physical host; I is
 residue only; J is full installed/physical acceptance.
 
+## Settings themes / native backdrop
+
+Settings remains a frameless translucent QWidget top-level. `SettingsThemeSpec` schema v5 is the semantic visual
+authority and compiled Default Dark is the unconditional no-file fallback. Complete `.srtheme` files may request
+`off`, `acrylic` or `glass` and must pass strict whole-theme validation.
+
+The current Windows Settings top-level is a layered HWND. Both translucent product materials therefore stay on the
+physically proven `SetWindowCompositionAttribute` AccentPolicy family:
+
+```text
+Acrylic -> ACCENT_ENABLE_ACRYLICBLURBEHIND (state 4) + theme native tint
+Glass   -> ACCENT_ENABLE_BLURBEHIND        (state 3) + no native tint
+Off     -> ACCENT_DISABLED                 (state 0)
+```
+
+Glass colour and opacity are owned by semantic Qt RGBA surfaces above the untinted native blur. AccentPolicy state 3 is
+not the documented `DwmEnableBlurBehindWindow` API and must not be reasoned about as though those mechanisms were the
+same.
+
+DWM system-backdrop/redirection-bitmap experiments are not part of the current Settings contract. Reintroducing them
+requires an intentional window/presentation architecture change and new physical proof, not a theme tweak. Native
+activation is not repaired by timers, duplicate calls or QSS replay.
+
+`themes/dark.qss` is legacy stylesheet residue, not theme authority. Its guarded retirement is in `Future_Cleanup.md`.
+The complete permanent contract is `Docs/Settings_Theme_Architecture.md`.
+
 ## Capability / ordinary instance state
 
 Family activation/deactivation is different from ordinary instance ON/OFF. Capability deactivation preserves detail
@@ -112,6 +138,9 @@ Canonical direction is NW/N/NE/W/E/SW/S/SE, default SE, resolved in Python. No T
 `widgets.shadows.offset`, `shadowtuning.json`, or replacement hidden tuning. Ordinary card = cached retained
 `RectangularShadow`; ordinary text = duplicate glyph + signed offset; whole-widget fade = one retained root opacity.
 Clock analogue hard shadows are permanent family-authored exceptions under doc 11.
+
+Settings-window theme/shadow ownership is separate from runtime overlay-widget shadow authority; see
+`Docs/Settings_Theme_Architecture.md` and `ui/widgets/control_shadow.py`.
 
 ## Geometry / CUSTOM
 

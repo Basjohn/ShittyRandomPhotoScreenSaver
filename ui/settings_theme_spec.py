@@ -78,10 +78,16 @@ class NativeBackdropStyle:
     * ``off`` disables the native composition backdrop;
     * ``acrylic`` uses theme-tinted AccentPolicy Acrylic and requires non-zero
       tint alpha because alpha-zero Acrylic is an unreliable/degenerate state;
-    * ``glass`` uses a near-clear AccentPolicy blur underlay compatible with the
-      frameless layered Settings HWND. The semantic Qt surfaces own the visible
-      Glass tint and opacity, so the stored Glass backdrop tint may be fully
-      transparent.
+    * ``glass`` uses untinted AccentPolicy ``ACCENT_ENABLE_BLURBEHIND``
+      (state 3) on the frameless layered Settings HWND. The native Glass path
+      does not consume ``tint``; semantic Qt surfaces own visible Glass colour
+      and opacity. The stored tint remains part of the common file schema.
+
+    Acrylic and Glass deliberately stay on the same AccentPolicy composition
+    family because that is the physically validated contract for the current
+    layered QWidget top-level. AccentPolicy state 3 is distinct from the
+    documented ``DwmEnableBlurBehindWindow`` API and must not be conflated with
+    it.
 
     The platform adapter owns how each mode is rendered. Theme data owns the
     requested product mode and its schema-level tint value.

@@ -1,8 +1,8 @@
 """Pure semantic model for SRPSS Theme Foundry.
 
-This module intentionally contains no Qt and no source scanner.  Theme Foundry
-edits the same immutable :class:`SettingsThemeSpec` that the Settings runtime
-consumes, and serializes through ``ui.settings_theme_io``.
+Theme Foundry edits the same immutable schema-v5 :class:`SettingsThemeSpec`
+consumed by Settings and serializes only through ``ui.settings_theme_io``.
+There is no source/QSS scanner and no second theme schema hidden in the tool.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from ui.settings_theme_spec import (
-    AcrylicStyle,
+    NativeBackdropStyle,
     DEFAULT_DARK_SETTINGS_THEME,
     GradientStop,
     GradientStyle,
@@ -28,38 +28,54 @@ class AcrylicTintPreset:
     description: str
 
 
+# These are explicitly Acrylic-only. Glass has no native tint in the accepted
+# Settings architecture; its colour/opacity belongs to semantic Qt surfaces.
 ACRYLIC_TINT_PRESETS: tuple[AcrylicTintPreset, ...] = (
     AcrylicTintPreset(
         "Charcoal (Default)",
         Rgba(24, 24, 24, 80),
-        "Current SRPSS Default Dark acrylic tint.",
+        "Default Dark native Acrylic tint.",
     ),
     AcrylicTintPreset(
-        "Smoke",
+        "Neutral Smoke",
         Rgba(42, 44, 50, 68),
-        "Slightly lighter neutral smoke while retaining obvious acrylic blur.",
+        "Lighter neutral native Acrylic tint.",
     ),
     AcrylicTintPreset(
-        "Neutral Glass-ish Tint",
-        Rgba(210, 218, 224, 34),
-        "A pale neutral tint. Runtime effect is still Acrylic, not a separate Glass compositor mode.",
+        "Cool Acrylic",
+        Rgba(62, 82, 112, 58),
+        "Cool native Acrylic tint; this does not change the material to Glass.",
     ),
     AcrylicTintPreset(
-        "Cool Glass-ish Tint",
-        Rgba(92, 126, 168, 42),
-        "Cool translucent tint over the supported Acrylic runtime effect.",
+        "Warm Acrylic",
+        Rgba(110, 79, 58, 62),
+        "Warm native Acrylic tint; this does not change the material to Glass.",
     ),
     AcrylicTintPreset(
-        "Warm Glass-ish Tint",
-        Rgba(138, 104, 82, 48),
-        "Warm translucent tint over the supported Acrylic runtime effect.",
-    ),
-    AcrylicTintPreset(
-        "Clear-ish Acrylic",
+        "Weak Tint Acrylic",
         Rgba(24, 24, 24, 18),
-        "Very weak tint. Still Acrylic; use Backdrop Off for a real disabled state.",
+        "Very weak but still non-zero native Acrylic tint.",
     ),
 )
+
+BACKDROP_MODE_LABELS: dict[str, str] = {
+    "off": "Off",
+    "acrylic": "Acrylic",
+    "glass": "Glass",
+}
+
+BACKDROP_MODE_DESCRIPTIONS: dict[str, str] = {
+    "off": "No native Settings backdrop.",
+    "acrylic": (
+        "AccentPolicy state 4. The backdrop tint below is a real native tint/strength "
+        "and must have non-zero alpha."
+    ),
+    "glass": (
+        "AccentPolicy state 3 with no native tint. Visible Glass colour and opacity "
+        "come from the semantic Qt RGBA surface roles; backdrop.tint is retained in "
+        "the file schema but ignored by the native Glass adapter."
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,8 +87,7 @@ class LayerRelation:
     reverse_solve: bool = False
 
 
-# These relationships are deliberately semantic and high-confidence.  They are
-# presentation guidance for Foundry only and do not become runtime authorities.
+# Presentation guidance for Foundry only; runtime renderers remain authoritative.
 LAYER_RELATIONS: tuple[LayerRelation, ...] = (
     LayerRelation(
         "window.dialog_glass",
@@ -205,7 +220,6 @@ _COLOR_CATEGORY_PREFIXES: tuple[tuple[str, str], ...] = (
     ("context.", "Context Menu"),
 )
 
-
 _SPECIAL_WORDS = {
     "rss": "RSS",
     "api": "API",
@@ -218,10 +232,9 @@ _SPECIAL_WORDS = {
 
 def _human_piece(piece: str) -> str:
     piece = piece.replace("_", " ")
-    words = []
-    for word in piece.split():
-        words.append(_SPECIAL_WORDS.get(word.lower(), word.capitalize()))
-    return " ".join(words)
+    return " ".join(
+        _SPECIAL_WORDS.get(word.lower(), word.capitalize()) for word in piece.split()
+    )
 
 
 def friendly_token_label(token: str) -> str:
@@ -257,8 +270,8 @@ def semantic_description(kind: str, token: str) -> str:
 @dataclass(slots=True)
 class ThemeDraft:
     name: str
-    acrylic_enabled: bool
-    acrylic_tint: Rgba
+    backdrop_mode: str
+    backdrop_tint: Rgba
     colors: dict[str, Rgba]
     shadows: dict[str, ShadowStyle]
     gradients: dict[str, GradientStyle]
@@ -267,8 +280,8 @@ class ThemeDraft:
     def from_spec(cls, spec: SettingsThemeSpec) -> "ThemeDraft":
         return cls(
             name=spec.name,
-            acrylic_enabled=spec.acrylic.enabled,
-            acrylic_tint=spec.acrylic.tint,
+            backdrop_mode=spec.backdrop.mode,
+            backdrop_tint=spec.backdrop.tint,
             colors=dict(spec.colors),
             shadows=dict(spec.shadows),
             gradients=dict(spec.gradients),
@@ -277,9 +290,9 @@ class ThemeDraft:
     def to_spec(self) -> SettingsThemeSpec:
         return SettingsThemeSpec(
             name=self.name,
-            acrylic=AcrylicStyle(
-                enabled=self.acrylic_enabled,
-                tint=self.acrylic_tint,
+            backdrop=NativeBackdropStyle(
+                mode=self.backdrop_mode,
+                tint=self.backdrop_tint,
             ),
             colors=dict(self.colors),
             shadows=dict(self.shadows),
@@ -317,9 +330,7 @@ def nearest_composite_relation(token: str) -> LayerRelation | None:
 
 def relations_for(token: str) -> tuple[LayerRelation, ...]:
     return tuple(
-        relation
-        for relation in LAYER_RELATIONS
-        if token in {relation.lower, relation.upper}
+        relation for relation in LAYER_RELATIONS if token in {relation.lower, relation.upper}
     )
 
 
@@ -330,13 +341,7 @@ def solve_layer_for_target(
     colors: dict[str, Rgba],
     target_rgb: tuple[int, int, int],
 ) -> tuple[Rgba | None, str]:
-    """Solve the selected simple alpha-over layer at its current alpha.
-
-    The target is visible RGB only.  The selected layer's alpha is preserved so
-    clicking the predicted preview does not silently rewrite opacity.  If the
-    requested target cannot be represented without channel clipping at that
-    alpha, ``None`` is returned with a useful explanation.
-    """
+    """Solve the selected simple alpha-over layer at its current alpha."""
 
     if relation.kind != "composite" or not relation.reverse_solve:
         return None, "This relationship is not a reversible alpha-over mapping."
@@ -358,11 +363,10 @@ def solve_layer_for_target(
     def solve_channels(denominator: float, fixed_terms: Iterable[float]) -> list[float] | None:
         if denominator <= 1e-9:
             return None
-        solved = []
-        for target_channel, fixed_term in zip(target, fixed_terms):
-            value = (target_channel * out_a - fixed_term) / denominator
-            solved.append(value)
-        return solved
+        return [
+            (target_channel * out_a - fixed_term) / denominator
+            for target_channel, fixed_term in zip(target, fixed_terms)
+        ]
 
     if selected_token == relation.upper:
         fixed = (
@@ -438,6 +442,8 @@ def matching_acrylic_preset(tint: Rgba) -> str | None:
 
 __all__ = [
     "ACRYLIC_TINT_PRESETS",
+    "BACKDROP_MODE_DESCRIPTIONS",
+    "BACKDROP_MODE_LABELS",
     "LAYER_RELATIONS",
     "AcrylicTintPreset",
     "LayerRelation",
