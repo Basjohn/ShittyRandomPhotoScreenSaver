@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-08-23
+Last updated: 2026-08-29
 
 Compact routing for recurring investigation and migration sign-off commands.
 
@@ -162,9 +162,9 @@ Focused Quick harnesses prove as relevant:
 - resource cleanup;
 - exact transition/visualizer/widget contract being changed.
 
-## 8. Phase-E capability / ownership checks
+## 8. Closed E/F ownership regressions and current G routing
 
-### 8.1 Landed E2/E2.7 foundation
+### 8.1 Landed E/F capability/ownership foundation
 
 Focused tests already guard:
 
@@ -189,22 +189,21 @@ tests/test_visualizer_failover_reclaim.py
 
 This list is routing, not a frozen manifest.
 
-### 8.2 Active E1 ownership
+### 8.2 Closed E1 ownership regression
 
-E1 is the active next Phase-E slice. Harness/test the **actual owner** for:
+E1 is closed. Its surviving owner tests remain permanent regression coverage for:
 
 - family-exclusive providers/models;
 - timers/polls/refresh callbacks;
 - processes/workers;
 - shared-service references;
 - generation/model registration;
-- clean deactivation retirement;
-- reactivation;
+- clean deactivation retirement/reactivation;
 - fresh-process deactivated import/construction dormancy.
 
-Do not infer full provider/process dormancy from old factory-creation gating alone.
+Do not describe this as future Phase-E work and do not infer full provider/process dormancy from factory-creation gating alone.
 
-### 8.3 Landed E2 Settings UI regression
+### 8.3 Landed Settings capability UI regression
 
 Preserve focused Settings/runtime cases for:
 
@@ -217,7 +216,28 @@ Preserve focused Settings/runtime cases for:
 - Random effective-pool correctness;
 - explicit zero-activated-transition state repair.
 
-Provider/model/resource retirement assertions belong to E1 once they reach the actual owner.
+Provider/model/resource retirement assertions stay at the actual neutral owner; do not move them back into presentation tests.
+
+### 8.4 Current G focused routing
+
+G4 core viewport resize is landed; the immediate bar is the bounded post-checkpoint correction batch:
+
+```powershell
+pytest tests/test_bubble_viewport_config_route.py tests/test_bubble_viewport_reflow.py tests/test_custom_layout_manager.py tests/test_qtquick_custom_layout_overlay.py tests/test_visualizer_runtime_controller.py -q --tb=short
+```
+
+Add the exact Bubble BTF/replay/cadence suites named by the correction decomposition when Bubble simulation/output code
+changes. Never regenerate goldens merely to make viewport migration pass.
+
+After G4 corrections are GREEN, G7/G8 routing centers on:
+
+```powershell
+pytest tests/test_qtquick_auxiliary.py tests/test_qtquick_context_menu.py tests/test_qtquick_input_controller.py tests/test_qtquick_runtime.py -q --tb=short
+```
+
+Use focused two-display/runtime-shaped harnesses for A -> B -> A focus/Ctrl/context/CUSTOM behavior when available. Physical
+hardware ingress and final installed multi-display acceptance remain J evidence. Do not stop for independent audit between
+GREEN G slices; the audit stop is once after complete G is checkpointed.
 
 ## 9. Physical evidence
 

@@ -1,6 +1,6 @@
 # Documentation Maintenance
 
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
 ## Roles
 
@@ -20,6 +20,10 @@ Last updated: 2026-08-28
 Temporary working/theme-plan files may help an active migration but are not durable architecture. When a focused current
 contract exists, route permanent invariants there and retire the temporary plan rather than making other docs depend on
 it.
+
+Reorientation/handoff summaries are operator/conversation aids by default, not repository architecture. Keep them outside
+`Docs/` unless the operator explicitly asks for a repository handoff artifact. The repository should route through
+`Current_Plan.md` + focused contracts rather than a dated reorientation file.
 
 ## These are not changelogs
 
@@ -44,8 +48,10 @@ to implement it. Determine which side is authoritative:
 - genuinely superseded design -> rewrite the contract cleanly to the new destination;
 - uncertain historical wording -> inspect source/evidence/operator intent before changing either.
 
-The 2026-08-28 visualizer viewport-resize correction is the canonical example: the destination contract requires edge
-viewport reflow for all five modes, so the missing Bubble/source affordance is migration debt, not prose to erase.
+The visualizer viewport work is the canonical example: the destination contract required edge viewport reflow for all five
+modes, so the earlier missing Bubble/source affordance was implementation debt rather than prose to erase. Once that core
+path landed, current docs then had to stop claiming Bubble was still capability-gated and name only the bounded
+post-checkpoint ownership/spatial omissions that genuinely remained.
 
 ## Focused docs after closure
 
@@ -77,6 +83,14 @@ caller-dead components that can already leave.
 
 A closed phase must not remain described as `ACTIVE`, `candidate`, `awaiting audit` or future work in a live authority
 document. A partial checkpoint must name exactly what remains unproven.
+
+
+## Checkpoint/hash wording
+
+Exact commit hashes are useful in `Current_Plan.md`, audits and checkpoint-scoped evidence. Avoid copying them into broad
+living guides/indexes/decompositions unless that exact tree is intrinsic to the document. A stale hash in a live routing doc
+creates false authority. Prefer `inspect exact current source; later source outranks owner-name details` for executable
+decompositions that are meant to survive several bounded commits.
 
 ## Import dormancy wording
 

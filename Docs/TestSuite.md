@@ -1,23 +1,28 @@
 # Test Suite Guide
 
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
 Reviewed source basis:
 
 ```text
-source checkpoint = 8642c60e
-F0–F8 closed; G1–G6 closed; G7 near closure
-active correction = visualizer independent viewport-extent resize for all five modes
+F0–F8 closed; G1–G6 closed
+G4 core viewport-edge implementation + Bubble reflow + all-five-mode capability policy landed
+active first bar = bounded G4 post-checkpoint audit corrections
+then G7 caller-proof closure -> G8 focus/MC closure -> one complete-G independent audit before H
 ```
+
+This live ledger deliberately does not carry a source commit hash. Exact checkpoint hashes belong in `Current_Plan.md` or
+checkpoint-scoped audit evidence; a hash in a frequently edited inventory becomes stale without improving row ownership.
 
 This document is the SRPSS testing strategy and **live test-file inventory/retirement ledger**. It is not a phase
 changelog. Historical implementation narrative belongs in audits/history; this introduction states only current test
 authority.
 
 Current migration-critical additions already present in source include retained CUSTOM/session/overlay, retained input,
-G7 auxiliary/context and visualizer geometry tests. The missing G4 behavior requires focused coverage proving separate
-uniform scale vs viewport extent, all five mode reflow, Bubble BTF, Save/Cancel/layout-slot round-trip and no retained
-identity/presentation duplication.
+G7 auxiliary/context, visualizer geometry and the new Bubble viewport config/reflow tests. Core G4 behavior is landed. The
+active correction bar now protects committed-vs-temporary CUSTOM viewport ownership, the remaining nonbaseline Bubble retry
+clamp, contraction handling for non-surface bubbles, the specular-offset coordinate contract, baseline/BTF invariance and
+no retained identity/presentation duplication.
 
 ## 1. Audit method and status vocabulary
 
@@ -182,24 +187,26 @@ E1/E2/E2.7/E3/E4 and F0–F8 are closed. Their surviving neutral owner, capabili
 presentation tests are permanent regressions. Do not revive QWidget presentation assertions merely because H has not yet
 removed the final physical host.
 
-### G4 correction — FIRST ACTIVE TEST BAR
+### G4 post-checkpoint corrections — FIRST ACTIVE TEST BAR
 
-The current implementation has retained wheel/corner uniform resize but must add independent visualizer edge viewport
-resize. Required focused coverage:
+The core independent edge-resize operation, Bubble baseline-relative reflow and all-five-mode capability policy are landed.
+Do not reopen that architecture. Required correction coverage now includes:
 
-- left/right edge changes viewport width only;
-- top/bottom edge changes viewport height only;
-- uniform scale remains constant during edge resize;
-- wheel/corner uniform scale does not mutate viewport extent;
-- Spectrum, Oscilloscope, Sine, Bubble and DevCurve all admit baseline/wide/tall extents;
-- Bubble's capability gate becomes enabled and spatial reflow remains BTF-clean;
-- no anisotropic finished-pixel scaling;
-- Save/Cancel, variant persistence and layout slots round-trip scale and extent separately;
-- retained item/model/render identity and one-window invariant survive resize.
+- committed nonbaseline extent survives ordinary runtime outside CUSTOM;
+- active CUSTOM working extent overrides committed truth only while editing;
+- Save retains the newly committed extent after override retirement;
+- Cancel restores the pre-edit committed extent;
+- canonical reset drops stale persisted extent without making all no-CUSTOM states canonical;
+- Bubble overlap-retry jitter clamps to the current nonbaseline domain while preserving exact baseline behavior;
+- representative shrink explicitly covers `reaches_surface=False` as well as surface-reaching bubbles;
+- `spec_ox`/`spec_oy` are classified/tested in the coordinate space the shader actually consumes;
+- canonical Bubble replay/BTF/goldens remain unchanged;
+- no particle-count scaling, cadence retuning, anisotropic finished-pixel scaling or retained identity duplication.
 
-Use/extend `tests/test_qtquick_custom_layout_overlay.py`, `tests/test_qtquick_visualizer_geometry.py`,
-`tests/test_custom_layout_session.py` and `tests/test_layout_slots.py` rather than creating a parallel geometry framework.
-Implementation ordering is pinned by `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md`.
+Use `tests/test_bubble_viewport_config_route.py`, `tests/test_bubble_viewport_reflow.py` and extend the existing manager/session/
+overlay/runtime-controller tests at their owning seam. The durable architecture is pinned by
+`Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md`; exact correction ordering is pinned by
+`G4_Post_Checkpoint_Audit_Corrections_Decomposition.md`.
 
 ### G7 — near closure
 
@@ -216,7 +223,8 @@ cross-display transfer, edit X Save/Cancel and visualizer uniform+viewport resiz
 ### H
 
 H test work proves sole Quick production owner/cardinality/lifecycle and lets the remaining physical presenter tests retire
-with their source. It does not require the full installed physical matrix.
+with their source. It must also prove the corrected visualizer viewport-config binding across ordinary committed state, live
+CUSTOM override, Save, Cancel, slot replay and generation recreation. It does not require the full installed physical matrix.
 
 ### I
 
@@ -295,8 +303,8 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_qtquick_frame_pacer.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_image_boundary.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_image_textures.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
-| `tests/test_custom_layout_session.py` | **KEEP — MIGRATION PERMANENT / G** | Neutral session, variants, working enabled/removal and persistence contract; extend for separate visualizer scale/viewport extent. |
-| `tests/test_qtquick_custom_layout_overlay.py` | **KEEP — MIGRATION PERMANENT / G** | Retained CUSTOM overlay/drag/resize/cross-display contract; extend with visualizer edge viewport handles. |
+| `tests/test_custom_layout_session.py` | **KEEP — MIGRATION PERMANENT / G** | Neutral session/variants/working-state contract; separate visualizer scale + viewport extent is landed and remains permanent. |
+| `tests/test_qtquick_custom_layout_overlay.py` | **KEEP — MIGRATION PERMANENT / G** | Retained CUSTOM overlay/drag/edge+corner resize/cross-display contract; extend only for current viewport-lifecycle corrections where applicable. |
 | `tests/test_qtquick_auxiliary.py` | **KEEP — MIGRATION PERMANENT / G7** | Same-scene dimming/pixel-shift/halo generation and lifecycle contract. |
 | `tests/test_qtquick_context_menu.py` | **KEEP — MIGRATION PERMANENT / G7** | Retained context-menu model/QML/action admission contract. |
 | `tests/test_qtquick_input_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
@@ -338,6 +346,8 @@ The inventory below accounts for every executable test file present at the revie
 | File | Status | Note |
 | --- | --- | --- |
 | `tests/test_bubble_btf_coalescing.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
+| `tests/test_bubble_viewport_config_route.py` | **KEEP — MIGRATION PERMANENT / G4** | Live/coalesced viewport configuration route into each authored Bubble step; extend for committed-vs-CUSTOM override lifecycle. |
+| `tests/test_bubble_viewport_reflow.py` | **KEEP — MIGRATION PERMANENT / G4** | Baseline exact no-op plus wide/tall/shrink domain projection, authored-count invariance and no geometry-created tick. |
 | `tests/test_bubble_cadence.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_bubble_reactivity.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_bubble_renderer_transport.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
@@ -386,7 +396,7 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_visualizer_reactivity_quality.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_visualizer_replay.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_visualizer_retired_modes.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
-| `tests/test_visualizer_runtime_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
+| `tests/test_visualizer_runtime_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination runtime-controller contract, including presentation-neutral viewport configuration ownership; retain through cutover. |
 | `tests/test_visualizer_settings_plumbing.py` | **UPDATE REQUIRED NOW** | Mixed file: current settings/shader contracts plus retired pre-Quick card-growth/old-overlay assumptions; known broad-suite watch item. |
 | `tests/test_visualizer_smart_positioning.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_visualizer_startup_contract.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
@@ -418,7 +428,7 @@ The inventory below accounts for every executable test file present at the revie
 | File | Status | Note |
 | --- | --- | --- |
 | `tests/test_custom_layout_contract.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
-| `tests/test_custom_layout_manager.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
+| `tests/test_custom_layout_manager.py` | **KEEP — MIGRATION PERMANENT / G** | Current Python-owned CUSTOM geometry/resize/persistence adapter; permanent scale/extent and Save/Cancel/slot regression owner. |
 | `tests/test_dimming_and_interaction_fixes.py` | **MIGRATION-CRITICAL — G/H** | Rehome display/input/topology behavior to Quick runtime. |
 | `tests/test_display_context_menu.py` | **MIGRATION-CRITICAL — G/H** | Rehome display/input/topology behavior to Quick runtime. |
 | `tests/test_display_integration.py` | **MIGRATION-CRITICAL — G/H** | Rehome display/input/topology behavior to Quick runtime. |

@@ -1,7 +1,7 @@
 # 05 — CUSTOM Layout, Input, Interaction and Auxiliary Runtime Pixels
 
-Status: **G1–G6 closed; G4 viewport-resize correction required; G7 near closure; G8 pending**  
-Last updated: 2026-08-28
+Status: **G1–G6 closed; G4 core landed with bounded audit corrections priority; G7 near closure; G8 pending**  
+Last updated: 2026-08-29
 
 `Current_Plan.md` owns work admission.
 
@@ -77,9 +77,9 @@ corner handles
 
 Visualizer final pixels remain uniformly scaled and the committed viewport extent is unchanged.
 
-### Visualizer viewport-extent resize — REQUIRED G4 CORRECTION
+### Visualizer viewport-extent resize — CORE LANDED; POST-CHECKPOINT CORRECTIONS OPEN
 
-The destination contract also requires retained **edge** handles:
+The retained **edge** operation is landed:
 
 ```text
 left/right edge -> viewport extent width only
@@ -89,16 +89,20 @@ top/bottom edge -> viewport extent height only
 This changes world/layout playroom and current aspect while keeping `uniform_visual_scale` constant. It is not X/Y
 stretch of a rendered image.
 
-All five current modes must support it: Spectrum, Oscilloscope, Sine, Bubble and DevCurve. A temporary source
-`viewport_resize_capable=False` for Bubble is unfinished migration gating, not accepted destination behavior.
+All five current modes participate: Spectrum, Oscilloscope, Sine, Bubble and DevCurve. The core Bubble logical reflow and
+all-five-mode capability policy are landed; do not reintroduce a false gate as a workaround.
 
-Bubble must receive committed viewport bounds as spatial configuration, preserving circles/radii/velocity units,
-trajectories/collisions, trails/transients and BTF. Pointer/render cadence may not become simulation cadence.
+Bubble receives viewport bounds as spatial configuration, preserving circles/radii/velocity units, trajectories/collisions,
+trails/transients and BTF. Pointer/render cadence may not become simulation cadence.
 
-Save/Cancel, committed CUSTOM geometry and layout slots must round-trip `uniform_visual_scale` and viewport extent as
-separate values. Corner/wheel operations may not silently rewrite extent; edge operations may not silently rewrite
-scale. Implementation sequencing and legal seams are decomposed in
-`Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md`.
+Save/Cancel, committed CUSTOM geometry and layout slots round-trip `uniform_visual_scale` and viewport extent as separate
+values. Corner/wheel operations may not silently rewrite extent; edge operations may not silently rewrite scale. In
+addition, viewport configuration has explicit precedence: ordinary committed extent remains truth outside CUSTOM; an active
+working extent is a temporary override. Save commits the new extent, Cancel restores the pre-edit committed extent, and
+ending CUSTOM removes only the override.
+
+The durable scale/extent architecture is decomposed in `Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md`. The
+current bounded corrections are owned by `G4_Post_Checkpoint_Audit_Corrections_Decomposition.md`.
 
 ## Cross-monitor transfer — CLOSED G5
 
@@ -154,8 +158,8 @@ visualizer uniform+viewport resize and edit-mode X Save/Cancel. Do not reintrodu
 G1 session + multi-variant/working-state contract                   CLOSED
 G2 Quick edit overlays + ordinary geometry + X                    CLOSED
 G3 Save/Cancel + exact variant/enabled/duplicate persistence      CLOSED
-G4 uniform resize                                                 CLOSED
-G4 correction: visualizer independent viewport extent            REQUIRED FIRST
+G4 core uniform + independent viewport extent                   LANDED
+G4 post-checkpoint ownership/spatial corrections                  REQUIRED FIRST
 G5 cross-monitor transfer                                         CLOSED
 G6 runtime-neutral input/action routing                           CLOSED
 G7 context/halo/dimming/pixel-shift                               NEAR CLOSURE

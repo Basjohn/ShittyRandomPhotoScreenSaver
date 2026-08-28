@@ -1,11 +1,22 @@
 # Remaining G7 / G8 — Auxiliary, Input and Focus Closure Technical Decomposition
 
-Status: **G7 closure + G8 acceptance guidance**  
-Checkpoint basis: `59f4a3c98235215a9ff89fc09e4cc979d1831e89`  
+Status: **execute after the current bounded G4 audit-correction batch is GREEN; then close G7 + G8 continuously**  
+Source basis: inspect exact current tree before each slice; owner names below are current routing, not a frozen commit snapshot.  
 Work admission: `Current_Plan.md`
 
 This document describes how to finish the already-selected architecture. It is not permission to redesign input, create a
 new focus subsystem or port historical QWidget fixes mechanically into Quick.
+
+## 0. Entry and audit boundary
+
+Do not enter this decomposition until `G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` is GREEN. Once admitted, G7
+and G8 are one continuous remaining-G closure sequence. Do **not** stop merely to request an independent audit after a
+GREEN G7 slice or between bounded G8 fixes. Use focused tests + post-push self-audit and continue while the next task is
+known and GREEN.
+
+After G4 corrections + G7 + G8 are all GREEN, push/checkpoint the complete G state, reconcile immediate G status docs, then
+**stop once for independent audit before H**. Real RED/unresolved YELLOW evidence, a missing product decision or a hard
+destination-invariant conflict still stops early.
 
 ## 1. Current destination wiring
 
@@ -281,3 +292,10 @@ Do not create tests that require the deleted QWidget focus machinery merely beca
 - retained family actions and global fallbacks are exclusive/correct;
 - menu/halo/Ctrl state survives A -> B -> A, CUSTOM, Settings/recreate and runtime replacement;
 - no focus-driven shadow corruption or auxiliary/native-window regression is introduced.
+
+
+## 13. G completion gate
+
+G7/G8 GREEN is not permission to start H immediately. The complete G checkpoint includes the corrected G4 viewport contract,
+G7 caller-proof auxiliary/context closure and G8 focus/MC closure. Once that complete checkpoint is pushed, stop for the
+single independent G audit required by `Current_Plan.md`. H begins only after that audit is accepted.

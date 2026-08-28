@@ -1,17 +1,14 @@
 # Remaining G4 — Visualizer Viewport-Extent Resize Technical Decomposition
 
-Status: **deterministic implementation COMPLETE; only the deferred all-five-mode installed/eyes-on gate remains (after H)**  
-Landed and test-gated for all five modes: geometry projection (§2/§5/§6), session scale/extent working state (§3),
-overlay + QML edge handles (§4), scene-controller preview projection (§6), the manager viewport-edge adapter (§5),
-the persistence round-trip incl. canonical-reset (§9), the live `presentation_viewport_extent` config route from a
-CUSTOM edge drag into the next authored Bubble step, and Bubble's baseline-relative logical-domain reflow (§7) with
-`viewport_resize_capable=True` flipped on. Canonical `(420,280)` stays a strict byte-identical no-op. Do not reopen
-the deterministic work; the remaining eyes-on gate is correctly blocked on H.  
-Checkpoint basis: `59f4a3c98235215a9ff89fc09e4cc979d1831e89`  
-Work admission: `Current_Plan.md`
+Status: **core implementation LANDED; bounded post-checkpoint audit corrections are PRIORITY before G7**  
+Work admission: `Current_Plan.md`  
+Correction playbook: `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md`
 
-This is an implementation decomposition, not a changelog and not permission to redesign CUSTOM or the Visualizer.
-Exact later source outranks owner names below; the state/ownership contracts do not change casually.
+The original G4 scale/extent architecture is landed and remains binding. An independent post-checkpoint audit found bounded
+lifecycle/spatial omissions; do not interpret those corrections as a reason to redesign CUSTOM, change Bubble personality or
+reopen accepted geometry architecture.
+
+Exact later source outranks historical owner wording below.
 
 ## 1. Required result
 
@@ -31,7 +28,7 @@ top / bottom edge
     -> uniform scale unchanged
 ```
 
-The destination geometry state is conceptually:
+Canonical geometry state:
 
 ```text
 origin
@@ -39,14 +36,14 @@ uniform_visual_scale
 viewport_extent = (world_width, world_height)
 ```
 
-Visible outer size is derived from the latter two. Do not create an independent persisted `width`/`height` authority that
-can disagree with them.
+Visible outer size is derived from scale + extent. Do not create an independently writable persisted width/height authority
+that can disagree with them.
 
 All five current modes participate: Spectrum, Oscilloscope, Sine, Bubble and DevCurve. Bubble is not exempt.
 
-## 2. Extend the landed seams; do not build a second resize path
+## 2. Landed owner path
 
-Current legal flow is already almost correct:
+The retained destination path is:
 
 ```text
 CustomLayoutOverlay.qml
@@ -61,7 +58,7 @@ CustomLayoutOverlay.qml
                                     -> retained VisualizerPresentation / render node
 ```
 
-Relevant current owners:
+Relevant owners include:
 
 - `rendering/quick/qml/CustomLayoutOverlay.qml`
 - `rendering/quick/custom_layout_overlay.py`
@@ -69,64 +66,45 @@ Relevant current owners:
 - `rendering/custom_layout_session.py`
 - `rendering/quick/scene_controller.py`
 - `widgets/spotify_visualizer/presentation_geometry.py`
+- `widgets/spotify_visualizer/runtime_controller.py`
+- `widgets/spotify_visualizer/bubble_frame_runtime.py`
+- `widgets/spotify_visualizer/bubble_simulation.py`
 - `core/settings/visualizer_mode_registry.py`
-- existing visualizer logical/runtime mode owners
 
-**Do not** create a visualizer-specific QML persistence owner, second edit overlay, second session, separate top-level resize
-window, or another geometry map.
+Do not create a visualizer-specific QML persistence owner, second edit overlay, second session, separate top-level resize
+window or another geometry map.
 
-## 3. Working-state representation
+## 3. Working-state and persistence contract
 
-`CustomLayoutSessionItem.current_size_payload` is the existing family-specific working payload carrier. Use that seam (or a
-small explicit typed equivalent immediately beneath it) for canonical visualizer resize state.
+The landed session carries uniform and viewport operations independently. The contract is:
 
-The current G4 implementation largely reconstructs visualizer size from baseline geometry plus `resize_scale`. That is
-sufficient for uniform scaling but cannot represent the required scale/extent distinction by itself.
-
-For the visualizer, working state must carry enough information to resolve both independently:
-
-```text
-uniform_visual_scale
-viewport_extent_width
-viewport_extent_height
-```
-
-or an equivalent canonical `viewport_extent` pair.
-
-Rules:
-
-- `resize_scale` may remain a transient/session-relative helper for the already-landed uniform operation; it must never be
-  repurposed as viewport extent.
-- admission initializes the working payload from the current committed/resolved visualizer presentation, not from an
-  arbitrary QML item size;
+- admission initializes from current committed/resolved presentation, not arbitrary QML pixels;
 - uniform resize changes only effective uniform scale;
 - edge resize changes only the selected extent axis;
-- Cancel restores both baseline values exactly;
-- Save commits both values exactly;
+- Cancel restores both admitted baseline values exactly;
+- Save commits both exactly;
 - geometry variant and display identity remain the existing `CustomLayoutKey` authority;
-- layout slots replay the committed payload; they do not invent a second visualizer-size snapshot.
+- layout slots replay the committed payload rather than inventing a second size snapshot;
+- canonical `(420,280)` does not require a redundant persisted `viewport_extent` key;
+- returning a previously non-baseline committed extent to canonical must remove the stale persisted key.
 
-If compatibility `width`/`height` fields are temporarily required to read an old CUSTOM entry, normalize them once into the
-canonical scale+extent representation. Do not keep both representations writable.
+Compatibility width/height fields, if read at all, must normalize once into the canonical scale+extent representation and
+must not remain a second writable truth.
 
 ## 4. Overlay affordance
 
-Do not make every ordinary resizable widget gain viewport edges.
+The retained overlay has a distinct viewport-resize capability separate from ordinary whole-size resize.
 
-The overlay model needs a distinct semantic capability for viewport resize, e.g. `viewportResizeCapable`, separate from the
-existing whole-size `resizable` role.
-
-For the current product:
+Destination policy:
 
 ```text
 spotify_visualizer -> viewportResizeCapable = true
 ordinary widgets   -> false
 ```
 
-All five visualizer modes are destination-capable. Remove/replace the temporary Bubble false gate; do not use it to hide the
-edge controls.
+All five visualizer modes are destination-capable.
 
-Add four retained same-scene edge hit regions:
+Four retained same-scene edge hit regions own only semantic pointer input:
 
 ```text
 left
@@ -135,16 +113,14 @@ top
 bottom
 ```
 
-They emit only semantic handle id + pointer position through the existing model/manager resize seam. QML does no min-size,
-DPR, persistence, mode geometry or Bubble math.
-
-Keep the existing corner and wheel behavior unchanged.
+QML owns no minimum-size, DPR, persistence, mode geometry or Bubble math. Existing corner/wheel behavior remains uniform
+scale.
 
 ## 5. Edge geometry math
 
 Python/session geometry remains authoritative.
 
-At resize start capture the same kind of immutable origin facts used by the existing corner path:
+At resize start the owner captures immutable origin facts equivalent to:
 
 ```text
 origin outer rect
@@ -154,7 +130,7 @@ pointer origin
 selected edge
 ```
 
-For an effective current uniform scale `S`:
+For effective uniform scale `S`:
 
 ```text
 right:  outer_width  = pointer_x - fixed_left
@@ -166,25 +142,14 @@ viewport_width  = outer_width  / S
 viewport_height = outer_height / S
 ```
 
-Only the selected extent axis changes. The opposite axis and `S` remain bit-for-bit/epsilon-equivalent to their working
-values.
+Only the selected extent axis changes. The opposite axis and uniform scale remain unchanged. Minimum visible outer size maps
+back to a minimum extent at the current scale; minimum enforcement never mutates scale.
 
-Use the existing Python-owned screen/minimum/clamp/transfer rules. Do not independently clamp in QML and then clamp again
-in Python. A cross-display threshold remains G5 ownership; an edge drag is not permission to create a second display-transfer
-algorithm.
-
-Minimums must be expressed coherently with scale: a minimum visible outer width/height implies a minimum extent at the
-current scale. Do not silently increase/decrease uniform scale just to satisfy an edge minimum.
+Edge drag is not a second cross-display transfer algorithm.
 
 ## 6. Canonical presentation resolution
 
-`QuickSceneController._sync_custom_layout_visualizer()` currently has a uniform-only projection shape: baseline
-presentation + session `resize_scale` -> `resize_visualizer_presentation_uniformly(...)`.
-
-Extend that projection so it consumes the **current effective scale and current viewport extent** from the session payload.
-Do not infer viewport extent from the QML edit frame after the fact.
-
-Keep geometry math in `widgets/spotify_visualizer/presentation_geometry.py`. Preferred shape:
+Quick presentation resolves from one canonical source shape:
 
 ```text
 baseline/current authored presentation style
@@ -194,62 +159,86 @@ baseline/current authored presentation style
     -> one ResolvedVisualizerPresentation
 ```
 
-A small pure helper may be added if it avoids duplicating the baseline-style de-scaling/re-scaling already present in
-`resize_visualizer_presentation_uniformly()`. Do not duplicate border/radius/shadow/content-inset scaling logic in
-`QuickSceneController`.
+Do not infer viewport extent back from QML frame pixels. Keep border/radius/shadow/content-inset scaling in the shared
+presentation-geometry owner rather than duplicating it in `QuickSceneController`.
 
-The resulting single `ResolvedVisualizerPresentation` continues to feed shell, clip and custom GL. There is no alternate
-render geometry.
+The resulting one `ResolvedVisualizerPresentation` continues to feed shell, clip and custom GL. There is no alternate render
+geometry.
 
-## 7. Bubble spatial reflow
+## 7. Logical viewport configuration and precedence
 
-Bubble benefits from the viewport operation and must implement it.
-
-Viewport changes are **latest spatial configuration**, not authored-time events:
+Viewport extent is latest **spatial configuration**, not authored-time input:
 
 ```text
-CUSTOM drag sample
-    -> latest viewport bounds/configuration
+CUSTOM working change / ordinary committed presentation
+    -> latest effective viewport configuration
 
-VisualizerLogicalRuntime
-    -> continues advancing on its existing authored cadence
-    -> consumes current bounds when performing logical work
+Visualizer authored cadence
+    -> next normal authored step consumes current configuration
 ```
 
-Do not tick Bubble from pointer events. Do not add a geometry timer. Do not discard authored logical steps because a resize
-is in progress.
+No pointer event ticks Bubble. No geometry timer exists.
+
+The core live route is landed, but post-checkpoint audit found that **committed presentation extent and temporary CUSTOM
+working extent need explicit precedence/lifecycle ownership**. The correction is mandatory and is decomposed in:
+
+`G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` §1.
+
+Binding outcome:
+
+```text
+CUSTOM active  -> working extent temporarily wins
+CUSTOM Save    -> new committed extent wins after override retirement
+CUSTOM Cancel  -> pre-edit committed extent wins after override retirement
+ordinary mode  -> current committed extent wins
+```
+
+“No active CUSTOM session” must never be treated as synonymous with canonical `(420,280)`.
+
+## 8. Bubble spatial reflow
+
+Bubble uses a baseline-relative logical world. Canonical `(420,280)` corresponds to the exact accepted unit-square path.
+Wide/tall extents expand one or both logical axes; renderer-facing positions/trails/radius are projected back into the
+existing normalized Quick render contract so circles and apparent scale remain coherent.
 
 Spatial rules:
 
 - circles remain circles;
 - radius units remain coherent;
-- velocity units/collision response are not multiplied independently by X/Y aspect ratios;
-- widening/tallening expands the available logical domain rather than stretching existing bubble positions like a texture;
-- shrinking uses the existing/canonical bounds reconciliation behavior for objects now outside the domain; do not globally
-  normalize every position to percentages as an anisotropic pseudo-reflow;
-- trails, ghosts, pops/transients and protected renderer-visible consequences remain BTF-bound;
-- the operation must not become an excuse to retune Bubble speed/collision/elasticity/personality.
+- velocity/collision response are not multiplied independently by X/Y aspect ratios;
+- widening/tallening expands available logical domain rather than stretching finished pixels;
+- authored big/small counts and `MAX_BUBBLES` do not scale with viewport area;
+- shrinking reconciles state through existing lifecycle semantics rather than percentage-rescaling positions;
+- trails and protected renderer-visible consequences remain BTF-bound;
+- Bubble speed/collision/elasticity/personality are not retuned for geometry.
 
-If there is no current presentation-neutral viewport configuration record on the logical side, introduce the smallest
-immutable/source-equivalent record required at the runtime-controller boundary. Never pass `QQuickItem`, `QScreen`, QML
-objects or render-thread state into Bubble simulation.
+The phrase **“baseline density” is incorrect and must not be used**. At fixed authored counts, a larger viewport is naturally
+less dense.
 
-## 8. Other mode reflow expectations
+Post-checkpoint audit found three Bubble-specific items still requiring deterministic closure:
+
+1. overlap-retry clamp still contains the old `[-0.25,1.25]` unit-square bound;
+2. contraction behavior for newly off-domain `reaches_surface=False` bubbles needs explicit bounded retirement/tests;
+3. `spec_ox`/`spec_oy` coordinate semantics must be traced through the shader and corrected only if they are positional
+   viewport-space values.
+
+See the correction playbook §§2–4.
+
+## 9. Other mode reflow expectations
 
 At constant uniform scale:
 
-- Spectrum recomputes bar distribution/layout from the current viewport;
+- Spectrum recomputes distribution/layout from current viewport;
 - Oscilloscope recomputes waveform domain/placement without changing authored stroke scale;
-- Sine recomputes its domain/placement without a second clock or stretched raster;
+- Sine recomputes domain/placement without a second clock or stretched raster;
 - DevCurve recomputes layer/domain placement while preserving authored stroke/specular/tuning semantics;
-- Bubble follows section 7.
+- Bubble follows §8.
 
-The existing Phase-D baseline/wide/tall renderer geometry proofs are the foundation. The missing work is exposing,
-persisting and live-projecting the operation through CUSTOM for every mode.
+The core operation is landed for all five. Final physical baseline/wide/tall acceptance remains deferred until after H.
 
-## 9. Persistence and replay
+## 10. Save/Cancel/replay invariants
 
-The following must preserve scale and extent as separate state:
+The following preserve scale and extent as separate state:
 
 ```text
 live CUSTOM edit
@@ -264,67 +253,94 @@ runtime recreation from committed settings
 
 Specific invariants:
 
-- edge resize never rewrites ordinary ON/OFF, capability activation, provider/account/source settings or inactive geometry
-  variants;
-- corner/wheel never reset a previously committed non-baseline viewport extent;
-- layout-slot replay restores both extent and scale from that slot;
-- cross-display transfer changes display/rect projection only; it does not reset the visualizer back to 1.5 aspect;
-- Cancel after arbitrary uniform+edge operations returns exactly to the admitted baseline payload and rect.
+- edge resize never rewrites ordinary ON/OFF, capability activation, provider/account/source settings or inactive variants;
+- corner/wheel never reset a committed non-baseline viewport extent;
+- slot replay restores both extent and scale from that slot;
+- cross-display transfer changes display/rect projection only and does not force 1.5 aspect;
+- Cancel after arbitrary uniform+edge operations returns exactly to the admitted baseline payload and rect;
+- Save of a canonical reset removes stale persisted non-baseline extent;
+- end-CUSTOM logical configuration resolves to the correct committed extent rather than unconditional canonical baseline.
 
-## 10. Focused implementation order
+## 11. Current correction implementation order
 
-Use this order unless exact source proves a smaller equivalent slice:
+The original G4 implementation sequence is complete. The remaining deterministic order is now:
 
-1. Add explicit visualizer scale+extent working/persistence semantics and tests without new QML affordance.
-2. Add pure presentation-geometry projection for arbitrary extent + scale.
-3. Update `QuickSceneController` retained preview projection to consume that state.
-4. Add overlay/model edge semantic capability and four edge handles.
-5. Route edge begin/live/final through the existing manager/session owner.
-6. Make all five mode policies destination-capable; remove the Bubble temporary gate.
-7. Wire Bubble logical viewport configuration without changing its authored clock.
-8. Close Save/Cancel/layout-slot/variant/cross-display round-trip.
-9. Run deterministic all-mode + BTF gates, then eyes-on wide/tall behavior.
+1. committed-vs-CUSTOM viewport configuration ownership/precedence;
+2. Bubble overlap-retry domain clamp;
+3. contraction retirement for non-surface off-domain bubbles;
+4. specular offset coordinate-space audit/correction if required;
+5. remove “baseline density” wording;
+6. focused G4/Bubble regression bars;
+7. full established BTF/cadence/replay/reactivity/transport regression sweep;
+8. post-push self-audit and G4 deterministic-close status update;
+9. continue directly into G7.
 
-Do not start with Bubble retuning or QML geometry hacks.
+Do not stop for independent audit after G4 alone. `Current_Plan.md` owns the single audit gate after all of G is GREEN and
+checkpointed.
 
-## 11. Required tests
+## 12. Required permanent tests
 
-Extend existing permanent tests rather than creating a parallel framework:
+Keep/extend destination tests rather than creating a parallel framework:
 
 - `tests/test_qtquick_custom_layout_overlay.py`
-  - distinct edge handles only for viewport-capable visualizer;
-  - semantic edge ids; no QML persistence/math authority.
+  - semantic edge capability and live extent sink publication;
+  - CUSTOM clear/save/cancel route as applicable.
 - `tests/test_custom_layout_session.py`
-  - independent working scale/extent; exact Cancel restoration.
+  - independent working scale/extent and exact Cancel restoration.
 - `tests/test_custom_layout_manager.py`
-  - left/right/top/bottom anchor math, minimums, active variant only, no scale mutation.
-- `tests/test_qtquick_visualizer_geometry.py`
-  - arbitrary target extent + scale; baseline identity retained; no X/Y stretch.
-- `tests/test_layout_slots.py`
-  - scale+extent slot round-trip and ordinary ON/OFF/capability separation.
-- current all-mode Quick renderer tests
-  - baseline/wide/tall for all five.
-- Bubble deterministic/BTF tests
-  - same authored cadence and consequences before/through/after viewport changes.
+  - edge anchors/minimums/no-scale mutation;
+  - non-baseline persistence and reverse round-trip to canonical.
+- visualizer runtime-controller tests
+  - committed extent vs temporary CUSTOM override precedence;
+  - latest-state coalescing with no new clock.
+- `tests/test_bubble_viewport_config_route.py`
+  - latest extent enters each authored Bubble step; no geometry-driven step.
+- `tests/test_bubble_viewport_reflow.py`
+  - exact baseline/no-op;
+  - wide/tall/shrink;
+  - authored-count invariance;
+  - overlap-retry extended-domain bounds;
+  - non-surface contraction retirement;
+  - trail/radius projection;
+  - specular coordinate contract if applicable.
+- existing Bubble BTF/cadence/replay/reactivity/transport goldens
+  - unchanged baseline behavior and protected consequences.
 
 Also prove retained scene/item/model/render identity does not recreate merely because an edge moves.
 
-## 12. Rejected shortcuts
+## 13. Rejected shortcuts
 
 Do not:
 
-- treat Bubble's current false capability flag as product intent;
 - turn edge drag into X/Y scaling of final GL pixels;
-- derive and persist only outer `width`/`height` with no scale/extent distinction;
+- derive/persist only outer width/height with no scale/extent distinction;
 - add a second visualizer size settings authority;
 - update QML properties and call that persistence;
-- recreate the visualizer item/render node on every drag sample;
+- recreate the visualizer item/render node on drag samples;
 - feed pointer cadence into Bubble logical cadence;
 - normalize/retune Bubble behavior to hide bad geometry;
+- scale particle counts with viewport area;
+- keep `[-0.25,1.25]` as a non-baseline world clamp;
+- treat end-CUSTOM as automatic canonical viewport;
+- allow ordinary presentation publication and CUSTOM working publication to race as equal viewport truths;
+- change specular offsets without first proving their coordinate space;
 - create a visualizer-only edit overlay or accelerated window;
-- reset viewport extent when corner/wheel scaling occurs.
+- reset viewport extent when corner/wheel scaling occurs;
+- regenerate/loosen BTF goldens to bless baseline drift.
 
-## 13. GREEN definition
+## 14. GREEN definition
 
-G4 correction is GREEN only when all five modes can be edge-resized live, Save/Cancel/slot/variant replay is exact,
-uniform scale remains independent, Bubble remains BTF-clean, and the one-window/one-retained-owner architecture survives.
+Deterministic G4 is finally GREEN when:
+
+- all five modes retain independent live edge extent and uniform scale;
+- Save/Cancel/slot/variant/cross-display replay remains exact;
+- committed vs temporary CUSTOM extent precedence is deterministic through edit/save/cancel/clear;
+- no-session runtime resolves the actual committed extent;
+- Bubble canonical path remains accepted/BTF-clean;
+- Bubble non-baseline spawn retry, contraction lifecycle and specular coordinate semantics are correct/tested;
+- authored counts/personality/cadence remain unchanged by extent;
+- one-window/one-retained-owner architecture survives;
+- no golden/threshold retuning was needed to preserve baseline.
+
+The remaining all-five-mode installed/eyes-on viewport matrix is deliberately deferred until after H and remains J/physical
+acceptance debt. Deterministic GREEN is not a claim that the final visuals have been physically accepted.

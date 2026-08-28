@@ -1,7 +1,7 @@
 # 01 — Runtime Host and Lifecycle Contract
 
 Status: **Quick host foundation landed; Phase H final production owner wiring remains**  
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
 `Current_Plan.md` owns sequence.
 
@@ -59,7 +59,7 @@ readiness/reveal and outward engine signals. H replaces QWidget/private-composit
 Implementation sequence and deletion/cardinality traps are decomposed in
 `Remaining_H_Production_Cutover_Decomposition.md`.
 
-H connects exactly once:
+H begins only after the complete checkpointed G state passes its independent audit. H then connects exactly once:
 
 ```text
 selected display
@@ -68,9 +68,13 @@ selected display
 -> canonical capability + ordinary enabled/instance resolution
 -> existing neutral service lease(s)
 -> stable family presentation model(s)
--> QuickSceneController ordinaryWidgetHost
+-> QuickSceneController ordinaryWidgetHost / visualizer / G owners
 -> retained family QML item(s)
 ```
+
+The visualizer viewport-config seam is part of this binding. Ordinary committed extent remains authoritative outside
+CUSTOM; a live CUSTOM working extent is only a temporary override. H must not rely on "CUSTOM inactive -> None -> canonical"
+as a substitute for the committed configuration owner.
 
 Never run legacy and Quick production `WidgetRuntimeManager` ownership in parallel. Preserve real service cardinality.
 Settings/topology recreation rebinds current accepted state without duplicating providers/controllers. Activation
@@ -127,4 +131,5 @@ H requires focused/runtime-shaped proof sufficient to establish sole destination
 cardinality and caller-dead old-host deletion.
 
 J owns the comprehensive compiled/installed physical matrix: real 1/2/N displays, mixed refresh/DPR, topology/off-wake,
-full widget/Visualizer eyes-on parity, physical continuity/tail metrics and clean installed exit.
+full widget/Visualizer eyes-on parity (including the deferred all-five-mode baseline/wide/tall viewport gate), physical
+continuity/tail metrics and clean installed exit.

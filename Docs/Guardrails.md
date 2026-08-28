@@ -58,7 +58,7 @@ Stop/reassess when:
 
 - Bubble/Spectrum/another mode loses authored fidelity/reactivity or BTF fails;
 - visualizer wide/tall viewport support is replaced by final-pixel anisotropic stretch;
-- Bubble is treated as exempt from required viewport reflow merely because a temporary capability flag says false;
+- Bubble is re-gated/exempted from viewport reflow to avoid fixing a viewport ownership or spatial-domain defect;
 - source age rises while visuals continue;
 - physical p99/max worsens despite prettier averages;
 - producer waits for paint/present or second visualizer logical clock appears;
@@ -81,7 +81,9 @@ viewport_extent        # independent world/playroom width/height
 ```
 
 All five current modes support both destination operations. Edge viewport resize is configuration, not a clock. Bubble
-must receive changed spatial bounds without deforming circles or compromising BTF.
+must receive changed spatial bounds without deforming circles or compromising BTF. Ordinary committed viewport extent
+remains truth outside CUSTOM; a working CUSTOM extent is a temporary override only. Leaving CUSTOM must not reset a saved
+non-baseline layout to canonical by confusing "no override" with "baseline".
 
 ## Capability state
 
