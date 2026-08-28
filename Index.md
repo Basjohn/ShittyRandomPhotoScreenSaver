@@ -22,6 +22,7 @@ correction promoted ahead of G7/G8 closure.**
 | durable product/architecture | `Spec.md` |
 | fast current owner map | `Docs/Contracts.md` |
 | Settings theme / Acrylic / Glass architecture | `Docs/Settings_Theme_Architecture.md` |
+| `dark.qss` retirement execution | `Docs/Settings_Dark_QSS_Retirement.md` |
 | physical scene/presenter architecture | `Docs/Compositor_Architecture.md` |
 | CUSTOM/edit/input/auxiliary | `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md` |
 | runtime host/lifecycle/H | `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md` |
@@ -43,8 +44,9 @@ correction promoted ahead of G7/G8 closure.**
 
 `Docs/Settings_Theme_Architecture.md` is the permanent Settings-theme contract. It owns schema-v5 theme semantics,
 layered-QWidget native backdrop mapping, Acrylic/Glass division of responsibility, Theme Foundry authoring rules and the
-boundary around future `dark.qss` retirement. Historical Glass investigation is R-61; temporary theme planning notes are
-not current authority.
+boundary around future `dark.qss` retirement. `Docs/Settings_Dark_QSS_Retirement.md` is the focused execution authority
+for removing that legacy stylesheet with zero intended visual/behavior change once `Future_Cleanup.md` admits the work.
+Historical Glass investigation is R-61; temporary theme planning notes are not current authority.
 
 ## Closed ordinary-family migration
 

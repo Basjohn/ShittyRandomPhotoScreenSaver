@@ -41,27 +41,12 @@ pixel/presentation ownership.
 - `ui/settings_theme_paths.py` contains temporary theme-directory packaging/dev-fallback wiring. Before release, wire the
   real packaged themes directory and remove temporary fallback once that resource-path contract is durable. Preserve
   compiled Default Dark as unconditional no-file fallback.
-- `themes/dark.qss` is legacy base-stylesheet debris and is **not** Settings theme authority. It is still loaded by
-  `ui/settings_theme.py`, and the tray menu currently loads the same whole file independently from `ui/system_tray.py`.
-  Retire it only as a focused caller/selector migration; do not simply delete it and do not copy its visual literals back
-  into Python. The safe retirement sequence is:
-
-  1. inventory every live `dark.qss` loader plus every selector actually depended upon by Settings, tray menus and any
-     remaining dialog/control caller;
-  2. classify each surviving rule as **structural/geometry/resource/behavior** or **visual palette**. ThemeSpec remains
-     sole Settings colour/opacity/shadow authority; old palette literals are deletion candidates, not migration input;
-  3. move only required structural rules to the narrow permanent renderer/component that owns that widget. Preserve exact
-     geometry, checkbox/resource behavior, scroll-area/corner behavior and other proven non-palette semantics;
-  4. do not alter `core/windows/dwm_blur.py`, AccentPolicy mode ownership, the frameless/layered top-level contract or the
-     forged outer-edge/corner geometry as part of stylesheet retirement;
-  5. give the tray menu a narrow owned style instead of loading the entire Settings legacy stylesheet;
-  6. run the Settings theme matrix with `themes/dark.qss` physically absent: compiled Default Dark plus representative
-     Acrylic and Glass themes, buckets, inputs/combos, scroll areas, tooltips, popups/dialogs, colour picker, context/tray
-     menus and resize/forged-edge visuals;
-  7. only after that absence test is green, remove `_load_base_stylesheet()`/other file loaders and delete `dark.qss` in
-     the same cleanup boundary; then remove comments/compensation that existed only because the legacy base QSS remained.
-
-  The permanent backdrop/theme contract is `Docs/Settings_Theme_Architecture.md`.
+- `themes/dark.qss` is legacy base-stylesheet debris, not Settings theme authority. Its removal is a dedicated zero-intended-
+  pixel-change cleanup. **Execution authority: `Docs/Settings_Dark_QSS_Retirement.md`.** Do not simply delete the file,
+  copy its visual literals into Python, or alter native AccentPolicy/frameless/forged-edge behavior while retiring it.
+  The final gate is a physical Default Dark + Acrylic + Glass + dialogs/controls/tray matrix with the file genuinely absent,
+  followed by removal of both production loaders and the file in the same bounded cleanup boundary.
+  Permanent backdrop/theme authority remains `Docs/Settings_Theme_Architecture.md`.
 
 ## Closed Phase-F family retirement
 

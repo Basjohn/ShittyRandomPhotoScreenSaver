@@ -98,6 +98,7 @@ from theme_foundry_model import (  # noqa: E402
     gradient_summary,
     matching_acrylic_preset,
     matching_color_tokens,
+    most_used_colors,
     replace_matching_color_roles,
     nearest_composite_relation,
     relations_for,
@@ -607,6 +608,14 @@ class ThemeFoundryWindow(QMainWindow):
         row.addWidget(self.favorite_btn)
         layout.addLayout(row)
 
+        layout.addWidget(
+            self._collapsible(
+                "MOST USED COLOURS",
+                self._build_most_used_colors_box(),
+                expanded=False,
+            )
+        )
+
         details = QWidget()
         details_layout = QVBoxLayout(details)
         details_layout.setContentsMargins(0, 0, 0, 0)
@@ -693,6 +702,103 @@ class ThemeFoundryWindow(QMainWindow):
         self.reset_all_default_btn.clicked.connect(self._reset_all_default)
         layout.addStretch(1)
         return scroll
+
+    def _build_most_used_colors_box(self) -> QWidget:
+        box = QWidget()
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        note = QLabel(
+            "Top six exact RGBA values used by semantic colour roles in the working theme. "
+            "Fully transparent values are ignored. Click a swatch to replace every exact "
+            "semantic match; shadows and gradient stops remain separate."
+        )
+        note.setWordWrap(True)
+        note.setObjectName("muted")
+        layout.addWidget(note)
+
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(6)
+        grid.addWidget(self._heading("Colour"), 0, 0)
+        count_heading = self._heading("Uses")
+        count_heading.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        grid.addWidget(count_heading, 0, 1)
+
+        self._most_used_entries: list[tuple[Rgba, tuple[str, ...]]] = []
+        self.most_used_buttons: list[SwatchButton] = []
+        self.most_used_count_labels: list[QLabel] = []
+        for index in range(6):
+            button = SwatchButton("")
+            button.setMinimumWidth(190)
+            button.colorRequested.connect(
+                lambda index=index: self._choose_most_used_color(index)
+            )
+            count = QLabel("")
+            count.setObjectName("muted")
+            count.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            grid.addWidget(button, index + 1, 0)
+            grid.addWidget(count, index + 1, 1)
+            self.most_used_buttons.append(button)
+            self.most_used_count_labels.append(count)
+
+        grid.setColumnStretch(0, 1)
+        layout.addLayout(grid)
+        return box
+
+    def _refresh_most_used_colors(self) -> None:
+        if not hasattr(self, "most_used_buttons"):
+            return
+
+        entries = most_used_colors(self.draft.colors, limit=6)
+        self._most_used_entries = list(entries)
+        for index, (button, count_label) in enumerate(
+            zip(self.most_used_buttons, self.most_used_count_labels)
+        ):
+            if index >= len(entries):
+                button.hide()
+                count_label.hide()
+                continue
+
+            value, tokens = entries[index]
+            button.show()
+            count_label.show()
+            button.set_rgba(value)
+            button.setText(rgba_summary(value))
+            count_label.setText(f"{len(tokens)} role{'s' if len(tokens) != 1 else ''}")
+            token_lines = "\n".join(f"• {friendly_token_label(token)}" for token in tokens)
+            button.setToolTip(
+                f"{len(tokens)} exact semantic RGBA match{'es' if len(tokens) != 1 else ''}.\n"
+                "Click to replace all of them.\n\n"
+                f"{token_lines}"
+            )
+
+    def _choose_most_used_color(self, index: int) -> None:
+        if index < 0 or index >= len(self._most_used_entries):
+            return
+
+        current, tokens = self._most_used_entries[index]
+        chosen = self._choose_qcolor(
+            current,
+            f"Replace {len(tokens)} Uses of {rgba_summary(current)}",
+        )
+        if chosen is None or chosen == current:
+            return
+
+        replaced = replace_matching_color_roles(
+            self.draft.colors,
+            current,
+            chosen,
+        )
+        self._rebuild_tree(self.selected_entry)
+        self._refresh_editor()
+        self._update_dirty_status()
+        self._set_status(
+            f"Changed {len(replaced)} exact-matching semantic colour roles from "
+            f"{rgba_summary(current)} to {rgba_summary(chosen)}."
+        )
 
     def _build_color_editor(self) -> QWidget:
         page = QWidget()
@@ -782,8 +888,30 @@ class ThemeFoundryWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
         self.gradient_preview = GradientPreview()
         layout.addWidget(self.gradient_preview)
+
+        all_heading = self._heading("All Stops")
+        layout.addWidget(all_heading)
+        all_note = QLabel(
+            "Edit every stop directly. Common 3-stop gradients therefore expose all three "
+            "colours and positions at once; 2- and 4-stop gradients use the same editor."
+        )
+        all_note.setWordWrap(True)
+        all_note.setObjectName("muted")
+        layout.addWidget(all_note)
+
+        self.gradient_all_stops_host = QWidget()
+        self.gradient_all_stops_grid = QGridLayout(self.gradient_all_stops_host)
+        self.gradient_all_stops_grid.setContentsMargins(0, 0, 0, 0)
+        self.gradient_all_stops_grid.setHorizontalSpacing(8)
+        self.gradient_all_stops_grid.setVerticalSpacing(6)
+        layout.addWidget(self.gradient_all_stops_host)
+
+        selected_heading = self._heading("Selected Stop / Structure")
+        layout.addWidget(selected_heading)
         row = QHBoxLayout()
         row.addWidget(QLabel("Stop"))
         self.gradient_stop_combo = QComboBox()
@@ -796,6 +924,7 @@ class ThemeFoundryWindow(QMainWindow):
         row.addWidget(self.gradient_add_btn)
         row.addWidget(self.gradient_remove_btn)
         layout.addLayout(row)
+
         self.gradient_swatch = SwatchButton("Stop Colour…")
         self.gradient_swatch.colorRequested.connect(self._choose_gradient_stop_color)
         layout.addWidget(self.gradient_swatch)
@@ -949,6 +1078,7 @@ class ThemeFoundryWindow(QMainWindow):
             if item is not None:
                 self.tree.setCurrentItem(item)
         self._filter_tree()
+        self._refresh_most_used_colors()
 
     def _filter_tree(self, *_args) -> None:
         text = self.search.text().strip().lower()
@@ -1080,7 +1210,62 @@ class ThemeFoundryWindow(QMainWindow):
         self.gradient_stop_combo.setCurrentIndex(self._gradient_stop_index)
         self.gradient_stop_combo.blockSignals(False)
         self._refresh_gradient_stop_controls(token)
+        self._refresh_gradient_all_stops(token)
         self.gradient_remove_btn.setEnabled(len(value.stops) > 2)
+
+    def _refresh_gradient_all_stops(self, token: str) -> None:
+        value = self.draft.gradients[token]
+        grid = self.gradient_all_stops_grid
+
+        while grid.count():
+            item = grid.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.hide()
+                widget.setParent(None)
+                widget.deleteLater()
+
+        grid.addWidget(self._heading("Stop"), 0, 0)
+        grid.addWidget(self._heading("Colour"), 0, 1)
+        position_heading = self._heading("Position")
+        position_heading.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        grid.addWidget(position_heading, 0, 2)
+
+        for index, stop in enumerate(value.stops):
+            stop_label = QLabel(f"{index + 1}")
+            stop_label.setObjectName("muted")
+            grid.addWidget(stop_label, index + 1, 0)
+
+            swatch = SwatchButton(rgba_summary(stop.color))
+            swatch.set_rgba(stop.color)
+            swatch.colorRequested.connect(
+                lambda index=index: self._choose_gradient_stop_color_at(index)
+            )
+            grid.addWidget(swatch, index + 1, 1)
+
+            position = self._double_spin(0.0, 1.0, 0.01, 3)
+            previous = (
+                value.stops[index - 1].position + 0.001 if index > 0 else 0.0
+            )
+            following = (
+                value.stops[index + 1].position - 0.001
+                if index + 1 < len(value.stops)
+                else 1.0
+            )
+            position.blockSignals(True)
+            position.setRange(previous, following)
+            position.setValue(stop.position)
+            position.blockSignals(False)
+            position.valueChanged.connect(
+                lambda changed, index=index: self._gradient_all_position_changed(
+                    index, changed
+                )
+            )
+            grid.addWidget(position, index + 1, 2)
+
+        grid.setColumnStretch(1, 1)
 
     def _refresh_gradient_stop_controls(self, token: str) -> None:
         value = self.draft.gradients[token]
@@ -1239,6 +1424,53 @@ class ThemeFoundryWindow(QMainWindow):
             return
         self.draft.shadows[token] = changed
         self._after_value_change("shadow", token)
+
+    def _choose_gradient_stop_color_at(self, index: int) -> None:
+        if not self.selected_entry or self.selected_entry[0] != "gradient":
+            return
+        token = self.selected_entry[1]
+        gradient = self.draft.gradients[token]
+        if index < 0 or index >= len(gradient.stops):
+            return
+
+        stop = gradient.stops[index]
+        chosen = self._choose_qcolor(
+            stop.color,
+            f"Choose {friendly_token_label(token)} Stop {index + 1} Colour",
+        )
+        if chosen is None or chosen == stop.color:
+            return
+
+        stops = list(gradient.stops)
+        stops[index] = GradientStop(stop.position, chosen)
+        self._gradient_stop_index = index
+        self.draft.gradients[token] = GradientStyle(stops=tuple(stops))
+        self._after_value_change("gradient", token)
+
+    def _gradient_all_position_changed(self, index: int, value: float) -> None:
+        if (
+            self._updating
+            or not self.selected_entry
+            or self.selected_entry[0] != "gradient"
+        ):
+            return
+        token = self.selected_entry[1]
+        gradient = self.draft.gradients[token]
+        if index < 0 or index >= len(gradient.stops):
+            return
+
+        stops = list(gradient.stops)
+        stop = stops[index]
+        stops[index] = GradientStop(float(value), stop.color)
+        try:
+            changed = GradientStyle(stops=tuple(stops))
+        except (TypeError, ValueError) as exc:
+            self._set_status(f"Invalid gradient position: {exc}")
+            return
+
+        self._gradient_stop_index = index
+        self.draft.gradients[token] = changed
+        self._after_value_change("gradient", token)
 
     def _gradient_stop_selected(self, index: int) -> None:
         if index < 0 or not self.selected_entry or self.selected_entry[0] != "gradient":
@@ -1410,6 +1642,7 @@ class ThemeFoundryWindow(QMainWindow):
             self._refresh_tree_item(kind, token)
             if kind == "color":
                 self._refresh_layers()
+                self._refresh_most_used_colors()
         finally:
             self._updating = False
         self._update_dirty_status()
