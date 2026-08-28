@@ -4097,6 +4097,86 @@ def test_visualizer_viewport_extent_round_trips_through_save_and_reopen(qtbot):
     assert manager2.cancel_session() is True
 
 
+def test_visualizer_viewport_extent_reset_to_canonical_drops_stale_persisted_value(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("A", QRect(0, 0, 6000, 4000))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    # Start from an already-persisted WIDE visualizer (a prior non-baseline save).
+    settings_stub._widgets_map = {
+        "spotify_visualizer": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 2,
+            "displays": {
+                signature: {
+                    "spotify_visualizer": {"default": {
+                        "rect": {"x": 0.02, "y": 0.05, "width": 0.155, "height": 0.105},
+                        "size_payload": {"width": 930, "height": 420, "viewport_extent": [620.0, 280.0]},
+                        "resize_mode": "visualizer_rect",
+                    }}
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+    visualizer = _VisualizerLikeTestWidget(display)
+    visualizer._vis_mode_str = "spectrum"
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+    # Sanity: the wide extent is restored as the baseline for this session.
+    assert normalize_viewport_extent(
+        getattr(visualizer, "_custom_layout_viewport_extent", None)
+    ) == (620.0, 280.0)
+
+    assert manager.start_session() is True
+    item = manager._shell_states["spotify_visualizer"].item
+    assert item.baseline_viewport_extent == (620.0, 280.0)
+    origin_rect = QRect(item.current_global_rect)
+    scale = origin_rect.width() / 620.0
+
+    # Edge-resize the width back to exactly canonical 420 world units.
+    right_edge = QPoint(origin_rect.x() + origin_rect.width(), origin_rect.center().y())
+    assert manager.begin_retained_resize(item, "right", right_edge) is True
+    target_cursor_x = origin_rect.x() + int(round(420.0 * scale))
+    assert manager.update_retained_resize(
+        item, "right", QPoint(target_cursor_x, right_edge.y()), True
+    ) is True
+    assert item.current_viewport_extent[0] == pytest.approx(420.0, abs=0.5)
+    assert item.current_viewport_extent[1] == pytest.approx(280.0)
+
+    assert manager.save_session() is True
+    widgets_map = settings_stub.get_widgets_map()
+    payload = next(iter(widgets_map["custom_layout"]["displays"].values()))["spotify_visualizer"]["default"]
+    # The stale wide extent must be gone: a canonical save carries no extent key.
+    assert "viewport_extent" not in payload["size_payload"]
+
+    # Reopen resolves the canonical baseline, not the old wide aspect.
+    _reset_custom_layout_manager_state()
+    display2 = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display2)
+    display2.show()
+    visualizer2 = _VisualizerLikeTestWidget(display2)
+    visualizer2._vis_mode_str = "spectrum"
+    display2.spotify_visualizer_widget = visualizer2
+    qtbot.addWidget(visualizer2)
+    manager2 = CustomLayoutManager(display2)
+    _attach_manager(display2, manager2)
+    manager2.apply_saved_layouts_to_display()
+    assert normalize_viewport_extent(
+        getattr(visualizer2, "_custom_layout_viewport_extent", None)
+    ) is None
+    assert manager2.start_session() is True
+    item2 = manager2._shell_states["spotify_visualizer"].item
+    assert item2.baseline_viewport_extent == (420.0, 280.0)
+    assert manager2.cancel_session() is True
+
+
 def test_custom_layout_manager_visualizer_legacy_scale_payload_rebaselines_to_committed_rect(qtbot):
     _reset_custom_layout_manager_state()
     screen = _FakeScreen("A", QRect(0, 0, 1600, 1200))

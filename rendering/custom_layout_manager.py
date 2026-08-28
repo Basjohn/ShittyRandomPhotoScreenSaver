@@ -789,17 +789,18 @@ class CustomLayoutManager:
         size_payload = dict(state.item.current_size_payload)
         if state.descriptor.custom_layout_resize_mode == "clock_font":
             size_payload.pop("display_mode", None)
-        if (
-            state.descriptor.custom_layout_resize_mode == "visualizer_rect"
-            and state.item.current_viewport_extent is not None
-            and not self._is_canonical_baseline_extent(state.item.current_viewport_extent)
-        ):
-            # Persist the committed logical world separately from uniform scale so
-            # a reopened / slot-replayed visualizer restores its exact extent and
-            # aspect, not the 1.5 baseline. A never-edge-resized visualizer stays
-            # on the canonical baseline aspect and writes no redundant extent.
+        if state.descriptor.custom_layout_resize_mode == "visualizer_rect":
             extent = state.item.current_viewport_extent
-            size_payload["viewport_extent"] = [float(extent[0]), float(extent[1])]
+            if extent is not None and not self._is_canonical_baseline_extent(extent):
+                # Persist the committed logical world separately from uniform scale
+                # so a reopened / slot-replayed visualizer restores its exact
+                # extent and aspect, not the 1.5 baseline.
+                size_payload["viewport_extent"] = [float(extent[0]), float(extent[1])]
+            else:
+                # Canonical (or unset) extent must drop any previously persisted
+                # value the copied payload carried, so resizing back to baseline and
+                # saving does not leave a stale wide/tall extent that reopens wide.
+                size_payload.pop("viewport_extent", None)
         entry = CustomLayoutEntry(
             widget_id=widget_id,
             geometry_variant=geometry_variant,
