@@ -3,6 +3,7 @@ from __future__ import annotations
 from tools.theme_foundry_model import (
     ThemeDraft,
     matching_color_tokens,
+    most_used_colors,
     replace_matching_color_roles,
 )
 from ui.settings_theme_io import settings_theme_from_json, settings_theme_to_json
@@ -60,3 +61,42 @@ def test_replace_matching_color_roles_changes_only_exact_matches() -> None:
         "b": new,
         "c": Rgba(10, 20, 30, 41),
     }
+
+
+def test_most_used_colors_ranks_exact_rgba_and_ignores_invisible_values() -> None:
+    red = Rgba(180, 40, 50, 255)
+    blue = Rgba(40, 80, 180, 255)
+    green = Rgba(40, 160, 90, 255)
+    invisible = Rgba(0, 0, 0, 0)
+    colors = {
+        "red.first": red,
+        "blue.first": blue,
+        "invisible.a": invisible,
+        "red.second": red,
+        "blue.second": blue,
+        "green.only": green,
+        "invisible.b": invisible,
+    }
+
+    assert most_used_colors(colors, limit=3) == (
+        (red, ("red.first", "red.second")),
+        (blue, ("blue.first", "blue.second")),
+        (green, ("green.only",)),
+    )
+
+
+def test_most_used_colors_keeps_alpha_variants_separate() -> None:
+    opaque = Rgba(20, 30, 40, 255)
+    translucent = Rgba(20, 30, 40, 180)
+    colors = {
+        "opaque.a": opaque,
+        "translucent.a": translucent,
+        "translucent.b": translucent,
+        "opaque.b": opaque,
+        "translucent.c": translucent,
+    }
+
+    assert most_used_colors(colors, limit=2) == (
+        (translucent, ("translucent.a", "translucent.b", "translucent.c")),
+        (opaque, ("opaque.a", "opaque.b")),
+    )

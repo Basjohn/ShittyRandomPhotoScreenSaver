@@ -356,6 +356,41 @@ def replace_matching_color_roles(
     return tokens
 
 
+def most_used_colors(
+    colors: dict[str, Rgba],
+    *,
+    limit: int = 6,
+    include_fully_transparent: bool = False,
+) -> tuple[tuple[Rgba, tuple[str, ...]], ...]:
+    """Rank exact semantic RGBA values by how many colour roles use them.
+
+    Equal-frequency colours keep first-appearance order from ``colors`` so the
+    Foundry display is deterministic. Fully transparent values are omitted by
+    default because they contribute no visible colour and would otherwise crowd
+    the useful palette summary.
+    """
+
+    if limit <= 0:
+        return ()
+
+    groups: dict[Rgba, list[str]] = {}
+    first_seen: dict[Rgba, int] = {}
+    for index, (token, value) in enumerate(colors.items()):
+        if not include_fully_transparent and value.a == 0:
+            continue
+        groups.setdefault(value, []).append(token)
+        first_seen.setdefault(value, index)
+
+    ranked = sorted(
+        groups.items(),
+        key=lambda item: (-len(item[1]), first_seen[item[0]]),
+    )
+    return tuple(
+        (value, tuple(tokens))
+        for value, tokens in ranked[:limit]
+    )
+
+
 def solve_layer_for_target(
     *,
     selected_token: str,
@@ -475,6 +510,9 @@ __all__ = [
     "friendly_token_label",
     "gradient_summary",
     "matching_acrylic_preset",
+    "matching_color_tokens",
+    "most_used_colors",
+    "replace_matching_color_roles",
     "nearest_composite_relation",
     "relations_for",
     "rgba_summary",
