@@ -44,6 +44,10 @@ from rendering.custom_layout_session import (
     CustomLayoutSessionItem,
     DEFAULT_GEOMETRY_VARIANT,
     normalize_geometry_variant,
+    normalize_viewport_extent,
+)
+from widgets.spotify_visualizer.render_state import (
+    CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
 )
 from rendering.widget_descriptors import (
     get_custom_persistence_monitor_settings_key_for_widget,
@@ -65,6 +69,17 @@ from widgets.edit_shell_widget import EditShellWidget
 logger = get_logger(__name__)
 _MIN_CUSTOM_WIDGET_WIDTH = int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.width())
 _MIN_CUSTOM_WIDGET_HEIGHT = int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.height())
+
+# Semantic viewport-extent (edge) handle ids. Corner ids drive the uniform
+# whole-size operation; these four change one viewport axis at constant uniform
+# scale. Kept in sync with rendering/quick/custom_layout_overlay.py.
+_VIEWPORT_EDGE_HANDLES = frozenset({"left", "right", "top", "bottom"})
+
+
+def _is_viewport_edge_handle(handle: object) -> bool:
+    return str(handle) in _VIEWPORT_EDGE_HANDLES
+
+
 _VISUALIZER_RECOVERY_ASPECT = 1.5
 _VISUALIZER_RECOVERY_MIN_SIZE = QSize(max(260, _MIN_CUSTOM_WIDGET_WIDTH), max(120, _MIN_CUSTOM_WIDGET_HEIGHT))
 def _dispatch_shell_signal(
@@ -119,6 +134,13 @@ class _ShellState:
     resize_origin_scale: float = 1.0
     resize_origin_payload: dict[str, Any] | None = None
     resize_corner: str | None = None
+    # Viewport-extent (edge) resize origin facts. Separate from the uniform
+    # corner origin above so the two operations never contaminate each other.
+    viewport_edge: str | None = None
+    viewport_origin_rect: QRect | None = None
+    viewport_origin_extent: tuple[float, float] | None = None
+    viewport_origin_scale: float = 1.0
+    viewport_origin_cursor: QPoint | None = None
 
 
 # Widget ids whose LIVE runtime an edit session genuinely mutates, and which a
@@ -1391,6 +1413,12 @@ class CustomLayoutManager:
         if self._session is None:
             raise RuntimeError("CUSTOM layout session missing while creating edit state")
         ordinary_enabled = self._read_ordinary_enabled_for_widget(descriptor)
+        viewport_capable = descriptor.custom_layout_resize_mode == "visualizer_rect"
+        baseline_viewport_extent = (
+            self._admission_viewport_extent(baseline_payload)
+            if viewport_capable
+            else None
+        )
         item = CustomLayoutSessionItem(
             source_key=CustomLayoutKey(
                 descriptor.widget_id,
@@ -1407,6 +1435,8 @@ class CustomLayoutManager:
             resize_capable=descriptor.supports_layout_resize_edit,
             source_monitor_route=source_monitor_value,
             current_monitor_route=current_monitor_value,
+            viewport_resize_capable=viewport_capable,
+            baseline_viewport_extent=baseline_viewport_extent,
         )
         self._session.add_item(item)
         state = _ShellState(
@@ -1794,10 +1824,22 @@ class CustomLayoutManager:
         corner: str,
         cursor_global: QPoint,
     ) -> bool:
-        """Adapt retained Quick resize start to the canonical Python owner."""
+        """Adapt retained Quick resize start to the canonical Python owner.
+
+        Corner handles drive the uniform whole-size operation; the four viewport
+        edges drive the independent viewport-extent operation. The two paths keep
+        separate origin facts so neither contaminates the other.
+        """
 
         state = self._state_for_session_item(item)
-        if state is None or not state.descriptor.supports_layout_resize_edit:
+        if state is None:
+            return False
+        if _is_viewport_edge_handle(corner):
+            if not state.item.viewport_resize_capable:
+                return False
+            self._begin_viewport_edge_resize(state, str(corner), QPoint(cursor_global))
+            return True
+        if not state.descriptor.supports_layout_resize_edit:
             return False
         self._on_shell_resize_drag_started(
             state.descriptor.widget_id,
@@ -1817,7 +1859,19 @@ class CustomLayoutManager:
         """Apply retained Quick resize through existing anchor/payload rules."""
 
         state = self._state_for_session_item(item)
-        if state is None or not state.descriptor.supports_layout_resize_edit:
+        if state is None:
+            return False
+        if _is_viewport_edge_handle(corner):
+            if not state.item.viewport_resize_capable:
+                return False
+            self._apply_viewport_edge_resize(
+                state.descriptor.widget_id,
+                str(corner),
+                cursor_global=QPoint(cursor_global),
+                finalize=bool(finalize),
+            )
+            return True
+        if not state.descriptor.supports_layout_resize_edit:
             return False
         self._apply_resize_drag(
             state.descriptor.widget_id,
@@ -1987,12 +2041,238 @@ class CustomLayoutManager:
             state.resize_origin_scale = state.item.resize_scale
             state.resize_corner = None
 
+    def _admission_viewport_extent(
+        self,
+        baseline_payload: dict[str, Any],
+    ) -> tuple[float, float]:
+        """Resolve the visualizer's committed logical world at session admission.
+
+        A committed ``viewport_extent`` in the persisted payload wins; otherwise
+        the canonical baseline aspect is used. This never derives extent from the
+        pixel rect, so a never-edge-resized visualizer stays on the 1.5 baseline.
+        """
+
+        committed = normalize_viewport_extent(baseline_payload.get("viewport_extent"))
+        if committed is not None:
+            return committed
+        return (
+            float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[0]),
+            float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1]),
+        )
+
+    def _faithful_viewport_outer_rect(
+        self,
+        current_rect: QRect,
+        extent: tuple[float, float],
+    ) -> tuple[QRect, float]:
+        """Reconstruct the true extent-derived outer rect and its uniform scale.
+
+        The visualizer's committed WIDTH is the faithful outer axis; its shell
+        height may still carry a legacy QoL preview envelope, so the true outer
+        height is recomputed from the committed extent at the single uniform
+        pixels-per-world derived from width. This keeps the edge operation from
+        inheriting preview-only height growth and keeps one uniform scale for
+        both axes.
+        """
+
+        effective_scale = float(current_rect.width()) / float(extent[0])
+        faithful_height = max(1, int(round(float(extent[1]) * effective_scale)))
+        faithful_rect = QRect(
+            current_rect.x(),
+            current_rect.y(),
+            current_rect.width(),
+            faithful_height,
+        )
+        return faithful_rect, effective_scale
+
+    def _begin_viewport_edge_resize(
+        self,
+        state: _ShellState,
+        edge: str,
+        cursor_global: QPoint,
+    ) -> None:
+        """Capture immutable origin facts for one viewport-extent edge drag."""
+
+        origin_extent = (
+            state.item.current_viewport_extent
+            or state.item.baseline_viewport_extent
+        )
+        if origin_extent is None:
+            return
+        current_rect = state.item.current_global_rect
+        if current_rect.width() <= 0 or origin_extent[0] <= 0.0:
+            return
+        faithful_rect, effective_scale = self._faithful_viewport_outer_rect(
+            current_rect,
+            (float(origin_extent[0]), float(origin_extent[1])),
+        )
+        if not (effective_scale > 0.0):
+            return
+        state.viewport_edge = edge
+        state.viewport_origin_rect = faithful_rect
+        state.viewport_origin_extent = (
+            float(origin_extent[0]),
+            float(origin_extent[1]),
+        )
+        state.viewport_origin_scale = effective_scale
+        state.viewport_origin_cursor = QPoint(cursor_global)
+
+    def _apply_viewport_edge_resize(
+        self,
+        widget_id: str,
+        edge: str,
+        *,
+        cursor_global: QPoint,
+        finalize: bool,
+    ) -> None:
+        """Change one viewport axis at constant uniform scale.
+
+        The edge operation is orthogonal to the uniform (wheel/corner) operation:
+        ``resize_scale`` is never touched, the opposite axis extent is preserved
+        bit-for-bit, and finished pixels are never anisotropically stretched. One
+        uniform pixels-per-world factor (derived from the faithful width axis at
+        drag start) maps pointer pixels to world units, so a minimum outer size
+        never silently changes uniform scale.
+        """
+
+        state = self._shell_states.get(widget_id)
+        if state is None or not state.item.viewport_resize_capable:
+            return
+        resolved_edge = str(edge or state.viewport_edge or "")
+        if not _is_viewport_edge_handle(resolved_edge):
+            return
+        origin_extent = (
+            state.viewport_origin_extent
+            or state.item.current_viewport_extent
+            or state.item.baseline_viewport_extent
+        )
+        if origin_extent is None:
+            return
+        if state.viewport_origin_rect is not None and state.viewport_origin_scale > 0.0:
+            origin_rect = state.viewport_origin_rect
+            scale_px_per_world = state.viewport_origin_scale
+        else:
+            origin_rect, scale_px_per_world = self._faithful_viewport_outer_rect(
+                state.item.current_global_rect,
+                (float(origin_extent[0]), float(origin_extent[1])),
+            )
+        if origin_rect.width() <= 0 or origin_rect.height() <= 0:
+            return
+        if not (scale_px_per_world > 0.0):
+            return
+
+        horizontal = resolved_edge in ("left", "right")
+        min_size = self._min_size_for_state(state)
+        left = origin_rect.x()
+        top = origin_rect.y()
+        right = origin_rect.x() + origin_rect.width()
+        bottom = origin_rect.y() + origin_rect.height()
+
+        if resolved_edge == "right":
+            new_width = max(int(min_size.width()), int(round(cursor_global.x() - left)))
+            new_rect = QRect(left, top, new_width, origin_rect.height())
+        elif resolved_edge == "left":
+            new_left = min(int(round(cursor_global.x())), right - int(min_size.width()))
+            new_rect = QRect(new_left, top, right - new_left, origin_rect.height())
+        elif resolved_edge == "bottom":
+            new_height = max(int(min_size.height()), int(round(cursor_global.y() - top)))
+            new_rect = QRect(left, top, origin_rect.width(), new_height)
+        else:  # top
+            new_top = min(int(round(cursor_global.y())), bottom - int(min_size.height()))
+            new_rect = QRect(left, new_top, origin_rect.width(), bottom - new_top)
+
+        new_rect = self._clamp_viewport_edge_rect_on_fixed_screen(
+            state,
+            new_rect,
+            resolved_edge,
+        )
+
+        # Derive the dragged extent axis only; the opposite axis is untouched.
+        extent_width, extent_height = origin_extent
+        if horizontal:
+            extent_width = max(1.0, float(new_rect.width()) / scale_px_per_world)
+        else:
+            extent_height = max(1.0, float(new_rect.height()) / scale_px_per_world)
+
+        state.item.current_global_rect = QRect(new_rect)
+        state.item.current_viewport_extent = normalize_viewport_extent(
+            (extent_width, extent_height)
+        )
+        # Keep the legacy pixel payload coherent within the session so the shell
+        # preview and any interim persistence carry the new outer size.
+        payload = dict(state.item.current_size_payload)
+        payload["width"] = int(new_rect.width())
+        payload["height"] = int(new_rect.height())
+        state.item.current_size_payload = payload
+        self._update_shell_reset_affordances(state)
+        self._log_geo_audit(
+            widget_id,
+            "viewport_edge_final" if finalize else "viewport_edge_live",
+            global_rect=new_rect,
+            payload=state.item.current_size_payload,
+            source="_apply_viewport_edge_resize",
+            extra=(
+                f"edge={resolved_edge} extent=({extent_width:.2f},{extent_height:.2f}) "
+                f"scale={state.item.resize_scale:.4f} px_per_world={scale_px_per_world:.4f}"
+            ),
+        )
+        self._refresh_shell_snapshot_for_resize_preview(state, new_rect.size())
+        self._set_shell_geometry_silently(state, new_rect)
+        if finalize:
+            state.viewport_edge = None
+            state.viewport_origin_rect = None
+            state.viewport_origin_extent = None
+            state.viewport_origin_scale = 1.0
+            state.viewport_origin_cursor = None
+
+    def _clamp_viewport_edge_rect_on_fixed_screen(
+        self,
+        state: _ShellState,
+        rect: QRect,
+        edge: str,
+    ) -> QRect:
+        """Clamp only the moving edge to the fixed screen; never transfer displays.
+
+        Cross-display transfer stays G5 ownership: an edge drag holds the anchor
+        edge and the untouched axis fixed and clamps the moving edge to the
+        current screen, honouring the same minimum outer size as the corner path.
+        """
+
+        screen = state.current_screen or self._screen
+        left = rect.x()
+        top = rect.y()
+        right = rect.x() + rect.width()
+        bottom = rect.y() + rect.height()
+        min_size = self._min_size_for_state(state)
+        if screen is not None:
+            geom = screen.geometry()
+            screen_left = geom.x()
+            screen_top = geom.y()
+            screen_right = geom.x() + geom.width()
+            screen_bottom = geom.y() + geom.height()
+            if edge == "right":
+                right = min(right, screen_right)
+                right = max(right, left + int(min_size.width()))
+            elif edge == "left":
+                left = max(left, screen_left)
+                left = min(left, right - int(min_size.width()))
+            elif edge == "bottom":
+                bottom = min(bottom, screen_bottom)
+                bottom = max(bottom, top + int(min_size.height()))
+            else:  # top
+                top = max(top, screen_top)
+                top = min(top, bottom - int(min_size.height()))
+        return QRect(left, top, right - left, bottom - top)
+
     def _on_shell_reset_size_requested(self, widget_id: str) -> None:
         state = self._shell_states.get(widget_id)
         if state is None:
             return
         state.item.resize_scale = 1.0
         state.item.current_size_payload = dict(state.item.baseline_size_payload)
+        # Reset-size returns to the committed baseline, which includes the
+        # baseline viewport extent (edge operation), not only uniform scale.
+        state.item.current_viewport_extent = state.item.baseline_viewport_extent
         self._update_shell_reset_affordances(state)
         current = QRect(state.item.current_global_rect)
         baseline = QRect(state.item.baseline_global_rect)
