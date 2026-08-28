@@ -17,6 +17,7 @@ from core.settings.visualizer_mode_registry import (
 from widgets.spotify_visualizer.presentation_geometry import (
     CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO,
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
+    resize_visualizer_presentation,
     resize_visualizer_presentation_uniformly,
     resolve_visualizer_presentation,
 )
@@ -100,6 +101,105 @@ def test_retained_uniform_resize_preserves_viewport_and_rescales_authored_chrome
     assert resized.border_width == pytest.approx(4.0 * target_scale)
     assert resized.shell_style["shadow_blur"] == pytest.approx(
         18.0 * target_scale
+    )
+
+
+@pytest.mark.parametrize(
+    ("extent", "expected_aspect"),
+    (
+        ((630.0, 280.0), 2.25),
+        ((420.0, 420.0), 1.0),
+        ((420.0, 217.0), 420.0 / 217.0),
+    ),
+)
+def test_edge_reproject_changes_extent_only_without_touching_uniform_scale(
+    extent,
+    expected_aspect,
+) -> None:
+    baseline = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("spectrum"),
+        display_size=(2560.0, 1440.0),
+        outer_origin=(40.0, 60.0),
+        uniform_visual_scale=1.5,
+        border_width=4.0,
+        corner_radius=8.0,
+        content_inset=2.0,
+        shadow_blur=18.0,
+        shadow_offset=(2.0, 4.0),
+    )
+
+    reprojected = resize_visualizer_presentation(
+        baseline,
+        display_size=(2560.0, 1440.0),
+        outer_origin=(120.0, 90.0),
+        relative_scale=1.0,
+        viewport_extent=extent,
+    )
+
+    # Uniform scale is untouched by an extent-only operation.
+    assert reprojected.uniform_visual_scale == pytest.approx(1.5)
+    assert reprojected.viewport_extent == extent
+    assert reprojected.current_aspect_ratio == pytest.approx(expected_aspect)
+    # Outer pixels are extent * scale on both axes independently: no X/Y stretch
+    # of finished pixels, the outer rect simply reflects the new world.
+    assert reprojected.outer_rect == pytest.approx(
+        (120.0, 90.0, extent[0] * 1.5, extent[1] * 1.5)
+    )
+    # Baseline identity survives an arbitrary custom extent.
+    assert reprojected.baseline_viewport_size == (420.0, 280.0)
+    assert reprojected.baseline_aspect_ratio == 1.5
+    # Authored chrome remains scaled by uniform scale only, never by aspect.
+    assert reprojected.border_width == pytest.approx(4.0 * 1.5)
+    assert reprojected.shell_style["shadow_blur"] == pytest.approx(18.0 * 1.5)
+
+
+def test_edge_and_uniform_reproject_compose_independently() -> None:
+    baseline = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("bubble"),
+        display_size=(3840.0, 2160.0),
+        outer_origin=(100.0, 100.0),
+    )
+
+    # A wide extent plus a 2x uniform scale compose to extent * scale with no
+    # cross-contamination between the two operations.
+    reprojected = resize_visualizer_presentation(
+        baseline,
+        display_size=(3840.0, 2160.0),
+        outer_origin=(100.0, 100.0),
+        relative_scale=2.0,
+        viewport_extent=(560.0, 280.0),
+    )
+
+    assert reprojected.uniform_visual_scale == pytest.approx(2.0)
+    assert reprojected.viewport_extent == (560.0, 280.0)
+    assert reprojected.current_aspect_ratio == pytest.approx(2.0)
+    assert reprojected.outer_rect == pytest.approx(
+        (100.0, 100.0, 560.0 * 2.0, 280.0 * 2.0)
+    )
+
+
+def test_uniform_reproject_preserves_a_previously_committed_custom_extent() -> None:
+    # Corner/wheel resize must never reset a previously committed non-baseline
+    # viewport extent back to the 1.5 baseline aspect.
+    tall_baseline = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("oscilloscope"),
+        display_size=(2560.0, 1440.0),
+        outer_origin=(80.0, 80.0),
+        viewport_extent=(420.0, 560.0),
+    )
+
+    resized = resize_visualizer_presentation_uniformly(
+        tall_baseline,
+        display_size=(2560.0, 1440.0),
+        outer_origin=(80.0, 80.0),
+        relative_scale=1.5,
+    )
+
+    assert resized.viewport_extent == (420.0, 560.0)
+    assert resized.current_aspect_ratio == pytest.approx(420.0 / 560.0)
+    assert resized.uniform_visual_scale == pytest.approx(1.5)
+    assert resized.outer_rect == pytest.approx(
+        (80.0, 80.0, 420.0 * 1.5, 560.0 * 1.5)
     )
 
 
