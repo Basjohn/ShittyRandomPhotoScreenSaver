@@ -7,11 +7,12 @@ Last updated: 2026-08-28
 Exact pushed `main` reviewed through:
 
 ```text
-59f4a3c98235215a9ff89fc09e4cc979d1831e89
-G1–G6 landed; G7 retained dimming/pixel shift, cursor halo and context menu are landed; G7 is near closure.
+9baea1f6df9301430ed7da9d6ae780f5e502352e
+G4 deterministic viewport-extent implementation is complete for all five modes,
+including Bubble logical reflow, the live config route and the canonical-reset persistence fix.
+Only the deferred all-five-mode installed/eyes-on viewport gate remains (after H).
 ```
 
-The latest migration-relevant G7 commit in that checkpoint is `a8b2426e` (retained context menu).
 Later source always outranks this plan.
 
 Current phase state:
@@ -21,7 +22,7 @@ F0–F8   ordinary-family migration                         CLOSED
 G1      neutral CUSTOM session / variants / layout slots CLOSED
 G2      retained edit overlay / X / family binding       CLOSED
 G3      Save/Cancel + enabled/duplicate persistence      CLOSED
-G4      retained uniform + viewport-extent resize     LANDED; Bubble logical reflow remaining
+G4      viewport-extent implementation                   DETERMINISTIC COMPLETE; eyes-on deferred (after H)
 G5      retained cross-display transfer                  CLOSED
 G6      retained input / semantic family actions         CLOSED
 G7      retained context + auxiliary pixels              NEAR CLOSURE
@@ -31,41 +32,41 @@ I       residue only                                     after H
 J       final installed / physical validation            final
 ```
 
-## Remaining G4 blocker — Bubble logical viewport reflow
+## G4 deterministic implementation — complete
 
-The retained viewport-extent (edge) resize operation is landed and gated by tests for the geometry projection,
-session working state, overlay/QML edge handles, scene-controller preview projection, the manager edge adapter and
-the persistence round-trip. The four proven modes (Spectrum, Oscilloscope, Sine, DevCurve) reflow because their
-Quick renderers already recompute their domain from committed geometry and the shader keeps circles round.
+The G4 viewport-extent implementation is deterministically complete and pushed for all five modes. Landed and test-gated:
+retained edge handles + session scale/extent working state, presentation-geometry projection, scene-controller preview
+projection, the manager viewport-edge adapter, persistence (including the canonical-reset drop of a stale extent), the live
+`presentation_viewport_extent` config route from a CUSTOM edge drag into the next authored Bubble step, Bubble's
+baseline-relative logical-domain reflow (canonical `(420,280)` is a strict byte-identical no-op; wide/tall expand the world,
+shrink reconciles through the canonical exit/cull path, authored counts/personality untouched, render seam normalizes so the
+shader keeps circles round), and the `viewport_resize_capable=True` policy flip for all five modes.
 
-One piece remains before G4 closes: **Bubble logical viewport reflow**.
+Only the deferred all-five-mode installed/eyes-on viewport gate remains, and it is correctly blocked on H (see below). Do not
+reopen the deterministic work or invent compatibility presentation work to inspect it before H.
 
-Bubble's simulation runs in a unit square `[0,1]^2`; the shader maps that to the card and keeps circles round via
-aspect correction. The accepted **baseline (1.5) look is a BTF golden and must stay byte-identical**. The reflow
-must be a strict no-op at the baseline aspect and expand the logical domain only for a wide/tall committed extent
-(baseline-relative domain extension), never anisotropically stretching finished pixels, and never retuning Bubble
-speed/collision/elasticity/personality or adding a second clock. The committed viewport extent is already available
-at the runtime-controller boundary (`presentation_viewport_extent`); Bubble must consume it as latest spatial
-configuration.
+## Deferred G4 physical acceptance
 
-Remaining proof:
+The final all-five-mode baseline/wide/tall eyes-on gate remains required, but is deliberately deferred until the Quick runtime
+is production-authoritative enough to inspect honestly.
 
-- wire the committed viewport extent into the Bubble simulation as latest spatial configuration (no pointer/geometry
-  clock); domain defaults to the baseline square so BTF goldens stay byte-identical;
-- a wide/tall extent expands the Bubble logical domain (bubbles fill the extra space at baseline density) rather than
-  texture-stretching positions; circles/radii/velocity/collision stay coherent and BTF-clean;
-- flip Bubble's `viewport_resize_capable` mode policy to `True` (and update the two policy tests) once the reflow
-  lands, so all five modes are destination-capable;
-- all-five-mode eyes-on gate at baseline, wide and tall extents (this piece needs installed/manual visual
-  acceptance — deterministic tests alone do not close Bubble visual/timing fidelity).
+After H, physically check at minimum:
 
-Because this modifies BTF-binding simulation code and needs eyes-on acceptance, it is an audit/eyes-on boundary.
+```text
+Spectrum      baseline / wide / tall
+Oscilloscope  baseline / wide / tall
+Sine          baseline / wide / tall
+Bubble        baseline / wide / tall / representative shrink
+DevCurve      baseline / wide / tall
+```
 
-Use `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` section 7 as the route, with
-`Docs/Guardrails/Visualizer_Presentation.md` (§9, §14), `Docs/Guardrails/Bubble_Temporal_Fidelity.md` and
-`Docs/QtQuick_Migration/03_Visualizer.md` as binding destination contracts.
+For Bubble specifically verify circles, apparent size, speed, distribution, trails, collision feel and BTF continuity.
+Installed/manual evidence can reject deterministic implementation if the result looks materially wrong.
 
-## Resume G7 closure after the G4 correction
+This deferred physical gate is acceptance debt, not permission to leave Bubble `viewport_resize_capable=False` after the
+deterministic implementation is complete.
+
+## Resume G7 closure after deterministic G4 completion
 
 Already landed in the retained Quick scene:
 
@@ -73,10 +74,10 @@ Already landed in the retained Quick scene:
 - cursor halo and inactivity behavior;
 - retained context-menu model/QML and semantic action admission.
 
-G7 remaining work is closure/caller proof: inspect exact current legacy context/halo/dimming/pixel-shift callers,
-retire superseded QWidget/top-level auxiliary pixel ownership that no longer has a live caller, preserve Python
-semantic command/settings authority, and prove same-window generation/focus/input behavior. Do not rebuild a
-compatibility presenter merely to keep the half-migrated screensaver runnable.
+G7 remaining work is closure/caller proof: inspect exact current legacy context/halo/dimming/pixel-shift callers, retire
+superseded QWidget/top-level auxiliary pixel ownership that no longer has a live caller, preserve Python semantic
+command/settings authority, and prove same-window generation/focus/input behavior. Do not rebuild a compatibility presenter
+merely to keep the half-migrated screensaver runnable.
 
 Then perform G8 MC/focus closure. For G7 deletion/caller proof and G8 focus/input sequencing, follow
 `Docs/QtQuick_Migration/Remaining_G7_G8_Auxiliary_Focus_Decomposition.md`.
@@ -88,16 +89,19 @@ Normal bounded slice:
 ```text
 inspect exact source
 -> bounded implementation
--> focused tests + required eyes-on evidence
+-> focused tests
 -> diff/status
 -> commit/push
 -> fresh post-push self-audit
 -> continue when GREEN
 ```
 
-External audit is required for cross-family/process/display architecture changes, engine/window/thread/resource
-ownership changes, material runtime lifecycle/shared-resource changes, unresolved YELLOW, deterministic-vs-visual
-disagreement, or explicit request. H owner cutover remains independently audit-required.
+Use an explicit deferred-physical-acceptance marker where the current production routing makes a real Quick eyes-on gate
+impossible. Do not fabricate visual acceptance and do not block destination implementation on a legacy compatibility detour.
+
+External audit is required for cross-family/process/display architecture changes, engine/window/thread/resource ownership
+changes, material runtime lifecycle/shared-resource changes, unresolved YELLOW, deterministic-vs-visual disagreement, or
+explicit request. H owner cutover remains independently audit-required.
 
 Do not run routine hosted CI or full/Nuitka/installed builds during ordinary G implementation.
 
@@ -129,8 +133,17 @@ Hard:
 
 ## CUSTOM contracts already landed and still binding
 
-Geometry key supports `(widget_id, display_identity, geometry_variant)`; Clock digital/analogue have independent
-committed rects without drift.
+Geometry key supports `(widget_id, display_identity, geometry_variant)`; Clock digital/analogue have independent committed
+rects without drift.
+
+Visualizer geometry has two independent authored operations:
+
+```text
+wheel/corners -> uniform_visual_scale
+edges         -> viewport_extent
+```
+
+Neither operation may silently mutate the other.
 
 Every adjustable edit-mode card gets `X`:
 
@@ -141,17 +154,17 @@ Every adjustable edit-mode card gets `X`:
 
 Save/Enter commits; Cancel restores pre-edit geometry, duplicate set and ordinary enabled state.
 
-Layout slots are ordinary visible-layout snapshots: `Shift+1`..`Shift+0` save and `1`..`0` load geometry/size plus
-ordinary ON/OFF. Slot load may turn an effective family member ordinarily ON/OFF, but never activates a fully
-deactivated family/capability and never overwrites provider/account/source settings.
+Layout slots are ordinary visible-layout snapshots: `Shift+1`..`Shift+0` save and `1`..`0` load geometry/size plus ordinary
+ON/OFF. Slot load may turn an effective family member ordinarily ON/OFF, but never activates a fully deactivated
+family/capability and never overwrites provider/account/source settings.
 
 Centering guides are red so display/peer-centre alignment is distinct from ordinary grid/edge guides.
 
 ## H — final production owner cutover
 
-The source still routes normal startup through legacy `DisplayWidget` before H. **That is a routing fact, not a
-requirement that the partially migrated application remain product-functional.** Do not add compatibility work solely
-to keep the old runtime alive while migration proceeds.
+The source still routes normal startup through legacy `DisplayWidget` before H. **That is a routing fact, not a requirement
+that the partially migrated application remain product-functional.** Do not add compatibility work solely to keep the old
+runtime alive while migration proceeds.
 
 H is the final owner/orchestration wiring. Follow
 `Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md`; do not improvise a compatibility architecture:
@@ -168,27 +181,28 @@ selected display
 ```
 
 Do not run legacy and Quick production runtime managers in parallel. Preserve semantic cardinality.
-`QuickSceneController` remains sole runtime Quick-item creator/destructor for its display; shared `QQmlEngine` is not
-a hidden runtime-generation owner.
+`QuickSceneController` remains sole runtime Quick-item creator/destructor for its display; shared `QQmlEngine` is not a hidden
+runtime-generation owner.
 
 Once that destination chain is authoritative, delete the remaining physical-host path: `DisplayWidget`,
-QRhiWidget/`GLCompositorWidget`, old compositor scheduling/presentation glue, unsupported software/backend-demotion
-fallback, obsolete `hw_accel`/fallback-overlay policy, remaining physical-host transition/visualizer debris,
-temporary legacy anchors after destination ownership, and obsolete presentation-setting compatibility.
+QRhiWidget/`GLCompositorWidget`, old compositor scheduling/presentation glue, unsupported software/backend-demotion fallback,
+obsolete `hw_accel`/fallback-overlay policy, remaining physical-host transition/visualizer debris, temporary legacy anchors
+after destination ownership, and obsolete presentation-setting compatibility.
 
-H does **not** require a seamless live handoff from a fully functioning legacy application. H must prove owner/lifecycle
-correctness of the destination and leave only Quick production authority. No production switch back.
+H does **not** require a seamless live handoff from a fully functioning legacy application. H must prove
+owner/lifecycle correctness of the destination and leave only Quick production authority. No production switch back.
 
 ## I / J
 
-I is residue only: expired adapters/aliases, caller-dead old-presenter utilities, obsolete tests/tools/comments and
-abandoned migration spikes.
+I is residue only: expired adapters/aliases, caller-dead old-presenter utilities, obsolete tests/tools/comments and abandoned
+migration spikes.
 
-J owns comprehensive installed/compiled and physical acceptance: real 1/2/N-display, DPR/topology/off-wake,
-continuity, widget/Visualizer eyes-on parity, performance/tail checks, clean shutdown, test-ledger reconciliation and
-documentation closure.
+J owns comprehensive installed/compiled and physical acceptance: real 1/2/N-display, DPR/topology/off-wake, continuity,
+widget/Visualizer eyes-on parity, the deferred G4 all-mode viewport gate, performance/tail checks, clean shutdown,
+test-ledger reconciliation and documentation closure.
 
-## Current acceptance debt
+## Current unrelated acceptance debt
 
-Unrelated logging, Reddit-helper and physical two-display midpoint-capture focused-test debt remains in
-`Future_Cleanup.md` and must not be mistaken for the visualizer viewport-resize blocker above.
+`Future_Cleanup.md` is authoritative for unrelated cleanup/test debt. Current known focused debt includes the Reddit helper
+tests and the physical two-display Quick midpoint-capture smoke cases. Do not resurrect already-closed logging or retired
+global Presets debt in this plan.
