@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import QObject, QPoint, Signal
+from PySide6.QtCore import QObject, QPoint, QSize, Signal
 from PySide6.QtGui import QScreen
 
 from rendering.widget_runtime_manager import WidgetRuntimeManager
@@ -373,6 +373,23 @@ class QuickDisplayRuntime(QObject):
             raise TypeError("visualizer viewport override sink must be callable")
         self.scene_controller.set_visualizer_viewport_config_sink(override_sink)
 
+    def get_target_size(self) -> QSize:
+        """Return this display's target image pixel size (logical size x DPR).
+
+        This is the physical pixel extent the image pipeline should process to for
+        this display, derived from the bound display identity - no legacy widget
+        or compositor surface is consulted.
+        """
+
+        _x, _y, width, height = self._display_identity.geometry
+        dpr = float(self._display_identity.device_pixel_ratio)
+        if dpr <= 0.0:
+            dpr = 1.0
+        return QSize(
+            max(1, int(round(float(width) * dpr))),
+            max(1, int(round(float(height) * dpr))),
+        )
+
     def set_presentation_image(self, image: PresentationImage | None) -> None:
         """Publish immutable base-image state into this display generation."""
 
@@ -381,6 +398,19 @@ class QuickDisplayRuntime(QObject):
         if self.transition_controller.is_active:
             raise RuntimeError("cannot replace the base image during a transition run")
         self.scene_controller.set_presentation_image(image)
+
+    def clear(self) -> None:
+        """Clear the base image while keeping the window/scene generation live.
+
+        A running transition is cancelled first so the cleared state is coherent.
+        A retiring/retired generation ignores the request.
+        """
+
+        if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
+            return
+        if self.transition_controller.is_active:
+            self.transition_controller.cancel_current(reason="clear")
+        self.scene_controller.set_presentation_image(None)
 
     def start_transition(
         self,
