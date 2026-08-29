@@ -164,3 +164,59 @@ def test_unit_visualizer_owner_is_single_and_blocks_runtime_retirement(qt_app) -
             unit.retire()
         factory.deleteLater()
         qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_unit_routes_media_actions_to_its_retained_presentation(
+    qt_app,
+    monkeypatch,
+) -> None:
+    class _MediaPresentation:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def request_transport(self, key: str) -> bool:
+            self.calls.append(("transport", key))
+            return True
+
+        def request_app_volume_step(self, direction: int) -> bool:
+            self.calls.append(("app_volume", direction))
+            return True
+
+        def request_system_volume_step(self, delta: float) -> float:
+            self.calls.append(("system_volume", delta))
+            return 0.65
+
+        def request_system_mute_toggle(self) -> bool:
+            self.calls.append(("mute",))
+            return True
+
+    coord = SharedCtrlCoordinator()
+    unit, factory = _make_unit(qt_app, 99, coord)
+    media = _MediaPresentation()
+    monkeypatch.setattr(
+        unit.presenter,
+        "presentation_for_widget_id",
+        lambda widget_id: media if widget_id == "media" else None,
+    )
+    try:
+        assert unit.request_media_transport("play") is True
+        assert unit.request_media_transport("prev") is True
+        assert unit.request_media_transport("next") is True
+        assert unit.request_app_volume_step(-1) is True
+        assert unit.request_system_volume_step(0.05) == pytest.approx(0.65)
+        assert unit.request_system_mute_toggle() is True
+        with pytest.raises(ValueError, match="unsupported Media transport"):
+            unit.request_media_transport("stop")
+        assert media.calls == [
+            ("transport", "play"),
+            ("transport", "prev"),
+            ("transport", "next"),
+            ("app_volume", -1),
+            ("system_volume", 0.05),
+            ("mute",),
+        ]
+    finally:
+        unit.retire()
+        factory.deleteLater()
+        qt_app.processEvents()

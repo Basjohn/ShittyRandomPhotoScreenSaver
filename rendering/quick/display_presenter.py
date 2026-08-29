@@ -76,6 +76,14 @@ class QuickDisplayPresenter:
                 return binding.current_geometry
         return None
 
+    def presentation_for_widget_id(self, widget_id: str) -> object | None:
+        """Return one retained family presentation without exposing the host."""
+
+        binder = self._binder
+        if binder is None or self._retired:
+            return None
+        return binder.presentation_for_widget_id(widget_id)
+
     def bind_families(
         self,
         *,

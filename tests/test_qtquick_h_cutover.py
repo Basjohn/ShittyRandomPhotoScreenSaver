@@ -1,14 +1,14 @@
 """H production-cutover integration bars.
 
-These prove the destination pieces connect correctly at the display/runtime owner
-before DisplayManager flips to the Quick production route. They assert semantic
-owner cardinality and the corrected-G4 visualizer viewport-config ownership
-through the real QuickDisplayRuntime + QuickSceneController + runtime controller
-chain, not a stand-in sink.
+These prove the production Quick pieces connect correctly at the display/runtime
+owner. They assert semantic owner cardinality and the corrected-G4 visualizer
+viewport-config ownership through the real QuickDisplayRuntime +
+QuickSceneController + runtime controller chain, not a stand-in sink.
 """
 
 from __future__ import annotations
 
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -45,7 +45,35 @@ def test_display_manager_constructs_only_authoritative_quick_units(
 
     screens = tuple(qt_app.screens())
     assert screens
+    actions = []
     monkeypatch.setattr(QuickDisplayUnit, "show_on_screen", lambda _unit: None)
+    monkeypatch.setattr(
+        QuickDisplayUnit,
+        "request_media_transport",
+        lambda unit, key: actions.append((unit.screen_index, "transport", key))
+        or True,
+    )
+    monkeypatch.setattr(
+        QuickDisplayUnit,
+        "request_app_volume_step",
+        lambda unit, direction: actions.append(
+            (unit.screen_index, "app_volume", direction)
+        )
+        or True,
+    )
+    monkeypatch.setattr(
+        QuickDisplayUnit,
+        "request_system_volume_step",
+        lambda unit, delta: actions.append(
+            (unit.screen_index, "system_volume", delta)
+        )
+        or 0.5,
+    )
+    monkeypatch.setattr(
+        QuickDisplayUnit,
+        "request_system_mute_toggle",
+        lambda unit: actions.append((unit.screen_index, "mute")) or True,
+    )
 
     manager = DisplayManager(runtime_generation=701)
     try:
@@ -62,6 +90,28 @@ def test_display_manager_constructs_only_authoritative_quick_units(
             for unit in manager.displays
         )
 
+        runtime = manager.displays[0].runtime
+        runtime.play_pause_requested.emit()
+        runtime.home_play_pause_requested.emit()
+        runtime.previous_track_requested.emit()
+        runtime.next_track_requested.emit()
+        runtime.slider_volume_up_requested.emit()
+        runtime.slider_volume_down_requested.emit()
+        runtime.global_volume_up_requested.emit()
+        runtime.global_volume_down_requested.emit()
+        runtime.global_mute_toggle_requested.emit()
+        assert actions == [
+            (0, "transport", "play"),
+            (0, "transport", "play"),
+            (0, "transport", "prev"),
+            (0, "transport", "next"),
+            (0, "app_volume", 1),
+            (0, "app_volume", -1),
+            (0, "system_volume", 0.05),
+            (0, "system_volume", -0.05),
+            (0, "mute"),
+        ]
+
         manager.cleanup()
         assert manager.displays == []
         assert len(manager._retiring_quick_units) == len(screens)
@@ -72,6 +122,48 @@ def test_display_manager_constructs_only_authoritative_quick_units(
     finally:
         if not manager._retired:
             manager.retire_runtime()
+        qt_app.processEvents()
+
+
+def test_display_manager_owns_layout_slot_persistence_and_fenced_reload(
+    qt_app,
+) -> None:
+    class _Settings:
+        def __init__(self) -> None:
+            self.widgets = {
+                "clock": {"enabled": True, "position": "Top Left"},
+            }
+            self.save_calls = 0
+
+        def get_widgets_map(self):
+            return deepcopy(self.widgets)
+
+        def set_widgets_map(self, widgets, *, emit_change=True) -> None:
+            self.widgets = deepcopy(widgets)
+
+        def save(self) -> None:
+            self.save_calls += 1
+
+    settings = _Settings()
+    manager = DisplayManager(settings_manager=settings, runtime_generation=702)
+    reloads = []
+    manager.custom_layout_reload_requested.connect(
+        lambda kind, generation, identity: reloads.append(
+            (kind, generation, identity)
+        )
+    )
+    try:
+        assert manager._save_layout_slot("1") is True
+        settings.widgets["clock"]["position"] = "Bottom Right"
+        assert manager._load_layout_slot("1") is True
+        assert settings.widgets["clock"]["position"] == "Top Left"
+        assert settings.save_calls == 2
+        assert reloads == [("slot_load", 702, id(manager))]
+        assert manager._save_layout_slot("bad") is False
+        assert manager._load_layout_slot("9") is False
+    finally:
+        manager.disconnect_monitor_detection()
+        manager.deleteLater()
         qt_app.processEvents()
 
 

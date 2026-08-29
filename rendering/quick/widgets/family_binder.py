@@ -184,6 +184,18 @@ class OrdinaryFamilyPresentationBinder:
     def live_count(self) -> int:
         return len(self._bound)
 
+    def presentation_for_widget_id(
+        self,
+        widget_id: str,
+    ) -> BoundFamilyPresentation | None:
+        """Return the retained presentation already owned for ``widget_id``."""
+
+        normalized = str(widget_id)
+        for bound_id, presentation in zip(self._bound_widget_ids, self._bound):
+            if bound_id == normalized:
+                return presentation
+        return None
+
     def bind(self, widgets_config: Mapping[str, object] | None) -> tuple[str, ...]:
         """Build every admitted family instance once for this display generation.
 

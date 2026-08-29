@@ -1162,6 +1162,11 @@ class RetainedMediaPresentation:
 
         return self._model.request_app_volume_step(direction)
 
+    def request_transport(self, key: str) -> bool:
+        """Route an already-admitted keyboard transport action."""
+
+        return self._model.request_transport(key)
+
     def request_system_mute_toggle(self) -> bool:
         """Route an already-admitted keyboard system-mute action."""
 

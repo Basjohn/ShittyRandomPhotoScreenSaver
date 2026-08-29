@@ -89,6 +89,9 @@ def test_binder_builds_only_enabled_instances_into_the_host(qt_app) -> None:
         assert host.live_count == 2
         assert set(host.model_identities()) == {"clock", "clock2"}
         assert binder.live_count == 2
+        assert binder.presentation_for_widget_id("clock") is not None
+        assert binder.presentation_for_widget_id("clock2") is not None
+        assert binder.presentation_for_widget_id("clock3") is None
     finally:
         runtime.close_runtime()
         factory.deleteLater()

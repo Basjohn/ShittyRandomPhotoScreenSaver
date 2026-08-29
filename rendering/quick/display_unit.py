@@ -158,6 +158,40 @@ class QuickDisplayUnit:
     def has_running_transition(self) -> bool:
         return bool(self._runtime.transition_controller.is_active)
 
+    def request_media_transport(self, key: str) -> bool:
+        """Dispatch one admitted transport action to this unit's Media owner."""
+
+        normalized = str(key or "").strip().lower()
+        if normalized not in {"play", "prev", "next"}:
+            raise ValueError(f"unsupported Media transport action: {key!r}")
+        presentation = self._presenter.presentation_for_widget_id("media")
+        request = getattr(presentation, "request_transport", None)
+        return bool(callable(request) and request(normalized))
+
+    def request_app_volume_step(self, direction: int) -> bool:
+        """Dispatch one admitted app-volume step to this unit's Media owner."""
+
+        presentation = self._presenter.presentation_for_widget_id("media")
+        request = getattr(presentation, "request_app_volume_step", None)
+        return bool(callable(request) and request(int(direction)))
+
+    def request_system_volume_step(self, delta: float) -> float | None:
+        """Dispatch one admitted system-volume step to this unit's Media owner."""
+
+        presentation = self._presenter.presentation_for_widget_id("media")
+        request = getattr(presentation, "request_system_volume_step", None)
+        if not callable(request):
+            return None
+        result = request(float(delta))
+        return None if result is None else float(result)
+
+    def request_system_mute_toggle(self) -> bool:
+        """Dispatch one admitted mute toggle to this unit's Media owner."""
+
+        presentation = self._presenter.presentation_for_widget_id("media")
+        request = getattr(presentation, "request_system_mute_toggle", None)
+        return bool(callable(request) and request())
+
     def runtime_retirement_roots(
         self,
     ) -> tuple[tuple[QObject, ...], tuple[object, ...]]:

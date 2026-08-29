@@ -286,6 +286,10 @@ The family/runtime destination integration already landed and test-gated include
   `QScreen`, sharing exactly one manager-generation `QuickSceneFactory` and `SharedCtrlCoordinator`; it no longer constructs
   `DisplayWidget`. Quick cleanup retains every unit until asynchronous runtime/window retirement completes, and manager/factory
   deletion waits behind that completion. Focused constructor/lifecycle/display integration proof is **87 passed, 4 skipped**.
+- Quick input transport/app-volume/system-volume/mute signals now route through each unit's already-owned retained Media
+  presentation, preserving its configuration/runtime-availability admission and the existing neutral service owners. Layout
+  slot save/load moved to `DisplayManager` + `SettingsManager`; a successful load emits the existing runtime-generation and
+  exact-manager-identity fenced reload request. No backend or service fallback was added.
 
 ### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 
