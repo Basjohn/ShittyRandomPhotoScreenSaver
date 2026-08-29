@@ -180,29 +180,91 @@ def test_overlap_retry_clamp_uses_actual_logical_domain() -> None:
     assert tall.y == pytest.approx(1.75)  # domain_h + 0.25
 
 
-def test_shrink_reconciles_out_of_domain_bubbles_without_rescaling() -> None:
-    # Spread bubbles into a wide world, then shrink back to baseline.
-    sim = _run((760.0, 280.0), ticks=1)
-    outside = [b for b in sim._bubbles if b.x > 1.1 and b.reaches_surface]
-    assert outside, "expected some surface bubbles beyond the shrunk domain"
-    inside_before = {
-        id(b): (b.x, b.y) for b in sim._bubbles if b.x <= 0.9
+_ZERO_ENERGY = {"bass": 0.0, "mid": 0.0, "high": 0.0, "overall": 0.0}
+
+
+def _quiet_settings(extent):
+    return {
+        "_bubble_viewport_extent": extent,
+        "bubble_big_count": 0,
+        "bubble_small_count": 0,
     }
 
-    # Shrink to baseline and advance: out-of-domain surface bubbles exit/cull via
-    # the canonical boundary path; interior bubbles are NOT percentage-rescaled.
-    for _ in range(80):
+
+def test_contraction_retire_pops_only_non_surface_off_domain_bubbles() -> None:
+    sim = BubbleSimulation()
+    sim._domain_w = 1.0
+    sim._domain_h = 1.0
+    ns_outside = BubbleState(x=1.3, y=0.5, radius=0.02, reaches_surface=False, max_age=999.0, alpha=1.0)
+    ns_inside = BubbleState(x=0.5, y=0.5, radius=0.02, reaches_surface=False, max_age=999.0, alpha=1.0)
+    surf_outside = BubbleState(x=1.3, y=0.5, radius=0.02, reaches_surface=True, alpha=1.0)
+    already_popping = BubbleState(
+        x=1.4, y=0.5, radius=0.02, reaches_surface=False, popping=True, pop_timer=0.3, alpha=1.0
+    )
+    sim._bubbles.extend([ns_outside, ns_inside, surf_outside, already_popping])
+
+    sim._retire_non_surface_bubbles_outside_domain()
+
+    # Non-surface off-domain -> existing pop path, timer reset to start the fade.
+    assert ns_outside.popping is True and ns_outside.pop_timer == 0.0
+    # Interior non-surface is untouched.
+    assert ns_inside.popping is False
+    # Surface bubbles are reconciled by the head/tail exit path, not popped here.
+    assert surf_outside.popping is False
+    # An already-popping bubble is not restarted.
+    assert already_popping.pop_timer == pytest.approx(0.3)
+
+
+def test_contraction_via_tick_routes_surface_and_non_surface_correctly() -> None:
+    sim = BubbleSimulation()
+    sim._domain_w = 1.5  # start wide
+    sim._domain_h = 1.0
+    ns_outside = BubbleState(x=1.4, y=0.5, radius=0.02, reaches_surface=False, max_age=999.0, alpha=1.0)
+    interior = BubbleState(x=0.4, y=0.5, radius=0.02, reaches_surface=False, max_age=999.0, alpha=1.0)
+    surf_outside = BubbleState(x=1.4, y=0.5, radius=0.02, reaches_surface=True, alpha=1.0)
+    sim._bubbles.extend([ns_outside, interior, surf_outside])
+
+    # Contract to baseline; no spawns/energy so the transition is isolated.
+    sim.tick(0.016, dict(_ZERO_ENERGY), _quiet_settings((420.0, 280.0)))
+
+    assert ns_outside.popping is True          # retired promptly via pop
+    assert surf_outside.exiting is True         # surface uses exit/drain
+    assert interior.popping is False            # interior untouched
+    assert interior.exiting is False
+    assert 0.0 <= interior.x <= 1.0             # not teleported or rescaled
+
+
+def test_growth_or_stable_domain_never_retires_bubbles() -> None:
+    sim = BubbleSimulation()
+    sim._domain_w = 1.0
+    sim._domain_h = 1.0
+    # A bubble that would be off a *baseline* world but is inside the wider world.
+    off_baseline = BubbleState(x=1.3, y=0.5, radius=0.02, reaches_surface=False, max_age=999.0, alpha=1.0)
+    sim._bubbles.append(off_baseline)
+
+    # Grow to wide: no contraction, so nothing is retired.
+    sim.tick(0.016, dict(_ZERO_ENERGY), _quiet_settings((630.0, 280.0)))
+    assert off_baseline.popping is False
+    # Stable wide: still no contraction event.
+    sim.tick(0.016, dict(_ZERO_ENERGY), _quiet_settings((630.0, 280.0)))
+    assert off_baseline.popping is False
+
+
+def test_contracted_population_replenishes_to_authored_targets() -> None:
+    # Fill a wide world, then contract and let it settle. Off-domain bubbles
+    # retire and spawns refill to the authored counts (never scaled by area).
+    sim = _run((760.0, 280.0), ticks=1, seed=99)
+    for _ in range(120):
         sim.tick(0.016, dict(_ENERGY), _settings((420.0, 280.0)))
 
-    for b in sim._bubbles:
-        # No global rescale: an interior bubble that stayed keeps its coordinate
-        # scale (it was never multiplied by the domain ratio).
-        if id(b) in inside_before:
-            assert b.x <= 1.0 + 1e-6
-
-    # The far-outside surface bubbles did not survive unbounded in the shrunk
-    # world.
+    big = sum(1 for b in sim._bubbles if b.is_big and not b.exiting and not b.popping)
+    small = sum(1 for b in sim._bubbles if not b.is_big and not b.exiting and not b.popping)
+    # Replenished back to (near) the authored targets - not permanently depleted
+    # by stranded off-domain bubbles, and never scaled up by viewport area.
+    assert 5 <= big <= 6
+    assert 18 <= small <= 20
+    # No non-surface bubble is left stranded materially outside the shrunk world.
     assert all(
-        not (b.x > 1.1 and b.reaches_surface and not b.exiting)
+        not (b.x > 1.1 and not b.reaches_surface and not b.popping)
         for b in sim._bubbles
     )

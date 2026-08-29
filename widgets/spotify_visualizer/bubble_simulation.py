@@ -361,6 +361,31 @@ class BubbleSimulation:
 
         return self._domain_w == 1.0 and self._domain_h == 1.0
 
+    def _retire_non_surface_bubbles_outside_domain(self) -> None:
+        """Pop non-surface bubbles left materially outside a contracted domain.
+
+        Surface-reaching bubbles are reconciled by the existing head/tail exit
+        drain. A non-surface bubble is otherwise governed only by its age, so on
+        a contraction one now off-domain would stay invisible while holding an
+        authored population slot. Route it into the existing pop/fade/death path
+        (never teleport it back into view, never rescale the field). The ``0.1``
+        margin matches the head-exit "materially outside" allowance so ordinary
+        near-edge motion is not affected.
+        """
+
+        margin = 0.1
+        for bubble in self._bubbles:
+            if bubble.reaches_surface or bubble.popping or bubble.exiting:
+                continue
+            if (
+                bubble.x < -margin
+                or bubble.x > self._domain_w + margin
+                or bubble.y < -margin
+                or bubble.y > self._domain_h + margin
+            ):
+                bubble.popping = True
+                bubble.pop_timer = 0.0
+
     def tick(self, dt: float, energy_bands: Optional[object], settings: Dict) -> None:
         """Advance simulation by *dt* seconds."""
         if dt <= 0.0 or dt > 1.0:
@@ -369,7 +394,19 @@ class BubbleSimulation:
         tick_start = time.perf_counter()
 
         # Latest committed CUSTOM viewport extent (spatial config, not a clock).
+        prev_domain_w = self._domain_w
+        prev_domain_h = self._domain_h
         self._apply_viewport_domain(settings.get("_bubble_viewport_extent"))
+        if (
+            self._domain_w < prev_domain_w - 1e-9
+            or self._domain_h < prev_domain_h - 1e-9
+        ):
+            # Domain contracted this step: retire bubbles now materially outside
+            # the smaller world through the existing lifecycle (surface bubbles
+            # exit/drain naturally in the head/tail check below; non-surface
+            # bubbles are otherwise governed only by age, so pop them now instead
+            # of leaving invisible off-domain particles holding population slots).
+            self._retire_non_surface_bubbles_outside_domain()
 
         self._time += dt
 
