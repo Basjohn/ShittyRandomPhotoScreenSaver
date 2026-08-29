@@ -282,7 +282,11 @@ class OverlayGeometryBinding:
         """
 
         size = (float(content_size[0]), float(content_size[1]))
-        self._last_content_size = size
+        # A non-positive size means the family has not declared a real preferred
+        # size yet; keep any prior size rather than raising, and let a committed
+        # CUSTOM rect (if any) still apply independently of content size.
+        if size[0] > 0.0 and size[1] > 0.0:
+            self._last_content_size = size
         return self._reapply()
 
     def set_display_bounds(
@@ -311,12 +315,37 @@ class OverlayGeometryBinding:
         return geometry
 
 
+def connect_overlay_preferred_size(item, binding: OverlayGeometryBinding):
+    """Wire a retained item's QML preferred-size report to a geometry binding.
+
+    The retained ``OverlayWidget`` reports its declared preferred content size
+    (size only) via the ``preferredContentSizeChanged`` signal; this connects
+    that signal to :meth:`OverlayGeometryBinding.update_content_size` and applies
+    the current declared size once. Python (the binding) owns anchor/clamp/outer
+    geometry; QML never anchors itself. There is no width feedback, polling,
+    timer or per-frame callback. Returns the initially applied geometry, if any.
+    """
+
+    signal = getattr(item, "preferredContentSizeChanged", None)
+    if signal is not None and hasattr(signal, "connect"):
+        signal.connect(
+            lambda width, height: binding.update_content_size((width, height))
+        )
+    try:
+        width = float(item.property("preferredContentWidth") or 0.0)
+        height = float(item.property("preferredContentHeight") or 0.0)
+    except (TypeError, ValueError):
+        width = height = 0.0
+    return binding.update_content_size((width, height))
+
+
 __all__ = [
     "DEFAULT_MARGIN_PX",
     "MIN_VISIBLE_PX",
     "OverlayAnchor",
     "OverlayGeometryBinding",
     "OverlayGeometryPolicy",
+    "connect_overlay_preferred_size",
     "resolve_anchored_geometry",
     "resolve_overlay_geometry_policy",
 ]

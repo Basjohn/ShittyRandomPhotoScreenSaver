@@ -34,6 +34,12 @@ Item {
     // content area rather than subclassing a god-object base.
     default property alias content: contentArea.data
 
+    // Shell inset each family adds around its intrinsic content when declaring a
+    // preferred content size. Exposed so a family can compute preferred size as
+    // (intrinsic content + shell inset) without reading its own assigned width
+    // (which would create a width<->preferredWidth feedback loop).
+    readonly property real shellInset: 2 * padding
+
     RectangularShadow {
         id: cardShadow
         objectName: "overlayCardShadow"

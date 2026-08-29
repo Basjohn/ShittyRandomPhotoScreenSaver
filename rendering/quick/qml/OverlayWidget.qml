@@ -21,6 +21,30 @@ Item {
 
     default property alias content: card.content
 
+    // Content-driven outer geometry (H option A): each family binds its stable
+    // *preferred* content size here from its intrinsic QML content (text implicit
+    // sizes, fixed dimensions), NOT from this item's assigned width/height. The
+    // display owner reads these as size only and remains the sole outer-rect /
+    // anchor / clamp authority; QML never anchors itself. Deriving preferred size
+    // from the assigned width would create a width<->preferredWidth feedback
+    // loop, so families must derive it from intrinsic content plus card.shellInset.
+    // A value of 0 means the family has not yet declared a real preferred size.
+    property real preferredContentWidth: 0.0
+    property real preferredContentHeight: 0.0
+
+    // Emitted (size only) whenever the declared preferred content size changes,
+    // so the owner can re-anchor without polling or per-frame callbacks.
+    signal preferredContentSizeChanged(real width, real height)
+    onPreferredContentWidthChanged: overlayWidget.preferredContentSizeChanged(
+        overlayWidget.preferredContentWidth, overlayWidget.preferredContentHeight
+    )
+    onPreferredContentHeightChanged: overlayWidget.preferredContentSizeChanged(
+        overlayWidget.preferredContentWidth, overlayWidget.preferredContentHeight
+    )
+
+    // Expose the shell inset so families compute preferred size consistently.
+    readonly property real shellInset: card.shellInset
+
     // The common card shell is forwarded so the whole ordinary-widget shell
     // stays a single retained component with explicit presentation properties.
     property alias cardShellEnabled: card.shellEnabled

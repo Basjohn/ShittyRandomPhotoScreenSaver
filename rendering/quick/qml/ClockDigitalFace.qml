@@ -4,6 +4,21 @@ Item {
     id: digitalFace
     required property var clockModel
 
+    // Intrinsic preferred content size (H option A): the natural, unconstrained
+    // text widths (implicitWidth) and the stacked column's natural height. These
+    // derive only from content/font metrics, never from this face's assigned
+    // width, so reporting them upward creates no width<->preferredWidth loop.
+    readonly property real preferredContentWidth: Math.max(
+        timeText.implicitWidth,
+        calendarText.visible ? calendarText.implicitWidth : 0.0,
+        timezoneText.visible ? timezoneText.implicitWidth : 0.0
+    )
+    // The stacked column's natural height. childrenRect.height is used rather
+    // than the Column's implicitHeight because the column is centre-anchored,
+    // which leaves implicitHeight unpopulated; the height dimension of
+    // childrenRect stays intrinsic (it does not depend on the assigned width).
+    readonly property real preferredContentHeight: contentColumn.childrenRect.height
+
     Column {
         id: contentColumn
         objectName: "clockDigitalContent"
