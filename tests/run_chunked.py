@@ -50,6 +50,7 @@ H_DESTINATION_PROFILE = (
     "test_qtquick_input_controller.py",
     "test_qtquick_auxiliary.py",
     "test_qtquick_context_menu.py",
+    "test_qtquick_custom_layout_owner.py",
     "test_qtquick_custom_layout_overlay.py",
     "test_qtquick_ordinary_widget_host.py",
     "test_qtquick_clock_presentation.py",

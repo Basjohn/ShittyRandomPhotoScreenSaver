@@ -59,6 +59,7 @@ class QuickDisplayVisualizerOwner:
         )
 
         self._runtime = runtime
+        self._presentation_runtime = runtime
         self._controller = VisualizerRuntimeController(
             runtime_generation=runtime.runtime_generation,
             bar_count=int(bar_count),
@@ -70,6 +71,8 @@ class QuickDisplayVisualizerOwner:
         self._transition_half_duration_s = max(
             0.0, float(transition_half_duration_s)
         )
+        self._committed_layout_rect: tuple[float, float, float, float] | None = None
+        self._committed_layout_extent: tuple[float, float] | None = None
         self._mode_transition_phase = "idle"
         self._mode_transition_started_at = 0.0
         self._mode_transition_fade = 1.0
@@ -89,6 +92,10 @@ class QuickDisplayVisualizerOwner:
     @property
     def render_identity(self) -> Any:
         return self._render_identity
+
+    @property
+    def presentation_runtime(self) -> Any:
+        return self._presentation_runtime
 
     @property
     def is_started(self) -> bool:
@@ -221,6 +228,59 @@ class QuickDisplayVisualizerOwner:
             raise RuntimeError("visualizer BeatEngine has no playback-state authority")
         set_playback_state(active)
 
+    def set_presentation_runtime(self, runtime: Any) -> bool:
+        """Move retained presentation/config publication, not logical ownership."""
+
+        if self._retired:
+            return False
+        if runtime is self._presentation_runtime:
+            return False
+        old_runtime = self._presentation_runtime
+        old_runtime.scene_controller.set_visualizer_viewport_config_sink(None)
+        self._presentation_runtime = runtime
+        runtime.bind_visualizer_viewport_config(
+            self._controller.set_custom_viewport_override
+        )
+        return True
+
+    def configure_committed_layout(
+        self,
+        *,
+        local_rect: tuple[float, float, float, float] | None,
+        viewport_extent: tuple[float, float] | None = None,
+    ) -> None:
+        """Hydrate one saved CUSTOM outer rect before logical runtime start.
+
+        The rect and optional logical extent are ordinary committed truth.  The
+        retained CUSTOM session may later install a temporary extent override,
+        but no edit-session state is stored here.
+        """
+
+        if self._retired or self._started:
+            raise RuntimeError("visualizer committed layout must bind before start")
+        if local_rect is None:
+            self._committed_layout_rect = None
+            self._committed_layout_extent = None
+            return
+        x, y, width, height = (float(value) for value in local_rect)
+        if width <= 0.0 or height <= 0.0:
+            raise ValueError("visualizer committed layout rect must be positive")
+        if viewport_extent is None:
+            extent = None
+        else:
+            extent = (float(viewport_extent[0]), float(viewport_extent[1]))
+            if extent[0] <= 0.0 or extent[1] <= 0.0:
+                raise ValueError("visualizer committed viewport extent must be positive")
+        self._committed_layout_rect = (x, y, width, height)
+        self._committed_layout_extent = extent
+        # Rehydrate committed logical-world truth before the authored logical
+        # runtime can consume it. The same resolved record is later published
+        # by the GUI synchronization edge.
+        self._controller.commit_presentation_metrics(
+            self._resolve_current_presentation()
+        )
+        self._committed_layout_extent = None
+
     def _resolve_current_presentation(self) -> Any:
         if self._presentation_resolver is not None:
             presentation = self._presentation_resolver()
@@ -236,16 +296,30 @@ class QuickDisplayVisualizerOwner:
             resolve_visualizer_presentation,
         )
 
-        identity = self._runtime.display_identity
+        identity = self._presentation_runtime.display_identity
         _x, _y, width, height = identity.geometry
         dpr = float(identity.device_pixel_ratio)
         if dpr <= 0.0:
             dpr = 1.0
+        committed_rect = self._committed_layout_rect
+        viewport_extent = (
+            self._committed_layout_extent
+            if self._committed_layout_extent is not None
+            else self._controller.presentation_viewport_extent
+        )
+        if committed_rect is None:
+            outer_origin = (0.0, 0.0)
+            uniform_scale = 1.0
+        else:
+            outer_origin = (committed_rect[0], committed_rect[1])
+            uniform_scale = committed_rect[2] / max(1e-6, viewport_extent[0])
         return resolve_visualizer_presentation(
             policy=self._controller.presentation_policy,
             display_size=(float(width), float(height)),
+            outer_origin=outer_origin,
             dpr=dpr,
-            viewport_extent=self._controller.presentation_viewport_extent,
+            uniform_visual_scale=uniform_scale,
+            viewport_extent=viewport_extent,
             content_fade=self._mode_transition_fade,
         )
 
@@ -258,7 +332,7 @@ class QuickDisplayVisualizerOwner:
         different) presentation record.
         """
 
-        self._runtime.scene_controller.apply_visualizer_presentation(
+        self._presentation_runtime.scene_controller.apply_visualizer_presentation(
             presentation,
             active=True,
         )

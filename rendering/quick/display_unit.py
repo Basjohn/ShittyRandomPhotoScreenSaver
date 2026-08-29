@@ -305,6 +305,7 @@ def create_quick_display_unit(
     window_policy: QuickWindowPolicy,
     ctrl_coordinator: SharedCtrlCoordinator,
     interaction_mode_provider: Callable[[], bool] | None = None,
+    custom_layout_active_provider: Callable[[], bool] | None = None,
     telemetry: RenderNodeTelemetry | None = None,
     adapters: Sequence[OrdinaryFamilyAdapter] | None = None,
 ) -> QuickDisplayUnit:
@@ -323,6 +324,7 @@ def create_quick_display_unit(
         window_policy=window_policy,
         telemetry=telemetry,
         interaction_mode_provider=interaction_mode_provider,
+        custom_layout_active_provider=custom_layout_active_provider,
         global_ctrl_held_provider=ctrl_coordinator.held_provider(),
         ctrl_state_publisher=ctrl_coordinator.publisher_for(screen_index),
     )

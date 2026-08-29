@@ -61,6 +61,8 @@ class QuickDisplayRuntime(QObject):
     context_menu_requested = Signal(QPoint)
     layout_slot_load_requested = Signal(str)
     layout_slot_save_requested = Signal(str)
+    custom_layout_save_requested = Signal()
+    custom_layout_cancel_requested = Signal()
 
     def __init__(
         self,
@@ -74,6 +76,7 @@ class QuickDisplayRuntime(QObject):
         interaction_mode_provider: Callable[[], bool] | None = None,
         global_ctrl_held_provider: Callable[[], bool] | None = None,
         ctrl_state_publisher: Callable[[bool], None] | None = None,
+        custom_layout_active_provider: Callable[[], bool] | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -95,6 +98,7 @@ class QuickDisplayRuntime(QObject):
             interaction_mode_provider=interaction_mode_provider,
             global_ctrl_held_provider=global_ctrl_held_provider,
             ctrl_state_publisher=ctrl_state_publisher,
+            custom_layout_active_provider=custom_layout_active_provider,
             parent=self,
         )
         self._window.bind_input_controller(self._input)
@@ -213,6 +217,12 @@ class QuickDisplayRuntime(QObject):
         )
         self._input.layout_slot_save_requested.connect(
             self.layout_slot_save_requested.emit
+        )
+        self._input.custom_layout_save_requested.connect(
+            self.custom_layout_save_requested.emit
+        )
+        self._input.custom_layout_cancel_requested.connect(
+            self.custom_layout_cancel_requested.emit
         )
 
     @property

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QKeyEvent, QMouseEvent
 
 from rendering.runtime_input import RuntimeInputOwner
@@ -17,6 +17,8 @@ class QuickInputController(RuntimeInputOwner):
     """Apply shared product input policy without retaining widget-era owners."""
 
     input_state_changed = Signal(object)
+    custom_layout_save_requested = Signal()
+    custom_layout_cancel_requested = Signal()
 
     def __init__(
         self,
@@ -26,6 +28,7 @@ class QuickInputController(RuntimeInputOwner):
         interaction_mode_provider: Callable[[], bool] | None = None,
         global_ctrl_held_provider: Callable[[], bool] | None = None,
         ctrl_state_publisher: Callable[[bool], None] | None = None,
+        custom_layout_active_provider: Callable[[], bool] | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(
@@ -41,6 +44,7 @@ class QuickInputController(RuntimeInputOwner):
                 None if runtime_generation is None else int(runtime_generation)
             ),
         )
+        self._custom_layout_active_provider = custom_layout_active_provider
 
     @property
     def screen_index(self) -> int:
@@ -84,6 +88,17 @@ class QuickInputController(RuntimeInputOwner):
 
     def handle_key_press(self, event: QKeyEvent) -> bool:
         if not self._state.admission_open:
+            return True
+        provider = self._custom_layout_active_provider
+        custom_active = bool(provider is not None and provider())
+        if custom_active and event.key() in (
+            Qt.Key.Key_Return,
+            Qt.Key.Key_Enter,
+        ):
+            self.custom_layout_save_requested.emit()
+            return True
+        if custom_active and event.key() == Qt.Key.Key_Escape:
+            self.custom_layout_cancel_requested.emit()
             return True
         return super().handle_key_press(event)
 
@@ -130,6 +145,7 @@ class QuickInputController(RuntimeInputOwner):
         if not self._state.admission_open:
             return False
         super().cleanup()
+        self._custom_layout_active_provider = None
         self._publish_state(
             admission_open=False,
             interaction_mode_enabled=False,

@@ -512,6 +512,16 @@ class AchievementPulsePresentationModel(QObject):
         self.stateChanged.emit()
         return True
 
+    def apply_custom_layout_config(
+        self,
+        config: AchievementPulsePresentationConfig,
+    ) -> bool:
+        if self._retired or config == self.config:
+            return False
+        self._snapshot = replace(self._snapshot, config=config)
+        self.stateChanged.emit()
+        return True
+
     def apply_style(self, style: AchievementPulsePresentationStyle) -> bool:
         if self._retired or style == self.style:
             return False
@@ -721,6 +731,9 @@ class RetainedAchievementPulsePresentation:
             card_style=model.style.card_style,
         )
         self._retained.add_retirement_callback(model.retire)
+        self._retained.set_custom_layout_size_payload_handler(
+            self._apply_custom_layout_size_payload
+        )
         host.set_widget_input_state_handler(self._retained, self.apply_input_state)
         self._connect("refreshRequested", model.request_manual_refresh)
         self._connect("settingsRequested", self._handle_settings_requested)
@@ -750,6 +763,24 @@ class RetainedAchievementPulsePresentation:
 
     def set_interaction_enabled(self, enabled: bool) -> bool:
         return self._model.set_interaction_enabled(enabled)
+
+    def _apply_custom_layout_size_payload(
+        self,
+        payload: Mapping[str, Any],
+    ) -> None:
+        config = self._model.config
+        self._model.apply_custom_layout_config(
+            replace(
+                config,
+                font_size=int(payload.get("font_size", config.font_size)),
+                square_artwork_size=int(
+                    payload.get("square_artwork_size", config.square_artwork_size)
+                ),
+                capsule_font_size=int(
+                    payload.get("capsule_font_size", config.capsule_font_size)
+                ),
+            )
+        )
 
     def apply_input_state(self, input_state: object) -> bool:
         if isinstance(input_state, Mapping):
