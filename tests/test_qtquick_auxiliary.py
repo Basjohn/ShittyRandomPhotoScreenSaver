@@ -13,13 +13,14 @@ from PySide6.QtCore import (
     QTimer,
     Qt,
 )
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QKeyEvent, QMouseEvent
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 
 from rendering.quick.auxiliary import (
     QuickAuxiliaryController,
     QuickAuxiliaryState,
 )
+from rendering.quick.input_controller import QuickInputController
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
 from rendering.quick.state import QuickInputState, QuickWindowPolicy
 from rendering.quick.widgets.host import OverlayWidgetGeometry
@@ -87,6 +88,40 @@ def test_pixel_shift_walk_stays_bounded_and_turns_inward_at_the_edge() -> None:
     assert abs(edge_x) <= 4
     assert abs(edge_y) <= 4
     assert abs(edge_x) < 4 or abs(edge_y) < 4
+
+
+def test_halo_follows_cross_display_ctrl_clear_after_focus_moves(qt_app) -> None:
+    # Integrated A->B->A coherence tying the input and auxiliary owners: display
+    # A's halo is Ctrl-admitted; when focus moves to B and the shared coordinator
+    # clears Ctrl, A's derived input state clears and its halo hides rather than
+    # staying stuck visible.
+    global_state = {"held": False}
+    display_a = QuickInputController(
+        screen_index=0,
+        runtime_generation=7,
+        global_ctrl_held_provider=lambda: global_state["held"],
+        ctrl_state_publisher=lambda held: global_state.__setitem__("held", held),
+    )
+    aux_a = QuickAuxiliaryController(screen_index=0, runtime_generation=7)
+    aux_a.resume()
+    aux_a.update_halo_pointer(QPointF(100.0, 50.0))
+
+    # A presses Ctrl -> its input state admits the halo.
+    display_a.handle_key_press(
+        QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Control, Qt.KeyboardModifier.NoModifier)
+    )
+    assert display_a.is_ctrl_mode_active() is True
+    assert aux_a.apply_input_state(display_a.input_state) is True
+    assert aux_a.state.halo_visible is True
+
+    # Focus moves to B; the coordinator clears the shared Ctrl state.
+    global_state["held"] = False
+    display_a.is_ctrl_mode_active()  # re-derive and republish A's input state
+    assert display_a.input_state.ctrl_held is False
+    aux_a.apply_input_state(display_a.input_state)
+    assert aux_a.state.halo_visible is False
+
+    aux_a.close()
 
 
 def test_halo_visibility_is_input_admitted_suppressed_and_shape_bounded(
