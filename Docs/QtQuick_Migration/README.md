@@ -23,8 +23,9 @@ Live phase/checkpoint status is intentionally not duplicated here; read `Current
 | `Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` | durable G4 scale/extent architecture and closure bars |
 | `G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` | G4 ownership/spatial correction closure reference |
 | `Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` | G7/G8 auxiliary/focus closure reference |
-| `Remaining_H_Production_Cutover_Decomposition.md` | H owner wiring, viewport-config binding, cardinality and old-host deletion |
-| `H_Pre_Cutover_Visualizer_Edge_Corrections.md` | bounded H pre-cutover visualizer synchronization/config/admission/retirement correction gate |
+| `Remaining_H_Production_Cutover_Decomposition.md` | H production authority wiring, cardinality, lifecycle and old-host deletion |
+| `H_Pre_Cutover_Visualizer_Edge_Corrections.md` | **closed audit record** for the pre-cutover visualizer edge findings |
+| `H_True_F_Technical_Closure.md` | **closed follow-up evidence** for technical-config ownership + real retained-consumer proof |
 | `Remaining_J_Final_Installed_Acceptance_Decomposition.md` | J compiled/installed/physical acceptance and closure matrix |
 
 ## Migration scaffolding rule
@@ -36,8 +37,8 @@ temporary continuity; the production cutover removes the remaining physical-host
 ## Visualizer viewport rule
 
 The all-five-mode viewport capability policy and core edge-resize path are landed. Do not reintroduce
-`viewport_resize_capable=False` for Bubble as a workaround. Current corrections must preserve independent uniform scale vs
-viewport extent, deterministic committed-vs-temporary CUSTOM ownership, Bubble BTF and the exact canonical baseline path.
+`viewport_resize_capable=False` for Bubble as a workaround. Preserve independent uniform scale vs viewport extent,
+deterministic committed-vs-temporary CUSTOM ownership, Bubble BTF and the exact canonical baseline path.
 
 ## Sequence rule
 

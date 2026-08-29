@@ -15,22 +15,24 @@ I                                           -> residue only
 
 A working legacy product during migration is not a retention reason.
 
-## Current first-order migration cleanup
+## Current migration deletion boundary
 
-Do **not** perform this instead of the active bounded G4 post-checkpoint audit corrections. After those corrections, finish
-G7 caller proof and remove any remaining old QWidget/top-level context-menu, halo, dimming or pixel-shift presentation that
-has no live destination-independent responsibility.
+G is closed. Do not reopen G4/G7/G8 as cleanup work.
 
-Preserve Python semantic command/settings authority and neutral configuration/runtime logic; delete only superseded
+During H, deletion follows the production authority conversion: once exact caller proof shows a legacy physical-host edge has
+no surviving destination-independent responsibility, remove it in the H boundary rather than carrying a second presenter
+forward. Preserve Python semantic command/settings authority and neutral configuration/runtime logic; delete only superseded
 pixel/presentation ownership.
+
+After the authority flip, I is source-driven residue only: expired aliases/adapters/tools/tests/comments that no longer own a
+surviving contract.
 
 ## Unrelated focused-test debt
 
 - Reddit helper recovery/installer/watcher tests contain stale helper-era expectations; reconcile separately from the
   retained Reddit presentation.
-- Three physical two-display `tests/test_qtquick_runtime.py` smoke cases can miss only the second screen's 250 ms
-  crossfade-midpoint capture while transition/retirement otherwise complete. Treat as focused smoke-oracle debt, not a
-  visualizer viewport blocker.
+- Real two-display QScreen identity/topology smoke cells are **J physical acceptance evidence**, not generic cleanup debt and
+  not an H deterministic gate. Keep them unless their evidence role is rehomed to an equivalent current harness.
 
 ## Settings GUI residue
 
@@ -59,17 +61,14 @@ an edge inseparable from the old physical host waits for H.
 
 Preserve destination-used `VisualizerLogicalRuntime`, mode frame runtimes/authored algorithms, BeatEngine/source
 ownership, immutable render state, snapshot bridge/adapters and shaders/math used by Quick. Delete caller-proven old
-compositor/card/overlay pixels. The core G4 viewport-edge feature is landed; do not mistake the current bounded viewport
-ownership/Bubble spatial corrections for legacy cleanup.
+compositor/card/overlay pixels. The G4 viewport-edge ownership/spatial correction work is closed; do not mistake its retained contracts/tests for legacy
+cleanup.
 
-## Phase G
+## Closed Phase G
 
-Before G closes:
-
-- complete the bounded post-checkpoint G4 viewport ownership/Bubble spatial corrections while preserving the landed all-five-mode edge-resize architecture;
-- close G7 auxiliary/context caller proof and retire superseded old pixels;
-- complete G8 MC/focus gates;
-- no old QWidget edit/grid/auxiliary presentation remains as a destination fallback.
+G is closed at the accepted deterministic destination boundary. Its surviving neutral/retained contracts are permanent
+regressions, not deletion candidates. Any old G-era presenter code that survives after H must be classified from exact
+post-cutover callers during I rather than preserved because this ledger once named a G task.
 
 ## Phase H
 

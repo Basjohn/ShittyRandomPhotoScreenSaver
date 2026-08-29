@@ -68,6 +68,11 @@ old: implement/add/prove this Phase-X item
 new: current owner/contract; named open debt only where it actually remains
 ```
 
+If a closed audit/correction record is retained because its original findings are useful, **do not rewrite the historical
+finding body into fake present-tense GREEN prose**. Add an unmistakable CLOSED/evidence header, state that any `[RED]` labels
+belong to the named audit basis, and route live status to `Current_Plan.md` / the current contract. This preserves reasoning
+without inviting a later agent to reopen already-closed work.
+
 ## Migration-epoch wording
 
 Distinguish destination authority, temporary source scaffolding, temporary visual/behavior reference and historical
@@ -126,6 +131,11 @@ counts become contradictory almost immediately during an active migration.
 When a caller-dead feature island is intentionally retired, remove its implementation and implementation-only tombstone
 tests together rather than preserving zero-value modules merely because an old inventory row still exists. Preserve a
 separate neutral module only when a real surviving caller/contract still owns it.
+
+For Qt/QQuick-heavy maintained profiles, process isolation is a legitimate test-harness boundary. A queued callback or
+scene-graph teardown defect from one target can contaminate later tests in the same long-lived pytest process; classify that
+before treating many downstream errors as independent product regressions. Isolation must expose the owning failing target,
+not hide a real failure with skips or broader ignore lists.
 
 ## Closure check
 

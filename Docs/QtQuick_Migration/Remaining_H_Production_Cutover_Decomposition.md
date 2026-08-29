@@ -73,22 +73,26 @@ engine call sites.
 
 ## 5. Cutover order
 
+The bounded visualizer pre-cutover gate is a **closed prerequisite**, not an active step in this decomposition. Its audit trail
+remains in `H_Pre_Cutover_Visualizer_Edge_Corrections.md` and `H_True_F_Technical_Closure.md`; do not reopen it without exact
+regression evidence.
+
 1. **Inventory DisplayManager's exact external product contract.** Separate real engine/display semantics from
-   `DisplayWidget` implementation probes, but do not begin the concrete collection swap while the pre-cutover visualizer gate
-   below is RED.
-2. **Close the bounded visualizer destination-edge correction gate.** Follow
-   `H_Pre_Cutover_Visualizer_Edge_Corrections.md`: correct consumer-driven all-five logical/runtime configuration ownership;
-   add one Quick presentation synchronization owner that turns latest logical publication + resolved presentation state into
-   the existing immutable render bridge; preserve one admitted visualizer display owner; wire semantic mode-cycle hit
-   admission; make logical-runtime join a hard retirement barrier; prove the complete widget-free all-five chain.
-3. **Perform the DisplayManager + engine conversion as one coordinated production cutover.** Move engine callers onto the
-   durable semantic DisplayManager/display-unit contract while replacing the collection's concrete presenter type. Do not land
-   a half-swapped production state, a throwaway legacy-only decoupling layer or a compatibility facade.
+   `DisplayWidget` implementation probes.
+2. **Convert the semantic DisplayManager/engine caller surface in bounded checkpoints.** Move callers away from concrete
+   QWidget/compositor assumptions toward the durable display-unit contract.
+3. **Commit the production authority topology to Quick.** Replace the collection's concrete presenter type without a parallel
+   production presenter, throwaway legacy-only decoupling architecture or `DisplayWidget` compatibility facade.
 4. **Wire the remaining product semantics exactly once:** outward input/actions, image + transition routing, ordinary family
    admission/services, CUSTOM/context/auxiliary state, the single admitted visualizer, readiness and topology/generation
    replacement.
-5. **Prove readiness/lifecycle/generation replacement** with runtime-shaped tests for one and multiple displays.
+5. **Prove readiness/lifecycle/generation replacement** with deterministic/runtime-shaped one- and multi-display tests owned by
+   the current H destination profile.
 6. **Delete old physical-host callers and source** once caller proof shows the Quick destination is the only production route.
+
+"Coordinated" or "atomic" cutover describes the **finished authority topology**, not the size of one coding session or commit.
+The conversion may span as many explicit checkpoints as needed, including intentionally non-runnable intermediate migration
+states, provided no checkpoint invents two legitimate production authorities or a fake legacy compatibility presenter.
 
 ## 6. Visualizer logical/configuration + synchronization ownership
 
@@ -99,7 +103,10 @@ Durable split:
 
 ```text
 canonical settings / resolved activation / preset
--> consumer-driven resolved logical/runtime configuration
+-> resolved technical cache
+   -> engine/DSP inputs -> controller-owned shared BeatEngine/audio-worker boundary
+   -> authored-logical technical-origin inputs -> controller-owned VisualizerLogicalTickState
+-> other consumer-driven resolved logical/runtime configuration
 -> VisualizerRuntimeController + controller-owned logical tick state
 -> one VisualizerLogicalRuntime
 -> latest immutable VisualizerLogicalFrame
@@ -120,10 +127,15 @@ Rules:
   logical/runtime configuration; renderer-only colours/glow/chrome/card/layout remain presentation-owned;
 - do not move all legacy widget fields into the controller merely to eliminate attribute errors; prefer narrow resolved
   per-mode configuration/state;
+- the Settings label "technical" is provenance, not ownership: DSP/capture values go to the one shared engine boundary while
+  technical-origin values read by authored logical evolution go to controller-owned logical state;
+- bar-count technical changes keep controller authority, the shared engine reconfiguration/generation and logical display-bar
+  mirror/freshness state coherent; legacy overlay-only mirrors get no destination copy without a real retained consumer;
 - one BeatEngine/source/logical runtime/mailbox/render bridge cardinality remains binding;
-- binding the bridge into Quick is not sufficient. One GUI/Quick synchronization owner must take the freshest logical
-  publication, fence identity, resolve presentation state, compose `VisualizerRenderSnapshot`, publish the existing bridge and
-  request retained presentation without another clock/FIFO/paint acknowledgement;
+- binding or directly draining the bridge is not sufficient. One GUI/Quick synchronization owner must take the freshest
+  logical publication, fence identity, resolve presentation state once, compose `VisualizerRenderSnapshot`, publish the
+  existing bridge, commit that same presentation to the retained item, and request retained presentation without another
+  clock/FIFO/paint acknowledgement;
 - legacy widget adapters may temporarily delegate to neutral state/configuration before cutover, but are not a fallback and
   retire with the widget;
 - no QML/QQuickItem/QScreen/render-thread object enters logical state/configuration;
@@ -269,7 +281,8 @@ Do not carry these to I merely because deletion feels risky. I is residue, not a
 
 H must prove enough to safely establish sole Quick production authority:
 
-- 1 and 2+ runtime construction with exact QScreen identity;
+- one- and multi-display deterministic/runtime-shaped construction with coherent display identity; exact operator-hardware
+  `QScreen` identity/topology cells remain J physical evidence;
 - one `QuickDisplayRuntime` / one `QQuickWindow` per selected display;
 - one intended `WidgetRuntimeManager`/service owner chain;
 - image + transition routing through Quick APIs;
@@ -277,9 +290,11 @@ H must prove enough to safely establish sole Quick production authority:
 - G input/CUSTOM/auxiliary/context attached once;
 - exactly one product-level visualizer owner is admitted across participating displays; its controller constructs/configures/
   starts/advances without a QWidget host;
+- canonical technical settings reach the one shared BeatEngine or controller-owned authored-logical state according to actual
+  consumer, including coherent bar-count reconfiguration;
 - all-five logical/runtime settings reach their actual authored consumers without widget-only attributes;
-- one GUI/Quick synchronization owner turns latest logical publication + resolved presentation state into a complete
-  `VisualizerRenderSnapshot` and publishes the existing bridge into the retained Quick consumer;
+- one GUI/Quick synchronization owner turns latest logical publication + one resolved presentation record into a complete
+  `VisualizerRenderSnapshot`, publishes the existing bridge and proves consumption through the retained Quick item/node;
 - retained visualizer double-click cycles visualizer mode before the global next-image fallback;
 - failed logical-runtime join blocks visualizer/display generation retirement;
 - visualizer viewport config: committed baseline + committed nonbaseline + live CUSTOM override + Save + Cancel + slot replay;
@@ -288,9 +303,10 @@ H must prove enough to safely establish sole Quick production authority:
 - topology-loss path quiesces old generation;
 - caller proof permits old-host deletion.
 
-J still owns comprehensive compiled/installed physical acceptance: mixed refresh/DPR, off/wake, real Winlogon/MC, full
-eyes-on parity, the deferred all-five-mode baseline/wide/tall visualizer viewport matrix, performance tails and clean
-installed shutdown.
+J still owns comprehensive compiled/installed physical acceptance: exact real-display identity, add/remove/reorder topology,
+mixed refresh/DPR, off/wake, real Winlogon/MC, full eyes-on parity, the deferred all-five-mode baseline/wide/tall visualizer
+viewport matrix, performance tails and clean installed shutdown. Physical source-mode smoke cells may be useful early evidence,
+but they are not the deterministic H authority-flip gate.
 
 ## 13. Rejected H shortcuts
 

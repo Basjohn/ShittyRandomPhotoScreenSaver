@@ -1,6 +1,12 @@
 # H — True F Closure: Technical Configuration + Retained Consumer
 
-Status authority remains `Current_Plan.md`. This note is a bounded correction discovered by post-GREEN audit of `45b7c8f8`.
+Status: **CLOSED correction evidence — permanent regression lessons promoted to current contracts**  
+Status authority remains `Current_Plan.md`. This note records the bounded post-GREEN correction discovered by audit of
+`45b7c8f8`; it is not a standing prerequisite to rerun before every H slice.
+
+The durable ownership rules are now also carried by `Docs/Contracts.md`, `Docs/Guardrails/Visualizer_Presentation.md`,
+`Docs/Visualizer_Reference.md`, `Docs/Visualizer_Change_Checklist.md` and `03_Visualizer.md`. Keep this file as the compact
+reason those rules exist.
 
 ## What stays accepted
 
@@ -66,9 +72,9 @@ logical publication
 -> VisualizerRenderNode.snapshot is admitted
 ```
 
-## Correct F exit bar
+## Closure bar that admitted DisplayManager conversion
 
-Before DisplayManager conversion is admitted by audit:
+The bounded closure required:
 
 1. canonical settings/model resolves a technical cache without QWidget;
 2. Quick owner/controller applies that cache to the one shared BeatEngine;
@@ -78,6 +84,10 @@ Before DisplayManager conversion is admitted by audit:
 6. the existing all-five visual/config/golden/cadence bars remain GREEN.
 
 No new visualizer subsystem, settings authority, timer, bridge, compatibility facade or legacy overlay mirror is required.
+
+This closure is now a permanent regression boundary. Future failures should reopen only the smallest demonstrated owner
+(engine technical apply, authored-logical state, retained synchronization/consumer, bar-count coherence, etc.), not the whole
+pre-cutover audit.
 
 ## Cutover checkpointing clarification
 

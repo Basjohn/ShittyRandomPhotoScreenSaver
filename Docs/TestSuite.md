@@ -66,8 +66,12 @@ The **current H destination gate** is the maintained profile:
 python tests/run_chunked.py --profile h-destination --chunks 4 --timeout-seconds 900 --log
 ```
 
-`run_chunked.py` performs one collection preflight before starting chunks. A stale import therefore fails once and stops;
-it is no longer repeated as four apparently independent chunk failures.
+`run_chunked.py` performs one collection preflight before starting the maintained profile. A stale import therefore fails
+once and stops. **Maintained profiles are then isolated by target:** every selected file or nodeid runs in its own fresh pytest process,
+while `--chunks` only partitions those subprocesses into a small number of reporting/log groups. This is deliberate for
+QQuick/Qt lifecycle tests: a queued callback or scene-graph teardown defect in one target must not contaminate unrelated tests
+in another target. Whole-tree/explicit-target mode still uses pytest-chunk test-level partitioning because it is a reconciliation
+diagnostic during H/I rather than the current destination authority.
 
 A complete-tree run remains available as a **broad reconciliation diagnostic** during H/I:
 
@@ -252,7 +256,7 @@ The Settings-overhaul drift found during the pre-cutover caution run is reconcil
 | `tests/test_sine_line4_persistence.py` | **RECONCILED** | Removes retired `_sine_line4_horizontal_shift` assumptions; locks current normalized `sine_line4_shift` binder semantics. |
 | `tests/test_visualizer_settings_plumbing.py` | **PARTIALLY RECONCILED / H-I MIXED** | Known unknown-mode assertion now follows the canonical registry fallback. Surviving settings contracts remain; legacy presenter/overlay portions retire or rehome with their owners in H/I. |
 | `tests/test_settings_theme_system.py` | **ADDED — PERMANENT** | Locks the centralized Settings ThemeSpec runtime transaction, catalog/default-mirror rules, persisted fallback semantics and temporary path-resolution precedence. |
-| `tests/run_chunked.py` | **RECONCILED** | Adds one collection preflight and the maintained `h-destination` profile; whole-tree mode remains available for reconciliation. |
+| `tests/run_chunked.py` | **RECONCILED** | Adds one collection preflight and a maintained, **target-isolated** `h-destination` profile so QQuick teardown cannot poison unrelated targets; whole-tree mode remains available for reconciliation. |
 
 Remaining non-blocking ledger debt belongs to the owner named by each row, not to the current H admission decision:
 
@@ -334,7 +338,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_presentation_spike.py` | **WILL BE OBSOLETE — J** | Architecture-selection spike, not a forever product regression. |
 | `tests/test_qtquick_render_node.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_ripple_transition.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
-| `tests/test_qtquick_runtime.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
+| `tests/test_qtquick_runtime.py` | **KEEP — MIXED H/J** | Deterministic/source-shaped runtime ownership, generation recreation and coordinated input-exit tests remain in the H destination profile. The two tests explicitly requiring real physical displays (`test_threaded_runtime_uses_exact_identity_for_two_physical_displays` and `test_threaded_runtime_recreates_removed_and_added_physical_topology`) are J physical/topology evidence and are intentionally not part of the per-commit H profile. |
 | `tests/test_qtquick_scene_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_transition_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_transition_implementations.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
@@ -763,6 +767,15 @@ Final J execution/sign-off follows `Docs/QtQuick_Migration/Remaining_J_Final_Ins
 section remains the test-ledger rule for distinguishing deterministic status from physical evidence.
 
 Physical display/refresh/DPR/GPU/subjective claims remain separate from deterministic test status.
+
+`tests/test_qtquick_runtime.py` contains two useful physical-source smoke cells that are retained for J rather than used as
+the H per-commit gate:
+
+- `test_threaded_runtime_uses_exact_identity_for_two_physical_displays`
+- `test_threaded_runtime_recreates_removed_and_added_physical_topology`
+
+They consume the operator's actual `QScreen` identities/topology and therefore remain valuable acceptance evidence, but a
+timing/hardware red in those cells does not block the H authority cutover before the production Quick chain exists to validate.
 
 Report per display as relevant:
 

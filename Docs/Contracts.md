@@ -155,13 +155,29 @@ canonical enabled/activation + requested monitor
 ```
 
 The logical runtime step advances against controller-owned state, never a live QWidget. Configuration ownership follows the
-**actual consumer**: every value used by authored logical evolution or a mode-owned frame runtime must be presentation-neutral;
-pure renderer colour/glow/card/chrome/layout stays presentation-owned. Do not move every legacy widget field into the logical
-controller merely because the widget historically stored both kinds together.
+**actual consumer**, not the Settings subsection or historical widget field that supplied it. In particular, the canonical
+resolved "technical" cache is not one ownership bucket:
 
-Binding a render bridge is not delivery proof: the synchronization owner must populate it with a complete, identity-fenced
-snapshot. A failed authored-runtime join blocks visualizer/display generation retirement. Retained visualizer double-click is
-semantic mode-cycle input and must be admitted before the display-level next-image fallback.
+```text
+engine/DSP technical inputs
+-> controller-owned shared BeatEngine / audio-worker boundary
+
+technical-origin values consumed by authored logical evolution
+-> controller-owned VisualizerLogicalTickState
+
+renderer/style/chrome values
+-> presentation state
+```
+
+Bar-count reconfiguration must leave controller authority, the shared engine generation and the controller-owned logical
+display-bar mirror/freshness state coherent. Legacy overlay-only mirrors get no Quick successor unless an exact retained
+consumer exists. Do not move every legacy widget field into the logical controller merely because the widget historically
+stored several ownership classes together.
+
+Binding or directly draining a render bridge is not delivery proof. The synchronization owner must populate it with a complete,
+identity-fenced snapshot **and the retained visualizer item/node must actually admit that snapshot**. A failed authored-runtime
+join blocks visualizer/display generation retirement. Retained visualizer double-click is semantic mode-cycle input and must be
+admitted before the display-level next-image fallback.
 
 Visualizer geometry has two independent persisted dimensions of intent:
 

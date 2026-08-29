@@ -76,9 +76,26 @@ controller-owned logical state rather than a live `SpotifyVisualizerWidget`.
 Configuration follows the same ownership split, but **the owning consumer decides the boundary**. Canonical
 settings/activation resolution must feed presentation-neutral resolved configuration for every value consumed by authored
 logical evolution or a mode-owned logical frame runtime across Spectrum, Oscilloscope, Sine, Bubble and DevCurve. Pure
-renderer/style/chrome values stay on the presentation side. Do not classify a value as presentation-only merely because it
-historically lived on `SpotifyVisualizerWidget`, and do not turn the logical controller into a bag of every legacy widget
-field.
+renderer/style/chrome values stay on the presentation side. Do not classify a value by where it lived on
+`SpotifyVisualizerWidget` or by the Settings subsection that produced it.
+
+The canonical resolved technical cache therefore has multiple legitimate consumers:
+
+```text
+DSP/capture technical values
+-> controller-owned shared BeatEngine / audio-worker boundary
+
+technical-origin authored-logical values
+-> controller-owned VisualizerLogicalTickState
+
+presentation-only style/chrome
+-> VisualizerPresentationState / resolved presentation
+```
+
+Bar-count reconfiguration must update controller authority, the shared engine through its existing generation/reconfigure
+contract, and the controller-owned logical display-bar mirror/freshness state together. Legacy overlay-only technical mirrors
+do not get recreated in Quick without an exact destination consumer. This split does **not** create another settings resolver,
+engine, controller or cadence owner.
 
 The Quick render node does not read a live `SpotifyVisualizerWidget`, arbitrary QObject presentation
 state, provider objects or `SettingsManager`.
@@ -187,8 +204,10 @@ source / engine
 ```
 
 The individual logical, bridge and render components may be landed before production cutover; the chain is **not complete**
-until the synchronization owner actually composes and publishes a current snapshot. Merely binding the bridge object to the
-Quick scene is not destination proof.
+until the synchronization owner actually composes and publishes a current snapshot **and the retained visualizer item admits
+it for the exact identity**. Merely binding the bridge object to the Quick scene, or calling the bridge's take method directly
+from a test, is not destination proof. The resolved presentation used for snapshot composition is committed to the retained
+item at the same synchronization boundary rather than independently re-resolved.
 
 The synchronization boundary may mark visual state dirty and transfer a complete current snapshot. It
 may not:
@@ -602,8 +621,10 @@ Keep focused proof for:
 - immutable render boundary;
 - no live QWidget/provider/settings reads from renderer;
 - logical step + every all-five logical/frame-runtime configuration consumer require no live QWidget host;
-- latest logical publication + resolved presentation state compose a complete `VisualizerRenderSnapshot` and populate the
-  existing bridge before Quick rendering;
+- canonical technical cache routes engine-owned values to the one shared BeatEngine/audio-worker boundary and authored-logical
+  technical-origin values to controller-owned logical state, with bar-count controller/engine/logical-mirror coherence;
+- latest logical publication + resolved presentation state compose a complete `VisualizerRenderSnapshot`, populate the
+  existing bridge and are consumed through the real retained Quick item/render-node synchronization path;
 - exactly one product-level visualizer display owner is admitted; no per-display duplicate controller/source owner;
 - retained visualizer double-click mode-cycle precedes the global next-image fallback;
 - failed authored-runtime join blocks generation/display retirement;
