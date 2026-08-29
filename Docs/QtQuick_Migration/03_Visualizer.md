@@ -1,6 +1,5 @@
 # 03 — Visualizer Qt Quick Migration
 
-Status: **Phase-D architecture landed; G4 core viewport resize landed; bounded post-checkpoint corrections are current priority**  
 Last updated: 2026-08-29
 
 Cross-links:
@@ -14,15 +13,12 @@ Cross-links:
 - historical painted-card bleed: `Docs/Historical_Bugs/R-21_Visualizer_Painted_Card_GL_Boundary.md`
 - deferred deletion: `Future_Cleanup.md`
 
-Phase D is **complete**. D1–D9 and its render/logical architecture remain closed. This file is also the durable
-geometry contract consumed by G. The core G4 edge operation, Bubble logical reflow and all-five-mode capability policy are
-landed. The current post-checkpoint G4 corrections do not reopen Phase-D architecture; they close bounded viewport
-ownership/spatial omissions against that landed design. See
-`Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md`.
+Phase D is **complete** and its render/logical architecture remains closed. This file is the durable visualizer
+logical/render/geometry contract; `Current_Plan.md` owns live migration status and phase sequencing. Later ownership/cutover
+work may finish removing migration scaffolding without reopening D1–D9.
 
-Remaining installed Bubble cadence, eyes-on parity and mixed-refresh checks are operator-scheduled
-acceptance debt. They are not permission to fabricate a pass and are not by themselves unfinished
-Phase-D implementation.
+Installed Bubble cadence, eyes-on parity and mixed-refresh checks remain physical acceptance concerns. They are not permission
+to change authored behavior or weaken deterministic contracts.
 
 ## 1. Preserved authored-time owner
 
@@ -56,10 +52,11 @@ The landed shape is conceptually:
 
 ```text
 VisualizerRuntimeController
-    settings/mode/preset activation
+    settings/mode/preset activation identity
     BeatEngine/source ownership
     playback-edge ownership
-    VisualizerLogicalRuntime
+    controller-owned VisualizerLogicalTickState
+    sole VisualizerLogicalRuntime
     mode-owned logical frame runtime
     latest logical publication
 
@@ -71,7 +68,13 @@ Quick visualizer presentation
     QSGRenderNode visual content
 ```
 
-No hidden QWidget is required to retain logical/source ownership.
+No hidden QWidget is required to retain logical/source ownership. The authored logical step advances against the
+controller-owned logical state rather than a live `SpotifyVisualizerWidget`.
+
+Configuration follows the same ownership split: canonical settings/activation resolution feeds one presentation-neutral
+logical/runtime apply authority for authored simulation state and engine/runtime configuration; visual-only style/chrome
+configuration stays on the presentation side. Do not turn the logical controller into a bag of legacy widget presentation
+fields.
 
 The Quick render node does not read a live `SpotifyVisualizerWidget`, arbitrary QObject presentation
 state, provider objects or `SettingsManager`.
@@ -571,6 +574,7 @@ Keep focused proof for:
 - distinct Quick render-thread ownership;
 - immutable render boundary;
 - no live QWidget/provider/settings reads from renderer;
+- logical step + logical/runtime configuration require no live QWidget host;
 - non-zero-origin/non-1-DPR geometry;
 - card/shader alignment;
 - `CARD` rounded inner clipping;

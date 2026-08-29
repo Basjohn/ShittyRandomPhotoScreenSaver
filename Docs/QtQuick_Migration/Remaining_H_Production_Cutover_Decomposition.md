@@ -1,27 +1,17 @@
 # Remaining H — Production Quick Cutover Technical Decomposition
 
-Status: **execute only after complete G is GREEN, pushed and independently audited/accepted**  
-Source basis: inspect exact current tree at H admission; this decomposition defines owners/invariants rather than a frozen commit hash.  
-Work admission: `Current_Plan.md`
+Work admission and live checkpoint: `Current_Plan.md`  
+Source basis: inspect exact current source before execution; this decomposition owns durable H destination boundaries rather
+than transient checkpoint status.
 
 H is final production owner/orchestration wiring plus old physical-host deletion. It is not a second family migration and
 not a requirement to restore the half-migrated legacy application before switching.
 
-## 1. Admission gate
+## 1. Authority rule
 
-Do not begin H because G7 or G8 individually looks done. Required entry state:
-
-```text
-G4 post-checkpoint corrections GREEN
-+ G7 caller-proof auxiliary/context closure GREEN
-+ G8 focus/MC closure GREEN
--> complete G checkpoint pushed
--> independent audit accepted
--> H admitted
-```
-
-The accepted G checkpoint is source truth. If exact source after the audit differs from owner names below, update this
-decomposition before coding rather than inventing compatibility behavior.
+`Current_Plan.md` decides whether H is admitted and what slice is next. Do not copy live phase/checkpoint status into this
+file. If exact source exposes a missing durable ownership seam, close that seam under the destination contracts before the
+production flip rather than inventing compatibility behavior.
 
 ## 2. Destination chain
 
@@ -35,18 +25,22 @@ DisplayManager / engine display orchestration
         -> one display-owned WidgetRuntimeManager
             -> canonical capability + ordinary enabled/instance admission
             -> existing neutral runtime services/models
+        -> one VisualizerRuntimeController
+            -> controller-owned logical tick state
+            -> sole VisualizerLogicalRuntime / mode logical runtime
+            -> immutable/latest render publication
         -> ordinaryWidgetHost / visualizer / transition / CUSTOM / auxiliary retained scene
 ```
 
 No parallel legacy production manager/presenter is permitted.
 
-## 3. Pre-H source seam
+## 3. Migration source seam
 
-Before H, normal startup may still route through `engine/display_manager.py` -> legacy `DisplayWidget` / old physical host.
-Treat that as a routing fact, not destination architecture. Inspect exact callers at H admission rather than preserving a
-stale private-attribute inventory from an older checkpoint.
+Before production cutover, source may still route through `engine/display_manager.py` -> legacy `DisplayWidget` / old
+physical host. Treat that as migration scaffolding, not destination architecture. Inspect exact callers before cutover rather
+than preserving a stale private-attribute inventory.
 
-The destination pieces are already real and must be connected, not recreated:
+Reuse destination owners that already exist; do not create parallel replacements:
 
 - `rendering/quick/runtime.py` — per-display generation owner;
 - `rendering/quick/window.py` — exact physical `QQuickWindow`;
@@ -54,9 +48,9 @@ The destination pieces are already real and must be connected, not recreated:
 - `rendering/widget_runtime_manager.py` — presentation-neutral capability/lifecycle/service owner;
 - migrated family models/presentations and neutral service leases from F;
 - retained G CUSTOM/input/auxiliary/context owners;
-- visualizer logical/runtime controller + snapshot bridge + landed viewport-configuration seam.
+- visualizer runtime controller + controller-owned logical state/runtime + snapshot bridge + viewport-configuration seam.
 
-H should connect those pieces; it should not create replacement versions of them.
+H should connect those owners; it should not create replacement versions of them.
 
 ## 4. Keep DisplayManager responsibilities; replace presenter assumptions
 
@@ -69,31 +63,57 @@ DisplayManager remains responsible for product-level display orchestration such 
 - coordinated readiness/reveal/outward engine signals;
 - coordinated exit and display replacement.
 
-Replace assumptions that require QWidget/compositor internals with narrow `QuickDisplayRuntime` APIs/signals. Do not make
-`QuickDisplayRuntime` emulate arbitrary `DisplayWidget` private attributes just to minimize diff size.
+Replace assumptions that require QWidget/compositor internals with a small semantic DisplayManager/display-unit contract.
+Do not make `QuickDisplayRuntime` or `QuickDisplayUnit` emulate arbitrary `DisplayWidget` private attributes, do not create
+one-for-one forwarding methods merely to minimize diff size, and do not spread concrete Quick implementation internals across
+engine call sites.
 
-## 5. Suggested cutover order
+## 5. Cutover order
 
-1. **Inventory DisplayManager's exact current external contract.** List methods/signals consumed by engine/tests. Separate
-   product orchestration from `DisplayWidget` implementation probes.
-2. **Make the runtime collection presenter-neutral.** Own `QuickDisplayRuntime` instances without lying about them as QWidget
-   objects.
-3. **Construct one shared/process Quick scene factory at the proper owner boundary** and one `QuickDisplayRuntime` per selected
-   QScreen/generation.
-4. **Wire outward input/action signals** from each Quick runtime to the same product-level DisplayManager/engine actions.
-5. **Wire base image + transition routing** through explicit Quick APIs; remove compositor/private-widget pokes.
-6. **Attach exactly one display-owned `WidgetRuntimeManager`.** Reuse neutral capability/service ownership; never instantiate
-   a legacy manager in parallel.
-7. **Resolve ordinary family admission once** from capability effectiveness + ordinary ON/OFF/instances, then bind stable
-   presentation models into `QuickSceneController`/`ordinaryWidgetHost`.
-8. **Bind G owners exactly once:** CUSTOM session/actions/layout slots, context/auxiliary/input state and visualizer
-   viewport-configuration ownership through their existing explicit runtime APIs.
-9. **Prove readiness/lifecycle/generation replacement** with runtime-shaped tests.
-10. **Delete old physical-host callers and source** once the destination is the only production route.
+1. **Inventory DisplayManager's exact external product contract.** Separate real engine/display semantics from
+   `DisplayWidget` implementation probes.
+2. **Prove the visualizer destination owner is self-sufficient before the flip.** A fresh `VisualizerRuntimeController` must
+   be constructible/configurable/startable without `SpotifyVisualizerWidget`; its logical step advances against
+   controller-owned state, and logical/runtime settings use presentation-neutral configuration authority. Visual-only styling
+   stays presentation-owned.
+3. **Bind the thin Quick visualizer edge.** Per intended display/generation, bind the existing controller's immutable render
+   source and viewport configuration into `QuickDisplayRuntime`; prove generation replacement/retirement with one
+   engine/source/logical owner and no hidden widget.
+4. **Perform the DisplayManager + engine conversion as one coordinated production cutover.** Move engine callers onto the
+   durable semantic DisplayManager/display-unit contract while replacing the collection's concrete presenter type. Do not land
+   a half-swapped production state, a throwaway legacy-only decoupling layer or a compatibility facade.
+5. **Wire the remaining product semantics exactly once:** outward input/actions, image + transition routing, ordinary family
+   admission/services, CUSTOM/context/auxiliary state, readiness and topology/generation replacement.
+6. **Prove readiness/lifecycle/generation replacement** with runtime-shaped tests for one and multiple displays.
+7. **Delete old physical-host callers and source** once caller proof shows the Quick destination is the only production route.
 
-Do not perform step 10 by leaving dead compatibility shims that merely forward dozens of `DisplayWidget` private names.
+## 6. Visualizer logical/configuration ownership
 
-## 6. Visualizer viewport-configuration binding
+The visualizer must not require a live QWidget to perform authored logical work or apply logical/runtime configuration.
+Durable split:
+
+```text
+canonical settings / resolved activation
+-> one presentation-neutral logical/runtime configuration authority
+-> VisualizerRuntimeController + controller-owned logical tick state
+-> one VisualizerLogicalRuntime
+
+visual-only styling/chrome/layout
+-> Quick presentation state/model/render contract
+```
+
+Rules:
+
+- the logical runtime step advances against controller-owned state, not `logical_tick(widget)`;
+- controller-owned state may delegate engine/source/generation identity back to the controller, but it is not a second owner;
+- one BeatEngine/source/logical runtime/mailbox/render bridge cardinality remains binding;
+- technical/runtime configuration may live with controller/runtime ownership; visual colours, glow, borders, card/layout/fade
+  presentation do not migrate into logical state merely because legacy code stored them on the same widget;
+- legacy widget adapters may temporarily delegate to neutral state/configuration before cutover, but are not a fallback and
+  retire with the widget;
+- no QML/QQuickItem/QScreen/render-thread object enters logical state/configuration.
+
+## 7. Visualizer viewport-configuration binding
 
 H must explicitly preserve the corrected G4 ownership model. Do not depend on incidental ordering between render-snapshot
 publication and CUSTOM-session callbacks. Conceptually there are two configuration levels:
@@ -121,7 +141,7 @@ Bind the existing presentation-neutral visualizer controller/config seam once fr
 No QQuickItem/QML/QScreen/render-thread object enters Bubble logical state. No second configuration map, queue, timer or
 clock is introduced.
 
-## 7. WidgetRuntimeManager cardinality
+## 8. WidgetRuntimeManager cardinality
 
 `WidgetRuntimeManager` is presentation-neutral and may retain provider/model service ownership while presenter bindings
 change. H must preserve exactly one intended runtime owner per display/generation.
@@ -137,7 +157,7 @@ Rules:
 If a Quick presentation host needs a small registry/host adapter for `WidgetRuntimeManager`, make it explicit and
 presentation-neutral. Do not make the neutral manager own QML items.
 
-## 8. Generation/lifecycle order
+## 9. Generation/lifecycle order
 
 Preserve the landed lifecycle principle:
 
@@ -161,7 +181,7 @@ blocking Python against the threaded render loop. Do not replace it with direct 
 
 A topology change rebuilds a generation on the target QScreen; do not move live render resources between windows.
 
-## 9. Readiness
+## 10. Readiness
 
 Do not translate old compositor flags into arbitrary sleeps.
 
@@ -178,7 +198,7 @@ Use explicit Quick readiness facts already exposed by runtime/scene as applicabl
 DisplayManager may aggregate those facts across selected displays. A fixed delay, black placeholder, stale previous texture
 or "window exists" alone is not readiness.
 
-## 10. Physical-host deletion boundary
+## 11. Physical-host deletion boundary
 
 After the Quick production route is proven, delete caller-dead old physical presentation, including as applicable:
 
@@ -193,7 +213,7 @@ After the Quick production route is proven, delete caller-dead old physical pres
 
 Do not carry these to I merely because deletion feels risky. I is residue, not a second cutover phase.
 
-## 11. H proof bar vs J
+## 12. H proof bar vs J
 
 H must prove enough to safely establish sole Quick production authority:
 
@@ -203,6 +223,7 @@ H must prove enough to safely establish sole Quick production authority:
 - image + transition routing through Quick APIs;
 - retained ordinary families admitted once;
 - G input/CUSTOM/auxiliary/context attached once;
+- visualizer controller constructs/configures/starts/advances without a QWidget host and binds exactly once to Quick;
 - visualizer viewport config: committed baseline + committed nonbaseline + live CUSTOM override + Save + Cancel + slot replay;
 - generation 0 and replacement generation behavior, including viewport rehydration before use;
 - repeated construct/close without stale callbacks or duplicate owners;
@@ -213,7 +234,7 @@ J still owns comprehensive compiled/installed physical acceptance: mixed refresh
 eyes-on parity, the deferred all-five-mode baseline/wide/tall visualizer viewport matrix, performance tails and clean
 installed shutdown.
 
-## 12. Rejected H shortcuts
+## 13. Rejected H shortcuts
 
 Do not:
 
@@ -221,6 +242,7 @@ Do not:
 - add a `DisplayWidget` compatibility facade around `QuickDisplayRuntime`;
 - keep an old software/compositor fallback after cutover;
 - create a second `WidgetRuntimeManager` because the Quick host needs a registry;
+- move visual-only visualizer settings/chrome/layout into `VisualizerRuntimeController` logical state;
 - move provider/business logic into QML;
 - preserve caller-dead QWidget pixels to keep pre-H startup working;
 - use sleeps instead of readiness;
@@ -230,9 +252,10 @@ Do not:
 - treat `CUSTOM inactive` as synonymous with `viewport extent = canonical`;
 - let ordinary presentation publication silently overwrite a live CUSTOM viewport override.
 
-## 13. GREEN definition
+## 14. GREEN definition
 
 H is GREEN when normal production orchestration creates only the Quick runtime chain, semantic owner cardinality is correct,
-all corrected G configuration/input/auxiliary owners are bound once, generation/lifecycle tests are clean, committed and
+the visualizer logical/configuration owner is widget-free and bound once, all corrected G configuration/input/auxiliary owners
+are bound once, generation/lifecycle tests are clean, committed and
 CUSTOM-overridden viewport configuration survives its lifecycle matrix, and the remaining old physical presenter is deleted
 with caller proof.
