@@ -84,17 +84,23 @@ class RuntimeInputOwner(QObject):
     def is_ctrl_held(self) -> bool:
         return self._ctrl_held
 
-    def is_ctrl_mode_active(self) -> bool:
-        if self._ctrl_held:
-            return True
+    def _global_ctrl_held(self) -> bool | None:
+        """Coordinator Ctrl state, or None when no cross-display coordinator wired."""
+
         provider = self._global_ctrl_held_provider
         if provider is None:
-            return False
+            return None
         try:
             return bool(provider())
         except Exception:
             logger.exception("[RUNTIME_INPUT] Global Ctrl-state provider failed")
-            return False
+            return None
+
+    def is_ctrl_mode_active(self) -> bool:
+        if self._ctrl_held:
+            return True
+        global_state = self._global_ctrl_held()
+        return bool(global_state) if global_state is not None else False
 
     def set_context_menu_active(self, active: bool) -> None:
         self._context_menu_active = bool(active)
