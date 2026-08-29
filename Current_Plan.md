@@ -214,31 +214,38 @@ The family/runtime destination integration named first in the H directive is com
 - Prior H slices: `bind_visualizer_render_source` (exact identity) and `bind_visualizer_viewport_config` (corrected-G4
   committed/override ownership) at the runtime owner; the `capture_qpixmap` image bridge already exists and is tested.
 
-### H open decision — ordinary-widget outer-geometry resolution (GATE before the DisplayManager flip)
+### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 
-The DisplayManager production flip is blocked on a genuine unbuilt destination authority, not merely a large slice.
+The ordinary-widget outer-geometry gate is resolved: **option A** (QML reports a size-only preferred content size; Python is
+the sole outer-rect/anchor/clamp authority). Per the boundary correction, the deterministic per-family preferred-size
+contract is **H work** (built now); only final eyes-on visual parity is J. Landed:
 
-The family binder consumes an **injected** per-widget display-space `OverlayWidgetGeometry`. In the legacy path
-(`widgets/base_overlay_widget.py::_update_position`) each ordinary widget's outer rect is resolved from: a **content-driven
-size** (`self.size()`/`sizeHint()`, i.e. the widget's rendered content), a named anchor (`position`, e.g. "Top Right"), a
-`margin`, pixel-shift/stack offsets, and a min-visible clamp — with the G CUSTOM committed rect as an override. No Quick-era
-resolver reproduces this: docs say only that "outer geometry is Python/session-owned" without specifying how the
-**content-driven size** is obtained once presentation lives in QML (the content size is known only after the retained item
-lays out via QML `implicitWidth`/`implicitHeight`).
+- `rendering/quick/widgets/geometry_resolver.py` — pure `resolve_anchored_geometry` (reproduces the legacy
+  `_update_position` content-size + anchor + margin + min-visible clamp, minus QWidget-era padding/pixel-shift artifacts),
+  `OverlayGeometryPolicy` + `resolve_overlay_geometry_policy` (persisted `position`/`margin`, optional CUSTOM committed-rect
+  override), `OverlayGeometryBinding` (content-size → committed outer rect; identical-effective no-op; committed rect wins;
+  re-anchors on display-bounds/topology change), and `connect_overlay_preferred_size` (wires the QML signal; no width
+  feedback, no polling/timers/per-frame callbacks).
+- QML contract: `OverlayWidget` exposes family-declared `preferredContentWidth/Height` + a size-only
+  `preferredContentSizeChanged`; `OverlayCard` exposes `shellInset`. Every production family declares a real, non-placeholder
+  preferred size from intrinsic/config sources (never its assigned width): Clock (digital intrinsic text / analogue
+  font-square), Weather, Reddit, Gmail (new additive `GmailPresentationConfig.width` + model `contentWidth`), Media
+  (artwork-centric), and the two Steam authored cards. A binder bar asserts all seven report a real size before the flip.
 
-This is a real architecture fork the flip cannot proceed past without a decision (guessing silently mislays every widget):
+CUSTOM committed rect remains authoritative and suppresses ordinary re-anchoring. J later validates/refines visual parity.
 
-- **A. QML→Python content-size feedback + Python anchor-resolve.** Retained item reports resolved implicit content size;
-  Python reproduces `_update_position` anchoring (position/margin/offset/clamp) and re-anchors when content size changes.
-  Most faithful to current auto-sizing product behavior; needs a bounded size-feedback seam.
-- **B. Fully explicit persisted rects (CUSTOM-owned).** Seed each widget's rect once, then geometry is explicit and only
-  CUSTOM edits it. Simplest resolver; changes product behavior (widgets stop auto-resizing to content after settings changes
-  unless re-seeded).
-- **C. Python computes size from settings/font metrics (no QML feedback).** Approximate; risks mismatch with actual rendered
-  content and per-family special cases.
+### H remaining — the DisplayManager production flip
 
-Recommendation: **A** (preserves current content-driven anchoring). This choice is required before building the per-display
-Quick presenter + DisplayManager flip + legacy deletion.
+All destination pieces now exist and are GREEN: manager cardinality, the full seven-family `OrdinaryFamilyPresentationBinder`,
+visualizer render-source + viewport-config bindings, the `capture_qpixmap` image bridge, and the complete option-A geometry
+mechanism + per-family preferred sizes. Remaining flip steps:
+
+1. **Per-display Quick presenter** assembling `QuickDisplayRuntime` + binder + per-widget geometry bindings (reconciling
+   precedence: CUSTOM committed rect > family-owned variant geometry, e.g. Clock digital/analogue > content-anchored) +
+   visualizer bindings + image/transition routing + outward signal fan-in.
+2. **DisplayManager rewire** to construct/own the Quick presenter per selected QScreen instead of `DisplayWidget`, mapping
+   image/transition/readiness/generation/topology onto the runtime APIs; update the engine test suites off QWidget shapes.
+3. **Caller-proven legacy deletion** of `DisplayWidget`/`GLCompositorWidget`/compositor stack (§10), not deferred to I.
 
 H is **not admitted until the complete G checkpoint has passed the independent audit above**.
 
