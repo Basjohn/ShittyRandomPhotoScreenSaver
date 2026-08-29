@@ -106,6 +106,13 @@ class VisualizerLogicalTickState:
         self._controller.bar_count = value
 
     @property
+    def _vis_mode_str(self) -> str:
+        # Derived read-only mode string, identical to the legacy widget's
+        # ``_vis_mode.name.lower()`` (the controller mode id is that canonical
+        # lowercase token).
+        return str(self._controller.mode_id)
+
+    @property
     def _settings_model(self) -> Any:
         return self._controller.settings_model
 
