@@ -15,15 +15,17 @@ OverlayWidget {
     signal systemMuteToggleRequested()
     signal seekFractionRequested(real fraction)
 
-    // Content-driven outer size (H option A): Media is an artwork-centric card
-    // whose bands distribute assigned space in both axes, so its preferred size
-    // is a deterministic config-derived size (artwork dimension + a font-scaled
-    // metadata allowance + authored bands), never a function of the assigned
-    // width/height - no feedback. J validates/refines exact dimensions.
-    preferredContentWidth: (
+    // Content-driven outer size (H option A). Width honours the historical
+    // ordinary-card minimum footprint (600) and enlarges above it only when the
+    // artwork + metadata genuinely require it. Height honours the historical
+    // media floor of max(220, artwork_size + 60). Config-derived (no assigned
+    // width/height dependency, no feedback). J refines exact dimensions.
+    preferredContentWidth: Math.max(
+        600.0,
         mediaModel.artworkSize + 18.0 + Math.max(220.0, mediaModel.fontSize * 16.0)
-    ) + mediaRoot.shellInset
-    preferredContentHeight: (mediaModel.artworkSize + 96.0) + mediaRoot.shellInset
+            + mediaRoot.shellInset
+    )
+    preferredContentHeight: Math.max(220.0, mediaModel.artworkSize + 60.0)
 
     function appVolumeLevelAt(y, height) {
         if (height <= 0.0)

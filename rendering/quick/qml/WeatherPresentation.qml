@@ -9,16 +9,18 @@ OverlayWidget {
     signal settingsRequested(string target)
     signal refreshRequested()
 
-    // Content-driven outer size (H option A): width from the intrinsic text
-    // widths (implicitWidth) plus the optional condition icon; height from the
-    // ready column's natural stacked height. Intrinsic sources only - no
-    // dependency on the assigned width, so no width<->preferredWidth feedback.
-    // J validates/refines exact spacing against eyes-on parity.
+    // Content-driven outer size (H option A). Width honours the historical
+    // ordinary-card minimum footprint (BaseOverlayWidget.DEFAULT_CARD_MIN_WIDTH =
+    // 600) and only enlarges above it when the intrinsic text/icon content
+    // genuinely requires it - it must never silently shrink below the authored
+    // floor. Height is content/layout driven. Intrinsic sources only (no
+    // width<->preferredWidth feedback). J refines eyes-on parity.
     preferredContentWidth: Math.max(
-        140.0,
+        600.0,
         (weatherModel.showConditionIcon ? weatherModel.iconSize + 12.0 : 0.0)
             + Math.max(locationText.implicitWidth, conditionText.implicitWidth)
-    ) + weatherRoot.shellInset
+            + weatherRoot.shellInset
+    )
     preferredContentHeight: Math.max(
         60.0, readyColumn.childrenRect.height
     ) + weatherRoot.shellInset

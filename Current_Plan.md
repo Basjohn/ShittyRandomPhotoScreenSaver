@@ -227,12 +227,21 @@ contract is **H work** (built now); only final eyes-on visual parity is J. Lande
   re-anchors on display-bounds/topology change), and `connect_overlay_preferred_size` (wires the QML signal; no width
   feedback, no polling/timers/per-frame callbacks).
 - QML contract: `OverlayWidget` exposes family-declared `preferredContentWidth/Height` + a size-only
-  `preferredContentSizeChanged`; `OverlayCard` exposes `shellInset`. Every production family declares a real, non-placeholder
-  preferred size from intrinsic/config sources (never its assigned width): Clock (digital intrinsic text / analogue
-  font-square), Weather, Reddit, Gmail (new additive `GmailPresentationConfig.width` + model `contentWidth`), Media
-  (artwork-centric), and the two Steam authored cards. A binder bar asserts all seven report a real size before the flip.
+  `preferredContentSizeChanged`; `OverlayCard` exposes `shellInset`. Every production family declares a real preferred size
+  from intrinsic/config sources (never its assigned width).
+- **Historical size policies are honoured (H, not J)** — intrinsic QML measurement may enlarge a card where content genuinely
+  requires it, but never shrinks below the authored/minimum footprint (deterministic bars in
+  `tests/test_qtquick_family_size_policy.py`):
+  - Weather / Reddit / Media: 600 px minimum width (`BaseOverlayWidget.DEFAULT_CARD_MIN_WIDTH`);
+  - Gmail: authored width, default 600, clamped 200–1200;
+  - Media: height floor `max(220, artwork_size + 60)`;
+  - Clock analogue: authored natural geometry `width = max(160, font*4.5)`, `height = max(width, width*1.3)`;
+  - Clock digital: content-driven intrinsic text; Steam cards: authored dimensions.
 
-CUSTOM committed rect remains authoritative and suppresses ordinary re-anchoring. J later validates/refines visual parity.
+**Ownership DECIDED — option A:** content anchoring is **default placement only**. Existing CUSTOM committed rects and Clock
+per-variant (digital/analogue) committed-rect ownership remain unchanged and override the binding completely (the binding's
+`policy.committed_rect` carries the committed rect; when present it wins and suppresses re-anchoring). J later validates/refines
+visual parity only.
 
 ### H remaining — the DisplayManager production flip
 
@@ -240,9 +249,10 @@ All destination pieces now exist and are GREEN: manager cardinality, the full se
 visualizer render-source + viewport-config bindings, the `capture_qpixmap` image bridge, and the complete option-A geometry
 mechanism + per-family preferred sizes. Remaining flip steps:
 
-1. **Per-display Quick presenter** assembling `QuickDisplayRuntime` + binder + per-widget geometry bindings (reconciling
-   precedence: CUSTOM committed rect > family-owned variant geometry, e.g. Clock digital/analogue > content-anchored) +
-   visualizer bindings + image/transition routing + outward signal fan-in.
+1. **Per-display Quick presenter** assembling `QuickDisplayRuntime` + binder + per-widget geometry bindings under option A
+   (content-anchoring is default placement only; CUSTOM committed rects and Clock per-variant committed rects override the
+   binding and are left owning their geometry unchanged) + visualizer bindings + image/transition routing + outward signal
+   fan-in.
 2. **DisplayManager rewire** to construct/own the Quick presenter per selected QScreen instead of `DisplayWidget`, mapping
    image/transition/readiness/generation/topology onto the runtime APIs; update the engine test suites off QWidget shapes.
 3. **Caller-proven legacy deletion** of `DisplayWidget`/`GLCompositorWidget`/compositor stack (§10), not deferred to I.
