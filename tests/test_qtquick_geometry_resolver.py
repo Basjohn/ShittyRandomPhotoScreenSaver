@@ -14,6 +14,7 @@ from rendering.quick.widgets.geometry_resolver import (
     DEFAULT_MARGIN_PX,
     MIN_VISIBLE_PX,
     OverlayAnchor,
+    OverlayGeometryBinding,
     OverlayGeometryPolicy,
     resolve_anchored_geometry,
     resolve_overlay_geometry_policy,
@@ -223,3 +224,76 @@ def test_policy_committed_rect_overrides_anchoring() -> None:
     resolved = policy.resolve((999.0, 999.0), bounds)
     assert resolved == committed
     assert policy.has_committed_rect is True
+
+
+def _binding(policy, bounds):
+    applied: list[OverlayWidgetGeometry] = []
+    binding = OverlayGeometryBinding(
+        policy=policy, display_bounds=bounds, geometry_sink=applied.append
+    )
+    return binding, applied
+
+
+def test_binding_applies_anchored_geometry_on_content_size() -> None:
+    bounds = OverlayWidgetGeometry(0.0, 0.0, 1000.0, 800.0)
+    policy = OverlayGeometryPolicy(
+        widget_id="clock", anchor=OverlayAnchor.TOP_RIGHT, margin=30.0
+    )
+    binding, applied = _binding(policy, bounds)
+
+    result = binding.update_content_size((200.0, 100.0))
+    assert result is not None
+    assert result.x == pytest.approx(1000.0 - 200.0 - 30.0)
+    assert result.width == pytest.approx(200.0)
+    assert applied == [result]
+    assert binding.current_geometry == result
+
+
+def test_binding_is_a_no_op_when_geometry_is_unchanged() -> None:
+    bounds = OverlayWidgetGeometry(0.0, 0.0, 1000.0, 800.0)
+    policy = OverlayGeometryPolicy(
+        widget_id="clock", anchor=OverlayAnchor.TOP_RIGHT, margin=30.0
+    )
+    binding, applied = _binding(policy, bounds)
+
+    binding.update_content_size((200.0, 100.0))
+    # Same content size resolves to the same rectangle -> no second sink call.
+    assert binding.update_content_size((200.0, 100.0)) is None
+    assert len(applied) == 1
+    # A different content size re-lays-out.
+    assert binding.update_content_size((240.0, 100.0)) is not None
+    assert len(applied) == 2
+
+
+def test_binding_reanchors_on_display_bounds_change() -> None:
+    policy = OverlayGeometryPolicy(
+        widget_id="clock", anchor=OverlayAnchor.TOP_RIGHT, margin=30.0
+    )
+    binding, applied = _binding(
+        policy, OverlayWidgetGeometry(0.0, 0.0, 1000.0, 800.0)
+    )
+    binding.update_content_size((200.0, 100.0))
+    # A topology change to a wider display re-anchors to the new right edge.
+    result = binding.set_display_bounds(
+        OverlayWidgetGeometry(0.0, 0.0, 1600.0, 900.0)
+    )
+    assert result is not None
+    assert result.x == pytest.approx(1600.0 - 200.0 - 30.0)
+    assert len(applied) == 2
+
+
+def test_binding_committed_rect_ignores_content_size_churn() -> None:
+    bounds = OverlayWidgetGeometry(0.0, 0.0, 1000.0, 800.0)
+    committed = OverlayWidgetGeometry(111.0, 222.0, 333.0, 144.0)
+    policy = OverlayGeometryPolicy(
+        widget_id="clock",
+        anchor=OverlayAnchor.TOP_RIGHT,
+        margin=30.0,
+        committed_rect=committed,
+    )
+    binding, applied = _binding(policy, bounds)
+
+    # A committed rect applies immediately and is immune to content-size churn.
+    assert binding.update_content_size((200.0, 100.0)) == committed
+    assert binding.update_content_size((900.0, 900.0)) is None
+    assert applied == [committed]
