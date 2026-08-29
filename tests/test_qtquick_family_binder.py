@@ -47,12 +47,12 @@ def _geometry_resolver(widget_id: str) -> OverlayWidgetGeometry:
     return OverlayWidgetGeometry(120.0 + lane * 40.0, 90.0, 300.0, 160.0)
 
 
-def _make_runtime(qt_app, generation: int):
+def _make_runtime(qt_app, generation: int, *, screen_index: int = 0):
     screen = qt_app.primaryScreen()
     assert screen is not None
     factory = QuickSceneFactory()
     runtime = QuickDisplayRuntime(
-        screen_index=0,
+        screen_index=screen_index,
         runtime_generation=generation,
         screen=screen,
         scene_factory=factory,
@@ -68,6 +68,7 @@ def _binder(runtime, **overrides) -> OrdinaryFamilyPresentationBinder:
         geometry_resolver=_geometry_resolver,
         display_bounds=_DISPLAY_BOUNDS,
         display_identity="screen:a",
+        screen_index=runtime.screen_index,
         shadow_values={"enabled": True, "direction": "SE"},
     )
     kwargs.update(overrides)
@@ -95,6 +96,30 @@ def test_binder_builds_only_enabled_instances_into_the_host(qt_app) -> None:
     finally:
         runtime.close_runtime()
         factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_binder_routes_each_enabled_instance_to_its_effective_monitor(qt_app) -> None:
+    runtime_a, factory_a = _make_runtime(qt_app, 89, screen_index=0)
+    runtime_b, factory_b = _make_runtime(qt_app, 90, screen_index=1)
+    config = _widgets_config(
+        clock={"enabled": True, "monitor": "1"},
+        clock2={"enabled": True, "monitor": "2"},
+    )
+    try:
+        binder_a = _binder(runtime_a, adapters=(ClockFamilyAdapter(),))
+        binder_b = _binder(runtime_b, adapters=(ClockFamilyAdapter(),))
+
+        assert binder_a.bind(config) == ("clock",)
+        assert binder_b.bind(config) == ("clock2",)
+        assert runtime_a.scene_controller.ordinary_widget_host.live_count == 1
+        assert runtime_b.scene_controller.ordinary_widget_host.live_count == 1
+    finally:
+        runtime_b.close_runtime()
+        factory_b.deleteLater()
+        runtime_a.close_runtime()
+        factory_a.deleteLater()
         qt_app.processEvents()
 
 

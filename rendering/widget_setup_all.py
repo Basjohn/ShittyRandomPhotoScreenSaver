@@ -22,6 +22,7 @@ from rendering.widget_descriptors import (
     get_effective_monitor_value_for_widget,
     get_factory_widget_descriptors,
     is_custom_position_selected_for_widget,
+    monitor_route_admits_screen,
 )
 from core.settings.capability_activation import (
     is_widget_family_effective,
@@ -144,11 +145,7 @@ def _resolve_card_border_width(config: dict) -> int:
 
 
 def _show_on_this_monitor(screen_index: int, monitor_sel) -> bool:
-    try:
-        return (monitor_sel == 'ALL') or (int(monitor_sel) == (screen_index + 1))
-    except Exception as e:
-        logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-        return True
+    return monitor_route_admits_screen(monitor_sel, screen_index)
 
 
 def _ensure_factory_registry(

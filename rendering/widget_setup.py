@@ -11,6 +11,7 @@ from PySide6.QtGui import QColor
 
 from core.logging.logger import get_logger
 from core.settings import SettingsManager
+from rendering.widget_descriptors import monitor_route_admits_screen
 
 if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
@@ -37,11 +38,7 @@ def resolve_monitor_visibility(monitor_sel: str, screen_index: int) -> bool:
     Returns:
         True if widget should be visible on this screen
     """
-    try:
-        return (monitor_sel == 'ALL') or (int(monitor_sel) == (screen_index + 1))
-    except Exception as e:
-        logger.debug("[MISC] Exception suppressed: %s", e)
-        return True  # Default to visible on parse error
+    return monitor_route_admits_screen(monitor_sel, screen_index)
 
 
 def setup_dimming(display: "DisplayWidget", widgets_config: Dict) -> None:

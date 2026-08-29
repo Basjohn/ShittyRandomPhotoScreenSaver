@@ -1,7 +1,7 @@
 """Thin per-display ordinary-family presentation binder (H keystone).
 
 Presentation-neutral wiring that resolves the admitted ordinary-widget family
-instances for one display generation and constructs their existing
+instances routed to one display generation and constructs their existing
 ``Retained*Presentation`` items into that display's
 ``OrdinaryWidgetPresentationHost``.
 
@@ -18,8 +18,9 @@ It invents no capability, cadence, settings, geometry or provider authority:
 The binder only *orders* admission, *builds* through the adapters, and *holds*
 the resulting retained presentations so it can retire them exactly once with the
 display generation. It is not a second family map, provider owner, lifecycle
-owner or clock. Per-instance ``enabled`` state stays distinct from family
-capability effectiveness, exactly as the neutral manager contract requires.
+owner or clock. Per-instance ``enabled`` state and effective monitor route stay
+distinct from family capability effectiveness, exactly as the neutral manager
+and descriptor contracts require.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Optional, Protocol, runtime_checkable
 
 from core.logging.logger import get_logger
+from rendering.widget_descriptors import widget_route_admits_screen
 
 from .host import OrdinaryWidgetPresentationHost, OverlayWidgetGeometry
 
@@ -149,6 +151,7 @@ class OrdinaryFamilyPresentationBinder:
         geometry_resolver: Callable[[str], Optional[OverlayWidgetGeometry]],
         display_bounds: OverlayWidgetGeometry,
         display_identity: str,
+        screen_index: int,
         shadow_values: Mapping[str, object] | None = None,
         thread_manager: Any | None = None,
         runtime_generation: int | None = None,
@@ -159,6 +162,7 @@ class OrdinaryFamilyPresentationBinder:
         self._geometry_resolver = geometry_resolver
         self._display_bounds = display_bounds
         self._display_identity = str(display_identity)
+        self._screen_index = int(screen_index)
         self._shadow_values: dict[str, object] = dict(shadow_values or {})
         self._thread_manager = thread_manager
         self._runtime_generation = runtime_generation
@@ -201,8 +205,8 @@ class OrdinaryFamilyPresentationBinder:
 
         A family is admitted only while its capability is *effective* (activated
         and every required family activated); within an admitted family, only the
-        per-instance ``enabled`` instances are built. Returns the built widget
-        ids in build order.
+        per-instance ``enabled`` instances whose effective monitor route admits
+        this destination are built. Returns the built widget ids in build order.
         """
 
         if self._retired:
@@ -219,6 +223,17 @@ class OrdinaryFamilyPresentationBinder:
             if not self._runtime_manager.is_family_effective(config, family_id):
                 continue
             for widget_id in adapter.enabled_instance_ids(config):
+                if not widget_route_admits_screen(
+                    widget_id,
+                    config,
+                    self._screen_index,
+                ):
+                    logger.debug(
+                        "[FAMILY_BINDER] Monitor route excludes %s from screen %d",
+                        widget_id,
+                        self._screen_index,
+                    )
+                    continue
                 geometry = self._geometry_resolver(widget_id)
                 if geometry is None:
                     logger.debug(

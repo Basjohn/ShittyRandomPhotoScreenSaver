@@ -101,8 +101,8 @@ regression evidence.
 3. **Commit the production authority topology to Quick.** Replace the collection's concrete presenter type without a parallel
    production presenter, throwaway legacy-only decoupling architecture or `DisplayWidget` compatibility facade.
 4. **Wire the remaining product semantics exactly once:** outward input/actions, image + transition routing, ordinary family
-   admission/services, CUSTOM/context/auxiliary state, the single admitted visualizer, readiness and topology/generation
-   replacement.
+   admission/services (including canonical per-instance effective monitor routing), CUSTOM/context/auxiliary state, the
+   single admitted visualizer, readiness and topology/generation replacement.
 5. **Prove readiness/lifecycle/generation replacement** with deterministic/runtime-shaped one- and multi-display tests owned by
    the current H destination profile.
 6. **Delete old physical-host callers and source** once caller proof shows the Quick destination is the only production route.
