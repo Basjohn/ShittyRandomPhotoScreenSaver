@@ -985,6 +985,119 @@ class DisplayManager(QObject):
             if isinstance(state, dict):
                 states.append(state)
         return tuple(states)
+
+    def collect_runtime_retirement_roots(
+        self,
+    ) -> tuple[list[QObject], list[object]]:
+        """Collect exact generation roots for the replacement barrier.
+
+        Destination display units publish their own root topology. The
+        temporary legacy branch remains centralized here until the QWidget
+        presenter is caller-dead and deleted; no engine/lifecycle caller needs
+        to know either concrete display shape.
+        """
+
+        qobjects: list[QObject] = []
+        python_owners: list[object] = []
+
+        def _append_unique(values: list[object], candidate: object | None) -> None:
+            if candidate is None:
+                return
+            candidate_id = id(candidate)
+            if any(id(value) == candidate_id for value in values):
+                return
+            values.append(candidate)
+
+        def _append_qobject_tree(candidate: object | None) -> None:
+            if not isinstance(candidate, QObject):
+                return
+            _append_unique(qobjects, candidate)
+            try:
+                for child in candidate.findChildren(QObject):
+                    _append_unique(qobjects, child)
+            except (RuntimeError, TypeError):
+                logger.debug(
+                    "[LIFECYCLE_BARRIER] Could not enumerate children for %s",
+                    type(candidate).__name__,
+                    exc_info=True,
+                )
+
+        _append_qobject_tree(self)
+        for display in self.displays:
+            roots = getattr(display, "runtime_retirement_roots", None)
+            if callable(roots):
+                display_qobjects, display_python_owners = roots()
+                for root in display_qobjects:
+                    _append_qobject_tree(root)
+                for owner in display_python_owners:
+                    _append_unique(python_owners, owner)
+                continue
+
+            # Current physical-host roots. Delete this branch with the retired
+            # QWidget presenter after the Quick production route is proven.
+            _append_qobject_tree(display)
+            for attr_name in (
+                "_gl_compositor",
+                "_compositor",
+                "_spotify_bars_overlay",
+                "spotify_visualizer_widget",
+                "media_widget",
+                "_ctrl_cursor_hint",
+                "_input_handler",
+                "_transition_controller",
+                "_image_presenter",
+            ):
+                _append_qobject_tree(getattr(display, attr_name, None))
+
+            for attr_name in (
+                "_widget_manager",
+                "_custom_layout_manager",
+                "_transition_factory",
+                "_pixel_shift_manager",
+            ):
+                _append_unique(python_owners, getattr(display, attr_name, None))
+
+            widget_manager = getattr(display, "_widget_manager", None)
+            if widget_manager is not None:
+                for attr_name in ("_fade_coordinator", "_factory_registry"):
+                    _append_unique(
+                        python_owners,
+                        getattr(widget_manager, attr_name, None),
+                    )
+
+            custom_manager = getattr(display, "_custom_layout_manager", None)
+            if custom_manager is not None:
+                _append_qobject_tree(getattr(custom_manager, "_grid_overlay", None))
+                for state in list(
+                    getattr(custom_manager, "_shell_states", {}).values()
+                ):
+                    _append_qobject_tree(getattr(state, "shell", None))
+                    _append_qobject_tree(getattr(state, "widget", None))
+
+            compositor = getattr(display, "_gl_compositor", None)
+            if compositor is not None:
+                for attr_name in (
+                    "_deferred_warmup_context",
+                    "_deferred_warmup_surface",
+                ):
+                    _append_qobject_tree(getattr(compositor, attr_name, None))
+                for attr_name in ("_render_strategy_manager", "_transition_renderer"):
+                    _append_unique(
+                        python_owners,
+                        getattr(compositor, attr_name, None),
+                    )
+                strategy_manager = getattr(
+                    compositor,
+                    "_render_strategy_manager",
+                    None,
+                )
+                if strategy_manager is not None:
+                    _append_unique(
+                        python_owners,
+                        getattr(strategy_manager, "_timer", None),
+                    )
+
+        return qobjects, python_owners
     
     def get_screen_count(self) -> int:
         """Get number of detected screens."""

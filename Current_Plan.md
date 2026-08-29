@@ -273,6 +273,9 @@ The family/runtime destination integration already landed and test-gated include
 - The follow-on engine-caller slice is landed: startup first-image admission, Media idle wake and lifecycle diagnostics now
   use semantic `DisplayManager` queries/operations. Engine handlers no longer inspect `current_image_path`, `media_widget`,
   `_ctrl_cursor_hint` or concrete display collections; generation teardown remains the sole auxiliary-pixel retirement owner.
+- The destruction barrier now consumes an explicit `DisplayManager`/display-unit retirement-root contract. Quick units expose
+  their runtime/window and plain-Python generation owners directly, and queue runtime-object deletion only after legal
+  render-safe window retirement; the barrier no longer scrapes physical-presenter internals.
 
 ### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 

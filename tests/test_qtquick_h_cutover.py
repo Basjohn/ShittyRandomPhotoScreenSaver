@@ -12,7 +12,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QPoint, QRect, QSize
+from PySide6.QtCore import QObject, QPoint, QRect, QSize
 from PySide6.QtGui import QPixmap
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
@@ -57,6 +57,8 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
                 scene_controller=SimpleNamespace(presentation_image=None),
                 describe_runtime_state=lambda: {"screen_index": self.screen_index},
             )
+            self.retirement_qobject = QObject()
+            self.retirement_owner = SimpleNamespace(screen_index=screen_index)
 
         def processing_descriptor(self, display_mode: DisplayMode):
             return DisplayProcessingDescriptor(
@@ -72,6 +74,9 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
 
         def present_image(self, pixmap, *, image_path: str = "") -> None:
             published.append((self.screen_index, pixmap.size(), image_path))
+
+        def runtime_retirement_roots(self):
+            return ((self.retirement_qobject,), (self.retirement_owner,))
 
     manager = DisplayManager(display_mode=DisplayMode.FIT)
     manager.displays = [
@@ -98,6 +103,16 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
             {"screen_index": 2},
             {"screen_index": 5},
         )
+        qobjects, python_owners = manager.collect_runtime_retirement_roots()
+        assert qobjects[0] is manager
+        assert qobjects[1:] == [
+            manager.displays[0].retirement_qobject,
+            manager.displays[1].retirement_qobject,
+        ]
+        assert python_owners == [
+            manager.displays[0].retirement_owner,
+            manager.displays[1].retirement_owner,
+        ]
 
         manager.present_processed_image(5, pixmap, pixmap, "five.jpg")
         manager.show_image_on_screen(2, pixmap, "two.jpg")

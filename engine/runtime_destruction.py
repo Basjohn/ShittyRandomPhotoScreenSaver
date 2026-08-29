@@ -80,93 +80,16 @@ def qt_replacement_may_run(engine: object | None) -> bool:
     return True
 
 
-def _append_unique(values: list[object], candidate: object | None) -> None:
-    if candidate is None:
-        return
-    candidate_id = id(candidate)
-    if any(id(value) == candidate_id for value in values):
-        return
-    values.append(candidate)
-
-
 def collect_runtime_roots(manager: object) -> tuple[list[QObject], list[object]]:
-    """Collect runtime roots without retaining them beyond barrier arming."""
+    """Collect runtime roots through the display orchestrator's contract."""
 
-    qobjects: list[QObject] = []
-    python_owners: list[object] = []
-
-    if isinstance(manager, QObject):
-        _append_unique(qobjects, manager)
-
-    displays = list(getattr(manager, "displays", ()) or ())
-    for display in displays:
-        if isinstance(display, QObject):
-            _append_unique(qobjects, display)
-            try:
-                for child in display.findChildren(QObject):
-                    _append_unique(qobjects, child)
-            except (RuntimeError, TypeError):
-                logger.debug(
-                    "[LIFECYCLE_BARRIER] Could not enumerate children for %s",
-                    _safe_class_name(display),
-                    exc_info=True,
-                )
-
-        for attr_name in (
-            "_gl_compositor",
-            "_compositor",
-            "_spotify_bars_overlay",
-            "spotify_visualizer_widget",
-            "media_widget",
-            "_ctrl_cursor_hint",
-            "_input_handler",
-            "_transition_controller",
-            "_image_presenter",
-        ):
-            value = getattr(display, attr_name, None)
-            if isinstance(value, QObject):
-                _append_unique(qobjects, value)
-
-        for attr_name in (
-            "_widget_manager",
-            "_custom_layout_manager",
-            "_transition_factory",
-            "_pixel_shift_manager",
-        ):
-            _append_unique(python_owners, getattr(display, attr_name, None))
-
-        widget_manager = getattr(display, "_widget_manager", None)
-        if widget_manager is not None:
-            for attr_name in ("_fade_coordinator", "_factory_registry"):
-                _append_unique(python_owners, getattr(widget_manager, attr_name, None))
-
-        custom_manager = getattr(display, "_custom_layout_manager", None)
-        if custom_manager is not None:
-            _append_unique(qobjects, getattr(custom_manager, "_grid_overlay", None))
-            for state in list(getattr(custom_manager, "_shell_states", {}).values()):
-                _append_unique(qobjects, getattr(state, "shell", None))
-                _append_unique(qobjects, getattr(state, "widget", None))
-
-        compositor = getattr(display, "_gl_compositor", None)
-        if compositor is not None:
-            for attr_name in (
-                "_deferred_warmup_context",
-                "_deferred_warmup_surface",
-            ):
-                value = getattr(compositor, attr_name, None)
-                if isinstance(value, QObject):
-                    _append_unique(qobjects, value)
-            for attr_name in ("_render_strategy_manager", "_transition_renderer"):
-                _append_unique(python_owners, getattr(compositor, attr_name, None))
-            strategy_manager = getattr(compositor, "_render_strategy_manager", None)
-            if strategy_manager is not None:
-                _append_unique(python_owners, getattr(strategy_manager, "_timer", None))
-            # The compositor's OpenGL context is the top-level window's
-            # Qt-owned QRhi context, not a per-display child context. It
-            # outlives the display and must not be awaited as a retiring root.
-            # The SRPSS-owned hidden warmup context above is still watched.
-
-    return qobjects, python_owners
+    collect = getattr(manager, "collect_runtime_retirement_roots", None)
+    if not callable(collect):
+        raise RuntimeError(
+            "Display manager has no collect_runtime_retirement_roots() contract"
+        )
+    qobjects, python_owners = collect()
+    return list(qobjects), list(python_owners)
 
 
 class RuntimeDestructionBarrier:
