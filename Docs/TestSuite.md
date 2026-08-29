@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-08-29
+Last updated: 2026-08-30
 
 Reviewed authority:
 
@@ -344,6 +344,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_transition_implementations.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_transition_parameter_defaults.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_transition_parameter_resolution.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
+| `tests/test_qtquick_transition_request_resolution.py` | **KEEP — MIGRATION PERMANENT / H** | One Settings-authored transition spec per accepted image batch, fail-closed Random admission and frozen direction/parameter values. |
 | `tests/test_qtquick_transition_state.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_transition_state_fence.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_transition_uniform_wiring.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |

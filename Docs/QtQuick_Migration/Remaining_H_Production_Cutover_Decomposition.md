@@ -64,6 +64,7 @@ DisplayManager remains responsible for product-level display orchestration such 
 - topology reconciliation;
 - runtime-generation/display collection ownership;
 - current-image routing;
+- one accepted-image-batch transition selection shared across selected displays, with per-display immutable image values;
 - coordinated readiness/reveal/outward engine signals;
 - coordinated exit and display replacement.
 
@@ -71,6 +72,11 @@ Replace assumptions that require QWidget/compositor internals with a small seman
 Do not make `QuickDisplayRuntime` or `QuickDisplayUnit` emulate arbitrary `DisplayWidget` private attributes, do not create
 one-for-one forwarding methods merely to minimize diff size, and do not spread concrete Quick implementation internals across
 engine call sites.
+
+Transition settings are resolved once by the display orchestrator after engine Random admission. That resolved value is not a
+second factory or presenter: each display unit combines it only with its own immutable current/destination images and starts
+the existing retained `QuickTransitionController`. Accepted-image/current-image truth changes at destination finalization,
+not request construction or transition start; an inadmissible Random choice publishes no substitute transition.
 
 ## 5. Cutover order
 

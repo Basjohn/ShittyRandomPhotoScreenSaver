@@ -24,6 +24,9 @@ from rendering.custom_layout_session import (
 )
 from rendering.quick.runtime import QuickDisplayRuntime
 from rendering.quick.display_unit import QuickDisplayUnit
+from rendering.quick.display_image_route import (
+    presentation_image_from_processed_pixmap,
+)
 from rendering.quick.display_processing import DisplayProcessingDescriptor
 from rendering.display_modes import DisplayMode
 from rendering.quick.scene_controller import QuickSceneFactory
@@ -215,14 +218,30 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
                 device_pixel_ratio=self._dpr,
             )
 
-        def present_image(self, pixmap, *, image_path: str = "") -> None:
-            published.append((self.screen_index, pixmap.size(), image_path))
+        def capture_image(self, pixmap, *, image_path: str = ""):
+            return presentation_image_from_processed_pixmap(
+                pixmap,
+                image_path=image_path,
+            )
+
+        def current_image(self):
+            return self.runtime.scene_controller.presentation_image
+
+        def present_captured_image(self, image) -> None:
+            self.runtime.scene_controller.presentation_image = image
+            published.append(
+                (self.screen_index, QSize(*image.pixel_size), image.source_path)
+            )
+
+        def start_transition(self, _request) -> None:
+            raise AssertionError("settings-free image route must not admit a transition")
 
         def runtime_retirement_roots(self):
             return ((self.retirement_qobject,), (self.retirement_owner,))
 
         def clear(self) -> None:
             self.clear_calls += 1
+            self.runtime.scene_controller.presentation_image = None
 
         def quiesce(self) -> None:
             self.quiesce_calls += 1
@@ -298,6 +317,105 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
         assert manager.has_presented_image() is True
         with pytest.raises(IndexError):
             manager.present_processed_image(1, pixmap, pixmap, "missing.jpg")
+    finally:
+        manager.displays = []
+        manager.disconnect_monitor_detection()
+        manager.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_display_manager_resolves_one_transition_spec_and_commits_on_finalize(
+    qt_app,
+) -> None:
+    class _Settings:
+        def get(self, key: str, default=None):
+            if key == "transitions":
+                return {
+                    "type": "Slide",
+                    "random_always": False,
+                    "durations": {"Slide": 275},
+                    "slide": {"direction": "Random"},
+                }
+            if key == "display.hw_accel":
+                return False
+            return default
+
+    class _Unit:
+        def __init__(self, screen_index: int, source_path: str) -> None:
+            self.screen_index = screen_index
+            self._current = presentation_image_from_processed_pixmap(
+                QPixmap(4, 3),
+                image_path=source_path,
+            )
+            self.request = None
+            self.active = False
+
+        def capture_image(self, pixmap, *, image_path: str = ""):
+            return presentation_image_from_processed_pixmap(
+                pixmap,
+                image_path=image_path,
+            )
+
+        def current_image(self):
+            return self._current
+
+        def present_captured_image(self, image) -> None:
+            self._current = image
+
+        def start_transition(self, request) -> None:
+            assert self.request is None
+            self.request = request
+            self.active = True
+
+        def has_running_transition(self) -> bool:
+            return self.active
+
+        def finalize(self, manager: DisplayManager) -> None:
+            assert self.request is not None
+            self._current = self.request.destination_image
+            self.active = False
+            manager._on_quick_transition_finalized(
+                self,
+                SimpleNamespace(
+                    destination_image_identity=self._current.identity,
+                ),
+            )
+
+    manager = DisplayManager(
+        settings_manager=_Settings(),
+        runtime_generation=703,
+    )
+    first = _Unit(2, "old-two.jpg")
+    second = _Unit(5, "old-five.jpg")
+    manager.displays = [first, second]
+    completed = []
+    manager.transition_completed.connect(completed.append)
+    try:
+        manager.set_transition_work_pending(True)
+        manager.present_processed_image(2, QPixmap(8, 6), QPixmap(), "two.jpg")
+        manager.present_processed_image(5, QPixmap(10, 7), QPixmap(), "five.jpg")
+
+        assert first.request is not None
+        assert second.request is not None
+        assert first.request.transition_id == second.request.transition_id == "slide"
+        assert first.request.duration_ms == second.request.duration_ms == 275
+        assert first.request.direction == second.request.direction
+        assert first.request.parameters == second.request.parameters
+        assert first.request.source_image.source_path == "old-two.jpg"
+        assert second.request.source_image.source_path == "old-five.jpg"
+        assert first.request.destination_image.source_path == "two.jpg"
+        assert second.request.destination_image.source_path == "five.jpg"
+        assert manager.current_images == {}
+        assert manager.has_transition_work_pending() is True
+
+        first.finalize(manager)
+        assert manager.current_images == {2: "two.jpg"}
+        assert manager.has_transition_work_pending() is True
+        second.finalize(manager)
+        assert manager.current_images == {2: "two.jpg", 5: "five.jpg"}
+        assert manager.has_transition_work_pending() is False
+        assert completed == [2, 5]
     finally:
         manager.displays = []
         manager.disconnect_monitor_detection()

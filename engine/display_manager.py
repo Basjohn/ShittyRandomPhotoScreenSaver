@@ -25,6 +25,10 @@ from rendering.quick.state import (
     QuickWindowPolicy,
     QuickWindowRole,
 )
+from rendering.quick.transitions.request_resolution import (
+    ResolvedQuickTransitionSpec,
+    resolve_quick_transition_spec,
+)
 from transitions.overlay_manager import hide_all_overlays
 from utils.lockfree.spsc_queue import SPSCQueue
 
@@ -146,6 +150,11 @@ class DisplayManager(QObject):
         self._transition_ready_queue: Optional[SPSCQueue] = None
         self._sync_enabled = False
         self._transition_work_pending = False
+        self._quick_transition_batch_spec: ResolvedQuickTransitionSpec | None = None
+        self._quick_transition_spec_resolved = False
+        self._quick_transition_paths: dict[int, str] = {}
+        self._quick_batch_expected_screens: set[int] = set()
+        self._quick_batch_published_screens: set[int] = set()
         self._monitor_detection_app = None
         self._monitor_detection_connected = False
         self._monitor_reconcile_pending = False
@@ -551,7 +560,10 @@ class DisplayManager(QObject):
         runtime.layout_slot_load_requested.connect(self._load_layout_slot)
         runtime.layout_slot_save_requested.connect(self._save_layout_slot)
         runtime.transition_finalized.connect(
-            lambda _completion, idx=screen_index: self.transition_completed.emit(idx)
+            lambda completion, display=unit: self._on_quick_transition_finalized(
+                display,
+                completion,
+            )
         )
         runtime.readiness_changed.connect(
             lambda readiness, display=unit, generation=startup_generation: self._on_quick_readiness_changed(
@@ -960,6 +972,167 @@ class DisplayManager(QObject):
         """Handle exit request from any display."""
         logger.info("Exit requested from display widget")
         self.exit_requested.emit()
+
+    def _selected_destination_screen_indices(self) -> set[int]:
+        """Return screen identities owned by the destination collection."""
+
+        return {
+            int(getattr(display, "screen_index", position))
+            for position, display in enumerate(self.displays)
+            if not isinstance(display, DisplayWidget)
+        }
+
+    def _reset_quick_transition_batch(self) -> None:
+        self._quick_transition_batch_spec = None
+        self._quick_transition_spec_resolved = False
+        self._quick_transition_paths.clear()
+        self._quick_batch_expected_screens.clear()
+        self._quick_batch_published_screens.clear()
+
+    def _begin_quick_transition_batch(
+        self,
+        expected_screens: Set[int] | None = None,
+    ) -> None:
+        """Open one accepted destination-image batch exactly once."""
+
+        if self._transition_work_pending:
+            if expected_screens:
+                self._quick_batch_expected_screens.update(
+                    int(screen) for screen in expected_screens
+                )
+            return
+        if self._quick_transition_paths or self.has_running_transition():
+            raise RuntimeError(
+                "cannot admit a new image batch while a Quick transition is active"
+            )
+        self._reset_quick_transition_batch()
+        self._quick_batch_expected_screens = {
+            int(screen)
+            for screen in (
+                expected_screens
+                if expected_screens is not None
+                else self._selected_destination_screen_indices()
+            )
+        }
+        self._transition_work_pending = True
+
+    def _finish_quick_transition_batch_if_complete(self) -> bool:
+        """Close the batch after every admitted destination is authoritative."""
+
+        if not self._transition_work_pending:
+            return False
+        if self._quick_transition_paths or self.has_running_transition():
+            return False
+        if not self._quick_batch_expected_screens.issubset(
+            self._quick_batch_published_screens
+        ):
+            return False
+        self._transition_work_pending = False
+        self._reset_quick_transition_batch()
+        return True
+
+    def _resolve_quick_transition_batch_spec(
+        self,
+    ) -> ResolvedQuickTransitionSpec | None:
+        """Resolve Settings intent once, then share it across this batch."""
+
+        if not self._quick_transition_spec_resolved:
+            self._quick_transition_batch_spec = resolve_quick_transition_spec(
+                self.settings_manager
+            )
+            self._quick_transition_spec_resolved = True
+        return self._quick_transition_batch_spec
+
+    def _present_quick_image(
+        self,
+        display: object,
+        pixmap: QPixmap,
+        image_path: str,
+        *,
+        implicit_expected_screens: Set[int] | None = None,
+    ) -> None:
+        """Publish or transition one processed image through a destination unit."""
+
+        screen_index = int(getattr(display, "screen_index"))
+        if not self._transition_work_pending:
+            self._begin_quick_transition_batch(
+                implicit_expected_screens or {screen_index}
+            )
+
+        capture = getattr(display, "capture_image", None)
+        current_image = getattr(display, "current_image", None)
+        publish = getattr(display, "present_captured_image", None)
+        start_transition = getattr(display, "start_transition", None)
+        if not all(
+            callable(operation)
+            for operation in (capture, current_image, publish, start_transition)
+        ):
+            raise TypeError("display unit has no Quick image/transition contract")
+
+        destination = capture(pixmap, image_path=image_path)
+        source = current_image()
+        if source is None:
+            publish(destination)
+            self._quick_batch_published_screens.add(screen_index)
+            self._on_image_displayed(screen_index, image_path)
+            self._finish_quick_transition_batch_if_complete()
+            return
+
+        if bool(getattr(display, "has_running_transition")()):
+            raise RuntimeError(
+                f"screen {screen_index} already has an active Quick transition"
+            )
+
+        spec = self._resolve_quick_transition_batch_spec()
+        if spec is None:
+            logger.warning(
+                "[TRANSITION] No transition admitted for image batch; "
+                "publishing destination directly without broadening Random pool"
+            )
+            publish(destination)
+            self._quick_batch_published_screens.add(screen_index)
+            self._on_image_displayed(screen_index, image_path)
+            self._finish_quick_transition_batch_if_complete()
+            return
+
+        request = spec.build_request(
+            runtime_generation=int(self._runtime_generation or 0),
+            source_image=source,
+            destination_image=destination,
+        )
+        start_transition(request)
+        self._quick_transition_paths[screen_index] = str(image_path or "")
+        self._quick_batch_published_screens.add(screen_index)
+
+    def _on_quick_transition_finalized(
+        self,
+        display: QuickDisplayUnit,
+        completion: object,
+    ) -> None:
+        """Commit image/accounting truth only after destination finalization."""
+
+        screen_index = int(display.screen_index)
+        image_path = self._quick_transition_paths.pop(screen_index, None)
+        current = display.current_image()
+        destination_identity = str(
+            getattr(completion, "destination_image_identity", "") or ""
+        )
+        if (
+            image_path is not None
+            and current is not None
+            and current.identity == destination_identity
+        ):
+            self._on_image_displayed(screen_index, image_path)
+        elif image_path is not None and not self._retired:
+            logger.error(
+                "[TRANSITION] Finalized destination was not installed "
+                "screen=%s expected=%s current=%s",
+                screen_index,
+                destination_identity,
+                getattr(current, "identity", None),
+            )
+        self.transition_completed.emit(screen_index)
+        self._finish_quick_transition_batch_if_complete()
     
     def _on_image_displayed(self, screen_index: int, image_path: str) -> None:
         """Handle image displayed event."""
@@ -1034,25 +1207,27 @@ class DisplayManager(QObject):
             elif isinstance(display, DisplayWidget):
                 display.set_image(pixmap, image_path)
             else:
-                presenter = getattr(display, "present_image", None)
-                if not callable(presenter):
-                    raise TypeError("display unit has no image publication contract")
-                presenter(pixmap, image_path=image_path)
-                self._on_image_displayed(int(screen_index), image_path)
+                self._present_quick_image(
+                    display,
+                    pixmap,
+                    image_path,
+                    implicit_expected_screens={int(screen_index)},
+                )
         else:
             # Show on all screens (same image mode)
             if self.same_image_mode:
+                quick_screens = self._selected_destination_screen_indices()
+                if quick_screens and not self._transition_work_pending:
+                    self._begin_quick_transition_batch(quick_screens)
                 for display in self.displays:
                     if isinstance(display, DisplayWidget):
                         display.set_image(pixmap, image_path)
                         continue
-                    presenter = getattr(display, "present_image", None)
-                    if not callable(presenter):
-                        raise TypeError("display unit has no image publication contract")
-                    presenter(pixmap, image_path=image_path)
-                    self._on_image_displayed(
-                        int(getattr(display, "screen_index")),
+                    self._present_quick_image(
+                        display,
+                        pixmap,
                         image_path,
+                        implicit_expected_screens=quick_screens,
                     )
                 logger.debug(f"Image shown on all {len(self.displays)} displays")
     
@@ -1088,11 +1263,7 @@ class DisplayManager(QObject):
         if isinstance(display, DisplayWidget):
             display.set_processed_image(processed_pixmap, original_pixmap, image_path)
             return
-        presenter = getattr(display, "present_image", None)
-        if not callable(presenter):
-            raise TypeError("display unit has no processed-image publication contract")
-        presenter(processed_pixmap, image_path=image_path)
-        self._on_image_displayed(int(screen_index), image_path)
+        self._present_quick_image(display, processed_pixmap, image_path)
     
     def show_error(self, message: str, screen_index: Optional[int] = None) -> None:
         """
@@ -1128,6 +1299,8 @@ class DisplayManager(QObject):
         for display in self.displays:
             display.clear()
         self.current_images.clear()
+        self._transition_work_pending = False
+        self._reset_quick_transition_batch()
         logger.info("All displays cleared")
 
     def quiesce_all(self) -> None:
@@ -1464,8 +1637,34 @@ class DisplayManager(QObject):
         *,
         screen_index: int | None = None,
     ) -> None:
-        """Mark all displays as having accepted image-change work before transition start."""
-        self._transition_work_pending = bool(pending)
+        """Open/reconcile one accepted image batch before transition start."""
+
+        destination_screens = self._selected_destination_screen_indices()
+        if pending and destination_screens:
+            expected = (
+                destination_screens
+                if screen_index is None
+                else {int(screen_index)}
+            )
+            self._begin_quick_transition_batch(expected)
+        elif not pending and destination_screens:
+            if screen_index is not None:
+                missing_screen = int(screen_index)
+                self._quick_batch_expected_screens.discard(missing_screen)
+                self._quick_batch_published_screens.discard(missing_screen)
+            else:
+                # The producer has no more displays to publish for this batch.
+                # Preserve every already-started/direct destination, but do not
+                # let a failed/omitted screen pin accepted-work truth forever.
+                self._quick_batch_expected_screens.intersection_update(
+                    self._quick_batch_published_screens
+                )
+            self._finish_quick_transition_batch_if_complete()
+        elif not destination_screens:
+            self._transition_work_pending = bool(pending)
+
+        # Temporary deletion scaffold only. Production construction never adds
+        # a DisplayWidget or mixes presenter families in this collection.
         displays = (
             self.displays
             if screen_index is None
@@ -1607,14 +1806,18 @@ class DisplayManager(QObject):
         
         # Start transitions on all displays
         logger.debug(f"[SYNC] Starting synchronized transition on {len(self.displays)} displays")
+        quick_screens = self._selected_destination_screen_indices()
+        if quick_screens and not self._transition_work_pending:
+            self._begin_quick_transition_batch(quick_screens)
         for display in self.displays:
             if isinstance(display, DisplayWidget):
                 display.set_image(pixmap, image_path)
                 continue
-            display.present_image(pixmap, image_path=image_path)
-            self._on_image_displayed(
-                int(getattr(display, "screen_index")),
+            self._present_quick_image(
+                display,
+                pixmap,
                 image_path,
+                implicit_expected_screens=quick_screens,
             )
         
         # Wait for all to be ready (with timeout)
@@ -1677,6 +1880,8 @@ class DisplayManager(QObject):
 
             self.displays = failed_units
             self.current_images.clear()
+            self._transition_work_pending = False
+            self._reset_quick_transition_batch()
             self._quick_readiness_by_screen.clear()
             self._display_image_accounting_by_id.clear()
             self._publish_display_image_accounting()
@@ -1797,6 +2002,7 @@ class DisplayManager(QObject):
         self._display_startup_ready_seen.clear()
         self._monitor_reconcile_pending = False
         self._transition_work_pending = False
+        self._reset_quick_transition_batch()
         self._transition_ready_queue = None
         self._display_image_accounting_by_id.clear()
         self._publish_display_image_accounting()
