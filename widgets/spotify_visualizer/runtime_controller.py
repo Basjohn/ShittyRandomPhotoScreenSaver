@@ -113,11 +113,26 @@ class VisualizerRuntimeController:
 
         self._logical_tick_state = VisualizerLogicalTickState(self)
 
+        # Symmetric presentation-neutral owner for this generation's renderer /
+        # presentation-only config (colours, glow, per-line styling, rainbow,
+        # Bubble renderer colours). Authored logical inputs never live here.
+        from widgets.spotify_visualizer.presentation_state import (
+            VisualizerPresentationState,
+        )
+
+        self._presentation_state = VisualizerPresentationState(self)
+
     @property
     def logical_tick_state(self) -> Any:
         """Return the controller-owned authored per-tick logical state host."""
 
         return self._logical_tick_state
+
+    @property
+    def presentation_state(self) -> Any:
+        """Return the controller-owned renderer/presentation-only config host."""
+
+        return self._presentation_state
 
     @property
     def runtime_generation(self) -> int:

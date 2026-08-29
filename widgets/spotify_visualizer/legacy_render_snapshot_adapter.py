@@ -670,14 +670,16 @@ _MODE_CAPTURE: dict[str, ModeCapture] = {
 
 
 def _common_style(widget: Any) -> dict[str, object]:
+    # Renderer styling from the presentation owner; single_piece is authored-logical.
+    pres = config_applier._presentation_source(widget)
     return {
-        "fill_color": getattr(widget, "_bar_fill_color", None),
-        "border_color": getattr(widget, "_bar_border_color", None),
-        "ghosting_enabled": bool(getattr(widget, "_ghosting_enabled", True)),
-        "ghost_alpha": float(getattr(widget, "_ghost_alpha", 0.4)),
-        "ghost_decay": float(getattr(widget, "_ghost_decay_rate", -1.0)),
+        "fill_color": getattr(pres, "_bar_fill_color", None),
+        "border_color": getattr(pres, "_bar_border_color", None),
+        "ghosting_enabled": bool(getattr(pres, "_ghosting_enabled", True)),
+        "ghost_alpha": float(getattr(pres, "_ghost_alpha", 0.4)),
+        "ghost_decay": float(getattr(pres, "_ghost_decay_rate", -1.0)),
         "single_piece": bool(getattr(widget, "_spectrum_single_piece", False)),
-        "border_radius": float(getattr(widget, "_spectrum_border_radius", 0.0)),
+        "border_radius": float(getattr(pres, "_spectrum_border_radius", 0.0)),
     }
 
 

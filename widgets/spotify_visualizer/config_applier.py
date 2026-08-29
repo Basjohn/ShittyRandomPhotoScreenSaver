@@ -41,6 +41,25 @@ def _color_or_none(value: Any) -> QColor | None:
     return None
 
 
+def _presentation_source(host: Any) -> Any:
+    """Where pure renderer/presentation-only config is read from.
+
+    Authored logical inputs are read from ``host`` directly; renderer styling is
+    owned by the controller-owned ``VisualizerPresentationState``. The widget-free
+    logical state exposes ``presentation_config_host`` pointing there; the legacy
+    widget delegates its presentation fields to the same state, so either host
+    resolves to one presentation storage. A bare host (e.g. a test double whose
+    ``__getattr__`` fabricates values) reads its own attributes.
+    """
+
+    from widgets.spotify_visualizer.presentation_state import (
+        VisualizerPresentationState,
+    )
+
+    pres = getattr(host, "presentation_config_host", None)
+    return pres if isinstance(pres, VisualizerPresentationState) else host
+
+
 def _normalize_direction(value: Any, default: str = "top_left") -> str:
     val = str(value).lower()
     valid = {
@@ -304,130 +323,229 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
             setattr(host, f'_devcurve_layer_{src}_shape_nodes', list(kwargs[shape_key]))
 
 
-def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
-    """Apply per-mode keyword settings to *widget*.
+def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
+    """Apply the pure renderer/presentation-only per-mode config to *host*.
 
-    Each key is checked in *kwargs*; if present the value is validated,
-    clamped, and written to the corresponding ``widget._*`` attribute.
+    This is the single authority for the presentation (styling) portion of the
+    per-mode settings apply: bar/line/glow colours, glow sizing/reactivity,
+    per-line styling, ghost-line toggles, rainbow styling and Bubble renderer
+    colours - exactly the fields the legacy adapter reads when composing the
+    immutable renderer parameters. Authored logical inputs flow through
+    ``apply_logical_vis_mode_kwargs``; engine/technical config and card-growth
+    stay in ``apply_vis_mode_kwargs`` (they need the widget's engine).
+
+    ``host`` is the ``VisualizerPresentationState`` (widget-free path) or the
+    legacy widget, whose presentation fields delegate to that same state.
     """
 
-    apply_logical_vis_mode_kwargs(widget, kwargs)
-
-    # --- Oscilloscope -------------------------------------------------
+    # --- Oscilloscope styling ----------------------------------------
     if 'osc_glow_enabled' in kwargs:
-        widget._osc_glow_enabled = bool(kwargs['osc_glow_enabled'])
+        host._osc_glow_enabled = bool(kwargs['osc_glow_enabled'])
     if 'osc_glow_intensity' in kwargs:
-        widget._osc_glow_intensity = max(0.0, float(kwargs['osc_glow_intensity']))
+        host._osc_glow_intensity = max(0.0, float(kwargs['osc_glow_intensity']))
     if 'osc_glow_size' in kwargs:
-        widget._osc_glow_size = max(0.1, min(3.0, float(kwargs['osc_glow_size'])))
+        host._osc_glow_size = max(0.1, min(3.0, float(kwargs['osc_glow_size'])))
     if 'osc_glow_reactivity' in kwargs:
-        widget._osc_glow_reactivity = max(0.0, min(2.0, float(kwargs['osc_glow_reactivity'])))
+        host._osc_glow_reactivity = max(0.0, min(2.0, float(kwargs['osc_glow_reactivity'])))
     if 'osc_glow_color' in kwargs:
         c = _color_or_none(kwargs['osc_glow_color'])
         if c is not None:
-            widget._osc_glow_color = c
+            host._osc_glow_color = c
     if 'osc_reactive_glow' in kwargs:
-        widget._osc_reactive_glow = bool(kwargs['osc_reactive_glow'])
-    # osc_line_amplitude is authored-logical (base_sensitivity) -> apply_logical.
+        host._osc_reactive_glow = bool(kwargs['osc_reactive_glow'])
     if 'osc_smoothing' in kwargs:
-        widget._osc_smoothing = max(0.0, min(1.0, float(kwargs['osc_smoothing'])))
+        host._osc_smoothing = max(0.0, min(1.0, float(kwargs['osc_smoothing'])))
     if 'osc_line_color' in kwargs:
         c = _color_or_none(kwargs['osc_line_color'])
         if c is not None:
-            widget._osc_line_color = c
+            host._osc_line_color = c
     if 'osc_line_count' in kwargs:
-        widget._osc_line_count = max(1, min(6, int(kwargs['osc_line_count'])))
-    if 'osc_line2_color' in kwargs:
-        c = _color_or_none(kwargs['osc_line2_color'])
-        if c is not None:
-            widget._osc_line2_color = c
-    if 'osc_line2_glow_color' in kwargs:
-        c = _color_or_none(kwargs['osc_line2_glow_color'])
-        if c is not None:
-            widget._osc_line2_glow_color = c
-    if 'osc_line3_color' in kwargs:
-        c = _color_or_none(kwargs['osc_line3_color'])
-        if c is not None:
-            widget._osc_line3_color = c
-    if 'osc_line3_glow_color' in kwargs:
-        c = _color_or_none(kwargs['osc_line3_glow_color'])
-        if c is not None:
-            widget._osc_line3_glow_color = c
-    if 'osc_line4_color' in kwargs:
-        c = _color_or_none(kwargs['osc_line4_color'])
-        if c is not None:
-            widget._osc_line4_color = c
-    if 'osc_line4_glow_color' in kwargs:
-        c = _color_or_none(kwargs['osc_line4_glow_color'])
-        if c is not None:
-            widget._osc_line4_glow_color = c
-    if 'osc_line5_color' in kwargs:
-        c = _color_or_none(kwargs['osc_line5_color'])
-        if c is not None:
-            widget._osc_line5_color = c
-    if 'osc_line5_glow_color' in kwargs:
-        c = _color_or_none(kwargs['osc_line5_glow_color'])
-        if c is not None:
-            widget._osc_line5_glow_color = c
-    if 'osc_line6_color' in kwargs:
-        c = _color_or_none(kwargs['osc_line6_color'])
-        if c is not None:
-            widget._osc_line6_color = c
-    if 'osc_line6_glow_color' in kwargs:
-        c = _color_or_none(kwargs['osc_line6_glow_color'])
-        if c is not None:
-            widget._osc_line6_glow_color = c
-    if 'osc_ghost_line2_enabled' in kwargs:
-        widget._osc_ghost_line2_enabled = bool(kwargs['osc_ghost_line2_enabled'])
-    if 'osc_ghost_line3_enabled' in kwargs:
-        widget._osc_ghost_line3_enabled = bool(kwargs['osc_ghost_line3_enabled'])
-    if 'osc_ghost_line4_enabled' in kwargs:
-        widget._osc_ghost_line4_enabled = bool(kwargs['osc_ghost_line4_enabled'])
-    if 'osc_ghost_line5_enabled' in kwargs:
-        widget._osc_ghost_line5_enabled = bool(kwargs['osc_ghost_line5_enabled'])
-    if 'osc_ghost_line6_enabled' in kwargs:
-        widget._osc_ghost_line6_enabled = bool(kwargs['osc_ghost_line6_enabled'])
+        host._osc_line_count = max(1, min(6, int(kwargs['osc_line_count'])))
+    for _idx in range(2, 7):
+        _ck = f'osc_line{_idx}_color'
+        _gk = f'osc_line{_idx}_glow_color'
+        if _ck in kwargs:
+            c = _color_or_none(kwargs[_ck])
+            if c is not None:
+                setattr(host, f'_osc_line{_idx}_color', c)
+        if _gk in kwargs:
+            c = _color_or_none(kwargs[_gk])
+            if c is not None:
+                setattr(host, f'_osc_line{_idx}_glow_color', c)
+    for _idx in range(2, 7):
+        _ek = f'osc_ghost_line{_idx}_enabled'
+        if _ek in kwargs:
+            setattr(host, f'_osc_ghost_line{_idx}_enabled', bool(kwargs[_ek]))
+    if 'osc_line_dim' in kwargs:
+        host._osc_line_dim = bool(kwargs['osc_line_dim'])
+    if 'osc_line_offset_bias' in kwargs:
+        host._osc_line_offset_bias = max(0.0, min(1.0, float(kwargs['osc_line_offset_bias'])))
+    if 'osc_vertical_shift' in kwargs:
+        host._osc_vertical_shift = int(kwargs['osc_vertical_shift'])
 
-
-        # mirrored it into pulse_cap/stage_gain when those keys were absent,
-        # size ladder and caused "why did it suddenly explode?" regressions.
-    # --- Card + bar styling (global across modes) ---------------------
+    # --- Card + bar styling (global across modes) --------------------
     if 'bar_fill_color' in kwargs:
         c = _color_or_none(kwargs['bar_fill_color'])
         if c is not None:
-            widget._bar_fill_color = c
+            host._bar_fill_color = c
     if 'bar_border_color' in kwargs:
         c = _color_or_none(kwargs['bar_border_color'])
         if c is not None:
-            widget._bar_border_color = c
+            host._bar_border_color = c
     if 'bar_border_opacity' in kwargs:
         try:
             opacity = max(0.0, min(1.0, float(kwargs['bar_border_opacity'])))
         except Exception:
-            opacity = getattr(widget._bar_border_color, 'alphaF', lambda: 1.0)()
-        # Preserve RGB, adjust alpha channel
-        color = QColor(widget._bar_border_color)
-        color.setAlphaF(opacity)
-        widget._bar_border_color = color
+            opacity = getattr(getattr(host, '_bar_border_color', None), 'alphaF', lambda: 1.0)()
+        base = getattr(host, '_bar_border_color', None)
+        if base is not None:
+            color = QColor(base)
+            color.setAlphaF(opacity)
+            host._bar_border_color = color
 
-    # --- Spectrum -----------------------------------------------------
-    # spectrum_single_piece / visual_smoothing[_enabled] are authored-logical
-    # (SpectrumFrameRuntime.resolve) and flow through apply_logical_vis_mode_kwargs.
+    # --- Spectrum styling (glow / border / rainbow border) -----------
     if 'spectrum_rainbow_per_bar' in kwargs:
-        widget._rainbow_per_bar = bool(kwargs['spectrum_rainbow_per_bar'])
+        host._rainbow_per_bar = bool(kwargs['spectrum_rainbow_per_bar'])
     if 'spectrum_rainbow_border' in kwargs:
-        widget._spectrum_rainbow_border = bool(kwargs['spectrum_rainbow_border'])
-
+        host._spectrum_rainbow_border = bool(kwargs['spectrum_rainbow_border'])
     if 'spectrum_border_radius' in kwargs:
-        widget._spectrum_border_radius = max(0.0, min(20.0, float(kwargs['spectrum_border_radius'])))
+        host._spectrum_border_radius = max(0.0, min(20.0, float(kwargs['spectrum_border_radius'])))
     if 'spectrum_glow_enabled' in kwargs:
-        widget._spectrum_glow_enabled = bool(kwargs['spectrum_glow_enabled'])
+        host._spectrum_glow_enabled = bool(kwargs['spectrum_glow_enabled'])
     if 'spectrum_glow_intensity' in kwargs:
-        widget._spectrum_glow_intensity = max(0.0, min(1.5, float(kwargs['spectrum_glow_intensity'])))
+        host._spectrum_glow_intensity = max(0.0, min(1.5, float(kwargs['spectrum_glow_intensity'])))
     if 'spectrum_glow_color' in kwargs:
         c = _color_or_none(kwargs['spectrum_glow_color'])
         if c is not None:
-            widget._spectrum_glow_color = c
+            host._spectrum_glow_color = c
+    if 'spectrum_ghost_alpha' in kwargs:
+        host._spectrum_ghost_alpha = max(0.0, min(1.0, float(kwargs['spectrum_ghost_alpha'])))
+
+    # --- Sine styling ------------------------------------------------
+    if 'sine_vertical_shift' in kwargs:
+        host._sine_vertical_shift = int(kwargs['sine_vertical_shift'])
+    if 'sine_card_adaptation' in kwargs:
+        host._sine_card_adaptation = max(0.05, min(1.0, float(kwargs['sine_card_adaptation'])))
+    if 'sine_wave_effect' in kwargs:
+        host._sine_wave_effect = max(0.0, min(1.0, float(kwargs['sine_wave_effect'])))
+    if 'sine_micro_wobble' in kwargs:
+        host._sine_micro_wobble = max(0.0, min(1.0, float(kwargs['sine_micro_wobble'])))
+    if 'sine_crawl_amount' in kwargs:
+        host._sine_crawl_amount = max(0.0, min(1.0, float(kwargs['sine_crawl_amount'])))
+    if 'sine_density' in kwargs:
+        host._sine_density = max(0.25, min(3.0, float(kwargs['sine_density'])))
+    if 'sine_displacement' in kwargs:
+        host._sine_displacement = max(0.0, min(1.0, float(kwargs['sine_displacement'])))
+    if 'sine_glow_enabled' in kwargs:
+        host._sine_glow_enabled = bool(kwargs['sine_glow_enabled'])
+    if 'sine_glow_intensity' in kwargs:
+        host._sine_glow_intensity = max(0.0, float(kwargs['sine_glow_intensity']))
+    if 'sine_glow_size' in kwargs:
+        host._sine_glow_size = max(0.1, min(3.0, float(kwargs['sine_glow_size'])))
+    if 'sine_glow_reactivity' in kwargs:
+        host._sine_glow_reactivity = max(0.0, min(2.0, float(kwargs['sine_glow_reactivity'])))
+    if 'sine_glow_color' in kwargs:
+        c = _color_or_none(kwargs['sine_glow_color'])
+        if c is not None:
+            host._sine_glow_color = c
+    if 'sine_line_color' in kwargs:
+        c = _color_or_none(kwargs['sine_line_color'])
+        if c is not None:
+            host._sine_line_color = c
+    if 'sine_reactive_glow' in kwargs:
+        host._sine_reactive_glow = bool(kwargs['sine_reactive_glow'])
+    if 'sine_smoothing' in kwargs:
+        host._sine_smoothing = max(0.0, min(1.0, float(kwargs['sine_smoothing'])))
+    if 'sine_line_offset_bias' in kwargs:
+        host._sine_line_offset_bias = max(0.0, min(1.0, float(kwargs['sine_line_offset_bias'])))
+    if 'sine_line_dim' in kwargs:
+        host._sine_line_dim = bool(kwargs['sine_line_dim'])
+    for _idx in range(2, 7):
+        _ck = f'sine_line{_idx}_color'
+        _gk = f'sine_line{_idx}_glow_color'
+        if _ck in kwargs:
+            c = _color_or_none(kwargs[_ck])
+            if c is not None:
+                setattr(host, f'_sine_line{_idx}_color', c)
+        if _gk in kwargs:
+            c = _color_or_none(kwargs[_gk])
+            if c is not None:
+                setattr(host, f'_sine_line{_idx}_glow_color', c)
+    for _idx in range(2, 7):
+        _ek = f'sine_ghost_line{_idx}_enabled'
+        if _ek in kwargs:
+            setattr(host, f'_sine_ghost_line{_idx}_enabled', bool(kwargs[_ek]))
+
+    # --- Rainbow (per-mode keys fall back to the global key) ---------
+    _mode_str = getattr(host, '_vis_mode_str', None) or ''
+    _pm_re = f'{_mode_str}_rainbow_enabled' if _mode_str else ''
+    _pm_rs = f'{_mode_str}_rainbow_speed' if _mode_str else ''
+    if _pm_re and _pm_re in kwargs:
+        host._rainbow_enabled = bool(kwargs[_pm_re])
+    elif 'rainbow_enabled' in kwargs:
+        host._rainbow_enabled = bool(kwargs['rainbow_enabled'])
+    if _pm_rs and _pm_rs in kwargs:
+        host._rainbow_speed = max(0.01, min(5.0, float(kwargs[_pm_rs])))
+    elif 'rainbow_speed' in kwargs:
+        host._rainbow_speed = max(0.01, min(5.0, float(kwargs['rainbow_speed'])))
+    if 'rainbow_per_bar' in kwargs:
+        host._rainbow_per_bar = bool(kwargs['rainbow_per_bar'])
+
+    # --- Bubble renderer styling -------------------------------------
+    if 'bubble_ghosting_enabled' in kwargs:
+        host._bubble_ghosting_enabled = bool(kwargs['bubble_ghosting_enabled'])
+    if 'bubble_ghost_alpha' in kwargs:
+        host._bubble_ghost_alpha = max(0.0, min(1.0, float(kwargs['bubble_ghost_alpha'])))
+    if 'bubble_ghost_decay' in kwargs:
+        host._bubble_ghost_decay = max(0.1, min(1.0, float(kwargs['bubble_ghost_decay'])))
+    if 'bubble_outline_color' in kwargs:
+        c = _color_or_none(kwargs['bubble_outline_color'])
+        if c is not None:
+            host._bubble_outline_color = c
+    if 'bubble_specular_color' in kwargs:
+        c = _color_or_none(kwargs['bubble_specular_color'])
+        if c is not None:
+            host._bubble_specular_color = c
+    if 'bubble_gradient_light' in kwargs:
+        c = _color_or_none(kwargs['bubble_gradient_light'])
+        if c is not None:
+            host._bubble_gradient_light = c
+    if 'bubble_gradient_dark' in kwargs:
+        c = _color_or_none(kwargs['bubble_gradient_dark'])
+        if c is not None:
+            host._bubble_gradient_dark = c
+    if 'bubble_pop_color' in kwargs:
+        c = _color_or_none(kwargs['bubble_pop_color'])
+        if c is not None:
+            host._bubble_pop_color = c
+    if 'bubble_specular_direction' in kwargs:
+        host._bubble_specular_direction = normalize_bubble_specular_direction(kwargs['bubble_specular_direction'])
+    if 'bubble_gradient_direction' in kwargs:
+        host._bubble_gradient_direction = normalize_bubble_gradient_direction(kwargs['bubble_gradient_direction'])
+    if 'bubble_tail_opacity' in kwargs:
+        host._bubble_tail_opacity = max(0.0, min(0.85, float(kwargs['bubble_tail_opacity'])))
+
+
+def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
+    """Apply per-mode keyword settings to *widget*.
+
+    Each key is checked in *kwargs*; if present the value is validated,
+    clamped, and written to the corresponding ``widget._*`` attribute. Authored
+    logical inputs go through ``apply_logical_vis_mode_kwargs``; pure renderer
+    styling through ``apply_presentation_vis_mode_kwargs`` (both delegate to the
+    controller-owned neutral state); engine/technical config and card-growth are
+    applied here directly because they need the widget's engine.
+    """
+
+    apply_logical_vis_mode_kwargs(widget, kwargs)
+    apply_presentation_vis_mode_kwargs(widget, kwargs)
+
+    # NOTE: pure renderer/presentation-only styling is applied above through
+    # apply_presentation_vis_mode_kwargs (the single presentation authority).
+    # Only engine/technical config (needs the widget's engine), card-height
+    # growth and Bubble simulation/layout controls remain here.
+
+    # --- Spectrum engine / technical config ---------------------------
     if 'spectrum_mirrored' in kwargs:
         _new_mirrored = bool(kwargs['spectrum_mirrored'])
         if _new_mirrored != getattr(widget, '_spectrum_mirrored', True):
@@ -535,159 +653,11 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._osc_growth = max(0.5, min(5.0, float(kwargs['osc_growth'])))
     if 'devcurve_growth' in kwargs:
         widget._devcurve_growth = max(1.0, min(5.0, float(kwargs['devcurve_growth'])))
-    # osc_speed is authored-logical (line_speed) -> apply_logical.
-    if 'osc_line_dim' in kwargs:
-        widget._osc_line_dim = bool(kwargs['osc_line_dim'])
-    if 'osc_line_offset_bias' in kwargs:
-        widget._osc_line_offset_bias = max(0.0, min(1.0, float(kwargs['osc_line_offset_bias'])))
-    if 'osc_vertical_shift' in kwargs:
-        widget._osc_vertical_shift = int(kwargs['osc_vertical_shift'])
-
-    # --- Sine wave ----------------------------------------------------
+    # --- Sine wave card-height growth ---------------------------------
     if 'sine_wave_growth' in kwargs:
         widget._sine_wave_growth = max(0.5, min(5.0, float(kwargs['sine_wave_growth'])))
-    # sine_wave_travel / sine_travel_line2..6 / sine_line1..6_shift are
-    # authored-logical (SineFrameRuntime.resolve travels/line_shifts) and flow
-    # through apply_logical_vis_mode_kwargs.
-    if 'sine_wave_effect' in kwargs:
-        widget._sine_wave_effect = max(0.0, min(1.0, float(kwargs['sine_wave_effect'])))
-    if 'sine_micro_wobble' in kwargs:
-        widget._sine_micro_wobble = max(0.0, min(1.0, float(kwargs['sine_micro_wobble'])))
-    if 'sine_crawl_amount' in kwargs:
-        widget._sine_crawl_amount = max(0.0, min(1.0, float(kwargs['sine_crawl_amount'])))
-    # sine_width_reaction is authored-logical (base_width_reaction) -> apply_logical.
-    if 'sine_density' in kwargs:
-        widget._sine_density = max(0.25, min(3.0, float(kwargs['sine_density'])))
-    if 'sine_displacement' in kwargs:
-        widget._sine_displacement = max(0.0, min(1.0, float(kwargs['sine_displacement'])))
-    if 'sine_vertical_shift' in kwargs:
-        widget._sine_vertical_shift = int(kwargs['sine_vertical_shift'])
-    if 'sine_card_adaptation' in kwargs:
-        widget._sine_card_adaptation = max(0.05, min(1.0, float(kwargs['sine_card_adaptation'])))
-    if 'sine_glow_enabled' in kwargs:
-        widget._sine_glow_enabled = bool(kwargs['sine_glow_enabled'])
-    if 'sine_glow_intensity' in kwargs:
-        widget._sine_glow_intensity = max(0.0, float(kwargs['sine_glow_intensity']))
-    if 'sine_glow_size' in kwargs:
-        widget._sine_glow_size = max(0.1, min(3.0, float(kwargs['sine_glow_size'])))
-    if 'sine_glow_reactivity' in kwargs:
-        widget._sine_glow_reactivity = max(0.0, min(2.0, float(kwargs['sine_glow_reactivity'])))
-    if 'sine_glow_color' in kwargs:
-        c = _color_or_none(kwargs['sine_glow_color'])
-        if c is not None:
-            widget._sine_glow_color = c
-    if 'sine_line_color' in kwargs:
-        c = _color_or_none(kwargs['sine_line_color'])
-        if c is not None:
-            widget._sine_line_color = c
-    if 'sine_reactive_glow' in kwargs:
-        widget._sine_reactive_glow = bool(kwargs['sine_reactive_glow'])
-    # sine_sensitivity (base_sensitivity), sine_speed (line_speed) and
-    # sine_line_count are authored-logical (SineFrameRuntime.resolve) -> apply_logical.
-    if 'sine_smoothing' in kwargs:
-        widget._sine_smoothing = max(0.0, min(1.0, float(kwargs['sine_smoothing'])))
-    if 'sine_line_offset_bias' in kwargs:
-        widget._sine_line_offset_bias = max(0.0, min(1.0, float(kwargs['sine_line_offset_bias'])))
-    if 'sine_line_dim' in kwargs:
-        widget._sine_line_dim = bool(kwargs['sine_line_dim'])
-    if 'sine_line2_color' in kwargs:
-        c = _color_or_none(kwargs['sine_line2_color'])
-        if c is not None:
-            widget._sine_line2_color = c
-    if 'sine_line2_glow_color' in kwargs:
-        c = _color_or_none(kwargs['sine_line2_glow_color'])
-        if c is not None:
-            widget._sine_line2_glow_color = c
-    if 'sine_line3_color' in kwargs:
-        c = _color_or_none(kwargs['sine_line3_color'])
-        if c is not None:
-            widget._sine_line3_color = c
-    if 'sine_line3_glow_color' in kwargs:
-        c = _color_or_none(kwargs['sine_line3_glow_color'])
-        if c is not None:
-            widget._sine_line3_glow_color = c
-    if 'sine_line4_color' in kwargs:
-        c = _color_or_none(kwargs['sine_line4_color'])
-        if c is not None:
-            widget._sine_line4_color = c
-    if 'sine_line4_glow_color' in kwargs:
-        c = _color_or_none(kwargs['sine_line4_glow_color'])
-        if c is not None:
-            widget._sine_line4_glow_color = c
-    if 'sine_line5_color' in kwargs:
-        c = _color_or_none(kwargs['sine_line5_color'])
-        if c is not None:
-            widget._sine_line5_color = c
-    if 'sine_line5_glow_color' in kwargs:
-        c = _color_or_none(kwargs['sine_line5_glow_color'])
-        if c is not None:
-            widget._sine_line5_glow_color = c
-    if 'sine_line6_color' in kwargs:
-        c = _color_or_none(kwargs['sine_line6_color'])
-        if c is not None:
-            widget._sine_line6_color = c
-    if 'sine_line6_glow_color' in kwargs:
-        c = _color_or_none(kwargs['sine_line6_glow_color'])
-        if c is not None:
-            widget._sine_line6_glow_color = c
-    if 'sine_ghost_line2_enabled' in kwargs:
-        widget._sine_ghost_line2_enabled = bool(kwargs['sine_ghost_line2_enabled'])
-    if 'sine_ghost_line3_enabled' in kwargs:
-        widget._sine_ghost_line3_enabled = bool(kwargs['sine_ghost_line3_enabled'])
-    if 'sine_ghost_line4_enabled' in kwargs:
-        widget._sine_ghost_line4_enabled = bool(kwargs['sine_ghost_line4_enabled'])
-    if 'sine_ghost_line5_enabled' in kwargs:
-        widget._sine_ghost_line5_enabled = bool(kwargs['sine_ghost_line5_enabled'])
-    if 'sine_ghost_line6_enabled' in kwargs:
-        widget._sine_ghost_line6_enabled = bool(kwargs['sine_ghost_line6_enabled'])
 
-    # --- Rainbow (per-mode, falls back to global key for compat) --------
-    # Per-mode keys like spectrum_rainbow_enabled take priority over the
-    # legacy global rainbow_enabled.  The UI writes both.
-    _mode_str = getattr(widget, '_vis_mode_str', None) or ''
-    _pm_re = f'{_mode_str}_rainbow_enabled' if _mode_str else ''
-    _pm_rs = f'{_mode_str}_rainbow_speed' if _mode_str else ''
-    if _pm_re and _pm_re in kwargs:
-        widget._rainbow_enabled = bool(kwargs[_pm_re])
-    elif 'rainbow_enabled' in kwargs:
-        widget._rainbow_enabled = bool(kwargs['rainbow_enabled'])
-    if _pm_rs and _pm_rs in kwargs:
-        widget._rainbow_speed = max(0.01, min(5.0, float(kwargs[_pm_rs])))
-    elif 'rainbow_speed' in kwargs:
-        widget._rainbow_speed = max(0.01, min(5.0, float(kwargs['rainbow_speed'])))
-    if 'rainbow_per_bar' in kwargs:
-        widget._rainbow_per_bar = bool(kwargs['rainbow_per_bar'])
-
-    # --- Oscilloscope ghost trail ----------------------------------------
-    # osc_ghosting_enabled / osc_ghost_intensity (gate) / osc_ghost_decay are
-    # authored-logical (OscilloscopeFrameRuntime.resolve) -> apply_logical.
-
-    # --- Spectrum ghost ----------------------------------------------------
-    # spectrum_ghosting_enabled / spectrum_ghost_decay are authored-logical
-    # (SpectrumFrameRuntime.resolve) -> apply_logical; ghost_alpha stays render-side.
-    if 'spectrum_ghost_alpha' in kwargs:
-        widget._spectrum_ghost_alpha = max(0.0, min(1.0, float(kwargs['spectrum_ghost_alpha'])))
-
-    # --- Sine ghost -------------------------------------------------------
-    # sine_ghosting_enabled / sine_ghost_alpha (gate) / sine_ghost_decay are
-    # authored-logical (SineFrameRuntime.resolve) -> apply_logical.
-
-    # --- Bubble ghost -----------------------------------------------------
-    if 'bubble_ghosting_enabled' in kwargs:
-        widget._bubble_ghosting_enabled = bool(kwargs['bubble_ghosting_enabled'])
-    if 'bubble_ghost_alpha' in kwargs:
-        widget._bubble_ghost_alpha = max(0.0, min(1.0, float(kwargs['bubble_ghost_alpha'])))
-    if 'bubble_ghost_decay' in kwargs:
-        widget._bubble_ghost_decay = max(0.1, min(1.0, float(kwargs['bubble_ghost_decay'])))
-
-    # --- Sine Wave Heartbeat -----------------------------------------------
-
-    # DevCurve authored-logical config (base/motion/idle/smoothness/ghosting/
-    # foreground + per-layer field inputs) now flows through
-    # apply_logical_vis_mode_kwargs above; the DevCurve field solve is on the
-    # authored logical clock. No DevCurve presentation-only fields remain here.
-
-    # --- Bubble -----------------------------------------------------------
+    # --- Bubble simulation / layout controls (widget-owned) -----------
     if 'bubble_group_drift' in kwargs:
         widget._bubble_group_drift = bool(kwargs['bubble_group_drift'])
     if 'bubble_collision_pop_mode' in kwargs:
@@ -695,67 +665,47 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         if mode not in {"off", "one", "all"}:
             mode = "off"
         widget._bubble_collision_pop_mode = mode
-    if 'bubble_outline_color' in kwargs:
-        c = _color_or_none(kwargs['bubble_outline_color'])
-        if c is not None:
-            widget._bubble_outline_color = c
-    if 'bubble_specular_color' in kwargs:
-        c = _color_or_none(kwargs['bubble_specular_color'])
-        if c is not None:
-            widget._bubble_specular_color = c
-    if 'bubble_gradient_light' in kwargs:
-        c = _color_or_none(kwargs['bubble_gradient_light'])
-        if c is not None:
-            widget._bubble_gradient_light = c
-    if 'bubble_gradient_dark' in kwargs:
-        c = _color_or_none(kwargs['bubble_gradient_dark'])
-        if c is not None:
-            widget._bubble_gradient_dark = c
-    if 'bubble_pop_color' in kwargs:
-        c = _color_or_none(kwargs['bubble_pop_color'])
-        if c is not None:
-            widget._bubble_pop_color = c
-    if 'bubble_specular_direction' in kwargs:
-        widget._bubble_specular_direction = normalize_bubble_specular_direction(kwargs['bubble_specular_direction'])
-    if 'bubble_gradient_direction' in kwargs:
-        widget._bubble_gradient_direction = normalize_bubble_gradient_direction(kwargs['bubble_gradient_direction'])
     if 'bubble_big_visual_smoothing' in kwargs:
         widget._bubble_big_visual_smoothing = max(0.0, min(1.0, float(kwargs['bubble_big_visual_smoothing'])))
     if 'bubble_growth' in kwargs:
         widget._bubble_growth = max(1.0, min(5.0, float(kwargs['bubble_growth'])))
-    if 'bubble_tail_opacity' in kwargs:
-        widget._bubble_tail_opacity = max(0.0, min(0.85, float(kwargs['bubble_tail_opacity'])))
 
 
 def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> None:
-    """Update *extra* with the cross-mode visual fields every GPU path understands."""
-    extra['rainbow_enabled'] = getattr(widget, '_rainbow_enabled', False)
-    extra['rainbow_speed'] = getattr(widget, '_rainbow_speed', 0.5)
-    extra['rainbow_per_bar'] = getattr(widget, '_rainbow_per_bar', False)
-    extra['spectrum_rainbow_border'] = getattr(widget, '_spectrum_rainbow_border', False)
-    extra['spectrum_glow_enabled'] = getattr(widget, '_spectrum_glow_enabled', False)
-    extra['spectrum_glow_intensity'] = getattr(widget, '_spectrum_glow_intensity', 0.55)
-    extra['spectrum_glow_color'] = getattr(widget, '_spectrum_glow_color', None)
+    """Update *extra* with the cross-mode visual fields every GPU path understands.
+
+    Authored-logical inputs (ghosting gates/decays, heartbeat) read from the
+    logical host; pure renderer styling (rainbow, glow, ghost-line toggles,
+    density/displacement) reads from the presentation-config owner.
+    """
+    pres = _presentation_source(widget)
+    extra['rainbow_enabled'] = getattr(pres, '_rainbow_enabled', False)
+    extra['rainbow_speed'] = getattr(pres, '_rainbow_speed', 0.5)
+    extra['rainbow_per_bar'] = getattr(pres, '_rainbow_per_bar', False)
+    extra['spectrum_rainbow_border'] = getattr(pres, '_spectrum_rainbow_border', False)
+    extra['spectrum_glow_enabled'] = getattr(pres, '_spectrum_glow_enabled', False)
+    extra['spectrum_glow_intensity'] = getattr(pres, '_spectrum_glow_intensity', 0.55)
+    extra['spectrum_glow_color'] = getattr(pres, '_spectrum_glow_color', None)
     extra['spectrum_ghosting_enabled'] = getattr(widget, '_spectrum_ghosting_enabled', True)
-    extra['spectrum_ghost_alpha'] = getattr(widget, '_spectrum_ghost_alpha', 0.4)
+    extra['spectrum_ghost_alpha'] = getattr(pres, '_spectrum_ghost_alpha', 0.4)
     extra['spectrum_ghost_decay'] = getattr(widget, '_spectrum_ghost_decay', 0.4)
     extra['osc_ghosting_enabled'] = getattr(widget, '_osc_ghosting_enabled', False)
     extra['osc_ghost_intensity'] = getattr(widget, '_osc_ghost_intensity', 0.4)
     extra['osc_ghost_decay'] = getattr(widget, '_osc_ghost_decay', 0.4)
-    extra['osc_ghost_line2_enabled'] = getattr(widget, '_osc_ghost_line2_enabled', True)
-    extra['osc_ghost_line3_enabled'] = getattr(widget, '_osc_ghost_line3_enabled', True)
+    extra['osc_ghost_line2_enabled'] = getattr(pres, '_osc_ghost_line2_enabled', True)
+    extra['osc_ghost_line3_enabled'] = getattr(pres, '_osc_ghost_line3_enabled', True)
     extra['sine_ghosting_enabled'] = getattr(widget, '_sine_ghosting_enabled', True)
     extra['sine_ghost_alpha'] = getattr(widget, '_sine_ghost_alpha', 0.45)
     extra['sine_ghost_decay'] = getattr(widget, '_sine_ghost_decay', 0.3)
-    extra['sine_ghost_line2_enabled'] = getattr(widget, '_sine_ghost_line2_enabled', True)
-    extra['sine_ghost_line3_enabled'] = getattr(widget, '_sine_ghost_line3_enabled', True)
-    extra['bubble_ghosting_enabled'] = getattr(widget, '_bubble_ghosting_enabled', False)
-    extra['bubble_ghost_alpha'] = getattr(widget, '_bubble_ghost_alpha', 0.0)
-    extra['bubble_ghost_decay'] = getattr(widget, '_bubble_ghost_decay', 0.4)
+    extra['sine_ghost_line2_enabled'] = getattr(pres, '_sine_ghost_line2_enabled', True)
+    extra['sine_ghost_line3_enabled'] = getattr(pres, '_sine_ghost_line3_enabled', True)
+    extra['bubble_ghosting_enabled'] = getattr(pres, '_bubble_ghosting_enabled', False)
+    extra['bubble_ghost_alpha'] = getattr(pres, '_bubble_ghost_alpha', 0.0)
+    extra['bubble_ghost_decay'] = getattr(pres, '_bubble_ghost_decay', 0.4)
     extra['sine_heartbeat'] = getattr(widget, '_sine_heartbeat', 0.0)
     extra['heartbeat_intensity'] = getattr(widget, '_heartbeat_intensity', 0.0)
-    extra['sine_density'] = getattr(widget, '_sine_density', 1.0)
-    extra['sine_displacement'] = getattr(widget, '_sine_displacement', 0.0)
+    extra['sine_density'] = getattr(pres, '_sine_density', 1.0)
+    extra['sine_displacement'] = getattr(pres, '_sine_displacement', 0.0)
 
 
 def _build_shared_visualizer_extras(widget: Any) -> Dict[str, Any]:
@@ -825,27 +775,40 @@ def _populate_engine_signal_snapshot(extra: Dict[str, Any], widget: Any, mode_st
 
 
 def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_sine: bool) -> None:
-    """Attach the shared Sine/Osc visual parameters."""
-    extra['glow_enabled'] = widget._sine_glow_enabled if is_sine else widget._osc_glow_enabled
-    extra['glow_intensity'] = widget._sine_glow_intensity if is_sine else widget._osc_glow_intensity
-    extra['glow_size'] = widget._sine_glow_size if is_sine else widget._osc_glow_size
+    """Attach the shared Sine/Osc visual parameters.
+
+    Authored-logical inputs (sensitivity/speed/travel/shift/width-reaction/
+    sine line-count) read from the logical host; pure renderer styling (glow,
+    colours, per-line styling, ghost-line toggles) from the presentation owner.
+    """
+    pres = _presentation_source(widget)
+    extra['glow_enabled'] = getattr(pres, '_sine_glow_enabled' if is_sine else '_osc_glow_enabled', True if is_sine else False)
+    extra['glow_intensity'] = getattr(pres, '_sine_glow_intensity' if is_sine else '_osc_glow_intensity', 0.5 if is_sine else 0.4)
+    extra['glow_size'] = getattr(pres, '_sine_glow_size' if is_sine else '_osc_glow_size', 1.0)
     extra['glow_reactivity'] = (
-        getattr(widget, '_sine_glow_reactivity', 1.0)
+        getattr(pres, '_sine_glow_reactivity', 1.0)
         if is_sine
-        else getattr(widget, '_osc_glow_reactivity', 1.0)
+        else getattr(pres, '_osc_glow_reactivity', 1.0)
     )
-    extra['glow_color'] = widget._sine_glow_color if is_sine else widget._osc_glow_color
-    extra['reactive_glow'] = widget._sine_reactive_glow if is_sine else widget._osc_reactive_glow
-    extra['line_sensitivity'] = widget._sine_sensitivity if is_sine else widget._osc_line_amplitude
-    extra['line_smoothing'] = widget._sine_smoothing if is_sine else widget._osc_smoothing
-    extra['line_speed'] = widget._sine_speed if is_sine else widget._osc_speed
-    extra['line_dim'] = widget._sine_line_dim if is_sine else widget._osc_line_dim
-    extra['line_offset_bias'] = widget._sine_line_offset_bias if is_sine else widget._osc_line_offset_bias
-    extra['osc_vertical_shift'] = widget._osc_vertical_shift
-    extra['sine_wave_travel'] = widget._sine_wave_travel
-    extra['sine_card_adaptation'] = widget._sine_card_adaptation
-    extra['sine_travel_line2'] = widget._sine_travel_line2
-    extra['sine_travel_line3'] = widget._sine_travel_line3
+    extra['glow_color'] = getattr(pres, '_sine_glow_color' if is_sine else '_osc_glow_color', None)
+    extra['reactive_glow'] = getattr(pres, '_sine_reactive_glow' if is_sine else '_osc_reactive_glow', True)
+    # Authored-logical.
+    extra['line_sensitivity'] = getattr(widget, '_sine_sensitivity' if is_sine else '_osc_line_amplitude', 1.0 if is_sine else 3.0)
+    extra['line_speed'] = getattr(widget, '_sine_speed' if is_sine else '_osc_speed', 1.0)
+    # Renderer styling.
+    extra['line_smoothing'] = getattr(pres, '_sine_smoothing' if is_sine else '_osc_smoothing', 0.7)
+    extra['line_dim'] = getattr(pres, '_sine_line_dim' if is_sine else '_osc_line_dim', False)
+    extra['line_offset_bias'] = getattr(pres, '_sine_line_offset_bias' if is_sine else '_osc_line_offset_bias', 0.0)
+    extra['osc_vertical_shift'] = getattr(pres, '_osc_vertical_shift', 0)
+    extra['sine_card_adaptation'] = getattr(pres, '_sine_card_adaptation', 0.3)
+    extra['sine_wave_effect'] = getattr(pres, '_sine_wave_effect', 0.0)
+    extra['sine_micro_wobble'] = getattr(pres, '_sine_micro_wobble', 0.0)
+    extra['sine_crawl_amount'] = getattr(pres, '_sine_crawl_amount', 0.0)
+    extra['sine_vertical_shift'] = getattr(pres, '_sine_vertical_shift', 0)
+    # Authored-logical (Sine travels / shifts / width reaction).
+    extra['sine_wave_travel'] = getattr(widget, '_sine_wave_travel', 0)
+    extra['sine_travel_line2'] = getattr(widget, '_sine_travel_line2', 0)
+    extra['sine_travel_line3'] = getattr(widget, '_sine_travel_line3', 0)
     extra['sine_travel_line4'] = getattr(widget, '_sine_travel_line4', 0)
     extra['sine_travel_line5'] = getattr(widget, '_sine_travel_line5', 0)
     extra['sine_travel_line6'] = getattr(widget, '_sine_travel_line6', 0)
@@ -855,39 +818,26 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
     extra['sine_line4_shift'] = getattr(widget, '_sine_line4_shift', 0.0)
     extra['sine_line5_shift'] = getattr(widget, '_sine_line5_shift', 0.0)
     extra['sine_line6_shift'] = getattr(widget, '_sine_line6_shift', 0.0)
-    extra['sine_wave_effect'] = widget._sine_wave_effect
-    extra['sine_micro_wobble'] = widget._sine_micro_wobble
-    extra['sine_crawl_amount'] = getattr(widget, '_sine_crawl_amount', 0.0)
-    extra['sine_width_reaction'] = widget._sine_width_reaction
-    extra['sine_vertical_shift'] = widget._sine_vertical_shift
-    extra['line_color'] = widget._sine_line_color if is_sine else widget._osc_line_color
-    extra['line_count'] = widget._sine_line_count if is_sine else widget._osc_line_count
-    extra['line2_color'] = widget._sine_line2_color if is_sine else widget._osc_line2_color
-    extra['line2_glow_color'] = widget._sine_line2_glow_color if is_sine else widget._osc_line2_glow_color
-    extra['line3_color'] = widget._sine_line3_color if is_sine else widget._osc_line3_color
-    extra['line3_glow_color'] = widget._sine_line3_glow_color if is_sine else widget._osc_line3_glow_color
-    extra['line4_color'] = widget._sine_line4_color if is_sine else widget._osc_line4_color
-    extra['line4_glow_color'] = widget._sine_line4_glow_color if is_sine else widget._osc_line4_glow_color
-    extra['line5_color'] = widget._sine_line5_color if is_sine else widget._osc_line5_color
-    extra['line5_glow_color'] = widget._sine_line5_glow_color if is_sine else widget._osc_line5_glow_color
-    extra['line6_color'] = widget._sine_line6_color if is_sine else widget._osc_line6_color
-    extra['line6_glow_color'] = widget._sine_line6_glow_color if is_sine else widget._osc_line6_glow_color
-    extra['ghost_line2_enabled'] = widget._sine_ghost_line2_enabled if is_sine else widget._osc_ghost_line2_enabled
-    extra['ghost_line3_enabled'] = widget._sine_ghost_line3_enabled if is_sine else widget._osc_ghost_line3_enabled
-    extra['ghost_line4_enabled'] = widget._sine_ghost_line4_enabled if is_sine else widget._osc_ghost_line4_enabled
-    extra['ghost_line5_enabled'] = widget._sine_ghost_line5_enabled if is_sine else widget._osc_ghost_line5_enabled
-    extra['ghost_line6_enabled'] = widget._sine_ghost_line6_enabled if is_sine else widget._osc_ghost_line6_enabled
+    extra['sine_width_reaction'] = getattr(widget, '_sine_width_reaction', 0.0)
+    # Line colours / count (sine line-count is authored-logical; osc is styling).
+    extra['line_color'] = getattr(pres, '_sine_line_color' if is_sine else '_osc_line_color', None)
+    extra['line_count'] = (
+        getattr(widget, '_sine_line_count', 1)
+        if is_sine
+        else getattr(pres, '_osc_line_count', 1)
+    )
+    _side = 'sine' if is_sine else 'osc'
+    for _i in range(2, 7):
+        extra[f'line{_i}_color'] = getattr(pres, f'_{_side}_line{_i}_color', None)
+        extra[f'line{_i}_glow_color'] = getattr(pres, f'_{_side}_line{_i}_glow_color', None)
+    for _i in range(2, 7):
+        extra[f'ghost_line{_i}_enabled'] = bool(
+            getattr(pres, f'_{_side}_ghost_line{_i}_enabled', True)
+        )
     # Legacy ghost enabled keys (for shader compatibility)
-    extra['osc_ghost_line2_enabled'] = bool(getattr(widget, '_osc_ghost_line2_enabled', True))
-    extra['osc_ghost_line3_enabled'] = bool(getattr(widget, '_osc_ghost_line3_enabled', True))
-    extra['osc_ghost_line4_enabled'] = bool(getattr(widget, '_osc_ghost_line4_enabled', True))
-    extra['osc_ghost_line5_enabled'] = bool(getattr(widget, '_osc_ghost_line5_enabled', True))
-    extra['osc_ghost_line6_enabled'] = bool(getattr(widget, '_osc_ghost_line6_enabled', True))
-    extra['sine_ghost_line2_enabled'] = bool(getattr(widget, '_sine_ghost_line2_enabled', True))
-    extra['sine_ghost_line3_enabled'] = bool(getattr(widget, '_sine_ghost_line3_enabled', True))
-    extra['sine_ghost_line4_enabled'] = bool(getattr(widget, '_sine_ghost_line4_enabled', True))
-    extra['sine_ghost_line5_enabled'] = bool(getattr(widget, '_sine_ghost_line5_enabled', True))
-    extra['sine_ghost_line6_enabled'] = bool(getattr(widget, '_sine_ghost_line6_enabled', True))
+    for _i in range(2, 7):
+        extra[f'osc_ghost_line{_i}_enabled'] = bool(getattr(pres, f'_osc_ghost_line{_i}_enabled', True))
+        extra[f'sine_ghost_line{_i}_enabled'] = bool(getattr(pres, f'_sine_ghost_line{_i}_enabled', True))
 
     # Preset guardrail: when paused, ensure Sine has minimum travel so it
     # remains visibly alive even if a preset stores travel as NONE.
@@ -909,19 +859,24 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
 
 
 def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
-    """Attach only GL-safe Bubble extras; sim controls stay on the widget."""
-    extra['bubble_outline_color'] = getattr(widget, '_bubble_outline_color', None)
-    extra['bubble_specular_color'] = getattr(widget, '_bubble_specular_color', None)
-    extra['bubble_gradient_light'] = getattr(widget, '_bubble_gradient_light', None)
-    extra['bubble_gradient_dark'] = getattr(widget, '_bubble_gradient_dark', None)
-    extra['bubble_pop_color'] = getattr(widget, '_bubble_pop_color', None)
-    extra['bubble_specular_direction'] = getattr(widget, '_bubble_specular_direction', 'top_left')
-    extra['bubble_gradient_direction'] = getattr(widget, '_bubble_gradient_direction', 'top')
+    """Attach only GL-safe Bubble extras.
+
+    Renderer colours/directions/tail read from the presentation owner; the
+    simulation arrays/counts read from the authored logical host.
+    """
+    pres = _presentation_source(widget)
+    extra['bubble_outline_color'] = getattr(pres, '_bubble_outline_color', None)
+    extra['bubble_specular_color'] = getattr(pres, '_bubble_specular_color', None)
+    extra['bubble_gradient_light'] = getattr(pres, '_bubble_gradient_light', None)
+    extra['bubble_gradient_dark'] = getattr(pres, '_bubble_gradient_dark', None)
+    extra['bubble_pop_color'] = getattr(pres, '_bubble_pop_color', None)
+    extra['bubble_specular_direction'] = getattr(pres, '_bubble_specular_direction', 'top_left')
+    extra['bubble_gradient_direction'] = getattr(pres, '_bubble_gradient_direction', 'top')
     extra['bubble_pos_data'] = getattr(widget, '_bubble_pos_data', [])
     extra['bubble_extra_data'] = getattr(widget, '_bubble_extra_data', [])
     extra['bubble_trail_data'] = getattr(widget, '_bubble_trail_data', [])
     extra['bubble_trail_strength'] = getattr(widget, '_bubble_trail_strength', 0.0)
-    extra['bubble_tail_opacity'] = getattr(widget, '_bubble_tail_opacity', 0.0)
+    extra['bubble_tail_opacity'] = getattr(pres, '_bubble_tail_opacity', 0.0)
     extra['bubble_count'] = getattr(widget, '_bubble_count', 0)
 
 
