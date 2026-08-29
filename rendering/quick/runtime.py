@@ -306,6 +306,34 @@ class QuickDisplayRuntime(QObject):
     def quiesce_for_runtime_pause(self) -> None:
         self.hide()
 
+    def bind_visualizer_render_source(
+        self,
+        controller: Any,
+        *,
+        engine_generation: int,
+        activation_id: int,
+    ) -> Any:
+        """Bind one exact visualizer activation's render bridge into this scene.
+
+        The display owner opens render admission on the presentation-neutral
+        runtime controller and hands its latest-state snapshot bridge to the
+        retained scene item for the current runtime generation. Logical ownership
+        stays with the controller; only the bounded immutable bridge crosses into
+        render. Returns the exact ``VisualizerRenderIdentity`` for caller proof.
+        """
+
+        if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
+            raise RuntimeError("cannot bind a visualizer source on a retiring runtime")
+        identity = controller.begin_render_activation(
+            engine_generation=int(engine_generation),
+            activation_id=int(activation_id),
+        )
+        self.scene_controller.set_visualizer_render_source(
+            controller.render_bridge,
+            identity,
+        )
+        return identity
+
     def bind_visualizer_viewport_config(
         self,
         override_sink: Callable[[tuple[float, float] | None], None],
