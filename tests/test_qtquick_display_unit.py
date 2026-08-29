@@ -16,7 +16,7 @@ from shiboken6 import isValid as is_valid_qobject
 from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.display_unit import create_quick_display_unit
 from rendering.quick.scene_controller import QuickSceneFactory
-from rendering.quick.state import QuickWindowPolicy
+from rendering.quick.state import QuickRuntimePhase, QuickWindowPolicy
 from rendering.quick.widgets.family_binder import ClockFamilyAdapter
 from rendering.display_modes import DisplayMode
 
@@ -119,5 +119,48 @@ def test_unit_retire_is_clean_and_drops_ctrl_contribution(qt_app, qtbot) -> None
             timeout=1000,
         )
     finally:
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_unit_visualizer_owner_is_single_and_blocks_runtime_retirement(qt_app) -> None:
+    class _VisualizerOwner:
+        def __init__(self) -> None:
+            self.allow_join = False
+            self.retire_calls = 0
+
+        def retire(self) -> bool:
+            self.retire_calls += 1
+            return self.allow_join
+
+    coord = SharedCtrlCoordinator()
+    unit, factory = _make_unit(qt_app, 98, coord)
+    owner = _VisualizerOwner()
+    try:
+        assert unit.is_visualizer_participant() is True
+        unit.attach_visualizer_owner(owner)
+        with pytest.raises(RuntimeError, match="display retirement blocked"):
+            unit.retire()
+        assert owner.retire_calls == 1
+        assert unit.is_retired is False
+        assert unit.runtime.phase is QuickRuntimePhase.CONSTRUCTED
+        assert unit.runtime_retirement_roots()[1] == (
+            unit,
+            unit.presenter,
+            owner,
+        )
+        with pytest.raises(RuntimeError, match="already owns"):
+            unit.attach_visualizer_owner(_VisualizerOwner())
+
+        owner.allow_join = True
+        assert unit.retire() is True
+        assert owner.retire_calls == 2
+        assert unit.is_retired is True
+        assert unit.is_visualizer_participant() is False
+    finally:
+        if not unit.is_retired:
+            owner.allow_join = True
+            unit.retire()
         factory.deleteLater()
         qt_app.processEvents()

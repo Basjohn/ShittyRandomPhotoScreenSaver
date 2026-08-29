@@ -276,6 +276,9 @@ The family/runtime destination integration already landed and test-gated include
 - The destruction barrier now consumes an explicit `DisplayManager`/display-unit retirement-root contract. Quick units expose
   their runtime/window and plain-Python generation owners directly, and queue runtime-object deletion only after legal
   render-safe window retirement; the barrier no longer scrapes physical-presenter internals.
+- `QuickDisplayUnit` now accepts only the one visualizer owner admitted upstream by `DisplayManager`; it never constructs one
+  per display. The chosen unit includes that owner in its generation roots and hard-blocks runtime/window retirement until
+  the authored logical runtime joins successfully.
 
 ### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 

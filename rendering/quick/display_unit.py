@@ -57,6 +57,7 @@ class QuickDisplayUnit:
         self._presenter = presenter
         self._ctrl_coordinator = ctrl_coordinator
         self._ctrl_key = ctrl_key
+        self._visualizer_owner: Any | None = None
         self._retired = False
 
     @property
@@ -74,6 +75,26 @@ class QuickDisplayUnit:
     @property
     def is_retired(self) -> bool:
         return self._retired
+
+    def is_visualizer_participant(self) -> bool:
+        """Return whether this selected unit can host product visualizer admission."""
+
+        return not self._retired and self._runtime.binding_loss is None
+
+    def attach_visualizer_owner(self, owner: Any) -> None:
+        """Attach the single manager-admitted visualizer owner to this unit.
+
+        DisplayManager resolves product-level admission before construction;
+        the unit only owns retirement ordering for the chosen display.
+        """
+
+        if self._retired:
+            raise RuntimeError("cannot attach a visualizer owner to a retired unit")
+        if owner is None:
+            raise ValueError("visualizer owner must not be None")
+        if self._visualizer_owner is not None:
+            raise RuntimeError("Quick display unit already owns a visualizer")
+        self._visualizer_owner = owner
 
     def display_bounds(self) -> OverlayWidgetGeometry:
         """Return this display's logical host rectangle (origin-relative)."""
@@ -148,10 +169,10 @@ class QuickDisplayUnit:
         generation owners and must also release before replacement proceeds.
         """
 
-        return (
-            (self._runtime, self._runtime.window),
-            (self, self._presenter),
-        )
+        python_owners = [self, self._presenter]
+        if self._visualizer_owner is not None:
+            python_owners.append(self._visualizer_owner)
+        return ((self._runtime, self._runtime.window), tuple(python_owners))
 
     # -- visibility / lifecycle -------------------------------------------- #
     def show_on_screen(self) -> None:
@@ -173,6 +194,12 @@ class QuickDisplayUnit:
 
         if self._retired:
             return False
+        if self._visualizer_owner is not None:
+            retired = self._visualizer_owner.retire()
+            if not retired:
+                raise RuntimeError(
+                    "visualizer logical runtime did not join; display retirement blocked"
+                )
         self._retired = True
         self._presenter.retire()
         self._runtime.retirement_completed.connect(self._runtime.deleteLater)
