@@ -71,6 +71,7 @@ class QuickDisplayVisualizerOwner:
         bar_count: int,
         initial_mode: str,
         engine_factory: Callable[[int], Any] | None = None,
+        presentation_resolver: Callable[[], Any] | None = None,
     ) -> None:
         from widgets.spotify_visualizer.runtime_controller import (
             VisualizerRuntimeController,
@@ -83,6 +84,12 @@ class QuickDisplayVisualizerOwner:
             initial_mode=str(initial_mode),
             engine_factory=engine_factory,
         )
+        # The display owner may inject a resolver that reflects live scene
+        # geometry/scale/fade/CUSTOM state; absent one, a baseline resolver is
+        # derived from the bound display identity + controller-owned policy and
+        # committed viewport extent (no second geometry authority).
+        self._presentation_resolver = presentation_resolver
+        self._sync: Any = None
         self._configured = False
         self._started = False
         self._bound = False
@@ -160,8 +167,52 @@ class QuickDisplayVisualizerOwner:
         self._runtime.bind_visualizer_viewport_config(
             self._controller.set_custom_viewport_override
         )
+        # Construct the single GUI/Quick presentation synchronization owner over
+        # the controller's existing mailbox + render bridge. It is driven by
+        # sync_present(); it invents no clock, cadence, queue or paint ack.
+        from widgets.spotify_visualizer.quick_presentation_sync import (
+            QuickVisualizerPresentationSync,
+        )
+
+        self._sync = QuickVisualizerPresentationSync(
+            self._controller,
+            resolve_presentation=self._resolve_current_presentation,
+        )
         self._bound = True
         return self._render_identity
+
+    def _resolve_current_presentation(self) -> Any:
+        """Resolve the current complete immutable presentation for a snapshot."""
+
+        if self._presentation_resolver is not None:
+            return self._presentation_resolver()
+        from widgets.spotify_visualizer.presentation_geometry import (
+            resolve_visualizer_presentation,
+        )
+
+        identity = self._runtime.display_identity
+        _x, _y, width, height = identity.geometry
+        dpr = float(identity.device_pixel_ratio)
+        if dpr <= 0.0:
+            dpr = 1.0
+        return resolve_visualizer_presentation(
+            policy=self._controller.presentation_policy,
+            display_size=(float(width), float(height)),
+            dpr=dpr,
+            viewport_extent=self._controller.presentation_viewport_extent,
+        )
+
+    def sync_present(self) -> bool:
+        """Drive one GUI/Quick synchronization pass (latest-wins).
+
+        Publishes the freshest identity-current logical frame as one immutable
+        Quick render snapshot into the controller's bridge. Returns True iff a
+        snapshot was admitted this pass. Requires a prior bind().
+        """
+
+        if self._retired or self._sync is None:
+            return False
+        return self._sync.sync_latest()
 
     def start(self, *, interval_s: float | None = None) -> None:
         """Start the sole authored logical runtime with the widget-free step."""
