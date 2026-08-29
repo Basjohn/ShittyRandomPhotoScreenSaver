@@ -2,10 +2,11 @@
 
 Bubble runs in a baseline-relative logical domain: canonical (420x280) is a
 strict 1x1 no-op that leaves the legacy unit-square path and render arrays
-exactly unchanged; a wide/tall committed extent expands the logical world so
-bubbles fill the extra space at baseline density, and the render seam normalizes
-back to [0,1] so the shader keeps circles round. These bars prove that contract
-deterministically; final visual acceptance is deferred to after H.
+exactly unchanged; a wide/tall committed extent expands the logical world while
+authored population and Bubble personality stay unchanged (a larger world is
+naturally less dense), and the render seam normalizes back to [0,1] so the
+shader keeps circles round. These bars prove that contract deterministically;
+final visual acceptance is deferred to after H.
 """
 
 from __future__ import annotations
