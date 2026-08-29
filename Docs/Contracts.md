@@ -138,22 +138,30 @@ direction to signed offsets before QML. Clock analogue geometry is the permanent
 Transitions: canonical registry/settings -> activation/admission -> immutable request/run -> lazy Quick implementation
 -> display render node. Old compositor transition pixels are debris after caller proof.
 
-Visualizer logical/source ownership is presentation-neutral:
+Visualizer logical/source/presentation ownership is bounded and single-instance at product level:
 
 ```text
-canonical settings / activation resolution
--> one VisualizerRuntimeController
--> one controller-owned VisualizerLogicalTickState
+canonical enabled/activation + requested monitor
+-> participating-display admission (exactly one visualizer owner)
+-> VisualizerRuntimeController
+-> controller-owned VisualizerLogicalTickState + all-five resolved logical/runtime config
 -> one VisualizerLogicalRuntime authored clock
 -> mode logical runtime
--> immutable/latest render state
--> Quick sync
--> visualizer render node
+-> latest immutable VisualizerLogicalFrame
+-> one GUI/Quick presentation synchronization owner
+-> complete ResolvedVisualizerPresentation + VisualizerRenderSnapshot
+-> existing VisualizerSnapshotBridge
+-> retained visualizer render node on the admitted display
 ```
 
-The logical runtime step advances against controller-owned state, never a live QWidget. Logical/runtime settings use one
-presentation-neutral apply authority; visual-only styling remains presentation-owned. Do not move presentation colour/glow/
-card/layout state into the logical controller merely because the legacy widget historically stored both kinds together.
+The logical runtime step advances against controller-owned state, never a live QWidget. Configuration ownership follows the
+**actual consumer**: every value used by authored logical evolution or a mode-owned frame runtime must be presentation-neutral;
+pure renderer colour/glow/card/chrome/layout stays presentation-owned. Do not move every legacy widget field into the logical
+controller merely because the widget historically stored both kinds together.
+
+Binding a render bridge is not delivery proof: the synchronization owner must populate it with a complete, identity-fenced
+snapshot. A failed authored-runtime join blocks visualizer/display generation retirement. Retained visualizer double-click is
+semantic mode-cycle input and must be admitted before the display-level next-image fallback.
 
 Visualizer geometry has two independent persisted dimensions of intent:
 
