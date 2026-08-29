@@ -233,9 +233,11 @@ class BubbleSimulation:
         # Baseline-relative logical domain. 1x1 is the canonical 420x280 world
         # and is a strict no-op path: every spatial site reduces to the exact
         # legacy unit-square values and the render arrays are emitted unchanged.
-        # A non-baseline committed viewport extent widens/heightens this domain
-        # so bubbles fill the extra logical world at baseline density; the render
-        # seam then normalizes back to [0,1] so the shader keeps circles round.
+        # A non-baseline committed viewport extent widens/heightens this domain:
+        # the logical world expands while authored population and Bubble
+        # personality remain unchanged (so a larger world is naturally less
+        # dense). The render seam then normalizes back to [0,1] so the shader
+        # keeps circles round.
         self._domain_w: float = 1.0
         self._domain_h: float = 1.0
         self._big_size_max: float = 0.038
