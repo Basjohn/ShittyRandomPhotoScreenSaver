@@ -178,7 +178,7 @@ class GmailPresentationConfig:
             sender_subject_ratio=_bounded_int(values.get("sender_subject_ratio"), 35, 10, 90),
             date_display_mode=str(values.get("date_display_mode", "numeric") or "numeric"),
             header_logo_px_adjust=_bounded_int(values.get("header_logo_px_adjust"), 2, -128, 128),
-            width=_bounded_int(values.get("width"), 600, 120, 4000),
+            width=_bounded_int(values.get("width"), 600, 200, 1200),
         )
 
     @classmethod

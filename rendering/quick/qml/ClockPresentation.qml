@@ -8,15 +8,18 @@ OverlayWidget {
     semanticDoubleClickEnabled: true
     signal toggleModeRequested()
 
-    // Report the active face's intrinsic/config-derived content size (plus the
-    // shell inset) up to the display owner, which owns anchor/clamp/outer rect.
+    // Report the active face's content size up to the display owner, which owns
+    // anchor/clamp/outer rect. Digital is content-driven text, so it adds the
+    // shell inset around the intrinsic content; analogue reports its authored
+    // natural outer footprint directly (its geometry policy is the whole-widget
+    // size, not inner content).
     readonly property bool _isDigital: clockRoot.clockModel.displayMode === "digital"
-    preferredContentWidth: (
-        _isDigital ? digitalFace.preferredContentWidth : analogueFace.preferredContentWidth
-    ) + clockRoot.shellInset
-    preferredContentHeight: (
-        _isDigital ? digitalFace.preferredContentHeight : analogueFace.preferredContentHeight
-    ) + clockRoot.shellInset
+    preferredContentWidth: _isDigital
+        ? digitalFace.preferredContentWidth + clockRoot.shellInset
+        : analogueFace.preferredContentWidth
+    preferredContentHeight: _isDigital
+        ? digitalFace.preferredContentHeight + clockRoot.shellInset
+        : analogueFace.preferredContentHeight
 
     ClockDigitalFace {
         id: digitalFace

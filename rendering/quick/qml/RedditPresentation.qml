@@ -8,14 +8,15 @@ OverlayWidget {
     signal openPostRequested(string url)
     signal refreshRequested()
 
-    // Content-driven outer size (H option A): height from the stacked content's
-    // natural bounds; width from the intrinsic header width and a font-derived
-    // post column width (posts fill their column, so there is no cleaner
-    // intrinsic post width). Intrinsic/config sources only - no dependency on the
-    // assigned width, so no width<->preferredWidth feedback. J refines parity.
+    // Content-driven outer size (H option A). Width honours the historical
+    // ordinary-card minimum footprint (BaseOverlayWidget.DEFAULT_CARD_MIN_WIDTH =
+    // 600) and only enlarges above it when the intrinsic header content genuinely
+    // requires it - never shrinking below the authored floor. Height is content
+    // driven. Intrinsic sources only (no width<->preferredWidth feedback). J
+    // refines parity.
     preferredContentWidth: Math.max(
-        headerRow.implicitWidth + 20.0, redditRoot.redditModel.fontSize * 26.0
-    ) + redditRoot.shellInset
+        600.0, headerRow.implicitWidth + 20.0 + redditRoot.shellInset
+    )
     preferredContentHeight: Math.max(
         60.0, contentColumn.childrenRect.height
     ) + redditRoot.shellInset
