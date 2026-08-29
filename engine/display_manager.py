@@ -521,6 +521,35 @@ class DisplayManager(QObject):
             self.cycle_transition_requested.emit
         )
         runtime.settings_requested.connect(self.settings_requested.emit)
+        runtime.play_pause_requested.connect(
+            lambda display=unit: display.request_media_transport("play")
+        )
+        runtime.home_play_pause_requested.connect(
+            lambda display=unit: display.request_media_transport("play")
+        )
+        runtime.previous_track_requested.connect(
+            lambda display=unit: display.request_media_transport("prev")
+        )
+        runtime.next_track_requested.connect(
+            lambda display=unit: display.request_media_transport("next")
+        )
+        runtime.slider_volume_up_requested.connect(
+            lambda display=unit: display.request_app_volume_step(+1)
+        )
+        runtime.slider_volume_down_requested.connect(
+            lambda display=unit: display.request_app_volume_step(-1)
+        )
+        runtime.global_volume_up_requested.connect(
+            lambda display=unit: display.request_system_volume_step(+0.05)
+        )
+        runtime.global_volume_down_requested.connect(
+            lambda display=unit: display.request_system_volume_step(-0.05)
+        )
+        runtime.global_mute_toggle_requested.connect(
+            lambda display=unit: display.request_system_mute_toggle()
+        )
+        runtime.layout_slot_load_requested.connect(self._load_layout_slot)
+        runtime.layout_slot_save_requested.connect(self._save_layout_slot)
         runtime.transition_finalized.connect(
             lambda _completion, idx=screen_index: self.transition_completed.emit(idx)
         )
@@ -541,6 +570,73 @@ class DisplayManager(QObject):
             lambda _generation, idx=screen_index: self._on_quick_runtime_retired(idx)
         )
         self._quick_readiness_by_screen[screen_index] = runtime.scene_readiness
+
+    def _request_custom_layout_runtime_reload(self, request_kind: str) -> None:
+        """Publish one manager-identity-fenced runtime layout reload request."""
+
+        generation = self._runtime_generation
+        self.custom_layout_reload_requested.emit(
+            str(request_kind),
+            int(generation) if generation is not None else -1,
+            int(id(self)),
+        )
+
+    def _save_layout_slot(self, slot_id: str) -> bool:
+        """Persist one source-free layout slot through SettingsManager."""
+
+        settings = self.settings_manager
+        if settings is None:
+            return False
+        try:
+            from core.settings.layout_slots import save_layout_slot
+
+            widgets_map = settings.get_widgets_map()
+            if not save_layout_slot(widgets_map, slot_id):
+                logger.info(
+                    "[LAYOUT_SLOT] Ignored invalid Quick layout slot save: %s",
+                    slot_id,
+                )
+                return False
+            settings.set_widgets_map(widgets_map, emit_change=False)
+            settings.save()
+            logger.info("[LAYOUT_SLOT] Saved Quick layout slot %s", slot_id)
+            return True
+        except Exception:
+            logger.error(
+                "[LAYOUT_SLOT] Quick layout slot save failed: %s",
+                slot_id,
+                exc_info=True,
+            )
+            return False
+
+    def _load_layout_slot(self, slot_id: str) -> bool:
+        """Apply one saved layout slot and request a fenced runtime rebuild."""
+
+        settings = self.settings_manager
+        if settings is None:
+            return False
+        try:
+            from core.settings.layout_slots import apply_layout_slot
+
+            widgets_map = settings.get_widgets_map()
+            if not apply_layout_slot(widgets_map, slot_id):
+                logger.info(
+                    "[LAYOUT_SLOT] Empty or invalid Quick layout slot load: %s",
+                    slot_id,
+                )
+                return False
+            settings.set_widgets_map(widgets_map, emit_change=False)
+            settings.save()
+            logger.info("[LAYOUT_SLOT] Loaded Quick layout slot %s", slot_id)
+            self._request_custom_layout_runtime_reload("slot_load")
+            return True
+        except Exception:
+            logger.error(
+                "[LAYOUT_SLOT] Quick layout slot load failed: %s",
+                slot_id,
+                exc_info=True,
+            )
+            return False
 
     def _on_quick_readiness_changed(
         self,
