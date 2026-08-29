@@ -279,6 +279,9 @@ The family/runtime destination integration already landed and test-gated include
 - `QuickDisplayUnit` now accepts only the one visualizer owner admitted upstream by `DisplayManager`; it never constructs one
   per display. The chosen unit includes that owner in its generation roots and hard-blocks runtime/window retirement until
   the authored logical runtime joins successfully.
+- The manager collection surface now handles all-screen/specific-screen publication, accepted-image/first-frame accounting,
+  clear, quiesce, dimming, identity diagnostics and pending-work state through real display-unit semantics. These paths no
+  longer require `set_image`, `get_screen_info`, compositor dimming fields or QWidget pause methods from a Quick unit.
 
 ### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 
