@@ -31,11 +31,78 @@ from rendering.quick.display_processing import DisplayProcessingDescriptor
 from rendering.display_modes import DisplayMode
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
+from rendering.quick.frame_pacer import QuickFrameDemand
 from rendering.widget_runtime_manager import WidgetRuntimeManager
+from widgets.spotify_visualizer import tick_pipeline
 from widgets.spotify_visualizer.presentation_geometry import (
     resolve_visualizer_presentation,
 )
 from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
+
+
+class _ManagerVisualizerEngine:
+    def __init__(self) -> None:
+        self.acquire_count = 0
+        self.release_count = 0
+        self.playback: list[bool] = []
+        self._audio_worker = SimpleNamespace(
+            set_audio_block_size=lambda _size: None,
+        )
+
+    def set_floor_config(self, *_args) -> None:
+        pass
+
+    def set_sensitivity_config(self, *_args) -> None:
+        pass
+
+    def set_energy_boost(self, *_args) -> None:
+        pass
+
+    def set_agc_strength(self, *_args) -> None:
+        pass
+
+    def set_input_gain(self, *_args) -> None:
+        pass
+
+    def get_generation_id(self) -> int:
+        return 17
+
+    def get_activation_id(self) -> int:
+        return 23
+
+    def set_thread_manager(self, _manager) -> None:
+        pass
+
+    def set_runtime_generation(self, _generation) -> None:
+        pass
+
+    def set_playback_state(self, playing: bool) -> None:
+        self.playback.append(bool(playing))
+
+    def acquire(self) -> None:
+        self.acquire_count += 1
+
+    def release(self) -> None:
+        self.release_count += 1
+
+    def get_bubble_energy_bands(self):
+        return SimpleNamespace(bass=0.0, mid=0.0, high=0.0, overall=0.0)
+
+    def get_transient_energy_bands(self):
+        return SimpleNamespace(
+            bass_transient=0.0,
+            mid_transient=0.0,
+            high_transient=0.0,
+            onset_detected=False,
+            onset_type="",
+            onset_strength=0.0,
+        )
+
+    def get_event_scheduler(self):
+        return None
+
+    def get_perf_diagnostics(self):
+        return {}
 
 
 @pytest.mark.qt
@@ -124,6 +191,121 @@ def test_display_manager_constructs_only_authoritative_quick_units(
         )
     finally:
         if not manager._retired:
+            manager.retire_runtime()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
+    qt_app,
+    qtbot,
+    monkeypatch,
+) -> None:
+    """Production orchestration resolves settings once and owns one destination."""
+
+    class _Settings:
+        def __init__(self) -> None:
+            self.widgets = {
+                "family_activation": {"media": True, "visualizers": True},
+                "clock": {"enabled": False},
+                "weather": {"enabled": False},
+                "media": {"enabled": False},
+                "reddit": {"enabled": False},
+                "gmail": {"enabled": False},
+                "achievement_pulse": {"enabled": False},
+                "abandonment_issues": {"enabled": False},
+                "spotify_visualizer": {
+                    "enabled": True,
+                    "visualizers_enabled": True,
+                    "monitor": "ALL",
+                    "mode": "bubble",
+                    "preset_bubble": 3,
+                    "bubble_bar_count": 32,
+                    "bubble_big_count": 7,
+                    "bubble_small_count": 19,
+                },
+            }
+
+        def get_widgets_map(self):
+            return deepcopy(self.widgets)
+
+        def get(self, key: str, default=None):
+            if key == "widgets":
+                return deepcopy(self.widgets)
+            value = {"widgets": self.widgets}
+            for part in key.split("."):
+                if not isinstance(value, dict) or part not in value:
+                    return default
+                value = value[part]
+            return value
+
+    engine = _ManagerVisualizerEngine()
+    monkeypatch.setattr(
+        "widgets.spotify_visualizer.beat_engine.get_shared_spotify_beat_engine",
+        lambda _count: engine,
+    )
+    monkeypatch.setattr(
+        tick_pipeline, "consume_engine_bars", lambda _owner, _now: (True, True)
+    )
+    monkeypatch.setattr(
+        tick_pipeline, "process_heartbeat", lambda _owner, _now: None
+    )
+    monkeypatch.setattr(
+        tick_pipeline, "record_tick_perf", lambda _owner, _now: None
+    )
+    monkeypatch.setattr(QuickDisplayUnit, "show_on_screen", lambda _unit: None)
+
+    manager = DisplayManager(
+        settings_manager=_Settings(),
+        runtime_generation=702,
+    )
+    owner = None
+    owner_runtime = None
+    try:
+        assert manager.initialize_displays() == len(qt_app.screens())
+        owner = manager._quick_visualizer_owner
+        chosen = manager._quick_visualizer_unit
+        assert owner is not None
+        assert chosen in manager.displays
+        participating = [
+            unit for unit in manager.displays if unit.is_visualizer_participant()
+        ]
+        assert chosen.screen_index == min(
+            unit.screen_index for unit in participating
+        )
+        assert [unit._visualizer_owner is not None for unit in manager.displays].count(True) == 1
+        assert owner.controller.mode_id == "bubble"
+        assert (
+            owner.controller.logical_tick_state._bubble_big_count
+            == owner.controller.settings_model.bubble_big_count
+        )
+        assert owner.render_identity.runtime_generation == 702
+        assert owner.render_identity.engine_generation == 17
+        assert owner.render_identity.activation_id == 23
+        assert engine.acquire_count == 1
+        assert engine.release_count == 0
+        assert owner.is_started is True
+        assert chosen.runtime.frame_pacer.demands & QuickFrameDemand.VISUALIZER
+        owner_runtime = owner.controller.logical_runtime
+        assert owner_runtime is not None and owner_runtime.is_running()
+
+        manager.cleanup()
+        assert manager._quick_visualizer_owner is None
+        assert owner.is_retired is True
+        assert owner_runtime.is_running() is False
+        assert engine.release_count == 1
+        qtbot.waitUntil(
+            lambda: not manager._retiring_quick_units,
+            timeout=3000,
+        )
+    finally:
+        if not manager._retired:
+            if manager.displays:
+                manager.cleanup()
+                qtbot.waitUntil(
+                    lambda: not manager._retiring_quick_units,
+                    timeout=3000,
+                )
             manager.retire_runtime()
         qt_app.processEvents()
 

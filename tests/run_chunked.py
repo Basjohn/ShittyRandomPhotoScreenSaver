@@ -41,6 +41,7 @@ H_DESTINATION_PROFILE = (
     "test_qtquick_family_size_policy.py",
     "test_qtquick_geometry_resolver.py",
     "test_qtquick_overlay_preferred_size.py",
+    "test_qtquick_frame_pacer.py",
     "test_qtquick_runtime.py::test_runtime_is_a_narrow_qobject_owner_with_queued_window_retirement",
     "test_qtquick_runtime.py::test_threaded_runtime_teardown_recreates_generation_zero_to_one",
     "test_qtquick_runtime.py::test_threaded_runtime_input_exit_retires_complete_display_set",

@@ -1561,6 +1561,11 @@ class _SmokeRunner(QObject):
         self._active_hide_records = {}
         try:
             for probe in self._probes:
+                # This harness deliberately simulates a visualizer pacing
+                # consumer without constructing the product visualizer owner.
+                # Install the corresponding inert GUI-sync edge explicitly;
+                # production visualizer demand remains callback-required.
+                probe.runtime.frame_pacer.set_visualizer_sync(lambda: False)
                 probe.runtime.frame_pacer.set_visualizer_active(True)
                 before = probe.telemetry.snapshot()
                 geometry = probe.window.geometry()
@@ -1821,6 +1826,9 @@ class _SmokeRunner(QObject):
             displaced = next(probe for probe in self._probes if probe.index == 0)
             fallback = next(probe for probe in self._probes if probe.index == 1)
             fallback_screen = self._current_screen_by_index[1]
+            # Topology smoke simulates a presentation consumer only; it does
+            # not construct the product visualizer owner.
+            displaced.runtime.frame_pacer.set_visualizer_sync(lambda: False)
             displaced.runtime.frame_pacer.set_visualizer_active(True)
             self._topology_displacement = {
                 "generation": self._generation,

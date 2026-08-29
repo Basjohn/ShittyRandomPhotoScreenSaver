@@ -85,7 +85,21 @@ def _pacer(target_hz: float = 100.0):
         clock_ns=clock,
         timer=timer,
     )
+    pacer.set_visualizer_sync(lambda: True)
     return pacer, window, timer, clock
+
+
+def test_visualizer_sync_runs_on_existing_presentation_opportunity_before_update():
+    pacer, window, _timer, _clock = _pacer()
+    events: list[tuple[str, int]] = []
+    pacer.set_visualizer_sync(
+        lambda: events.append(("sync", window.update_count)) or True
+    )
+
+    pacer.set_visualizer_active(True)
+
+    assert events == [("sync", 0)]
+    assert window.update_count == 1
 
 
 @pytest.mark.parametrize("rate", (0.0, -1.0, math.inf, -math.inf, math.nan))

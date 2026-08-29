@@ -8,10 +8,11 @@ The documentation is reconciled through independently audited pushed source plus
 
 ```text
 87499707 (one batch-resolved Quick transition route + finalization accounting landed on pushed main)
-current worktree: retained context-menu population + existing-owner action routing
+b826ee74 (retained context-menu population + existing-owner action routing landed on pushed main)
+current bounded checkpoint: one manager-admitted production Quick visualizer owner + existing frame-pacer synchronization
 True-F focused gate: 7/7 GREEN
 Settings-overhaul focused reconciliation: 154/154 GREEN
-H destination profile: 58/58 target-isolated GREEN
+H destination profile: 59/59 target-isolated GREEN
 Complete G: independently audited and ACCEPTED.
 H: ACTIVE. The pre-cutover visualizer destination-edge correction gate is CLOSED.
 CURRENT H implementation target: coordinated DisplayManager + engine authority cutover.
@@ -28,6 +29,10 @@ Accepted H foundation through this checkpoint:
 - VisualizerLogicalRuntime advances against controller-owned state without SpotifyVisualizerWidget;
 - immutable visualizer render contracts / bridge and Quick render consumers exist;
 - QuickDisplayVisualizerOwner exists as a thin display/generation edge and can construct/bind/start a widget-free controller.
+- DisplayManager now resolves canonical visualizer activation/model/technical state once, admits exactly one participating
+  Quick unit, and starts that unit's sole widget-free controller/source/logical owner; non-owning units construct none.
+- the existing display-local QuickFramePacer drives the GUI-side presentation synchronizer under its VISUALIZER demand;
+  there is no second timer or authored clock, and engine acquire/release is exactly once across owner start/retirement.
 - visualizer technical configuration is presentation-neutral: the controller/shared BeatEngine receives resolved technical
   settings without `SpotifyVisualizerWidget`, while technical values consumed by authored evolution live on controller-owned logical state;
 - `QuickVisualizerPresentationSync` commits the exact resolved presentation embedded in the published snapshot to the retained
@@ -63,7 +68,7 @@ now the current H implementation target.** Deferred to J installed acceptance: t
 hardware-ingress matrix.
 
 The pre-cutover test-authority maintenance pass is **complete enough for H**. The large Settings GUI/theme overhaul is now
-covered by reconciled current-owner tests (**154/154 GREEN**), and the maintained H destination profile is **58/58 GREEN**
+covered by reconciled current-owner tests (**154/154 GREEN**), and the maintained H destination profile is **59/59 GREEN**
 under target-isolated subprocess execution. The earlier whole-tree/chunk noise was traced to stale legacy-owner tests plus
 Qt/QQuick cross-test lifecycle contamination; it is not an unresolved H architecture defect. `Docs/TestSuite.md` now owns the
 current H-vs-I/J test classification.
@@ -86,7 +91,7 @@ G6      retained input / semantic family actions         CLOSED
 G7      retained context + auxiliary pixels              CLOSED (destination sole aux; legacy = H-scaffolding)
 G8      MC / focus closure                               DETERMINISTIC CLOSED; physical A->B->A matrix = J debt
 G-GATE  independent audit of complete checkpointed G     ACCEPTED
-H       production Quick owner/orchestration cutover     ACTIVE; destination gate 58/58 GREEN, DisplayManager cutover CURRENT
+H       production Quick owner/orchestration cutover     ACTIVE; destination gate 59/59 GREEN, DisplayManager cutover CURRENT
 I       residue only                                     after H
 J       final installed / physical validation            final
 ```
@@ -297,9 +302,9 @@ The family/runtime destination integration already landed and test-gated include
   cannot clear pending work until every admitted screen is authoritative.
 - Each production Quick unit now receives current retained context-menu rows from `DisplayManager`; previous/next/settings/exit,
   transition selection, dimming and interaction-mode actions route to the existing manager/signals/Settings authorities. The
-  retiring QWidget menu and retained Quick menu share one presentation-neutral transition-selection mutation. CUSTOM and
-  visualizer menu rows remain unadmitted until their single destination owners are attached; there is no fallback into the old
-  `CustomLayoutManager` or visualizer widget.
+  retiring QWidget menu and retained Quick menu share one presentation-neutral transition-selection mutation. CUSTOM remains
+  unadmitted until its single destination owner is attached; visualizer mode rows remain unadmitted until the admitted owner's
+  semantic mode-change route is complete. There is no fallback into the old `CustomLayoutManager` or visualizer widget.
 
 ### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 
@@ -371,7 +376,7 @@ regression evidence.
 
 The bounded correction route `Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md` is closed: steps 1–7
 below are landed and test-gated (Findings A–F GREEN; see the checkpoint disposition above). The reconciled H destination
-regression profile is also GREEN (**58/58 targets**). Steps 8–9 — the coordinated production-authority cutover and
+regression profile is also GREEN (**59/59 targets**). Steps 8–9 — the coordinated production-authority cutover and
 caller-proven deletion — are therefore the remaining H work and are **CURRENT NOW**. The completed route and remaining order are:
 
 1. **Correct all-five configuration ownership.** Inventory actual logical/frame-runtime consumers. Move only those consumed
@@ -403,8 +408,9 @@ caller-proven deletion — are therefore the remaining H work and are **CURRENT 
    ownership topology: do not add a `DisplayWidget` compatibility facade, throwaway legacy-only decoupling layer, or parallel
    legitimate production presenter merely to make intermediate checkpoints runnable. **Current sub-checkpoint:** the selected
    display collection constructor, retirement ordering, image/transition route, retained input/context actions and layout-slot
-   reload route are Quick-authoritative; remaining work is exact-once CUSTOM/single-visualizer orchestration before
-   runtime-shaped proof and physical-host deletion.
+   reload route are Quick-authoritative; one canonical settings-to-single-Quick-visualizer construction/start/sync/retirement
+   route is now authoritative. Remaining work is exact-once CUSTOM plus visualizer semantic mode-change/menu/double-click
+   orchestration before runtime-shaped proof and physical-host deletion.
 9. **Runtime-shaped production proof and caller-proven deletion.** Prove one/multiple selected displays, image/transition
    routing, ordinary families, the single admitted visualizer, corrected-G owners, readiness, generation/topology replacement
    and clean retirement; then delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, legacy visualizer host/compositor glue,
