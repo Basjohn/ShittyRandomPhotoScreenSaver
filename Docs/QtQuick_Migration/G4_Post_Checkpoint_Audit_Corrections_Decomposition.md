@@ -1,6 +1,8 @@
 # G4 Post-Checkpoint Audit Corrections — Technical Decomposition
 
-Status: **PRIORITY before G7 resumes**  
+Status: **COMPLETE — all corrections (A committed/override ownership, B domain retry clamp, C contraction lifecycle,
+D specular audit) plus the wording cleanup are landed, test-gated and pushed. Baseline byte-identical; goldens green
+without retuning. Deterministic G4 closed; only the post-H eyes-on gate remains.**  
 Basis: G4 core viewport-extent work is pushed; independent audit found bounded lifecycle/spatial omissions.  
 Work admission: `Current_Plan.md`
 
