@@ -54,6 +54,40 @@ def _committed(controller: VisualizerRuntimeController, extent) -> None:
 
 
 @pytest.mark.qt
+def test_runtime_binds_visualizer_render_source_with_exact_identity(qt_app) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    factory = QuickSceneFactory()
+    runtime = QuickDisplayRuntime(
+        screen_index=0,
+        runtime_generation=62,
+        screen=screen,
+        scene_factory=factory,
+        window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    controller = VisualizerRuntimeController(
+        runtime_generation=62,
+        bar_count=24,
+        initial_mode="bubble",
+        engine_factory=lambda _bar_count: object(),
+    )
+    try:
+        identity = runtime.bind_visualizer_render_source(
+            controller, engine_generation=3, activation_id=7
+        )
+        assert identity.runtime_generation == 62
+        assert identity.engine_generation == 3
+        assert identity.activation_id == 7
+        assert identity.mode_id == "bubble"
+        # The retained scene item now owns exactly that activation identity.
+        assert runtime.scene_controller.visualizer_render_identity == identity
+    finally:
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
 def test_runtime_binds_visualizer_viewport_config_with_committed_and_custom_override(
     qt_app,
 ) -> None:
