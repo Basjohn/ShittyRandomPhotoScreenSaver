@@ -19,7 +19,7 @@ presenter; Ctrl state is coordinated through the shared coordinator.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
 from PySide6.QtCore import QObject, QSize
@@ -29,6 +29,7 @@ from core.logging.logger import get_logger
 from rendering.display_modes import DisplayMode
 
 from .ctrl_coordinator import SharedCtrlCoordinator
+from .context_menu import QuickContextMenuEntry
 from .display_image_route import (
     present_processed_pixmap,
     presentation_image_from_processed_pixmap,
@@ -229,6 +230,21 @@ class QuickDisplayUnit:
         presentation = self._presenter.presentation_for_widget_id("media")
         request = getattr(presentation, "request_system_mute_toggle", None)
         return bool(callable(request) and request())
+
+    def configure_context_menu(
+        self,
+        entries: Iterable[QuickContextMenuEntry],
+        *,
+        action_handler: Callable[[str, str], bool],
+    ) -> bool:
+        """Bind current product rows/actions to this retained menu model."""
+
+        if not callable(action_handler):
+            raise TypeError("context-menu action handler must be callable")
+        model = self._runtime.context_menu_model
+        changed = model.replace_entries(entries)
+        model.set_action_handler(action_handler)
+        return changed
 
     def runtime_retirement_roots(
         self,

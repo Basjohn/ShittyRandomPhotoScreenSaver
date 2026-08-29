@@ -17,7 +17,11 @@ from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.window import QuickDisplayWindow
 
 
-def _entries(*, edit_mode: bool = False) -> tuple[QuickContextMenuEntry, ...]:
+def _entries(
+    *,
+    edit_mode: bool = False,
+    layout_available: bool = True,
+) -> tuple[QuickContextMenuEntry, ...]:
     return build_quick_context_menu_entries(
         transition_names=("Crossfade", "Wipe"),
         current_transition="Wipe",
@@ -30,6 +34,7 @@ def _entries(*, edit_mode: bool = False) -> tuple[QuickContextMenuEntry, ...]:
         interaction_mode_enabled=False,
         interaction_mode_locked=False,
         edit_mode_active=edit_mode,
+        layout_actions_available=layout_available,
     )
 
 
@@ -63,6 +68,12 @@ def test_context_menu_builder_preserves_admitted_product_structure() -> None:
     assert "✓  Save Widget Layout" in active_labels
     assert "↺  Cancel Widget Layout" in active_labels
     assert "⟲  Reset To Saved Layout" in active_labels
+
+    unavailable_labels = [
+        entry.label for entry in _entries(layout_available=False)
+    ]
+    assert "✥  Edit Widget Layout" not in unavailable_labels
+    assert "✓  Save Widget Layout" not in unavailable_labels
 
 
 def test_context_menu_model_admits_only_live_enabled_semantic_actions() -> None:

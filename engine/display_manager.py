@@ -14,8 +14,19 @@ from PySide6.QtGui import QGuiApplication, QScreen, QPixmap, QDesktopServices
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
+from core.settings.capability_activation import (
+    apply_transition_menu_selection,
+    get_activated_transition_names,
+    get_effective_random_pool,
+)
+from core.settings.defaults import get_default_settings
 from rendering.display_modes import DisplayMode
 from rendering.display_widget import DisplayWidget
+from rendering.transition_registry import (
+    canonicalize_transition_name,
+    is_transition_available_for_hw,
+)
+from rendering.quick.context_menu import build_quick_context_menu_entries
 from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.display_unit import QuickDisplayUnit, create_quick_display_unit
 from rendering.quick.display_processing import DisplayProcessingDescriptor
@@ -513,6 +524,175 @@ class DisplayManager(QObject):
         auxiliary.configure_pixel_shift(pixel_shift_enabled, pixel_shift_rate)
         auxiliary.set_halo_shape(settings.get("input.halo_shape", "cursor_light"))
 
+    def _quick_context_transition_state(
+        self,
+    ) -> tuple[dict[str, Any], str, bool, bool]:
+        """Resolve current transition rows from canonical Settings state."""
+
+        from core.settings.settings_manager import SettingsManager
+
+        defaults = get_default_settings().get("transitions", {})
+        transitions = (
+            self.settings_manager.get("transitions", {})
+            if self.settings_manager is not None
+            else defaults
+        )
+        if not isinstance(transitions, dict):
+            transitions = dict(defaults) if isinstance(defaults, dict) else {}
+        current = canonicalize_transition_name(
+            transitions.get("type"),
+            fallback="Crossfade",
+        )
+        random_enabled = SettingsManager.to_bool(
+            transitions.get("random_always", False),
+            False,
+        )
+        hw_enabled = SettingsManager.to_bool(
+            self.settings_manager.get("display.hw_accel", False)
+            if self.settings_manager is not None
+            else False,
+            False,
+        )
+        random_selectable = any(
+            is_transition_available_for_hw(name, hw_enabled)
+            for name in get_effective_random_pool(transitions)
+        )
+        return transitions, current, random_enabled, random_selectable
+
+    def _refresh_quick_context_menu(self, unit: QuickDisplayUnit) -> None:
+        """Refresh one retained menu from current product authorities."""
+
+        from core.mc import is_mc_build
+        from core.settings.settings_manager import SettingsManager
+
+        transitions, current, random_enabled, random_selectable = (
+            self._quick_context_transition_state()
+        )
+        settings = self.settings_manager
+        dimming_enabled = SettingsManager.to_bool(
+            settings.get("accessibility.dimming.enabled", False)
+            if settings is not None
+            else False,
+            False,
+        )
+        entries = build_quick_context_menu_entries(
+            transition_names=get_activated_transition_names(transitions),
+            current_transition=current,
+            random_enabled=random_enabled,
+            random_selectable=random_selectable,
+            visualizer_modes=(),
+            current_visualizer="spectrum",
+            visualizer_available=False,
+            dimming_enabled=dimming_enabled,
+            interaction_mode_enabled=self._interaction_mode_enabled(),
+            interaction_mode_locked=is_mc_build(),
+            edit_mode_active=False,
+            # Do not expose a fallback into the retiring CustomLayoutManager.
+            layout_actions_available=False,
+        )
+        unit.configure_context_menu(
+            entries,
+            action_handler=lambda action_id, payload, display=unit: (
+                self._handle_quick_context_action(display, action_id, payload)
+            ),
+        )
+
+    def _refresh_all_quick_context_menus(self) -> None:
+        for display in tuple(self.displays):
+            if isinstance(display, QuickDisplayUnit) and not display.is_retired:
+                self._refresh_quick_context_menu(display)
+
+    @staticmethod
+    def _context_toggle_value(payload: str) -> bool | None:
+        normalized = str(payload or "").strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+        return None
+
+    def _handle_quick_context_action(
+        self,
+        unit: QuickDisplayUnit,
+        action_id: str,
+        payload: str,
+    ) -> bool:
+        """Route one admitted retained-menu action to existing product owners."""
+
+        action = str(action_id or "").strip()
+        if action == "previous":
+            self.previous_requested.emit()
+            return True
+        if action == "next":
+            self.next_requested.emit()
+            return True
+        if action == "settings":
+            self.settings_requested.emit()
+            return True
+        if action == "exit":
+            self._on_exit_requested()
+            return True
+
+        settings = self.settings_manager
+        if settings is None:
+            return False
+        try:
+            if action == "transition":
+                transitions = settings.get("transitions", {})
+                if not isinstance(transitions, dict):
+                    return False
+                if not apply_transition_menu_selection(transitions, payload):
+                    return False
+                settings.set("transitions", transitions)
+                settings.save()
+                logger.info(
+                    "Context menu: transition selection=%s screen=%s",
+                    payload,
+                    unit.screen_index,
+                )
+                self._refresh_all_quick_context_menus()
+                return True
+
+            enabled = self._context_toggle_value(payload)
+            if enabled is None:
+                return False
+            if action == "toggle_dimming":
+                settings.set("accessibility.dimming.enabled", enabled)
+                settings.save()
+                try:
+                    opacity = max(
+                        10,
+                        min(
+                            90,
+                            int(settings.get("accessibility.dimming.opacity", 30)),
+                        ),
+                    ) / 100.0
+                except (TypeError, ValueError):
+                    opacity = 0.3
+                self.set_dimming_all_displays(enabled, opacity)
+                self._refresh_all_quick_context_menus()
+                return True
+            if action == "toggle_interaction":
+                from core.mc import is_mc_build
+
+                persisted = True if is_mc_build() else enabled
+                settings.set("input.interaction_mode", persisted)
+                settings.save()
+                self._refresh_all_quick_context_menus()
+                return True
+        except Exception:
+            logger.error(
+                "[CONTEXT_MENU] Quick action failed action=%s screen=%s",
+                action,
+                unit.screen_index,
+                exc_info=True,
+            )
+            return False
+
+        # Visualizer and CUSTOM rows are admitted only when their single
+        # destination owners are attached later in H.
+        return False
+
     def _connect_quick_runtime(
         self,
         unit: QuickDisplayUnit,
@@ -530,6 +710,11 @@ class DisplayManager(QObject):
             self.cycle_transition_requested.emit
         )
         runtime.settings_requested.connect(self.settings_requested.emit)
+        runtime.context_menu_requested.connect(
+            lambda _position, display=unit: self._refresh_quick_context_menu(
+                display
+            )
+        )
         runtime.play_pause_requested.connect(
             lambda display=unit: display.request_media_transport("play")
         )
@@ -866,6 +1051,7 @@ class DisplayManager(QObject):
                 thread_manager=self._thread_manager,
             )
             self._configure_quick_auxiliary(display)
+            self._refresh_quick_context_menu(display)
             self.displays.append(display)
             logger.info("Quick display unit created for screen %d" % screen_index)
             if show_immediately:

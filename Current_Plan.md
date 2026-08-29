@@ -7,8 +7,8 @@ Last updated: 2026-08-30
 The documentation is reconciled through independently audited pushed source plus the current bounded H worktree:
 
 ```text
-57b4fd6b (retained input actions + layout persistence/reload routing landed on pushed main)
-current worktree: one batch-resolved Quick transition route + finalization accounting
+87499707 (one batch-resolved Quick transition route + finalization accounting landed on pushed main)
+current worktree: retained context-menu population + existing-owner action routing
 True-F focused gate: 7/7 GREEN
 Settings-overhaul focused reconciliation: 154/154 GREEN
 H destination profile: 58/58 target-isolated GREEN
@@ -295,6 +295,11 @@ The family/runtime destination integration already landed and test-gated include
   and varies only each unit's immutable source/destination images. Random remains fail-closed, first images publish directly,
   and `current_images`/first-frame/transition-complete truth advances only after each destination finalizes. The batch owner
   cannot clear pending work until every admitted screen is authoritative.
+- Each production Quick unit now receives current retained context-menu rows from `DisplayManager`; previous/next/settings/exit,
+  transition selection, dimming and interaction-mode actions route to the existing manager/signals/Settings authorities. The
+  retiring QWidget menu and retained Quick menu share one presentation-neutral transition-selection mutation. CUSTOM and
+  visualizer menu rows remain unadmitted until their single destination owners are attached; there is no fallback into the old
+  `CustomLayoutManager` or visualizer widget.
 
 ### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 
@@ -397,8 +402,8 @@ caller-proven deletion — are therefore the remaining H work and are **CURRENT 
    intermediate migration commits are allowed to remain intentionally non-runnable. What must remain atomic is the finished
    ownership topology: do not add a `DisplayWidget` compatibility facade, throwaway legacy-only decoupling layer, or parallel
    legitimate production presenter merely to make intermediate checkpoints runnable. **Current sub-checkpoint:** the selected
-   display collection constructor, retirement ordering, image/transition route, retained input actions and layout-slot reload
-   route are Quick-authoritative; remaining work is exact-once context/CUSTOM/single-visualizer orchestration before
+   display collection constructor, retirement ordering, image/transition route, retained input/context actions and layout-slot
+   reload route are Quick-authoritative; remaining work is exact-once CUSTOM/single-visualizer orchestration before
    runtime-shaped proof and physical-host deletion.
 9. **Runtime-shaped production proof and caller-proven deletion.** Prove one/multiple selected displays, image/transition
    routing, ordinary families, the single admitted visualizer, corrected-G owners, readiness, generation/topology replacement

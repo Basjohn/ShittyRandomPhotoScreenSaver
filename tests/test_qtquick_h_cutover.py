@@ -128,6 +128,121 @@ def test_display_manager_constructs_only_authoritative_quick_units(
         qt_app.processEvents()
 
 
+@pytest.mark.qt
+def test_display_manager_populates_and_routes_retained_context_menu(
+    qt_app,
+    qtbot,
+    monkeypatch,
+) -> None:
+    class _Settings:
+        def __init__(self) -> None:
+            self.data = {
+                "widgets": {
+                    widget_id: {"enabled": False}
+                    for widget_id in (
+                        "clock",
+                        "weather",
+                        "media",
+                        "reddit",
+                        "gmail",
+                        "achievement_pulse",
+                        "abandonment_issues",
+                    )
+                },
+                "transitions": {
+                    "type": "Crossfade",
+                    "random_always": False,
+                    "pool": {"Wipe": True},
+                },
+                "accessibility": {
+                    "dimming": {"enabled": False, "opacity": 40},
+                    "pixel_shift": {"enabled": False, "rate": 1},
+                },
+                "display": {"hw_accel": False},
+                "input": {"interaction_mode": False},
+            }
+            self.save_calls = 0
+
+        def get(self, key: str, default=None):
+            value = self.data
+            for part in key.split("."):
+                if not isinstance(value, dict) or part not in value:
+                    return default
+                value = value[part]
+            return value
+
+        def set(self, key: str, value) -> None:
+            target = self.data
+            parts = key.split(".")
+            for part in parts[:-1]:
+                target = target.setdefault(part, {})
+            target[parts[-1]] = value
+
+        def save(self) -> None:
+            self.save_calls += 1
+
+        def get_widgets_map(self):
+            return deepcopy(self.data["widgets"])
+
+    settings = _Settings()
+    monkeypatch.setattr("core.mc.is_mc_build", lambda: False)
+    monkeypatch.setattr(QuickDisplayUnit, "show_on_screen", lambda _unit: None)
+    manager = DisplayManager(settings_manager=settings, runtime_generation=704)
+    previous = []
+    next_images = []
+    settings_requests = []
+    exits = []
+    manager.previous_requested.connect(lambda: previous.append(True))
+    manager.next_requested.connect(lambda: next_images.append(True))
+    manager.settings_requested.connect(lambda: settings_requests.append(True))
+    manager.exit_requested.connect(lambda: exits.append(True))
+    try:
+        assert manager.initialize_displays() == len(qt_app.screens())
+        unit = manager.displays[0]
+        model = unit.runtime.context_menu_model
+        labels = [entry["label"] for entry in model.entries]
+        assert "✥  Edit Widget Layout" not in labels
+        assert "⟳  Change Visualizer" not in labels
+
+        def _request(action_id: str, payload: str = "", checked: bool = True):
+            assert model.open_at(10.0, 12.0) is True
+            assert model.requestAction(action_id, payload, checked) is True
+
+        _request("previous")
+        _request("next")
+        _request("settings")
+        assert previous == [True]
+        assert next_images == [True]
+        assert settings_requests == [True]
+
+        _request("transition", "Wipe")
+        assert settings.get("transitions.type") == "Wipe"
+        assert settings.get("transitions.random_always") is False
+
+        _request("toggle_dimming", checked=True)
+        assert settings.get("accessibility.dimming.enabled") is True
+        assert all(
+            display.runtime.auxiliary_controller.state.dimming_enabled
+            for display in manager.displays
+        )
+
+        _request("toggle_interaction", checked=True)
+        assert settings.get("input.interaction_mode") is True
+        _request("exit")
+        assert exits == [True]
+        assert settings.save_calls == 3
+
+        manager.cleanup()
+        qtbot.waitUntil(
+            lambda: not manager._retiring_quick_units,
+            timeout=3000,
+        )
+    finally:
+        if not manager._retired:
+            manager.retire_runtime()
+        qt_app.processEvents()
+
+
 def test_display_manager_owns_layout_slot_persistence_and_fenced_reload(
     qt_app,
 ) -> None:

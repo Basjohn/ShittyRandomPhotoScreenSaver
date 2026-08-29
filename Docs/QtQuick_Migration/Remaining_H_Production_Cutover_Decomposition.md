@@ -78,6 +78,11 @@ second factory or presenter: each display unit combines it only with its own imm
 the existing retained `QuickTransitionController`. Accepted-image/current-image truth changes at destination finalization,
 not request construction or transition start; an inadmissible Random choice publishes no substitute transition.
 
+The retained context-menu model owns rows, visibility and live-action admission only. `DisplayManager` supplies current rows
+and routes accepted product actions to the existing outward signals and Settings/display authorities. A row whose destination
+owner is not attached (notably CUSTOM or the single visualizer during cutover) must remain absent/disabled; it must not invoke
+the retiring QWidget presenter as a fallback.
+
 ## 5. Cutover order
 
 The bounded visualizer pre-cutover gate is a **closed prerequisite**, not an active step in this decomposition. Its audit trail
