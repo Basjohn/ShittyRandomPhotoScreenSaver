@@ -4,20 +4,24 @@ Last updated: 2026-08-29
 
 ## Current checkpoint
 
-The attached documentation snapshot records pushed source through:
+The documentation is reconciled through pushed source:
 
 ```text
-29c0586891ab46c97dad2a369c6a63d2f6af3516
-Complete G is deterministically GREEN and pushed:
-- G4 viewport-extent implementation + post-checkpoint corrections (A committed/override ownership,
-  B domain retry clamp, C contraction lifecycle, D specular audit, wording) for all five modes;
-- G7 auxiliary/context caller closure (destination sole aux; legacy = H-scaffolding);
-- G8 deterministic focus/MC closure (cross-display stuck-Ctrl fixed; MC policy/fallback/generation locked).
+558e99cb1621f99768b81df2a2eab0246f8cb0d7
+Complete G: independently audited and ACCEPTED.
+H: ADMITTED and in progress.
+
+Landed H work through this checkpoint:
+- one WidgetRuntimeManager per QuickDisplayRuntime generation;
+- full seven-family OrdinaryFamilyPresentationBinder;
+- visualizer render-source + viewport-config bindings;
+- capture_qpixmap image bridge;
+- option-A outer-geometry mechanism;
+- historical per-family preferred-size policies and deterministic regression bars.
 ```
 
-Exact later source always outranks this document. **All of G is deterministically complete and checkpointed. This is the
-single G-completion stop: request one independent audit of the complete checkpointed G state before H.** H must not begin
-until that audit is accepted. Deferred to J installed acceptance: the all-five-mode visualizer eyes-on gate and the physical
+Exact later source always outranks this document. **All of G is complete, independently audited and accepted. H is admitted and
+is the active phase.** Deferred to J installed acceptance: the all-five-mode visualizer eyes-on gate and the physical
 two-display A->B->A hardware-ingress matrix.
 
 Current phase state:
@@ -32,8 +36,8 @@ G5      retained cross-display transfer                  CLOSED
 G6      retained input / semantic family actions         CLOSED
 G7      retained context + auxiliary pixels              CLOSED (destination sole aux; legacy = H-scaffolding)
 G8      MC / focus closure                               DETERMINISTIC CLOSED; physical A->B->A matrix = J debt
-G-GATE  independent audit of complete checkpointed G     READY — all G GREEN, request now before H
-H       production Quick owner/orchestration cutover     after G audit
+G-GATE  independent audit of complete checkpointed G     ACCEPTED
+H       production Quick owner/orchestration cutover     ACTIVE
 I       residue only                                     after H
 J       final installed / physical validation            final
 ```
@@ -54,7 +58,7 @@ The bounded correction batch from
 - misleading "baseline density" wording removed.
 
 Baseline stays byte-identical; BTF/replay/cadence/reactivity/transport goldens remain green with no tuning/golden/count
-changes. G4 is **deterministic implementation complete, physical acceptance deferred** (see below). Resume G7 next.
+changes. G4 is **deterministic implementation complete, physical acceptance deferred** (see below).
 
 ## Deferred G4 physical acceptance
 
@@ -99,11 +103,12 @@ physical-ingress pass from synthetic Qt events.
 
 Route reference: `Docs/QtQuick_Migration/Remaining_G7_G8_Auxiliary_Focus_Decomposition.md`.
 
-## Independent-audit stop policy for the rest of G
+## Independent G audit — ACCEPTED
 
-**Independent audit is the G-completion gate, not a per-slice interruption.**
+The complete checkpointed G state passed the required independent audit. That gate is satisfied and does not create any
+further stop before or during ordinary GREEN H work.
 
-During G4 correction, G7 and G8, use the normal loop:
+The implementation loop remains:
 
 ```text
 inspect exact source
@@ -115,11 +120,10 @@ inspect exact source
 -> continue when GREEN
 ```
 
-Claude/implementation agents should **not stop merely to request an independent audit between GREEN G slices**, including
-architecture-sensitive G work. Continue while the next G task is known, bounded, testable and consistent with the binding
-contracts.
+Implementation agents should **not stop merely to request user attention between GREEN slices** while the next task is known,
+bounded, testable and consistent with the binding contracts.
 
-A stop before G completion is required only for a real blocker, for example:
+A stop is required only for a real blocker, for example:
 
 - RED or unresolved YELLOW evidence that cannot be resolved from exact source/tests;
 - a required product/semantic decision not owned by existing docs;
@@ -128,19 +132,10 @@ A stop before G completion is required only for a real blocker, for example:
   prohibited architecture;
 - explicit user instruction to stop.
 
-Once **G4 corrections + G7 + G8 are all GREEN**, commit/push the complete G checkpoint, reconcile the immediate G status docs,
-then **STOP before H and request one independent audit of the complete checkpointed G state**. H must not begin until that
-audit is accepted.
+H remains independently audit-sensitive because it is the production owner cutover, but **H is admitted**. Architecture-
+sensitive H work still demands stronger tests and self-audit; it does not by itself create a user-attention stop.
 
-This supersedes older wording that could be read as requiring a separate external-audit pause after every
-architecture/lifecycle/shared-owner G slice. Those changes still demand stronger tests and self-audit; they do not by
-themselves create a user-attention stop while G is still in progress.
-
-H remains independently audit-sensitive because it is the production owner cutover. Its decomposition has now been
-reconciled against the current G contracts, including the visualizer viewport-config seam, but **H is still not admitted**
-until the complete checkpointed G state passes the independent audit above.
-
-Do not run routine hosted CI or full/Nuitka/installed builds during ordinary G implementation.
+Do not run routine hosted CI or full/Nuitka/installed builds during ordinary migration implementation.
 
 ## Destination invariants
 
@@ -257,15 +252,15 @@ mechanism + per-family preferred sizes. Remaining flip steps:
    image/transition/readiness/generation/topology onto the runtime APIs; update the engine test suites off QWidget shapes.
 3. **Caller-proven legacy deletion** of `DisplayWidget`/`GLCompositorWidget`/compositor stack (§10), not deferred to I.
 
-H is **not admitted until the complete G checkpoint has passed the independent audit above**.
+H is **admitted and active**. The complete G checkpoint has already passed the required independent audit.
 
-The source may still route normal startup through legacy `DisplayWidget` before H. That is a routing fact, not a requirement
-that the partially migrated application remain product-functional. Do not add compatibility work solely to keep the old
-runtime alive while migration proceeds.
+The source may still route normal startup through legacy `DisplayWidget` before the production flip. That is a routing fact,
+not a requirement that the partially migrated application remain product-functional. Do not add compatibility work solely to
+keep the old runtime alive while migration proceeds.
 
 H is the final owner/orchestration wiring. Follow the reconciled
-`Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md` after the G audit. Do not improvise a compatibility
-architecture in the meantime.
+`Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md`. Do not improvise a compatibility architecture in
+the meantime.
 
 Destination shape remains:
 
