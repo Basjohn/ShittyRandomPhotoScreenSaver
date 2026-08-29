@@ -1,10 +1,12 @@
 """
 Display manager for multi-monitor support.
 
-Manages DisplayWidget instances across multiple screens.
+Owns one authoritative Quick display unit for each selected screen.
 """
+import os
 import time
 import weakref
+from dataclasses import asdict
 from types import MappingProxyType
 from typing import Any, List, Dict, Optional, Set
 from PySide6.QtCore import QObject, QSize, Signal, QUrl
@@ -14,7 +16,15 @@ from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
 from rendering.display_modes import DisplayMode
 from rendering.display_widget import DisplayWidget
+from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
+from rendering.quick.display_unit import QuickDisplayUnit, create_quick_display_unit
 from rendering.quick.display_processing import DisplayProcessingDescriptor
+from rendering.quick.scene_controller import QuickSceneFactory
+from rendering.quick.state import (
+    QuickSceneReadiness,
+    QuickWindowPolicy,
+    QuickWindowRole,
+)
 from transitions.overlay_manager import hide_all_overlays
 from utils.lockfree.spsc_queue import SPSCQueue
 
@@ -30,11 +40,11 @@ except Exception:  # pragma: no cover - non-Windows or optional import failure
 
 class DisplayManager(QObject):
     """
-    Manage display widgets across multiple monitors.
+    Manage authoritative Quick display units across multiple monitors.
     
     Features:
     - Multi-monitor detection
-    - DisplayWidget creation per monitor
+    - Quick display-unit creation per selected monitor
     - Monitor hotplug handling
     - Same/different image modes
     - Coordinated exit
@@ -113,7 +123,14 @@ class DisplayManager(QObject):
             }
         )
         self._runtime_signal_connections: list[tuple[str, Any]] = []
-        self.displays: List[DisplayWidget] = []
+        self.displays: list[QuickDisplayUnit] = []
+        self._quick_scene_factory: QuickSceneFactory | None = None
+        self._quick_ctrl_coordinator = SharedCtrlCoordinator()
+        self._quick_readiness_by_screen: dict[int, QuickSceneReadiness] = {}
+        self._retiring_quick_units: dict[int, QuickDisplayUnit] = {}
+        self._retire_manager_when_quick_complete = False
+        self._widgets_config_snapshot: dict[str, Any] = {}
+        self._shadow_values_snapshot: dict[str, Any] = {}
         self.current_images: Dict[int, str] = {}  # screen_index -> image_path
         self._deferred_reddit_urls: list[str] = []
         self._display_startup_generation = 0
@@ -410,10 +427,186 @@ class DisplayManager(QObject):
         """Handle screen removed event."""
         logger.info("Screen removed: %s" % screen.name())
         self._schedule_monitor_reconcile("screenRemoved")
+
+    def _quick_window_policy(self) -> QuickWindowPolicy:
+        """Resolve the production top-level role without importing QWidget policy."""
+
+        from core.mc import is_mc_build
+
+        if not is_mc_build():
+            return QuickWindowPolicy()
+        use_splash = (
+            os.environ.get("SRPSS_MC_WINDOW_FLAGS", "").strip().lower()
+            == "splash"
+        )
+        always_on_top = True
+        if self.settings_manager is not None:
+            from core.settings.settings_manager import SettingsManager
+
+            always_on_top = SettingsManager.to_bool(
+                self.settings_manager.get("mc.always_on_top", True),
+                True,
+            )
+        return QuickWindowPolicy(
+            role=(
+                QuickWindowRole.MEDIA_CENTER_SPLASH
+                if use_splash
+                else QuickWindowRole.MEDIA_CENTER_TOOL
+            ),
+            always_on_top=always_on_top,
+        )
+
+    def _interaction_mode_enabled(self) -> bool:
+        from core.mc import is_mc_build
+
+        if is_mc_build():
+            return True
+        if self.settings_manager is None:
+            return False
+        from core.settings.settings_manager import SettingsManager
+
+        return SettingsManager.to_bool(
+            self.settings_manager.get("input.interaction_mode", False),
+            False,
+        )
+
+    def _configure_quick_auxiliary(self, unit: QuickDisplayUnit) -> None:
+        """Apply canonical generation-scoped auxiliary state once before show."""
+
+        settings = self.settings_manager
+        if settings is None:
+            return
+        from core.settings.settings_manager import SettingsManager
+
+        auxiliary = unit.runtime.auxiliary_controller
+        dimming_enabled = SettingsManager.to_bool(
+            settings.get("accessibility.dimming.enabled", False),
+            False,
+        )
+        try:
+            dimming_opacity = max(
+                10,
+                min(90, int(settings.get("accessibility.dimming.opacity", 30))),
+            )
+        except (TypeError, ValueError):
+            dimming_opacity = 30
+        auxiliary.set_dimming(dimming_enabled, dimming_opacity / 100.0)
+        pixel_shift_enabled = SettingsManager.to_bool(
+            settings.get("accessibility.pixel_shift.enabled", False),
+            False,
+        )
+        try:
+            pixel_shift_rate = int(
+                settings.get("accessibility.pixel_shift.rate", 1)
+            )
+        except (TypeError, ValueError):
+            pixel_shift_rate = 1
+        auxiliary.configure_pixel_shift(pixel_shift_enabled, pixel_shift_rate)
+        auxiliary.set_halo_shape(settings.get("input.halo_shape", "cursor_light"))
+
+    def _connect_quick_runtime(
+        self,
+        unit: QuickDisplayUnit,
+        *,
+        startup_generation: int,
+    ) -> None:
+        """Connect one unit's explicit runtime events to product orchestration."""
+
+        runtime = unit.runtime
+        screen_index = int(unit.screen_index)
+        runtime.exit_requested.connect(self._on_exit_requested)
+        runtime.previous_requested.connect(self.previous_requested.emit)
+        runtime.next_requested.connect(self.next_requested.emit)
+        runtime.cycle_transition_requested.connect(
+            self.cycle_transition_requested.emit
+        )
+        runtime.settings_requested.connect(self.settings_requested.emit)
+        runtime.transition_finalized.connect(
+            lambda _completion, idx=screen_index: self.transition_completed.emit(idx)
+        )
+        runtime.readiness_changed.connect(
+            lambda readiness, display=unit, generation=startup_generation: self._on_quick_readiness_changed(
+                display,
+                readiness,
+                generation,
+            )
+        )
+        runtime.display_identity_changed.connect(
+            lambda _identity, display=unit: display.reanchor_for_current_bounds()
+        )
+        runtime.topology_loss_detected.connect(
+            lambda _loss: self._schedule_monitor_reconcile("quick_binding_loss")
+        )
+        runtime.retirement_completed.connect(
+            lambda _generation, idx=screen_index: self._on_quick_runtime_retired(idx)
+        )
+        self._quick_readiness_by_screen[screen_index] = runtime.scene_readiness
+
+    def _on_quick_readiness_changed(
+        self,
+        unit: QuickDisplayUnit,
+        readiness: object,
+        startup_generation: int,
+    ) -> None:
+        if not isinstance(readiness, QuickSceneReadiness):
+            raise TypeError("Quick runtime emitted invalid readiness state")
+        if (
+            startup_generation != self._display_startup_generation
+            or unit not in self.displays
+            or readiness.runtime_generation != self._runtime_generation
+            or readiness.screen_index != unit.screen_index
+        ):
+            return
+        self._quick_readiness_by_screen[unit.screen_index] = readiness
+        if readiness.error is not None or readiness.scene_graph_invalidated:
+            logger.error(
+                "[DISPLAY] Quick readiness failed screen=%s state=%s",
+                unit.screen_index,
+                readiness.as_dict(),
+            )
+            return
+        if readiness.qml_root_created and readiness.admission_open:
+            self._mark_display_startup_ready(unit, startup_generation)
+        if (
+            readiness.ready_for_reveal
+            and unit.screen_index in self._authoritative_first_frame_screens
+        ):
+            self._on_startup_reveal_completed(unit.screen_index)
+
+    def _on_quick_runtime_retired(self, screen_index: int) -> None:
+        self._retiring_quick_units.pop(int(screen_index), None)
+        if self._retiring_quick_units:
+            return
+        self._quick_ctrl_coordinator.reset()
+        if self._retire_manager_when_quick_complete:
+            self.deleteLater()
+
+    def _begin_quick_unit_retirement(self, unit: QuickDisplayUnit) -> bool:
+        """Retain one unit until its asynchronous runtime retirement completes."""
+
+        screen_index = int(unit.screen_index)
+        existing = self._retiring_quick_units.get(screen_index)
+        if existing is not None and existing is not unit:
+            raise RuntimeError(
+                f"screen {screen_index} already has a retiring Quick display unit"
+            )
+        self._retiring_quick_units[screen_index] = unit
+        try:
+            started = unit.retire()
+        except Exception:
+            if not unit.is_retired:
+                self._retiring_quick_units.pop(screen_index, None)
+            raise
+        if not started and not unit.is_retired:
+            self._retiring_quick_units.pop(screen_index, None)
+            raise RuntimeError(
+                f"Quick display unit retirement did not start for screen {screen_index}"
+            )
+        return started
     
     def initialize_displays(self) -> int:
         """
-        Create and show display widgets for all monitors.
+        Create and show the one authoritative Quick unit for each selected monitor.
         
         Returns:
             Number of displays created
@@ -423,19 +616,43 @@ class DisplayManager(QObject):
         
         logger.info("Initializing displays for %d screens" % screen_count)
         
-        # Clear existing displays
-        self.cleanup()
+        if (
+            self.displays
+            or self._retiring_quick_units
+            or self._quick_scene_factory is not None
+        ):
+            raise RuntimeError(
+                "Quick display replacement requires a retired manager/destruction barrier"
+            )
         self._display_startup_generation += 1
         startup_generation = self._display_startup_generation
 
-        # Resolve which screens should actually create DisplayWidgets
+        self._quick_scene_factory = QuickSceneFactory(parent=self)
+        self._quick_ctrl_coordinator.reset()
+        self._quick_readiness_by_screen.clear()
+        if self.settings_manager is not None:
+            self._widgets_config_snapshot = self.settings_manager.get_widgets_map()
+            from core.settings.models import ShadowSettings
+            from core.settings.shadow_direction import get_shadow_direction
+
+            self._shadow_values_snapshot = asdict(
+                ShadowSettings.from_settings(self.settings_manager)
+            )
+            self._shadow_values_snapshot["direction"] = get_shadow_direction(
+                self.settings_manager
+            ).value
+        else:
+            self._widgets_config_snapshot = {}
+            self._shadow_values_snapshot = {}
+
+        # Resolve which screens should actually create one Quick display unit.
         allowed_indices = self._get_allowed_screen_indices(screen_count)
         
         # Instantiate the full active display set before the first display runs
         # widget setup. Visualizer CUSTOM owner selection is participation-based,
         # so screen 0 must be able to see later requested displays as pending
         # startup instead of misclassifying them as absent.
-        pending_displays: List[DisplayWidget] = []
+        pending_displays: list[QuickDisplayUnit] = []
         for i in range(screen_count):
             if i in allowed_indices:
                 display = self._create_display_for_screen(i, show_immediately=False)
@@ -503,7 +720,7 @@ class DisplayManager(QObject):
                 )
                 self._show_display_widget(display, startup_generation=startup_generation)
         
-        logger.info("Created %d display widgets" % len(self.displays))
+        logger.info("Created %d Quick display units" % len(self.displays))
         return len(self.displays)
     
     def _create_display_for_screen(
@@ -511,62 +728,38 @@ class DisplayManager(QObject):
         screen_index: int,
         *,
         show_immediately: bool = True,
-    ) -> Optional[DisplayWidget]:
+    ) -> Optional[QuickDisplayUnit]:
         """
-        Create display widget for a specific screen.
+        Create the authoritative Quick display unit for a specific screen.
         
         Args:
             screen_index: Screen index
         """
         try:
-            display = DisplayWidget(
-                screen_index=screen_index,
-                display_mode=self.display_mode,
-                settings_manager=self.settings_manager,
-                resource_manager=self._resource_manager,
+            screens = QGuiApplication.screens()
+            if not 0 <= int(screen_index) < len(screens):
+                raise IndexError(f"screen index out of range: {screen_index}")
+            factory = self._quick_scene_factory
+            if factory is None:
+                raise RuntimeError("Quick scene factory is unavailable")
+            display = create_quick_display_unit(
+                screen=screens[int(screen_index)],
+                screen_index=int(screen_index),
+                runtime_generation=int(self._runtime_generation or 0),
+                scene_factory=factory,
+                window_policy=self._quick_window_policy(),
+                ctrl_coordinator=self._quick_ctrl_coordinator,
+                interaction_mode_provider=self._interaction_mode_enabled,
+            )
+            self._connect_quick_runtime(display, startup_generation=self._display_startup_generation)
+            display.bind_families(
+                widgets_config=self._widgets_config_snapshot,
+                shadow_values=self._shadow_values_snapshot,
                 thread_manager=self._thread_manager,
-                runtime_generation=self._runtime_generation,
             )
-            display._image_resource_owner = f"display:{screen_index}:manager:{id(self)}"
-            display._image_resource_generation = id(self)
-            display._runtime_manager_identity = id(self)
-            manager_ref = weakref.ref(self)
-
-            def _publish_image_accounting(display_obj, snapshot) -> None:
-                manager = manager_ref()
-                if manager is not None:
-                    manager._record_display_image_accounting(display_obj, snapshot)
-
-            display._image_resource_accounting_publisher = _publish_image_accounting
-            refresh_accounting = getattr(display, "refresh_image_resource_accounting", None)
-            if callable(refresh_accounting):
-                refresh_accounting()
-            
-            # Connect signals
-            display.exit_requested.connect(self._on_exit_requested)
-            # FIX: Use default args to capture screen_index by value (not by reference)
-            display.image_displayed.connect(
-                lambda path, idx=screen_index: self._on_image_displayed(idx, path)
-            )
-            display.startup_reveal_completed.connect(
-                lambda idx=screen_index: self._on_startup_reveal_completed(idx)
-            )
-            display.transition_completed.connect(
-                lambda idx=screen_index: self.transition_completed.emit(idx)
-            )
-            
-            # Connect hotkey signals
-            display.previous_requested.connect(self.previous_requested.emit)
-            display.next_requested.connect(self.next_requested.emit)
-            display.cycle_transition_requested.connect(self.cycle_transition_requested.emit)
-            display.settings_requested.connect(self.settings_requested.emit)
-            display.custom_layout_reload_requested.connect(self.custom_layout_reload_requested.emit)
-            
-            # Connect dimming sync signal - when one display changes dimming, update all
-            display.dimming_changed.connect(self.set_dimming_all_displays)
-            
+            self._configure_quick_auxiliary(display)
             self.displays.append(display)
-            logger.info("Display widget created for screen %d" % screen_index)
+            logger.info("Quick display unit created for screen %d" % screen_index)
             if show_immediately:
                 self._show_display_widget(display)
             return display
@@ -574,8 +767,8 @@ class DisplayManager(QObject):
             logger.error("Failed to create display for screen %d: %s" % (screen_index, e), exc_info=True)
             return None
 
-    def _show_display_widget(self, display: DisplayWidget, *, startup_generation: int | None = None) -> bool:
-        """Show a previously-instantiated display widget."""
+    def _show_display_widget(self, display: QuickDisplayUnit, *, startup_generation: int | None = None) -> bool:
+        """Show a fully-bound authoritative Quick display unit."""
         try:
             display.show_on_screen()
             if startup_generation is not None:
@@ -590,24 +783,21 @@ class DisplayManager(QObject):
                 exc_info=True,
             )
             try:
+                self._begin_quick_unit_retirement(display)
+            except Exception:
+                logger.error(
+                    "[DISPLAY_MANAGER] Failed to retire display after show failure",
+                    exc_info=True,
+                )
+            else:
                 if display in self.displays:
                     self.displays.remove(display)
-            except Exception:
-                logger.debug("[DISPLAY_MANAGER] Failed to remove display after show failure", exc_info=True)
-            try:
-                display.close()
-            except Exception:
-                logger.debug("[DISPLAY_MANAGER] Failed to close display after show failure", exc_info=True)
-            try:
-                display.deleteLater()
-            except Exception:
-                logger.debug("[DISPLAY_MANAGER] Failed to delete display after show failure", exc_info=True)
             if startup_generation is not None and startup_generation == self._display_startup_generation:
                 self._display_startup_ready_expected.discard(id(display))
                 self._emit_display_startup_ready_if_complete(startup_generation)
             return False
 
-    def _mark_display_startup_ready(self, display: DisplayWidget, generation: int) -> None:
+    def _mark_display_startup_ready(self, display: QuickDisplayUnit, generation: int) -> None:
         """Record that one display finished generation-scoped startup setup."""
 
         if generation != self._display_startup_generation:
@@ -629,14 +819,13 @@ class DisplayManager(QObject):
         key = id(display)
         self._display_startup_ready_seen.add(key)
         expected = self._display_startup_ready_expected
-        surface_ready = getattr(display, "_render_surface", None) is not None
-        compositor_ready = getattr(display, "_gl_compositor", None) is not None
+        readiness = display.runtime.scene_readiness
         logger.info(
-            "[DISPLAY] Startup display ready screen=%s generation=%s surface_ready=%s compositor_ready=%s ready=%d/%d",
+            "[DISPLAY] Quick startup display ready screen=%s generation=%s qml_root=%s admission=%s ready=%d/%d",
             getattr(display, "screen_index", "?"),
             generation,
-            surface_ready,
-            compositor_ready,
+            readiness.qml_root_created,
+            readiness.admission_open,
             len(self._display_startup_ready_seen.intersection(expected)),
             len(expected),
         )
@@ -666,10 +855,9 @@ class DisplayManager(QObject):
                 display.close()
                 display.deleteLater()
             else:
-                retire = getattr(display, "retire", None)
-                if not callable(retire):
+                if not isinstance(display, QuickDisplayUnit):
                     raise RuntimeError("display unit has no retirement contract")
-                retire()
+                self._begin_quick_unit_retirement(display)
             logger.info("Removed excess display runtime")
     
     def _on_exit_requested(self) -> None:
@@ -695,6 +883,9 @@ class DisplayManager(QObject):
             self.authoritative_first_frames_ready.emit(
                 int(self._runtime_generation or 0)
             )
+        readiness = self._quick_readiness_by_screen.get(int(screen_index))
+        if readiness is not None and readiness.ready_for_reveal:
+            self._on_startup_reveal_completed(int(screen_index))
 
     def _on_startup_reveal_completed(self, screen_index: int) -> None:
         """Publish once after every display's existing FadeCoordinator completes."""
@@ -1339,7 +1530,7 @@ class DisplayManager(QObject):
             logger.debug("[SYNC] Synchronized transition started successfully")
     
     def cleanup(self) -> None:
-        """Synchronously destroy every display runtime and its GL resources."""
+        """Retire every display generation through its authoritative owner."""
         self._display_startup_generation += 1
         self._display_startup_ready_expected = set()
         self._display_startup_ready_seen = set()
@@ -1349,7 +1540,63 @@ class DisplayManager(QObject):
         self._startup_reveal_screens.clear()
         self._startup_reveal_emitted = False
         count = len(self.displays)
-        logger.info("Cleaning up %d display widgets", count)
+        logger.info("Cleaning up %d display runtimes", count)
+
+        quick_units = [
+            display
+            for display in self.displays
+            if isinstance(display, QuickDisplayUnit)
+        ]
+        if quick_units:
+            if len(quick_units) != count:
+                raise RuntimeError(
+                    "mixed legacy/Quick display ownership is not a valid production topology"
+                )
+
+            failed_units: list[QuickDisplayUnit] = []
+            cleanup_errors: list[str] = []
+            for unit in quick_units:
+                screen_index = int(unit.screen_index)
+                try:
+                    if is_perf_metrics_enabled():
+                        logger.info(
+                            "[PERF][DISPLAY_MANAGER] cleanup_display screen=%s state=%s",
+                            screen_index,
+                            unit.runtime.describe_runtime_state(),
+                        )
+                    unit.quiesce()
+                    unit.clear()
+                    self._begin_quick_unit_retirement(unit)
+                except Exception as exc:
+                    failed_units.append(unit)
+                    cleanup_errors.append(
+                        f"screen={screen_index} type={type(exc).__name__} error={exc}"
+                    )
+                    logger.error(
+                        "Quick display retirement failed (screen_index=%s): %s",
+                        screen_index,
+                        exc,
+                        exc_info=True,
+                    )
+
+            self.displays = failed_units
+            self.current_images.clear()
+            self._quick_readiness_by_screen.clear()
+            self._display_image_accounting_by_id.clear()
+            self._publish_display_image_accounting()
+            if cleanup_errors:
+                raise RuntimeError(
+                    "Quick display retirement incomplete: "
+                    + " | ".join(cleanup_errors)
+                )
+            logger.info(
+                "Display manager began asynchronous retirement for %d Quick units",
+                count,
+            )
+            return
+
+        # Temporary physical-host cleanup branch. Delete this with the retired
+        # QWidget presenter once its tests and callers are removed in H.
 
         try:
             from rendering.display_widget import DisplayWidget
@@ -1438,9 +1685,10 @@ class DisplayManager(QObject):
     def retire_runtime(self) -> None:
         """Detach process-level routes and queue this retired manager for deletion.
 
-        ``cleanup()`` remains reusable by ``initialize_displays()``.  This
-        terminal method is intentionally separate and is called only when the
-        engine is replacing or shutting down the entire runtime generation.
+        This terminal method is called only when the engine is replacing or
+        shutting down the entire runtime generation. A Quick manager and its
+        scene factory remain alive until every top-level window/runtime reports
+        retirement; replacement is admitted only by the destruction barrier.
         """
 
         if self._retired:
@@ -1461,6 +1709,13 @@ class DisplayManager(QObject):
         self.settings_manager = None
         self._thread_manager = None
         self._resource_manager = None
+        self._retire_manager_when_quick_complete = True
+        if self._retiring_quick_units:
+            return
+        if self.displays:
+            raise RuntimeError(
+                "DisplayManager.retire_runtime() requires cleanup() to retire displays first"
+            )
         self.deleteLater()
 
     def take_deferred_reddit_urls(self) -> list[str]:

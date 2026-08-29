@@ -39,9 +39,10 @@ No parallel legacy production manager/presenter is permitted.
 
 ## 3. Migration source seam
 
-Before production cutover, source may still route through `engine/display_manager.py` -> legacy `DisplayWidget` / old
-physical host. Treat that as migration scaffolding, not destination architecture. Inspect exact callers before cutover rather
-than preserving a stale private-attribute inventory.
+The production `engine/display_manager.py` collection constructor routes selected `QScreen` identities to
+`QuickDisplayUnit`; it must not regain a legacy constructor branch. Caller-dead `DisplayWidget` / old physical-host cleanup,
+tests and source may remain only as deletion scaffolding until step 6 proves they are unreachable. Inspect exact callers rather
+than preserving a stale private-attribute inventory or turning that scaffold into a compatibility surface.
 
 Reuse destination owners that already exist; do not create parallel replacements:
 

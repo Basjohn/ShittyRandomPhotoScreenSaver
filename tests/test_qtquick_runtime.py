@@ -103,7 +103,10 @@ def test_threaded_runtime_teardown_recreates_generation_zero_to_one():
             "--size",
             "240x135",
             "--phase-delay-ms",
-            "250",
+            # Keep a real midpoint render opportunity on the slowest selected
+            # physical screen; 125 ms allowed a loaded 60 Hz display to jump
+            # from the first transition sample straight to its deadline.
+            "500",
         ],
         cwd=ROOT,
         env=env,
