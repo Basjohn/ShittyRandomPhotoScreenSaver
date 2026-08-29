@@ -2179,8 +2179,11 @@ class BubbleSimulation:
             spread = 0.08 + _attempt * 0.015
             x = x + random.uniform(-spread, spread)
             y = y + random.uniform(-spread, spread)
-            x = max(-0.25, min(1.25, x))
-            y = max(-0.25, min(1.25, y))
+            # Off-world retry allowance in the actual logical domain. The 0.25 is
+            # a baseline-world distance (not an aspect percentage); at the 1x1
+            # baseline these bounds are exactly [-0.25, 1.25], unchanged.
+            x = max(-0.25, min(self._domain_w + 0.25, x))
+            y = max(-0.25, min(self._domain_h + 0.25, y))
         # If still overlapping after 15 attempts, skip spawn entirely
         else:
             return

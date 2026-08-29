@@ -147,6 +147,39 @@ def test_output_radius_normalizes_by_domain_height_preserving_physical_scale() -
     assert tall_pos[2] == pytest.approx(base_pos[2] / 2.0)
 
 
+def test_overlap_retry_clamp_uses_actual_logical_domain() -> None:
+    # The overlap-retry jitter clamp must bound to the actual logical world plus
+    # the same off-world allowance, not the legacy unit box. Starting far past
+    # the ceiling makes the clamp bind exactly, so baseline stays [-0.25,1.25]
+    # while wide/tall extend the corresponding axis only.
+    def _forced_overlap_spawn(domain_w, domain_h):
+        random.seed(3)
+        sim = BubbleSimulation()
+        sim._domain_w = domain_w
+        sim._domain_h = domain_h
+        calls = {"n": 0}
+
+        def _overlaps_once(*_a, **_k):
+            calls["n"] += 1
+            return calls["n"] == 1  # overlap on the first check, then settle
+
+        sim._overlaps_existing = _overlaps_once  # type: ignore[method-assign]
+        sim._spawn_bubble_at(True, 2.0, 2.0, "up", 0.6, "random")
+        return sim._bubbles[-1]
+
+    baseline = _forced_overlap_spawn(1.0, 1.0)
+    assert baseline.x == pytest.approx(1.25)
+    assert baseline.y == pytest.approx(1.25)
+
+    wide = _forced_overlap_spawn(1.5, 1.0)
+    assert wide.x == pytest.approx(1.75)  # domain_w + 0.25
+    assert wide.y == pytest.approx(1.25)  # y untouched
+
+    tall = _forced_overlap_spawn(1.0, 1.5)
+    assert tall.x == pytest.approx(1.25)  # x untouched
+    assert tall.y == pytest.approx(1.75)  # domain_h + 0.25
+
+
 def test_shrink_reconciles_out_of_domain_bubbles_without_rescaling() -> None:
     # Spread bubbles into a wide world, then shrink back to baseline.
     sim = _run((760.0, 280.0), ticks=1)
