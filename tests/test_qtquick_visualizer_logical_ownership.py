@@ -10,26 +10,33 @@ will drive.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from widgets.spotify_visualizer import tick_pipeline
 from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
 
 
-class _Bars:
-    def get_bars(self):
-        return [0.2, 0.4, 0.6, 0.8], [0.0] * 4, []
-
-    def get_perf_diagnostics(self):
-        return {}
-
-
 class _Engine:
-    def __init__(self):
-        self._bars = _Bars()
+    """Production-shaped fake engine: real energy/transient band snapshots so the
+    authored Bubble dispatch and publication path runs unmodified."""
 
-    def get_visualization_data(self):
-        return self._bars.get_bars()
+    def get_bubble_energy_bands(self):
+        return SimpleNamespace(bass=0.0, mid=0.0, high=0.0, overall=0.0)
+
+    def get_transient_energy_bands(self):
+        return SimpleNamespace(
+            bass_transient=0.0,
+            mid_transient=0.0,
+            high_transient=0.0,
+            onset_detected=False,
+            onset_type="",
+            onset_strength=0.0,
+        )
+
+    def get_event_scheduler(self):
+        return None
 
     def get_perf_diagnostics(self):
         return {}

@@ -180,8 +180,14 @@ def ensure_tick_source(widget: Any) -> None:
     try:
         controller = getattr(widget, "runtime_controller", None)
         if controller is not None:
+            # The authored logical runtime advances against the controller-owned
+            # logical tick state, not the QWidget: no legacy presenter is captured
+            # in the step closure. The widget still performs setup pre-cutover, but
+            # its fields delegate to this same controller-owned state.
             runtime = controller.start_logical_runtime(
-                step=lambda _deadline_ts, _w=widget: logical_tick(_w),
+                step=lambda _deadline_ts, _s=controller.logical_tick_state: (
+                    logical_tick(_s)
+                ),
                 interval_s=interval_s,
             )
         else:
