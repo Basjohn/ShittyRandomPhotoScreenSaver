@@ -50,6 +50,56 @@ def _enabled_flag(value: object, default: bool) -> bool:
     return bool(value)
 
 
+def _enabled_from_candidates(
+    widgets_config: Mapping[str, object],
+    candidate_ids: Sequence[str],
+) -> tuple[str, ...]:
+    """Filter explicit candidate instance ids by canonical per-instance enabled.
+
+    The default when an instance has no explicit ``enabled`` is the canonical
+    default for that id, falling back to enabled only for the first candidate
+    (the base instance) so unconfigured secondary instances stay off.
+    """
+
+    from core.settings.defaults import get_default_settings
+
+    defaults = get_default_settings().get("widgets", {})
+    enabled: list[str] = []
+    for index, widget_id in enumerate(candidate_ids):
+        values = widgets_config.get(widget_id, {})
+        if not isinstance(values, Mapping):
+            values = {}
+        default_values = defaults.get(widget_id, {})
+        default_enabled = bool(
+            default_values.get("enabled", index == 0)
+            if isinstance(default_values, Mapping)
+            else index == 0
+        )
+        if _enabled_flag(values.get("enabled", default_enabled), default_enabled):
+            enabled.append(widget_id)
+    return tuple(enabled)
+
+
+def _attach_runtime_service(
+    runtime_manager: Any,
+    widget_id: str,
+    model: Any,
+    widgets_config: Mapping[str, object],
+) -> bool:
+    """Own and inject the neutral runtime service for a model, or fail closed.
+
+    A widget id with no registered service spec needs no service and passes. A
+    widget id that requires a service must receive one: a ``None`` result is a
+    hard build/injection failure and the instance must not present on a
+    QWidget-owned or serviceless fallback.
+    """
+
+    if not runtime_manager.has_runtime_service(widget_id):
+        return True
+    service = runtime_manager.ensure_widget_service(widget_id, model, widgets_config)
+    return service is not None
+
+
 @runtime_checkable
 class BoundFamilyPresentation(Protocol):
     """Minimal structural contract the binder needs to hold and retire an item."""
@@ -226,32 +276,9 @@ class ClockFamilyAdapter:
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
-        from core.settings.defaults import get_default_settings
-        from core.settings.widget_family_catalog import (
-            get_widget_family_descriptor,
+        return _enabled_from_candidates(
+            widgets_config, ("clock", "clock2", "clock3")
         )
-
-        descriptor = get_widget_family_descriptor("clocks")
-        members = (
-            descriptor.member_widget_ids
-            if descriptor is not None
-            else ("clock", "clock2", "clock3")
-        )
-        defaults = get_default_settings().get("widgets", {})
-        enabled: list[str] = []
-        for widget_id in members:
-            values = widgets_config.get(widget_id, {})
-            if not isinstance(values, Mapping):
-                values = {}
-            default_values = defaults.get(widget_id, {})
-            default_enabled = bool(
-                default_values.get("enabled", widget_id == "clock")
-                if isinstance(default_values, Mapping)
-                else widget_id == "clock"
-            )
-            if _enabled_flag(values.get("enabled", default_enabled), default_enabled):
-                enabled.append(widget_id)
-        return tuple(enabled)
 
     def build(
         self,
@@ -288,21 +315,254 @@ class ClockFamilyAdapter:
         )
 
 
+class WeatherFamilyAdapter:
+    """Adapter for the single-instance Weather family."""
+
+    @property
+    def family_id(self) -> str:
+        return "weather"
+
+    def enabled_instance_ids(
+        self, widgets_config: Mapping[str, object]
+    ) -> tuple[str, ...]:
+        return _enabled_from_candidates(widgets_config, ("weather",))
+
+    def build(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        host: OrdinaryWidgetPresentationHost,
+        geometry: OverlayWidgetGeometry,
+        display_bounds: OverlayWidgetGeometry,
+        display_identity: str,
+        shadow_values: Mapping[str, object],
+        runtime_manager: Any,
+    ) -> BoundFamilyPresentation | None:
+        from .weather import (
+            RetainedWeatherPresentation,
+            WeatherPresentationConfig,
+            WeatherPresentationModel,
+            WeatherPresentationStyle,
+        )
+
+        config = WeatherPresentationConfig.from_widgets_mapping(widgets_config)
+        style = WeatherPresentationStyle.project(config, shadow_values)
+        model = WeatherPresentationModel(config, style)
+        if not _attach_runtime_service(
+            runtime_manager, widget_id, model, widgets_config
+        ):
+            return None
+        return RetainedWeatherPresentation(
+            host=host, model=model, geometry=geometry
+        )
+
+
+class RedditFamilyAdapter:
+    """Adapter for the Reddit family (reddit/reddit2)."""
+
+    @property
+    def family_id(self) -> str:
+        return "reddit"
+
+    def enabled_instance_ids(
+        self, widgets_config: Mapping[str, object]
+    ) -> tuple[str, ...]:
+        return _enabled_from_candidates(widgets_config, ("reddit", "reddit2"))
+
+    def build(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        host: OrdinaryWidgetPresentationHost,
+        geometry: OverlayWidgetGeometry,
+        display_bounds: OverlayWidgetGeometry,
+        display_identity: str,
+        shadow_values: Mapping[str, object],
+        runtime_manager: Any,
+    ) -> BoundFamilyPresentation | None:
+        from .reddit import (
+            RedditPresentationConfig,
+            RedditPresentationModel,
+            RedditPresentationStyle,
+            RetainedRedditPresentation,
+        )
+
+        config = RedditPresentationConfig.from_widgets_mapping(
+            widgets_config, widget_id=widget_id
+        )
+        style = RedditPresentationStyle.project(config, shadow_values)
+        model = RedditPresentationModel(config, style)
+        if not _attach_runtime_service(
+            runtime_manager, widget_id, model, widgets_config
+        ):
+            return None
+        return RetainedRedditPresentation(
+            host=host, model=model, geometry=geometry
+        )
+
+
+class GmailFamilyAdapter:
+    """Adapter for the single-instance Gmail family."""
+
+    @property
+    def family_id(self) -> str:
+        return "gmail"
+
+    def enabled_instance_ids(
+        self, widgets_config: Mapping[str, object]
+    ) -> tuple[str, ...]:
+        return _enabled_from_candidates(widgets_config, ("gmail",))
+
+    def build(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        host: OrdinaryWidgetPresentationHost,
+        geometry: OverlayWidgetGeometry,
+        display_bounds: OverlayWidgetGeometry,
+        display_identity: str,
+        shadow_values: Mapping[str, object],
+        runtime_manager: Any,
+    ) -> BoundFamilyPresentation | None:
+        from .gmail import (
+            GmailPresentationConfig,
+            GmailPresentationModel,
+            GmailPresentationStyle,
+            RetainedGmailPresentation,
+        )
+
+        config = GmailPresentationConfig.from_widgets_mapping(widgets_config)
+        style = GmailPresentationStyle.project(config, shadow_values)
+        model = GmailPresentationModel(config, style)
+        if not _attach_runtime_service(
+            runtime_manager, widget_id, model, widgets_config
+        ):
+            return None
+        return RetainedGmailPresentation(
+            host=host, model=model, geometry=geometry
+        )
+
+
+class AchievementPulseFamilyAdapter:
+    """Adapter for the Achievement Pulse card (Steam capability family)."""
+
+    @property
+    def family_id(self) -> str:
+        return "steam"
+
+    def enabled_instance_ids(
+        self, widgets_config: Mapping[str, object]
+    ) -> tuple[str, ...]:
+        return _enabled_from_candidates(widgets_config, ("achievement_pulse",))
+
+    def build(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        host: OrdinaryWidgetPresentationHost,
+        geometry: OverlayWidgetGeometry,
+        display_bounds: OverlayWidgetGeometry,
+        display_identity: str,
+        shadow_values: Mapping[str, object],
+        runtime_manager: Any,
+    ) -> BoundFamilyPresentation | None:
+        from .achievement_pulse import (
+            AchievementPulsePresentationConfig,
+            AchievementPulsePresentationModel,
+            AchievementPulsePresentationStyle,
+            RetainedAchievementPulsePresentation,
+        )
+
+        config = AchievementPulsePresentationConfig.from_widgets_mapping(
+            widgets_config
+        )
+        style = AchievementPulsePresentationStyle.project(config, shadow_values)
+        model = AchievementPulsePresentationModel(config, style)
+        if not _attach_runtime_service(
+            runtime_manager, widget_id, model, widgets_config
+        ):
+            return None
+        return RetainedAchievementPulsePresentation(
+            host=host, model=model, geometry=geometry
+        )
+
+
+class AbandonmentIssuesFamilyAdapter:
+    """Adapter for the Abandonment Issues card (Steam capability family)."""
+
+    @property
+    def family_id(self) -> str:
+        return "steam"
+
+    def enabled_instance_ids(
+        self, widgets_config: Mapping[str, object]
+    ) -> tuple[str, ...]:
+        return _enabled_from_candidates(widgets_config, ("abandonment_issues",))
+
+    def build(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        host: OrdinaryWidgetPresentationHost,
+        geometry: OverlayWidgetGeometry,
+        display_bounds: OverlayWidgetGeometry,
+        display_identity: str,
+        shadow_values: Mapping[str, object],
+        runtime_manager: Any,
+    ) -> BoundFamilyPresentation | None:
+        from .abandonment_issues import (
+            AbandonmentIssuesPresentationConfig,
+            AbandonmentIssuesPresentationModel,
+            AbandonmentIssuesPresentationStyle,
+            RetainedAbandonmentIssuesPresentation,
+        )
+
+        config = AbandonmentIssuesPresentationConfig.from_widgets_mapping(
+            widgets_config
+        )
+        style = AbandonmentIssuesPresentationStyle.project(config, shadow_values)
+        model = AbandonmentIssuesPresentationModel(config, style)
+        if not _attach_runtime_service(
+            runtime_manager, widget_id, model, widgets_config
+        ):
+            return None
+        return RetainedAbandonmentIssuesPresentation(
+            host=host, model=model, geometry=geometry
+        )
+
+
 def default_ordinary_family_adapters() -> tuple[OrdinaryFamilyAdapter, ...]:
     """Return the explicit ordered ordinary-family adapters currently wired.
 
-    Adapters are added family-by-family as each existing ``Retained*Presentation``
-    is connected into production. Order is the deterministic build order; it does
-    not imply Z-order, which the host owns.
+    Order is the deterministic build order; it does not imply Z-order, which the
+    host owns. Media is intentionally not yet wired here (its multi-service +
+    artwork-provider construction lands in a dedicated slice).
     """
 
-    return (ClockFamilyAdapter(),)
+    return (
+        ClockFamilyAdapter(),
+        WeatherFamilyAdapter(),
+        RedditFamilyAdapter(),
+        GmailFamilyAdapter(),
+        AchievementPulseFamilyAdapter(),
+        AbandonmentIssuesFamilyAdapter(),
+    )
 
 
 __all__ = [
+    "AbandonmentIssuesFamilyAdapter",
+    "AchievementPulseFamilyAdapter",
     "BoundFamilyPresentation",
     "ClockFamilyAdapter",
+    "GmailFamilyAdapter",
     "OrdinaryFamilyAdapter",
     "OrdinaryFamilyPresentationBinder",
+    "RedditFamilyAdapter",
+    "WeatherFamilyAdapter",
     "default_ordinary_family_adapters",
 ]

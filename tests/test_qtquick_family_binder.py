@@ -16,8 +16,14 @@ from rendering.quick.runtime import QuickDisplayRuntime
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.widgets.family_binder import (
+    AbandonmentIssuesFamilyAdapter,
+    AchievementPulseFamilyAdapter,
     ClockFamilyAdapter,
+    GmailFamilyAdapter,
     OrdinaryFamilyPresentationBinder,
+    RedditFamilyAdapter,
+    WeatherFamilyAdapter,
+    default_ordinary_family_adapters,
 )
 from rendering.quick.widgets.host import OverlayWidgetGeometry
 
@@ -72,7 +78,7 @@ def test_binder_builds_only_enabled_instances_into_the_host(qt_app) -> None:
     runtime, factory = _make_runtime(qt_app, 80)
     try:
         host = runtime.scene_controller.ordinary_widget_host
-        binder = _binder(runtime)
+        binder = _binder(runtime, adapters=(ClockFamilyAdapter(),))
 
         built = binder.bind(_widgets_config(clock2={"enabled": True}))
 
@@ -93,7 +99,7 @@ def test_binder_retire_all_drops_every_item_exactly_once(qt_app) -> None:
     runtime, factory = _make_runtime(qt_app, 81)
     try:
         host = runtime.scene_controller.ordinary_widget_host
-        binder = _binder(runtime)
+        binder = _binder(runtime, adapters=(ClockFamilyAdapter(),))
         binder.bind(_widgets_config())
         assert host.live_count == 1
 
@@ -116,7 +122,7 @@ def test_binder_skips_family_when_capability_not_effective(qt_app) -> None:
     runtime, factory = _make_runtime(qt_app, 82)
     try:
         host = runtime.scene_controller.ordinary_widget_host
-        binder = _binder(runtime)
+        binder = _binder(runtime, adapters=(ClockFamilyAdapter(),))
 
         # Clock capability deactivated -> not effective -> nothing built even
         # though the instance is enabled.
@@ -136,7 +142,7 @@ def test_binder_skips_family_when_capability_not_effective(qt_app) -> None:
 def test_binder_binds_once_per_generation(qt_app) -> None:
     runtime, factory = _make_runtime(qt_app, 83)
     try:
-        binder = _binder(runtime)
+        binder = _binder(runtime, adapters=(ClockFamilyAdapter(),))
         binder.bind(_widgets_config())
         with pytest.raises(RuntimeError):
             binder.bind(_widgets_config())
@@ -155,3 +161,102 @@ def test_clock_adapter_enumerates_enabled_instances_without_qt() -> None:
     ) == ("clock", "clock2", "clock3")
     # A disabled base clock is honoured too.
     assert adapter.enabled_instance_ids({"clock": {"enabled": False}}) == ()
+
+
+def test_default_adapter_set_covers_every_wired_family_without_qt() -> None:
+    families = [adapter.family_id for adapter in default_ordinary_family_adapters()]
+    # Two Steam-family instances share the one capability family id.
+    assert families == [
+        "clocks",
+        "weather",
+        "reddit",
+        "gmail",
+        "steam",
+        "steam",
+    ]
+
+
+def test_reddit_adapter_enumerates_both_members_without_qt() -> None:
+    adapter = RedditFamilyAdapter()
+    assert adapter.family_id == "reddit"
+    assert adapter.enabled_instance_ids(
+        {"reddit": {"enabled": True}, "reddit2": {"enabled": True}}
+    ) == ("reddit", "reddit2")
+    assert adapter.enabled_instance_ids(
+        {"reddit": {"enabled": True}, "reddit2": {"enabled": False}}
+    ) == ("reddit",)
+
+
+def test_steam_adapters_are_off_by_default_and_gate_on_enable_without_qt() -> None:
+    achievement = AchievementPulseFamilyAdapter()
+    abandonment = AbandonmentIssuesFamilyAdapter()
+    assert achievement.family_id == "steam"
+    assert abandonment.family_id == "steam"
+    # Canonical default is disabled for both Steam cards.
+    assert achievement.enabled_instance_ids({}) == ()
+    assert abandonment.enabled_instance_ids({}) == ()
+    assert achievement.enabled_instance_ids(
+        {"achievement_pulse": {"enabled": True}}
+    ) == ("achievement_pulse",)
+    assert abandonment.enabled_instance_ids(
+        {"abandonment_issues": {"enabled": True}}
+    ) == ("abandonment_issues",)
+
+
+@pytest.mark.qt
+def test_provider_families_build_with_owned_runtime_services(qt_app) -> None:
+    runtime, factory = _make_runtime(qt_app, 84)
+    try:
+        host = runtime.scene_controller.ordinary_widget_host
+        manager = runtime.widget_runtime_manager
+        binder = _binder(
+            runtime,
+            adapters=(WeatherFamilyAdapter(), GmailFamilyAdapter()),
+        )
+
+        built = binder.bind(
+            {"weather": {"enabled": True}, "gmail": {"enabled": True}}
+        )
+
+        assert built == ("weather", "gmail")
+        assert host.live_count == 2
+        # The single display-owned neutral manager owns each instance's service.
+        assert manager.get_widget_service("weather") is not None
+        assert manager.get_widget_service("gmail") is not None
+    finally:
+        # Closing the runtime retires the neutral services exactly once.
+        runtime.close_runtime()
+        assert manager.is_retired is True
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_steam_family_gated_off_builds_nothing_but_enabling_admits_card(
+    qt_app,
+) -> None:
+    runtime, factory = _make_runtime(qt_app, 85)
+    try:
+        host = runtime.scene_controller.ordinary_widget_host
+        binder = _binder(runtime, adapters=(AchievementPulseFamilyAdapter(),))
+
+        # Default: Steam card disabled -> nothing built.
+        built = binder.bind({})
+        assert built == ()
+        assert host.live_count == 0
+    finally:
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+    runtime, factory = _make_runtime(qt_app, 86)
+    try:
+        host = runtime.scene_controller.ordinary_widget_host
+        binder = _binder(runtime, adapters=(AchievementPulseFamilyAdapter(),))
+        built = binder.bind({"achievement_pulse": {"enabled": True}})
+        assert built == ("achievement_pulse",)
+        assert host.live_count == 1
+    finally:
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
