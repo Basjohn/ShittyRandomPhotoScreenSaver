@@ -21,6 +21,15 @@ Item {
     readonly property real numeralRadius: faceRadius + Math.max(12.0, faceSide * 0.055)
     readonly property real numeralSize: Math.max(8.0, Math.min(clockModel.fontSize * 0.20, faceSide / 18.0))
 
+    // Deterministic preferred content size (H option A): the analogue face fills
+    // whatever square it is given, so its preferred size is a config-derived
+    // square (scaled by the authored font size) plus the footer band, never a
+    // function of the assigned width (no feedback). J validates/refines the exact
+    // authored dimension against eyes-on parity.
+    readonly property real preferredFaceSide: Math.max(120.0, clockModel.fontSize * 3.6)
+    readonly property real preferredContentWidth: preferredFaceSide
+    readonly property real preferredContentHeight: preferredFaceSide + footerHeight + 8.0
+
     Item {
         id: staticFace
         objectName: "clockAnalogueStaticFace"
