@@ -26,8 +26,22 @@ class DisplayProcessingDescriptor:
 
     screen_index: int
     target_size: QSize
+    logical_size: QSize
     display_mode: DisplayMode
     device_pixel_ratio: float
+
+    def __post_init__(self) -> None:
+        if self.target_size.width() <= 0 or self.target_size.height() <= 0:
+            raise ValueError("display processing target pixel size must be positive")
+        if self.logical_size.width() <= 0 or self.logical_size.height() <= 0:
+            raise ValueError("display processing target logical size must be positive")
+        if self.device_pixel_ratio <= 0.0:
+            raise ValueError("display processing target DPR must be positive")
+
+    def get_target_size(self) -> QSize:
+        """Compatibility with the presentation-neutral processing input protocol."""
+
+        return QSize(self.target_size)
 
     def reuse_key(self) -> tuple[object, ...]:
         """Return the exact transform-reuse key for same-transform batching.

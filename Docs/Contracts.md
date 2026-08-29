@@ -59,6 +59,10 @@ QuickDisplayRuntime
 component/cache infrastructure, not runtime-generation owner. Do not run old and Quick production runtime managers in
 parallel.
 
+Engine image processing consumes ordered immutable `DisplayProcessingDescriptor` values from `DisplayManager` and publishes
+GUI-materialized results back through a screen-identity-keyed manager/display-unit operation. It does not retain or inspect
+concrete QWidget/Quick presenter objects, compositor internals or private DPR fields.
+
 ## Retirement timing
 
 | Legacy/migration owner | Retirement |

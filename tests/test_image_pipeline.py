@@ -21,6 +21,7 @@ from engine.image_pipeline import (
     schedule_prefetch,
 )
 from rendering.display_modes import DisplayMode
+from rendering.quick.display_processing import DisplayProcessingDescriptor
 
 
 class _FakeScheduler:
@@ -35,6 +36,26 @@ def _solid_qimage(width: int, height: int, color: QColor) -> QImage:
     image = QImage(width, height, QImage.Format.Format_ARGB32)
     image.fill(color)
     return image
+
+
+def _processing_targets(*displays) -> tuple[DisplayProcessingDescriptor, ...]:
+    targets = []
+    for index, display in enumerate(displays):
+        size = display.get_target_size()
+        dpr = float(getattr(display, "device_pixel_ratio", 1.0))
+        targets.append(
+            DisplayProcessingDescriptor(
+                screen_index=index,
+                target_size=QSize(size),
+                logical_size=QSize(
+                    max(1, int(round(size.width() / dpr))),
+                    max(1, int(round(size.height() / dpr))),
+                ),
+                display_mode=display.display_mode,
+                device_pixel_ratio=dpr,
+            )
+        )
+    return tuple(targets)
 
 
 def test_rejected_display_candidate_uses_bounded_queue_replacement(monkeypatch):
@@ -489,7 +510,9 @@ def test_previous_async_reports_rejection_when_submit_and_fallback_fail(
         display_mode=DisplayMode.FILL,
         _device_pixel_ratio=1.0,
     )
-    display_manager = SimpleNamespace(displays=[display])
+    display_manager = SimpleNamespace(
+        snapshot_processing_descriptors=lambda: _processing_targets(display)
+    )
 
     class _RejectingThreads:
         def submit_compute_task(self, *_args, **_kwargs):
@@ -520,7 +543,7 @@ def test_normal_async_retry_retains_existing_image_change_owner():
     )
     pending_calls = []
     display_manager = SimpleNamespace(
-        displays=[display],
+        snapshot_processing_descriptors=lambda: _processing_targets(display),
         set_transition_work_pending=lambda value: pending_calls.append(value),
     )
 
@@ -707,7 +730,7 @@ def test_schedule_prefetch_uses_preview_upcoming_and_registers_scaled_requests()
         display_manager=SimpleNamespace(
             has_running_transition=lambda: False,
             has_transition_work_pending=lambda: False,
-            displays=[display],
+            snapshot_processing_descriptors=lambda: _processing_targets(display),
         ),
         _image_cache=_FakeCache(),
         settings_manager=settings_manager,
@@ -784,7 +807,7 @@ def test_schedule_prefetch_does_not_decode_raw_for_display_ready_preview():
         display_manager=SimpleNamespace(
             has_running_transition=lambda: False,
             has_transition_work_pending=lambda: False,
-            displays=[display],
+            snapshot_processing_descriptors=lambda: _processing_targets(display),
         ),
         _image_cache=_FakeCache(),
         settings_manager=settings_manager,
@@ -849,7 +872,7 @@ def test_schedule_prefetch_with_all_display_ready_variants_creates_no_work():
         display_manager=SimpleNamespace(
             has_running_transition=lambda: False,
             has_transition_work_pending=lambda: False,
-            displays=[display],
+            snapshot_processing_descriptors=lambda: _processing_targets(display),
         ),
         _image_cache=_FakeCache(),
         settings_manager=SimpleNamespace(
@@ -917,7 +940,9 @@ def test_schedule_prefetch_different_images_aligns_requests_to_display_order():
         display_manager=SimpleNamespace(
             has_running_transition=lambda: False,
             has_transition_work_pending=lambda: False,
-            displays=[display_a, display_b],
+            snapshot_processing_descriptors=lambda: _processing_targets(
+                display_a, display_b
+            ),
         ),
         _image_cache=_FakeCache(),
         settings_manager=settings_manager,
@@ -980,7 +1005,9 @@ def test_schedule_prefetch_same_image_prioritizes_first_preview_for_all_display_
         display_manager=SimpleNamespace(
             has_running_transition=lambda: False,
             has_transition_work_pending=lambda: False,
-            displays=[display_a, display_b],
+            snapshot_processing_descriptors=lambda: _processing_targets(
+                display_a, display_b
+            ),
         ),
         _image_cache=_FakeCache(),
         settings_manager=settings_manager,
