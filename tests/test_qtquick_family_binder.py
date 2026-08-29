@@ -20,6 +20,7 @@ from rendering.quick.widgets.family_binder import (
     AchievementPulseFamilyAdapter,
     ClockFamilyAdapter,
     GmailFamilyAdapter,
+    MediaFamilyAdapter,
     OrdinaryFamilyPresentationBinder,
     RedditFamilyAdapter,
     WeatherFamilyAdapter,
@@ -169,6 +170,7 @@ def test_default_adapter_set_covers_every_wired_family_without_qt() -> None:
     assert families == [
         "clocks",
         "weather",
+        "media",
         "reddit",
         "gmail",
         "steam",
@@ -225,6 +227,33 @@ def test_provider_families_build_with_owned_runtime_services(qt_app) -> None:
         assert manager.get_widget_service("gmail") is not None
     finally:
         # Closing the runtime retires the neutral services exactly once.
+        runtime.close_runtime()
+        assert manager.is_retired is True
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_media_card_builds_with_all_three_owned_leases(qt_app) -> None:
+    runtime, factory = _make_runtime(qt_app, 87)
+    try:
+        host = runtime.scene_controller.ordinary_widget_host
+        manager = runtime.widget_runtime_manager
+        binder = _binder(
+            runtime,
+            adapters=(MediaFamilyAdapter(),),
+            runtime_generation=87,
+        )
+
+        built = binder.bind({"media": {"enabled": True, "provider": "spotify"}})
+
+        assert built == ("media",)
+        assert host.live_count == 1
+        # The single card owns three neutral leases through the one manager.
+        assert manager.get_widget_service("media") is not None
+        assert manager.get_widget_service("spotify_volume") is not None
+        assert manager.get_widget_service("mute_button") is not None
+    finally:
         runtime.close_runtime()
         assert manager.is_retired is True
         factory.deleteLater()

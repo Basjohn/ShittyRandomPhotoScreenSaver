@@ -134,6 +134,7 @@ class OrdinaryFamilyAdapter(Protocol):
         display_identity: str,
         shadow_values: Mapping[str, object],
         runtime_manager: Any,
+        runtime_generation: int | None,
     ) -> BoundFamilyPresentation | None: ...
 
 
@@ -150,6 +151,7 @@ class OrdinaryFamilyPresentationBinder:
         display_identity: str,
         shadow_values: Mapping[str, object] | None = None,
         thread_manager: Any | None = None,
+        runtime_generation: int | None = None,
         adapters: Sequence[OrdinaryFamilyAdapter] | None = None,
     ) -> None:
         self._host = host
@@ -159,6 +161,7 @@ class OrdinaryFamilyPresentationBinder:
         self._display_identity = str(display_identity)
         self._shadow_values: dict[str, object] = dict(shadow_values or {})
         self._thread_manager = thread_manager
+        self._runtime_generation = runtime_generation
         self._adapters: tuple[OrdinaryFamilyAdapter, ...] = (
             tuple(adapters)
             if adapters is not None
@@ -221,6 +224,7 @@ class OrdinaryFamilyPresentationBinder:
                         display_identity=self._display_identity,
                         shadow_values=self._shadow_values,
                         runtime_manager=self._runtime_manager,
+                        runtime_generation=self._runtime_generation,
                     )
                 except Exception:
                     logger.debug(
@@ -291,6 +295,7 @@ class ClockFamilyAdapter:
         display_identity: str,
         shadow_values: Mapping[str, object],
         runtime_manager: Any,
+        runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
         from .clock import (
             ClockPresentationConfig,
@@ -338,6 +343,7 @@ class WeatherFamilyAdapter:
         display_identity: str,
         shadow_values: Mapping[str, object],
         runtime_manager: Any,
+        runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
         from .weather import (
             RetainedWeatherPresentation,
@@ -381,6 +387,7 @@ class RedditFamilyAdapter:
         display_identity: str,
         shadow_values: Mapping[str, object],
         runtime_manager: Any,
+        runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
         from .reddit import (
             RedditPresentationConfig,
@@ -426,6 +433,7 @@ class GmailFamilyAdapter:
         display_identity: str,
         shadow_values: Mapping[str, object],
         runtime_manager: Any,
+        runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
         from .gmail import (
             GmailPresentationConfig,
@@ -469,6 +477,7 @@ class AchievementPulseFamilyAdapter:
         display_identity: str,
         shadow_values: Mapping[str, object],
         runtime_manager: Any,
+        runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
         from .achievement_pulse import (
             AchievementPulsePresentationConfig,
@@ -514,6 +523,7 @@ class AbandonmentIssuesFamilyAdapter:
         display_identity: str,
         shadow_values: Mapping[str, object],
         runtime_manager: Any,
+        runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
         from .abandonment_issues import (
             AbandonmentIssuesPresentationConfig,
@@ -536,17 +546,82 @@ class AbandonmentIssuesFamilyAdapter:
         )
 
 
+class MediaFamilyAdapter:
+    """Adapter for the single-card Media family (media + volume + mute leases).
+
+    The Media family presents one card (``media``) that consumes three neutral
+    runtime services owned by the single manager: the transport/artwork lease
+    (``media``), the volume lease (``spotify_volume``) and the system-mute lease
+    (``mute_button``). The card fails closed if any required lease cannot build.
+    """
+
+    @property
+    def family_id(self) -> str:
+        return "media"
+
+    def enabled_instance_ids(
+        self, widgets_config: Mapping[str, object]
+    ) -> tuple[str, ...]:
+        return _enabled_from_candidates(widgets_config, ("media",))
+
+    def build(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        host: OrdinaryWidgetPresentationHost,
+        geometry: OverlayWidgetGeometry,
+        display_bounds: OverlayWidgetGeometry,
+        display_identity: str,
+        shadow_values: Mapping[str, object],
+        runtime_manager: Any,
+        runtime_generation: int | None = None,
+    ) -> BoundFamilyPresentation | None:
+        from rendering.quick.media_artwork import MediaArtworkImageProvider
+
+        from .media import (
+            MediaPresentationConfig,
+            MediaPresentationModel,
+            MediaPresentationStyle,
+            RetainedMediaPresentation,
+        )
+
+        config = MediaPresentationConfig.from_widgets_mapping(widgets_config)
+        style = MediaPresentationStyle.project(config, shadow_values)
+        model = MediaPresentationModel(
+            config,
+            style,
+            MediaArtworkImageProvider(),
+            runtime_generation=runtime_generation,
+        )
+        # The one media card consumes three neutral leases, each injected into
+        # the same model by its own service spec. All are required: a missing
+        # lease fails the card closed rather than presenting a half-wired card.
+        for lease_widget_id in ("media", "spotify_volume", "mute_button"):
+            if not _attach_runtime_service(
+                runtime_manager, lease_widget_id, model, widgets_config
+            ):
+                # Retire any leases already owned for this card before failing
+                # closed, so a partial build never leaves an orphaned lease.
+                for owned in ("media", "spotify_volume", "mute_button"):
+                    runtime_manager.retire_widget_service(owned)
+                return None
+        return RetainedMediaPresentation(
+            host=host, model=model, geometry=geometry
+        )
+
+
 def default_ordinary_family_adapters() -> tuple[OrdinaryFamilyAdapter, ...]:
     """Return the explicit ordered ordinary-family adapters currently wired.
 
     Order is the deterministic build order; it does not imply Z-order, which the
-    host owns. Media is intentionally not yet wired here (its multi-service +
-    artwork-provider construction lands in a dedicated slice).
+    host owns.
     """
 
     return (
         ClockFamilyAdapter(),
         WeatherFamilyAdapter(),
+        MediaFamilyAdapter(),
         RedditFamilyAdapter(),
         GmailFamilyAdapter(),
         AchievementPulseFamilyAdapter(),
@@ -560,6 +635,7 @@ __all__ = [
     "BoundFamilyPresentation",
     "ClockFamilyAdapter",
     "GmailFamilyAdapter",
+    "MediaFamilyAdapter",
     "OrdinaryFamilyAdapter",
     "OrdinaryFamilyPresentationBinder",
     "RedditFamilyAdapter",
