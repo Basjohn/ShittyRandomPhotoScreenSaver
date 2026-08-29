@@ -234,6 +234,52 @@ def test_provider_families_build_with_owned_runtime_services(qt_app) -> None:
 
 
 @pytest.mark.qt
+def test_every_admitted_family_reports_a_real_preferred_size(qt_app) -> None:
+    # Pre-flip guarantee: every production family the binder admits must expose a
+    # real, non-placeholder content-driven preferred size (H option A). No family
+    # may enter the DisplayManager flip with a zero/placeholder natural size.
+    runtime, factory = _make_runtime(qt_app, 88)
+    try:
+        host = runtime.scene_controller.ordinary_widget_host
+        binder = _binder(runtime, runtime_generation=88)
+        config = {
+            "clock": {"enabled": True},
+            "weather": {"enabled": True},
+            "media": {"enabled": True, "provider": "spotify"},
+            "reddit": {"enabled": True},
+            "reddit2": {"enabled": True},
+            "gmail": {"enabled": True},
+            "achievement_pulse": {"enabled": True},
+            "abandonment_issues": {"enabled": True},
+        }
+        built = binder.bind(config)
+        # Every family got admitted and built.
+        assert set(built) == {
+            "clock",
+            "weather",
+            "media",
+            "reddit",
+            "reddit2",
+            "gmail",
+            "achievement_pulse",
+            "abandonment_issues",
+        }
+        for widget_id in built:
+            presentation = host.presentation_for_model_identity(widget_id)
+            assert presentation is not None, widget_id
+            item = presentation.item
+            width = float(item.property("preferredContentWidth"))
+            height = float(item.property("preferredContentHeight"))
+            # A real size, not a placeholder or the unset 0 sentinel.
+            assert width > 10.0, (widget_id, width)
+            assert height > 10.0, (widget_id, height)
+    finally:
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
 def test_media_card_builds_with_all_three_owned_leases(qt_app) -> None:
     runtime, factory = _make_runtime(qt_app, 87)
     try:

@@ -138,6 +138,7 @@ class GmailPresentationConfig:
     sender_subject_ratio: int = 35
     date_display_mode: str = "numeric"
     header_logo_px_adjust: int = 2
+    width: int = 600
 
     @classmethod
     def from_mapping(cls, values: Mapping[str, object]) -> "GmailPresentationConfig":
@@ -177,6 +178,7 @@ class GmailPresentationConfig:
             sender_subject_ratio=_bounded_int(values.get("sender_subject_ratio"), 35, 10, 90),
             date_display_mode=str(values.get("date_display_mode", "numeric") or "numeric"),
             header_logo_px_adjust=_bounded_int(values.get("header_logo_px_adjust"), 2, -128, 128),
+            width=_bounded_int(values.get("width"), 600, 120, 4000),
         )
 
     @classmethod
@@ -729,6 +731,10 @@ class GmailPresentationModel(QObject):
     @Property(float, notify=stateChanged)
     def headerBorderWidth(self) -> float:
         return max(1.0, self.style.card_style.border_width - 3.0)
+
+    @Property(float, notify=stateChanged)
+    def contentWidth(self) -> float:
+        return float(self.config.width)
 
     @Property(float, notify=stateChanged)
     def contentHeight(self) -> float:

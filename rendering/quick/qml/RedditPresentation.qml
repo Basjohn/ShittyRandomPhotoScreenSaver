@@ -8,6 +8,18 @@ OverlayWidget {
     signal openPostRequested(string url)
     signal refreshRequested()
 
+    // Content-driven outer size (H option A): height from the stacked content's
+    // natural bounds; width from the intrinsic header width and a font-derived
+    // post column width (posts fill their column, so there is no cleaner
+    // intrinsic post width). Intrinsic/config sources only - no dependency on the
+    // assigned width, so no width<->preferredWidth feedback. J refines parity.
+    preferredContentWidth: Math.max(
+        headerRow.implicitWidth + 20.0, redditRoot.redditModel.fontSize * 26.0
+    ) + redditRoot.shellInset
+    preferredContentHeight: Math.max(
+        60.0, contentColumn.childrenRect.height
+    ) + redditRoot.shellInset
+
     Column {
         id: contentColumn
         objectName: "redditContent"

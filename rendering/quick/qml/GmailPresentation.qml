@@ -15,6 +15,14 @@ OverlayWidget {
     property real actionPopupY: 0.0
     readonly property real committedContentHeight: gmailModel.contentHeight
 
+    // Content-driven outer size (H option A): Gmail is a fixed-width list card;
+    // its preferred width is the authored width setting (via the model) and its
+    // height is the model-computed content height. Both are size-only model
+    // reports independent of the assigned width - no width<->preferredWidth
+    // feedback. J refines exact insets against eyes-on parity.
+    preferredContentWidth: gmailModel.contentWidth
+    preferredContentHeight: gmailModel.contentHeight
+
     signal openInboxRequested()
     signal openMessageRequested(string messageId)
     signal refreshRequested()
