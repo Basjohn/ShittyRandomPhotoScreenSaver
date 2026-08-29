@@ -7,9 +7,10 @@ Last updated: 2026-08-29
 The documentation is reconciled through independently audited pushed source:
 
 ```text
-b2a8cd8527c18bc4a8137717d8eb5f891140bd0d
+c8eef7d4 (pre-cutover visualizer destination-edge correction gate GREEN)
 Complete G: independently audited and ACCEPTED.
-H: ACTIVE, but the atomic DisplayManager production cutover is PRE-CUTOVER BLOCKED.
+H: ACTIVE. The pre-cutover visualizer destination-edge correction gate is GREEN;
+the atomic DisplayManager production cutover is now ADMITTED (next H work).
 
 Accepted H foundation through this checkpoint:
 - one WidgetRuntimeManager per QuickDisplayRuntime generation;
@@ -24,33 +25,31 @@ Accepted H foundation through this checkpoint:
 - immutable visualizer render contracts / bridge and Quick render consumers exist;
 - QuickDisplayVisualizerOwner exists as a thin display/generation edge and can construct/bind/start a widget-free controller.
 
-Pre-cutover audit disposition at this source:
+Pre-cutover audit disposition — ALL GREEN (`Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md`):
 - ACCEPT the widget-free logical/source ownership extraction; do not reopen or roll it back.
-- RED: binding VisualizerSnapshotBridge is not sufficient; no production destination owner yet consumes the logical mailbox,
-  resolves complete presentation state, composes VisualizerRenderSnapshot and publishes it into the bridge for Quick.
-- RED: the current settings split is too narrow. Settings consumed by Spectrum/Oscilloscope/Sine/DevCurve logical frame
-  runtimes still depend on widget-era presentation attributes; classify settings by their actual owning consumer, not by
-  "looks visual" vs "looks logical" naming.
-- RED: Quick visualizer retirement must treat a failed VisualizerLogicalRuntime join as a hard generation-retirement barrier;
-  an owner may not report successful retirement while the non-daemon authored runtime is still owned.
-- RED: current product semantics admit one visualizer owner routed to one participating display. Destination admission,
-  requested-monitor/fallback/transfer geometry and ownership must be resolved before constructing the Quick visualizer edge;
-  do not instantiate a duplicate VisualizerRuntimeController merely because another display exists.
-- RED: visualizer double-click mode-cycle must have a retained semantic Quick hit/action route before the window-level
-  unhandled-double-click fallback (next image).
-- RED: current fresh-owner tests prove useful component seams but do not prove the complete canonical-settings -> all-five
-  logical/runtime configuration -> logical publication -> Quick render snapshot -> retained item path.
+- GREEN (A): `QuickVisualizerPresentationSync` is the one GUI/Quick synchronization owner - drains the latest logical
+  publication, rejects stale generation/engine/activation/mode identity, resolves the complete presentation, composes and
+  publishes `VisualizerRenderSnapshot` into the existing bridge. `QuickDisplayVisualizerOwner.sync_present()` drives it.
+- GREEN (B): all-five authored-logical config (Spectrum/Oscilloscope/Sine/DevCurve inputs consumed by each mode's
+  `*FrameRuntime.resolve` / DevCurve field solve) is owned by `VisualizerLogicalTickState` via the single neutral authority
+  `apply_logical_vis_mode_kwargs`. Classification is by actual consumer, not naming.
+- GREEN (F): the pure renderer/presentation-only subset is owned by a symmetric neutral `VisualizerPresentationState`, fed by
+  the single authority `apply_presentation_vis_mode_kwargs`, consumed by the widget-free capture; the owner-shaped all-five
+  destination-chain proof reaches the retained Quick consumer from canonical settings without `SpotifyVisualizerWidget`.
+- GREEN (C): `QuickDisplayVisualizerOwner.retire()` is a hard join barrier - a failed stop/join keeps ownership and fails
+  retirement (retryable); a stop exception propagates; only a successful join retires.
+- GREEN (D): `rendering/quick/visualizer_admission.py` resolves exactly one admitted visualizer display owner from
+  participating Quick units (requested-if-participating, else cautious hold, else stable fallback); non-owning units build none.
+- GREEN (E): the retained visualizer joins the semantic double-click hit/action admission before the global next-image
+  fallback (`rendering/quick/visualizer/double_click_admission.py`; scene controller binds the composed hit test).
 
 Next H boundary:
-- close the bounded visualizer destination-edge correction batch documented in
-  `Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md`;
-- prove the complete widget-free all-five owner path, hard retirement barrier and single-owner display admission GREEN;
-- only then perform the coordinated atomic DisplayManager + engine cutover and caller-proven legacy physical-host deletion.
+- perform the coordinated atomic DisplayManager + engine cutover and caller-proven legacy physical-host deletion (below).
 ```
 
-Exact later source always outranks this document. **All of G remains complete, independently audited and accepted. H remains
-active, but the production flip is explicitly blocked by the bounded pre-cutover visualizer destination-edge corrections
-above.** Deferred to J installed acceptance: the all-five-mode visualizer eyes-on gate and the physical two-display A->B->A
+Exact later source always outranks this document. **All of G remains complete, independently audited and accepted. The
+bounded pre-cutover visualizer destination-edge correction gate is GREEN, so the atomic DisplayManager production flip is now
+admitted.** Deferred to J installed acceptance: the all-five-mode visualizer eyes-on gate and the physical two-display A->B->A
 hardware-ingress matrix.
 
 Current phase state:
@@ -66,7 +65,7 @@ G6      retained input / semantic family actions         CLOSED
 G7      retained context + auxiliary pixels              CLOSED (destination sole aux; legacy = H-scaffolding)
 G8      MC / focus closure                               DETERMINISTIC CLOSED; physical A->B->A matrix = J debt
 G-GATE  independent audit of complete checkpointed G     ACCEPTED
-H       production Quick owner/orchestration cutover     ACTIVE; PRE-CUTOVER CORRECTION GATE RED
+H       production Quick owner/orchestration cutover     ACTIVE; pre-cutover gate GREEN, atomic cutover ADMITTED
 I       residue only                                     after H
 J       final installed / physical validation            final
 ```
@@ -305,13 +304,11 @@ rules now supersede the earlier broad "visualizer runtime ownership correction c
 - visualizer mode-cycle remains a semantic Python action reached through retained Quick hit admission; unhandled display
   double-click remains the global next-image fallback only after family/visualizer semantic regions decline the event.
 
-### H PRE-CUTOVER correction gate — RED; atomic DisplayManager flip BLOCKED
+### H PRE-CUTOVER correction gate — GREEN; atomic DisplayManager flip ADMITTED
 
-The thin `QuickDisplayVisualizerOwner` landed at `b2a8cd8527c18bc4a8137717d8eb5f891140bd0d`, but the independent pre-cutover
-audit found the final destination edge incomplete. The bounded correction route is
-`Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md`.
-
-Required order:
+The bounded correction route `Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md` is closed: steps 1–7
+below are landed, test-gated and pushed (Findings A–F GREEN; see the checkpoint disposition above). Steps 8–9 (the atomic
+cutover and caller-proven deletion) are the remaining, now-admitted H work. The required order was:
 
 1. **Correct all-five configuration ownership.** Inventory actual logical/frame-runtime consumers. Move only those consumed
    values behind presentation-neutral resolved configuration/state; keep renderer-only colour/glow/card/chrome values on the
