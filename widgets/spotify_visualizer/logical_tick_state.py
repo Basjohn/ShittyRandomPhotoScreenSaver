@@ -290,6 +290,59 @@ def install_default_logical_tick_state(state: Any, *, bar_count: int) -> None:
     state._bubble_trail_strength = 0.0
     state._sine_heartbeat = 0.0
 
+    # Authored per-mode logical config defaults (canonical settings override
+    # these through apply_logical_vis_mode_kwargs). Mirrors the widget's
+    # post-construction defaults exactly - an ownership move, not a retune.
+    # DevCurve per-layer colour/shape inputs are omitted here: the DevCurve
+    # parameter snapshot supplies their canonical defaults on read.
+    state._spectrum_single_piece = False
+    state._spectrum_visual_smoothing_enabled = True
+    state._spectrum_visual_smoothing = 0.5
+    state._spectrum_ghosting_enabled = True
+    state._spectrum_ghost_decay = 0.4
+    state._osc_speed = 1.0
+    state._osc_line_amplitude = 3.0
+    state._osc_ghosting_enabled = False
+    state._osc_ghost_intensity = 0.4
+    state._osc_ghost_decay = 0.4
+    state._sine_speed = 1.0
+    state._sine_line_count = 1
+    state._sine_wave_travel = 0
+    state._sine_travel_line2 = 0
+    state._sine_travel_line3 = 0
+    state._sine_travel_line4 = 0
+    state._sine_travel_line5 = 0
+    state._sine_travel_line6 = 0
+    state._sine_line1_shift = 0.0
+    state._sine_line2_shift = 0.0
+    state._sine_line3_shift = 0.0
+    state._sine_line4_shift = 0.0
+    state._sine_line5_shift = 0.0
+    state._sine_line6_shift = 0.0
+    state._sine_width_reaction = 0.0
+    state._sine_sensitivity = 1.0
+    state._sine_ghosting_enabled = True
+    state._sine_ghost_alpha = 0.45
+    state._sine_ghost_decay = 0.3
+    state._devcurve_active_layer = "bass"
+    state._devcurve_base_level = 0.58
+    state._devcurve_motion_power = 1.0
+    state._devcurve_idle_motion = 0.20
+    state._devcurve_idle_speed = 0.60
+    state._devcurve_smoothness = 0.55
+    state._devcurve_ghosting_enabled = False
+    state._devcurve_ghost_alpha = 0.0
+    state._devcurve_ghost_decay = 0.4
+    state._devcurve_foreground_shadow_enabled = False
+    state._devcurve_foreground_shadow_alpha = 0.36
+    state._devcurve_foreground_shadow_darken = 0.42
+    state._devcurve_foreground_shadow_offset = 0.10
+    state._devcurve_foreground_specular_enabled = False
+    state._devcurve_foreground_specular_alpha = 0.78
+    state._devcurve_foreground_specular_width = 0.022
+    state._devcurve_foreground_specular_offset = 0.028
+    state._devcurve_foreground_specular_crest_bias = 1.05
+
     # Heartbeat / pulse tracking.
     state._heartbeat_intensity = 0.0
     state._heartbeat_avg_bass = 0.0
