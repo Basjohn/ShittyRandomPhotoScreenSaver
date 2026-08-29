@@ -177,6 +177,58 @@ def test_runtime_right_click_opens_retained_menu_and_action_closes_admission(
         qt_app.processEvents()
 
 
+def test_context_menu_active_clears_on_dismiss_and_retirement_close_paths(qt_app) -> None:
+    # G7 close-path invariant: context_menu_active suppression must release on
+    # EVERY close path, not only an action-triggered close - a stuck suppression
+    # historically wedged exit/halo behavior.
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    factory = QuickSceneFactory()
+    runtime = QuickDisplayRuntime(
+        screen_index=0,
+        runtime_generation=41,
+        screen=screen,
+        scene_factory=factory,
+        window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+        interaction_mode_provider=lambda: True,
+    )
+    model = runtime.context_menu_model
+    model.replace_entries(_entries())
+    model.set_action_handler(lambda action_id, payload: True)
+    runtime.window.setGeometry(0, 0, 640, 480)
+
+    def _right_click(x: float, y: float) -> None:
+        event = QMouseEvent(
+            QEvent.Type.MouseButtonPress,
+            QPointF(x, y),
+            QPointF(x, y),
+            Qt.MouseButton.RightButton,
+            Qt.MouseButton.RightButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        runtime.window.mousePressEvent(event)
+
+    try:
+        # Dismiss path (click-away / Escape): suppression releases.
+        _right_click(100.0, 90.0)
+        assert model.menuVisible is True
+        assert runtime.input_controller.input_state.context_menu_active is True
+        assert model.dismiss() is True
+        assert model.menuVisible is False
+        assert runtime.input_controller.input_state.context_menu_active is False
+
+        # Retirement path: menu open when input admission closes -> suppression
+        # releases and stale state cannot leave it stuck active.
+        _right_click(130.0, 120.0)
+        assert runtime.input_controller.input_state.context_menu_active is True
+        runtime.input_controller.close_input()
+        assert runtime.input_controller.input_state.context_menu_active is False
+    finally:
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
 def test_retained_context_menu_draws_real_quick_pixels_and_clamps(qt_app) -> None:
     owner = QObject()
     factory = QuickSceneFactory(owner)
