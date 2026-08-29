@@ -27,6 +27,7 @@ from widgets.spotify_visualizer.presentation_geometry import (
     resolve_visualizer_presentation,
 )
 from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
+from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
 
 
@@ -430,7 +431,7 @@ def test_scene_controller_owns_overlay_for_exact_display_generation(qt_app) -> N
 
 
 @pytest.mark.qt
-def test_scene_controller_pushes_live_custom_viewport_extent_to_config_sink(qt_app) -> None:
+def test_scene_controller_drives_runtime_viewport_override_through_edit_lifecycle(qt_app) -> None:
     screen = qt_app.primaryScreen()
     assert screen is not None
     window = QuickDisplayWindow(
@@ -442,13 +443,32 @@ def test_scene_controller_pushes_live_custom_viewport_extent_to_config_sink(qt_a
     factory = QuickSceneFactory()
     controller = QuickSceneController(window=window, factory=factory)
 
+    # Owner-shaped: bind the real runtime controller's override seam and assert
+    # the effective extent the authored Bubble step would consume, not just a
+    # list-append sink. The runtime starts on a committed WIDE extent.
+    runtime = VisualizerRuntimeController(
+        runtime_generation=0,
+        bar_count=24,
+        initial_mode="bubble",
+        engine_factory=lambda _bar_count: object(),
+    )
+    runtime.commit_presentation_metrics(
+        resolve_visualizer_presentation(
+            policy=get_visualizer_presentation_policy("bubble"),
+            display_size=(1920.0, 1080.0),
+            outer_origin=(40.0, 60.0),
+            viewport_extent=(630.0, 280.0),
+        )
+    )
+    assert runtime.presentation_viewport_extent == (630.0, 280.0)
+
     session = CustomLayoutSession()
     visualizer = _item(
         "spotify_visualizer",
         "display:a",
         QRect(120, 90, 630, 420),
         viewport_capable=True,
-        baseline_viewport_extent=(420.0, 280.0),
+        baseline_viewport_extent=(630.0, 280.0),
     )
     visualizer.current_monitor_route = "1"
     session.add_item(visualizer)
@@ -458,24 +478,32 @@ def test_scene_controller_pushes_live_custom_viewport_extent_to_config_sink(qt_a
         display_origin=QPoint(0, 0),
     )
 
-    published: list[object] = []
-    controller.set_visualizer_viewport_config_sink(published.append)
-    # Binding the sink republishes the current CUSTOM extent immediately.
-    assert published[-1] == (420.0, 280.0)
+    controller.set_visualizer_viewport_config_sink(runtime.set_custom_viewport_override)
+    # Binding overrides with the current working extent (= committed at admission).
+    assert runtime.has_custom_viewport_override is True
+    assert runtime.presentation_viewport_extent == (630.0, 280.0)
 
-    # A live edge drag (extent-only) reaches the sink as the latest config.
-    visualizer.set_viewport_extent(630.0, 280.0)
+    # A live edge drag overrides the effective extent while edit mode is active.
+    visualizer.set_viewport_extent(840.0, 280.0)
     session.notify_item_changed(visualizer)
-    assert published[-1] == (630.0, 280.0)
+    assert runtime.presentation_viewport_extent == (840.0, 280.0)
 
-    # A vertical edge drag likewise coalesces to the latest committed world.
-    visualizer.set_viewport_extent(630.0, 420.0)
-    session.notify_item_changed(visualizer)
-    assert published[-1] == (630.0, 420.0)
+    # An ordinary committed republish during CUSTOM cannot erase the override.
+    runtime.commit_presentation_metrics(
+        resolve_visualizer_presentation(
+            policy=get_visualizer_presentation_policy("bubble"),
+            display_size=(1920.0, 1080.0),
+            outer_origin=(40.0, 60.0),
+            viewport_extent=(420.0, 280.0),
+        )
+    )
+    assert runtime.presentation_viewport_extent == (840.0, 280.0)
 
-    # Ending CUSTOM restores the baseline world (None) for the next authored step.
+    # Ending CUSTOM retires the override and falls back to the committed extent -
+    # not manufactured canonical.
     controller.clear_custom_layout_session()
-    assert published[-1] is None
+    assert runtime.has_custom_viewport_override is False
+    assert runtime.presentation_viewport_extent == (420.0, 280.0)
 
     controller.quiesce_for_retirement()
     window.deleteLater()
