@@ -11,6 +11,10 @@ from typing import Callable
 from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtQuick import QQuickWindow
 
+from core.logging.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class QuickFrameDemand(IntFlag):
     """Independent reasons that require continuous custom-node presentation."""
@@ -96,6 +100,7 @@ class QuickFramePacer(QObject):
         self._timer.timeout.connect(self._service_deadline)
         self._state = QuickPacerState(float(target_hz))
         self._demands = QuickFrameDemand.NONE
+        self._visualizer_sync: Callable[[], bool] | None = None
         self._paused = False
         self._closed = False
 
@@ -146,6 +151,23 @@ class QuickFramePacer(QObject):
 
     def set_visualizer_active(self, active: bool) -> None:
         self.set_demand(QuickFrameDemand.VISUALIZER, active)
+
+    def set_visualizer_sync(
+        self,
+        synchronize: Callable[[], bool] | None,
+    ) -> None:
+        """Bind the one GUI-side visualizer publication edge.
+
+        The visualizer's logical owner owns authored evolution. This callback
+        only drains its latest immutable state on the existing display-local
+        presentation opportunity; it never introduces another timer or clock.
+        """
+
+        if self._closed:
+            raise RuntimeError("Quick frame pacer is closed")
+        if synchronize is not None and not callable(synchronize):
+            raise TypeError("visualizer synchronization edge must be callable")
+        self._visualizer_sync = synchronize
 
     def set_target_hz(self, target_hz: float) -> None:
         """Retarget this display after its bound QScreen refresh changes."""
@@ -208,6 +230,7 @@ class QuickFramePacer(QObject):
         if self._closed:
             return
         self.stop()
+        self._visualizer_sync = None
         self._closed = True
 
     def describe(self) -> dict[str, object]:
@@ -236,6 +259,20 @@ class QuickFramePacer(QObject):
             return
         decision = self._state.consume(self._clock_ns())
         if decision.due_opportunities:
+            if self._demands & QuickFrameDemand.VISUALIZER:
+                synchronize = self._visualizer_sync
+                if synchronize is None:
+                    raise RuntimeError(
+                        "visualizer frame demand has no presentation synchronization owner"
+                    )
+                try:
+                    synchronize()
+                except Exception:
+                    logger.error(
+                        "[QUICK_PACER] Visualizer presentation synchronization failed",
+                        exc_info=True,
+                    )
+                    raise
             # Qt may coalesce update requests. One service callback issues at
             # most the freshest request for all deadlines already missed.
             self._window.update()

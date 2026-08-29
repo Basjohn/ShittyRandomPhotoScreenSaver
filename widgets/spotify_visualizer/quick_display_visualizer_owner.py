@@ -65,6 +65,7 @@ class QuickDisplayVisualizerOwner:
         self._configured = False
         self._started = False
         self._bound = False
+        self._engine_acquired = False
         self._retired = False
         self._render_identity: Any = None
 
@@ -172,6 +173,20 @@ class QuickDisplayVisualizerOwner:
         self._bound = True
         return self._render_identity
 
+    def set_playing(self, playing: bool) -> None:
+        """Apply canonical Media playback truth to logical + source owners."""
+
+        if self._retired:
+            return
+        active = bool(playing)
+        controller = self._controller
+        controller.playing = active
+        engine = controller.ensure_engine()
+        set_playback_state = getattr(engine, "set_playback_state", None)
+        if not callable(set_playback_state):
+            raise RuntimeError("visualizer BeatEngine has no playback-state authority")
+        set_playback_state(active)
+
     def _resolve_current_presentation(self) -> Any:
         if self._presentation_resolver is not None:
             return self._presentation_resolver()
@@ -217,23 +232,62 @@ class QuickDisplayVisualizerOwner:
         from widgets.spotify_visualizer.tick_pipeline import logical_tick
 
         controller = self._controller
-        interval = (
-            float(interval_s)
-            if interval_s is not None
-            else 1.0 / max(15.0, _DEFAULT_MAX_FPS)
-        )
-        controller.start_logical_runtime(
-            step=lambda _deadline_ts, _s=controller.logical_tick_state: logical_tick(_s),
-            interval_s=interval,
-        )
-        self._started = True
+        if not self._configured or not self._bound:
+            raise RuntimeError("visualizer owner must be configured and bound before start")
+        engine = controller.ensure_engine()
+        set_thread_manager = getattr(engine, "set_thread_manager", None)
+        if controller.thread_manager is not None and callable(set_thread_manager):
+            set_thread_manager(controller.thread_manager)
+        set_generation = getattr(engine, "set_runtime_generation", None)
+        if callable(set_generation):
+            set_generation(controller.runtime_generation)
+        acquire = getattr(engine, "acquire", None)
+        pacer = self._runtime.frame_pacer
+        try:
+            if callable(acquire):
+                acquire()
+                self._engine_acquired = True
+            self.set_playing(controller.playing)
+            interval = (
+                float(interval_s)
+                if interval_s is not None
+                else 1.0 / max(15.0, _DEFAULT_MAX_FPS)
+            )
+            controller.start_logical_runtime(
+                step=lambda _deadline_ts, _s=controller.logical_tick_state: logical_tick(_s),
+                interval_s=interval,
+            )
+            pacer.set_visualizer_sync(self.sync_present)
+            pacer.set_visualizer_active(True)
+            self._started = True
+        except Exception:
+            try:
+                pacer.set_visualizer_active(False)
+                pacer.set_visualizer_sync(None)
+            finally:
+                controller.stop_logical_runtime()
+                if self._engine_acquired:
+                    release = getattr(engine, "release", None)
+                    if callable(release):
+                        release()
+                    self._engine_acquired = False
+            raise
 
     def retire(self) -> bool:
         if self._retired:
             return False
+        if self._started:
+            pacer = self._runtime.frame_pacer
+            pacer.set_visualizer_active(False)
+            pacer.set_visualizer_sync(None)
         joined = bool(self._controller.stop_logical_runtime())
         if not joined:
             return False
+        if self._engine_acquired:
+            release = getattr(self._controller.engine, "release", None)
+            if callable(release):
+                release()
+            self._engine_acquired = False
         self._retired = True
         self._controller.close_render_admission()
         return True

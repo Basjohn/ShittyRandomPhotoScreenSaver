@@ -24,6 +24,10 @@ from widgets.spotify_visualizer.quick_display_visualizer_owner import (
 class _Engine:
     """Production-shaped fake engine (energy/transient snapshots)."""
 
+    def __init__(self) -> None:
+        self.acquire_count = 0
+        self.release_count = 0
+
     def get_bubble_energy_bands(self):
         return SimpleNamespace(bass=0.0, mid=0.0, high=0.0, overall=0.0)
 
@@ -42,6 +46,15 @@ class _Engine:
 
     def get_perf_diagnostics(self):
         return {}
+
+    def set_playback_state(self, _playing: bool) -> None:
+        pass
+
+    def acquire(self) -> None:
+        self.acquire_count += 1
+
+    def release(self) -> None:
+        self.release_count += 1
 
 
 _BUBBLE_CONFIG = {
@@ -82,11 +95,12 @@ def test_edge_constructs_configures_binds_starts_and_retires(qt_app, monkeypatch
     _quiet_tick(monkeypatch)
     runtime, factory = _make_runtime(qt_app, 40)
     try:
+        engine = _Engine()
         owner = QuickDisplayVisualizerOwner(
             runtime,
             bar_count=32,
             initial_mode="bubble",
-            engine_factory=lambda _bc: _Engine(),
+            engine_factory=lambda _bc: engine,
         )
         # Exactly one controller for this generation, tagged with it.
         assert owner.controller.runtime_generation == 40
@@ -107,11 +121,13 @@ def test_edge_constructs_configures_binds_starts_and_retires(qt_app, monkeypatch
         logical = owner.controller.logical_runtime
         assert logical is not None
         assert logical.is_running() is True
+        assert engine.acquire_count == 1
 
         assert owner.retire() is True
         # The sole logical runtime is joined/stopped and detached from the controller.
         assert logical.is_running() is False
         assert owner.controller.logical_runtime is None
+        assert engine.release_count == 1
         # Idempotent.
         assert owner.retire() is False
     finally:

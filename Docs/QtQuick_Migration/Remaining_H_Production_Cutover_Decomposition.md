@@ -83,6 +83,10 @@ and routes accepted product actions to the existing outward signals and Settings
 owner is not attached (notably CUSTOM or the single visualizer during cutover) must remain absent/disabled; it must not invoke
 the retiring QWidget presenter as a fallback.
 
+The existing per-display `QuickFramePacer` is the visualizer's GUI publication-opportunity owner. The sole admitted
+`QuickDisplayVisualizerOwner` binds `QuickVisualizerPresentationSync` into that pacer under VISUALIZER demand; logical
+evolution remains on `VisualizerLogicalRuntime`. A second GUI timer, authored clock or paint acknowledgement is forbidden.
+
 ## 5. Cutover order
 
 The bounded visualizer pre-cutover gate is a **closed prerequisite**, not an active step in this decomposition. Its audit trail
@@ -198,6 +202,11 @@ canonical enabled/activation + requested visualizer monitor
 Preserve requested-display preference and existing cautious fallback/transfer semantics. Non-owning displays construct no
 duplicate visualizer controller/source/logical runtime. The chosen display/unit owns retirement ordering for its visualizer
 edge.
+
+Production construction resolves the canonical activation payload, `SpotifyVisualizerSettings`, technical cache and
+consumer-owned logical/presentation kwargs once in `DisplayManager`, then configures/binds/starts only the chosen unit's
+existing owner. That owner acquires/releases the shared BeatEngine exactly once and receives canonical retained Media
+playback state; manager references are action routes, not a second lifecycle owner.
 
 Retained semantic input must also preserve:
 

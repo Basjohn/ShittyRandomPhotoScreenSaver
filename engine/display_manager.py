@@ -18,6 +18,7 @@ from core.settings.capability_activation import (
     apply_transition_menu_selection,
     get_activated_transition_names,
     get_effective_random_pool,
+    is_widget_family_effective,
 )
 from core.settings.defaults import get_default_settings
 from rendering.display_modes import DisplayMode
@@ -142,6 +143,9 @@ class DisplayManager(QObject):
         self._quick_scene_factory: QuickSceneFactory | None = None
         self._quick_ctrl_coordinator = SharedCtrlCoordinator()
         self._quick_readiness_by_screen: dict[int, QuickSceneReadiness] = {}
+        self._quick_visualizer_owner: Any | None = None
+        self._quick_visualizer_unit: QuickDisplayUnit | None = None
+        self._quick_visualizer_media_presentation: Any | None = None
         self._retiring_quick_units: dict[int, QuickDisplayUnit] = {}
         self._retire_manager_when_quick_complete = False
         self._widgets_config_snapshot: dict[str, Any] = {}
@@ -961,6 +965,8 @@ class DisplayManager(QObject):
         self._display_startup_ready_seen = set()
         self._display_startup_ready_emitted_generation = -1
 
+        self._admit_quick_visualizer(pending_displays)
+
         # Preserve staggered show behavior without processEvents() re-entry.
         # Display registration happens before this loop, so visualizer owner
         # selection sees the full active set while the expensive show/GL startup
@@ -1015,6 +1021,185 @@ class DisplayManager(QObject):
         
         logger.info("Created %d Quick display units" % len(self.displays))
         return len(self.displays)
+
+    @staticmethod
+    def _requested_visualizer_screen_index(monitor: object) -> int:
+        """Resolve the 1-based persisted monitor route; ALL means first live."""
+
+        normalized = str(monitor or "ALL").strip().upper()
+        if normalized == "ALL":
+            return -1
+        try:
+            monitor_number = int(normalized)
+        except (TypeError, ValueError):
+            logger.warning(
+                "[SPOTIFY_VIS] Invalid Quick monitor route %r; using first participant",
+                monitor,
+            )
+            return -1
+        if monitor_number < 1:
+            logger.warning(
+                "[SPOTIFY_VIS] Invalid Quick monitor route %r; using first participant",
+                monitor,
+            )
+            return -1
+        return monitor_number - 1
+
+    def _admit_quick_visualizer(
+        self,
+        participants: list[QuickDisplayUnit],
+    ) -> bool:
+        """Construct, bind and start the one admitted Quick visualizer owner."""
+
+        if self._quick_visualizer_owner is not None:
+            raise RuntimeError("Quick visualizer owner already admitted")
+        widgets = self._widgets_config_snapshot
+        section = widgets.get("spotify_visualizer", {})
+        if not isinstance(section, dict):
+            return False
+        if not is_widget_family_effective(widgets, "visualizers"):
+            return False
+
+        from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.settings_manager import SettingsManager
+        from core.settings.visualizer_presets import (
+            resolve_visualizer_activation_payload,
+        )
+
+        activation = resolve_visualizer_activation_payload(section)
+        model = SpotifyVisualizerSettings.from_mapping(
+            activation.resolved_config,
+            apply_preset_overlay=False,
+            resolve_preset_indices=False,
+        )
+        if not (
+            SettingsManager.to_bool(model.enabled, False)
+            and SettingsManager.to_bool(model.visualizers_enabled, True)
+        ):
+            return False
+
+        from rendering.quick.visualizer_admission import (
+            resolve_quick_visualizer_owner_unit,
+        )
+
+        requested = self._requested_visualizer_screen_index(model.monitor)
+        chosen = resolve_quick_visualizer_owner_unit(requested, participants)
+        if chosen is None:
+            logger.warning(
+                "[SPOTIFY_VIS] No participating Quick display admits the visualizer"
+            )
+            return False
+
+        from widgets.spotify_visualizer.quick_display_visualizer_owner import (
+            QuickDisplayVisualizerOwner,
+        )
+        from widgets.spotify_visualizer.technical_config import (
+            build_technical_cache,
+        )
+
+        mode = str(model.mode)
+        technical_cache = build_technical_cache(None, model)
+        owner = QuickDisplayVisualizerOwner(
+            chosen.runtime,
+            bar_count=model.resolve_bar_count(mode),
+            initial_mode=mode,
+        )
+        try:
+            owner.controller.settings_model = model
+            owner.controller.technical_config_cache = technical_cache
+            owner.configure(
+                logical_kwargs=asdict(model),
+                presentation_kwargs=asdict(model),
+                technical_config=technical_cache.get(mode),
+                thread_manager=self._thread_manager,
+                process_supervisor=self._process_supervisor,
+                playing=False,
+            )
+            engine = owner.controller.engine
+            generation = int(engine.get_generation_id())
+            activation_id = int(engine.get_activation_id())
+            owner.bind(
+                engine_generation=generation,
+                activation_id=activation_id,
+            )
+            presentation = chosen.presenter.presentation_for_widget_id("media")
+            if presentation is not None:
+                owner.set_playing(
+                    str(getattr(presentation, "playbackState", "unknown")).lower()
+                    == "playing"
+                )
+            owner.start()
+            self._quick_visualizer_owner = owner
+            self._quick_visualizer_unit = chosen
+            if presentation is not None:
+                self._bind_quick_visualizer_media(chosen)
+            chosen.attach_visualizer_owner(owner)
+        except Exception:
+            if self._quick_visualizer_owner is owner:
+                self._release_quick_visualizer_routes()
+            if not owner.is_retired:
+                owner.retire()
+            raise
+
+        logger.info(
+            "[SPOTIFY_VIS] Admitted one Quick owner screen=%s mode=%s generation=%s activation=%s",
+            chosen.screen_index,
+            mode,
+            generation,
+            activation_id,
+        )
+        return True
+
+    def _bind_quick_visualizer_media(self, unit: QuickDisplayUnit) -> None:
+        """Bind canonical retained Media playback state to the sole owner."""
+
+        presentation = unit.presenter.presentation_for_widget_id("media")
+        if presentation is None:
+            return
+        changed = getattr(presentation, "stateChanged", None)
+        if changed is None or not hasattr(changed, "connect"):
+            raise RuntimeError("Quick Media presentation has no state-change authority")
+        changed.connect(self._sync_quick_visualizer_playback)
+        self._quick_visualizer_media_presentation = presentation
+        self._sync_quick_visualizer_playback()
+
+    def _sync_quick_visualizer_playback(self) -> None:
+        owner = self._quick_visualizer_owner
+        presentation = self._quick_visualizer_media_presentation
+        if owner is None or presentation is None:
+            return
+        owner.set_playing(
+            str(getattr(presentation, "playbackState", "unknown")).lower()
+            == "playing"
+        )
+
+    def _disconnect_quick_visualizer_media_route(self) -> None:
+        """Detach the sole retained Media -> visualizer playback action route."""
+
+        presentation = self._quick_visualizer_media_presentation
+        if presentation is not None:
+            changed = getattr(presentation, "stateChanged", None)
+            if changed is not None and hasattr(changed, "disconnect"):
+                try:
+                    changed.disconnect(self._sync_quick_visualizer_playback)
+                except (RuntimeError, TypeError):
+                    logger.debug(
+                        "[SPOTIFY_VIS] Media route already detached during retirement"
+                    )
+        self._quick_visualizer_media_presentation = None
+
+    def _release_quick_visualizer_routes(
+        self,
+        unit: QuickDisplayUnit | None = None,
+    ) -> bool:
+        """Drop manager routing references; the chosen unit owns retirement."""
+
+        if unit is not None and unit is not self._quick_visualizer_unit:
+            return False
+        self._disconnect_quick_visualizer_media_route()
+        self._quick_visualizer_owner = None
+        self._quick_visualizer_unit = None
+        return True
     
     def _create_display_for_screen(
         self,
@@ -1077,6 +1262,7 @@ class DisplayManager(QObject):
                 exc_info=True,
             )
             try:
+                self._disconnect_quick_visualizer_media_route()
                 self._begin_quick_unit_retirement(display)
             except Exception:
                 logger.error(
@@ -1084,6 +1270,7 @@ class DisplayManager(QObject):
                     exc_info=True,
                 )
             else:
+                self._release_quick_visualizer_routes(display)
                 if display in self.displays:
                     self.displays.remove(display)
             if startup_generation is not None and startup_generation == self._display_startup_generation:
@@ -1151,7 +1338,9 @@ class DisplayManager(QObject):
             else:
                 if not isinstance(display, QuickDisplayUnit):
                     raise RuntimeError("display unit has no retirement contract")
+                self._disconnect_quick_visualizer_media_route()
                 self._begin_quick_unit_retirement(display)
+                self._release_quick_visualizer_routes(display)
             logger.info("Removed excess display runtime")
     
     def _on_exit_requested(self) -> None:
@@ -1363,6 +1552,9 @@ class DisplayManager(QObject):
         """Retain the process owner used by admitted generation services."""
 
         self._process_supervisor = supervisor
+        owner = self._quick_visualizer_owner
+        if owner is not None:
+            owner.controller.process_supervisor = supervisor
         for display in self.displays:
             if not isinstance(display, DisplayWidget):
                 continue
@@ -2040,6 +2232,7 @@ class DisplayManager(QObject):
 
             failed_units: list[QuickDisplayUnit] = []
             cleanup_errors: list[str] = []
+            self._disconnect_quick_visualizer_media_route()
             for unit in quick_units:
                 screen_index = int(unit.screen_index)
                 try:
@@ -2052,6 +2245,7 @@ class DisplayManager(QObject):
                     unit.quiesce()
                     unit.clear()
                     self._begin_quick_unit_retirement(unit)
+                    self._release_quick_visualizer_routes(unit)
                 except Exception as exc:
                     failed_units.append(unit)
                     cleanup_errors.append(
