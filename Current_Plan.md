@@ -199,6 +199,47 @@ Centering guides are red so display/peer-centre alignment is distinct from ordin
 
 ## H — final production owner cutover
 
+### H progress (landed, GREEN, pushed)
+
+The family/runtime destination integration named first in the H directive is complete and test-gated:
+
+- `QuickDisplayRuntime` owns **exactly one** `WidgetRuntimeManager` per generation (H §7 cardinality): hostless
+  construction, retired once before scene teardown, dropped at window destruction, replacement generations build their own.
+- `rendering/quick/widgets/family_binder.py` — thin presentation-neutral `OrdinaryFamilyPresentationBinder` + one small
+  adapter per family. It resolves admitted families (capability effectiveness via the single manager; per-instance `enabled`
+  distinct), builds the existing `Retained*Presentation` items into the real `OrdinaryWidgetPresentationHost`, owns each
+  family's neutral runtime service(s) through the manager (fail-closed on a missing required lease), and retires held items
+  exactly once. All seven families wired: Clock, Weather, Media (three leases), Reddit (reddit/reddit2), Gmail, and the two
+  Steam cards (Achievement Pulse, Abandonment Issues). Geometry + shadow values are **injected seams**.
+- Prior H slices: `bind_visualizer_render_source` (exact identity) and `bind_visualizer_viewport_config` (corrected-G4
+  committed/override ownership) at the runtime owner; the `capture_qpixmap` image bridge already exists and is tested.
+
+### H open decision — ordinary-widget outer-geometry resolution (GATE before the DisplayManager flip)
+
+The DisplayManager production flip is blocked on a genuine unbuilt destination authority, not merely a large slice.
+
+The family binder consumes an **injected** per-widget display-space `OverlayWidgetGeometry`. In the legacy path
+(`widgets/base_overlay_widget.py::_update_position`) each ordinary widget's outer rect is resolved from: a **content-driven
+size** (`self.size()`/`sizeHint()`, i.e. the widget's rendered content), a named anchor (`position`, e.g. "Top Right"), a
+`margin`, pixel-shift/stack offsets, and a min-visible clamp — with the G CUSTOM committed rect as an override. No Quick-era
+resolver reproduces this: docs say only that "outer geometry is Python/session-owned" without specifying how the
+**content-driven size** is obtained once presentation lives in QML (the content size is known only after the retained item
+lays out via QML `implicitWidth`/`implicitHeight`).
+
+This is a real architecture fork the flip cannot proceed past without a decision (guessing silently mislays every widget):
+
+- **A. QML→Python content-size feedback + Python anchor-resolve.** Retained item reports resolved implicit content size;
+  Python reproduces `_update_position` anchoring (position/margin/offset/clamp) and re-anchors when content size changes.
+  Most faithful to current auto-sizing product behavior; needs a bounded size-feedback seam.
+- **B. Fully explicit persisted rects (CUSTOM-owned).** Seed each widget's rect once, then geometry is explicit and only
+  CUSTOM edits it. Simplest resolver; changes product behavior (widgets stop auto-resizing to content after settings changes
+  unless re-seeded).
+- **C. Python computes size from settings/font metrics (no QML feedback).** Approximate; risks mismatch with actual rendered
+  content and per-family special cases.
+
+Recommendation: **A** (preserves current content-driven anchoring). This choice is required before building the per-display
+Quick presenter + DisplayManager flip + legacy deletion.
+
 H is **not admitted until the complete G checkpoint has passed the independent audit above**.
 
 The source may still route normal startup through legacy `DisplayWidget` before H. That is a routing fact, not a requirement
