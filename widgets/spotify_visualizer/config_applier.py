@@ -65,11 +65,18 @@ def _normalize_lane_strengths(value: Any, defaults: Dict[str, float]) -> Dict[st
 
 
 def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
-    """Apply ONLY the authored logical (Bubble physics) config to a
-    presentation-neutral host (VisualizerLogicalTickState or the legacy widget).
+    """Apply ONLY the authored logical config to a presentation-neutral host
+    (``VisualizerLogicalTickState`` or the legacy widget that delegates to it).
 
     This is the single authority for the logical portion of the per-mode
-    settings apply; presentation styling stays in apply_vis_mode_kwargs.
+    settings apply. "Logical" here is classified by the actual consumer, not by
+    naming: a value is applied here iff authored logical evolution or a
+    mode-owned logical frame runtime reads it (Bubble physics, plus the
+    Spectrum/Oscilloscope/Sine inputs consumed by each mode's
+    ``*FrameRuntime.resolve`` and the DevCurve inputs consumed by the DevCurve
+    logical field solve). Pure renderer/chrome/style values (bar/line/glow
+    colours, glow sizing, card radius, rainbow styling) stay presentation-owned
+    in ``apply_vis_mode_kwargs``.
     """
 
     if 'sine_heartbeat' in kwargs:
@@ -153,6 +160,149 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     if 'bubble_trail_strength' in kwargs:
         host._bubble_trail_strength = max(0.0, min(1.5, float(kwargs['bubble_trail_strength'])))
 
+    # --- Spectrum authored logical inputs (SpectrumFrameRuntime.resolve) ---
+    if 'spectrum_single_piece' in kwargs:
+        host._spectrum_single_piece = bool(kwargs['spectrum_single_piece'])
+    if 'spectrum_visual_smoothing_enabled' in kwargs:
+        host._spectrum_visual_smoothing_enabled = bool(
+            kwargs['spectrum_visual_smoothing_enabled']
+        )
+    if 'spectrum_visual_smoothing' in kwargs:
+        host._spectrum_visual_smoothing = max(
+            0.0, min(1.0, float(kwargs['spectrum_visual_smoothing']))
+        )
+    if 'spectrum_ghosting_enabled' in kwargs:
+        host._spectrum_ghosting_enabled = bool(kwargs['spectrum_ghosting_enabled'])
+    if 'spectrum_ghost_decay' in kwargs:
+        host._spectrum_ghost_decay = max(0.1, min(1.0, float(kwargs['spectrum_ghost_decay'])))
+
+    # --- Oscilloscope authored logical inputs (OscilloscopeFrameRuntime.resolve)
+    if 'osc_speed' in kwargs:
+        host._osc_speed = max(0.1, min(1.0, float(kwargs['osc_speed'])))
+    if 'osc_line_amplitude' in kwargs:
+        host._osc_line_amplitude = max(0.5, min(10.0, float(kwargs['osc_line_amplitude'])))
+    if 'osc_ghosting_enabled' in kwargs:
+        host._osc_ghosting_enabled = bool(kwargs['osc_ghosting_enabled'])
+    if 'osc_ghost_intensity' in kwargs:
+        host._osc_ghost_intensity = max(0.0, min(1.0, float(kwargs['osc_ghost_intensity'])))
+    if 'osc_ghost_decay' in kwargs:
+        host._osc_ghost_decay = max(0.1, min(1.0, float(kwargs['osc_ghost_decay'])))
+
+    # --- Sine authored logical inputs (SineFrameRuntime.resolve) -----------
+    if 'sine_speed' in kwargs:
+        host._sine_speed = max(0.1, min(1.0, float(kwargs['sine_speed'])))
+    if 'sine_line_count' in kwargs:
+        host._sine_line_count = max(1, min(6, int(kwargs['sine_line_count'])))
+    if 'sine_wave_travel' in kwargs:
+        host._sine_wave_travel = max(0, min(2, int(kwargs['sine_wave_travel'])))
+    if 'sine_travel_line2' in kwargs:
+        host._sine_travel_line2 = max(0, min(2, int(kwargs['sine_travel_line2'])))
+    if 'sine_travel_line3' in kwargs:
+        host._sine_travel_line3 = max(0, min(2, int(kwargs['sine_travel_line3'])))
+    if 'sine_travel_line4' in kwargs:
+        host._sine_travel_line4 = max(0, min(2, int(kwargs['sine_travel_line4'])))
+    if 'sine_travel_line5' in kwargs:
+        host._sine_travel_line5 = max(0, min(2, int(kwargs['sine_travel_line5'])))
+    if 'sine_travel_line6' in kwargs:
+        host._sine_travel_line6 = max(0, min(2, int(kwargs['sine_travel_line6'])))
+    if 'sine_line1_shift' in kwargs:
+        host._sine_line1_shift = max(-1.0, min(1.0, float(kwargs['sine_line1_shift'])))
+    if 'sine_line2_shift' in kwargs:
+        host._sine_line2_shift = max(-1.0, min(1.0, float(kwargs['sine_line2_shift'])))
+    if 'sine_line3_shift' in kwargs:
+        host._sine_line3_shift = max(-1.0, min(1.0, float(kwargs['sine_line3_shift'])))
+    if 'sine_line4_shift' in kwargs:
+        host._sine_line4_shift = max(-1.0, min(1.0, float(kwargs['sine_line4_shift'])))
+    if 'sine_line5_shift' in kwargs:
+        host._sine_line5_shift = max(-1.0, min(1.0, float(kwargs['sine_line5_shift'])))
+    if 'sine_line6_shift' in kwargs:
+        host._sine_line6_shift = max(-1.0, min(1.0, float(kwargs['sine_line6_shift'])))
+    if 'sine_width_reaction' in kwargs:
+        host._sine_width_reaction = max(0.0, min(1.0, float(kwargs['sine_width_reaction'])))
+    if 'sine_sensitivity' in kwargs:
+        host._sine_sensitivity = max(0.1, min(5.0, float(kwargs['sine_sensitivity'])))
+    if 'sine_ghosting_enabled' in kwargs:
+        host._sine_ghosting_enabled = bool(kwargs['sine_ghosting_enabled'])
+    if 'sine_ghost_alpha' in kwargs:
+        host._sine_ghost_alpha = max(0.0, min(1.0, float(kwargs['sine_ghost_alpha'])))
+    if 'sine_ghost_decay' in kwargs:
+        host._sine_ghost_decay = max(0.1, min(1.0, float(kwargs['sine_ghost_decay'])))
+
+    # --- DevCurve authored logical inputs (_devcurve_parameter_snapshot) ---
+    # The DevCurve field solve runs on the authored logical clock and consumes
+    # its full parameter snapshot (including per-layer colour/outline), so these
+    # are logical-owned even though some read as styling.
+    if 'devcurve_base_level' in kwargs:
+        host._devcurve_base_level = max(0.10, min(0.90, float(kwargs['devcurve_base_level'])))
+    if 'devcurve_motion_power' in kwargs:
+        host._devcurve_motion_power = max(0.0, min(3.0, float(kwargs['devcurve_motion_power'])))
+    if 'devcurve_idle_motion' in kwargs:
+        host._devcurve_idle_motion = max(0.0, min(1.5, float(kwargs['devcurve_idle_motion'])))
+    if 'devcurve_idle_speed' in kwargs:
+        host._devcurve_idle_speed = max(0.05, min(2.0, float(kwargs['devcurve_idle_speed'])))
+    if 'devcurve_smoothness' in kwargs:
+        host._devcurve_smoothness = max(0.0, min(1.0, float(kwargs['devcurve_smoothness'])))
+    if 'devcurve_ghosting_enabled' in kwargs:
+        host._devcurve_ghosting_enabled = bool(kwargs['devcurve_ghosting_enabled'])
+    if 'devcurve_ghost_alpha' in kwargs:
+        host._devcurve_ghost_alpha = max(0.0, min(1.0, float(kwargs['devcurve_ghost_alpha'])))
+    if 'devcurve_ghost_decay' in kwargs:
+        host._devcurve_ghost_decay = max(0.1, min(1.0, float(kwargs['devcurve_ghost_decay'])))
+    if 'devcurve_foreground_shadow_enabled' in kwargs:
+        host._devcurve_foreground_shadow_enabled = bool(kwargs['devcurve_foreground_shadow_enabled'])
+    if 'devcurve_foreground_shadow_alpha' in kwargs:
+        host._devcurve_foreground_shadow_alpha = max(0.0, min(1.0, float(kwargs['devcurve_foreground_shadow_alpha'])))
+    if 'devcurve_foreground_shadow_darken' in kwargs:
+        host._devcurve_foreground_shadow_darken = max(0.0, min(1.0, float(kwargs['devcurve_foreground_shadow_darken'])))
+    if 'devcurve_foreground_shadow_offset' in kwargs:
+        host._devcurve_foreground_shadow_offset = max(0.0, min(0.45, float(kwargs['devcurve_foreground_shadow_offset'])))
+    if 'devcurve_foreground_specular_enabled' in kwargs:
+        host._devcurve_foreground_specular_enabled = bool(kwargs['devcurve_foreground_specular_enabled'])
+    if 'devcurve_foreground_specular_alpha' in kwargs:
+        host._devcurve_foreground_specular_alpha = max(0.0, min(1.0, float(kwargs['devcurve_foreground_specular_alpha'])))
+    if 'devcurve_foreground_specular_width' in kwargs:
+        host._devcurve_foreground_specular_width = max(0.002, min(0.120, float(kwargs['devcurve_foreground_specular_width'])))
+    if 'devcurve_foreground_specular_offset' in kwargs:
+        host._devcurve_foreground_specular_offset = max(-0.20, min(0.20, float(kwargs['devcurve_foreground_specular_offset'])))
+    if 'devcurve_foreground_specular_crest_bias' in kwargs:
+        host._devcurve_foreground_specular_crest_bias = max(0.0, min(2.0, float(kwargs['devcurve_foreground_specular_crest_bias'])))
+    if 'devcurve_active_layer' in kwargs:
+        active = str(kwargs['devcurve_active_layer']).strip().lower()
+        host._devcurve_active_layer = active if active in {'bass', 'vocals', 'mids', 'transients'} else 'bass'
+    for src in ('bass', 'vocals', 'mids', 'transients'):
+        en_key = f'devcurve_layer_{src}_enabled'
+        color_key = f'devcurve_layer_{src}_color'
+        alpha_key = f'devcurve_layer_{src}_alpha'
+        power_key = f'devcurve_layer_{src}_power'
+        offset_key = f'devcurve_layer_{src}_offset'
+        order_key = f'devcurve_layer_{src}_order'
+        outline_color_key = f'devcurve_layer_{src}_outline_color'
+        outline_width_key = f'devcurve_layer_{src}_outline_width'
+        shape_key = f'devcurve_layer_{src}_shape_nodes'
+        if en_key in kwargs:
+            setattr(host, f'_devcurve_layer_{src}_enabled', bool(kwargs[en_key]))
+        if color_key in kwargs:
+            c = _color_or_none(kwargs[color_key])
+            if c is not None:
+                setattr(host, f'_devcurve_layer_{src}_color', c)
+        if outline_color_key in kwargs:
+            oc = _color_or_none(kwargs[outline_color_key])
+            if oc is not None:
+                oc.setAlpha(255)
+                setattr(host, f'_devcurve_layer_{src}_outline_color', oc)
+        if alpha_key in kwargs:
+            setattr(host, f'_devcurve_layer_{src}_alpha', max(0.0, min(1.0, float(kwargs[alpha_key]))))
+        if power_key in kwargs:
+            setattr(host, f'_devcurve_layer_{src}_power', max(0.0, min(3.0, float(kwargs[power_key]))))
+        if offset_key in kwargs:
+            setattr(host, f'_devcurve_layer_{src}_offset', max(-0.45, min(0.45, float(kwargs[offset_key]))))
+        if outline_width_key in kwargs:
+            setattr(host, f'_devcurve_layer_{src}_outline_width', max(0.001, min(0.020, float(kwargs[outline_width_key]))))
+        if order_key in kwargs:
+            setattr(host, f'_devcurve_layer_{src}_order', max(1, min(4, int(kwargs[order_key]))))
+        if shape_key in kwargs and isinstance(kwargs[shape_key], list):
+            setattr(host, f'_devcurve_layer_{src}_shape_nodes', list(kwargs[shape_key]))
+
 
 def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     """Apply per-mode keyword settings to *widget*.
@@ -178,8 +328,7 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
             widget._osc_glow_color = c
     if 'osc_reactive_glow' in kwargs:
         widget._osc_reactive_glow = bool(kwargs['osc_reactive_glow'])
-    if 'osc_line_amplitude' in kwargs:
-        widget._osc_line_amplitude = max(0.5, min(10.0, float(kwargs['osc_line_amplitude'])))
+    # osc_line_amplitude is authored-logical (base_sensitivity) -> apply_logical.
     if 'osc_smoothing' in kwargs:
         widget._osc_smoothing = max(0.0, min(1.0, float(kwargs['osc_smoothing'])))
     if 'osc_line_color' in kwargs:
@@ -262,17 +411,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bar_border_color = color
 
     # --- Spectrum -----------------------------------------------------
-    if 'spectrum_single_piece' in kwargs:
-        widget._spectrum_single_piece = bool(kwargs['spectrum_single_piece'])
-    if 'spectrum_visual_smoothing_enabled' in kwargs:
-        widget._spectrum_visual_smoothing_enabled = bool(
-            kwargs['spectrum_visual_smoothing_enabled']
-        )
-    if 'spectrum_visual_smoothing' in kwargs:
-        widget._spectrum_visual_smoothing = max(
-            0.0,
-            min(1.0, float(kwargs['spectrum_visual_smoothing'])),
-        )
+    # spectrum_single_piece / visual_smoothing[_enabled] are authored-logical
+    # (SpectrumFrameRuntime.resolve) and flow through apply_logical_vis_mode_kwargs.
     if 'spectrum_rainbow_per_bar' in kwargs:
         widget._rainbow_per_bar = bool(kwargs['spectrum_rainbow_per_bar'])
     if 'spectrum_rainbow_border' in kwargs:
@@ -395,8 +535,7 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._osc_growth = max(0.5, min(5.0, float(kwargs['osc_growth'])))
     if 'devcurve_growth' in kwargs:
         widget._devcurve_growth = max(1.0, min(5.0, float(kwargs['devcurve_growth'])))
-    if 'osc_speed' in kwargs:
-        widget._osc_speed = max(0.1, min(1.0, float(kwargs['osc_speed'])))
+    # osc_speed is authored-logical (line_speed) -> apply_logical.
     if 'osc_line_dim' in kwargs:
         widget._osc_line_dim = bool(kwargs['osc_line_dim'])
     if 'osc_line_offset_bias' in kwargs:
@@ -407,38 +546,16 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     # --- Sine wave ----------------------------------------------------
     if 'sine_wave_growth' in kwargs:
         widget._sine_wave_growth = max(0.5, min(5.0, float(kwargs['sine_wave_growth'])))
-    if 'sine_wave_travel' in kwargs:
-        widget._sine_wave_travel = max(0, min(2, int(kwargs['sine_wave_travel'])))
-    if 'sine_travel_line2' in kwargs:
-        widget._sine_travel_line2 = max(0, min(2, int(kwargs['sine_travel_line2'])))
-    if 'sine_travel_line3' in kwargs:
-        widget._sine_travel_line3 = max(0, min(2, int(kwargs['sine_travel_line3'])))
-    if 'sine_travel_line4' in kwargs:
-        widget._sine_travel_line4 = max(0, min(2, int(kwargs['sine_travel_line4'])))
-    if 'sine_travel_line5' in kwargs:
-        widget._sine_travel_line5 = max(0, min(2, int(kwargs['sine_travel_line5'])))
-    if 'sine_travel_line6' in kwargs:
-        widget._sine_travel_line6 = max(0, min(2, int(kwargs['sine_travel_line6'])))
-    if 'sine_line1_shift' in kwargs:
-        widget._sine_line1_shift = max(-1.0, min(1.0, float(kwargs['sine_line1_shift'])))
-    if 'sine_line2_shift' in kwargs:
-        widget._sine_line2_shift = max(-1.0, min(1.0, float(kwargs['sine_line2_shift'])))
-    if 'sine_line3_shift' in kwargs:
-        widget._sine_line3_shift = max(-1.0, min(1.0, float(kwargs['sine_line3_shift'])))
-    if 'sine_line4_shift' in kwargs:
-        widget._sine_line4_shift = max(-1.0, min(1.0, float(kwargs['sine_line4_shift'])))
-    if 'sine_line5_shift' in kwargs:
-        widget._sine_line5_shift = max(-1.0, min(1.0, float(kwargs['sine_line5_shift'])))
-    if 'sine_line6_shift' in kwargs:
-        widget._sine_line6_shift = max(-1.0, min(1.0, float(kwargs['sine_line6_shift'])))
+    # sine_wave_travel / sine_travel_line2..6 / sine_line1..6_shift are
+    # authored-logical (SineFrameRuntime.resolve travels/line_shifts) and flow
+    # through apply_logical_vis_mode_kwargs.
     if 'sine_wave_effect' in kwargs:
         widget._sine_wave_effect = max(0.0, min(1.0, float(kwargs['sine_wave_effect'])))
     if 'sine_micro_wobble' in kwargs:
         widget._sine_micro_wobble = max(0.0, min(1.0, float(kwargs['sine_micro_wobble'])))
     if 'sine_crawl_amount' in kwargs:
         widget._sine_crawl_amount = max(0.0, min(1.0, float(kwargs['sine_crawl_amount'])))
-    if 'sine_width_reaction' in kwargs:
-        widget._sine_width_reaction = max(0.0, min(1.0, float(kwargs['sine_width_reaction'])))
+    # sine_width_reaction is authored-logical (base_width_reaction) -> apply_logical.
     if 'sine_density' in kwargs:
         widget._sine_density = max(0.25, min(3.0, float(kwargs['sine_density'])))
     if 'sine_displacement' in kwargs:
@@ -465,14 +582,10 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
             widget._sine_line_color = c
     if 'sine_reactive_glow' in kwargs:
         widget._sine_reactive_glow = bool(kwargs['sine_reactive_glow'])
-    if 'sine_sensitivity' in kwargs:
-        widget._sine_sensitivity = max(0.1, min(5.0, float(kwargs['sine_sensitivity'])))
+    # sine_sensitivity (base_sensitivity), sine_speed (line_speed) and
+    # sine_line_count are authored-logical (SineFrameRuntime.resolve) -> apply_logical.
     if 'sine_smoothing' in kwargs:
         widget._sine_smoothing = max(0.0, min(1.0, float(kwargs['sine_smoothing'])))
-    if 'sine_speed' in kwargs:
-        widget._sine_speed = max(0.1, min(1.0, float(kwargs['sine_speed'])))
-    if 'sine_line_count' in kwargs:
-        widget._sine_line_count = max(1, min(6, int(kwargs['sine_line_count'])))
     if 'sine_line_offset_bias' in kwargs:
         widget._sine_line_offset_bias = max(0.0, min(1.0, float(kwargs['sine_line_offset_bias'])))
     if 'sine_line_dim' in kwargs:
@@ -546,29 +659,18 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._rainbow_per_bar = bool(kwargs['rainbow_per_bar'])
 
     # --- Oscilloscope ghost trail ----------------------------------------
-    if 'osc_ghosting_enabled' in kwargs:
-        widget._osc_ghosting_enabled = bool(kwargs['osc_ghosting_enabled'])
-    if 'osc_ghost_intensity' in kwargs:
-        widget._osc_ghost_intensity = max(0.0, min(1.0, float(kwargs['osc_ghost_intensity'])))
-    if 'osc_ghost_decay' in kwargs:
-        widget._osc_ghost_decay = max(0.1, min(1.0, float(kwargs['osc_ghost_decay'])))
+    # osc_ghosting_enabled / osc_ghost_intensity (gate) / osc_ghost_decay are
+    # authored-logical (OscilloscopeFrameRuntime.resolve) -> apply_logical.
 
     # --- Spectrum ghost ----------------------------------------------------
-    if 'spectrum_ghosting_enabled' in kwargs:
-        widget._spectrum_ghosting_enabled = bool(kwargs['spectrum_ghosting_enabled'])
+    # spectrum_ghosting_enabled / spectrum_ghost_decay are authored-logical
+    # (SpectrumFrameRuntime.resolve) -> apply_logical; ghost_alpha stays render-side.
     if 'spectrum_ghost_alpha' in kwargs:
         widget._spectrum_ghost_alpha = max(0.0, min(1.0, float(kwargs['spectrum_ghost_alpha'])))
-    if 'spectrum_ghost_decay' in kwargs:
-        widget._spectrum_ghost_decay = max(0.1, min(1.0, float(kwargs['spectrum_ghost_decay'])))
-
 
     # --- Sine ghost -------------------------------------------------------
-    if 'sine_ghosting_enabled' in kwargs:
-        widget._sine_ghosting_enabled = bool(kwargs['sine_ghosting_enabled'])
-    if 'sine_ghost_alpha' in kwargs:
-        widget._sine_ghost_alpha = max(0.0, min(1.0, float(kwargs['sine_ghost_alpha'])))
-    if 'sine_ghost_decay' in kwargs:
-        widget._sine_ghost_decay = max(0.1, min(1.0, float(kwargs['sine_ghost_decay'])))
+    # sine_ghosting_enabled / sine_ghost_alpha (gate) / sine_ghost_decay are
+    # authored-logical (SineFrameRuntime.resolve) -> apply_logical.
 
     # --- Bubble ghost -----------------------------------------------------
     if 'bubble_ghosting_enabled' in kwargs:
@@ -580,77 +682,10 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
 
     # --- Sine Wave Heartbeat -----------------------------------------------
 
-    # --- Dev Curve --------------------------------------------------------------
-    if 'devcurve_active_layer' in kwargs:
-        active = str(kwargs['devcurve_active_layer']).strip().lower()
-        widget._devcurve_active_layer = active if active in {'bass', 'vocals', 'mids', 'transients'} else 'bass'
-    if 'devcurve_base_level' in kwargs:
-        widget._devcurve_base_level = max(0.10, min(0.90, float(kwargs['devcurve_base_level'])))
-    if 'devcurve_motion_power' in kwargs:
-        widget._devcurve_motion_power = max(0.0, min(3.0, float(kwargs['devcurve_motion_power'])))
-    if 'devcurve_idle_motion' in kwargs:
-        widget._devcurve_idle_motion = max(0.0, min(1.5, float(kwargs['devcurve_idle_motion'])))
-    if 'devcurve_idle_speed' in kwargs:
-        widget._devcurve_idle_speed = max(0.05, min(2.0, float(kwargs['devcurve_idle_speed'])))
-    if 'devcurve_smoothness' in kwargs:
-        widget._devcurve_smoothness = max(0.0, min(1.0, float(kwargs['devcurve_smoothness'])))
-    if 'devcurve_ghosting_enabled' in kwargs:
-        widget._devcurve_ghosting_enabled = bool(kwargs['devcurve_ghosting_enabled'])
-    if 'devcurve_ghost_alpha' in kwargs:
-        widget._devcurve_ghost_alpha = max(0.0, min(1.0, float(kwargs['devcurve_ghost_alpha'])))
-    if 'devcurve_ghost_decay' in kwargs:
-        widget._devcurve_ghost_decay = max(0.1, min(1.0, float(kwargs['devcurve_ghost_decay'])))
-    if 'devcurve_foreground_shadow_enabled' in kwargs:
-        widget._devcurve_foreground_shadow_enabled = bool(kwargs['devcurve_foreground_shadow_enabled'])
-    if 'devcurve_foreground_shadow_alpha' in kwargs:
-        widget._devcurve_foreground_shadow_alpha = max(0.0, min(1.0, float(kwargs['devcurve_foreground_shadow_alpha'])))
-    if 'devcurve_foreground_shadow_darken' in kwargs:
-        widget._devcurve_foreground_shadow_darken = max(0.0, min(1.0, float(kwargs['devcurve_foreground_shadow_darken'])))
-    if 'devcurve_foreground_shadow_offset' in kwargs:
-        widget._devcurve_foreground_shadow_offset = max(0.0, min(0.45, float(kwargs['devcurve_foreground_shadow_offset'])))
-    if 'devcurve_foreground_specular_enabled' in kwargs:
-        widget._devcurve_foreground_specular_enabled = bool(kwargs['devcurve_foreground_specular_enabled'])
-    if 'devcurve_foreground_specular_alpha' in kwargs:
-        widget._devcurve_foreground_specular_alpha = max(0.0, min(1.0, float(kwargs['devcurve_foreground_specular_alpha'])))
-    if 'devcurve_foreground_specular_width' in kwargs:
-        widget._devcurve_foreground_specular_width = max(0.002, min(0.120, float(kwargs['devcurve_foreground_specular_width'])))
-    if 'devcurve_foreground_specular_offset' in kwargs:
-        widget._devcurve_foreground_specular_offset = max(-0.20, min(0.20, float(kwargs['devcurve_foreground_specular_offset'])))
-    if 'devcurve_foreground_specular_crest_bias' in kwargs:
-        widget._devcurve_foreground_specular_crest_bias = max(0.0, min(2.0, float(kwargs['devcurve_foreground_specular_crest_bias'])))
-    for src in ('bass', 'vocals', 'mids', 'transients'):
-        en_key = f'devcurve_layer_{src}_enabled'
-        color_key = f'devcurve_layer_{src}_color'
-        alpha_key = f'devcurve_layer_{src}_alpha'
-        power_key = f'devcurve_layer_{src}_power'
-        offset_key = f'devcurve_layer_{src}_offset'
-        order_key = f'devcurve_layer_{src}_order'
-        outline_color_key = f'devcurve_layer_{src}_outline_color'
-        outline_width_key = f'devcurve_layer_{src}_outline_width'
-        if en_key in kwargs:
-            setattr(widget, f'_devcurve_layer_{src}_enabled', bool(kwargs[en_key]))
-        if color_key in kwargs:
-            c = _color_or_none(kwargs[color_key])
-            if c is not None:
-                setattr(widget, f'_devcurve_layer_{src}_color', c)
-        if outline_color_key in kwargs:
-            oc = _color_or_none(kwargs[outline_color_key])
-            if oc is not None:
-                oc.setAlpha(255)
-                setattr(widget, f'_devcurve_layer_{src}_outline_color', oc)
-        if alpha_key in kwargs:
-            setattr(widget, f'_devcurve_layer_{src}_alpha', max(0.0, min(1.0, float(kwargs[alpha_key]))))
-        if power_key in kwargs:
-            setattr(widget, f'_devcurve_layer_{src}_power', max(0.0, min(3.0, float(kwargs[power_key]))))
-        if offset_key in kwargs:
-            setattr(widget, f'_devcurve_layer_{src}_offset', max(-0.45, min(0.45, float(kwargs[offset_key]))))
-        if outline_width_key in kwargs:
-            setattr(widget, f'_devcurve_layer_{src}_outline_width', max(0.001, min(0.020, float(kwargs[outline_width_key]))))
-        if order_key in kwargs:
-            setattr(widget, f'_devcurve_layer_{src}_order', max(1, min(4, int(kwargs[order_key]))))
-        shape_key = f'devcurve_layer_{src}_shape_nodes'
-        if shape_key in kwargs and isinstance(kwargs[shape_key], list):
-            setattr(widget, f'_devcurve_layer_{src}_shape_nodes', list(kwargs[shape_key]))
+    # DevCurve authored-logical config (base/motion/idle/smoothness/ghosting/
+    # foreground + per-layer field inputs) now flows through
+    # apply_logical_vis_mode_kwargs above; the DevCurve field solve is on the
+    # authored logical clock. No DevCurve presentation-only fields remain here.
 
     # --- Bubble -----------------------------------------------------------
     if 'bubble_group_drift' in kwargs:
