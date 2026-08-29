@@ -9,7 +9,9 @@ order and dropping its Ctrl contribution.
 from __future__ import annotations
 
 import pytest
+from PySide6.QtCore import QObject
 from PySide6.QtGui import QColor, QPixmap
+from shiboken6 import isValid as is_valid_qobject
 
 from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.display_unit import create_quick_display_unit
@@ -77,6 +79,10 @@ def test_unit_assembles_chain_and_binds_families(qt_app) -> None:
         assert target.device_pixel_ratio == pytest.approx(
             unit.runtime.display_identity.device_pixel_ratio
         )
+        qobjects, python_owners = unit.runtime_retirement_roots()
+        assert qobjects == (unit.runtime, unit.runtime.window)
+        assert all(isinstance(root, QObject) for root in qobjects)
+        assert python_owners == (unit, unit.presenter)
     finally:
         unit.retire()
         factory.deleteLater()
@@ -84,12 +90,14 @@ def test_unit_assembles_chain_and_binds_families(qt_app) -> None:
 
 
 @pytest.mark.qt
-def test_unit_retire_is_clean_and_drops_ctrl_contribution(qt_app) -> None:
+def test_unit_retire_is_clean_and_drops_ctrl_contribution(qt_app, qtbot) -> None:
     coord = SharedCtrlCoordinator()
     unit, factory = _make_unit(qt_app, 97, coord)
     try:
         host = unit.runtime.scene_controller.ordinary_widget_host
         manager = unit.runtime.widget_runtime_manager
+        runtime = unit.runtime
+        window = runtime.window
         unit.bind_families(
             widgets_config={"clock": {"enabled": True}},
             shadow_values={"enabled": True, "direction": "SE"},
@@ -106,6 +114,10 @@ def test_unit_retire_is_clean_and_drops_ctrl_contribution(qt_app) -> None:
         assert unit.is_retired is True
         # Idempotent.
         assert unit.retire() is False
+        qtbot.waitUntil(
+            lambda: not is_valid_qobject(window) and not is_valid_qobject(runtime),
+            timeout=1000,
+        )
     finally:
         factory.deleteLater()
         qt_app.processEvents()

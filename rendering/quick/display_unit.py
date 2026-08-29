@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QObject, QSize
 from PySide6.QtGui import QPixmap, QScreen
 
 from core.logging.logger import get_logger
@@ -137,6 +137,22 @@ class QuickDisplayUnit:
     def has_running_transition(self) -> bool:
         return bool(self._runtime.transition_controller.is_active)
 
+    def runtime_retirement_roots(
+        self,
+    ) -> tuple[tuple[QObject, ...], tuple[object, ...]]:
+        """Return the exact roots the replacement barrier must observe.
+
+        The runtime and its top-level window are independent QObject roots;
+        their QObject children cover the scene, pacer, input, auxiliary,
+        context and transition owners. The unit/presenter are plain Python
+        generation owners and must also release before replacement proceeds.
+        """
+
+        return (
+            (self._runtime, self._runtime.window),
+            (self, self._presenter),
+        )
+
     # -- visibility / lifecycle -------------------------------------------- #
     def show_on_screen(self) -> None:
         self._runtime.show_on_screen()
@@ -159,6 +175,7 @@ class QuickDisplayUnit:
             return False
         self._retired = True
         self._presenter.retire()
+        self._runtime.retirement_completed.connect(self._runtime.deleteLater)
         closed = self._runtime.close_runtime()
         self._ctrl_coordinator.forget(self._ctrl_key)
         return closed
