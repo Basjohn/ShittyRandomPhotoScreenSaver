@@ -7,13 +7,14 @@ import time
 import weakref
 from types import MappingProxyType
 from typing import Any, List, Dict, Optional, Set
-from PySide6.QtCore import QObject, Signal, QUrl
+from PySide6.QtCore import QObject, QSize, Signal, QUrl
 from PySide6.QtGui import QGuiApplication, QScreen, QPixmap, QDesktopServices
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
 from rendering.display_modes import DisplayMode
 from rendering.display_widget import DisplayWidget
+from rendering.quick.display_processing import DisplayProcessingDescriptor
 from transitions.overlay_manager import hide_all_overlays
 from utils.lockfree.spsc_queue import SPSCQueue
 
@@ -732,10 +733,16 @@ class DisplayManager(QObject):
         
         if screen_index is not None:
             # Show on specific screen
-            if 0 <= screen_index < len(self.displays):
-                self.displays[screen_index].set_image(pixmap, image_path)
-            else:
+            display = self._display_for_screen_index(screen_index)
+            if display is None:
                 logger.warning(f"[FALLBACK] Invalid screen index: {screen_index}")
+            elif isinstance(display, DisplayWidget):
+                display.set_image(pixmap, image_path)
+            else:
+                presenter = getattr(display, "present_image", None)
+                if not callable(presenter):
+                    raise TypeError("display unit has no image publication contract")
+                presenter(pixmap, image_path=image_path)
         else:
             # Show on all screens (same image mode)
             if self.same_image_mode:
@@ -753,6 +760,32 @@ class DisplayManager(QObject):
             image_path: Path to image
         """
         self.show_image(pixmap, image_path, screen_index)
+
+    def _display_for_screen_index(self, screen_index: int) -> object | None:
+        for position, display in enumerate(self.displays):
+            if int(getattr(display, "screen_index", position)) == int(screen_index):
+                return display
+        return None
+
+    def present_processed_image(
+        self,
+        screen_index: int,
+        processed_pixmap: QPixmap,
+        original_pixmap: QPixmap,
+        image_path: str,
+    ) -> None:
+        """Publish one GUI-materialized image through the selected display unit."""
+
+        display = self._display_for_screen_index(screen_index)
+        if display is None:
+            raise IndexError(f"no selected display for screen index {screen_index}")
+        if isinstance(display, DisplayWidget):
+            display.set_processed_image(processed_pixmap, original_pixmap, image_path)
+            return
+        presenter = getattr(display, "present_image", None)
+        if not callable(presenter):
+            raise TypeError("display unit has no processed-image publication contract")
+        presenter(processed_pixmap, image_path=image_path)
     
     def show_error(self, message: str, screen_index: Optional[int] = None) -> None:
         """
@@ -763,8 +796,9 @@ class DisplayManager(QObject):
             screen_index: Specific screen, or None for all screens
         """
         if screen_index is not None:
-            if 0 <= screen_index < len(self.displays):
-                self.displays[screen_index].show_error(message)
+            display = self._display_for_screen_index(screen_index)
+            if isinstance(display, DisplayWidget):
+                display.show_error(message)
         else:
             for display in self.displays:
                 display.show_error(message)
@@ -859,6 +893,48 @@ class DisplayManager(QObject):
     def get_display_count(self) -> int:
         """Get number of active displays."""
         return len(self.displays)
+
+    def snapshot_processing_descriptors(
+        self,
+    ) -> tuple[DisplayProcessingDescriptor, ...]:
+        """Return immutable per-display inputs without exposing presenter objects.
+
+        During the H conversion the collection still contains ``DisplayWidget``
+        instances. The final Quick collection exposes the same semantic snapshot
+        directly from ``QuickDisplayUnit``. Engine consumers see only this
+        contract; neither presenter is emulated by the other.
+        """
+
+        targets: list[DisplayProcessingDescriptor] = []
+        for index, display in enumerate(self.displays):
+            snapshot = getattr(display, "processing_descriptor", None)
+            if callable(snapshot):
+                target = snapshot(self.display_mode)
+                if not isinstance(target, DisplayProcessingDescriptor):
+                    raise TypeError(
+                        "display unit returned an invalid processing-target snapshot"
+                    )
+                targets.append(target)
+                continue
+
+            if not isinstance(display, DisplayWidget):
+                raise TypeError(
+                    "display collection member has no processing-target contract"
+                )
+            pixel_size = display.get_target_size()
+            dpr = float(getattr(display, "_device_pixel_ratio", 1.0))
+            if dpr <= 0.0:
+                raise ValueError("legacy display reported a non-positive DPR")
+            targets.append(
+                DisplayProcessingDescriptor(
+                    screen_index=int(getattr(display, "screen_index", index)),
+                    target_size=QSize(pixel_size),
+                    logical_size=QSize(int(display.width()), int(display.height())),
+                    display_mode=self.display_mode,
+                    device_pixel_ratio=dpr,
+                )
+            )
+        return tuple(targets)
     
     def get_screen_count(self) -> int:
         """Get number of detected screens."""
@@ -888,11 +964,23 @@ class DisplayManager(QObject):
             return False
         return False
 
-    def set_transition_work_pending(self, pending: bool) -> None:
+    def set_transition_work_pending(
+        self,
+        pending: bool,
+        *,
+        screen_index: int | None = None,
+    ) -> None:
         """Mark all displays as having accepted image-change work before transition start."""
         self._transition_work_pending = bool(pending)
         try:
-            for display in self.displays:
+            displays = (
+                self.displays
+                if screen_index is None
+                else [self._display_for_screen_index(screen_index)]
+            )
+            for display in displays:
+                if display is None:
+                    continue
                 setter = getattr(display, "set_transition_work_pending", None)
                 if callable(setter):
                     setter(pending)

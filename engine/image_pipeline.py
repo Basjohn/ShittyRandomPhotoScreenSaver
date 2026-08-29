@@ -28,6 +28,7 @@ from core.threading.manager import ThreadManager
 from core.process.types import WorkerType, MessageType
 from core.settings import SettingsManager
 from rendering.display_modes import DisplayMode
+from rendering.quick.display_processing import DisplayProcessingDescriptor
 from rendering.image_processor_async import AsyncImageProcessor
 from sources.base_provider import ImageMetadata
 
@@ -208,7 +209,7 @@ def _pixmap_from_image_with_perf(
 
 
 def _apply_display_pixmap_with_perf(
-    display: object,
+    display_manager: object,
     processed_pixmap: QPixmap,
     original_pixmap: QPixmap,
     image_path: str,
@@ -217,15 +218,19 @@ def _apply_display_pixmap_with_perf(
     display_index: int,
 ) -> None:
     """Apply one display image while exposing setter/transition-start cost."""
-    use_processed_setter = hasattr(display, "set_processed_image")
-    stage = "set_processed_image" if use_processed_setter else "set_image"
+    stage = "present_processed_image"
     perf_enabled = is_perf_metrics_enabled()
     started_ts = time.perf_counter() if perf_enabled else 0.0
     try:
-        if use_processed_setter:
-            display.set_processed_image(processed_pixmap, original_pixmap, image_path)
-        else:
-            display.set_image(processed_pixmap, image_path)
+        presenter = getattr(display_manager, "present_processed_image", None)
+        if not callable(presenter):
+            raise TypeError("DisplayManager has no processed-image publication contract")
+        presenter(
+            display_index,
+            processed_pixmap,
+            original_pixmap,
+            image_path,
+        )
     finally:
         if perf_enabled:
             logger.info(
@@ -352,25 +357,16 @@ def _get_display_quality_settings(engine: ScreensaverEngine) -> tuple[bool, bool
 def _get_prefetch_target_specs(engine: ScreensaverEngine) -> List[Dict[str, Any]]:
     specs: List[Dict[str, Any]] = []
     display_manager = getattr(engine, "display_manager", None)
-    displays = getattr(display_manager, "displays", None) or []
     seen: set[tuple[int, int, str, float]] = set()
-    for display in displays:
+    for descriptor in _snapshot_display_processing_targets(display_manager):
         try:
-            dpr = _normalize_device_pixel_ratio(
-                getattr(display, "_device_pixel_ratio", 1.0)
-            )
-            if hasattr(display, "get_target_size"):
-                target_size = display.get_target_size()
-            else:
-                target_size = QSize(
-                    int(display.width() * dpr),
-                    int(display.height() * dpr),
-                )
+            dpr = _normalize_device_pixel_ratio(descriptor.device_pixel_ratio)
+            target_size = descriptor.target_size
             width = int(target_size.width())
             height = int(target_size.height())
             if width <= 0 or height <= 0:
                 continue
-            mode = _normalize_display_mode(getattr(display, "display_mode", DisplayMode.FILL))
+            mode = _normalize_display_mode(descriptor.display_mode)
             signature = (width, height, mode.value, dpr)
             if signature in seen:
                 continue
@@ -392,19 +388,10 @@ def _get_prefetch_target_specs_in_display_order(engine: ScreensaverEngine) -> Li
     """Return ordered display target specs without cross-product fan-out."""
     specs: List[Dict[str, Any]] = []
     display_manager = getattr(engine, "display_manager", None)
-    displays = getattr(display_manager, "displays", None) or []
-    for display in displays:
+    for descriptor in _snapshot_display_processing_targets(display_manager):
         try:
-            dpr = _normalize_device_pixel_ratio(
-                getattr(display, "_device_pixel_ratio", 1.0)
-            )
-            if hasattr(display, "get_target_size"):
-                target_size = display.get_target_size()
-            else:
-                target_size = QSize(
-                    int(display.width() * dpr),
-                    int(display.height() * dpr),
-                )
+            dpr = _normalize_device_pixel_ratio(descriptor.device_pixel_ratio)
+            target_size = descriptor.target_size
             width = int(target_size.width())
             height = int(target_size.height())
             if width <= 0 or height <= 0:
@@ -413,7 +400,7 @@ def _get_prefetch_target_specs_in_display_order(engine: ScreensaverEngine) -> Li
                 {
                     "width": width,
                     "height": height,
-                    "display_mode": _normalize_display_mode(getattr(display, "display_mode", DisplayMode.FILL)),
+                    "display_mode": _normalize_display_mode(descriptor.display_mode),
                     "device_pixel_ratio": dpr,
                 }
             )
@@ -956,19 +943,6 @@ _DISPLAY_IMAGE_REPLACEMENT_LIMIT = 3
 
 
 @dataclass(frozen=True)
-class _DisplayProcessingTarget:
-    """Immutable display inputs safe to consume after UI teardown begins."""
-
-    width: int
-    height: int
-    display_mode: DisplayMode
-    device_pixel_ratio: float = 1.0
-
-    def get_target_size(self) -> QSize:
-        return QSize(self.width, self.height)
-
-
-@dataclass(frozen=True)
 class _ProcessedDisplayImage:
     """Thread-safe compute result; QPixmap materialization remains on the GUI."""
 
@@ -981,30 +955,18 @@ class _ProcessedDisplayImage:
     path: str
 
 
-def _snapshot_display_processing_targets(display_manager: object) -> tuple[_DisplayProcessingTarget, ...]:
-    targets: list[_DisplayProcessingTarget] = []
-    for display in list(getattr(display_manager, "displays", []) or []):
-        if hasattr(display, "get_target_size"):
-            size = display.get_target_size()
-            width = int(size.width())
-            height = int(size.height())
-        else:
-            dpr = float(getattr(display, "_device_pixel_ratio", 1.0))
-            width = int(display.width() * dpr)
-            height = int(display.height() * dpr)
-        targets.append(
-            _DisplayProcessingTarget(
-                width=max(1, width),
-                height=max(1, height),
-                display_mode=_normalize_display_mode(
-                    getattr(display, "display_mode", DisplayMode.FILL)
-                ),
-                device_pixel_ratio=float(
-                    getattr(display, "_device_pixel_ratio", 1.0)
-                ),
-            )
-        )
-    return tuple(targets)
+def _snapshot_display_processing_targets(
+    display_manager: object,
+) -> tuple[DisplayProcessingDescriptor, ...]:
+    snapshot = getattr(display_manager, "snapshot_processing_descriptors", None)
+    if not callable(snapshot):
+        raise TypeError("DisplayManager has no processing-target snapshot contract")
+    targets = snapshot()
+    if not isinstance(targets, tuple) or not all(
+        isinstance(target, DisplayProcessingDescriptor) for target in targets
+    ):
+        raise TypeError("DisplayManager returned invalid processing-target snapshots")
+    return targets
 
 
 def _image_meta_path(meta: Optional[ImageMetadata]) -> str:
@@ -1391,16 +1353,15 @@ def load_and_display_image_async(
     same_image = SettingsManager.to_bool(raw_same_image, True)
 
     # Build list of images to load - one per display if different images mode
-    displays = list(getattr(display_manager, "displays", []) or [])
     image_metas = [image_meta]  # First display gets the provided image
 
-    if not same_image and len(displays) > 1:
+    if not same_image and len(processing_targets) > 1:
         # Load different images for each additional display
         used_paths = set()
         first_path = str(image_meta.local_path) if image_meta.local_path else (image_meta.url or "")
         used_paths.add(first_path)
 
-        for i in range(1, len(displays)):
+        for i in range(1, len(processing_targets)):
             next_meta = None
             for attempt in range(5):
                 candidate = engine.image_queue.next() if engine.image_queue else None
@@ -1424,7 +1385,10 @@ def load_and_display_image_async(
                 image_metas.append(image_meta)
                 logger.warning(f"{TAG_ASYNC} Queue empty, reusing first image for display {i}")
 
-        logger.debug(f"{TAG_ASYNC} Loading {len(image_metas)} different images for {len(displays)} displays")
+        logger.debug(
+            f"{TAG_ASYNC} Loading {len(image_metas)} different images for "
+            f"{len(processing_targets)} displays"
+        )
 
     def _do_load_and_process() -> Optional[Dict]:
         """Background task: load and process images for all displays."""
@@ -1521,12 +1485,11 @@ def load_and_display_image_async(
             processed = data['processed']
             is_same_image = data.get('same_image', True)
 
-            displays = list(getattr(display_manager, "displays", []) or [])
-            for i, display in enumerate(displays):
+            for i, descriptor in enumerate(processing_targets):
                 if i not in processed:
-                    setter = getattr(display, "set_transition_work_pending", None)
+                    setter = getattr(display_manager, "set_transition_work_pending", None)
                     if callable(setter):
-                        setter(False)
+                        setter(False, screen_index=descriptor.screen_index)
             displayed_paths = []
 
             # PERF: Stagger transition starts by 100ms per display to avoid
@@ -1534,7 +1497,7 @@ def load_and_display_image_async(
             stagger_ms = TRANSITION_STAGGER_MS
             shared_gui_pixmaps: Dict[int, QPixmap] = {}
 
-            for i, display in enumerate(displays):
+            for i, descriptor in enumerate(processing_targets):
                 if i not in processed:
                     continue
 
@@ -1558,14 +1521,14 @@ def load_and_display_image_async(
                 delay_ms = i * stagger_ms
                 if delay_ms > 0:
                     def _delayed_set(
-                        d=display,
+                        manager=display_manager,
                         pp=processed_pixmap,
                         op=original_pixmap,
                         ip=img_path,
-                        screen_index=i,
+                        screen_index=descriptor.screen_index,
                     ):
                         _apply_display_pixmap_with_perf(
-                            d,
+                            manager,
                             pp,
                             op,
                             ip,
@@ -1577,17 +1540,17 @@ def load_and_display_image_async(
                         delay_ms,
                         _delayed_set,
                         reason="transition_display_stagger",
-                        display_index=i,
+                        display_index=descriptor.screen_index,
                         callable_label="display_image_apply",
                     )
                 else:
                     _apply_display_pixmap_with_perf(
-                        display,
+                        display_manager,
                         processed_pixmap,
                         original_pixmap,
                         img_path,
                         reason="transition_display_immediate",
-                        display_index=i,
+                        display_index=descriptor.screen_index,
                     )
 
                 displayed_paths.append(img_path)
@@ -1686,9 +1649,8 @@ def load_and_display_image_async_with_metas(
 
     runtime_generation, display_manager = _capture_runtime_identity(engine)
     processing_targets = _snapshot_display_processing_targets(display_manager)
-    displays = list(getattr(display_manager, "displays", []) or [])
     # Pad metas to match display count
-    while len(image_metas) < len(displays):
+    while len(image_metas) < len(processing_targets):
         image_metas.append(image_metas[-1] if image_metas else None)
 
     def _do_load() -> Optional[Dict]:
@@ -1732,16 +1694,15 @@ def load_and_display_image_async_with_metas(
                     logger.debug("[ASYNC-PREV] Failed to clear transition pending state", exc_info=True)
                 return
             processed = data['processed']
-            displays_list = list(getattr(display_manager, "displays", []) or [])
-            for i, display in enumerate(displays_list):
+            for i, descriptor in enumerate(processing_targets):
                 if i not in processed:
-                    setter = getattr(display, "set_transition_work_pending", None)
+                    setter = getattr(display_manager, "set_transition_work_pending", None)
                     if callable(setter):
-                        setter(False)
+                        setter(False, screen_index=descriptor.screen_index)
             stagger_ms = TRANSITION_STAGGER_MS
             displayed = []
             shared_gui_pixmaps: Dict[int, QPixmap] = {}
-            for i, display in enumerate(displays_list):
+            for i, descriptor in enumerate(processing_targets):
                 if i not in processed:
                     continue
                 proc = processed[i]
@@ -1758,14 +1719,14 @@ def load_and_display_image_async_with_metas(
                 delay_ms = i * stagger_ms
                 if delay_ms > 0:
                     def _delayed(
-                        d=display,
+                        manager=display_manager,
                         pp=processed_pixmap,
                         op=original_pixmap,
                         ip=proc.path,
-                        screen_index=i,
+                        screen_index=descriptor.screen_index,
                     ):
                         _apply_display_pixmap_with_perf(
-                            d,
+                            manager,
                             pp,
                             op,
                             ip,
@@ -1777,17 +1738,17 @@ def load_and_display_image_async_with_metas(
                         delay_ms,
                         _delayed,
                         reason="previous_image_display_stagger",
-                        display_index=i,
+                        display_index=descriptor.screen_index,
                         callable_label="previous_image_apply",
                     )
                 else:
                     _apply_display_pixmap_with_perf(
-                        display,
+                        display_manager,
                         processed_pixmap,
                         original_pixmap,
                         proc.path,
                         reason="previous_image_display_immediate",
-                        display_index=i,
+                        display_index=descriptor.screen_index,
                     )
                 displayed.append(proc.path)
             if displayed:
@@ -1889,23 +1850,29 @@ def load_and_display_image(
             engine.display_manager.show_image(pixmap, image_path)
             logger.info(f"Image displayed: {image_path}")
         else:
-            display_count = len(engine.display_manager.displays)
+            targets = engine.display_manager.snapshot_processing_descriptors()
+            display_count = len(targets)
             for i in range(display_count):
+                screen_index = targets[i].screen_index
                 if i == 0:
-                    engine.display_manager.show_image_on_screen(i, pixmap, image_path)
+                    engine.display_manager.show_image_on_screen(
+                        screen_index, pixmap, image_path
+                    )
                 else:
                     next_meta = engine.image_queue.next() if engine.image_queue else None
                     if next_meta:
                         try:
-                            d = engine.display_manager.displays[i]
-                            size = (d.width(), d.height())
+                            logical_size = targets[i].logical_size
+                            size = (logical_size.width(), logical_size.height())
                         except Exception as e:
                             logger.debug("[ENGINE] Exception suppressed: %s", e)
                             size = None
                         next_pixmap = load_image_task(engine, next_meta, preferred_size=size)
                         if next_pixmap:
                             next_path = str(next_meta.local_path) if next_meta.local_path else next_meta.url or "unknown"
-                            engine.display_manager.show_image_on_screen(i, next_pixmap, next_path)
+                            engine.display_manager.show_image_on_screen(
+                                screen_index, next_pixmap, next_path
+                            )
             logger.info(f"Different images displayed on {display_count} displays")
 
         engine.image_changed.emit(image_path)

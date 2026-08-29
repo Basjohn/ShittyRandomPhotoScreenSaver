@@ -225,29 +225,17 @@ def test_image_ui_conversion_segment_logs_bounded_cost(monkeypatch) -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    ("processed_setter", "expected_stage"),
-    ((True, "set_processed_image"), (False, "set_image")),
-)
-def test_image_ui_apply_segment_preserves_both_setter_paths(
-    monkeypatch,
-    processed_setter,
-    expected_stage,
-) -> None:
+def test_image_ui_apply_segment_uses_manager_publication_contract(monkeypatch) -> None:
     calls = []
     records = []
     processed = SimpleNamespace(width=lambda: 1920, height=lambda: 1080)
     original = object()
 
-    class _Display:
-        def set_image(self, pixmap, path):
-            calls.append(("set_image", pixmap, path))
-
-    display = _Display()
-    if processed_setter:
-        display.set_processed_image = lambda pixmap, original_pixmap, path: calls.append(
-            ("set_processed_image", pixmap, original_pixmap, path)
+    manager = SimpleNamespace(
+        present_processed_image=lambda screen_index, pixmap, original_pixmap, path: calls.append(
+            ("present_processed_image", screen_index, pixmap, original_pixmap, path)
         )
+    )
     ticks = iter((50.000, 50.003))
     monkeypatch.setattr(image_pipeline_module, "is_perf_metrics_enabled", lambda: True)
     monkeypatch.setattr(image_pipeline_module.time, "perf_counter", lambda: next(ticks))
@@ -258,7 +246,7 @@ def test_image_ui_apply_segment_preserves_both_setter_paths(
     )
 
     _apply_display_pixmap_with_perf(
-        display,
+        manager,
         processed,
         original,
         "image.jpg",
@@ -266,8 +254,8 @@ def test_image_ui_apply_segment_preserves_both_setter_paths(
         display_index=0,
     )
 
-    assert calls[0][0] == expected_stage
-    assert f"stage={expected_stage}" in records[0]
+    assert calls == [("present_processed_image", 0, processed, original, "image.jpg")]
+    assert "stage=present_processed_image" in records[0]
     assert "duration_ms=3.00" in records[0]
     assert "size=1920x1080" in records[0]
 

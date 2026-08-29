@@ -26,9 +26,11 @@ from PySide6.QtCore import QSize
 from PySide6.QtGui import QPixmap, QScreen
 
 from core.logging.logger import get_logger
+from rendering.display_modes import DisplayMode
 
 from .ctrl_coordinator import SharedCtrlCoordinator
 from .display_image_route import present_processed_pixmap
+from .display_processing import DisplayProcessingDescriptor
 from .display_presenter import QuickDisplayPresenter
 from .render import RenderNodeTelemetry
 from .runtime import QuickDisplayRuntime
@@ -114,6 +116,23 @@ class QuickDisplayUnit:
 
     def target_size(self) -> QSize:
         return self._runtime.get_target_size()
+
+    def processing_descriptor(
+        self,
+        display_mode: DisplayMode,
+    ) -> DisplayProcessingDescriptor:
+        """Snapshot immutable image-processing inputs for engine orchestration."""
+
+        identity = self._runtime.display_identity
+        _x, _y, logical_width, logical_height = identity.geometry
+        pixel_size = self.target_size()
+        return DisplayProcessingDescriptor(
+            screen_index=self.screen_index,
+            target_size=QSize(pixel_size),
+            logical_size=QSize(int(logical_width), int(logical_height)),
+            display_mode=display_mode,
+            device_pixel_ratio=float(identity.device_pixel_ratio),
+        )
 
     def has_running_transition(self) -> bool:
         return bool(self._runtime.transition_controller.is_active)

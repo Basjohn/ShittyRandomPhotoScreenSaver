@@ -1474,9 +1474,12 @@ class ScreensaverEngine(QObject):
         Safe helper for pre-scaling; returns None if displays not ready.
         """
         try:
-            if self.display_manager and self.display_manager.displays:
-                d0 = self.display_manager.displays[0]
-                w, h = d0.width(), d0.height()
+            if self.display_manager:
+                targets = self.display_manager.snapshot_processing_descriptors()
+                if not targets:
+                    return None
+                logical_size = targets[0].logical_size
+                w, h = logical_size.width(), logical_size.height()
                 if w > 0 and h > 0:
                     return (w, h)
         except Exception as e:
@@ -1489,23 +1492,18 @@ class ScreensaverEngine(QObject):
 
         This is used by the prefetch pipeline to decide which `|scaled:WxH` keys
         to generate via COMPUTE tasks. It is intentionally conservative and
-        returns logical widget sizes rather than attempting to second-guess DPR;
-        `DisplayWidget` continues to handle device-pixel scaling when it
-        prepares the final pixmap for each screen.
+        returns logical display sizes rather than attempting to second-guess DPR;
+        physical-pixel processing remains a separate display-target contract.
         """
 
         sizes: List[Tuple[int, int]] = []
         seen: set[Tuple[int, int]] = set()
         try:
             dm = self.display_manager
-            if not dm or not getattr(dm, 'displays', None):
+            if not dm:
                 return sizes
-            for d in dm.displays:
-                try:
-                    w, h = d.width(), d.height()
-                except Exception as _e:
-                    logger.debug("[ENGINE] Exception suppressed: %s", _e)
-                    continue
+            for target in dm.snapshot_processing_descriptors():
+                w, h = target.logical_size.width(), target.logical_size.height()
                 if w <= 0 or h <= 0:
                     continue
                 key = (w, h)

@@ -265,6 +265,11 @@ The family/runtime destination integration already landed and test-gated include
   contributions.
 - `rendering/quick/display_unit.py` assembles one display's destination chain from `QuickDisplayRuntime` +
   `QuickDisplayPresenter` + shared Ctrl coordination and exposes clean display operations rather than legacy-widget emulation.
+- The first coordinated-cutover caller slice is landed: `DisplayManager.snapshot_processing_descriptors()` publishes ordered,
+  immutable screen-identity/target-size/logical-size/mode/DPR inputs through the existing
+  `rendering/quick/display_processing.py` authority; the image pipeline no longer retains/indexes concrete presenter objects
+  for processing, prefetch or async publication and routes completed images through the manager/unit semantic API by actual
+  screen identity. This is a durable destination contract, not a `DisplayWidget` facade.
 
 ### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 

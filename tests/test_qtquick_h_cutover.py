@@ -10,15 +10,19 @@ chain, not a stand-in sink.
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import QPoint, QRect
+from PySide6.QtCore import QPoint, QRect, QSize
+from PySide6.QtGui import QPixmap
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+from engine.display_manager import DisplayManager
 from rendering.custom_layout_session import (
     CustomLayoutKey,
     CustomLayoutSession,
     CustomLayoutSessionItem,
 )
 from rendering.quick.runtime import QuickDisplayRuntime
+from rendering.quick.display_processing import DisplayProcessingDescriptor
+from rendering.display_modes import DisplayMode
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
 from rendering.widget_runtime_manager import WidgetRuntimeManager
@@ -26,6 +30,65 @@ from widgets.spotify_visualizer.presentation_geometry import (
     resolve_visualizer_presentation,
 )
 from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
+
+
+@pytest.mark.qt
+def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app) -> None:
+    published = []
+
+    class _Unit:
+        def __init__(self, screen_index: int, size: QSize, dpr: float) -> None:
+            self.screen_index = screen_index
+            self._size = QSize(size)
+            self._dpr = dpr
+
+        def processing_descriptor(self, display_mode: DisplayMode):
+            return DisplayProcessingDescriptor(
+                screen_index=self.screen_index,
+                target_size=QSize(self._size),
+                logical_size=QSize(
+                    int(round(self._size.width() / self._dpr)),
+                    int(round(self._size.height() / self._dpr)),
+                ),
+                display_mode=display_mode,
+                device_pixel_ratio=self._dpr,
+            )
+
+        def present_image(self, pixmap, *, image_path: str = "") -> None:
+            published.append((self.screen_index, pixmap.size(), image_path))
+
+    manager = DisplayManager(display_mode=DisplayMode.FIT)
+    manager.displays = [
+        _Unit(2, QSize(1920, 1080), 1.0),
+        _Unit(5, QSize(2560, 1440), 2.0),
+    ]
+    pixmap = QPixmap(8, 6)
+    try:
+        descriptors = manager.snapshot_processing_descriptors()
+        assert [item.screen_index for item in descriptors] == [2, 5]
+        assert [item.target_size for item in descriptors] == [
+            QSize(1920, 1080),
+            QSize(2560, 1440),
+        ]
+        assert [item.logical_size for item in descriptors] == [
+            QSize(1920, 1080),
+            QSize(1280, 720),
+        ]
+        assert all(item.display_mode is DisplayMode.FIT for item in descriptors)
+
+        manager.present_processed_image(5, pixmap, pixmap, "five.jpg")
+        manager.show_image_on_screen(2, pixmap, "two.jpg")
+        assert published == [
+            (5, QSize(8, 6), "five.jpg"),
+            (2, QSize(8, 6), "two.jpg"),
+        ]
+        with pytest.raises(IndexError):
+            manager.present_processed_image(1, pixmap, pixmap, "missing.jpg")
+    finally:
+        manager.displays = []
+        manager.disconnect_monitor_detection()
+        manager.deleteLater()
+        qt_app.processEvents()
 
 
 def _visualizer_item(display_identity: str, extent: tuple[float, float]):

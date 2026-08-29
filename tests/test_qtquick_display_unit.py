@@ -16,6 +16,7 @@ from rendering.quick.display_unit import create_quick_display_unit
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.widgets.family_binder import ClockFamilyAdapter
+from rendering.display_modes import DisplayMode
 
 
 def _pixmap(w: int, h: int) -> QPixmap:
@@ -65,6 +66,17 @@ def test_unit_assembles_chain_and_binds_families(qt_app) -> None:
         unit.clear()
         assert unit.runtime.scene_controller.presentation_image is None
         assert unit.target_size().width() > 0
+        target = unit.processing_descriptor(DisplayMode.FIT)
+        assert target.screen_index == 0
+        assert target.get_target_size() == unit.target_size()
+        assert (
+            target.logical_size.width(),
+            target.logical_size.height(),
+        ) == unit.runtime.display_identity.geometry[2:]
+        assert target.display_mode is DisplayMode.FIT
+        assert target.device_pixel_ratio == pytest.approx(
+            unit.runtime.display_identity.device_pixel_ratio
+        )
     finally:
         unit.retire()
         factory.deleteLater()
