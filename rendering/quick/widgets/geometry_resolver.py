@@ -231,10 +231,91 @@ def resolve_overlay_geometry_policy(
     )
 
 
+class OverlayGeometryBinding:
+    """Drive one retained item's outer geometry from live content size + policy.
+
+    This is the Python half of the content-driven geometry contract (option A):
+    the retained QML item reports its resolved implicit content size, and this
+    binding turns that into the item's committed outer rectangle through the
+    widget's :class:`OverlayGeometryPolicy` and the current display bounds. The
+    display/runtime owner connects the QML implicit-size change signal to
+    :meth:`update_content_size`; a topology change calls :meth:`set_display_bounds`
+    to re-anchor.
+
+    Identical effective geometry is a technical no-op: the geometry sink is only
+    invoked when the resolved rectangle actually changes, so a content-size
+    signal that does not move the committed rectangle never re-lays-out the item.
+    A committed CUSTOM rectangle (carried by the policy) wins outright, so live
+    content-size churn cannot disturb a user's CUSTOM placement.
+    """
+
+    def __init__(
+        self,
+        *,
+        policy: OverlayGeometryPolicy,
+        display_bounds: OverlayWidgetGeometry,
+        geometry_sink,
+    ) -> None:
+        if not callable(geometry_sink):
+            raise TypeError("overlay geometry sink must be callable")
+        self._policy = policy
+        self._display_bounds = display_bounds
+        self._geometry_sink = geometry_sink
+        self._last_content_size: tuple[float, float] | None = None
+        self._current_geometry: OverlayWidgetGeometry | None = None
+
+    @property
+    def policy(self) -> OverlayGeometryPolicy:
+        return self._policy
+
+    @property
+    def current_geometry(self) -> OverlayWidgetGeometry | None:
+        return self._current_geometry
+
+    def update_content_size(
+        self, content_size: tuple[float, float]
+    ) -> OverlayWidgetGeometry | None:
+        """Resolve and apply geometry for a new content size; no-op if unchanged.
+
+        Returns the newly applied geometry, or ``None`` when the resolved
+        rectangle is identical to the current one (a technical no-op).
+        """
+
+        size = (float(content_size[0]), float(content_size[1]))
+        self._last_content_size = size
+        return self._reapply()
+
+    def set_display_bounds(
+        self, display_bounds: OverlayWidgetGeometry
+    ) -> OverlayWidgetGeometry | None:
+        """Re-anchor against new display bounds (e.g. a topology change)."""
+
+        self._display_bounds = display_bounds
+        return self._reapply()
+
+    def _reapply(self) -> OverlayWidgetGeometry | None:
+        # A committed CUSTOM rectangle does not need a content size; anchored
+        # placement does. Without a content size yet, there is nothing to apply.
+        if self._policy.has_committed_rect:
+            geometry = self._policy.resolve((1.0, 1.0), self._display_bounds)
+        elif self._last_content_size is not None:
+            geometry = self._policy.resolve(
+                self._last_content_size, self._display_bounds
+            )
+        else:
+            return None
+        if geometry == self._current_geometry:
+            return None
+        self._current_geometry = geometry
+        self._geometry_sink(geometry)
+        return geometry
+
+
 __all__ = [
     "DEFAULT_MARGIN_PX",
     "MIN_VISIBLE_PX",
     "OverlayAnchor",
+    "OverlayGeometryBinding",
     "OverlayGeometryPolicy",
     "resolve_anchored_geometry",
     "resolve_overlay_geometry_policy",
