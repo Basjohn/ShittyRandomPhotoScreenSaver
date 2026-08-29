@@ -5,18 +5,7 @@ This is the small destination-side assembly that owns one
 ``QuickDisplayRuntime``. It invents no visualizer subsystem: the controller
 already owns mode/settings, the shared BeatEngine/source, the authored
 ``VisualizerLogicalRuntime`` and controller-owned logical tick state, viewport
-configuration and render-bridge publication. This edge only:
-
-- constructs one controller for the display generation;
-- configures it from canonical (already-resolved) settings through the neutral
-  logical-configuration authority and the shared engine;
-- starts the authored logical runtime with the widget-free step;
-- binds the controller's render source + viewport-config seam into the runtime;
-- retires it (stop the sole logical runtime, close render admission).
-
-No ``SpotifyVisualizerWidget`` is constructed. The shared BeatEngine is reused
-(``ensure_engine``), so no duplicate engine/logical owner is created; exactly one
-authored logical runtime exists per active owner/generation.
+configuration and render-bridge publication.
 """
 
 from __future__ import annotations
@@ -27,37 +16,24 @@ from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Authored default logical cadence ceiling (Hz); matches the widget path's
-# authored_logical_interval_s default when no explicit interval is supplied.
 _DEFAULT_MAX_FPS = 90.0
 
 
 def _mode_runtime_factory(mode_id: str) -> Callable[[], Any]:
-    """Return the authored per-mode logical runtime factory (lazy import)."""
-
     normalized = str(mode_id or "").lower()
     if normalized == "bubble":
         from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
-
         return BubbleFrameRuntime
     if normalized == "devcurve":
-        from widgets.spotify_visualizer.devcurve_frame_runtime import (
-            DevCurveFrameRuntime,
-        )
-
+        from widgets.spotify_visualizer.devcurve_frame_runtime import DevCurveFrameRuntime
         return DevCurveFrameRuntime
     if normalized == "oscilloscope":
-        from widgets.spotify_visualizer.oscilloscope_frame_runtime import (
-            OscilloscopeFrameRuntime,
-        )
-
+        from widgets.spotify_visualizer.oscilloscope_frame_runtime import OscilloscopeFrameRuntime
         return OscilloscopeFrameRuntime
     if normalized == "sine_wave":
         from widgets.spotify_visualizer.sine_frame_runtime import SineFrameRuntime
-
         return SineFrameRuntime
     from widgets.spotify_visualizer.spectrum_frame_runtime import SpectrumFrameRuntime
-
     return SpectrumFrameRuntime
 
 
@@ -84,10 +60,6 @@ class QuickDisplayVisualizerOwner:
             initial_mode=str(initial_mode),
             engine_factory=engine_factory,
         )
-        # The display owner may inject a resolver that reflects live scene
-        # geometry/scale/fade/CUSTOM state; absent one, a baseline resolver is
-        # derived from the bound display identity + controller-owned policy and
-        # committed viewport extent (no second geometry authority).
         self._presentation_resolver = presentation_resolver
         self._sync: Any = None
         self._configured = False
@@ -117,18 +89,11 @@ class QuickDisplayVisualizerOwner:
         *,
         logical_kwargs: Mapping[str, Any] | None = None,
         presentation_kwargs: Mapping[str, Any] | None = None,
+        technical_config: Mapping[str, Any] | None = None,
         thread_manager: Any | None = None,
         process_supervisor: Any | None = None,
         playing: bool = False,
     ) -> None:
-        """Configure the controller from already-resolved canonical settings.
-
-        ``logical_kwargs`` and ``presentation_kwargs`` are already resolved from
-        the one canonical preset/settings path; this edge applies them through the
-        neutral logical and presentation authorities and does not itself interpret
-        settings.
-        """
-
         if self._retired:
             raise RuntimeError("cannot configure a retired visualizer owner")
         from widgets.spotify_visualizer.config_applier import (
@@ -155,20 +120,36 @@ class QuickDisplayVisualizerOwner:
         if process_supervisor is not None:
             controller.process_supervisor = process_supervisor
         controller.ensure_engine()
-        # Resolve the sole authored logical runtime for the current mode. The
-        # shared engine is reused; no duplicate engine/logical owner is created.
+
+        # Technical settings are already resolved by the canonical settings /
+        # preset layer.  Prefer an explicit mapping from the display
+        # orchestration caller; the controller-owned cache is the compatible
+        # neutral fallback used by settings refresh/replay paths.
+        resolved_technical = technical_config
+        if resolved_technical is None:
+            cache = controller.technical_config_cache
+            if isinstance(cache, dict):
+                resolved_technical = cache.get(controller.mode_id)
+        if resolved_technical:
+            from widgets.spotify_visualizer.quick_technical_config import (
+                apply_controller_technical_config,
+            )
+
+            apply_controller_technical_config(
+                controller,
+                resolved_technical,
+                reason="quick_owner_configure",
+            )
+
         controller.resolve_logical_mode_state(
             controller.mode_id, _mode_runtime_factory(controller.mode_id)
         )
-        # A fresh destination owner is source-ready to advance.
         state._mode_teardown_block_until_ready = False
         state._mode_transition_ready = True
         state._waiting_for_fresh_engine_frame = False
         self._configured = True
 
     def bind(self, *, engine_generation: int, activation_id: int) -> Any:
-        """Bind the controller's render source + viewport-config seam into the runtime."""
-
         if self._retired:
             raise RuntimeError("cannot bind a retired visualizer owner")
         self._render_identity = self._runtime.bind_visualizer_render_source(
@@ -179,9 +160,6 @@ class QuickDisplayVisualizerOwner:
         self._runtime.bind_visualizer_viewport_config(
             self._controller.set_custom_viewport_override
         )
-        # Construct the single GUI/Quick presentation synchronization owner over
-        # the controller's existing mailbox + render bridge. It is driven by
-        # sync_present(); it invents no clock, cadence, queue or paint ack.
         from widgets.spotify_visualizer.quick_presentation_sync import (
             QuickVisualizerPresentationSync,
         )
@@ -189,13 +167,12 @@ class QuickDisplayVisualizerOwner:
         self._sync = QuickVisualizerPresentationSync(
             self._controller,
             resolve_presentation=self._resolve_current_presentation,
+            commit_presentation=self._apply_resolved_presentation,
         )
         self._bound = True
         return self._render_identity
 
     def _resolve_current_presentation(self) -> Any:
-        """Resolve the current complete immutable presentation for a snapshot."""
-
         if self._presentation_resolver is not None:
             return self._presentation_resolver()
         from widgets.spotify_visualizer.presentation_geometry import (
@@ -214,21 +191,27 @@ class QuickDisplayVisualizerOwner:
             viewport_extent=self._controller.presentation_viewport_extent,
         )
 
-    def sync_present(self) -> bool:
-        """Drive one GUI/Quick synchronization pass (latest-wins).
+    def _apply_resolved_presentation(self, presentation: Any) -> None:
+        """Commit the exact presentation embedded in the published snapshot.
 
-        Publishes the freshest identity-current logical frame as one immutable
-        Quick render snapshot into the controller's bridge. Returns True iff a
-        snapshot was admitted this pass. Requires a prior bind().
+        The scene controller owns retained shell/item projection. Keeping this
+        callback on the GUI-side synchronization edge prevents a bridge snapshot
+        from being published while the VisualizerRenderItem still has no (or a
+        different) presentation record.
         """
 
+        self._runtime.scene_controller.apply_visualizer_presentation(
+            presentation,
+            active=True,
+        )
+        self._controller.commit_presentation_metrics(presentation)
+
+    def sync_present(self) -> bool:
         if self._retired or self._sync is None:
             return False
         return self._sync.sync_latest()
 
     def start(self, *, interval_s: float | None = None) -> None:
-        """Start the sole authored logical runtime with the widget-free step."""
-
         if self._retired:
             raise RuntimeError("cannot start a retired visualizer owner")
         from widgets.spotify_visualizer.tick_pipeline import logical_tick
@@ -246,28 +229,8 @@ class QuickDisplayVisualizerOwner:
         self._started = True
 
     def retire(self) -> bool:
-        """Retire behind a hard authored-runtime join barrier.
-
-        The sole ``VisualizerLogicalRuntime`` is non-daemon authored work: a
-        failed stop/join is an unresolved generation, not a best-effort cleanup
-        detail. ``stop_logical_runtime`` closes publication/admission first, then
-        stops+joins the runtime, retaining ownership when the join does not
-        complete (returns ``False``) or raises. This owner must not report
-        successful retirement - and must not let the owning Quick display
-        runtime/window continue terminal teardown - while the runtime is still
-        owned:
-
-        - a failed join returns ``False`` with the runtime still owned and the
-          owner not retired, so the same owner can retry once the join can
-          complete;
-        - a stop/join exception propagates as a teardown failure (not swallowed);
-        - only a successful join marks the owner retired. Repeat calls after that
-          are idempotent (``False``).
-        """
-
         if self._retired:
             return False
-        # Propagates on a stop/join exception; the controller keeps ownership.
         joined = bool(self._controller.stop_logical_runtime())
         if not joined:
             return False
