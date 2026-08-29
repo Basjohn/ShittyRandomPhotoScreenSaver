@@ -22,11 +22,10 @@ from rendering.transition_registry import (
 )
 from core.settings.settings_manager import SettingsManager
 from core.settings.capability_activation import (
+    apply_transition_menu_selection,
     get_activated_transition_names,
     get_effective_random_pool,
-    is_transition_activated,
     is_widget_family_effective,
-    normalize_transition_capability_state,
 )
 from core.settings.visualizer_mode_registry import coerce_visualizer_mode_id
 from widgets.context_menu import ScreensaverContextMenu
@@ -339,36 +338,12 @@ def on_context_transition_selected(widget, name: str) -> None:
             if not isinstance(trans_cfg, dict):
                 trans_cfg = {}
             
-            # Handle 'Random' selection - random_always is the single authority.
-            if name == "Random":
-                trans_cfg["random_always"] = True
-                logger.info("Context menu: random transitions enabled")
-                widget._transition_random_enabled = True
-            else:
-                canonical_name = canonicalize_transition_name(name, fallback="Crossfade")
-                # A stale/deactivated concrete selection must fail admission and
-                # must not be persisted.
-                if not is_transition_activated(trans_cfg, canonical_name):
-                    logger.info(
-                        "Context menu: ignoring deactivated transition selection %s",
-                        canonical_name,
-                    )
-                    return
-                trans_cfg["type"] = canonical_name
-                trans_cfg["random_always"] = False
-                logger.info("Context menu: transition changed to %s", canonical_name)
-                widget._transition_random_enabled = False
-                widget._transition_fallback_type = canonical_name
-
-            # Clear cached random selections so the subsequent set() does not
-            # re-introduce stale values.
-            trans_cfg.pop("random_choice", None)
-            trans_cfg.pop("last_random_choice", None)
-
-            # Canonical normalization: never persist type="Random", zero-activated,
-            # or Random-on with an empty effective pool. random_always stays the
-            # single authority shared with Transitions SETUP.
-            normalize_transition_capability_state(trans_cfg)
+            if not apply_transition_menu_selection(trans_cfg, name):
+                logger.info(
+                    "Context menu: ignoring inadmissible transition selection %s",
+                    name,
+                )
+                return
             widget._transition_random_enabled = bool(trans_cfg.get("random_always", False))
             resolved_type = canonicalize_transition_name(trans_cfg.get("type", ""), fallback="Crossfade")
             if resolved_type and resolved_type != "Random":

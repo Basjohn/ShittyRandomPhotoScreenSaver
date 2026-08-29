@@ -298,3 +298,35 @@ def test_normalize_leaves_random_on_with_nonempty_effective_pool():
     changed = ca.normalize_transition_capability_state(transitions)
     assert changed is False
     assert transitions["random_always"] is True
+
+
+def test_transition_menu_selection_uses_single_random_authority() -> None:
+    transitions = {
+        "type": "Crossfade",
+        "random_always": False,
+        "random_choice": "Wipe",
+        "last_random_choice": "Wipe",
+        "pool": {"Wipe": True},
+    }
+
+    assert ca.apply_transition_menu_selection(transitions, "Random") is True
+    assert transitions["random_always"] is True
+    assert "random_choice" not in transitions
+    assert "last_random_choice" not in transitions
+    assert ca.apply_transition_menu_selection(transitions, "Wipe") is True
+    assert transitions["type"] == "Wipe"
+    assert transitions["random_always"] is False
+
+
+def test_transition_menu_selection_rejects_unknown_or_deactivated_choice() -> None:
+    transitions = {
+        "type": "Crossfade",
+        "random_always": False,
+        "activation": {"Wipe": False},
+    }
+    before = dict(transitions)
+
+    assert ca.apply_transition_menu_selection(transitions, "unknown") is False
+    assert transitions == before
+    assert ca.apply_transition_menu_selection(transitions, "Wipe") is False
+    assert transitions == before

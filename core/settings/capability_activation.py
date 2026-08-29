@@ -367,3 +367,37 @@ def normalize_transition_capability_state(transitions_config: Dict[str, Any]) ->
             changed = True
 
     return changed
+
+
+def apply_transition_menu_selection(
+    transitions_config: Dict[str, Any],
+    selection: str,
+) -> bool:
+    """Apply one admitted context-menu transition choice in-place.
+
+    This is the presentation-neutral mutation shared by the retiring QWidget
+    menu and the retained Quick menu. Unknown or deactivated concrete choices
+    fail closed without changing Settings. Random remains the single
+    ``random_always`` authority and never preserves a stale prepared choice.
+    """
+
+    if not isinstance(transitions_config, dict):
+        return False
+    selected = str(selection or "").strip()
+    if selected == "Random":
+        transitions_config[TRANSITION_RANDOM_MODE_KEY] = True
+    else:
+        canonical = canonicalize_transition_name(selected, fallback="")
+        if (
+            not canonical
+            or canonical == "Random"
+            or not is_transition_activated(transitions_config, canonical)
+        ):
+            return False
+        transitions_config[TRANSITION_MANUAL_TYPE_KEY] = canonical
+        transitions_config[TRANSITION_RANDOM_MODE_KEY] = False
+
+    transitions_config.pop("random_choice", None)
+    transitions_config.pop("last_random_choice", None)
+    normalize_transition_capability_state(transitions_config)
+    return True
