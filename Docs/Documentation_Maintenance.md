@@ -27,8 +27,13 @@ Reorientation/handoff summaries are operator/conversation aids by default, not r
 
 ## These are not changelogs
 
-Current authority documents describe **what is true now and what must be true next**. Do not append chronological
-implementation diaries, commit-by-commit narratives or “then we did X” history to living contracts.
+Only `Current_Plan.md` should routinely carry volatile phase progress, exact active checkpoint and next-slice wording.
+Routing indexes, subsystem contracts, guardrails and reusable decompositions should prefer durable owner/invariant language
+and point back to `Current_Plan.md` for live status. Do not make every index or focused contract require editing after each
+GREEN implementation checkpoint.
+
+Current authority documents describe **what is true or structurally required**. Do not append chronological implementation
+diaries, commit-by-commit narratives or “then we did X” history to living contracts.
 
 When a slice closes:
 
@@ -126,7 +131,7 @@ separate neutral module only when a real surviving caller/contract still owns it
 
 Before docs are reconciled:
 
-- current routing identifies current work unambiguously;
+- `Current_Plan.md` identifies current work unambiguously; routing/index docs do not duplicate volatile phase status;
 - no current-authority doc teaches a retired owner as destination;
 - no closed phase is described as future work;
 - no intended requirement has been erased merely because source missed it;

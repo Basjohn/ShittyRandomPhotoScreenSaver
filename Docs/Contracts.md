@@ -1,6 +1,6 @@
 # Contracts — Current Owner Map
 
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
 `Current_Plan.md` owns work admission. This file owns fast current/destination owner routing.
 
@@ -21,8 +21,8 @@ Last updated: 2026-08-28
 | Settings theme semantics/backdrop contract | `Docs/Settings_Theme_Architecture.md`; `SettingsThemeSpec` + Settings renderers + `core/windows/dwm_blur.py` |
 
 `QQuickWidget`, selectable old-presenter fallback and a second accelerated runtime surface are prohibited.
-Engine startup may still reference legacy `DisplayWidget` until H; that is a temporary routing fact, not a requirement
-that the legacy half-migrated runtime remain functional.
+Migration scaffolding may still reference legacy `DisplayWidget` before the production cutover. That is never a
+destination contract or a reason to preserve a compatibility presenter.
 
 ## Settings theme ownership
 
@@ -41,9 +41,9 @@ colour/opacity. Off = state 0. Do not conflate AccentPolicy state 3 with the doc
 `themes/dark.qss` is legacy base-stylesheet residue, not visual authority. Its audited retirement is owned by
 `Future_Cleanup.md`; do not alter native backdrop or forged-edge geometry merely to delete it.
 
-## H production runtime chain
+## Production runtime chain
 
-H connects the already-landed destination exactly once:
+The destination connects exactly once:
 
 ```text
 QuickDisplayRuntime
@@ -138,8 +138,22 @@ direction to signed offsets before QML. Clock analogue geometry is the permanent
 Transitions: canonical registry/settings -> activation/admission -> immutable request/run -> lazy Quick implementation
 -> display render node. Old compositor transition pixels are debris after caller proof.
 
-Visualizer: Beat/source owners -> `VisualizerLogicalRuntime` -> mode logical runtime -> immutable/latest render state ->
-Quick sync -> visualizer render node. One authored logical clock.
+Visualizer logical/source ownership is presentation-neutral:
+
+```text
+canonical settings / activation resolution
+-> one VisualizerRuntimeController
+-> one controller-owned VisualizerLogicalTickState
+-> one VisualizerLogicalRuntime authored clock
+-> mode logical runtime
+-> immutable/latest render state
+-> Quick sync
+-> visualizer render node
+```
+
+The logical runtime step advances against controller-owned state, never a live QWidget. Logical/runtime settings use one
+presentation-neutral apply authority; visual-only styling remains presentation-owned. Do not move presentation colour/glow/
+card/layout state into the logical controller merely because the legacy widget historically stored both kinds together.
 
 Visualizer geometry has two independent persisted dimensions of intent:
 

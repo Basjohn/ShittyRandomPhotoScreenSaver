@@ -7,7 +7,7 @@ Last updated: 2026-08-29
 The documentation is reconciled through pushed source:
 
 ```text
-be7c64e4cea48fee2c3b3ab9a6bded022bdfc2cc
+8f593f549ca51c57f177410754d15b7c0955309a
 Complete G: independently audited and ACCEPTED.
 H: ADMITTED and in progress.
 
@@ -19,14 +19,15 @@ Landed H work through this checkpoint:
 - option-A outer-geometry mechanism and historical per-family preferred-size policies;
 - thin QuickDisplayPresenter;
 - authoritative SharedCtrlCoordinator;
-- QuickDisplayUnit per-display destination-chain assembly.
+- QuickDisplayUnit per-display destination-chain assembly;
+- visualizer per-tick logical state owned by VisualizerRuntimeController;
+- production VisualizerLogicalRuntime step advances against controller-owned state, widget-free;
+- visualizer settings apply split by ownership: logical/runtime configuration is presentation-neutral, visual-only writes remain presentation-owned;
+- fresh VisualizerRuntimeController acceptance: canonical settings -> configure -> start -> real logical advance without constructing SpotifyVisualizerWidget.
 
-Current source-backed H prerequisite before the production flip:
-- the visualizer's VisualizerLogicalRuntime thread is controller-owned, but the production
-  per-tick logical computation still executes logical_tick(widget) against legacy widget state;
-- migrate that per-tick state/computation to presentation-neutral VisualizerRuntimeController
-  ownership (or a controller-owned state object) before the Quick visualizer ownership edge
-  and atomic DisplayManager cutover.
+Next H boundary:
+- build the thin Quick visualizer ownership edge over the now widget-free controller;
+- then perform the atomic DisplayManager + engine cutover and caller-proven legacy physical-host deletion.
 ```
 
 Exact later source always outranks this document. **All of G is complete, independently audited and accepted. H is admitted and
@@ -252,70 +253,54 @@ contract is **H work**; only final eyes-on visual parity is J. Landed:
 per-variant (digital/analogue) committed-rect ownership remain unchanged and override the binding completely. J later
 validates/refines visual parity only.
 
-### H visualizer runtime ownership correction — NEXT REQUIRED SLICE
+### H visualizer runtime ownership correction — COMPLETE
 
-A pre-flip source audit found one real missing destination ownership boundary.
+The discovered pre-flip visualizer ownership prerequisite is closed at this checkpoint.
 
-The existing `VisualizerRuntimeController` is already the intended presentation-neutral owner for visualizer mode/settings,
-source/engine identity, `VisualizerLogicalRuntime`, the latest-state mailbox, render bridge, viewport configuration and
-generation/activation fencing. **Do not create a second controller or replacement visualizer subsystem.**
-
-However, production cadence currently starts the controller-owned logical runtime with a step equivalent to:
+Destination ownership now satisfies the required seam:
 
 ```text
-logical_tick(widget)
+VisualizerRuntimeController
+-> controller-owned VisualizerLogicalTickState
+-> VisualizerLogicalRuntime(step = logical_tick(controller-owned state))
+-> mode logical runtime / immutable latest-state publication
 ```
 
-and `widgets/spotify_visualizer/tick_pipeline.py` still reads/writes substantial live legacy-widget state during each authored
-logical step (enabled/playing state, dt/perf accounting, engine/source freshness, mode-transition readiness, mode dispatch,
-logical publication and related state).
+The migration preserved one authored logical clock, one engine/source authority and existing generation/activation fencing.
+The legacy widget may still delegate to the controller-owned state while it remains pre-cutover scaffolding, but it is no
+longer required as the logical host.
 
-Therefore the Quick production owner cannot yet start the authored logical runtime without retaining a live legacy widget.
-That is a deterministic H ownership defect and must be closed **before** the atomic production flip; it is not J debt and is
-not permission to retain a hidden QWidget after cutover.
+Configuration was split by ownership rather than moving all widget-era settings into the controller:
 
-Required bounded correction:
+- logical/runtime values required by authored simulation use one presentation-neutral settings-apply authority;
+- technical/runtime cache remains controller-owned;
+- visual-only styling remains presentation-owned;
+- legacy QWidget/overlay compatibility writes are not destination contracts and retire with the legacy host.
 
-1. Move the state required by the authored per-tick logical computation off `spotify_visualizer_widget` and into the existing
-   `VisualizerRuntimeController` or a controller-owned presentation-neutral state object.
-2. Refactor the production logical step so `VisualizerLogicalRuntime` can advance using that destination state without a
-   `QWidget`/legacy presenter argument.
-3. Preserve existing authored algorithms, timing and state semantics. This is an ownership migration, **not a visualizer
-   retune/rewrite**.
-4. Preserve the existing shared BeatEngine/source cardinality and exactly one intended authored logical runtime per active
-   visualizer owner/generation; do not duplicate engine/source/tick owners.
-5. Keep generation/activation fencing, latest-state/coalescing semantics, source freshness, mode teardown/readiness,
-   viewport-extent ownership and render-bridge publication intact.
-6. Preserve BTF/replay/cadence/reactivity/transport goldens and do not alter authored Bubble counts/physics merely to ease
-   the ownership move.
-7. No QML/QQuickItem/QScreen/render-thread object enters the logical state.
-8. During this preparatory slice the old `DisplayWidget` remains the production caller only because the production cutover has
-   not happened yet. Do **not** run a second Quick visualizer logical owner in parallel normal production and do not add a
-   legacy fallback contract.
-9. Once this slice is GREEN, bind the existing controller through the Quick destination chain and proceed directly to the
-   atomic production cutover.
+A fresh controller can be constructed, configured from canonical settings, started and logically advanced without creating
+`SpotifyVisualizerWidget`. Focused visualizer/golden gates remained GREEN without authored retuning.
 
-### H remaining — visualizer owner closure, then atomic DisplayManager production flip
+### H remaining — thin visualizer edge, then atomic DisplayManager production flip
 
 The next sequence is:
 
-1. **Visualizer logical-state/step ownership migration** described above, with focused owner-shaped regression bars.
-2. **Thin Quick visualizer ownership edge**: construct/configure/start the existing `VisualizerRuntimeController` at the
-   intended destination owner, bind its existing render source + viewport configuration into `QuickDisplayRuntime`, and prove
-   generation replacement/retirement without a hidden widget.
-3. **Atomic DisplayManager + engine cutover.** `DisplayManager` remains the durable product-level orchestration boundary.
+1. **Thin Quick visualizer ownership edge**: construct/configure/start the existing `VisualizerRuntimeController` at the
+   intended per-display/generation owner, bind its existing render source + viewport configuration into `QuickDisplayRuntime`,
+   and prove generation replacement/retirement without a hidden widget or duplicate engine/logical owner.
+2. **Atomic DisplayManager + engine cutover.** `DisplayManager` remains the durable product-level orchestration boundary.
    Replace the engine's direct dependence on concrete `.displays[i]` implementation internals with a small semantic
    DisplayManager contract covering only real product operations (image routing, target size/query where genuinely needed,
    readiness, outward semantic signals/actions, display mode, generation/topology lifecycle and retirement/close).
-   - Do not create 51 one-for-one forwarding methods.
+   - Do not create one-for-one forwarding methods for old `DisplayWidget` internals.
    - Do not make `QuickDisplayUnit` or `QuickDisplayRuntime` emulate `DisplayWidget` private attributes.
    - Do not first build a throwaway legacy-only decoupling layer.
    - Do not spread `QuickDisplayUnit` implementation knowledge across engine call sites.
    The DisplayManager rewrite + engine call-site conversion + production Quick construction must land as one coordinated
    cutover because a half-swap is not a valid runtime state.
-4. **Runtime-shaped production proof** for one/multiple selected displays, image/transition routing, ordinary families,
-   visualizer ownership, corrected-G owners, readiness, generation replacement, topology replacement and clean retirement.
-5. **Caller-proven legacy deletion in H**: delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, the legacy visualizer host,
+3. **Runtime-shaped production proof** for one/multiple selected displays, image/transition routing, ordinary families,
+   visualizer ownership/configuration, corrected-G owners, readiness, generation replacement, topology replacement and clean
+   retirement.
+4. **Caller-proven legacy deletion in H**: delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, the legacy visualizer host,
    old compositor scheduling/presentation glue, unsupported software/backend-demotion presenter fallback, obsolete
    `hw_accel`/fallback-overlay policy and remaining old physical-host transition/visualizer glue once caller proof is clean.
 
@@ -327,8 +312,7 @@ not a requirement that the partially migrated application remain product-functio
 keep the old runtime alive while migration proceeds.
 
 H is the final owner/orchestration wiring. Follow the reconciled
-`Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md`, with this source-backed visualizer correction taking
-precedence where the older decomposition assumed all destination runtime ownership was already presentation-neutral.
+`Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md`.
 
 Destination shape remains:
 
@@ -337,7 +321,7 @@ selected display
 -> one QuickDisplayRuntime / QuickDisplayUnit
 -> retained Quick scene
 -> one display-owned WidgetRuntimeManager for ordinary families
--> existing presentation-neutral VisualizerRuntimeController for visualizer logical/source ownership
+-> VisualizerRuntimeController + controller-owned logical tick state/configuration
 -> Quick render-source / viewport bindings
 ```
 

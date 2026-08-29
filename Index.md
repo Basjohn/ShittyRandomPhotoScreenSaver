@@ -11,14 +11,13 @@ exact current source
 -> tests/evidence for the claim
 ```
 
-Current migration: **Phase F closed. Phase G has a bounded post-checkpoint G4 correction batch first, then G7 closure and
-G8 focus/MC closure. One independent audit gates the complete checkpointed G state before H.**
+Live migration phase/checkpoint status is intentionally owned only by `Current_Plan.md`.
 
 ## Current authority
 
 | Need | Read |
 | --- | --- |
-| current work / sequence / G audit gate | `Current_Plan.md` |
+| current work / sequence / phase gates | `Current_Plan.md` |
 | durable product/architecture | `Spec.md` |
 | fast current owner map | `Docs/Contracts.md` |
 | Settings theme / Acrylic / Glass architecture | `Docs/Settings_Theme_Architecture.md` |
@@ -63,16 +62,16 @@ the two substantive migrated Steam families.
 
 ## G / H / I / J
 
-G1–G6 are closed. The core G4 viewport-edge implementation, Bubble logical reflow and all-five-mode capability policy are
-landed, but the independent post-checkpoint audit found bounded ownership/spatial corrections which are the immediate
-priority. After those are GREEN, continue directly through G7 caller-proof closure and G8 focus/MC closure. Do **not** stop
-for independent audit between ordinary GREEN G slices; checkpoint all of G, then stop once for independent audit before H.
+`Current_Plan.md` owns which phase/slice is active and which gates have closed. This index deliberately does not duplicate
+that volatile status.
 
-H is final production owner/orchestration wiring plus remaining old physical-host deletion. It must bind the existing G
-viewport-config ownership correctly; it does not get to reset committed non-baseline extent merely because CUSTOM is
-inactive. I is deliberately source-driven residue and has no standing pre-H decomposition. J is final installed/physical
-acceptance, including the deferred all-five-mode viewport eyes-on gate; use
-`Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md`.
+Durable roles:
+
+- G owns retained CUSTOM/input/auxiliary/focus destination contracts and deterministic closure;
+- H owns final production Quick owner/orchestration cutover plus caller-proven old physical-host deletion;
+- I is source-driven residue only and has no standing speculative deletion plan;
+- J owns compiled/installed/physical acceptance, including real displays, mixed refresh/DPR, off/wake, MC/screensaver input,
+  eyes-on parity, performance tails and packaging.
 
 ## Transitions
 
@@ -89,7 +88,7 @@ For geometry/CUSTOM work read these together:
 - `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - `Docs/Visualizer_Reference.md`
 - `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md`
-- while the current audit corrections remain open: `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md`
+- `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` for the bounded G4 correction record
 
 The all-five-mode capability policy is landed. Do not reintroduce a Bubble false gate to avoid correcting viewport
 ownership or spatial-domain defects.
