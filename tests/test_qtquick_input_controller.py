@@ -256,6 +256,30 @@ def test_closed_quick_input_consumes_stale_events_without_emitting():
     assert controller.close_input() is False
 
 
+def test_ctrl_state_is_not_stuck_when_global_clears_after_focus_moves():
+    # G8 focus invariant: when focus has moved to another display and the shared
+    # coordinator clears Ctrl (the physical release lands on the other display),
+    # this display must follow the authoritative global clear, never staying
+    # stuck on a stale local Ctrl-held that it never received a release for.
+    global_state = {"held": False}
+    display_a = QuickInputController(
+        screen_index=0,
+        runtime_generation=0,
+        global_ctrl_held_provider=lambda: global_state["held"],
+        ctrl_state_publisher=lambda held: global_state.__setitem__("held", held),
+    )
+
+    assert display_a.handle_key_press(_key_press(Qt.Key.Key_Control)) is True
+    assert global_state["held"] is True
+    assert display_a.is_ctrl_mode_active() is True
+
+    # Focus moved to display B; the coordinator clears the shared Ctrl state.
+    global_state["held"] = False
+
+    assert display_a.is_ctrl_mode_active() is False
+    assert display_a.input_state.ctrl_held is False
+
+
 def test_quick_input_uses_injected_cross_display_ctrl_state():
     coordination = {"ctrl_held": False}
 

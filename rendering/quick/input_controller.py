@@ -64,7 +64,17 @@ class QuickInputController(RuntimeInputOwner):
         self.is_ctrl_mode_active()
 
     def is_ctrl_mode_active(self) -> bool:
-        active = super().is_ctrl_mode_active()
+        # The cross-display coordinator is authoritative for Ctrl mode. A display
+        # must not stay stuck on a stale local Ctrl-held after focus moved to a
+        # peer and the shared state cleared (the release lands on the focused
+        # display). Local input still feeds the coordinator via set_ctrl_held()'s
+        # publisher; when no coordinator is wired we keep the local base behavior.
+        global_state = self._global_ctrl_held()
+        active = (
+            global_state
+            if global_state is not None
+            else super().is_ctrl_mode_active()
+        )
         self._publish_state(ctrl_held=active)
         return active
 
