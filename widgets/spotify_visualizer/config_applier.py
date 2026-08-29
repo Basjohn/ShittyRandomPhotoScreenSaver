@@ -64,12 +64,104 @@ def _normalize_lane_strengths(value: Any, defaults: Dict[str, float]) -> Dict[st
     return normalized
 
 
+def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
+    """Apply ONLY the authored logical (Bubble physics) config to a
+    presentation-neutral host (VisualizerLogicalTickState or the legacy widget).
+
+    This is the single authority for the logical portion of the per-mode
+    settings apply; presentation styling stays in apply_vis_mode_kwargs.
+    """
+
+    if 'sine_heartbeat' in kwargs:
+        host._sine_heartbeat = max(0.0, min(1.0, float(kwargs['sine_heartbeat'])))
+    if 'bubble_big_bass_pulse' in kwargs:
+        host._bubble_big_bass_pulse = max(0.0, min(1.0, float(kwargs['bubble_big_bass_pulse'])))
+    if 'bubble_small_freq_pulse' in kwargs:
+        host._bubble_small_freq_pulse = max(0.0, min(1.0, float(kwargs['bubble_small_freq_pulse'])))
+    if 'bubble_stream_direction' in kwargs:
+        val = str(kwargs['bubble_stream_direction']).lower()
+        if val == 'diagonal':
+            val = 'top_right'
+        if val not in (
+            'none',
+            'up',
+            'down',
+            'left',
+            'right',
+            'top_left',
+            'top_right',
+            'bottom_left',
+            'bottom_right',
+            'random',
+        ):
+            val = 'up'
+        host._bubble_stream_direction = val
+    if 'bubble_stream_constant_speed' in kwargs:
+        host._bubble_stream_constant_speed = max(
+            0.0, min(2.0, float(kwargs['bubble_stream_constant_speed']))
+        )
+    if 'bubble_stream_speed_cap' in kwargs:
+        host._bubble_stream_speed_cap = max(
+            0.1, min(4.0, float(kwargs['bubble_stream_speed_cap']))
+        )
+    if 'bubble_stream_reactivity' in kwargs:
+        host._bubble_stream_reactivity = max(0.0, min(1.25, float(kwargs['bubble_stream_reactivity'])))
+    if 'bubble_rotation_amount' in kwargs:
+        host._bubble_rotation_amount = max(0.0, min(1.0, float(kwargs['bubble_rotation_amount'])))
+    if 'bubble_drift_amount' in kwargs:
+        host._bubble_drift_amount = max(0.0, min(1.0, float(kwargs['bubble_drift_amount'])))
+    if 'bubble_drift_speed' in kwargs:
+        host._bubble_drift_speed = max(0.0, min(1.0, float(kwargs['bubble_drift_speed'])))
+    if 'bubble_drift_frequency' in kwargs:
+        host._bubble_drift_frequency = max(0.0, min(1.0, float(kwargs['bubble_drift_frequency'])))
+    if 'bubble_drift_direction' in kwargs:
+        val = str(kwargs['bubble_drift_direction']).lower()
+        valid_dirs = (
+            'none', 'left', 'right', 'diagonal',
+            'swish_horizontal', 'swish_vertical',
+            'swirl_cw', 'swirl_ccw', 'random'
+        )
+        if val not in valid_dirs:
+            val = 'random'
+        host._bubble_drift_direction = val
+    if 'bubble_big_count' in kwargs:
+        host._bubble_big_count = max(1, min(30, int(kwargs['bubble_big_count'])))
+    if 'bubble_small_count' in kwargs:
+        host._bubble_small_count = max(5, min(80, int(kwargs['bubble_small_count'])))
+    if 'bubble_surface_reach' in kwargs:
+        host._bubble_surface_reach = max(0.0, min(1.0, float(kwargs['bubble_surface_reach'])))
+    if 'bubble_bounce_big_pct' in kwargs:
+        host._bubble_bounce_big_pct = max(0, min(100, int(kwargs['bubble_bounce_big_pct'])))
+    if 'bubble_bounce_small_pct' in kwargs:
+        host._bubble_bounce_small_pct = max(0, min(100, int(kwargs['bubble_bounce_small_pct'])))
+    if 'bubble_bounce_big_speed' in kwargs:
+        host._bubble_bounce_big_speed = max(0.0, min(2.0, float(kwargs['bubble_bounce_big_speed'])))
+    if 'bubble_bounce_small_speed' in kwargs:
+        host._bubble_bounce_small_speed = max(0.0, min(2.0, float(kwargs['bubble_bounce_small_speed'])))
+    if 'bubble_bounce_same_only' in kwargs:
+        host._bubble_bounce_same_only = bool(kwargs['bubble_bounce_same_only'])
+    if 'bubble_big_size_max' in kwargs:
+        host._bubble_big_size_max = max(0.010, min(0.060, float(kwargs['bubble_big_size_max'])))
+    if 'bubble_small_size_max' in kwargs:
+        host._bubble_small_size_max = max(0.004, min(0.030, float(kwargs['bubble_small_size_max'])))
+    if 'bubble_big_contraction_bias' in kwargs:
+        host._bubble_big_contraction_bias = max(0.0, min(2.0, float(kwargs['bubble_big_contraction_bias'])))
+    if 'bubble_big_size_clamp' in kwargs:
+        host._bubble_big_size_clamp = max(1.5, min(8.0, float(kwargs['bubble_big_size_clamp'])))
+    if 'bubble_big_specular_max_size' in kwargs:
+        host._bubble_big_specular_max_size = max(0.5, min(5.0, float(kwargs['bubble_big_specular_max_size'])))
+    if 'bubble_trail_strength' in kwargs:
+        host._bubble_trail_strength = max(0.0, min(1.5, float(kwargs['bubble_trail_strength'])))
+
+
 def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     """Apply per-mode keyword settings to *widget*.
 
     Each key is checked in *kwargs*; if present the value is validated,
     clamped, and written to the corresponding ``widget._*`` attribute.
     """
+
+    apply_logical_vis_mode_kwargs(widget, kwargs)
 
     # --- Oscilloscope -------------------------------------------------
     if 'osc_glow_enabled' in kwargs:
@@ -487,8 +579,6 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bubble_ghost_decay = max(0.1, min(1.0, float(kwargs['bubble_ghost_decay'])))
 
     # --- Sine Wave Heartbeat -----------------------------------------------
-    if 'sine_heartbeat' in kwargs:
-        widget._sine_heartbeat = max(0.0, min(1.0, float(kwargs['sine_heartbeat'])))
 
     # --- Dev Curve --------------------------------------------------------------
     if 'devcurve_active_layer' in kwargs:
@@ -563,74 +653,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
             setattr(widget, f'_devcurve_layer_{src}_shape_nodes', list(kwargs[shape_key]))
 
     # --- Bubble -----------------------------------------------------------
-    if 'bubble_big_bass_pulse' in kwargs:
-        widget._bubble_big_bass_pulse = max(0.0, min(1.0, float(kwargs['bubble_big_bass_pulse'])))
-    if 'bubble_small_freq_pulse' in kwargs:
-        widget._bubble_small_freq_pulse = max(0.0, min(1.0, float(kwargs['bubble_small_freq_pulse'])))
-    if 'bubble_stream_direction' in kwargs:
-        val = str(kwargs['bubble_stream_direction']).lower()
-        if val == 'diagonal':
-            val = 'top_right'
-        if val not in (
-            'none',
-            'up',
-            'down',
-            'left',
-            'right',
-            'top_left',
-            'top_right',
-            'bottom_left',
-            'bottom_right',
-            'random',
-        ):
-            val = 'up'
-        widget._bubble_stream_direction = val
-    if 'bubble_stream_constant_speed' in kwargs:
-        widget._bubble_stream_constant_speed = max(
-            0.0, min(2.0, float(kwargs['bubble_stream_constant_speed']))
-        )
-    if 'bubble_stream_speed_cap' in kwargs:
-        widget._bubble_stream_speed_cap = max(
-            0.1, min(4.0, float(kwargs['bubble_stream_speed_cap']))
-        )
-    if 'bubble_stream_reactivity' in kwargs:
-        widget._bubble_stream_reactivity = max(0.0, min(1.25, float(kwargs['bubble_stream_reactivity'])))
-    if 'bubble_rotation_amount' in kwargs:
-        widget._bubble_rotation_amount = max(0.0, min(1.0, float(kwargs['bubble_rotation_amount'])))
-    if 'bubble_drift_amount' in kwargs:
-        widget._bubble_drift_amount = max(0.0, min(1.0, float(kwargs['bubble_drift_amount'])))
     if 'bubble_group_drift' in kwargs:
         widget._bubble_group_drift = bool(kwargs['bubble_group_drift'])
-    if 'bubble_drift_speed' in kwargs:
-        widget._bubble_drift_speed = max(0.0, min(1.0, float(kwargs['bubble_drift_speed'])))
-    if 'bubble_drift_frequency' in kwargs:
-        widget._bubble_drift_frequency = max(0.0, min(1.0, float(kwargs['bubble_drift_frequency'])))
-    if 'bubble_drift_direction' in kwargs:
-        val = str(kwargs['bubble_drift_direction']).lower()
-        valid_dirs = (
-            'none', 'left', 'right', 'diagonal',
-            'swish_horizontal', 'swish_vertical',
-            'swirl_cw', 'swirl_ccw', 'random'
-        )
-        if val not in valid_dirs:
-            val = 'random'
-        widget._bubble_drift_direction = val
-    if 'bubble_big_count' in kwargs:
-        widget._bubble_big_count = max(1, min(30, int(kwargs['bubble_big_count'])))
-    if 'bubble_small_count' in kwargs:
-        widget._bubble_small_count = max(5, min(80, int(kwargs['bubble_small_count'])))
-    if 'bubble_surface_reach' in kwargs:
-        widget._bubble_surface_reach = max(0.0, min(1.0, float(kwargs['bubble_surface_reach'])))
-    if 'bubble_bounce_big_pct' in kwargs:
-        widget._bubble_bounce_big_pct = max(0, min(100, int(kwargs['bubble_bounce_big_pct'])))
-    if 'bubble_bounce_small_pct' in kwargs:
-        widget._bubble_bounce_small_pct = max(0, min(100, int(kwargs['bubble_bounce_small_pct'])))
-    if 'bubble_bounce_big_speed' in kwargs:
-        widget._bubble_bounce_big_speed = max(0.0, min(2.0, float(kwargs['bubble_bounce_big_speed'])))
-    if 'bubble_bounce_small_speed' in kwargs:
-        widget._bubble_bounce_small_speed = max(0.0, min(2.0, float(kwargs['bubble_bounce_small_speed'])))
-    if 'bubble_bounce_same_only' in kwargs:
-        widget._bubble_bounce_same_only = bool(kwargs['bubble_bounce_same_only'])
     if 'bubble_collision_pop_mode' in kwargs:
         mode = str(kwargs['bubble_collision_pop_mode']).strip().lower()
         if mode not in {"off", "one", "all"}:
@@ -660,22 +684,10 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bubble_specular_direction = normalize_bubble_specular_direction(kwargs['bubble_specular_direction'])
     if 'bubble_gradient_direction' in kwargs:
         widget._bubble_gradient_direction = normalize_bubble_gradient_direction(kwargs['bubble_gradient_direction'])
-    if 'bubble_big_size_max' in kwargs:
-        widget._bubble_big_size_max = max(0.010, min(0.060, float(kwargs['bubble_big_size_max'])))
-    if 'bubble_small_size_max' in kwargs:
-        widget._bubble_small_size_max = max(0.004, min(0.030, float(kwargs['bubble_small_size_max'])))
     if 'bubble_big_visual_smoothing' in kwargs:
         widget._bubble_big_visual_smoothing = max(0.0, min(1.0, float(kwargs['bubble_big_visual_smoothing'])))
-    if 'bubble_big_contraction_bias' in kwargs:
-        widget._bubble_big_contraction_bias = max(0.0, min(2.0, float(kwargs['bubble_big_contraction_bias'])))
-    if 'bubble_big_size_clamp' in kwargs:
-        widget._bubble_big_size_clamp = max(1.5, min(8.0, float(kwargs['bubble_big_size_clamp'])))
-    if 'bubble_big_specular_max_size' in kwargs:
-        widget._bubble_big_specular_max_size = max(0.5, min(5.0, float(kwargs['bubble_big_specular_max_size'])))
     if 'bubble_growth' in kwargs:
         widget._bubble_growth = max(1.0, min(5.0, float(kwargs['bubble_growth'])))
-    if 'bubble_trail_strength' in kwargs:
-        widget._bubble_trail_strength = max(0.0, min(1.5, float(kwargs['bubble_trail_strength'])))
     if 'bubble_tail_opacity' in kwargs:
         widget._bubble_tail_opacity = max(0.0, min(0.85, float(kwargs['bubble_tail_opacity'])))
 
