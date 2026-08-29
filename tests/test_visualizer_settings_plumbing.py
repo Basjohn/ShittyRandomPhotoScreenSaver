@@ -3690,6 +3690,7 @@ class TestVisualizerModeBinding:
 
     def test_load_visualizer_mode_selection_falls_back_when_saved_mode_is_unknown(self):
         from ui.tabs.media.visualizer_mode_binding import (
+            get_visualizer_mode_fallback,
             initialize_visualizer_mode_combo,
             load_visualizer_mode_selection,
         )
@@ -3730,7 +3731,7 @@ class TestVisualizerModeBinding:
         initialize_visualizer_mode_combo(tab)
         load_visualizer_mode_selection(tab, {"mode": "not_a_real_mode"})
 
-        assert tab.vis_mode_combo.currentData() == "bubble"
+        assert tab.vis_mode_combo.currentData() == get_visualizer_mode_fallback()
 
     def test_load_visualizer_rainbow_state_uses_registry_modes_and_active_selection(self):
         from ui.tabs.media.visualizer_mode_binding import (

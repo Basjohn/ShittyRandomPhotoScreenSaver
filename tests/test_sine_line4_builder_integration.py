@@ -1,120 +1,104 @@
-"""Integration test that uses the actual builder code."""
-import pytest
+"""Sine Line 4 integration through the current lazy WidgetsTab builder.
+
+This replaces the retired ``build_sine_wave_tab``/standalone-swatch fixture with
+an owner-shaped test: the visualizer section is hydrated through WidgetsTab,
+then the shared swatches and shift control persist through the real save path.
+"""
+from __future__ import annotations
+
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QWidget
+import pytest
+
+from core.settings.visualizer_presets import get_custom_preset_index
+from ui.styled_popup import ColorSwatchButton
+from ui.tabs.widgets_tab import WidgetsTab
+
+
+def _configure_sine_mode(settings_manager) -> None:
+    widgets = settings_manager.get("widgets", {}) or {}
+    widgets = dict(widgets)
+    visualizer = dict(widgets.get("spotify_visualizer", {}) or {})
+    visualizer.update(
+        {
+            "visualizers_enabled": True,
+            "enabled": True,
+            "mode": "sine_wave",
+        }
+    )
+    widgets["spotify_visualizer"] = visualizer
+    settings_manager.set("widgets", widgets)
 
 
 @pytest.mark.qt
-def test_sine_builder_line4_color_connections(qt_app, qtbot):
-    """Test that the builder actually connects line 4 color buttons correctly."""
-    # Import the builder function
-    from ui.tabs.media.sine_wave_builder import build_sine_wave_tab
-    
-    # Create a real tab with all necessary attributes
-    class TestTab(QWidget):
-        def __init__(self):
-            super().__init__()
-            self._save_called_count = 0
-            self._saved_settings = None
-            
-        def _save_settings(self):
-            self._save_called_count += 1
-            print(f"_save_settings called #{self._save_called_count}")
-    
-    tab = TestTab()
-    
-    # Build the sine wave UI
-    build_sine_wave_tab(tab)
-    
-    # Check that the color buttons exist
-    assert hasattr(tab, 'sine_line4_color_btn'), "sine_line4_color_btn not created"
-    assert hasattr(tab, 'sine_line4_glow_btn'), "sine_line4_glow_btn not created"
-    
-    # Check initial colors
-    initial_color = tab.sine_line4_color_btn.get_color()
-    print(f"Initial button color: {initial_color.getRgb()}")
-    
-    # Change the color via the button (simulating user picking a color)
-    new_color = QColor(0, 255, 255, 230)
-    tab.sine_line4_color_btn.set_color(new_color)
-    
-    # Check that _save_settings was called
-    print(f"Save called count: {tab._save_called_count}")
-    
-    # The attribute should have been updated
-    if hasattr(tab, '_sine_line4_color'):
-        print(f"_sine_line4_color: {tab._sine_line4_color.getRgb()}")
-    else:
-        print("_sine_line4_color attribute does not exist!")
-        
-    # Verify save was called at least once
-    assert tab._save_called_count > 0, "_save_settings was never called"
+def test_lazy_visualizer_builder_persists_line4_color_glow_and_shift(
+    qt_app,
+    settings_manager,
+):
+    _configure_sine_mode(settings_manager)
+    tab = WidgetsTab(
+        settings_manager,
+        lazy_sections=True,
+        initial_view_state={"subtab_id": "visualizers"},
+    )
+    try:
+        assert isinstance(tab.sine_line4_color_btn, ColorSwatchButton)
+        assert isinstance(tab.sine_line4_glow_btn, ColorSwatchButton)
+        assert tab.vis_mode_combo.currentData() == "sine_wave"
+
+        line = QColor(0, 255, 255, 230)
+        glow = QColor(30, 60, 255, 180)
+        tab.sine_line4_color_btn.set_color(line)
+        tab.sine_line4_color_btn.color_changed.emit(line)
+        tab.sine_line4_glow_btn.set_color(glow)
+        tab.sine_line4_glow_btn.color_changed.emit(glow)
+        tab.sine_line4_shift.setValue(40)
+
+        # Flush through the real current save owner rather than waiting for the
+        # debounce timer in this deterministic integration test.
+        tab._save_settings_now()
+
+        saved = settings_manager.get("widgets", {})["spotify_visualizer"]
+        assert saved["sine_line4_color"] == [0, 255, 255, 230]
+        assert saved["sine_line4_glow_color"] == [30, 60, 255, 180]
+        assert saved["sine_line4_shift"] == pytest.approx(0.40)
+    finally:
+        tab.deleteLater()
+        qt_app.processEvents()
 
 
 @pytest.mark.qt
-def test_actual_save_media_settings_includes_line4(qt_app, qtbot):
-    """Test that save_media_settings actually includes line 4 values."""
-    from ui.tabs.widgets_tab_media import save_media_settings, load_media_settings
-    from ui.tabs.media.sine_wave_settings_binding import load_sine_wave_mode_settings
-    
-    # Create a tab with sine mode set
-    class TestTab(QWidget):
-        def __init__(self):
-            super().__init__()
-            self._current_visualizer_mode = 'sine_wave'
-            # Set up line 4 with a custom color
-            self._sine_line4_color = QColor(0, 255, 255, 230)  # Cyan
-            self._sine_line4_glow_color = QColor(0, 255, 255, 180)
-            self._sine_line4_horizontal_shift = 40
-            
-            # Set up line 2 for comparison (this should work)
-            self._sine_line2_color = QColor(100, 100, 100, 230)
-            self._sine_line2_glow_color = QColor(100, 100, 100, 180)
-            self._sine_line2_horizontal_shift = 35
-            
-    tab = TestTab()
-    
-    # Mock the settings manager
-    saved_settings = {}
-    
-    class MockSM:
-        def set_many(self, settings_dict):
-            saved_settings.update(settings_dict)
-            print(f"Saved settings: {settings_dict}")
-    
-    # Save the settings
-    media_config, spotify_vis_config = save_media_settings(tab)
-    
-    print(f"spotify_vis_config: {spotify_vis_config}")
-    
-    # Check that line 2 and line 4 settings are both present
-    assert 'sine_line2_color' in spotify_vis_config, "sine_line2_color not in config"
-    assert 'sine_line4_color' in spotify_vis_config, "sine_line4_color not in config"
-    
-    print(f"sine_line2_color: {spotify_vis_config['sine_line2_color']}")
-    print(f"sine_line4_color: {spotify_vis_config['sine_line4_color']}")
-    
-    # Verify values are correct
-    assert spotify_vis_config['sine_line4_color'] == [0, 255, 255, 230], \
-        f"Expected [0, 255, 255, 230], got {spotify_vis_config['sine_line4_color']}"
-    
-    # Test loading back
-    def mock_config_get(key, default=None):
-        return spotify_vis_config.get(key, default)
-    
-    # Create a fresh tab
-    tab2 = TestTab()
-    # Reset to defaults
-    tab2._sine_line4_color = QColor(255, 0, 150, 230)
-    
-    # Load the settings
-    load_sine_wave_mode_settings(tab2, mock_config_get)
-    
-    print(f"After load, line4 color: {tab2._sine_line4_color.getRgb()}")
-    
-    assert tab2._sine_line4_color.getRgb()[:4] == (0, 255, 255, 230), \
-        f"Expected (0, 255, 255, 230), got {tab2._sine_line4_color.getRgb()}"
+def test_line4_values_round_trip_through_lazy_visualizer_hydration(
+    qt_app,
+    settings_manager,
+):
+    _configure_sine_mode(settings_manager)
+    widgets = settings_manager.get("widgets", {}) or {}
+    visualizer = dict(widgets.get("spotify_visualizer", {}) or {})
+    # Arbitrary user-authored mode values are authoritative only in the
+    # trailing Custom slot. Curated presets intentionally overlay their authored
+    # values during Settings hydration, matching runtime preset semantics.
+    visualizer.update(
+        {
+            "preset_sine_wave": get_custom_preset_index("sine_wave"),
+            "sine_line4_color": [11, 22, 33, 230],
+            "sine_line4_glow_color": [44, 55, 66, 180],
+            "sine_line4_shift": 0.37,
+        }
+    )
+    widgets["spotify_visualizer"] = visualizer
+    settings_manager.set("widgets", widgets)
 
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v", "-s"])
+    tab = WidgetsTab(
+        settings_manager,
+        lazy_sections=True,
+        initial_view_state={"subtab_id": "visualizers"},
+    )
+    try:
+        assert tab._sine_line4_color.getRgb() == (11, 22, 33, 230)
+        assert tab._sine_line4_glow_color.getRgb() == (44, 55, 66, 180)
+        assert tab.sine_line4_color_btn.color().getRgb() == (11, 22, 33, 230)
+        assert tab.sine_line4_glow_btn.color().getRgb() == (44, 55, 66, 180)
+        assert tab.sine_line4_shift.value() == 37
+    finally:
+        tab.deleteLater()
+        qt_app.processEvents()
