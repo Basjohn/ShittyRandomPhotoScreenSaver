@@ -26,15 +26,24 @@ pytest path\to\test_file.py -q --tb=short
 Use `Docs/TestSuite.md` to identify current/permanent, migration-critical, WILL-BE-OBSOLETE and obsolete
 test ownership.
 
-The bounded chunk wrapper remains a deliberate local diagnostic:
+For current H destination work, use the maintained profile owned by `Docs/TestSuite.md`:
+
+```powershell
+python tests/run_chunked.py --profile h-destination --chunks 4 --timeout-seconds 900 --log
+```
+
+Maintained profiles isolate selected targets in fresh pytest subprocesses so queued Qt/QQuick teardown from one target cannot
+poison an unrelated result. `--chunks` groups/logs those isolated targets; it is not four giant shared Qt processes.
+
+The whole-tree wrapper remains a broad H/I **reconciliation diagnostic**:
 
 ```powershell
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
 ```
 
-Do not treat a red chunk/full-suite run as proof the active slice failed until the relevant failure/log
-is inspected. A completed pytest summary followed by a process that never exits strongly suggests
-shutdown/lifecycle ownership and should be isolated rather than hidden with a longer timeout.
+Do not treat a red whole-tree run as proof the active slice failed until the relevant failure/log and owner classification are
+inspected. A completed pytest summary followed by a process that never exits strongly suggests shutdown/lifecycle ownership and
+should be isolated rather than hidden with a longer timeout.
 
 ## 2. Phase-C Quick transition regression harnesses
 
@@ -162,7 +171,7 @@ Focused Quick harnesses prove as relevant:
 - resource cleanup;
 - exact transition/visualizer/widget contract being changed.
 
-## 8. Closed E/F ownership regressions and current G routing
+## 8. Closed E/F/G ownership regressions and current H routing
 
 ### 8.1 Landed E/F capability/ownership foundation
 
@@ -218,26 +227,25 @@ Preserve focused Settings/runtime cases for:
 
 Provider/model/resource retirement assertions stay at the actual neutral owner; do not move them back into presentation tests.
 
-### 8.4 Current G focused routing
+### 8.4 Current H destination routing
 
-G4 core viewport resize is landed; the immediate bar is the bounded post-checkpoint correction batch:
+G4/G7/G8 implementation is closed. Do not use old G command bundles as the default H bar.
 
-```powershell
-pytest tests/test_bubble_viewport_config_route.py tests/test_bubble_viewport_reflow.py tests/test_custom_layout_manager.py tests/test_qtquick_custom_layout_overlay.py tests/test_visualizer_runtime_controller.py -q --tb=short
-```
-
-Add the exact Bubble BTF/replay/cadence suites named by the correction decomposition when Bubble simulation/output code
-changes. Never regenerate goldens merely to make viewport migration pass.
-
-After G4 corrections are GREEN, G7/G8 routing centers on:
+The maintained H destination profile is the ordinary broad architecture regression route:
 
 ```powershell
-pytest tests/test_qtquick_auxiliary.py tests/test_qtquick_context_menu.py tests/test_qtquick_input_controller.py tests/test_qtquick_runtime.py -q --tb=short
+python tests/run_chunked.py --profile h-destination --chunks 4 --timeout-seconds 900 --log
 ```
 
-Use focused two-display/runtime-shaped harnesses for A -> B -> A focus/Ctrl/context/CUSTOM behavior when available. Physical
-hardware ingress and final installed multi-display acceptance remain J evidence. Do not stop for independent audit between
-GREEN G slices; the audit stop is once after complete G is checkpointed.
+Use smaller focused files/nodeids first for the slice being changed. The H profile covers deterministic/runtime-shaped Quick
+display/unit/family/CUSTOM/input/transition/visualizer ownership, including the stronger technical-config + real retained-item
+visualizer boundary. It intentionally does **not** turn operator-hardware-dependent QScreen/topology cells into a per-commit H
+gate.
+
+Real two-display identity/topology, A -> B -> A physical ingress, mixed refresh/DPR, off/wake and final installed
+multi-display acceptance remain J evidence. Run those physical cells separately/isolated when the claim requires the operator's
+actual hardware.
+
 
 ## 9. Physical evidence
 

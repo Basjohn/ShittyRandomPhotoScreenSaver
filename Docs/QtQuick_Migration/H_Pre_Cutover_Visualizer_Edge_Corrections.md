@@ -1,11 +1,17 @@
 # H Pre-Cutover Visualizer Destination-Edge Corrections
 
+Status: **CLOSED audit/correction evidence — not current work admission**  
 Status authority: `Current_Plan.md`  
 Durable H boundary: `Remaining_H_Production_Cutover_Decomposition.md`  
+Post-audit True-F closure record: `H_True_F_Technical_Closure.md`  
 Audit source basis: `b2a8cd8527c18bc4a8137717d8eb5f891140bd0d`  
 Audit date: 2026-08-29
 
-This is the bounded correction record discovered **before** the atomic DisplayManager production flip. It does not reopen
+The `[RED]` labels below describe findings **at the audited source basis**. They are preserved as evidence and must not be read
+as current phase status. Findings A–E were closed, and the first claimed F closure was later independently strengthened by the
+True-F technical/retained-consumer correction. Live gate status belongs only to `Current_Plan.md` / `Docs/TestSuite.md`.
+
+This is the bounded correction record discovered **before** the DisplayManager production authority flip. It does not reopen
 accepted G, Phase D rendering work, Bubble tuning or the widget-free visualizer logical-owner extraction. Its purpose is to
 close the last product-owner/synchronization seams so the atomic cutover does not strand a thread, bind an empty render bridge,
 duplicate the visualizer across displays or silently lose authored per-mode configuration.
@@ -155,7 +161,11 @@ fallback. QML/Quick may identify the visualizer hit region, but Python remains m
 
 Do not solve this with a second global mouse router or by changing the global fallback meaning.
 
-## 7. Finding F — existing fresh-owner tests are component proof, not destination-chain proof [RED]
+## 7. Finding F — existing fresh-owner tests are component proof, not destination-chain proof [RED at audit basis]
+
+**Closure note:** the first follow-up proof still stopped short of canonical technical application and real retained-item
+consumption. `H_True_F_Technical_Closure.md` records that final bounded correction. Keep this section as the original finding,
+not as the current gate.
 
 The current fresh-owner test usefully proves construction/configuration/bind/start/retire shape with a small fake engine and a
 bounded Bubble-oriented configuration. It does not prove the whole product route. Before atomic cutover add at least one
@@ -181,7 +191,7 @@ Minimum deterministic proof:
 Existing BTF/golden/render-node/geometry/component tests remain binding and should stay unchanged unless exact source proves a
 real contract correction. Do not rewrite goldens to bless migration drift.
 
-## 8. Implementation order before the atomic DisplayManager flip
+## 8. Historical implementation order used to admit the DisplayManager flip
 
 Recommended bounded order:
 
@@ -233,5 +243,5 @@ canonical visualizer settings / preset / activation
 with semantic mode-cycle input, committed/CUSTOM viewport ownership, generation/activation fencing and hard successful join
 retirement all proven without constructing `SpotifyVisualizerWidget`.
 
-At that point the correction does **not** create another user-attention stop: resume H with the atomic DisplayManager + engine
-cutover, runtime-shaped production proof and caller-proven legacy physical-host deletion.
+Once the correction gate closed, execution returned to the durable H cutover route. Do not reopen this audit merely because
+its preserved finding headings say `[RED]`; inspect current source/tests and `Current_Plan.md` instead.

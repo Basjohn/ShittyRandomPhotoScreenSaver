@@ -28,7 +28,9 @@ scene controller, display frame pacer, input controller, retained auxiliary/cont
 `VisualizerRuntimeController` owns visualizer source/runtime identity, one controller-owned logical tick state, the sole
 authored `VisualizerLogicalRuntime`, logical mode state, latest immutable logical publication and generation/activation
 fencing. Every configuration value consumed by authored logical evolution or a mode-owned frame runtime must be available
-without `SpotifyVisualizerWidget`; pure renderer/chrome configuration stays presentation-owned.
+without `SpotifyVisualizerWidget`; pure renderer/chrome configuration stays presentation-owned. Technical settings are also
+split by consumer: engine/DSP controls apply through the controller-owned shared BeatEngine/audio-worker boundary, while
+technical-origin values consumed by authored logical evolution live on controller-owned logical state.
 
 Current product semantics admit one visualizer instance. Product orchestration chooses one participating display owner before
 constructing the visualizer edge; other display runtimes do not create duplicate visualizer controllers/source owners.
@@ -140,8 +142,9 @@ switch back.
 ## H vs J proof
 
 H requires focused/runtime-shaped proof sufficient to establish sole destination ownership, lifecycle safety,
-cardinality and caller-dead old-host deletion.
+cardinality and caller-dead old-host deletion. Multi-display semantics may be proven with deterministic/runtime-shaped
+identities in H; exact behavior tied to the operator's real physical `QScreen` set is not required to admit the authority flip.
 
-J owns the comprehensive compiled/installed physical matrix: real 1/2/N displays, mixed refresh/DPR, topology/off-wake,
-full widget/Visualizer eyes-on parity (including the deferred all-five-mode baseline/wide/tall viewport gate), physical
-continuity/tail metrics and clean installed exit.
+J owns the comprehensive compiled/installed physical matrix: real 1/2/N displays, exact physical QScreen identity,
+add/remove/reorder topology, mixed refresh/DPR, topology/off-wake, full widget/Visualizer eyes-on parity (including the
+deferred all-five-mode baseline/wide/tall viewport gate), physical continuity/tail metrics and clean installed exit.

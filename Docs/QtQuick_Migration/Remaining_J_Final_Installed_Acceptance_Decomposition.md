@@ -92,6 +92,11 @@ At minimum prove current destination ownership for:
 
 `Docs/TestSuite.md` owns the exact current inventory. Do not recreate a second permanent test manifest here.
 
+The maintained H destination profile may intentionally exclude test cells whose assertion depends on the operator's real
+physical `QScreen` set. Retained source-mode physical identity/topology smoke cells are useful **J evidence**, not missing H
+deterministic coverage. Run them in isolated subprocesses when appropriate so one Qt/scene-graph teardown cannot contaminate an
+unrelated acceptance result.
+
 ## 5. Compiled / frozen / packaging gate
 
 Use the current supported build tooling and `06_Build_Tooling_Validation.md`; do not invent a new packaging architecture in J.
@@ -147,7 +152,9 @@ For each relevant cell verify:
 - correct recovery/recreation without moving live render resources illegally between windows.
 
 If hardware cannot exercise a matrix cell, record the cell as unrun rather than converting synthetic coverage into a
-physical pass.
+physical pass. A source-mode physical smoke timing miss before the production Quick authority flip is not automatically a
+migration blocker; rerun/classify the corresponding cell against the post-H/I production-authoritative chain before changing
+architecture.
 
 ## 7. Visual parity / presentation matrix
 

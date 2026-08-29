@@ -43,11 +43,23 @@ It does **not** mutate:
 
 ### Configuration ownership follows the consumer
 
-Do not classify visualizer settings by legacy widget field location or by whether a name sounds "visual". If authored logical
-evolution or a Spectrum/Oscilloscope/Sine/Bubble/DevCurve mode-owned logical frame runtime consumes the value, the value must
-be available through presentation-neutral resolved logical/runtime configuration. Renderer-only colour/glow/card/chrome/style
-remains presentation-owned. Do not solve missing neutral configuration by copying every `SpotifyVisualizerWidget` attribute
-into the controller.
+Do not classify visualizer settings by legacy widget field location, Settings subsection, or by whether a name sounds
+"visual" or "technical". If authored logical evolution or a Spectrum/Oscilloscope/Sine/Bubble/DevCurve mode-owned logical
+frame runtime consumes the value, the value must be available through presentation-neutral resolved logical/runtime
+configuration. Renderer-only colour/glow/card/chrome/style remains presentation-owned. Do not solve missing neutral
+configuration by copying every `SpotifyVisualizerWidget` attribute into the controller.
+
+The canonical resolved technical cache is also split by consumer:
+
+- floor/sensitivity/audio-block/dynamic-range/AGC/input-gain/kick-lane and similar DSP inputs go through the **single
+  controller-owned shared BeatEngine/audio-worker boundary**;
+- transient pulse/clamp and mode transient-mix values consumed by authored logical evolution live on controller-owned logical
+  state even though their settings provenance is "technical";
+- bar-count changes must keep controller `bar_count`, shared-engine reconfiguration/generation, and the logical display-bar
+  mirror/freshness state coherent;
+- legacy overlay mirrors do not survive merely because the old QWidget technical applier wrote them.
+
+Needing the shared BeatEngine is not a reason to retain a QWidget owner.
 
 ## 2. One logical clock
 
@@ -101,8 +113,12 @@ latest VisualizerLogicalFrame
 ```
 
 It may coalesce latest state. It may not add a second timer/cadence, FIFO/catch-up queue, producer wait, paint acknowledgement
-or call into legacy `present_tick()`/QWidget/compositor presentation. If no complete current snapshot reaches the bridge, the
-visualizer destination is not wired.
+or call into legacy `present_tick()`/QWidget/compositor presentation. The resolved presentation record used to compose the
+snapshot must also be committed to the retained item at the same synchronization boundary so geometry/policy cannot be resolved
+twice into conflicting states.
+
+A test that calls `VisualizerSnapshotBridge.take_for_render()` directly proves the bridge contract only. Destination delivery
+requires the real retained `VisualizerRenderItem`/render-node synchronization path to admit the exact identity-fenced snapshot.
 
 ## 5. Physical presentation
 

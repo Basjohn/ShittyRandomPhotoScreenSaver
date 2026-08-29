@@ -4,10 +4,14 @@ Last updated: 2026-08-29
 
 ## Current checkpoint
 
-The documentation is reconciled through independently audited pushed source:
+The documentation is reconciled through independently audited pushed source plus the current test-maintenance worktree:
 
 ```text
-48183b44 (True-F technical + retained-consumer closure landed; 7/7 focused gate GREEN)
+5f33d300 (True-F closure + Settings/test-suite reconciliation landed on pushed main)
+current worktree: final H-profile target isolation / H-vs-J runtime-test classification reconciled
+True-F focused gate: 7/7 GREEN
+Settings-overhaul focused reconciliation: 154/154 GREEN
+H destination profile: 57/57 target-isolated GREEN
 Complete G: independently audited and ACCEPTED.
 H: ACTIVE. The pre-cutover visualizer destination-edge correction gate is CLOSED.
 CURRENT H implementation target: coordinated DisplayManager + engine authority cutover.
@@ -58,10 +62,16 @@ bounded pre-cutover visualizer destination-edge correction gate is CLOSED, so th
 now the current H implementation target.** Deferred to J installed acceptance: the all-five-mode visualizer eyes-on gate and the physical two-display A->B->A
 hardware-ingress matrix.
 
-The attempted broad chunked-suite caution run is **not a new H RED gate**: the test inventory/documentation is known to have
-drifted across the large Settings GUI/theme overhaul and legacy-architecture retirement. Until `tests/` + `Docs/TestSuite.md`
-are reconciled in the immediate maintenance pass, focused owner-shaped H gates and exact source outrank stale broad-suite
-collection failures. Do not restore retired architecture merely to satisfy an obsolete test.
+The pre-cutover test-authority maintenance pass is **complete enough for H**. The large Settings GUI/theme overhaul is now
+covered by reconciled current-owner tests (**154/154 GREEN**), and the maintained H destination profile is **57/57 GREEN**
+under target-isolated subprocess execution. The earlier whole-tree/chunk noise was traced to stale legacy-owner tests plus
+Qt/QQuick cross-test lifecycle contamination; it is not an unresolved H architecture defect. `Docs/TestSuite.md` now owns the
+current H-vs-I/J test classification.
+
+Two real-physical-display cells in `tests/test_qtquick_runtime.py` remain intentionally outside the per-commit H destination
+profile: exact two-screen identity and three-generation add/remove topology recreation. They remain valuable tests, but they
+exercise the operator's actual `QScreen` hardware/topology and therefore belong to the existing **J physical acceptance matrix**.
+Do not use those J cells to delay the production authority flip, and do not weaken/delete them merely to manufacture an H pass.
 
 Current phase state:
 
@@ -76,7 +86,7 @@ G6      retained input / semantic family actions         CLOSED
 G7      retained context + auxiliary pixels              CLOSED (destination sole aux; legacy = H-scaffolding)
 G8      MC / focus closure                               DETERMINISTIC CLOSED; physical A->B->A matrix = J debt
 G-GATE  independent audit of complete checkpointed G     ACCEPTED
-H       production Quick owner/orchestration cutover     ACTIVE; pre-cutover gate CLOSED, DisplayManager cutover CURRENT
+H       production Quick owner/orchestration cutover     ACTIVE; destination gate 57/57 GREEN, DisplayManager cutover CURRENT
 I       residue only                                     after H
 J       final installed / physical validation            final
 ```
@@ -325,8 +335,9 @@ regression evidence.
 ### H PRE-CUTOVER correction gate — CLOSED; DisplayManager cutover CURRENT
 
 The bounded correction route `Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md` is closed: steps 1–7
-below are landed, test-gated and pushed (Findings A–F GREEN; see the checkpoint disposition above). Steps 8–9 (the coordinated
-production-authority cutover and caller-proven deletion) are the remaining H work and are now CURRENT. The required order was:
+below are landed and test-gated (Findings A–F GREEN; see the checkpoint disposition above). The reconciled H destination
+regression profile is also GREEN (**57/57 targets**). Steps 8–9 — the coordinated production-authority cutover and
+caller-proven deletion — are therefore the remaining H work and are **CURRENT NOW**. The completed route and remaining order are:
 
 1. **Correct all-five configuration ownership.** Inventory actual logical/frame-runtime consumers. Move only those consumed
    values behind presentation-neutral resolved configuration/state; keep renderer-only colour/glow/card/chrome values on the
@@ -391,6 +402,10 @@ It covers build/frozen packaging, real 1/2/N-display refresh/DPR/topology/off-wa
 widget/Visualizer eyes-on parity, the deferred G4 all-mode viewport gate, physical cadence/performance tails, long-soak resource
 stability, clean shutdown, test/debt reconciliation and final documentation closure. J is acceptance/sign-off, not another
 presentation migration.
+
+The physical runtime smoke cells retained for J include the two-display identity and topology-recreation tests currently housed
+in `tests/test_qtquick_runtime.py`. Their presence in the repository is intentional. H retains the deterministic/runtime-shaped
+owner, generation-recreation and coordinated-exit tests from that module; J owns the hardware-dependent cells after H/I.
 
 ## Current unrelated acceptance debt
 

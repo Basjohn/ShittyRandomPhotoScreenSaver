@@ -99,7 +99,12 @@ The worker does not mutate Quick items or GPU resources.
 
 Configuration follows the consuming owner. Values used by authored logical evolution or mode-owned frame runtimes are
 presentation-neutral resolved configuration; renderer-only style/chrome is presentation-owned. Legacy widget attribute
-location is not an ownership rule.
+location and Settings subsection are not ownership rules.
+
+The resolved technical cache is deliberately not monolithic: DSP/capture controls apply through the controller-owned shared
+BeatEngine/audio-worker boundary, while technical-origin transient controls that authored logical evolution reads live on
+controller-owned logical state. Bar-count reconfiguration keeps controller, engine generation and logical display-bar
+mirror/freshness state coherent. Legacy overlay-only mirrors have no destination role without an exact retained consumer.
 
 ## 6. Latest-state semantics
 
@@ -346,6 +351,8 @@ Use:
 - BTF;
 - source freshness tests;
 - real renderer/output tests where visibility matters;
+- canonical settings/preset -> technical-engine/logical/presentation owner routing;
+- real retained-item snapshot consumption rather than direct bridge-drain-only proof;
 - Quick runtime-shaped presentation checks;
 - card-inner clip tests;
 - cardless-policy scene test;

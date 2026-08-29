@@ -36,6 +36,11 @@ Render-thread state is detached, generation/activation fenced and latest-state o
 - [ ] Anything read by authored logical evolution or a mode-owned Spectrum/Oscilloscope/Sine/Bubble/DevCurve frame runtime is
       available without `SpotifyVisualizerWidget`.
 - [ ] Pure renderer/style/chrome values remain presentation-owned.
+- [ ] A resolved "technical" value is routed by actual consumer rather than treated as one monolithic technical bucket:
+      BeatEngine/audio-worker input -> the one shared engine boundary; authored-logical input -> controller-owned logical state.
+- [ ] Bar-count changes keep controller authority, shared-engine reconfiguration/generation and logical bar-mirror freshness
+      coherent.
+- [ ] Legacy overlay-only technical mirrors were not recreated without an exact retained consumer.
 - [ ] No broad copy of legacy widget attributes into `VisualizerRuntimeController` was used to hide missing ownership.
 
 ## 4B. Quick snapshot publication
@@ -44,6 +49,10 @@ Render-thread state is detached, generation/activation fenced and latest-state o
 - [ ] Runtime generation, engine generation, activation and mode identity are fenced before publication.
 - [ ] Current presentation geometry/policy/fade/style is resolved into `ResolvedVisualizerPresentation`.
 - [ ] A complete `VisualizerRenderSnapshot` is published into the existing bridge and reaches the retained Quick consumer.
+- [ ] The same resolved presentation record used for snapshot composition is committed to the retained item at synchronization;
+      presentation is not independently re-resolved into conflicting geometry/policy.
+- [ ] A direct test call to `bridge.take_for_render()` is not treated as retained-consumer proof; the real retained
+      item/render-node synchronization path admits the exact snapshot identity.
 - [ ] Bridge binding alone is never treated as proof.
 - [ ] No second timer/cadence, FIFO, catch-up, paint acknowledgement or legacy `present_tick()` call was introduced.
 
@@ -127,8 +136,8 @@ GPU resources retire on the legal render owner.
 
 ## 11. Required proof for geometry changes
 
-- all five modes from canonical settings/preset resolution through logical publication and complete Quick snapshot
-  consumption;
+- all five modes from canonical settings/preset resolution through technical-engine/logical/presentation ownership,
+  logical publication and complete retained Quick snapshot consumption;
 - baseline + wide + tall extents;
 - no anisotropic final-pixel stretch;
 - separate scale/extent round-trip;

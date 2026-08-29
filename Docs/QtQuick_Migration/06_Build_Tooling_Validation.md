@@ -204,20 +204,22 @@ Every slice:
 focused pytest
 ```
 
-At major phase boundaries, when useful:
+At H architecture boundaries, use the maintained destination profile owned by `Docs/TestSuite.md`:
 
 ```text
-python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
+python tests/run_chunked.py --profile h-destination --chunks 4 --timeout-seconds 900 --log
 ```
 
-Do not run the entire suite after every small edit.
+Maintained profile targets run in fresh pytest subprocesses to prevent Qt/QQuick lifecycle contamination across unrelated
+targets. Do not run the entire suite after every small edit.
 
-Run the bounded suite when useful before H owner cutover/major legacy deletion and again as part of final closure when
-the environment is appropriate. Do not turn every G slice into a full-suite/build gate.
+The no-profile whole-tree command remains useful during H/I as a reconciliation diagnostic, not as a homogeneous
+production-authority gate while legacy-presenter tests still exist. A red old-presenter test is not automatically a current
+defect. Classify it against `Docs/TestSuite.md`; likewise, do not delete a `WILL BE OBSOLETE` test before its
+replacement-owner coverage exists.
 
-A red old-presenter test is not automatically a current defect. Classify it against
-`Docs/TestSuite.md`; likewise, do not delete a `WILL BE OBSOLETE` test before its replacement-owner
-coverage exists.
+Real physical QScreen identity/topology/mixed-refresh/DPR acceptance remains J evidence even when source-mode smoke cells exist
+earlier.
 
 ## 11. Manual/installed gates
 
