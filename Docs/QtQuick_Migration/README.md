@@ -24,6 +24,7 @@ Live phase/checkpoint status is intentionally not duplicated here; read `Current
 | `G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` | G4 ownership/spatial correction closure reference |
 | `Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` | G7/G8 auxiliary/focus closure reference |
 | `Remaining_H_Production_Cutover_Decomposition.md` | H owner wiring, viewport-config binding, cardinality and old-host deletion |
+| `H_Pre_Cutover_Visualizer_Edge_Corrections.md` | bounded H pre-cutover visualizer synchronization/config/admission/retirement correction gate |
 | `Remaining_J_Final_Installed_Acceptance_Decomposition.md` | J compiled/installed/physical acceptance and closure matrix |
 
 ## Migration scaffolding rule

@@ -30,6 +30,23 @@ Visualizer content stays inside the owning display's single retained `QQuickWind
 Render-thread state is detached, generation/activation fenced and latest-state oriented. Do not pass live
 `SpotifyVisualizerWidget`, provider, SettingsManager or mutable heavy arrays to the render thread.
 
+## 4A. Consumer-driven configuration ownership
+
+- [ ] For every changed setting, identify its actual consumer.
+- [ ] Anything read by authored logical evolution or a mode-owned Spectrum/Oscilloscope/Sine/Bubble/DevCurve frame runtime is
+      available without `SpotifyVisualizerWidget`.
+- [ ] Pure renderer/style/chrome values remain presentation-owned.
+- [ ] No broad copy of legacy widget attributes into `VisualizerRuntimeController` was used to hide missing ownership.
+
+## 4B. Quick snapshot publication
+
+- [ ] One GUI/Quick synchronization owner consumes the freshest logical publication.
+- [ ] Runtime generation, engine generation, activation and mode identity are fenced before publication.
+- [ ] Current presentation geometry/policy/fade/style is resolved into `ResolvedVisualizerPresentation`.
+- [ ] A complete `VisualizerRenderSnapshot` is published into the existing bridge and reaches the retained Quick consumer.
+- [ ] Bridge binding alone is never treated as proof.
+- [ ] No second timer/cadence, FIFO, catch-up, paint acknowledgement or legacy `present_tick()` call was introduced.
+
 ## 5. Shell / clip
 
 Current modes are CARD + CARD_INTERIOR. Custom GL stays above card fill, below border and inside the rounded inner path.
@@ -89,6 +106,20 @@ One authored fade progress may derive scene/content layer values; it must not cr
 `presentation_ready` distinct from `reactive_source_ready`; paused Spectrum may reveal idle presentation without a fake
 source identity.
 
+## 9A. Product display admission / semantic input
+
+- [ ] Exactly one visualizer owner is admitted across participating displays for the current product instance.
+- [ ] Requested-monitor/fallback and committed/CUSTOM geometry semantics are preserved.
+- [ ] Non-owning displays do not construct duplicate controller/source/logical runtime ownership.
+- [ ] Retained visualizer double-click cycles mode before display-level next-image fallback.
+
+## 9B. Retirement barrier
+
+- [ ] Visualizer publication closes before display teardown.
+- [ ] Sole authored logical runtime stop/join succeeds before owner/display retirement is reported complete.
+- [ ] A deliberately failed join leaves the generation unresolved and blocks terminal teardown.
+- [ ] Retry/success path is idempotent and does not duplicate owners.
+
 ## 10. Playback / lifecycle
 
 Pause/Play preserves runtime identity and warm-source semantics. Generation zero is valid. Stale snapshots are rejected.
@@ -96,7 +127,8 @@ GPU resources retire on the legal render owner.
 
 ## 11. Required proof for geometry changes
 
-- all five modes;
+- all five modes from canonical settings/preset resolution through logical publication and complete Quick snapshot
+  consumption;
 - baseline + wide + tall extents;
 - no anisotropic final-pixel stretch;
 - separate scale/extent round-trip;

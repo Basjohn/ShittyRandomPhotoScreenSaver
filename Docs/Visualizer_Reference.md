@@ -43,20 +43,26 @@ Primary owner:
 
 Supporting logical/source modules remain Python.
 
-Current durable flow (landed Phase-D boundary):
+Durable destination flow (Phase-D components plus the H production synchronization edge):
 
 ```text
 source / engine
     -> sole VisualizerLogicalRuntime
     -> mode-owned logical frame runtime (spectrum/oscilloscope/sine/bubble/devcurve)
-    -> immutable latest-state publication
-    -> VisualizerSnapshotBridge
-    -> Quick synchronization boundary (take-for-render; not a paint ack)
+    -> immutable latest logical publication
+    -> GUI/Quick synchronization owner
+        -> current resolved presentation state
+        -> complete VisualizerRenderSnapshot
+        -> existing VisualizerSnapshotBridge
+    -> Quick take-for-render (not a paint ack)
     -> one QSGRenderNode / lazy mode renderer
     -> render-node-local SDF/stencil clip
     -> retained Quick shell/chrome
-    -> one standalone QQuickWindow per physical display
+    -> admitted display's standalone QQuickWindow
 ```
+
+The bridge/render components can exist before H cutover, but bridge binding alone does not mean the destination is wired: a
+complete current snapshot must actually be composed and published.
 
 During migration, old GUI `present_tick`/compositor code may still exist as source scaffolding or historical reference.
 It is not destination architecture and need not remain runnable merely to preserve intermediate product continuity.
@@ -90,6 +96,10 @@ Presentation side owns:
 - physical presentation.
 
 The worker does not mutate Quick items or GPU resources.
+
+Configuration follows the consuming owner. Values used by authored logical evolution or mode-owned frame runtimes are
+presentation-neutral resolved configuration; renderer-only style/chrome is presentation-owned. Legacy widget attribute
+location is not an ownership rule.
 
 ## 6. Latest-state semantics
 
@@ -311,6 +321,21 @@ top/bottom     -> viewport height
 
 Viewport resizing is part of the destination CUSTOM contract, not optional QoL and not permission to stretch a
 rendered image. Save/Cancel and layout slots preserve scale and extent separately.
+
+## 14A. Visualizer display admission / semantic mode cycle
+
+Current product semantics admit one visualizer instance. Python orchestration resolves the requested monitor against actual
+participating Quick displays and constructs exactly one visualizer owner. Non-owning displays do not duplicate controller,
+source or authored logical runtime ownership. Preserve committed/CUSTOM geometry and the established requested-monitor
+fallback/transfer behavior.
+
+Retained visualizer double-click means cycle visualizer mode. The global display double-click means next image only when no
+retained family/visualizer semantic hit consumes it.
+
+## 14B. Retirement
+
+Visualizer generation retirement requires successful stop/join of the sole authored logical runtime. Failed join is a hard
+barrier and leaves the owner/generation unresolved; it is not permission to detach presentation and continue display teardown.
 
 ## 15. Validation
 

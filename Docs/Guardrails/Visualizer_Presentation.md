@@ -41,6 +41,14 @@ It does **not** mutate:
 - QPixmap/QPainter;
 - GPU/GL/RHI resources.
 
+### Configuration ownership follows the consumer
+
+Do not classify visualizer settings by legacy widget field location or by whether a name sounds "visual". If authored logical
+evolution or a Spectrum/Oscilloscope/Sine/Bubble/DevCurve mode-owned logical frame runtime consumes the value, the value must
+be available through presentation-neutral resolved logical/runtime configuration. Renderer-only colour/glow/card/chrome/style
+remains presentation-owned. Do not solve missing neutral configuration by copying every `SpotifyVisualizerWidget` attribute
+into the controller.
+
 ## 2. One logical clock
 
 Forbidden logical owners:
@@ -79,6 +87,22 @@ The GUI/Quick boundary must be:
 
 The migration removes obsolete GUI `present_tick`/QRhiWidget ownership as pixels move to Quick rather
 than wrapping it permanently inside another layer.
+
+### Bridge population is an ownership bar
+
+A `VisualizerSnapshotBridge` connected to the Quick item is not sufficient. Exactly one GUI/Quick synchronization owner must:
+
+```text
+latest VisualizerLogicalFrame
++ current resolved presentation state
+-> identity-fenced VisualizerRenderSnapshot
+-> existing bridge
+-> retained Quick visualizer consumer
+```
+
+It may coalesce latest state. It may not add a second timer/cadence, FIFO/catch-up queue, producer wait, paint acknowledgement
+or call into legacy `present_tick()`/QWidget/compositor presentation. If no complete current snapshot reaches the bridge, the
+visualizer destination is not wired.
 
 ## 5. Physical presentation
 
@@ -297,6 +321,22 @@ edge survival, state-to-screen timing, and final continuity.
 
 Non-default viewport aspect must not be implemented by anisotropically stretching Bubble circles,
 line widths, or future 3D objects.
+
+## 14A. Product display admission and semantic input
+
+Current product semantics admit one visualizer instance. Resolve its requested monitor against participating Quick displays
+before constructing the visualizer owner. Exactly one display owns the controller/logical runtime/Quick edge for an admitted
+activation; other displays construct none. Preserve committed/CUSTOM geometry and requested-display fallback/transfer
+semantics.
+
+Double-click inside the retained visualizer cycles visualizer mode. Only if family/visualizer semantic hit admission declines
+the event may the display-level fallback advance to the next image.
+
+## 14B. Hard retirement barrier
+
+The sole authored `VisualizerLogicalRuntime` is non-daemon generation-owned work. Stop/join failure blocks visualizer and
+owning-display generation retirement. Never detach the bridge, report successful owner retirement or continue terminal window
+teardown while that runtime remains owned.
 
 ## 15. Generation fencing
 

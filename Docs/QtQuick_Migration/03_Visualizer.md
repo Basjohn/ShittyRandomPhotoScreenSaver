@@ -61,9 +61,11 @@ VisualizerRuntimeController
     latest logical publication
 
 Quick visualizer presentation
-    immutable snapshot admission
-    presentation policy
-    geometry/fade/readiness
+    one GUI/Quick synchronization owner
+    latest logical mailbox take/coalescing
+    generation/engine-generation/activation/mode fencing
+    resolved presentation policy + geometry/fade/readiness/style
+    complete VisualizerRenderSnapshot publication into existing bridge
     optional retained shell chrome
     QSGRenderNode visual content
 ```
@@ -71,10 +73,12 @@ Quick visualizer presentation
 No hidden QWidget is required to retain logical/source ownership. The authored logical step advances against the
 controller-owned logical state rather than a live `SpotifyVisualizerWidget`.
 
-Configuration follows the same ownership split: canonical settings/activation resolution feeds one presentation-neutral
-logical/runtime apply authority for authored simulation state and engine/runtime configuration; visual-only style/chrome
-configuration stays on the presentation side. Do not turn the logical controller into a bag of legacy widget presentation
-fields.
+Configuration follows the same ownership split, but **the owning consumer decides the boundary**. Canonical
+settings/activation resolution must feed presentation-neutral resolved configuration for every value consumed by authored
+logical evolution or a mode-owned logical frame runtime across Spectrum, Oscilloscope, Sine, Bubble and DevCurve. Pure
+renderer/style/chrome values stay on the presentation side. Do not classify a value as presentation-only merely because it
+historically lived on `SpotifyVisualizerWidget`, and do not turn the logical controller into a bag of every legacy widget
+field.
 
 The Quick render node does not read a live `SpotifyVisualizerWidget`, arbitrary QObject presentation
 state, provider objects or `SettingsManager`.
@@ -163,20 +167,28 @@ the coalescing rule rather than weakening the BTF test.
 
 ## 5. Synchronization boundary
 
-The landed flow is:
+The durable destination flow is:
 
 ```text
 source / engine
     -> sole VisualizerLogicalRuntime
     -> mode-owned logical frame runtime
-    -> immutable latest-state publication
-    -> VisualizerSnapshotBridge
-    -> Quick synchronization boundary / take-for-render
+    -> immutable latest logical publication
+    -> GUI/Quick synchronization owner
+        -> take/coalesce freshest logical publication
+        -> resolve current presentation state
+        -> compose VisualizerRenderSnapshot
+        -> publish existing VisualizerSnapshotBridge
+    -> Quick take-for-render
     -> one QSGRenderNode / lazy mode renderer
     -> render-node-local SDF/stencil clip
     -> retained Quick shell/chrome
-    -> one standalone QQuickWindow per physical display
+    -> owning display's standalone QQuickWindow
 ```
+
+The individual logical, bridge and render components may be landed before production cutover; the chain is **not complete**
+until the synchronization owner actually composes and publishes a current snapshot. Merely binding the bridge object to the
+Quick scene is not destination proof.
 
 The synchronization boundary may mark visual state dirty and transfer a complete current snapshot. It
 may not:
@@ -536,6 +548,18 @@ shell.
 Persist/restore whole-size scale and viewport extent as separate values. Edge resize is required for all five current
 modes; no current production mode is a destination opt-out.
 
+## 13A. Product display admission and semantic mode-cycle action
+
+The current product admits one visualizer instance. Before construction, Python product orchestration resolves the requested
+monitor against participating Quick display units and committed/CUSTOM display geometry. Exactly one participating display
+owns the visualizer controller/edge for that activation; other displays do not create duplicate source/logical owners.
+Fallback/transfer behavior must preserve the existing product contract when the requested display is temporarily unavailable or
+non-participating.
+
+A double-click inside the retained visualizer is a semantic **cycle visualizer mode** action. The visualizer hit region gets
+first refusal before the display-level unhandled-double-click fallback (`next image`). Quick/QML may report the hit; Python
+remains mode-cycle authority.
+
 ## 14. Lifecycle
 
 Retirement conceptually remains:
@@ -551,6 +575,9 @@ close visualizer publication
 ```
 
 Visibility is not destruction authority.
+
+Stopping/joining the sole authored logical runtime is a **hard retirement barrier**. If join fails, the visualizer generation
+remains owned and the owning display must not report terminal retirement or continue window teardown as though it succeeded.
 
 A non-daemon/background owner that survives retirement and prevents process/test shutdown is a defect.
 
@@ -574,7 +601,12 @@ Keep focused proof for:
 - distinct Quick render-thread ownership;
 - immutable render boundary;
 - no live QWidget/provider/settings reads from renderer;
-- logical step + logical/runtime configuration require no live QWidget host;
+- logical step + every all-five logical/frame-runtime configuration consumer require no live QWidget host;
+- latest logical publication + resolved presentation state compose a complete `VisualizerRenderSnapshot` and populate the
+  existing bridge before Quick rendering;
+- exactly one product-level visualizer display owner is admitted; no per-display duplicate controller/source owner;
+- retained visualizer double-click mode-cycle precedes the global next-image fallback;
+- failed authored-runtime join blocks generation/display retirement;
 - non-zero-origin/non-1-DPR geometry;
 - card/shader alignment;
 - `CARD` rounded inner clipping;

@@ -26,9 +26,16 @@ scene controller, display frame pacer, input controller, retained auxiliary/cont
 
 
 `VisualizerRuntimeController` owns visualizer source/runtime identity, one controller-owned logical tick state, the sole
-authored `VisualizerLogicalRuntime`, logical mode state, immutable publication and generation/activation fencing. Its authored
-logical step and logical/runtime configuration must be drivable without `SpotifyVisualizerWidget`. Visual-only configuration
-belongs to the Quick presentation side, not the logical state.
+authored `VisualizerLogicalRuntime`, logical mode state, latest immutable logical publication and generation/activation
+fencing. Every configuration value consumed by authored logical evolution or a mode-owned frame runtime must be available
+without `SpotifyVisualizerWidget`; pure renderer/chrome configuration stays presentation-owned.
+
+Current product semantics admit one visualizer instance. Product orchestration chooses one participating display owner before
+constructing the visualizer edge; other display runtimes do not create duplicate visualizer controllers/source owners.
+
+One GUI/Quick visualizer synchronization owner on the admitted display consumes the freshest logical publication, resolves
+presentation state, composes the complete `VisualizerRenderSnapshot` and publishes the existing bridge into the retained
+Quick visualizer item. It owns no second authored clock and does not call legacy `present_tick()`.
 
 `QuickSceneController` owns presentation-facing scene state: base image, transition run, visualizer presentation,
 ordinary retained items, CUSTOM overlay, dimming/pixel shift/halo/context presentation and reveal/fade. It is sole
@@ -65,14 +72,19 @@ selected display
 -> QuickDisplayRuntime
 -> one display-owned WidgetRuntimeManager for ordinary families
 -> existing neutral service lease(s) / stable family presentation models
--> one VisualizerRuntimeController + controller-owned logical state/runtime
--> QuickSceneController ordinaryWidgetHost / visualizer / CUSTOM / auxiliary owners
+-> exactly one admitted visualizer owner attached to one participating display
+   -> VisualizerRuntimeController + controller-owned logical state/runtime
+   -> GUI/Quick snapshot synchronization -> existing bridge -> retained visualizer item
+-> QuickSceneController ordinaryWidgetHost / CUSTOM / auxiliary owners
 -> retained Quick items
 ```
 
 The visualizer viewport-config seam is part of this binding. Ordinary committed extent remains authoritative outside
 CUSTOM; a live CUSTOM working extent is only a temporary override. H must not rely on "CUSTOM inactive -> None -> canonical"
 as a substitute for the committed configuration owner.
+
+Retained visualizer double-click remains semantic mode-cycle input and must be handled before the window-level unhandled
+next-image fallback.
 
 Never run legacy and Quick production `WidgetRuntimeManager` ownership in parallel. Preserve real service cardinality.
 Settings/topology recreation rebinds current accepted state without duplicating providers/controllers. Activation
@@ -87,7 +99,8 @@ destination owner/lifecycle correctness, make Quick authoritative and remove the
 close old admission
 -> invalidate/advance generation
 -> quiesce generation-owned work
--> stop display pacers / join logical runtimes where required
+-> stop/join admitted visualizer authored logical runtime (hard barrier; failure blocks retirement)
+-> stop display pacers
 -> close Quick presentation admission
 -> retire render resources on legal render/context owner
 -> close window/root scene
@@ -97,7 +110,9 @@ close old admission
 -> reveal
 ```
 
-Generation 0 is valid. Do not destroy custom GL resources from GUI thread merely because a window closes.
+Generation 0 is valid. A failed authored visualizer-runtime join leaves that generation unresolved; do not report display
+retirement success or continue terminal window teardown until the barrier succeeds. Do not destroy custom GL resources from
+GUI thread merely because a window closes.
 
 ## QML lifetime
 
