@@ -18,6 +18,13 @@ OverlayWidget {
         Math.min(width / authoredWidth, height / authoredHeight)
     )
 
+    // Content-driven outer size (H option A): this card is a self-contained
+    // authored canvas, so its preferred content size is the authored dimension
+    // directly (no shell inset - it draws its own frame). Size only; Python owns
+    // anchor/clamp/outer rect.
+    preferredContentWidth: abandonmentRoot.authoredWidth
+    preferredContentHeight: abandonmentRoot.authoredHeight
+
     TapHandler {
         enabled: abandonmentRoot.abandonmentModel.interactionEnabled
         acceptedButtons: Qt.LeftButton
