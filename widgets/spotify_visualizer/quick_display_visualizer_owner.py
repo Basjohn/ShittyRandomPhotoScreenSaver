@@ -116,16 +116,24 @@ class QuickDisplayVisualizerOwner:
         self,
         *,
         logical_kwargs: Mapping[str, Any] | None = None,
+        presentation_kwargs: Mapping[str, Any] | None = None,
         thread_manager: Any | None = None,
         process_supervisor: Any | None = None,
         playing: bool = False,
     ) -> None:
-        """Configure the controller from already-resolved canonical settings."""
+        """Configure the controller from already-resolved canonical settings.
+
+        ``logical_kwargs`` and ``presentation_kwargs`` are already resolved from
+        the one canonical preset/settings path; this edge applies them through the
+        neutral logical and presentation authorities and does not itself interpret
+        settings.
+        """
 
         if self._retired:
             raise RuntimeError("cannot configure a retired visualizer owner")
         from widgets.spotify_visualizer.config_applier import (
             apply_logical_vis_mode_kwargs,
+            apply_presentation_vis_mode_kwargs,
         )
         from widgets.spotify_visualizer.logical_tick_state import (
             install_default_logical_tick_state,
@@ -136,6 +144,10 @@ class QuickDisplayVisualizerOwner:
         install_default_logical_tick_state(state, bar_count=controller.bar_count)
         if logical_kwargs:
             apply_logical_vis_mode_kwargs(state, logical_kwargs)
+        if presentation_kwargs:
+            apply_presentation_vis_mode_kwargs(
+                controller.presentation_state, presentation_kwargs
+            )
         controller.enabled = True
         controller.playing = bool(playing)
         if thread_manager is not None:

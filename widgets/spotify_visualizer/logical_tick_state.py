@@ -66,6 +66,18 @@ class VisualizerLogicalTickState:
         return self._controller
 
     @property
+    def presentation_config_host(self) -> Any:
+        """Where the legacy adapter reads pure renderer/presentation-only config.
+
+        Authored logical inputs live on this state; renderer/presentation-only
+        config is owned by the controller-owned ``VisualizerPresentationState``.
+        The capture routes its presentation reads here so this logical host never
+        needs to carry presentation styling.
+        """
+
+        return self._controller.presentation_state
+
+    @property
     def _runtime_generation(self) -> int:
         return self._controller.runtime_generation
 
