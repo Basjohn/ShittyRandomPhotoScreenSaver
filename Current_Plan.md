@@ -7,14 +7,18 @@ Last updated: 2026-08-29
 The attached documentation snapshot records pushed source through:
 
 ```text
-fec03056b1b6d4c6287fbba0488f21ed7ac80c6f
-G4 viewport-extent implementation AND the post-checkpoint audit correction batch
-(A committed/override ownership, B domain retry clamp, C contraction lifecycle,
-D specular audit, wording) are landed, test-gated and pushed for all five modes.
+29c0586891ab46c97dad2a369c6a63d2f6af3516
+Complete G is deterministically GREEN and pushed:
+- G4 viewport-extent implementation + post-checkpoint corrections (A committed/override ownership,
+  B domain retry clamp, C contraction lifecycle, D specular audit, wording) for all five modes;
+- G7 auxiliary/context caller closure (destination sole aux; legacy = H-scaffolding);
+- G8 deterministic focus/MC closure (cross-display stuck-Ctrl fixed; MC policy/fallback/generation locked).
 ```
 
-Exact later source always outranks this document. G4 deterministic implementation is complete; only the deferred
-all-five-mode installed/eyes-on viewport gate remains (after H). Resume G7 next.
+Exact later source always outranks this document. **All of G is deterministically complete and checkpointed. This is the
+single G-completion stop: request one independent audit of the complete checkpointed G state before H.** H must not begin
+until that audit is accepted. Deferred to J installed acceptance: the all-five-mode visualizer eyes-on gate and the physical
+two-display A->B->A hardware-ingress matrix.
 
 Current phase state:
 
@@ -26,9 +30,9 @@ G3      Save/Cancel + enabled/duplicate persistence      CLOSED
 G4      viewport-extent implementation                   DETERMINISTIC COMPLETE; eyes-on deferred (after H)
 G5      retained cross-display transfer                  CLOSED
 G6      retained input / semantic family actions         CLOSED
-G7      retained context + auxiliary pixels              NEAR CLOSURE
-G8      MC / focus closure                               PENDING
-G-GATE  independent audit of complete checkpointed G     REQUIRED BEFORE H
+G7      retained context + auxiliary pixels              CLOSED (destination sole aux; legacy = H-scaffolding)
+G8      MC / focus closure                               DETERMINISTIC CLOSED; physical A->B->A matrix = J debt
+G-GATE  independent audit of complete checkpointed G     READY — all G GREEN, request now before H
 H       production Quick owner/orchestration cutover     after G audit
 I       residue only                                     after H
 J       final installed / physical validation            final
@@ -72,24 +76,28 @@ BTF continuity. Installed/manual evidence can reject deterministic implementatio
 
 Do not build legacy compatibility presentation solely to inspect this before H.
 
-## Then finish G7 and G8
+## G7 and G8 — CLOSED (deterministic)
 
-Already landed in the retained Quick scene:
+**G7 closed.** The retained Quick scene is the sole destination context/dimming/pixel-shift/halo presentation; Python remains
+semantic/settings authority (tests forbid QML settings/provider ownership). A caller audit classified every legacy auxiliary
+owner (`widgets/context_menu.py`, `widgets/cursor_halo.py`, `rendering/display_context_menu.py`, `widgets/pixel_shift_manager.py`,
+DisplayWidget helpers): all are live only through the production legacy `DisplayWidget` path (`engine/display_manager.py`), so
+they are **required physical-host scaffolding for H**, not caller-dead debris — there is no dual-run because the Quick runtime
+is not yet the production presenter. They retire wholesale at the H cutover. Menu `context_menu_active` suppression is proven to
+release on every close path (action / dismiss / retirement).
 
-- dimming and shared pixel-shift transform;
-- cursor halo and inactivity behavior;
-- retained context-menu model/QML and semantic action admission.
+**G8 deterministically closed.** Fixed a real cross-display stuck-Ctrl defect (the coordinator is now authoritative in
+`QuickInputController`, isolated from the legacy `InputHandler`). MC window role/policy (no taskbar/Alt-Tab, topmost, distinct
+`QuickWindowRole`) is preserved and test-locked; retained family double-click actions declare fallback admission so the global
+next-image fallback stays exclusive; generation replacement rejects stale input; the halo derives from live input state and
+follows the (unstuck) Ctrl clear. No forbidden focus mechanism was introduced (no focus-policy tree mutation, focus-shadow
+invalidation, top-level halo, or per-family key router).
 
-After G4 correction closure, continue G7 closure/caller proof: inspect exact current legacy
-context/halo/dimming/pixel-shift callers, retire superseded QWidget/top-level auxiliary pixel ownership that no longer has a
-live caller, preserve Python semantic command/settings authority, and prove same-window generation/focus/input behavior. Do
-not rebuild a compatibility presenter merely to keep the half-migrated screensaver runnable.
+The **physical two-display A->B->A hardware matrix** (real focus/Ctrl/hardware-key ingress across displays) and the
+**all-five-mode visualizer eyes-on gate** are explicitly deferred to J installed acceptance (see below); do not fabricate a
+physical-ingress pass from synthetic Qt events.
 
-Then perform G8 MC/focus closure. For G7 deletion/caller proof and G8 focus/input sequencing, follow:
-
-`Docs/QtQuick_Migration/Remaining_G7_G8_Auxiliary_Focus_Decomposition.md`
-
-Do not lose already-identified G7/G8 work while correcting G4.
+Route reference: `Docs/QtQuick_Migration/Remaining_G7_G8_Auxiliary_Focus_Decomposition.md`.
 
 ## Independent-audit stop policy for the rest of G
 

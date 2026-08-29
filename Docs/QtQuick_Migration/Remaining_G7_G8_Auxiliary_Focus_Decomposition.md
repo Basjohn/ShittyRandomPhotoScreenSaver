@@ -1,6 +1,10 @@
 # Remaining G7 / G8 — Auxiliary, Input and Focus Closure Technical Decomposition
 
-Status: **execute after the current bounded G4 audit-correction batch is GREEN; then close G7 + G8 continuously**  
+Status: **CLOSED (deterministic).** G7 auxiliary/context caller closure and G8 focus/MC closure are landed, test-gated and
+pushed. Legacy auxiliary owners are all live only via the production legacy `DisplayWidget` path, so they are required
+physical-host scaffolding for H (no dual-run, retire at cutover). A real cross-display stuck-Ctrl defect was found and fixed
+at the Quick input seam. The physical two-display A->B->A hardware-ingress matrix is deferred to J per section 9; do not
+fabricate a synthetic-event physical pass. Complete G now awaits the single independent audit before H.  
 Source basis: inspect exact current tree before each slice; owner names below are current routing, not a frozen commit snapshot.  
 Work admission: `Current_Plan.md`
 
