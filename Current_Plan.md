@@ -7,16 +7,14 @@ Last updated: 2026-08-29
 The attached documentation snapshot records pushed source through:
 
 ```text
-9baea1f6df9301430ed7da9d6ae780f5e502352e
-G4 core viewport-extent implementation is landed for all five modes,
-including Bubble logical reflow and the policy flip.
+fec03056b1b6d4c6287fbba0488f21ed7ac80c6f
+G4 viewport-extent implementation AND the post-checkpoint audit correction batch
+(A committed/override ownership, B domain retry clamp, C contraction lifecycle,
+D specular audit, wording) are landed, test-gated and pushed for all five modes.
 ```
 
-The user reports the completed G4 checkpoint and its golden/regression bars are pushed. Exact later source always outranks
-this document.
-
-An independent post-checkpoint audit found a **bounded G4 correction batch** that must be completed before G4 is finally
-closed. This does not invalidate the landed scale/extent architecture and is not permission to redesign CUSTOM or Bubble.
+Exact later source always outranks this document. G4 deterministic implementation is complete; only the deferred
+all-five-mode installed/eyes-on viewport gate remains (after H). Resume G7 next.
 
 Current phase state:
 
@@ -25,7 +23,7 @@ F0–F8   ordinary-family migration                         CLOSED
 G1      neutral CUSTOM session / variants / layout slots CLOSED
 G2      retained edit overlay / X / family binding       CLOSED
 G3      Save/Cancel + enabled/duplicate persistence      CLOSED
-G4      viewport-extent implementation                   AUDIT CORRECTIONS PRIORITY
+G4      viewport-extent implementation                   DETERMINISTIC COMPLETE; eyes-on deferred (after H)
 G5      retained cross-display transfer                  CLOSED
 G6      retained input / semantic family actions         CLOSED
 G7      retained context + auxiliary pixels              NEAR CLOSURE
@@ -36,51 +34,23 @@ I       residue only                                     after H
 J       final installed / physical validation            final
 ```
 
-## Immediate priority — G4 post-checkpoint audit corrections
+## G4 post-checkpoint audit corrections — COMPLETE
 
-Do this before resuming G7.
+The bounded correction batch from
+`Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` is landed, test-gated and pushed:
 
-Use:
+- **A** committed vs temporary CUSTOM working viewport extent split in the runtime controller (override wins only while
+  CUSTOM is active; retiring falls back to committed, never manufactured canonical; ordinary republish cannot erase the
+  override); owner-shaped Save/Cancel/precedence tests;
+- **B** overlap-retry clamp now uses the actual logical domain (`[-0.25, domain+0.25]`), baseline exactly `[-0.25, 1.25]`;
+- **C** contraction retires non-surface off-domain bubbles through the existing pop/death path (surface still exits/drains,
+  interior untouched, no rescale/teleport, fires only on an actual contraction);
+- **D** specular `spec_ox`/`spec_oy` proven dimensionless local bubble-space offsets (applied as `spec_ox * r` in the shader);
+  left unprojected, documented and locked by a payload + shader-source test;
+- misleading "baseline density" wording removed.
 
-`Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md`
-
-as the technical playbook. The existing G4 decomposition remains the binding scale/extent architecture contract:
-
-`Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md`
-
-The correction batch is deliberately narrow. It contains four source-level issues plus wording/test cleanup:
-
-1. **Viewport configuration ownership/lifecycle** — active CUSTOM working extent must temporarily override ordinary committed
-   extent, while Save/Cancel/end-CUSTOM return to the correct committed value rather than unconditionally resetting Bubble to
-   canonical `(420,280)`. The ordinary committed presentation path and CUSTOM working path must not fight each other.
-2. **Missed Bubble unit-square retry clamp** — `_spawn_bubble_at()` still bounds overlap-retry jitter to `[-0.25, 1.25]` on
-   both axes. Preserve that exact baseline behavior, but non-baseline domains must use the actual logical domain plus the same
-   off-world allowance.
-3. **Shrink reconciliation for non-surface bubbles** — explicitly handle/test bubbles which become outside the contracted
-   domain while `reaches_surface=False`; do not let invisible off-domain particles consume authored population indefinitely,
-   and do not percentage-rescale/teleport the field.
-4. **Specular mutation coordinate audit** — trace `spec_ox`/`spec_oy` through the Quick Bubble shader. If they are positional
-   viewport-space offsets, project them consistently for non-baseline domains; if they are dimensionless local bubble-space
-   values, leave them unchanged and prove/document that contract. Baseline must remain exact either way.
-
-Also remove the misleading phrase **“baseline density”** from Bubble reflow comments/tests/docs. Authored bubble counts remain
-unchanged, therefore a larger viewport is intentionally less dense unless a future explicit product decision says otherwise.
-
-### G4 correction hard bars
-
-- canonical `(420,280)` remains the exact accepted Bubble path;
-- do not regenerate or weaken BTF/replay/golden expectations to bless drift;
-- no Bubble speed/collision/bounce/drift/elasticity/pulse/trail/overdrive/cadence retuning;
-- no particle-count scaling with viewport area;
-- no pointer-driven Bubble tick, geometry timer, second logical clock or QML-owned simulation math;
-- no second persistence/geometry authority;
-- scale and extent remain independent;
-- Save/Cancel/ordinary-runtime viewport ownership is deterministic;
-- wide/tall/shrink behavior stays latest spatial configuration consumed by the authored Bubble step;
-- retained scene/item/render ownership does not change because an extent changes.
-
-When these corrections and their focused regression bars are GREEN, mark G4 **deterministic implementation complete, physical
-acceptance deferred** and continue directly into G7.
+Baseline stays byte-identical; BTF/replay/cadence/reactivity/transport goldens remain green with no tuning/golden/count
+changes. G4 is **deterministic implementation complete, physical acceptance deferred** (see below). Resume G7 next.
 
 ## Deferred G4 physical acceptance
 
