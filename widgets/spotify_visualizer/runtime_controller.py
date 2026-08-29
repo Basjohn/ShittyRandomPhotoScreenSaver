@@ -103,6 +103,21 @@ class VisualizerRuntimeController:
         )
         self._custom_viewport_override: tuple[float, float] | None = None
         self._render_bridge = VisualizerSnapshotBridge()
+        # The presentation-neutral destination owner for this generation's
+        # authored per-tick logical state. The authored logical step advances
+        # against this host so no QWidget/legacy presenter is required. One per
+        # controller; the shared engine/source/logical runtime stay singular here.
+        from widgets.spotify_visualizer.logical_tick_state import (
+            VisualizerLogicalTickState,
+        )
+
+        self._logical_tick_state = VisualizerLogicalTickState(self)
+
+    @property
+    def logical_tick_state(self) -> Any:
+        """Return the controller-owned authored per-tick logical state host."""
+
+        return self._logical_tick_state
 
     @property
     def runtime_generation(self) -> int:
