@@ -21,6 +21,7 @@ from rendering.custom_layout_session import (
 from rendering.quick.runtime import QuickDisplayRuntime
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
+from rendering.widget_runtime_manager import WidgetRuntimeManager
 from widgets.spotify_visualizer.presentation_geometry import (
     resolve_visualizer_presentation,
 )
@@ -51,6 +52,79 @@ def _committed(controller: VisualizerRuntimeController, extent) -> None:
             viewport_extent=extent,
         )
     )
+
+
+@pytest.mark.qt
+def test_runtime_owns_exactly_one_widget_runtime_manager_and_retires_it(
+    qt_app,
+) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    factory = QuickSceneFactory()
+    runtime = QuickDisplayRuntime(
+        screen_index=0,
+        runtime_generation=70,
+        screen=screen,
+        scene_factory=factory,
+        window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    try:
+        # Exactly one neutral capability/service owner exists for this display
+        # generation, and the accessor returns that same instance every time.
+        manager = runtime.widget_runtime_manager
+        assert isinstance(manager, WidgetRuntimeManager)
+        assert runtime.widget_runtime_manager is manager
+        assert manager.is_retired is False
+
+        state = runtime.describe_runtime_state()["widget_runtime_manager"]
+        assert state == {
+            "present": True,
+            "retired": False,
+            "has_bound_host": False,
+        }
+    finally:
+        # Closing the runtime retires the neutral owner exactly once. Retirement
+        # is idempotent: a second close does not re-run service teardown.
+        assert runtime.close_runtime() is True
+        assert manager.is_retired is True
+        retired_state = runtime.describe_runtime_state()["widget_runtime_manager"]
+        assert retired_state["retired"] is True
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_replacement_generation_builds_its_own_widget_runtime_manager(qt_app) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    factory = QuickSceneFactory()
+    first = QuickDisplayRuntime(
+        screen_index=0,
+        runtime_generation=71,
+        screen=screen,
+        scene_factory=factory,
+        window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    first_manager = first.widget_runtime_manager
+    assert first.close_runtime() is True
+    assert first_manager.is_retired is True
+
+    second = QuickDisplayRuntime(
+        screen_index=0,
+        runtime_generation=72,
+        screen=screen,
+        scene_factory=factory,
+        window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    try:
+        # A replacement generation owns its own live neutral manager, never the
+        # retired one from the prior generation.
+        assert second.widget_runtime_manager is not first_manager
+        assert second.widget_runtime_manager.is_retired is False
+    finally:
+        second.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
 
 
 @pytest.mark.qt

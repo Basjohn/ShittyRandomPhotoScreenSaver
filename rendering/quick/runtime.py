@@ -8,6 +8,8 @@ from typing import Any
 from PySide6.QtCore import QObject, QPoint, Signal
 from PySide6.QtGui import QScreen
 
+from rendering.widget_runtime_manager import WidgetRuntimeManager
+
 from .auxiliary import QuickAuxiliaryController
 from .context_menu import QuickContextMenuModel
 from .frame_pacer import QuickFramePacer
@@ -131,6 +133,14 @@ class QuickDisplayRuntime(QObject):
         )
         self._auxiliary.set_pixel_shift_defer_check(
             lambda: self._transition is not None and self._transition.is_active
+        )
+        # Exactly one presentation-neutral runtime capability/lifecycle/service
+        # owner per display generation (H §7 cardinality). It is constructed
+        # hostless; the per-display family presentation binder binds a registry
+        # host and drives admission/service lifetimes through it. Never run a
+        # second neutral manager in parallel for this display.
+        self._widget_runtime_manager: WidgetRuntimeManager | None = (
+            WidgetRuntimeManager()
         )
         self._close_meta_calls_queued = False
         self._window_delete_queued = False
@@ -282,6 +292,13 @@ class QuickDisplayRuntime(QObject):
             raise RuntimeError("Quick transition controller has retired")
         return controller
 
+    @property
+    def widget_runtime_manager(self) -> WidgetRuntimeManager:
+        manager = self._widget_runtime_manager
+        if manager is None:
+            raise RuntimeError("Quick widget runtime manager has retired")
+        return manager
+
     def show_on_screen(self) -> None:
         if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
             raise RuntimeError("cannot show a retiring Quick display runtime")
@@ -414,6 +431,11 @@ class QuickDisplayRuntime(QObject):
         self.context_menu_model.close()
         self.auxiliary_controller.close()
         self.transition_controller.close()
+        # Retire the neutral capability/service owner's generation-owned provider
+        # and model lifetimes exactly once before scene/render teardown, so no
+        # generation-owned runtime service outlives its display generation.
+        if self._widget_runtime_manager is not None:
+            self._widget_runtime_manager.cleanup()
         self.frame_pacer.close()
         self.scene_controller.quiesce_for_retirement()
         # This is the only legal window retirement entry: QuickDisplayWindow
@@ -465,6 +487,17 @@ class QuickDisplayRuntime(QObject):
             "close_meta_calls_queued": self._close_meta_calls_queued,
             "window_delete_queued": self._window_delete_queued,
             "retirement_completed": self._retirement_emitted,
+            "widget_runtime_manager": {
+                "present": self._widget_runtime_manager is not None,
+                "retired": (
+                    self._widget_runtime_manager is None
+                    or self._widget_runtime_manager.is_retired
+                ),
+                "has_bound_host": (
+                    self._widget_runtime_manager is not None
+                    and self._widget_runtime_manager.has_bound_host
+                ),
+            },
         }
 
     def _on_display_identity_changed(self, identity: QuickDisplayIdentity) -> None:
@@ -566,6 +599,9 @@ class QuickDisplayRuntime(QObject):
         self._scene = None
         self._pacer = None
         self._transition = None
+        if self._widget_runtime_manager is not None:
+            self._widget_runtime_manager.cleanup()
+            self._widget_runtime_manager = None
         if self._auxiliary is not None:
             self._retired_auxiliary_state = self._auxiliary.describe()
             self._auxiliary.deleteLater()
