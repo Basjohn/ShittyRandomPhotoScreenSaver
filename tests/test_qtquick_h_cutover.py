@@ -23,6 +23,7 @@ from rendering.custom_layout_session import (
     CustomLayoutSessionItem,
 )
 from rendering.quick.runtime import QuickDisplayRuntime
+from rendering.quick.display_unit import QuickDisplayUnit
 from rendering.quick.display_processing import DisplayProcessingDescriptor
 from rendering.display_modes import DisplayMode
 from rendering.quick.scene_controller import QuickSceneFactory
@@ -32,6 +33,46 @@ from widgets.spotify_visualizer.presentation_geometry import (
     resolve_visualizer_presentation,
 )
 from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
+
+
+@pytest.mark.qt
+def test_display_manager_constructs_only_authoritative_quick_units(
+    qt_app,
+    qtbot,
+    monkeypatch,
+) -> None:
+    """The production constructor owns one factory and only Quick units."""
+
+    screens = tuple(qt_app.screens())
+    assert screens
+    monkeypatch.setattr(QuickDisplayUnit, "show_on_screen", lambda _unit: None)
+
+    manager = DisplayManager(runtime_generation=701)
+    try:
+        assert manager.initialize_displays() == len(screens)
+        assert manager._quick_scene_factory is not None
+        assert len(manager.displays) == len(screens)
+        assert all(isinstance(unit, QuickDisplayUnit) for unit in manager.displays)
+        assert [unit.screen_index for unit in manager.displays] == list(
+            range(len(screens))
+        )
+        assert len({id(unit.runtime) for unit in manager.displays}) == len(screens)
+        assert all(
+            unit._ctrl_coordinator is manager._quick_ctrl_coordinator
+            for unit in manager.displays
+        )
+
+        manager.cleanup()
+        assert manager.displays == []
+        assert len(manager._retiring_quick_units) == len(screens)
+        qtbot.waitUntil(
+            lambda: not manager._retiring_quick_units,
+            timeout=3000,
+        )
+    finally:
+        if not manager._retired:
+            manager.retire_runtime()
+        qt_app.processEvents()
 
 
 @pytest.mark.qt

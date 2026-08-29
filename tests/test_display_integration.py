@@ -518,39 +518,18 @@ class TestDisplayManagerSync:
         show_seen_constructed_counts: list[int] = []
         scheduled_delays: list[int] = []
 
-        class _FakeSignal:
-            def connect(self, *args, **kwargs):
-                return None
-
-        class _FakeDisplayWidget:
-            def __init__(self, screen_index=0, **kwargs):
+        class _FakeQuickUnit:
+            def __init__(self, screen_index: int):
                 self.screen_index = screen_index
-                self.exit_requested = _FakeSignal()
-                self.image_displayed = _FakeSignal()
-                self.startup_reveal_completed = _FakeSignal()
-                self.transition_completed = _FakeSignal()
-                self.previous_requested = _FakeSignal()
-                self.next_requested = _FakeSignal()
-                self.cycle_transition_requested = _FakeSignal()
-                self.settings_requested = _FakeSignal()
-                self.custom_layout_reload_requested = _FakeSignal()
-                self.dimming_changed = _FakeSignal()
-                created_screen_indices.append(screen_index)
+                self.runtime = SimpleNamespace(
+                    scene_readiness=SimpleNamespace(
+                        qml_root_created=True,
+                        admission_open=True,
+                    )
+                )
 
             def show_on_screen(self):
                 show_seen_constructed_counts.append(len(created_screen_indices))
-
-            def shutdown_render_pipeline(self, reason="unspecified"):
-                return None
-
-            def clear(self):
-                return None
-
-            def close(self):
-                return None
-
-            def deleteLater(self):
-                return None
 
         class _FakeScreen:
             def __init__(self, index: int):
@@ -567,20 +546,29 @@ class TestDisplayManagerSync:
                 scheduled_delays.append(delay_ms)
                 callback(*args, **kwargs)
 
-        monkeypatch.setattr("engine.display_manager.DisplayWidget", _FakeDisplayWidget)
         monkeypatch.setattr(
             "engine.display_manager.QGuiApplication.screens",
             lambda _self=None: [_FakeScreen(0), _FakeScreen(1)],
         )
 
         manager = DisplayManager(thread_manager=_ImmediateThreadManager())
+
+        def _create(screen_index: int, *, show_immediately: bool = True):
+            created_screen_indices.append(screen_index)
+            display = _FakeQuickUnit(screen_index)
+            manager.displays.append(display)  # type: ignore[arg-type]
+            if show_immediately:
+                manager._show_display_widget(display)  # type: ignore[arg-type]
+            return display
+
+        monkeypatch.setattr(manager, "_create_display_for_screen", _create)
         created = manager.initialize_displays()
 
         assert created == 2
         assert created_screen_indices == [0, 1]
         assert scheduled_delays == [100]
         assert show_seen_constructed_counts == [2, 2], (
-            "All allowed DisplayWidget instances must already exist before the first "
+            "All allowed Quick display units must already exist before the first "
             "show/widget-setup pass runs, so visualizer display participation can see "
             "pending requested monitors instead of falling back too early."
         )
@@ -593,43 +581,29 @@ class TestDisplayManagerSync:
         callbacks: list[Callable[[], None]] = []
         shown: list[int] = []
 
-        class _FakeSignal:
-            def connect(self, *args, **kwargs):
-                return None
-
-        class _FakeDisplayWidget:
-            def __init__(self, screen_index=0, **kwargs):
+        class _FakeQuickUnit:
+            def __init__(self, screen_index=0):
                 self.screen_index = screen_index
-                self.exit_requested = _FakeSignal()
-                self.image_displayed = _FakeSignal()
-                self.startup_reveal_completed = _FakeSignal()
-                self.transition_completed = _FakeSignal()
-                self.previous_requested = _FakeSignal()
-                self.next_requested = _FakeSignal()
-                self.cycle_transition_requested = _FakeSignal()
-                self.settings_requested = _FakeSignal()
-                self.custom_layout_reload_requested = _FakeSignal()
-                self.dimming_changed = _FakeSignal()
+                self.runtime = SimpleNamespace(
+                    scene_readiness=SimpleNamespace(
+                        qml_root_created=True,
+                        admission_open=True,
+                    )
+                )
+                self.is_retired = False
 
             def show_on_screen(self):
                 shown.append(self.screen_index)
 
-            def shutdown_render_pipeline(self, reason="unspecified"):
+            def quiesce(self):
                 return None
 
-            def quiesce_for_runtime_pause(self):
-                return None
-
-            def cleanup_runtime(self, reason="explicit"):
-                return None
             def clear(self):
                 return None
 
-            def close(self):
-                return None
-
-            def deleteLater(self):
-                return None
+            def retire(self):
+                self.is_retired = True
+                return True
 
         class _FakeScreen:
             def __init__(self, index: int):
@@ -645,13 +619,22 @@ class TestDisplayManagerSync:
             def single_shot(self, delay_ms, callback, *args, **kwargs):
                 callbacks.append(lambda: callback(*args, **kwargs))
 
-        monkeypatch.setattr("engine.display_manager.DisplayWidget", _FakeDisplayWidget)
+        monkeypatch.setattr("engine.display_manager.QuickDisplayUnit", _FakeQuickUnit)
         monkeypatch.setattr(
             "engine.display_manager.QGuiApplication.screens",
             lambda _self=None: [_FakeScreen(0), _FakeScreen(1)],
         )
 
         manager = DisplayManager(thread_manager=_CapturingThreadManager())
+
+        def _create(screen_index: int, *, show_immediately: bool = True):
+            display = _FakeQuickUnit(screen_index)
+            manager.displays.append(display)
+            if show_immediately:
+                manager._show_display_widget(display)
+            return display
+
+        monkeypatch.setattr(manager, "_create_display_for_screen", _create)
         assert manager.initialize_displays() == 2
         assert shown == [0]
         assert len(callbacks) == 1
@@ -858,8 +841,12 @@ class TestDisplayManagerSync:
             def __init__(self, screen_index: int):
                 self.screen_index = screen_index
                 self.shown = False
-                self._render_surface = object()
-                self._gl_compositor = object()
+                self.runtime = SimpleNamespace(
+                    scene_readiness=SimpleNamespace(
+                        qml_root_created=True,
+                        admission_open=True,
+                    )
+                )
 
             def show_on_screen(self):
                 self.shown = True

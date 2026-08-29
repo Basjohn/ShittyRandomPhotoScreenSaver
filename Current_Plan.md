@@ -1,14 +1,14 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-29
+Last updated: 2026-08-30
 
 ## Current checkpoint
 
-The documentation is reconciled through independently audited pushed source plus the current test-maintenance worktree:
+The documentation is reconciled through independently audited pushed source plus the current bounded H worktree:
 
 ```text
-5f33d300 (True-F closure + Settings/test-suite reconciliation landed on pushed main)
-current worktree: final H-profile target isolation / H-vs-J runtime-test classification reconciled
+ddcc4f71 (semantic DisplayManager collection operations landed on pushed main)
+current worktree: production display collection constructor + Quick retirement ordering cut over
 True-F focused gate: 7/7 GREEN
 Settings-overhaul focused reconciliation: 154/154 GREEN
 H destination profile: 57/57 target-isolated GREEN
@@ -282,6 +282,10 @@ The family/runtime destination integration already landed and test-gated include
 - The manager collection surface now handles all-screen/specific-screen publication, accepted-image/first-frame accounting,
   clear, quiesce, dimming, identity diagnostics and pending-work state through real display-unit semantics. These paths no
   longer require `set_image`, `get_screen_info`, compositor dimming fields or QWidget pause methods from a Quick unit.
+- The production `DisplayManager.initialize_displays()` collection constructor now creates one `QuickDisplayUnit` per selected
+  `QScreen`, sharing exactly one manager-generation `QuickSceneFactory` and `SharedCtrlCoordinator`; it no longer constructs
+  `DisplayWidget`. Quick cleanup retains every unit until asynchronous runtime/window retirement completes, and manager/factory
+  deletion waits behind that completion. Focused constructor/lifecycle/display integration proof is **87 passed, 4 skipped**.
 
 ### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 
@@ -383,7 +387,9 @@ caller-proven deletion — are therefore the remaining H work and are **CURRENT 
    contract while moving authority to Quick units. This work may be checkpointed across as many commits/sessions as needed;
    intermediate migration commits are allowed to remain intentionally non-runnable. What must remain atomic is the finished
    ownership topology: do not add a `DisplayWidget` compatibility facade, throwaway legacy-only decoupling layer, or parallel
-   legitimate production presenter merely to make intermediate checkpoints runnable.
+   legitimate production presenter merely to make intermediate checkpoints runnable. **Current sub-checkpoint:** the selected
+   display collection constructor and its retirement ordering are Quick-authoritative; remaining work is the exact-once product
+   semantics (transition/action/context/CUSTOM/single-visualizer wiring) before runtime-shaped proof and physical-host deletion.
 9. **Runtime-shaped production proof and caller-proven deletion.** Prove one/multiple selected displays, image/transition
    routing, ordinary families, the single admitted visualizer, corrected-G owners, readiness, generation/topology replacement
    and clean retirement; then delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, legacy visualizer host/compositor glue,
