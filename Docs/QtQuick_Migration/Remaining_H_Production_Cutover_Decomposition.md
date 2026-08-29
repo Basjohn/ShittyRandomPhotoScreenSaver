@@ -208,6 +208,13 @@ consumer-owned logical/presentation kwargs once in `DisplayManager`, then config
 existing owner. That owner acquires/releases the shared BeatEngine exactly once and receives canonical retained Media
 playback state; manager references are action routes, not a second lifecycle owner.
 
+Mode choice/cycle reuses that same owner. `DisplayManager` resolves the target canonical activation and supplies it to the
+owner; the existing frame-pacer synchronization opportunity drives the retained content fade. At the fully hidden boundary
+the old sole logical runtime hard-joins, one BeatEngine activation transaction applies target logical/presentation/technical
+configuration and reset, the same owner rebinds the committed identity and restarts one logical runtime, and the target stays
+hidden until fresh target logical authority exists. Persistence occurs once only after a fully visible target snapshot. No
+second timer, engine acquisition, runtime owner or presenter participates.
+
 Retained semantic input must also preserve:
 
 ```text

@@ -573,6 +573,25 @@ class DisplayManager(QObject):
             self._quick_context_transition_state()
         )
         settings = self.settings_manager
+        visualizer = self._quick_visualizer_owner
+        visualizer_available = bool(
+            visualizer is not None
+            and visualizer.is_started
+            and not visualizer.is_retired
+        )
+        if visualizer_available:
+            from core.settings.visualizer_mode_registry import (
+                iter_visualizer_mode_descriptors,
+            )
+
+            visualizer_modes = tuple(
+                (descriptor.mode_id, descriptor.display_name)
+                for descriptor in iter_visualizer_mode_descriptors()
+            )
+            current_visualizer = str(visualizer.controller.mode_id)
+        else:
+            visualizer_modes = ()
+            current_visualizer = "spectrum"
         dimming_enabled = SettingsManager.to_bool(
             settings.get("accessibility.dimming.enabled", False)
             if settings is not None
@@ -584,9 +603,9 @@ class DisplayManager(QObject):
             current_transition=current,
             random_enabled=random_enabled,
             random_selectable=random_selectable,
-            visualizer_modes=(),
-            current_visualizer="spectrum",
-            visualizer_available=False,
+            visualizer_modes=visualizer_modes,
+            current_visualizer=current_visualizer,
+            visualizer_available=visualizer_available,
             dimming_enabled=dimming_enabled,
             interaction_mode_enabled=self._interaction_mode_enabled(),
             interaction_mode_locked=is_mc_build(),
@@ -656,6 +675,8 @@ class DisplayManager(QObject):
                 )
                 self._refresh_all_quick_context_menus()
                 return True
+            if action == "visualizer":
+                return self._request_quick_visualizer_mode(payload)
 
             enabled = self._context_toggle_value(payload)
             if enabled is None:
@@ -693,9 +714,79 @@ class DisplayManager(QObject):
             )
             return False
 
-        # Visualizer and CUSTOM rows are admitted only when their single
-        # destination owners are attached later in H.
+        # CUSTOM rows are admitted only when their single destination owner is
+        # attached later in H.
         return False
+
+    def _request_quick_visualizer_mode(self, mode_id: str) -> bool:
+        """Resolve and request one canonical activation on the admitted owner."""
+
+        owner = self._quick_visualizer_owner
+        settings = self.settings_manager
+        if owner is None or settings is None or owner.is_retired:
+            return False
+        from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.visualizer_mode_registry import (
+            coerce_visualizer_mode_id,
+            is_mode_active,
+        )
+        from core.settings.visualizer_presets import (
+            resolve_visualizer_activation_payload,
+        )
+        from widgets.spotify_visualizer.technical_config import build_technical_cache
+
+        target = str(mode_id or "").strip().lower()
+        if coerce_visualizer_mode_id(target) != target or not is_mode_active(target):
+            return False
+        section = settings.get("widgets.spotify_visualizer", {})
+        if not isinstance(section, dict):
+            return False
+        candidate = dict(section)
+        candidate["mode"] = target
+        activation = resolve_visualizer_activation_payload(candidate)
+        model = SpotifyVisualizerSettings.from_mapping(
+            activation.resolved_config,
+            apply_preset_overlay=False,
+            resolve_preset_indices=False,
+        )
+        technical_cache = build_technical_cache(None, model)
+        return bool(
+            owner.request_mode_change(
+                target,
+                settings_model=model,
+                resolved_activation=activation,
+                technical_cache=technical_cache,
+                logical_kwargs=asdict(model),
+                presentation_kwargs=asdict(model),
+                on_complete=self._complete_quick_visualizer_mode_change,
+            )
+        )
+
+    def _cycle_quick_visualizer_mode(self) -> None:
+        owner = self._quick_visualizer_owner
+        if owner is None or owner.is_retired:
+            return
+        from rendering.quick.visualizer.double_click_admission import (
+            next_visualizer_mode_id,
+        )
+
+        self._request_quick_visualizer_mode(
+            next_visualizer_mode_id(owner.controller.mode_id)
+        )
+
+    def _complete_quick_visualizer_mode_change(self, mode_id: str) -> None:
+        """Persist one fully presented target activation and refresh menu truth."""
+
+        settings = self.settings_manager
+        if settings is None:
+            raise RuntimeError("visualizer mode completion has no Settings authority")
+        settings.set("widgets.spotify_visualizer.mode", str(mode_id))
+        settings.save()
+        section = self._widgets_config_snapshot.get("spotify_visualizer")
+        if isinstance(section, dict):
+            section["mode"] = str(mode_id)
+        self._refresh_all_quick_context_menus()
+        logger.info("[SPOTIFY_VIS] Persisted Quick visualizer mode=%s", mode_id)
 
     def _connect_quick_runtime(
         self,
@@ -1106,6 +1197,7 @@ class DisplayManager(QObject):
         )
         try:
             owner.controller.settings_model = model
+            owner.controller.record_resolved_activation(activation)
             owner.controller.technical_config_cache = technical_cache
             owner.configure(
                 logical_kwargs=asdict(model),
@@ -1134,6 +1226,22 @@ class DisplayManager(QObject):
             if presentation is not None:
                 self._bind_quick_visualizer_media(chosen)
             chosen.attach_visualizer_owner(owner)
+            from rendering.quick.visualizer.double_click_admission import (
+                QuickVisualizerDoubleClickAdmission,
+            )
+
+            chosen.runtime.scene_controller.set_visualizer_double_click_admission(
+                QuickVisualizerDoubleClickAdmission(
+                    region_contains=(
+                        chosen.runtime.scene_controller.visualizer_contains_scene_position
+                    ),
+                    is_active=lambda admitted=owner: (
+                        admitted.is_started and not admitted.is_retired
+                    ),
+                    cycle_mode=self._cycle_quick_visualizer_mode,
+                )
+            )
+            self._refresh_all_quick_context_menus()
         except Exception:
             if self._quick_visualizer_owner is owner:
                 self._release_quick_visualizer_routes()
@@ -1197,6 +1305,9 @@ class DisplayManager(QObject):
         if unit is not None and unit is not self._quick_visualizer_unit:
             return False
         self._disconnect_quick_visualizer_media_route()
+        chosen = self._quick_visualizer_unit
+        if chosen is not None:
+            chosen.runtime.scene_controller.set_visualizer_double_click_admission(None)
         self._quick_visualizer_owner = None
         self._quick_visualizer_unit = None
         return True

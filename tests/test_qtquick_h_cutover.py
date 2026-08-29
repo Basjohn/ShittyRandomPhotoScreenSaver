@@ -45,6 +45,16 @@ class _ManagerVisualizerEngine:
         self.acquire_count = 0
         self.release_count = 0
         self.playback: list[bool] = []
+        self.generation = 17
+        self.activation = 23
+        self.transaction_depth = 0
+        self.transaction_pending = False
+        self.begin_count = 0
+        self.end_count = 0
+        self.reset_count = 0
+        self.cancel_count = 0
+        self.floor_reset_count = 0
+        self.bar_count = 32
         self._audio_worker = SimpleNamespace(
             set_audio_block_size=lambda _size: None,
         )
@@ -65,10 +75,39 @@ class _ManagerVisualizerEngine:
         pass
 
     def get_generation_id(self) -> int:
-        return 17
+        return self.generation
 
     def get_activation_id(self) -> int:
-        return 23
+        return self.activation
+
+    def begin_activation_transaction(self) -> None:
+        self.begin_count += 1
+        self.transaction_depth += 1
+
+    def end_activation_transaction(self, *, reason: str) -> int:
+        assert reason.startswith("quick_mode_change:")
+        self.end_count += 1
+        self.transaction_depth -= 1
+        if self.transaction_depth == 0 and self.transaction_pending:
+            self.transaction_pending = False
+            self.generation += 1
+            self.activation += 1
+        return self.activation
+
+    def reconfigure_bar_count(self, count: int) -> None:
+        if int(count) != self.bar_count:
+            self.bar_count = int(count)
+            self.transaction_pending = True
+
+    def cancel_pending_compute_tasks(self) -> None:
+        self.cancel_count += 1
+
+    def reset_smoothing_state(self) -> None:
+        self.reset_count += 1
+        self.transaction_pending = True
+
+    def reset_floor_state(self) -> None:
+        self.floor_reset_count += 1
 
     def set_thread_manager(self, _manager) -> None:
         pass
@@ -225,6 +264,7 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
                     "bubble_small_count": 19,
                 },
             }
+            self.save_calls = 0
 
         def get_widgets_map(self):
             return deepcopy(self.widgets)
@@ -238,6 +278,16 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
                     return default
                 value = value[part]
             return value
+
+        def set(self, key: str, value) -> None:
+            target = {"widgets": self.widgets}
+            parts = key.split(".")
+            for part in parts[:-1]:
+                target = target.setdefault(part, {})
+            target[parts[-1]] = value
+
+        def save(self) -> None:
+            self.save_calls += 1
 
     engine = _ManagerVisualizerEngine()
     monkeypatch.setattr(
@@ -255,8 +305,9 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
     )
     monkeypatch.setattr(QuickDisplayUnit, "show_on_screen", lambda _unit: None)
 
+    settings = _Settings()
     manager = DisplayManager(
-        settings_manager=_Settings(),
+        settings_manager=settings,
         runtime_generation=702,
     )
     owner = None
@@ -288,6 +339,81 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         assert chosen.runtime.frame_pacer.demands & QuickFrameDemand.VISUALIZER
         owner_runtime = owner.controller.logical_runtime
         assert owner_runtime is not None and owner_runtime.is_running()
+
+        # The retained menu and visualizer-region double-click both route into
+        # this exact owner. A zero-duration test clock preserves the real
+        # hidden-boundary transaction while avoiding wall-clock sleeps.
+        menu = chosen.runtime.context_menu_model
+        visualizer_menu = next(
+            entry for entry in menu.entries if entry["label"] == "⟳  Change Visualizer"
+        )
+        assert next(
+            child for child in visualizer_menu["children"] if child["payload"] == "bubble"
+        )["checked"] is True
+        admission = chosen.runtime.scene_controller._visualizer_double_click_admission
+        assert admission is not None
+        admission._region_contains = lambda _position: True
+        transition_now = [0.0]
+        owner._transition_clock = lambda: transition_now[0]
+        owner._transition_half_duration_s = 0.25
+        owner._sync = SimpleNamespace(sync_latest=lambda: True)
+        assert admission.handles_semantic_double_click_at(object()) is True
+        assert owner._mode_transition_phase == "fading_out"
+
+        outgoing_runtime = owner_runtime
+        transition_now[0] = 0.125
+        assert owner.sync_present() is True
+        assert owner._mode_transition_fade == pytest.approx(0.5)
+        assert outgoing_runtime.is_running() is True
+        transition_now[0] = 0.25
+        assert owner.sync_present() is True
+        assert outgoing_runtime.is_running() is False
+        assert owner.controller.mode_id == "devcurve"
+        assert owner.render_identity.engine_generation == 18
+        assert owner.render_identity.activation_id == 24
+        assert engine.begin_count == engine.end_count == 1
+        assert engine.reset_count == 1
+        assert engine.floor_reset_count == 1
+        assert owner.controller.logical_runtime is not outgoing_runtime
+        assert owner.controller.logical_runtime.is_running() is True
+        assert engine.acquire_count == 1
+        assert engine.release_count == 0
+
+        owner.controller.logical_tick_state._waiting_for_fresh_engine_frame = False
+        assert owner.sync_present() is True
+        assert owner._mode_transition_phase == "fading_in"
+        transition_now[0] = 0.375
+        assert owner.sync_present() is True
+        assert owner._mode_transition_fade == pytest.approx(0.5)
+        assert owner._mode_transition_phase == "fading_in"
+        transition_now[0] = 0.5
+        assert owner.sync_present() is True
+        assert owner._mode_transition_phase == "idle"
+        assert settings.get("widgets.spotify_visualizer.mode") == "devcurve"
+        assert settings.save_calls == 1
+        visualizer_menu = next(
+            entry for entry in menu.entries if entry["label"] == "⟳  Change Visualizer"
+        )
+        assert next(
+            child for child in visualizer_menu["children"] if child["payload"] == "devcurve"
+        )["checked"] is True
+
+        # Context-menu selection uses the same transaction/runtime owner.
+        owner._transition_half_duration_s = 0.0
+        assert menu.open_at(10.0, 12.0) is True
+        assert menu.requestAction("visualizer", "spectrum", True) is True
+        second_outgoing_runtime = owner.controller.logical_runtime
+        assert owner.sync_present() is True
+        assert second_outgoing_runtime.is_running() is False
+        owner.controller.logical_tick_state._waiting_for_fresh_engine_frame = False
+        assert owner.sync_present() is True
+        assert owner.sync_present() is True
+        assert owner.controller.mode_id == "spectrum"
+        assert settings.get("widgets.spotify_visualizer.mode") == "spectrum"
+        assert settings.save_calls == 2
+        assert engine.begin_count == engine.end_count == 2
+        assert engine.acquire_count == 1
+        assert [unit._visualizer_owner is not None for unit in manager.displays].count(True) == 1
 
         manager.cleanup()
         assert manager._quick_visualizer_owner is None
