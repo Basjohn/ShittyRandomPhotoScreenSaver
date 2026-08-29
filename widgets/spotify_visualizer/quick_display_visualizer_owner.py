@@ -183,18 +183,32 @@ class QuickDisplayVisualizerOwner:
         self._started = True
 
     def retire(self) -> bool:
-        """Retire exactly once: stop the sole logical runtime, close admission."""
+        """Retire behind a hard authored-runtime join barrier.
+
+        The sole ``VisualizerLogicalRuntime`` is non-daemon authored work: a
+        failed stop/join is an unresolved generation, not a best-effort cleanup
+        detail. ``stop_logical_runtime`` closes publication/admission first, then
+        stops+joins the runtime, retaining ownership when the join does not
+        complete (returns ``False``) or raises. This owner must not report
+        successful retirement - and must not let the owning Quick display
+        runtime/window continue terminal teardown - while the runtime is still
+        owned:
+
+        - a failed join returns ``False`` with the runtime still owned and the
+          owner not retired, so the same owner can retry once the join can
+          complete;
+        - a stop/join exception propagates as a teardown failure (not swallowed);
+        - only a successful join marks the owner retired. Repeat calls after that
+          are idempotent (``False``).
+        """
 
         if self._retired:
             return False
+        # Propagates on a stop/join exception; the controller keeps ownership.
+        joined = bool(self._controller.stop_logical_runtime())
+        if not joined:
+            return False
         self._retired = True
-        try:
-            self._controller.stop_logical_runtime()
-        except Exception:
-            logger.error(
-                "[VIS_OWNER] Logical runtime stop raised during retirement",
-                exc_info=True,
-            )
         self._controller.close_render_admission()
         return True
 
