@@ -1,7 +1,7 @@
 # 05 — CUSTOM Layout, Input, Interaction and Auxiliary Runtime Pixels
 
-Status: **G1–G6 closed; G4 core landed with bounded audit corrections priority; G7 near closure; G8 pending**  
-Last updated: 2026-08-29
+Status: **G destination contracts closed; H production destination owner attached**
+Last updated: 2026-08-30
 
 `Current_Plan.md` owns work admission.
 
@@ -13,6 +13,12 @@ ordinary-enabled state. Session semantics do not depend on QWidget.
 
 Preserve screen signatures/aliases, normalize/denormalize, clamp/snap/gutters/grid, display ownership, restore maps,
 Save/Cancel, layout slots and family-specific size payload semantics.
+
+H production attachment is owned exactly once by `QuickCustomLayoutOwner` at the manager generation. It assembles the real
+retained items from each `QuickDisplayUnit`, binds the existing per-display overlay and one cross-display coordinator, and
+persists through the neutral contract helpers. It never calls `CustomLayoutManager`, constructs edit screenshots, or creates
+another family/service/visualizer owner. The existing Quick input owner routes Enter/Escape, and layout-slot actions commit or
+cancel the same active session before their ordinary Settings mutation.
 
 ## Geometry variants
 

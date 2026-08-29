@@ -29,6 +29,12 @@ from rendering.transition_registry import (
 )
 from rendering.quick.context_menu import build_quick_context_menu_entries
 from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
+from rendering.quick.custom_layout_hydration import (
+    apply_quick_committed_payloads,
+    resolve_quick_committed_geometry,
+    resolve_quick_custom_entry,
+)
+from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
 from rendering.quick.display_unit import QuickDisplayUnit, create_quick_display_unit
 from rendering.quick.display_processing import DisplayProcessingDescriptor
 from rendering.quick.scene_controller import QuickSceneFactory
@@ -146,6 +152,15 @@ class DisplayManager(QObject):
         self._quick_visualizer_owner: Any | None = None
         self._quick_visualizer_unit: QuickDisplayUnit | None = None
         self._quick_visualizer_media_presentation: Any | None = None
+        self._quick_custom_layout_owner = QuickCustomLayoutOwner(
+            settings_manager=settings_manager,
+            participants_provider=lambda: tuple(self.displays),
+            visualizer_provider=lambda: (
+                self._quick_visualizer_owner,
+                self._quick_visualizer_unit,
+            ),
+            reload_request=self._request_custom_layout_runtime_reload,
+        )
         self._retiring_quick_units: dict[int, QuickDisplayUnit] = {}
         self._retire_manager_when_quick_complete = False
         self._widgets_config_snapshot: dict[str, Any] = {}
@@ -494,6 +509,9 @@ class DisplayManager(QObject):
             False,
         )
 
+    def _quick_custom_layout_active(self) -> bool:
+        return bool(self._quick_custom_layout_owner.is_active)
+
     def _configure_quick_auxiliary(self, unit: QuickDisplayUnit) -> None:
         """Apply canonical generation-scoped auxiliary state once before show."""
 
@@ -609,9 +627,8 @@ class DisplayManager(QObject):
             dimming_enabled=dimming_enabled,
             interaction_mode_enabled=self._interaction_mode_enabled(),
             interaction_mode_locked=is_mc_build(),
-            edit_mode_active=False,
-            # Do not expose a fallback into the retiring CustomLayoutManager.
-            layout_actions_available=False,
+            edit_mode_active=self._quick_custom_layout_owner.is_active,
+            layout_actions_available=self._quick_custom_layout_owner.can_start(),
         )
         unit.configure_context_menu(
             entries,
@@ -650,6 +667,9 @@ class DisplayManager(QObject):
             self.next_requested.emit()
             return True
         if action == "settings":
+            if self._quick_custom_layout_owner.is_active:
+                self._quick_custom_layout_owner.cancel()
+                self._refresh_all_quick_context_menus()
             self.settings_requested.emit()
             return True
         if action == "exit":
@@ -677,6 +697,26 @@ class DisplayManager(QObject):
                 return True
             if action == "visualizer":
                 return self._request_quick_visualizer_mode(payload)
+            if action == "edit_layout":
+                started = self._quick_custom_layout_owner.start()
+                if started:
+                    self._refresh_all_quick_context_menus()
+                return started
+            if action == "save_layout":
+                saved = self._quick_custom_layout_owner.save()
+                if saved:
+                    self._refresh_all_quick_context_menus()
+                return saved
+            if action == "cancel_layout":
+                cancelled = self._quick_custom_layout_owner.cancel()
+                if cancelled:
+                    self._refresh_all_quick_context_menus()
+                return cancelled
+            if action == "reset_layout":
+                reset = self._quick_custom_layout_owner.reset_to_authored()
+                if reset:
+                    self._refresh_all_quick_context_menus()
+                return reset
 
             enabled = self._context_toggle_value(payload)
             if enabled is None:
@@ -714,8 +754,6 @@ class DisplayManager(QObject):
             )
             return False
 
-        # CUSTOM rows are admitted only when their single destination owner is
-        # attached later in H.
         return False
 
     def _request_quick_visualizer_mode(self, mode_id: str) -> bool:
@@ -839,6 +877,12 @@ class DisplayManager(QObject):
         )
         runtime.layout_slot_load_requested.connect(self._load_layout_slot)
         runtime.layout_slot_save_requested.connect(self._save_layout_slot)
+        runtime.custom_layout_save_requested.connect(
+            self._save_quick_custom_layout
+        )
+        runtime.custom_layout_cancel_requested.connect(
+            self._cancel_quick_custom_layout
+        )
         runtime.transition_finalized.connect(
             lambda completion, display=unit: self._on_quick_transition_finalized(
                 display,
@@ -873,6 +917,18 @@ class DisplayManager(QObject):
             int(id(self)),
         )
 
+    def _save_quick_custom_layout(self) -> bool:
+        saved = self._quick_custom_layout_owner.save()
+        if saved:
+            self._refresh_all_quick_context_menus()
+        return saved
+
+    def _cancel_quick_custom_layout(self) -> bool:
+        cancelled = self._quick_custom_layout_owner.cancel()
+        if cancelled:
+            self._refresh_all_quick_context_menus()
+        return cancelled
+
     def _save_layout_slot(self, slot_id: str) -> bool:
         """Persist one source-free layout slot through SettingsManager."""
 
@@ -880,6 +936,9 @@ class DisplayManager(QObject):
         if settings is None:
             return False
         try:
+            if self._quick_custom_layout_owner.is_active:
+                if not self._quick_custom_layout_owner.save(request_reload=False):
+                    return False
             from core.settings.layout_slots import save_layout_slot
 
             widgets_map = settings.get_widgets_map()
@@ -908,6 +967,8 @@ class DisplayManager(QObject):
         if settings is None:
             return False
         try:
+            if self._quick_custom_layout_owner.is_active:
+                self._quick_custom_layout_owner.cancel()
             from core.settings.layout_slots import apply_layout_slot
 
             widgets_map = settings.get_widgets_map()
@@ -1207,6 +1268,34 @@ class DisplayManager(QObject):
                 process_supervisor=self._process_supervisor,
                 playing=False,
             )
+            custom_entry = resolve_quick_custom_entry(
+                widgets,
+                chosen.runtime.window.screen(),
+                "spotify_visualizer",
+            )
+            if custom_entry is not None:
+                from rendering.custom_layout_contract import (
+                    clamp_local_rect_to_bounds,
+                    denormalize_local_rect,
+                )
+                from rendering.custom_layout_session import normalize_viewport_extent
+
+                screen_size = chosen.runtime.window.screen().geometry().size()
+                local_rect = clamp_local_rect_to_bounds(
+                    denormalize_local_rect(custom_entry.rect, screen_size),
+                    screen_size,
+                )
+                owner.configure_committed_layout(
+                    local_rect=(
+                        float(local_rect.x()),
+                        float(local_rect.y()),
+                        float(local_rect.width()),
+                        float(local_rect.height()),
+                    ),
+                    viewport_extent=normalize_viewport_extent(
+                        custom_entry.size_payload.get("viewport_extent")
+                    ),
+                )
             engine = owner.controller.engine
             generation = int(engine.get_generation_id())
             activation_id = int(engine.get_activation_id())
@@ -1339,12 +1428,25 @@ class DisplayManager(QObject):
                 window_policy=self._quick_window_policy(),
                 ctrl_coordinator=self._quick_ctrl_coordinator,
                 interaction_mode_provider=self._interaction_mode_enabled,
+                custom_layout_active_provider=self._quick_custom_layout_active,
             )
             self._connect_quick_runtime(display, startup_generation=self._display_startup_generation)
+            screen = screens[int(screen_index)]
             display.bind_families(
                 widgets_config=self._widgets_config_snapshot,
                 shadow_values=self._shadow_values_snapshot,
                 thread_manager=self._thread_manager,
+                committed_rect_resolver=lambda widget_id, live_screen=screen: (
+                    resolve_quick_committed_geometry(
+                        self._widgets_config_snapshot,
+                        live_screen,
+                        widget_id,
+                    )
+                ),
+            )
+            apply_quick_committed_payloads(
+                display,
+                self._widgets_config_snapshot,
             )
             self._configure_quick_auxiliary(display)
             self._refresh_quick_context_menu(display)
@@ -2343,6 +2445,7 @@ class DisplayManager(QObject):
 
             failed_units: list[QuickDisplayUnit] = []
             cleanup_errors: list[str] = []
+            self._quick_custom_layout_owner.retire()
             self._disconnect_quick_visualizer_media_route()
             for unit in quick_units:
                 screen_index = int(unit.screen_index)
@@ -2499,6 +2602,7 @@ class DisplayManager(QObject):
         self._publish_display_image_accounting()
         self._image_accounting_publisher_ref = None
 
+        self._quick_custom_layout_owner.retire()
         self.settings_manager = None
         self._thread_manager = None
         self._resource_manager = None

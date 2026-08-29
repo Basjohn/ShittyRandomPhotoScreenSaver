@@ -60,6 +60,7 @@ class VisualizerSceneTransfer:
     identity: VisualizerRenderIdentity
     presentation: ResolvedVisualizerPresentation
     active: bool
+    double_click_admission: Any | None
 
 
 class QuickSceneFactory(QObject):
@@ -778,6 +779,7 @@ class QuickSceneController(QObject):
             identity=identity,
             presentation=presentation,
             active=bool(root.property("presentationActive")),
+            double_click_admission=self._visualizer_double_click_admission,
         )
         root.setProperty("customLayoutWorkingVisible", False)
         root.setProperty("presentationActive", False)
@@ -812,6 +814,9 @@ class QuickSceneController(QObject):
         self.apply_visualizer_presentation(
             presentation,
             active=transfer.active,
+        )
+        self.set_visualizer_double_click_admission(
+            transfer.double_click_admission
         )
 
     def _display_device_pixel_ratio(self) -> float:

@@ -80,8 +80,9 @@ not request construction or transition start; an inadmissible Random choice publ
 
 The retained context-menu model owns rows, visibility and live-action admission only. `DisplayManager` supplies current rows
 and routes accepted product actions to the existing outward signals and Settings/display authorities. A row whose destination
-owner is not attached (notably CUSTOM or the single visualizer during cutover) must remain absent/disabled; it must not invoke
-the retiring QWidget presenter as a fallback.
+owner is not attached must remain absent/disabled; it must not invoke the retiring QWidget presenter as a fallback. CUSTOM is
+one manager-generation owner over the neutral session plus existing retained display overlays/coordinator; it is not one owner
+per display and never consults the legacy `CustomLayoutManager`.
 
 The existing per-display `QuickFramePacer` is the visualizer's GUI publication-opportunity owner. The sole admitted
 `QuickDisplayVisualizerOwner` binds `QuickVisualizerPresentationSync` into that pacer under VISUALIZER demand; logical

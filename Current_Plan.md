@@ -13,7 +13,7 @@ d1523bd5 (one manager-admitted production Quick visualizer owner + existing fram
 current bounded checkpoint: single-owner visualizer mode transaction + retained menu/double-click action route
 True-F focused gate: 7/7 GREEN
 Settings-overhaul focused reconciliation: 154/154 GREEN
-H destination profile: 59/59 target-isolated GREEN
+H destination profile: 60/60 target-isolated GREEN
 Complete G: independently audited and ACCEPTED.
 H: ACTIVE. The pre-cutover visualizer destination-edge correction gate is CLOSED.
 CURRENT H implementation target: coordinated DisplayManager + engine authority cutover.
@@ -69,7 +69,7 @@ now the current H implementation target.** Deferred to J installed acceptance: t
 hardware-ingress matrix.
 
 The pre-cutover test-authority maintenance pass is **complete enough for H**. The large Settings GUI/theme overhaul is now
-covered by reconciled current-owner tests (**154/154 GREEN**), and the maintained H destination profile is **59/59 GREEN**
+covered by reconciled current-owner tests (**154/154 GREEN**), and the maintained H destination profile is **60/60 GREEN**
 under target-isolated subprocess execution. The earlier whole-tree/chunk noise was traced to stale legacy-owner tests plus
 Qt/QQuick cross-test lifecycle contamination; it is not an unresolved H architecture defect. `Docs/TestSuite.md` now owns the
 current H-vs-I/J test classification.
@@ -92,7 +92,7 @@ G6      retained input / semantic family actions         CLOSED
 G7      retained context + auxiliary pixels              CLOSED (destination sole aux; legacy = H-scaffolding)
 G8      MC / focus closure                               DETERMINISTIC CLOSED; physical A->B->A matrix = J debt
 G-GATE  independent audit of complete checkpointed G     ACCEPTED
-H       production Quick owner/orchestration cutover     ACTIVE; destination gate 59/59 GREEN, DisplayManager cutover CURRENT
+H       production Quick owner/orchestration cutover     ACTIVE; destination gate 60/60 GREEN, DisplayManager cutover CURRENT
 I       residue only                                     after H
 J       final installed / physical validation            final
 ```
@@ -303,9 +303,16 @@ The family/runtime destination integration already landed and test-gated include
   cannot clear pending work until every admitted screen is authoritative.
 - Each production Quick unit now receives current retained context-menu rows from `DisplayManager`; previous/next/settings/exit,
   transition selection, dimming and interaction-mode actions route to the existing manager/signals/Settings authorities. The
-  retiring QWidget menu and retained Quick menu share one presentation-neutral transition-selection mutation. CUSTOM remains
-  unadmitted until its single destination owner is attached; visualizer mode rows remain unadmitted until the admitted owner's
-  semantic mode-change route is complete. There is no fallback into the old `CustomLayoutManager` or visualizer widget.
+  retiring QWidget menu and retained Quick menu share one presentation-neutral transition-selection mutation. Visualizer mode
+  rows and exact-once CUSTOM edit/save/cancel/reset rows now route to their admitted destination owners. There is no fallback
+  into the old `CustomLayoutManager` or visualizer widget.
+- One manager-generation `QuickCustomLayoutOwner` now assembles the already-retained family/visualizer presentations into one
+  global `CustomLayoutSession`, binds each existing display overlay plus the cross-display scene coordinator, and owns working
+  X, independent Clock variants, family size payloads, uniform/viewport visualizer resize, committed geometry/position/monitor,
+  authored reset, Enter/Escape and layout-slot commit/cancel semantics. Startup rehydrates committed CUSTOM rect/payload truth
+  before presentation, and visualizer transfer retargets the same synchronization owner without moving or duplicating logical
+  runtime/cadence authority. Save/reset request the existing manager-identity-fenced rebuild; Cancel restores the same retained
+  items without persistence or recreation.
 
 ### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 
@@ -377,7 +384,7 @@ regression evidence.
 
 The bounded correction route `Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md` is closed: steps 1–7
 below are landed and test-gated (Findings A–F GREEN; see the checkpoint disposition above). The reconciled H destination
-regression profile is also GREEN (**59/59 targets**). Steps 8–9 — the coordinated production-authority cutover and
+regression profile is also GREEN (**60/60 targets**). Steps 8–9 — the coordinated production-authority cutover and
 caller-proven deletion — are therefore the remaining H work and are **CURRENT NOW**. The completed route and remaining order are:
 
 1. **Correct all-five configuration ownership.** Inventory actual logical/frame-runtime consumers. Move only those consumed
@@ -412,7 +419,8 @@ caller-proven deletion — are therefore the remaining H work and are **CURRENT 
    reload route are Quick-authoritative; one canonical settings-to-single-Quick-visualizer construction/start/sync/retirement
    route is authoritative, and its semantic mode change now preserves the retained 250 ms content crossfade, hidden target
    activation, hard runtime join, one BeatEngine activation transaction, fresh-target wait, retained menu choice and
-   visualizer-region double-click cycle. Remaining work is exact-once CUSTOM before runtime-shaped proof and physical-host
+   visualizer-region double-click cycle. Exact-once destination CUSTOM ownership and committed startup hydration are now
+   attached without a legacy fallback. Remaining work is runtime-shaped production proof and caller-proven physical-host
    deletion.
 9. **Runtime-shaped production proof and caller-proven deletion.** Prove one/multiple selected displays, image/transition
    routing, ordinary families, the single admitted visualizer, corrected-G owners, readiness, generation/topology replacement

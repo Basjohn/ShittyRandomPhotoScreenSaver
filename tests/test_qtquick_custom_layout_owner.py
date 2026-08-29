@@ -1,0 +1,377 @@
+"""Destination-owner integration gates for H retained CUSTOM authority."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+
+from PySide6.QtCore import QEvent, QPoint, QRect, Qt
+from PySide6.QtGui import QKeyEvent
+
+from engine.display_manager import DisplayManager
+from rendering.custom_layout_contract import (
+    get_screen_layout_entries_for_screen,
+    get_widget_layout_variant_payload,
+    load_custom_layout_map,
+)
+from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
+from rendering.quick.custom_layout_hydration import (
+    apply_quick_committed_payloads,
+    resolve_quick_committed_geometry,
+)
+from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
+from rendering.quick.display_unit import create_quick_display_unit
+from rendering.quick.input_controller import QuickInputController
+from rendering.quick.runtime import QuickDisplayRuntime
+from rendering.quick.scene_controller import QuickSceneFactory
+from rendering.quick.state import QuickWindowPolicy
+from rendering.quick.widgets.family_binder import ClockFamilyAdapter
+from widgets.spotify_visualizer.presentation_geometry import (
+    resolve_visualizer_presentation,
+)
+from widgets.spotify_visualizer.quick_display_visualizer_owner import (
+    QuickDisplayVisualizerOwner,
+)
+
+
+class _Settings:
+    def __init__(self, widgets: dict) -> None:
+        self.widgets = deepcopy(widgets)
+        self.save_calls = 0
+
+    def get_widgets_map(self):
+        return deepcopy(self.widgets)
+
+    def set_widgets_map(self, widgets, *, emit_change=True) -> None:
+        self.widgets = deepcopy(widgets)
+
+    def save(self) -> None:
+        self.save_calls += 1
+
+    def get(self, key: str, default=None):
+        current = self.widgets if key == "widgets" else {"widgets": self.widgets}
+        for part in key.split("."):
+            if not isinstance(current, dict) or part not in current:
+                return default
+            current = current[part]
+        return deepcopy(current)
+
+    def set(self, key: str, value) -> None:
+        if key == "widgets":
+            self.widgets = deepcopy(value)
+            return
+        parts = key.split(".")
+        if parts[0] == "widgets":
+            parts = parts[1:]
+        current = self.widgets
+        for part in parts[:-1]:
+            current = current.setdefault(part, {})
+        current[parts[-1]] = deepcopy(value)
+
+
+def _clock_widgets() -> dict:
+    return {
+        "clock": {
+            "enabled": True,
+            "display_mode": "digital",
+            "font_size": 48,
+            "position": "Top Left",
+            "monitor": "ALL",
+        },
+        "clock2": {"enabled": False},
+        "clock3": {"enabled": False},
+    }
+
+
+def _clock_unit(qt_app, widgets: dict, *, generation: int = 810):
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    factory = QuickSceneFactory()
+    unit = create_quick_display_unit(
+        screen=screen,
+        screen_index=0,
+        runtime_generation=generation,
+        scene_factory=factory,
+        window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+        ctrl_coordinator=SharedCtrlCoordinator(),
+        adapters=(ClockFamilyAdapter(),),
+    )
+    unit.bind_families(
+        widgets_config=widgets,
+        committed_rect_resolver=lambda widget_id: resolve_quick_committed_geometry(
+            widgets, screen, widget_id
+        ),
+    )
+    apply_quick_committed_payloads(unit, widgets)
+    return unit, factory
+
+
+def test_single_quick_custom_owner_cancel_restores_same_retained_item(qt_app) -> None:
+    widgets = _clock_widgets()
+    settings = _Settings(widgets)
+    unit, factory = _clock_unit(qt_app, widgets)
+    reloads: list[str] = []
+    owner = QuickCustomLayoutOwner(
+        settings_manager=settings,
+        participants_provider=lambda: (unit,),
+        visualizer_provider=lambda: (None, None),
+        reload_request=reloads.append,
+    )
+    try:
+        presentation = unit.presenter.presentation_for_widget_id("clock")
+        assert presentation is not None
+        retained_item = presentation.item
+        baseline = unit.presenter.geometry_for("clock")
+        assert baseline is not None
+
+        assert owner.start() is True
+        assert owner.start() is True
+        session = owner.session
+        assert session is not None
+        assert len(session.items()) == 1
+        item = session.items()[0]
+        item.set_geometry(
+            QRect(
+                item.current_global_rect.x() + 140,
+                item.current_global_rect.y() + 90,
+                item.current_global_rect.width() + 80,
+                item.current_global_rect.height() + 40,
+            ),
+            size_payload={"font_size": 72},
+            resize_scale=1.5,
+        )
+        session.notify_item_changed(item)
+        assert presentation.item is retained_item
+        assert presentation.model.config.font_size == 72
+
+        assert owner.cancel() is True
+        assert owner.is_active is False
+        assert presentation.item is retained_item
+        assert presentation.model.config.font_size == 48
+        assert settings.save_calls == 0
+        assert reloads == []
+    finally:
+        owner.retire()
+        unit.retire()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+def test_single_quick_custom_owner_save_commits_geometry_size_and_enabled(
+    qt_app,
+) -> None:
+    widgets = _clock_widgets()
+    settings = _Settings(widgets)
+    unit, factory = _clock_unit(qt_app, widgets, generation=811)
+    reloads: list[str] = []
+    owner = QuickCustomLayoutOwner(
+        settings_manager=settings,
+        participants_provider=lambda: (unit,),
+        visualizer_provider=lambda: (None, None),
+        reload_request=reloads.append,
+    )
+    try:
+        assert owner.start() is True
+        session = owner.session
+        assert session is not None
+        item = session.items()[0]
+        target = QRect(
+            item.current_global_rect.x() + 100,
+            item.current_global_rect.y() + 70,
+            item.current_global_rect.width() + 60,
+            item.current_global_rect.height() + 30,
+        )
+        item.set_geometry(
+            target,
+            size_payload={"font_size": 64},
+            resize_scale=4.0 / 3.0,
+        )
+        session.notify_item_changed(item)
+
+        assert owner.save() is True
+        assert settings.save_calls == 1
+        assert reloads == ["save_continue"]
+        assert settings.widgets["clock"]["position"] == "Custom"
+        assert settings.widgets["clock"]["monitor"] == "ALL"
+        custom_map = load_custom_layout_map(settings.widgets)
+        matched, entries = get_screen_layout_entries_for_screen(
+            custom_map,
+            unit.runtime.window.screen(),
+        )
+        assert matched is not None
+        payload = get_widget_layout_variant_payload(entries, "clock", "digital")
+        assert payload is not None
+        assert payload["size_payload"] == {"font_size": 64}
+
+        committed = resolve_quick_committed_geometry(
+            settings.widgets,
+            unit.runtime.window.screen(),
+            "clock",
+        )
+        assert committed is not None
+        screen = unit.runtime.window.screen().geometry()
+        assert committed.x == target.x() - screen.x()
+        assert committed.y == target.y() - screen.y()
+        assert committed.width == target.width()
+        assert committed.height == target.height()
+    finally:
+        owner.retire()
+        unit.retire()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+def test_quick_custom_singleton_x_is_working_off_and_save_is_ordinary_off(
+    qt_app,
+) -> None:
+    widgets = _clock_widgets()
+    settings = _Settings(widgets)
+    unit, factory = _clock_unit(qt_app, widgets, generation=812)
+    owner = QuickCustomLayoutOwner(
+        settings_manager=settings,
+        participants_provider=lambda: (unit,),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    try:
+        assert owner.start() is True
+        model = unit.runtime.scene_controller.custom_layout_overlay.model
+        assert model.rowCount() == 1
+        model.closeItem(0)
+        session = owner.session
+        assert session is not None
+        item = session.items()[0]
+        assert item.removed is False
+        assert item.current_enabled is False
+        assert settings.widgets["clock"]["enabled"] is True
+
+        assert owner.save() is True
+        assert settings.widgets["clock"]["enabled"] is False
+    finally:
+        owner.retire()
+        unit.retire()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+def test_quick_input_enter_and_escape_are_custom_actions_not_exit(qt_app) -> None:
+    active = True
+    controller = QuickInputController(
+        screen_index=0,
+        runtime_generation=813,
+        custom_layout_active_provider=lambda: active,
+    )
+    actions: list[str] = []
+    controller.custom_layout_save_requested.connect(lambda: actions.append("save"))
+    controller.custom_layout_cancel_requested.connect(lambda: actions.append("cancel"))
+    controller.exit_requested.connect(lambda: actions.append("exit"))
+
+    enter = QKeyEvent(
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_Return,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    escape = QKeyEvent(
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_Escape,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    assert controller.handle_key_press(enter) is True
+    assert controller.handle_key_press(escape) is True
+    assert actions == ["save", "cancel"]
+
+    active = False
+    assert controller.handle_key_press(escape) is True
+    assert actions == ["save", "cancel", "exit"]
+    controller.close_input()
+
+
+def test_display_manager_menu_routes_one_quick_custom_owner(qt_app) -> None:
+    widgets = _clock_widgets()
+    settings = _Settings(widgets)
+    unit, factory = _clock_unit(qt_app, widgets, generation=815)
+    manager = DisplayManager(settings_manager=settings, runtime_generation=815)
+    manager.displays = [unit]
+    owner = manager._quick_custom_layout_owner
+    try:
+        manager._refresh_quick_context_menu(unit)
+        entries = unit.runtime.context_menu_model.entries
+        assert any(entry["actionId"] == "edit_layout" for entry in entries)
+        assert manager._handle_quick_context_action(
+            unit, "edit_layout", ""
+        ) is True
+        assert manager._quick_custom_layout_owner is owner
+        assert owner.is_active is True
+        entries = unit.runtime.context_menu_model.entries
+        assert any(entry["actionId"] == "save_layout" for entry in entries)
+        assert any(entry["actionId"] == "cancel_layout" for entry in entries)
+
+        assert manager._handle_quick_context_action(
+            unit, "cancel_layout", ""
+        ) is True
+        assert owner.is_active is False
+        assert settings.save_calls == 0
+    finally:
+        manager.displays = []
+        manager.retire_runtime()
+        unit.retire()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+def test_visualizer_custom_transfer_retargets_same_owner_publication(qt_app) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    factory = QuickSceneFactory()
+    source = QuickDisplayRuntime(
+        screen_index=0,
+        runtime_generation=814,
+        screen=screen,
+        scene_factory=factory,
+        window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    target = QuickDisplayRuntime(
+        screen_index=1,
+        runtime_generation=814,
+        screen=screen,
+        scene_factory=factory,
+        window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    owner = QuickDisplayVisualizerOwner(
+        source,
+        bar_count=24,
+        initial_mode="bubble",
+        engine_factory=lambda _count: object(),
+    )
+    try:
+        owner.configure()
+        owner.configure_committed_layout(
+            local_rect=(120.0, 80.0, 630.0, 280.0),
+            viewport_extent=(630.0, 280.0),
+        )
+        owner.bind(engine_generation=3, activation_id=5)
+        first = owner._resolve_current_presentation()
+        owner._apply_resolved_presentation(first)
+        admission = object()
+        source.scene_controller.set_visualizer_double_click_admission(admission)
+
+        source.scene_controller.transfer_visualizer_to(target.scene_controller)
+        assert owner.set_presentation_runtime(target) is True
+        second = resolve_visualizer_presentation(
+            policy=owner.controller.presentation_policy,
+            display_size=(1920.0, 1080.0),
+            outer_origin=(260.0, 190.0),
+            viewport_extent=(630.0, 280.0),
+        )
+        owner._apply_resolved_presentation(second)
+
+        assert source.scene_controller._visualizer_item is None
+        assert target.scene_controller.visualizer_item is not None
+        assert target.scene_controller.visualizer_item.presentation is second
+        assert target.scene_controller._visualizer_double_click_admission is admission
+        assert owner.controller.committed_viewport_extent == (630.0, 280.0)
+    finally:
+        owner.retire()
+        source.close_runtime()
+        target.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
