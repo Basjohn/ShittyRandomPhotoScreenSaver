@@ -195,7 +195,9 @@ def test_threaded_runtime_input_exit_retires_complete_display_set():
             "--size",
             "240x135",
             "--phase-delay-ms",
-            "250",
+            # Preserve a real midpoint opportunity on the selected 60 Hz
+            # display while the input-exit probe drives both physical windows.
+            "500",
         ],
         cwd=ROOT,
         env=env,

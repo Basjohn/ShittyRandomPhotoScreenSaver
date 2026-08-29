@@ -29,13 +29,18 @@ from core.logging.logger import get_logger
 from rendering.display_modes import DisplayMode
 
 from .ctrl_coordinator import SharedCtrlCoordinator
-from .display_image_route import present_processed_pixmap
+from .display_image_route import (
+    present_processed_pixmap,
+    presentation_image_from_processed_pixmap,
+)
 from .display_processing import DisplayProcessingDescriptor
 from .display_presenter import QuickDisplayPresenter
+from .image_state import PresentationImage
 from .render import RenderNodeTelemetry
 from .runtime import QuickDisplayRuntime
 from .scene_controller import QuickSceneFactory
 from .state import QuickWindowPolicy
+from .transitions.state import TransitionRequest, TransitionRun
 from .widgets.family_binder import OrdinaryFamilyAdapter
 from .widgets.host import OverlayWidgetGeometry
 
@@ -131,6 +136,39 @@ class QuickDisplayUnit:
         """Publish one processed pipeline pixmap as the base image."""
 
         present_processed_pixmap(self._runtime, processed_pixmap, image_path=image_path)
+
+    def capture_image(
+        self,
+        processed_pixmap: QPixmap,
+        *,
+        image_path: str = "",
+    ) -> PresentationImage:
+        """Capture one processed pixmap into detached destination state."""
+
+        return presentation_image_from_processed_pixmap(
+            processed_pixmap,
+            image_path=image_path,
+        )
+
+    def current_image(self) -> PresentationImage | None:
+        """Return this unit's immutable current base-image value."""
+
+        return self._runtime.scene_controller.presentation_image
+
+    def present_captured_image(self, image: PresentationImage) -> None:
+        """Publish a previously captured image without recapturing it."""
+
+        self._runtime.set_presentation_image(image)
+
+    def start_transition(self, request: TransitionRequest) -> TransitionRun:
+        """Start one fully resolved transition through the retained runtime."""
+
+        return self._runtime.start_transition(request)
+
+    def cancel_transition(self, *, reason: str) -> bool:
+        """Cancel the current run to its admitted destination, if any."""
+
+        return self._runtime.cancel_transition(reason=reason)
 
     def clear(self) -> None:
         self._runtime.clear()

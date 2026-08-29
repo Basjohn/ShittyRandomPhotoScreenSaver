@@ -86,6 +86,7 @@ H_DESTINATION_PROFILE = (
     "test_qtquick_transition_implementations.py",
     "test_qtquick_transition_parameter_defaults.py",
     "test_qtquick_transition_parameter_resolution.py",
+    "test_qtquick_transition_request_resolution.py",
     "test_qtquick_transition_state.py",
     "test_qtquick_transition_state_fence.py",
     "test_qtquick_transition_uniform_wiring.py",

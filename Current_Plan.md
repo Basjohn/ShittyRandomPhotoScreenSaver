@@ -7,11 +7,11 @@ Last updated: 2026-08-30
 The documentation is reconciled through independently audited pushed source plus the current bounded H worktree:
 
 ```text
-ddcc4f71 (semantic DisplayManager collection operations landed on pushed main)
-current worktree: production display collection constructor + Quick retirement ordering cut over
+57b4fd6b (retained input actions + layout persistence/reload routing landed on pushed main)
+current worktree: one batch-resolved Quick transition route + finalization accounting
 True-F focused gate: 7/7 GREEN
 Settings-overhaul focused reconciliation: 154/154 GREEN
-H destination profile: 57/57 target-isolated GREEN
+H destination profile: 58/58 target-isolated GREEN
 Complete G: independently audited and ACCEPTED.
 H: ACTIVE. The pre-cutover visualizer destination-edge correction gate is CLOSED.
 CURRENT H implementation target: coordinated DisplayManager + engine authority cutover.
@@ -63,7 +63,7 @@ now the current H implementation target.** Deferred to J installed acceptance: t
 hardware-ingress matrix.
 
 The pre-cutover test-authority maintenance pass is **complete enough for H**. The large Settings GUI/theme overhaul is now
-covered by reconciled current-owner tests (**154/154 GREEN**), and the maintained H destination profile is **57/57 GREEN**
+covered by reconciled current-owner tests (**154/154 GREEN**), and the maintained H destination profile is **58/58 GREEN**
 under target-isolated subprocess execution. The earlier whole-tree/chunk noise was traced to stale legacy-owner tests plus
 Qt/QQuick cross-test lifecycle contamination; it is not an unresolved H architecture defect. `Docs/TestSuite.md` now owns the
 current H-vs-I/J test classification.
@@ -86,7 +86,7 @@ G6      retained input / semantic family actions         CLOSED
 G7      retained context + auxiliary pixels              CLOSED (destination sole aux; legacy = H-scaffolding)
 G8      MC / focus closure                               DETERMINISTIC CLOSED; physical A->B->A matrix = J debt
 G-GATE  independent audit of complete checkpointed G     ACCEPTED
-H       production Quick owner/orchestration cutover     ACTIVE; destination gate 57/57 GREEN, DisplayManager cutover CURRENT
+H       production Quick owner/orchestration cutover     ACTIVE; destination gate 58/58 GREEN, DisplayManager cutover CURRENT
 I       residue only                                     after H
 J       final installed / physical validation            final
 ```
@@ -290,6 +290,11 @@ The family/runtime destination integration already landed and test-gated include
   presentation, preserving its configuration/runtime-availability admission and the existing neutral service owners. Layout
   slot save/load moved to `DisplayManager` + `SettingsManager`; a successful load emits the existing runtime-generation and
   exact-manager-identity fenced reload request. No backend or service fallback was added.
+- Image changes now route through the retained Quick transition controller. `DisplayManager` resolves one immutable transition
+  spec per accepted batch after the engine's Random admission, shares its type/duration/direction/parameters across displays,
+  and varies only each unit's immutable source/destination images. Random remains fail-closed, first images publish directly,
+  and `current_images`/first-frame/transition-complete truth advances only after each destination finalizes. The batch owner
+  cannot clear pending work until every admitted screen is authoritative.
 
 ### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 
@@ -361,7 +366,7 @@ regression evidence.
 
 The bounded correction route `Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md` is closed: steps 1–7
 below are landed and test-gated (Findings A–F GREEN; see the checkpoint disposition above). The reconciled H destination
-regression profile is also GREEN (**57/57 targets**). Steps 8–9 — the coordinated production-authority cutover and
+regression profile is also GREEN (**58/58 targets**). Steps 8–9 — the coordinated production-authority cutover and
 caller-proven deletion — are therefore the remaining H work and are **CURRENT NOW**. The completed route and remaining order are:
 
 1. **Correct all-five configuration ownership.** Inventory actual logical/frame-runtime consumers. Move only those consumed
@@ -392,8 +397,9 @@ caller-proven deletion — are therefore the remaining H work and are **CURRENT 
    intermediate migration commits are allowed to remain intentionally non-runnable. What must remain atomic is the finished
    ownership topology: do not add a `DisplayWidget` compatibility facade, throwaway legacy-only decoupling layer, or parallel
    legitimate production presenter merely to make intermediate checkpoints runnable. **Current sub-checkpoint:** the selected
-   display collection constructor and its retirement ordering are Quick-authoritative; remaining work is the exact-once product
-   semantics (transition/action/context/CUSTOM/single-visualizer wiring) before runtime-shaped proof and physical-host deletion.
+   display collection constructor, retirement ordering, image/transition route, retained input actions and layout-slot reload
+   route are Quick-authoritative; remaining work is exact-once context/CUSTOM/single-visualizer orchestration before
+   runtime-shaped proof and physical-host deletion.
 9. **Runtime-shaped production proof and caller-proven deletion.** Prove one/multiple selected displays, image/transition
    routing, ordinary families, the single admitted visualizer, corrected-G owners, readiness, generation/topology replacement
    and clean retirement; then delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, legacy visualizer host/compositor glue,
