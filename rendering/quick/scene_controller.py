@@ -728,6 +728,20 @@ class QuickSceneController(QObject):
 
         self._visualizer_double_click_admission = admission
 
+    def visualizer_contains_scene_position(self, scene_position: Any) -> bool:
+        """Return whether the live retained visualizer owns this scene point."""
+
+        root = self._visualizer_root
+        if root is None:
+            return False
+        if not bool(root.property("presentationActive")) or not root.isVisible():
+            return False
+        try:
+            local = root.mapFromScene(scene_position)
+            return bool(root.contains(local))
+        except (TypeError, RuntimeError):
+            return False
+
     def transfer_visualizer_to(
         self,
         target: "QuickSceneController",

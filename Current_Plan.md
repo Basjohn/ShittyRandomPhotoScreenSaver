@@ -9,7 +9,8 @@ The documentation is reconciled through independently audited pushed source plus
 ```text
 87499707 (one batch-resolved Quick transition route + finalization accounting landed on pushed main)
 b826ee74 (retained context-menu population + existing-owner action routing landed on pushed main)
-current bounded checkpoint: one manager-admitted production Quick visualizer owner + existing frame-pacer synchronization
+d1523bd5 (one manager-admitted production Quick visualizer owner + existing frame-pacer synchronization landed on pushed main)
+current bounded checkpoint: single-owner visualizer mode transaction + retained menu/double-click action route
 True-F focused gate: 7/7 GREEN
 Settings-overhaul focused reconciliation: 154/154 GREEN
 H destination profile: 59/59 target-isolated GREEN
@@ -409,8 +410,10 @@ caller-proven deletion — are therefore the remaining H work and are **CURRENT 
    legitimate production presenter merely to make intermediate checkpoints runnable. **Current sub-checkpoint:** the selected
    display collection constructor, retirement ordering, image/transition route, retained input/context actions and layout-slot
    reload route are Quick-authoritative; one canonical settings-to-single-Quick-visualizer construction/start/sync/retirement
-   route is now authoritative. Remaining work is exact-once CUSTOM plus visualizer semantic mode-change/menu/double-click
-   orchestration before runtime-shaped proof and physical-host deletion.
+   route is authoritative, and its semantic mode change now preserves the retained 250 ms content crossfade, hidden target
+   activation, hard runtime join, one BeatEngine activation transaction, fresh-target wait, retained menu choice and
+   visualizer-region double-click cycle. Remaining work is exact-once CUSTOM before runtime-shaped proof and physical-host
+   deletion.
 9. **Runtime-shaped production proof and caller-proven deletion.** Prove one/multiple selected displays, image/transition
    routing, ordinary families, the single admitted visualizer, corrected-G owners, readiness, generation/topology replacement
    and clean retirement; then delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, legacy visualizer host/compositor glue,

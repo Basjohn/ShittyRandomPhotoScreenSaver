@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QPointF
 from PySide6.QtQml import QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
@@ -163,6 +164,11 @@ def test_scene_controller_applies_one_geometry_record_to_lazy_shell_and_item(
     assert item.presentation is presentation
     assert item.width() == 630.0
     assert item.height() == 420.0
+    assert controller.visualizer_contains_scene_position(QPointF(208.0, 311.0)) is True
+    assert controller.visualizer_contains_scene_position(QPointF(10.0, 10.0)) is False
+    controller.set_visualizer_presentation_active(False)
+    assert controller.visualizer_contains_scene_position(QPointF(208.0, 311.0)) is False
+    controller.set_visualizer_presentation_active(True)
 
     bridge = VisualizerSnapshotBridge()
     identity = bridge.begin_activation(
