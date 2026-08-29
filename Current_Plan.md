@@ -7,10 +7,10 @@ Last updated: 2026-08-29
 The documentation is reconciled through independently audited pushed source:
 
 ```text
-c8eef7d4 (pre-cutover visualizer destination-edge correction gate GREEN)
+48183b44 (True-F technical + retained-consumer closure landed; 7/7 focused gate GREEN)
 Complete G: independently audited and ACCEPTED.
-H: ACTIVE. The pre-cutover visualizer destination-edge correction gate is GREEN;
-the atomic DisplayManager production cutover is now ADMITTED (next H work).
+H: ACTIVE. The pre-cutover visualizer destination-edge correction gate is CLOSED.
+CURRENT H implementation target: coordinated DisplayManager + engine authority cutover.
 
 Accepted H foundation through this checkpoint:
 - one WidgetRuntimeManager per QuickDisplayRuntime generation;
@@ -24,6 +24,10 @@ Accepted H foundation through this checkpoint:
 - VisualizerLogicalRuntime advances against controller-owned state without SpotifyVisualizerWidget;
 - immutable visualizer render contracts / bridge and Quick render consumers exist;
 - QuickDisplayVisualizerOwner exists as a thin display/generation edge and can construct/bind/start a widget-free controller.
+- visualizer technical configuration is presentation-neutral: the controller/shared BeatEngine receives resolved technical
+  settings without `SpotifyVisualizerWidget`, while technical values consumed by authored evolution live on controller-owned logical state;
+- `QuickVisualizerPresentationSync` commits the exact resolved presentation embedded in the published snapshot to the retained
+  `VisualizerRenderItem`, and the retained item is proven to consume that snapshot.
 
 Pre-cutover audit disposition — ALL GREEN (`Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md`):
 - ACCEPT the widget-free logical/source ownership extraction; do not reopen or roll it back.
@@ -34,8 +38,10 @@ Pre-cutover audit disposition — ALL GREEN (`Docs/QtQuick_Migration/H_Pre_Cutov
   `*FrameRuntime.resolve` / DevCurve field solve) is owned by `VisualizerLogicalTickState` via the single neutral authority
   `apply_logical_vis_mode_kwargs`. Classification is by actual consumer, not naming.
 - GREEN (F): the pure renderer/presentation-only subset is owned by a symmetric neutral `VisualizerPresentationState`, fed by
-  the single authority `apply_presentation_vis_mode_kwargs`, consumed by the widget-free capture; the owner-shaped all-five
-  destination-chain proof reaches the retained Quick consumer from canonical settings without `SpotifyVisualizerWidget`.
+  the single authority `apply_presentation_vis_mode_kwargs`. The later True-F closure additionally proves canonical technical
+  settings resolve without QWidget, apply through the controller-owned shared BeatEngine, authored-logical technical inputs
+  reach controller-owned state, bar-count reconfiguration stays coherent, and the retained `VisualizerRenderItem` consumes the
+  exact synchronized snapshot/presentation. `tests/test_qtquick_visualizer_true_f_gate.py`: **7/7 GREEN** on the current worktree.
 - GREEN (C): `QuickDisplayVisualizerOwner.retire()` is a hard join barrier - a failed stop/join keeps ownership and fails
   retirement (retryable); a stop exception propagates; only a successful join retires.
 - GREEN (D): `rendering/quick/visualizer_admission.py` resolves exactly one admitted visualizer display owner from
@@ -44,13 +50,18 @@ Pre-cutover audit disposition — ALL GREEN (`Docs/QtQuick_Migration/H_Pre_Cutov
   fallback (`rendering/quick/visualizer/double_click_admission.py`; scene controller binds the composed hit test).
 
 Next H boundary:
-- perform the coordinated atomic DisplayManager + engine cutover and caller-proven legacy physical-host deletion (below).
+- perform the coordinated DisplayManager + engine authority cutover, then caller-proven legacy physical-host deletion (below).
 ```
 
 Exact later source always outranks this document. **All of G remains complete, independently audited and accepted. The
-bounded pre-cutover visualizer destination-edge correction gate is GREEN, so the atomic DisplayManager production flip is now
-admitted.** Deferred to J installed acceptance: the all-five-mode visualizer eyes-on gate and the physical two-display A->B->A
+bounded pre-cutover visualizer destination-edge correction gate is CLOSED, so the DisplayManager production authority cutover is
+now the current H implementation target.** Deferred to J installed acceptance: the all-five-mode visualizer eyes-on gate and the physical two-display A->B->A
 hardware-ingress matrix.
+
+The attempted broad chunked-suite caution run is **not a new H RED gate**: the test inventory/documentation is known to have
+drifted across the large Settings GUI/theme overhaul and legacy-architecture retirement. Until `tests/` + `Docs/TestSuite.md`
+are reconciled in the immediate maintenance pass, focused owner-shaped H gates and exact source outrank stale broad-suite
+collection failures. Do not restore retired architecture merely to satisfy an obsolete test.
 
 Current phase state:
 
@@ -65,7 +76,7 @@ G6      retained input / semantic family actions         CLOSED
 G7      retained context + auxiliary pixels              CLOSED (destination sole aux; legacy = H-scaffolding)
 G8      MC / focus closure                               DETERMINISTIC CLOSED; physical A->B->A matrix = J debt
 G-GATE  independent audit of complete checkpointed G     ACCEPTED
-H       production Quick owner/orchestration cutover     ACTIVE; pre-cutover gate GREEN, atomic cutover ADMITTED
+H       production Quick owner/orchestration cutover     ACTIVE; pre-cutover gate CLOSED, DisplayManager cutover CURRENT
 I       residue only                                     after H
 J       final installed / physical validation            final
 ```
@@ -271,7 +282,7 @@ contract is **H work**; only final eyes-on visual parity is J. Landed:
 per-variant (digital/analogue) committed-rect ownership remain unchanged and override the binding completely. J later
 validates/refines visual parity only.
 
-### H visualizer widget-free logical ownership — ACCEPTED; destination edge correction OPEN
+### H visualizer widget-free destination ownership — ACCEPTED; correction gate CLOSED
 
 The discovered logical-host prerequisite is genuinely closed and must **not** be reopened:
 
@@ -304,11 +315,18 @@ rules now supersede the earlier broad "visualizer runtime ownership correction c
 - visualizer mode-cycle remains a semantic Python action reached through retained Quick hit admission; unhandled display
   double-click remains the global next-image fallback only after family/visualizer semantic regions decline the event.
 
-### H PRE-CUTOVER correction gate — GREEN; atomic DisplayManager flip ADMITTED
+**True-F closure is now accepted.** The post-gate audit found two final destination seams that the earlier all-five proof had
+not actually exercised: widget-free technical engine application and retained-item consumption of the synchronized snapshot.
+Those are now implemented by the neutral controller/shared-engine technical apply path plus exact-presentation commit at the
+Quick synchronization edge. The focused regression gate `tests/test_qtquick_visualizer_true_f_gate.py` moved from the expected
+2-pass/5-fail diagnostic state to **7/7 GREEN** without weakening the assertions. Do not reopen this boundary absent exact source
+regression evidence.
+
+### H PRE-CUTOVER correction gate — CLOSED; DisplayManager cutover CURRENT
 
 The bounded correction route `Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md` is closed: steps 1–7
-below are landed, test-gated and pushed (Findings A–F GREEN; see the checkpoint disposition above). Steps 8–9 (the atomic
-cutover and caller-proven deletion) are the remaining, now-admitted H work. The required order was:
+below are landed, test-gated and pushed (Findings A–F GREEN; see the checkpoint disposition above). Steps 8–9 (the coordinated
+production-authority cutover and caller-proven deletion) are the remaining H work and are now CURRENT. The required order was:
 
 1. **Correct all-five configuration ownership.** Inventory actual logical/frame-runtime consumers. Move only those consumed
    values behind presentation-neutral resolved configuration/state; keep renderer-only colour/glow/card/chrome values on the
@@ -332,10 +350,12 @@ cutover and caller-proven deletion) are the remaining, now-admitted H work. The 
    publish a complete Quick render snapshot, survive pause/play and mode change, and retire without constructing
    `SpotifyVisualizerWidget`. Include stale identity rejection, generation 0, requested/fallback display ownership and failed
    join behavior. Existing component/golden tests remain binding but are not a substitute for this chain proof.
-8. **Only after 1–7 are GREEN: atomic DisplayManager + engine cutover.** `DisplayManager` remains the durable product-level
+8. **CURRENT: coordinated DisplayManager + engine authority cutover.** `DisplayManager` remains the durable product-level
    orchestration boundary. Replace the engine's concrete `.displays[i]` assumptions with the smallest real semantic display
-   contract while switching the collection to Quick units in one coordinated cutover. Do not add a `DisplayWidget`
-   compatibility facade, throwaway legacy-only decoupling layer, or parallel production presenter.
+   contract while moving authority to Quick units. This work may be checkpointed across as many commits/sessions as needed;
+   intermediate migration commits are allowed to remain intentionally non-runnable. What must remain atomic is the finished
+   ownership topology: do not add a `DisplayWidget` compatibility facade, throwaway legacy-only decoupling layer, or parallel
+   legitimate production presenter merely to make intermediate checkpoints runnable.
 9. **Runtime-shaped production proof and caller-proven deletion.** Prove one/multiple selected displays, image/transition
    routing, ordinary families, the single admitted visualizer, corrected-G owners, readiness, generation/topology replacement
    and clean retirement; then delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, legacy visualizer host/compositor glue,
@@ -351,8 +371,9 @@ H remains active; this is a bounded H correction gate, not a new phase and not p
 widget-free visualizer logical extraction. The legacy `DisplayWidget` production route may remain temporarily while the gate
 is corrected, but no compatibility work should be added solely to improve the half-migrated legacy product.
 
-After the correction gate is GREEN, H resumes the already-selected **atomic** production cutover. Once destination ownership
-is authoritative, delete the remaining physical-host path rather than carrying it into I.
+The correction gate is CLOSED. H now proceeds through the DisplayManager/engine cutover in bounded, testable checkpoints.
+"Coordinated" describes the final ownership result, **not** a requirement for one uninterrupted agent session or one giant commit.
+Once destination ownership is authoritative, delete the remaining physical-host path rather than carrying it into I.
 
 ## I / J
 
