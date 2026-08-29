@@ -24,9 +24,16 @@ dataclass — so it stays a pure, deterministically testable seam.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import Enum
 
 from .host import OverlayWidgetGeometry
+
+
+# The universal default overlay margin (px) when neither the instance nor the
+# canonical default carries one. Matches the legacy overlay default.
+DEFAULT_MARGIN_PX = 30.0
 
 
 # Matches the legacy min-visible clamp: a widget may be dragged/anchored partly
@@ -138,8 +145,97 @@ def resolve_anchored_geometry(
     )
 
 
+@dataclass(frozen=True)
+class OverlayGeometryPolicy:
+    """Resolved per-widget outer-geometry policy for one display generation.
+
+    The policy carries the persisted anchor + margin and an optional G CUSTOM
+    committed rectangle. ``resolve`` turns a live content size into the final
+    outer rectangle: a committed CUSTOM rectangle wins outright (its size is the
+    committed size, independent of live content), otherwise the content size is
+    anchored per the persisted placement.
+    """
+
+    widget_id: str
+    anchor: OverlayAnchor
+    margin: float
+    committed_rect: OverlayWidgetGeometry | None = None
+
+    @property
+    def has_committed_rect(self) -> bool:
+        return self.committed_rect is not None
+
+    def resolve(
+        self,
+        content_size: tuple[float, float],
+        display_bounds: OverlayWidgetGeometry,
+    ) -> OverlayWidgetGeometry:
+        if self.committed_rect is not None:
+            return self.committed_rect
+        return resolve_anchored_geometry(
+            content_size=content_size,
+            anchor=self.anchor,
+            margin=self.margin,
+            display_bounds=display_bounds,
+        )
+
+
+def _resolve_margin(
+    values: Mapping[str, object],
+    canonical: Mapping[str, object],
+) -> float:
+    raw = values.get("margin", canonical.get("margin"))
+    if raw is None:
+        return DEFAULT_MARGIN_PX
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_MARGIN_PX
+
+
+def resolve_overlay_geometry_policy(
+    widget_id: str,
+    widgets_config: Mapping[str, object] | None,
+    *,
+    committed_rect: OverlayWidgetGeometry | None = None,
+) -> OverlayGeometryPolicy:
+    """Resolve the anchor + margin geometry policy for one widget instance.
+
+    Reads the persisted ``position`` (anchor) and ``margin`` for ``widget_id``,
+    falling back to canonical defaults and then to ``TOP_RIGHT`` / the default
+    margin. ``committed_rect`` is an already-resolved G CUSTOM committed
+    rectangle (display-space) that, when provided, overrides anchored placement.
+    """
+
+    from core.settings.defaults import get_default_settings
+
+    config: Mapping[str, object] = (
+        widgets_config if isinstance(widgets_config, Mapping) else {}
+    )
+    values = config.get(widget_id, {})
+    if not isinstance(values, Mapping):
+        values = {}
+    canonical = get_default_settings().get("widgets", {}).get(widget_id, {})
+    if not isinstance(canonical, Mapping):
+        canonical = {}
+
+    anchor = OverlayAnchor.from_setting(
+        values.get("position", canonical.get("position"))
+    )
+    margin = _resolve_margin(values, canonical)
+    return OverlayGeometryPolicy(
+        widget_id=str(widget_id),
+        anchor=anchor,
+        margin=margin,
+        committed_rect=committed_rect,
+    )
+
+
 __all__ = [
+    "DEFAULT_MARGIN_PX",
     "MIN_VISIBLE_PX",
     "OverlayAnchor",
+    "OverlayGeometryPolicy",
     "resolve_anchored_geometry",
+    "resolve_overlay_geometry_policy",
 ]

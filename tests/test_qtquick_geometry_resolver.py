@@ -11,9 +11,12 @@ from __future__ import annotations
 import pytest
 
 from rendering.quick.widgets.geometry_resolver import (
+    DEFAULT_MARGIN_PX,
     MIN_VISIBLE_PX,
     OverlayAnchor,
+    OverlayGeometryPolicy,
     resolve_anchored_geometry,
+    resolve_overlay_geometry_policy,
 )
 from rendering.quick.widgets.host import OverlayWidgetGeometry
 
@@ -165,3 +168,58 @@ def test_zero_or_negative_content_size_is_rejected() -> None:
             margin=30.0,
             display_bounds=bounds,
         )
+
+
+def test_policy_reads_canonical_position_and_margin_defaults() -> None:
+    # No override: canonical defaults drive the policy (clock=Top Right/30,
+    # weather=Bottom Right/30, media=Top Left/30).
+    clock = resolve_overlay_geometry_policy("clock", {})
+    assert clock.anchor is OverlayAnchor.TOP_RIGHT
+    assert clock.margin == pytest.approx(30.0)
+    assert resolve_overlay_geometry_policy("weather", {}).anchor is (
+        OverlayAnchor.BOTTOM_RIGHT
+    )
+    assert resolve_overlay_geometry_policy("media", {}).anchor is (
+        OverlayAnchor.TOP_LEFT
+    )
+
+
+def test_policy_prefers_instance_overrides_over_canonical() -> None:
+    policy = resolve_overlay_geometry_policy(
+        "clock", {"clock": {"position": "Center", "margin": 12}}
+    )
+    assert policy.anchor is OverlayAnchor.CENTER
+    assert policy.margin == pytest.approx(12.0)
+
+
+def test_policy_falls_back_to_default_margin_when_none() -> None:
+    # reddit2's canonical margin is None (it inherits); a missing/None margin
+    # resolves to the universal default rather than crashing.
+    policy = resolve_overlay_geometry_policy("reddit2", {})
+    assert policy.margin == pytest.approx(DEFAULT_MARGIN_PX)
+
+
+def test_policy_resolve_anchors_live_content_size() -> None:
+    bounds = OverlayWidgetGeometry(0.0, 0.0, 1000.0, 800.0)
+    policy = OverlayGeometryPolicy(
+        widget_id="clock", anchor=OverlayAnchor.TOP_RIGHT, margin=30.0
+    )
+    geometry = policy.resolve((200.0, 100.0), bounds)
+    assert geometry.x == pytest.approx(1000.0 - 200.0 - 30.0)
+    assert geometry.y == pytest.approx(30.0)
+    assert policy.has_committed_rect is False
+
+
+def test_policy_committed_rect_overrides_anchoring() -> None:
+    bounds = OverlayWidgetGeometry(0.0, 0.0, 1000.0, 800.0)
+    committed = OverlayWidgetGeometry(111.0, 222.0, 333.0, 144.0)
+    policy = OverlayGeometryPolicy(
+        widget_id="clock",
+        anchor=OverlayAnchor.TOP_RIGHT,
+        margin=30.0,
+        committed_rect=committed,
+    )
+    # A committed CUSTOM rect wins outright, ignoring the live content size.
+    resolved = policy.resolve((999.0, 999.0), bounds)
+    assert resolved == committed
+    assert policy.has_committed_rect is True
