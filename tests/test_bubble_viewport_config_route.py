@@ -13,7 +13,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
 from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
+from widgets.spotify_visualizer.presentation_geometry import (
+    resolve_visualizer_presentation,
+)
 from widgets.spotify_visualizer.render_state import (
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
 )
@@ -65,30 +69,95 @@ def _advance(runtime, *, extent, authored_ts, edge_token):
     )
 
 
-def test_runtime_controller_viewport_extent_seam_is_settable_and_coalesces() -> None:
-    controller = VisualizerRuntimeController(
+def _controller():
+    return VisualizerRuntimeController(
         runtime_generation=0,
         bar_count=24,
         initial_mode="bubble",
         engine_factory=lambda _bar_count: object(),
     )
-    # The seam starts at the canonical baseline, never uninitialised.
+
+
+def _commit(controller, extent):
+    """Simulate the ordinary presentation publication committing an extent."""
+
+    controller.commit_presentation_metrics(
+        resolve_visualizer_presentation(
+            policy=get_visualizer_presentation_policy("bubble"),
+            display_size=(1920.0, 1080.0),
+            outer_origin=(40.0, 60.0),
+            viewport_extent=extent,
+        )
+    )
+
+
+def test_custom_override_takes_precedence_over_committed_extent_and_coalesces() -> None:
+    controller = _controller()
+    # Starts at the canonical committed baseline with no override.
+    assert controller.committed_viewport_extent == CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+    assert controller.has_custom_viewport_override is False
     assert controller.presentation_viewport_extent == CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
 
-    controller.set_presentation_viewport_extent((630.0, 280.0))
+    # While a CUSTOM override is active it wins; the latest value coalesces.
+    controller.set_custom_viewport_override((630.0, 280.0))
     assert controller.presentation_viewport_extent == (630.0, 280.0)
-
-    # Latest wins: viewport extent is state, not an event, so it coalesces.
-    controller.set_presentation_viewport_extent((420.0, 420.0))
+    controller.set_custom_viewport_override((420.0, 420.0))
     assert controller.presentation_viewport_extent == (420.0, 420.0)
 
-    # None restores the canonical baseline.
-    controller.set_presentation_viewport_extent(None)
-    assert controller.presentation_viewport_extent == CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+    # Retiring the override falls back to committed (never manufactured canonical
+    # when committed is non-canonical).
+    _commit(controller, (760.0, 280.0))
+    controller.set_custom_viewport_override(None)
+    assert controller.has_custom_viewport_override is False
+    assert controller.presentation_viewport_extent == (760.0, 280.0)
 
     for bad in ((0.0, 280.0), (420.0, -1.0)):
         with pytest.raises(ValueError):
-            controller.set_presentation_viewport_extent(bad)
+            controller.set_custom_viewport_override(bad)
+
+
+def test_cancel_restores_committed_and_save_promotes_committed() -> None:
+    # Scenario 1: canonical committed -> CUSTOM wide -> Cancel -> canonical.
+    c1 = _controller()
+    c1.set_custom_viewport_override((630.0, 280.0))
+    c1.set_custom_viewport_override(None)  # Cancel retires override; no commit.
+    assert c1.presentation_viewport_extent == CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+
+    # Scenario 2: committed wide -> CUSTOM taller -> Cancel -> original wide.
+    c2 = _controller()
+    _commit(c2, (630.0, 280.0))
+    c2.set_custom_viewport_override((630.0, 420.0))
+    c2.set_custom_viewport_override(None)  # Cancel.
+    assert c2.presentation_viewport_extent == (630.0, 280.0)
+
+    # Scenario 3: canonical committed -> CUSTOM wide -> Save -> saved wide.
+    c3 = _controller()
+    c3.set_custom_viewport_override((630.0, 280.0))
+    _commit(c3, (630.0, 280.0))       # Save promotes the new committed extent...
+    c3.set_custom_viewport_override(None)  # ...then the override retires.
+    assert c3.presentation_viewport_extent == (630.0, 280.0)
+
+    # Scenario 4: committed wide -> CUSTOM canonical -> Save -> canonical.
+    c4 = _controller()
+    _commit(c4, (630.0, 280.0))
+    c4.set_custom_viewport_override((420.0, 280.0))
+    _commit(c4, (420.0, 280.0))       # Save promotes canonical.
+    c4.set_custom_viewport_override(None)
+    assert c4.presentation_viewport_extent == CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+
+
+def test_ordinary_publication_cannot_erase_a_live_custom_override() -> None:
+    # Scenario 5: an ordinary committed-presentation publication while CUSTOM is
+    # active updates only the committed extent and cannot erase the working
+    # override that the authored step actually consumes.
+    controller = _controller()
+    controller.set_custom_viewport_override((630.0, 280.0))
+    _commit(controller, (420.0, 280.0))
+    assert controller.committed_viewport_extent == (420.0, 280.0)
+    assert controller.presentation_viewport_extent == (630.0, 280.0)
+    # And once CUSTOM retires, the ordinary committed value applies.
+    controller.set_custom_viewport_override(None)
+    assert controller.presentation_viewport_extent == (420.0, 280.0)
 
 
 def test_bubble_advance_carries_viewport_extent_into_each_authored_step() -> None:

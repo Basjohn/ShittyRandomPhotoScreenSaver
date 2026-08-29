@@ -527,10 +527,13 @@ class QuickSceneController(QObject):
         """Bind the logical viewport-config seam that consumes the CUSTOM extent.
 
         The destination orchestration passes the visualizer runtime controller's
-        ``set_presentation_viewport_extent`` here so a live retained edge drag
-        publishes its committed logical world to the next authored logical step.
-        Binding it immediately republishes the current CUSTOM extent so the sink
-        starts from truth rather than a stale baseline.
+        ``set_custom_viewport_override`` here so a live retained edge drag
+        publishes its temporary working world to the next authored logical step,
+        overriding the committed extent only while edit mode is active. Pushing
+        ``None`` (no active CUSTOM visualizer item) retires that override and the
+        runtime falls back to the committed extent - it never manufactures
+        canonical. Binding immediately republishes the current CUSTOM extent so
+        the sink starts from truth.
         """
 
         self._visualizer_viewport_config_sink = sink

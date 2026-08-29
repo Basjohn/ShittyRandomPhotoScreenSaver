@@ -91,9 +91,17 @@ class VisualizerRuntimeController:
         self._logical_runtime: VisualizerLogicalRuntime | None = None
         self._logical_present_pending = False
         self._logical_mode_states: dict[str, Any] = {}
-        self._presentation_viewport_extent = (
+        # Viewport extent has two distinct owners that must not fight over one
+        # scalar: the ordinary committed presentation extent (set by the render
+        # publication path) and an optional temporary CUSTOM working override
+        # (set by the live edit seam). The effective extent consumed by the
+        # authored logical step is the override while it is active, otherwise the
+        # committed value. Retiring the override never manufactures canonical - it
+        # simply falls back to whatever is actually committed.
+        self._committed_viewport_extent = (
             CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
         )
+        self._custom_viewport_override: tuple[float, float] | None = None
         self._render_bridge = VisualizerSnapshotBridge()
 
     @property
@@ -324,28 +332,48 @@ class VisualizerRuntimeController:
 
     @property
     def presentation_viewport_extent(self) -> tuple[float, float]:
-        """Latest committed presentation-neutral logical viewport metrics."""
+        """Effective logical viewport extent for the next authored step.
+
+        The temporary CUSTOM working override wins while it is active; otherwise
+        the ordinary committed presentation extent applies.
+        """
 
         with self._lock:
-            return self._presentation_viewport_extent
+            if self._custom_viewport_override is not None:
+                return self._custom_viewport_override
+            return self._committed_viewport_extent
 
-    def set_presentation_viewport_extent(
+    @property
+    def committed_viewport_extent(self) -> tuple[float, float]:
+        """Ordinary committed presentation extent, ignoring any CUSTOM override."""
+
+        with self._lock:
+            return self._committed_viewport_extent
+
+    @property
+    def has_custom_viewport_override(self) -> bool:
+        with self._lock:
+            return self._custom_viewport_override is not None
+
+    def set_custom_viewport_override(
         self,
         extent: tuple[float, float] | None,
     ) -> None:
-        """Publish the latest CUSTOM viewport extent as logical spatial config.
+        """Publish (or retire) the temporary CUSTOM working viewport extent.
 
         This is the presentation-neutral seam for the retained CUSTOM edge
-        operation: the GUI-owned CUSTOM session pushes its committed logical
-        world here, and the next authored logical step consumes it. Viewport
-        extent is state, not an authored temporal event, so the latest value
-        coalesces freely - there is no queue, no clock and no acknowledgement.
-        ``None`` restores the canonical baseline. Only plain typed floats cross
-        this boundary; no QQuickItem/QScreen/render-thread object ever does.
+        operation: while edit mode is active the GUI-owned session pushes its
+        working logical world here, and the next authored logical step consumes
+        it in preference to the committed extent. Viewport extent is state, not
+        an authored temporal event, so the latest value coalesces freely - no
+        queue, clock or acknowledgement. ``None`` retires the override, which
+        falls back to the committed extent (never manufactured canonical). Only
+        plain typed floats cross this boundary; no QQuickItem/QScreen/render
+        object ever does.
         """
 
         if extent is None:
-            resolved = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+            resolved: tuple[float, float] | None = None
         else:
             width = float(extent[0])
             height = float(extent[1])
@@ -353,13 +381,20 @@ class VisualizerRuntimeController:
                 raise ValueError("viewport extent must be positive")
             resolved = (width, height)
         with self._lock:
-            self._presentation_viewport_extent = resolved
+            self._custom_viewport_override = resolved
 
     def commit_presentation_metrics(
         self,
         presentation: ResolvedVisualizerPresentation,
     ) -> None:
-        """Publish geometry configuration for the next authored logical tick."""
+        """Commit the ordinary presentation extent for the next authored tick.
+
+        This is the ordinary (non-CUSTOM) publication path. It updates only the
+        committed extent and never touches a live CUSTOM working override, so an
+        ordinary presentation republish while edit mode is active cannot erase
+        the working value. After Save this is the seam that promotes the newly
+        committed extent so retiring the override lands on the correct value.
+        """
 
         if not isinstance(presentation, ResolvedVisualizerPresentation):
             raise TypeError("visualizer presentation must already be resolved")
@@ -372,7 +407,7 @@ class VisualizerRuntimeController:
         ):
             raise ValueError("visualizer presentation policy does not match mode")
         with self._lock:
-            self._presentation_viewport_extent = presentation.viewport_extent
+            self._committed_viewport_extent = presentation.viewport_extent
 
     def resolve_logical_mode_state(
         self,
