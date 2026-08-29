@@ -1264,6 +1264,42 @@ def get_effective_monitor_value_for_widget(
     return value or default
 
 
+def monitor_route_admits_screen(monitor_value: object, screen_index: int) -> bool:
+    """Return whether an ``ALL``/1-based monitor route admits a logical screen.
+
+    Malformed historical values remain visible, matching the existing QWidget
+    setup contract, while every valid numbered route is matched against the
+    destination's zero-based logical screen index.
+    """
+
+    normalized = str(monitor_value or "ALL").strip()
+    if normalized.upper() == "ALL":
+        return True
+    try:
+        return int(normalized) == int(screen_index) + 1
+    except (TypeError, ValueError):
+        return True
+
+
+def widget_route_admits_screen(
+    widget_id: str,
+    widgets_config: Mapping[str, Any] | None,
+    screen_index: int,
+    *,
+    default: str = "ALL",
+) -> bool:
+    """Resolve one widget's effective monitor route and admit its destination."""
+
+    return monitor_route_admits_screen(
+        get_effective_monitor_value_for_widget(
+            widget_id,
+            widgets_config,
+            default=default,
+        ),
+        screen_index,
+    )
+
+
 def get_custom_persistence_position_settings_key_for_widget(widget_id: str) -> str:
     descriptor = get_widget_runtime_descriptor(widget_id)
     if descriptor is None:

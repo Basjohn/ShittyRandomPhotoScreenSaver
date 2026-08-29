@@ -133,6 +133,7 @@ class QuickDisplayPresenter:
             geometry_resolver=initial_geometry,
             display_bounds=display_bounds,
             display_identity=display_signature,
+            screen_index=self._runtime.screen_index,
             shadow_values=shadow_values,
             thread_manager=thread_manager,
             runtime_generation=self._runtime.runtime_generation,

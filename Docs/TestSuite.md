@@ -366,7 +366,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_display_image_route.py` | **KEEP — MIGRATION PERMANENT / H** | GUI pixmap -> immutable Quick presentation-image routing and target-size contract. |
 | `tests/test_qtquick_display_presenter.py` | **KEEP — MIGRATION PERMANENT / H** | Thin per-display destination presenter; no provider/window/persistence authority. |
 | `tests/test_qtquick_display_unit.py` | **KEEP — MIGRATION PERMANENT / H** | Per-display Quick destination-chain assembly and semantic display operations. |
-| `tests/test_qtquick_family_binder.py` | **KEEP — MIGRATION PERMANENT / H** | Single-manager family admission/runtime service ownership and retained host binding. |
+| `tests/test_qtquick_family_binder.py` | **KEEP — MIGRATION PERMANENT / H** | Single-manager family admission/runtime service ownership, canonical per-instance monitor routing across logical displays, and retained host binding. |
 | `tests/test_qtquick_family_size_policy.py` | **KEEP — MIGRATION PERMANENT / H** | Historical deterministic family preferred-size policies under Option-A geometry. |
 | `tests/test_qtquick_geometry_resolver.py` | **KEEP — MIGRATION PERMANENT / H** | Python outer-rect/anchor/clamp authority; no QML outer-position feedback loop. |
 | `tests/test_qtquick_h_cutover.py` | **KEEP — MIGRATION PERMANENT / H** | H authority-cutover/cardinality/deletion bars, including one canonical manager-admitted visualizer owner, retained menu/double-click mode actions, hidden-boundary hard join, exact-once engine activation transaction, fresh-target reveal and engine-retirement lifecycle. |

@@ -10,7 +10,8 @@ The documentation is reconciled through independently audited pushed source plus
 87499707 (one batch-resolved Quick transition route + finalization accounting landed on pushed main)
 b826ee74 (retained context-menu population + existing-owner action routing landed on pushed main)
 d1523bd5 (one manager-admitted production Quick visualizer owner + existing frame-pacer synchronization landed on pushed main)
-current bounded checkpoint: single-owner visualizer mode transaction + retained menu/double-click action route
+b7c5c2d2 (one manager-generation Quick CUSTOM owner + committed startup hydration landed on pushed main)
+current bounded checkpoint: ordinary-family per-instance effective monitor-route admission
 True-F focused gate: 7/7 GREEN
 Settings-overhaul focused reconciliation: 154/154 GREEN
 H destination profile: 60/60 target-isolated GREEN
@@ -21,6 +22,8 @@ CURRENT H implementation target: coordinated DisplayManager + engine authority c
 Accepted H foundation through this checkpoint:
 - one WidgetRuntimeManager per QuickDisplayRuntime generation;
 - full seven-family OrdinaryFamilyPresentationBinder;
+- ordinary-family admission resolves each enabled instance's canonical effective monitor route against the destination's
+  logical screen index; valid numbered routes no longer construct that instance on every selected display;
 - capture_qpixmap / immutable image-routing seam;
 - option-A outer-geometry mechanism and historical per-family preferred-size policies;
 - thin QuickDisplayPresenter;
@@ -420,8 +423,9 @@ caller-proven deletion — are therefore the remaining H work and are **CURRENT 
    route is authoritative, and its semantic mode change now preserves the retained 250 ms content crossfade, hidden target
    activation, hard runtime join, one BeatEngine activation transaction, fresh-target wait, retained menu choice and
    visualizer-region double-click cycle. Exact-once destination CUSTOM ownership and committed startup hydration are now
-   attached without a legacy fallback. Remaining work is runtime-shaped production proof and caller-proven physical-host
-   deletion.
+   attached without a legacy fallback. Ordinary-family admission also filters every enabled instance through its canonical
+   effective monitor route for that destination. Remaining work is runtime-shaped production proof and caller-proven
+   physical-host deletion.
 9. **Runtime-shaped production proof and caller-proven deletion.** Prove one/multiple selected displays, image/transition
    routing, ordinary families, the single admitted visualizer, corrected-G owners, readiness, generation/topology replacement
    and clean retirement; then delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, legacy visualizer host/compositor glue,
