@@ -101,6 +101,85 @@ def test_logical_step_advances_against_controller_state_without_widget(
         qt_app.processEvents()
 
 
+_CANONICAL_BUBBLE_CONFIG = {
+    "bubble_big_count": 8,
+    "bubble_small_count": 25,
+    "bubble_big_size_max": 0.038,
+    "bubble_small_size_max": 0.018,
+    "bubble_drift_amount": 0.5,
+    "bubble_drift_speed": 0.5,
+    "bubble_drift_direction": "random",
+    "bubble_stream_direction": "up",
+    "bubble_stream_constant_speed": 0.5,
+    "bubble_surface_reach": 0.6,
+    "bubble_bounce_big_pct": 70,
+    "bubble_bounce_small_pct": 30,
+    "bubble_trail_strength": 0.0,
+}
+
+
+@pytest.mark.qt
+def test_fresh_controller_configured_started_advanced_without_widget(
+    qt_app, monkeypatch
+) -> None:
+    # Acceptance: a fresh visualizer destination owner is constructed, configured
+    # from canonical settings, started and logically advanced WITHOUT constructing
+    # SpotifyVisualizerWidget.
+    from widgets.spotify_visualizer.config_applier import (
+        apply_logical_vis_mode_kwargs,
+    )
+    from widgets.spotify_visualizer.logical_tick_state import (
+        install_default_logical_tick_state,
+    )
+    from widgets.spotify_visualizer.runtime_controller import (
+        VisualizerRuntimeController,
+    )
+
+    controller = VisualizerRuntimeController(
+        runtime_generation=0, bar_count=32, initial_mode="bubble"
+    )
+    state = controller.logical_tick_state
+
+    # Construct: install the authored runtime defaults on the controller-owned
+    # state (no widget).
+    install_default_logical_tick_state(state, bar_count=32)
+    # Configure: apply the authored logical (Bubble physics) config from canonical
+    # settings through the single neutral authority.
+    apply_logical_vis_mode_kwargs(state, _CANONICAL_BUBBLE_CONFIG)
+    assert state._bubble_big_count == 8
+    assert state._bubble_small_count == 25
+
+    # Configure runtime identity + engine/source.
+    controller.enabled = True
+    controller.playing = True
+    controller.engine = _Engine()
+    assert controller.resolve_logical_mode_state("bubble", BubbleFrameRuntime) is not None
+    controller.begin_render_activation(engine_generation=3, activation_id=4)
+    state._mode_teardown_block_until_ready = False
+    state._mode_transition_ready = True
+    state._waiting_for_fresh_engine_frame = False
+
+    monkeypatch.setattr(
+        tick_pipeline, "consume_engine_bars", lambda owner, now: (True, True)
+    )
+    monkeypatch.setattr(tick_pipeline, "process_heartbeat", lambda owner, now: None)
+    monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda owner, now: None)
+    monkeypatch.setattr(
+        tick_pipeline, "dispatch_devcurve_field", lambda owner, now: None
+    )
+
+    # Advance: the authored logical step runs against the controller-owned state
+    # and publishes - no SpotifyVisualizerWidget was ever constructed.
+    produced = 0
+    for _ in range(6):
+        frame = tick_pipeline.logical_tick(state)
+        if frame is not None:
+            produced += 1
+            publication = controller.logical_mailbox.take()
+            assert publication is not None
+    assert produced >= 1
+
+
 @pytest.mark.qt
 def test_state_host_and_widget_host_are_interchangeable(qt_app) -> None:
     from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget

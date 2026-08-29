@@ -246,4 +246,124 @@ class VisualizerLogicalTickState:
         log_audio_latency_metrics(self, engine, now_ts, force_reason=force_reason)
 
 
-__all__ = ["VisualizerLogicalTickState", "_CONTROLLER_DELEGATED"]
+def install_default_logical_tick_state(state: Any, *, bar_count: int) -> None:
+    """Initialize a fresh controller-owned logical state's authored runtime fields.
+
+    These are the authored per-tick runtime defaults the legacy widget setup
+    installs; extracting them here lets the Quick visualizer ownership edge
+    construct a usable logical state with no ``SpotifyVisualizerWidget``. Values
+    mirror the widget's post-construction defaults exactly (an ownership move, not
+    a retune). Authored logical *configuration* (Bubble physics) is applied
+    separately from canonical settings via ``apply_logical_vis_mode_kwargs``;
+    mode-specific runtime fields (devcurve) install when that mode activates.
+    """
+
+    from widgets.spotify_visualizer.bubble_cadence import BubbleCadenceState
+
+    # Authored Bubble physics config defaults (canonical settings override these
+    # through apply_logical_vis_mode_kwargs; kept here so an omitted key never
+    # leaves the authored simulation config unset).
+    state._bubble_big_count = 8
+    state._bubble_small_count = 25
+    state._bubble_big_size_max = 0.038
+    state._bubble_small_size_max = 0.018
+    state._bubble_big_size_clamp = 4.0
+    state._bubble_big_contraction_bias = 1.0
+    state._bubble_big_specular_max_size = 2.5
+    state._bubble_big_bass_pulse = 0.5
+    state._bubble_small_freq_pulse = 0.5
+    state._bubble_surface_reach = 0.6
+    state._bubble_rotation_amount = 0.5
+    state._bubble_drift_amount = 0.5
+    state._bubble_drift_speed = 0.5
+    state._bubble_drift_frequency = 0.5
+    state._bubble_drift_direction = "random"
+    state._bubble_stream_direction = "up"
+    state._bubble_stream_constant_speed = 0.5
+    state._bubble_stream_speed_cap = 2.0
+    state._bubble_stream_reactivity = 0.5
+    state._bubble_bounce_big_pct = 70
+    state._bubble_bounce_small_pct = 30
+    state._bubble_bounce_big_speed = 0.8
+    state._bubble_bounce_small_speed = 0.5
+    state._bubble_bounce_same_only = False
+    state._bubble_trail_strength = 0.0
+    state._sine_heartbeat = 0.0
+
+    # Heartbeat / pulse tracking.
+    state._heartbeat_intensity = 0.0
+    state._heartbeat_avg_bass = 0.0
+    state._heartbeat_fast_bass = 0.0
+    state._heartbeat_fast_prev = 0.0
+    state._heartbeat_last_ts = 0.0
+    state._heartbeat_last_trigger_ts = 0.0
+    state._heartbeat_last_log_ts = 0.0
+
+    # Authored cadence + smoothing.
+    state._smoothing = 0.18
+    state._bubble_cadence_state = BubbleCadenceState()
+    state._dt_spike_threshold_ms = 42.0
+    state._last_update_ts = -1.0
+
+    # Bubble runtime state (the simulation owns its own interior state).
+    state._bubble_count = 0
+    state._bubble_pos_data = []
+    state._bubble_trail_data = []
+    state._bubble_extra_data = []
+    state._bubble_last_perf_diag = {}
+    state._bubble_last_tick_ts = 0.0
+    state._bubble_dispatch_energy_snapshot = {}
+    state._bubble_dispatch_pulse_params = {}
+    state._bubble_dispatch_settings = {}
+    state._bubble_visible_render_state_ts = 0.0
+    state._bubble_visible_simulation_ts = 0.0
+    state._bubble_visible_source_ts = 0.0
+
+    # Display bars mirror + source identity.
+    state._display_bars = [0.0] * max(1, int(bar_count))
+    state._display_bars_source_generation = -1
+    state._display_bars_source_activation = -1
+
+    # Source freshness / mode-teardown readiness.
+    state._waiting_for_fresh_frame = False
+    state._waiting_for_fresh_engine_frame = False
+    state._has_pushed_first_frame = False
+    state._fallback_logged = False
+    state._mode_teardown_block_until_ready = False
+    state._mode_teardown_state = "idle"
+    state._mode_teardown_target_generation = -1
+    state._mode_transition_phase = 0
+    state._mode_transition_ready = False
+
+    # Perf tick + paint diagnostics.
+    state._perf_tick_frame_count = 0
+    state._perf_tick_last_ts = None
+    state._perf_tick_start_ts = None
+    state._perf_tick_min_dt = 0.0
+    state._perf_tick_max_dt = 0.0
+    state._perf_last_log_ts = None
+    state._perf_paint_frame_count = 0
+    state._perf_paint_last_ts = None
+    state._perf_paint_start_ts = None
+    state._perf_paint_min_dt = 0.0
+    state._perf_paint_max_dt = 0.0
+    state._perf_audio_lag_last_ms = 0.0
+    state._perf_audio_lag_min_ms = 0.0
+    state._perf_audio_lag_max_ms = 0.0
+
+    # Latency diagnostics.
+    state._latency_pending_probe = []
+    state._latency_last_signature = None
+    state._latency_last_log_ts = 0.0
+    state._latency_audio_ready = False
+    state._latency_authority = None
+    state._latency_log_interval = 10.0
+    state._latency_warn_ms = 80.0
+    state._latency_error_ms = 150.0
+
+
+__all__ = [
+    "VisualizerLogicalTickState",
+    "_CONTROLLER_DELEGATED",
+    "install_default_logical_tick_state",
+]
