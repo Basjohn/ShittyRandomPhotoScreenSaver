@@ -306,6 +306,28 @@ class QuickDisplayRuntime(QObject):
     def quiesce_for_runtime_pause(self) -> None:
         self.hide()
 
+    def bind_visualizer_viewport_config(
+        self,
+        override_sink: Callable[[tuple[float, float] | None], None],
+    ) -> None:
+        """Bind the corrected-G4 visualizer viewport-config ownership once.
+
+        The display owner wires the retained CUSTOM viewport-config sink to the
+        visualizer runtime controller's ``set_custom_viewport_override`` so a live
+        edge drag drives only the temporary working override, while the ordinary
+        committed extent stays the controller's own commit path. Retiring the
+        override (CUSTOM inactive) falls back to the committed extent - never a
+        manufactured canonical. Only plain typed floats cross this seam; no
+        QQuickItem/QScreen/render-thread object enters Bubble logical state, and
+        no second config map/queue/timer/clock is introduced.
+        """
+
+        if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
+            raise RuntimeError("cannot bind viewport config on a retiring runtime")
+        if not callable(override_sink):
+            raise TypeError("visualizer viewport override sink must be callable")
+        self.scene_controller.set_visualizer_viewport_config_sink(override_sink)
+
     def set_presentation_image(self, image: PresentationImage | None) -> None:
         """Publish immutable base-image state into this display generation."""
 
