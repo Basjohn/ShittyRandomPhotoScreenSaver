@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, replace
+from typing import Any
 import math
 from pathlib import Path
 
@@ -264,6 +265,7 @@ class QuickSceneController(QObject):
         self._visualizer_content_host: QQuickItem | None = None
         self._visualizer_item: VisualizerRenderItem | None = None
         self._visualizer_bridge: VisualizerSnapshotBridge | None = None
+        self._visualizer_double_click_admission: Any | None = None
         self._visualizer_telemetry = VisualizerRenderNodeTelemetry()
         self._last_transition_run_id = 0
         self._readiness = QuickSceneReadiness(
@@ -300,7 +302,7 @@ class QuickSceneController(QObject):
             create_family_item=factory.create_ordinary_widget_family,
         )
         window.bind_semantic_double_click_hit_test(
-            self._ordinary_widget_host.handles_semantic_double_click_at
+            self._semantic_double_click_hit_test
         )
         custom_layout_overlay_item = root.findChild(
             QQuickItem,
@@ -700,6 +702,32 @@ class QuickSceneController(QObject):
         self._ensure_visualizer_items().bind_render_source(bridge, identity)
         self._visualizer_bridge = bridge
 
+    def _semantic_double_click_hit_test(self, scene_position: Any) -> bool:
+        """Retained double-click admission: ordinary families, then visualizer.
+
+        Families keep first refusal; the visualizer joins before the neutral
+        runtime input owner's global next-image fallback. A hit on the visualizer
+        region cycles the visualizer mode and consumes the event.
+        """
+
+        if self._ordinary_widget_host.handles_semantic_double_click_at(scene_position):
+            return True
+        admission = self._visualizer_double_click_admission
+        if admission is not None and admission.handles_semantic_double_click_at(
+            scene_position
+        ):
+            return True
+        return False
+
+    def set_visualizer_double_click_admission(self, admission: Any | None) -> None:
+        """Register (or clear) the retained visualizer double-click mode-cycle.
+
+        The admission owns its own region/active/cycle authority; the composed
+        hit test above consults it after ordinary families and before fallback.
+        """
+
+        self._visualizer_double_click_admission = admission
+
     def transfer_visualizer_to(
         self,
         target: "QuickSceneController",
@@ -749,6 +777,7 @@ class QuickSceneController(QObject):
         self._visualizer_content_host = None
         self._visualizer_root = None
         self._visualizer_bridge = None
+        self._visualizer_double_click_admission = None
         self._custom_layout_visualizer_baseline = None
         return transfer
 
