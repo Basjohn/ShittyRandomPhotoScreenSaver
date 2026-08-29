@@ -109,10 +109,7 @@ def teardown_display_runtime(
         )
         raise
 
-    try:
-        display_count = manager.get_display_count()
-    except Exception:
-        display_count = len(getattr(manager, "displays", []))
+    display_count = manager.get_display_count()
     logger.info(
         "[LIFECYCLE] Full display teardown started reason=%s count=%d",
         reason,
@@ -120,11 +117,7 @@ def teardown_display_runtime(
     )
 
     if is_perf_metrics_enabled():
-        states = []
-        for display in getattr(manager, "displays", []):
-            describe = getattr(display, "describe_runtime_state", None)
-            if callable(describe):
-                states.append(describe())
+        states = manager.describe_display_states()
         logger.info(
             "[PERF][ENGINE] pre_teardown_display_states reason=%s count=%d states=%s",
             reason,

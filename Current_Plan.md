@@ -270,6 +270,9 @@ The family/runtime destination integration already landed and test-gated include
   `rendering/quick/display_processing.py` authority; the image pipeline no longer retains/indexes concrete presenter objects
   for processing, prefetch or async publication and routes completed images through the manager/unit semantic API by actual
   screen identity. This is a durable destination contract, not a `DisplayWidget` facade.
+- The follow-on engine-caller slice is landed: startup first-image admission, Media idle wake and lifecycle diagnostics now
+  use semantic `DisplayManager` queries/operations. Engine handlers no longer inspect `current_image_path`, `media_widget`,
+  `_ctrl_cursor_hint` or concrete display collections; generation teardown remains the sole auxiliary-pixel retirement owner.
 
 ### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 

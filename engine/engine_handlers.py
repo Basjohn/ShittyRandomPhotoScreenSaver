@@ -308,16 +308,13 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
     except Exception:
         logger.debug("Failed to cancel CUSTOM edit session before settings", exc_info=True)
 
-    # Wake media widget from idle mode when returning from settings
+    # Wake the presentation-neutral Media runtime from idle before teardown.
     # This ensures Spotify detection resumes if user opened Spotify while in settings
     try:
         if engine.display_manager:
-            for display in engine.display_manager.displays:
-                media_widget = getattr(display, 'media_widget', None)
-                if media_widget and hasattr(media_widget, 'wake_from_idle'):
-                    media_widget.wake_from_idle()
+            engine.display_manager.wake_media_runtime()
     except Exception as e:
-        logger.debug("[ENGINE] Failed to wake media widget from idle: %s", e)
+        logger.debug("[ENGINE] Failed to wake Media runtime from idle: %s", e)
 
     coordinator = None
     # Set settings dialog active flag FIRST - this prevents halo from showing
@@ -328,18 +325,8 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
     except Exception as e:
         logger.debug("[ENGINE] Exception suppressed: %s", e)
 
-    # Hide and destroy all cursor halo windows
-    if engine.display_manager:
-        for display in getattr(engine.display_manager, 'displays', []):
-            try:
-                halo = getattr(display, '_ctrl_cursor_hint', None)
-                if halo is not None:
-                    halo.hide()
-                    halo.close()
-                    halo.deleteLater()
-                    display._ctrl_cursor_hint = None
-            except Exception as _e:
-                logger.debug("[ENGINE] Exception suppressed: %s", _e)
+    # Runtime teardown below owns all generation-scoped auxiliary presentation,
+    # including the retained Quick halo and temporary legacy halo scaffolding.
 
     # Stop the engine but DON'T exit the app
     _record_diagnostic_stage(

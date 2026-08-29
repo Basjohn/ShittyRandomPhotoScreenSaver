@@ -1224,10 +1224,7 @@ class ScreensaverEngine(QObject):
                 )
                 self._schedule_startup_first_image_retry(attempt + 1)
                 return
-            if any(
-                getattr(display, "current_image_path", None)
-                for display in getattr(display_manager, "displays", [])
-            ):
+            if display_manager.has_presented_image():
                 return
             if self._show_next_image():
                 logger.warning(

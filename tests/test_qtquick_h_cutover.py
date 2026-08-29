@@ -9,6 +9,8 @@ chain, not a stand-in sink.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from PySide6.QtCore import QPoint, QRect, QSize
 from PySide6.QtGui import QPixmap
@@ -35,12 +37,26 @@ from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeContr
 @pytest.mark.qt
 def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app) -> None:
     published = []
+    media_wakes = []
+
+    class _MediaService:
+        def wake_from_idle(self) -> None:
+            media_wakes.append(True)
+
+    class _RuntimeManager:
+        def get_widget_service(self, widget_id: str):
+            return _MediaService() if widget_id == "media" else None
 
     class _Unit:
         def __init__(self, screen_index: int, size: QSize, dpr: float) -> None:
             self.screen_index = screen_index
             self._size = QSize(size)
             self._dpr = dpr
+            self.runtime = SimpleNamespace(
+                widget_runtime_manager=_RuntimeManager(),
+                scene_controller=SimpleNamespace(presentation_image=None),
+                describe_runtime_state=lambda: {"screen_index": self.screen_index},
+            )
 
         def processing_descriptor(self, display_mode: DisplayMode):
             return DisplayProcessingDescriptor(
@@ -75,6 +91,13 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
             QSize(1280, 720),
         ]
         assert all(item.display_mode is DisplayMode.FIT for item in descriptors)
+        assert manager.has_presented_image() is False
+        assert manager.wake_media_runtime() == 2
+        assert media_wakes == [True, True]
+        assert manager.describe_display_states() == (
+            {"screen_index": 2},
+            {"screen_index": 5},
+        )
 
         manager.present_processed_image(5, pixmap, pixmap, "five.jpg")
         manager.show_image_on_screen(2, pixmap, "two.jpg")
@@ -82,6 +105,8 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
             (5, QSize(8, 6), "five.jpg"),
             (2, QSize(8, 6), "two.jpg"),
         ]
+        manager.displays[1].runtime.scene_controller.presentation_image = object()
+        assert manager.has_presented_image() is True
         with pytest.raises(IndexError):
             manager.present_processed_image(1, pixmap, pixmap, "missing.jpg")
     finally:

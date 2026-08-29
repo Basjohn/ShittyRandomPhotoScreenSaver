@@ -935,6 +935,56 @@ class DisplayManager(QObject):
                 )
             )
         return tuple(targets)
+
+    def has_presented_image(self) -> bool:
+        """Return whether any selected display has accepted current image state."""
+
+        if self.current_images:
+            return True
+        for display in self.displays:
+            if isinstance(display, DisplayWidget):
+                if bool(getattr(display, "current_image_path", None)):
+                    return True
+                continue
+            runtime = getattr(display, "runtime", None)
+            scene = getattr(runtime, "scene_controller", None)
+            if scene is not None and getattr(scene, "presentation_image", None) is not None:
+                return True
+        return False
+
+    def wake_media_runtime(self) -> int:
+        """Wake every owned neutral Media runtime service from idle."""
+
+        awakened = 0
+        for display in self.displays:
+            if isinstance(display, DisplayWidget):
+                runtime_manager = getattr(display, "_widget_runtime_manager", None)
+            else:
+                runtime = getattr(display, "runtime", None)
+                runtime_manager = getattr(runtime, "widget_runtime_manager", None)
+            service_getter = getattr(runtime_manager, "get_widget_service", None)
+            service = service_getter("media") if callable(service_getter) else None
+            wake = getattr(service, "wake_from_idle", None)
+            if callable(wake):
+                wake()
+                awakened += 1
+        return awakened
+
+    def describe_display_states(self) -> tuple[dict[str, Any], ...]:
+        """Return bounded runtime diagnostics without exposing display owners."""
+
+        states: list[dict[str, Any]] = []
+        for display in self.displays:
+            describe = getattr(display, "describe_runtime_state", None)
+            if callable(describe):
+                state = describe()
+            else:
+                runtime = getattr(display, "runtime", None)
+                runtime_describe = getattr(runtime, "describe_runtime_state", None)
+                state = runtime_describe() if callable(runtime_describe) else None
+            if isinstance(state, dict):
+                states.append(state)
+        return tuple(states)
     
     def get_screen_count(self) -> int:
         """Get number of detected screens."""
