@@ -2546,6 +2546,12 @@ class BubbleSimulation:
             pos_data[pos_base + 3] = b.alpha
             extra_data[pos_base] = spec_factor
             extra_data[pos_base + 1] = b.rotation
+            # spec_ox/spec_oy are dimensionless LOCAL bubble-space offsets: the
+            # shader applies them as `spec_ox * r` / `spec_oy * r` relative to the
+            # (already domain-projected) radius, so they are intentionally NOT
+            # domain-normalized here. Projecting them would double-apply the
+            # domain and stretch the highlight. Specular size/offset mutation
+            # stays separate from the position/radius authority above.
             extra_data[pos_base + 2] = b.spec_ox
             extra_data[pos_base + 3] = b.spec_oy
 
