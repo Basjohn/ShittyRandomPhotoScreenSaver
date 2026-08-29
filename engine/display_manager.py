@@ -89,6 +89,7 @@ class DisplayManager(QObject):
             resource_manager or ResourceManager.get_or_create_app_shared()
         )
         self._thread_manager = thread_manager
+        self._process_supervisor = None
         self._image_accounting_publisher_ref = None
         if image_accounting_publisher is not None:
             try:
@@ -661,9 +662,15 @@ class DisplayManager(QObject):
         
         while len(self.displays) > screen_count:
             display = self.displays.pop()
-            display.close()
-            display.deleteLater()
-            logger.info("Removed excess display widget")
+            if isinstance(display, DisplayWidget):
+                display.close()
+                display.deleteLater()
+            else:
+                retire = getattr(display, "retire", None)
+                if not callable(retire):
+                    raise RuntimeError("display unit has no retirement contract")
+                retire()
+            logger.info("Removed excess display runtime")
     
     def _on_exit_requested(self) -> None:
         """Handle exit request from any display."""
@@ -707,11 +714,12 @@ class DisplayManager(QObject):
         self.startup_reveal_completed.emit(int(self._runtime_generation or 0))
     
     def set_process_supervisor(self, supervisor) -> None:
-        """Set the ProcessSupervisor on all display widgets.
-        
-        This enables worker integration for widgets that need process supervision.
-        """
+        """Retain the process owner used by admitted generation services."""
+
+        self._process_supervisor = supervisor
         for display in self.displays:
+            if not isinstance(display, DisplayWidget):
+                continue
             try:
                 display.set_process_supervisor(supervisor)
             except Exception:
@@ -743,11 +751,22 @@ class DisplayManager(QObject):
                 if not callable(presenter):
                     raise TypeError("display unit has no image publication contract")
                 presenter(pixmap, image_path=image_path)
+                self._on_image_displayed(int(screen_index), image_path)
         else:
             # Show on all screens (same image mode)
             if self.same_image_mode:
                 for display in self.displays:
-                    display.set_image(pixmap, image_path)
+                    if isinstance(display, DisplayWidget):
+                        display.set_image(pixmap, image_path)
+                        continue
+                    presenter = getattr(display, "present_image", None)
+                    if not callable(presenter):
+                        raise TypeError("display unit has no image publication contract")
+                    presenter(pixmap, image_path=image_path)
+                    self._on_image_displayed(
+                        int(getattr(display, "screen_index")),
+                        image_path,
+                    )
                 logger.debug(f"Image shown on all {len(self.displays)} displays")
     
     def show_image_on_screen(self, screen_index: int, pixmap: QPixmap, image_path: str = "") -> None:
@@ -786,6 +805,7 @@ class DisplayManager(QObject):
         if not callable(presenter):
             raise TypeError("display unit has no processed-image publication contract")
         presenter(processed_pixmap, image_path=image_path)
+        self._on_image_displayed(int(screen_index), image_path)
     
     def show_error(self, message: str, screen_index: Optional[int] = None) -> None:
         """
@@ -799,10 +819,22 @@ class DisplayManager(QObject):
             display = self._display_for_screen_index(screen_index)
             if isinstance(display, DisplayWidget):
                 display.show_error(message)
+            elif display is not None:
+                logger.error(
+                    "[DISPLAY] Runtime error for screen %s: %s",
+                    screen_index,
+                    message,
+                )
         else:
             for display in self.displays:
-                display.show_error(message)
-            logger.warning(f"[FALLBACK] Error shown on all displays: {message}")
+                if isinstance(display, DisplayWidget):
+                    display.show_error(message)
+                    continue
+                logger.error(
+                    "[DISPLAY] Runtime error for screen %s: %s",
+                    getattr(display, "screen_index", "?"),
+                    message,
+                )
     
     def clear_all(self) -> None:
         """Clear all displays (removes image but keeps windows visible)."""
@@ -814,10 +846,14 @@ class DisplayManager(QObject):
     def quiesce_all(self) -> None:
         """Suppress late display/widget work before clear/hide/cleanup proceeds."""
         for display in self.displays:
-            try:
-                display.quiesce_for_runtime_pause()
-            except Exception:
-                logger.debug("[DISPLAY_MANAGER] Failed to quiesce display before runtime pause", exc_info=True)
+            quiesce = getattr(display, "quiesce", None)
+            if callable(quiesce):
+                quiesce()
+                continue
+            legacy_quiesce = getattr(display, "quiesce_for_runtime_pause", None)
+            if not callable(legacy_quiesce):
+                raise RuntimeError("display collection member has no quiesce contract")
+            legacy_quiesce()
         logger.info("All displays quiesced")
     
     def hide_all(self) -> None:
@@ -834,15 +870,9 @@ class DisplayManager(QObject):
                     display.reset_after_settings()
             except Exception as e:
                 logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
-            try:
-                display.show_on_screen()
-            except Exception as e:
-                logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
-                display.show()
-            try:
+            display.show_on_screen()
+            if isinstance(display, DisplayWidget):
                 hide_all_overlays(display)
-            except Exception as e:
-                logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
         logger.info("All displays shown")
     
     def set_display_mode(self, mode: DisplayMode) -> None:
@@ -854,7 +884,8 @@ class DisplayManager(QObject):
         """
         self.display_mode = mode
         for display in self.displays:
-            display.set_display_mode(mode)
+            if isinstance(display, DisplayWidget):
+                display.set_display_mode(mode)
         logger.info(f"Display mode changed to {mode} for all screens")
     
     def set_same_image_mode(self, enabled: bool) -> None:
@@ -880,6 +911,9 @@ class DisplayManager(QObject):
         """
         for display in self.displays:
             try:
+                if not isinstance(display, DisplayWidget):
+                    display.runtime.auxiliary_controller.set_dimming(enabled, opacity)
+                    continue
                 display._dimming_enabled = enabled
                 display._dimming_opacity = opacity
                 comp = getattr(display, "_gl_compositor", None)
@@ -1110,7 +1144,17 @@ class DisplayManager(QObject):
         Returns:
             List of display info dicts
         """
-        return [display.get_screen_info() for display in self.displays]
+        result: list[dict] = []
+        for display in self.displays:
+            if isinstance(display, DisplayWidget):
+                result.append(display.get_screen_info())
+                continue
+            runtime = getattr(display, "runtime", None)
+            identity = getattr(runtime, "display_identity", None)
+            as_dict = getattr(identity, "as_dict", None)
+            if callable(as_dict):
+                result.append(as_dict())
+        return result
     
     def has_running_transition(self) -> bool:
         """Return True if any display currently has a running transition."""
@@ -1135,30 +1179,27 @@ class DisplayManager(QObject):
     ) -> None:
         """Mark all displays as having accepted image-change work before transition start."""
         self._transition_work_pending = bool(pending)
-        try:
-            displays = (
-                self.displays
-                if screen_index is None
-                else [self._display_for_screen_index(screen_index)]
-            )
-            for display in displays:
-                if display is None:
-                    continue
-                setter = getattr(display, "set_transition_work_pending", None)
-                if callable(setter):
-                    setter(pending)
-        except Exception as e:
-            logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
+        displays = (
+            self.displays
+            if screen_index is None
+            else [self._display_for_screen_index(screen_index)]
+        )
+        for display in displays:
+            if not isinstance(display, DisplayWidget):
+                continue
+            setter = getattr(display, "set_transition_work_pending", None)
+            if callable(setter):
+                setter(pending)
 
     def has_transition_work_pending(self) -> bool:
         """Return True if image-change work is pending or any transition is running."""
-        any_display_pending = False
+        if self._transition_work_pending:
+            return True
         try:
             for display in self.displays:
                 try:
                     has_pending = getattr(display, "has_transition_work_pending", None)
                     if callable(has_pending) and has_pending():
-                        any_display_pending = True
                         return True
                 except Exception as e:
                     logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
@@ -1166,8 +1207,6 @@ class DisplayManager(QObject):
         except Exception as e:
             logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
             return False
-        if not any_display_pending:
-            self._transition_work_pending = False
         return False
     
     # --- Phase 3: Multi-Display Synchronization (Lock-Free) ---
@@ -1282,7 +1321,14 @@ class DisplayManager(QObject):
         # Start transitions on all displays
         logger.debug(f"[SYNC] Starting synchronized transition on {len(self.displays)} displays")
         for display in self.displays:
-            display.set_image(pixmap, image_path)
+            if isinstance(display, DisplayWidget):
+                display.set_image(pixmap, image_path)
+                continue
+            display.present_image(pixmap, image_path=image_path)
+            self._on_image_displayed(
+                int(getattr(display, "screen_index")),
+                image_path,
+            )
         
         # Wait for all to be ready (with timeout)
         all_ready = self.wait_for_all_displays_ready(timeout_sec=1.0)

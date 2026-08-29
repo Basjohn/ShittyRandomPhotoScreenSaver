@@ -56,9 +56,19 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
                 widget_runtime_manager=_RuntimeManager(),
                 scene_controller=SimpleNamespace(presentation_image=None),
                 describe_runtime_state=lambda: {"screen_index": self.screen_index},
+                auxiliary_controller=SimpleNamespace(
+                    set_dimming=lambda enabled, opacity: published.append(
+                        (self.screen_index, "dimming", enabled, opacity)
+                    )
+                ),
+                display_identity=SimpleNamespace(
+                    as_dict=lambda: {"screen_index": self.screen_index}
+                ),
             )
             self.retirement_qobject = QObject()
             self.retirement_owner = SimpleNamespace(screen_index=screen_index)
+            self.clear_calls = 0
+            self.quiesce_calls = 0
 
         def processing_descriptor(self, display_mode: DisplayMode):
             return DisplayProcessingDescriptor(
@@ -77,6 +87,15 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
 
         def runtime_retirement_roots(self):
             return ((self.retirement_qobject,), (self.retirement_owner,))
+
+        def clear(self) -> None:
+            self.clear_calls += 1
+
+        def quiesce(self) -> None:
+            self.quiesce_calls += 1
+
+        def has_running_transition(self) -> bool:
+            return False
 
     manager = DisplayManager(display_mode=DisplayMode.FIT)
     manager.displays = [
@@ -116,10 +135,32 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
 
         manager.present_processed_image(5, pixmap, pixmap, "five.jpg")
         manager.show_image_on_screen(2, pixmap, "two.jpg")
+        manager.show_image(pixmap, "all.jpg")
         assert published == [
             (5, QSize(8, 6), "five.jpg"),
             (2, QSize(8, 6), "two.jpg"),
+            (2, QSize(8, 6), "all.jpg"),
+            (5, QSize(8, 6), "all.jpg"),
         ]
+        assert manager.current_images == {2: "all.jpg", 5: "all.jpg"}
+        manager.set_transition_work_pending(True, screen_index=5)
+        assert manager.has_transition_work_pending() is True
+        manager.set_transition_work_pending(False)
+        assert manager.has_transition_work_pending() is False
+        manager.set_dimming_all_displays(True, 0.4)
+        assert published[-2:] == [
+            (2, "dimming", True, 0.4),
+            (5, "dimming", True, 0.4),
+        ]
+        assert manager.get_display_info() == [
+            {"screen_index": 2},
+            {"screen_index": 5},
+        ]
+        manager.quiesce_all()
+        assert [unit.quiesce_calls for unit in manager.displays] == [1, 1]
+        manager.clear_all()
+        assert [unit.clear_calls for unit in manager.displays] == [1, 1]
+        assert manager.current_images == {}
         manager.displays[1].runtime.scene_controller.presentation_image = object()
         assert manager.has_presented_image() is True
         with pytest.raises(IndexError):
