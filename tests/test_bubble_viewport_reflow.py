@@ -11,6 +11,7 @@ deterministically; final visual acceptance is deferred to after H.
 from __future__ import annotations
 
 import random
+from pathlib import Path
 
 import pytest
 
@@ -189,6 +190,51 @@ def _quiet_settings(extent):
         "bubble_big_count": 0,
         "bubble_small_count": 0,
     }
+
+
+def test_specular_offsets_are_local_and_domain_independent() -> None:
+    # spec_ox/spec_oy are dimensionless local bubble-space mutations (a fraction
+    # of the bubble's own radius in the shader), NOT viewport positions. They
+    # must pass through unchanged for every domain while the radius is projected,
+    # so a wide/tall aspect cannot create a specular displacement stretch.
+    def _snapshot_with_spec(domain_w, domain_h):
+        sim = BubbleSimulation()
+        sim._domain_w = domain_w
+        sim._domain_h = domain_h
+        sim._bubbles.append(
+            BubbleState(
+                x=0.6, y=0.5, radius=0.03, is_big=False, alpha=1.0,
+                spec_ox=0.021, spec_oy=-0.017, spec_size_mut=1.1,
+            )
+        )
+        return sim.snapshot()
+
+    base_pos, base_extra, _bt = _snapshot_with_spec(1.0, 1.0)
+    wide_pos, wide_extra, _wt = _snapshot_with_spec(1.5, 1.0)
+    tall_pos, tall_extra, _tt = _snapshot_with_spec(1.0, 2.0)
+
+    # Baseline payload exact.
+    assert base_extra[2] == pytest.approx(0.021)
+    assert base_extra[3] == pytest.approx(-0.017)
+    # Offsets are identical across domains (not projected).
+    assert wide_extra[2] == pytest.approx(base_extra[2])
+    assert wide_extra[3] == pytest.approx(base_extra[3])
+    assert tall_extra[2] == pytest.approx(base_extra[2])
+    assert tall_extra[3] == pytest.approx(base_extra[3])
+    # Position/radius ARE a separate, projected authority.
+    assert tall_pos[2] == pytest.approx(base_pos[2] / 2.0)
+
+
+def test_shader_applies_specular_offset_relative_to_radius() -> None:
+    # Source-level contract lock: the shader must keep spec_ox/spec_oy as a
+    # fraction of the bubble radius (local space), never a viewport-absolute
+    # offset. If this changes, the coordinate audit must be revisited.
+    shader = (
+        Path(__file__).resolve().parents[1]
+        / "widgets" / "spotify_visualizer" / "shaders" / "bubble.frag"
+    ).read_text(encoding="utf-8")
+    assert "spec_ox * r" in shader
+    assert "spec_oy * r" in shader
 
 
 def test_contraction_retire_pops_only_non_surface_off_domain_bubbles() -> None:
