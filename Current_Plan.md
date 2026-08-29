@@ -7,7 +7,7 @@ Last updated: 2026-08-29
 The documentation is reconciled through pushed source:
 
 ```text
-558e99cb1621f99768b81df2a2eab0246f8cb0d7
+be7c64e4cea48fee2c3b3ab9a6bded022bdfc2cc
 Complete G: independently audited and ACCEPTED.
 H: ADMITTED and in progress.
 
@@ -15,9 +15,18 @@ Landed H work through this checkpoint:
 - one WidgetRuntimeManager per QuickDisplayRuntime generation;
 - full seven-family OrdinaryFamilyPresentationBinder;
 - visualizer render-source + viewport-config bindings;
-- capture_qpixmap image bridge;
-- option-A outer-geometry mechanism;
-- historical per-family preferred-size policies and deterministic regression bars.
+- capture_qpixmap / immutable image-routing seam;
+- option-A outer-geometry mechanism and historical per-family preferred-size policies;
+- thin QuickDisplayPresenter;
+- authoritative SharedCtrlCoordinator;
+- QuickDisplayUnit per-display destination-chain assembly.
+
+Current source-backed H prerequisite before the production flip:
+- the visualizer's VisualizerLogicalRuntime thread is controller-owned, but the production
+  per-tick logical computation still executes logical_tick(widget) against legacy widget state;
+- migrate that per-tick state/computation to presentation-neutral VisualizerRuntimeController
+  ownership (or a controller-owned state object) before the Quick visualizer ownership edge
+  and atomic DisplayManager cutover.
 ```
 
 Exact later source always outranks this document. **All of G is complete, independently audited and accepted. H is admitted and
@@ -196,7 +205,7 @@ Centering guides are red so display/peer-centre alignment is distinct from ordin
 
 ### H progress (landed, GREEN, pushed)
 
-The family/runtime destination integration named first in the H directive is complete and test-gated:
+The family/runtime destination integration already landed and test-gated includes:
 
 - `QuickDisplayRuntime` owns **exactly one** `WidgetRuntimeManager` per generation (H §7 cardinality): hostless
   construction, retired once before scene teardown, dropped at window destruction, replacement generations build their own.
@@ -204,88 +213,142 @@ The family/runtime destination integration named first in the H directive is com
   adapter per family. It resolves admitted families (capability effectiveness via the single manager; per-instance `enabled`
   distinct), builds the existing `Retained*Presentation` items into the real `OrdinaryWidgetPresentationHost`, owns each
   family's neutral runtime service(s) through the manager (fail-closed on a missing required lease), and retires held items
-  exactly once. All seven families wired: Clock, Weather, Media (three leases), Reddit (reddit/reddit2), Gmail, and the two
-  Steam cards (Achievement Pulse, Abandonment Issues). Geometry + shadow values are **injected seams**.
-- Prior H slices: `bind_visualizer_render_source` (exact identity) and `bind_visualizer_viewport_config` (corrected-G4
-  committed/override ownership) at the runtime owner; the `capture_qpixmap` image bridge already exists and is tested.
+  exactly once. All seven families are wired: Clock, Weather, Media, Reddit, Gmail, Achievement Pulse and Abandonment Issues.
+  Geometry + shadow values are **injected seams**.
+- `bind_visualizer_render_source` and `bind_visualizer_viewport_config` exist at the Quick runtime owner; corrected-G4
+  committed/override viewport ownership remains binding.
+- `capture_qpixmap` plus `rendering/quick/display_image_route.py` provide GUI-thread processed-pixmap -> immutable
+  `PresentationImage` routing without passing live `QPixmap` state into the render thread.
+- `rendering/quick/display_presenter.py` is the thin per-display ordinary-family + option-A geometry presenter. It owns no
+  provider, cadence, window or persistence authority.
+- `rendering/quick/ctrl_coordinator.py` provides one authoritative cross-display Ctrl truth and forgets retired display
+  contributions.
+- `rendering/quick/display_unit.py` assembles one display's destination chain from `QuickDisplayRuntime` +
+  `QuickDisplayPresenter` + shared Ctrl coordination and exposes clean display operations rather than legacy-widget emulation.
 
 ### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 
 The ordinary-widget outer-geometry gate is resolved: **option A** (QML reports a size-only preferred content size; Python is
 the sole outer-rect/anchor/clamp authority). Per the boundary correction, the deterministic per-family preferred-size
-contract is **H work** (built now); only final eyes-on visual parity is J. Landed:
+contract is **H work**; only final eyes-on visual parity is J. Landed:
 
 - `rendering/quick/widgets/geometry_resolver.py` — pure `resolve_anchored_geometry` (reproduces the legacy
   `_update_position` content-size + anchor + margin + min-visible clamp, minus QWidget-era padding/pixel-shift artifacts),
   `OverlayGeometryPolicy` + `resolve_overlay_geometry_policy` (persisted `position`/`margin`, optional CUSTOM committed-rect
-  override), `OverlayGeometryBinding` (content-size → committed outer rect; identical-effective no-op; committed rect wins;
+  override), `OverlayGeometryBinding` (content-size -> committed outer rect; identical-effective no-op; committed rect wins;
   re-anchors on display-bounds/topology change), and `connect_overlay_preferred_size` (wires the QML signal; no width
   feedback, no polling/timers/per-frame callbacks).
 - QML contract: `OverlayWidget` exposes family-declared `preferredContentWidth/Height` + a size-only
   `preferredContentSizeChanged`; `OverlayCard` exposes `shellInset`. Every production family declares a real preferred size
   from intrinsic/config sources (never its assigned width).
-- **Historical size policies are honoured (H, not J)** — intrinsic QML measurement may enlarge a card where content genuinely
-  requires it, but never shrinks below the authored/minimum footprint (deterministic bars in
-  `tests/test_qtquick_family_size_policy.py`):
+- Historical size policies are honoured:
   - Weather / Reddit / Media: 600 px minimum width (`BaseOverlayWidget.DEFAULT_CARD_MIN_WIDTH`);
-  - Gmail: authored width, default 600, clamped 200–1200;
+  - Gmail: authored width, default 600, clamped 200-1200;
   - Media: height floor `max(220, artwork_size + 60)`;
   - Clock analogue: authored natural geometry `width = max(160, font*4.5)`, `height = max(width, width*1.3)`;
   - Clock digital: content-driven intrinsic text; Steam cards: authored dimensions.
 
 **Ownership DECIDED — option A:** content anchoring is **default placement only**. Existing CUSTOM committed rects and Clock
-per-variant (digital/analogue) committed-rect ownership remain unchanged and override the binding completely (the binding's
-`policy.committed_rect` carries the committed rect; when present it wins and suppresses re-anchoring). J later validates/refines
-visual parity only.
+per-variant (digital/analogue) committed-rect ownership remain unchanged and override the binding completely. J later
+validates/refines visual parity only.
 
-### H remaining — the DisplayManager production flip
+### H visualizer runtime ownership correction — NEXT REQUIRED SLICE
 
-All destination pieces now exist and are GREEN: manager cardinality, the full seven-family `OrdinaryFamilyPresentationBinder`,
-visualizer render-source + viewport-config bindings, the `capture_qpixmap` image bridge, and the complete option-A geometry
-mechanism + per-family preferred sizes. Remaining flip steps:
+A pre-flip source audit found one real missing destination ownership boundary.
 
-1. **Per-display Quick presenter** assembling `QuickDisplayRuntime` + binder + per-widget geometry bindings under option A
-   (content-anchoring is default placement only; CUSTOM committed rects and Clock per-variant committed rects override the
-   binding and are left owning their geometry unchanged) + visualizer bindings + image/transition routing + outward signal
-   fan-in.
-2. **DisplayManager rewire** to construct/own the Quick presenter per selected QScreen instead of `DisplayWidget`, mapping
-   image/transition/readiness/generation/topology onto the runtime APIs; update the engine test suites off QWidget shapes.
-3. **Caller-proven legacy deletion** of `DisplayWidget`/`GLCompositorWidget`/compositor stack (§10), not deferred to I.
+The existing `VisualizerRuntimeController` is already the intended presentation-neutral owner for visualizer mode/settings,
+source/engine identity, `VisualizerLogicalRuntime`, the latest-state mailbox, render bridge, viewport configuration and
+generation/activation fencing. **Do not create a second controller or replacement visualizer subsystem.**
 
-H is **admitted and active**. The complete G checkpoint has already passed the required independent audit.
+However, production cadence currently starts the controller-owned logical runtime with a step equivalent to:
+
+```text
+logical_tick(widget)
+```
+
+and `widgets/spotify_visualizer/tick_pipeline.py` still reads/writes substantial live legacy-widget state during each authored
+logical step (enabled/playing state, dt/perf accounting, engine/source freshness, mode-transition readiness, mode dispatch,
+logical publication and related state).
+
+Therefore the Quick production owner cannot yet start the authored logical runtime without retaining a live legacy widget.
+That is a deterministic H ownership defect and must be closed **before** the atomic production flip; it is not J debt and is
+not permission to retain a hidden QWidget after cutover.
+
+Required bounded correction:
+
+1. Move the state required by the authored per-tick logical computation off `spotify_visualizer_widget` and into the existing
+   `VisualizerRuntimeController` or a controller-owned presentation-neutral state object.
+2. Refactor the production logical step so `VisualizerLogicalRuntime` can advance using that destination state without a
+   `QWidget`/legacy presenter argument.
+3. Preserve existing authored algorithms, timing and state semantics. This is an ownership migration, **not a visualizer
+   retune/rewrite**.
+4. Preserve the existing shared BeatEngine/source cardinality and exactly one intended authored logical runtime per active
+   visualizer owner/generation; do not duplicate engine/source/tick owners.
+5. Keep generation/activation fencing, latest-state/coalescing semantics, source freshness, mode teardown/readiness,
+   viewport-extent ownership and render-bridge publication intact.
+6. Preserve BTF/replay/cadence/reactivity/transport goldens and do not alter authored Bubble counts/physics merely to ease
+   the ownership move.
+7. No QML/QQuickItem/QScreen/render-thread object enters the logical state.
+8. During this preparatory slice the old `DisplayWidget` remains the production caller only because the production cutover has
+   not happened yet. Do **not** run a second Quick visualizer logical owner in parallel normal production and do not add a
+   legacy fallback contract.
+9. Once this slice is GREEN, bind the existing controller through the Quick destination chain and proceed directly to the
+   atomic production cutover.
+
+### H remaining — visualizer owner closure, then atomic DisplayManager production flip
+
+The next sequence is:
+
+1. **Visualizer logical-state/step ownership migration** described above, with focused owner-shaped regression bars.
+2. **Thin Quick visualizer ownership edge**: construct/configure/start the existing `VisualizerRuntimeController` at the
+   intended destination owner, bind its existing render source + viewport configuration into `QuickDisplayRuntime`, and prove
+   generation replacement/retirement without a hidden widget.
+3. **Atomic DisplayManager + engine cutover.** `DisplayManager` remains the durable product-level orchestration boundary.
+   Replace the engine's direct dependence on concrete `.displays[i]` implementation internals with a small semantic
+   DisplayManager contract covering only real product operations (image routing, target size/query where genuinely needed,
+   readiness, outward semantic signals/actions, display mode, generation/topology lifecycle and retirement/close).
+   - Do not create 51 one-for-one forwarding methods.
+   - Do not make `QuickDisplayUnit` or `QuickDisplayRuntime` emulate `DisplayWidget` private attributes.
+   - Do not first build a throwaway legacy-only decoupling layer.
+   - Do not spread `QuickDisplayUnit` implementation knowledge across engine call sites.
+   The DisplayManager rewrite + engine call-site conversion + production Quick construction must land as one coordinated
+   cutover because a half-swap is not a valid runtime state.
+4. **Runtime-shaped production proof** for one/multiple selected displays, image/transition routing, ordinary families,
+   visualizer ownership, corrected-G owners, readiness, generation replacement, topology replacement and clean retirement.
+5. **Caller-proven legacy deletion in H**: delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, the legacy visualizer host,
+   old compositor scheduling/presentation glue, unsupported software/backend-demotion presenter fallback, obsolete
+   `hw_accel`/fallback-overlay policy and remaining old physical-host transition/visualizer glue once caller proof is clean.
+
+H is **admitted and active**. This visualizer correction is a discovered H prerequisite, not a new phase and not a reason to
+reopen accepted G.
 
 The source may still route normal startup through legacy `DisplayWidget` before the production flip. That is a routing fact,
 not a requirement that the partially migrated application remain product-functional. Do not add compatibility work solely to
 keep the old runtime alive while migration proceeds.
 
 H is the final owner/orchestration wiring. Follow the reconciled
-`Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md`. Do not improvise a compatibility architecture in
-the meantime.
+`Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md`, with this source-backed visualizer correction taking
+precedence where the older decomposition assumed all destination runtime ownership was already presentation-neutral.
 
 Destination shape remains:
 
 ```text
 selected display
--> one QuickDisplayRuntime
--> one display-owned WidgetRuntimeManager
--> canonical capability + ordinary enabled/instance resolution
--> existing neutral service lease(s)
--> stable presentation model(s)
--> QuickSceneController ordinaryWidgetHost
--> retained family item(s)
+-> one QuickDisplayRuntime / QuickDisplayUnit
+-> retained Quick scene
+-> one display-owned WidgetRuntimeManager for ordinary families
+-> existing presentation-neutral VisualizerRuntimeController for visualizer logical/source ownership
+-> Quick render-source / viewport bindings
 ```
 
-Do not run legacy and Quick production runtime managers in parallel. Preserve semantic cardinality.
-`QuickSceneController` remains sole runtime Quick-item creator/destructor for its display; shared `QQmlEngine` is not a hidden
-runtime-generation owner.
+Do not run legacy and Quick production runtime managers or visualizer logical owners in parallel. Preserve semantic
+cardinality. `QuickSceneController` remains sole runtime Quick-item creator/destructor for its display; shared `QQmlEngine` is
+not a hidden runtime-generation owner.
 
-Once that destination chain is authoritative, delete the remaining physical-host path: `DisplayWidget`,
-QRhiWidget/`GLCompositorWidget`, old compositor scheduling/presentation glue, unsupported software/backend-demotion fallback,
-obsolete `hw_accel`/fallback-overlay policy, remaining physical-host transition/visualizer debris, temporary legacy anchors
-after destination ownership, and obsolete presentation-setting compatibility.
+Once the destination chain is authoritative, delete the remaining physical-host path rather than carrying it into I.
 
-H does **not** require a seamless live handoff from a fully functioning legacy application. H must prove
-owner/lifecycle correctness of the destination and leave only Quick production authority. No production switch back.
+H does **not** require a seamless live handoff from a fully functioning legacy application. H must prove owner/lifecycle
+correctness of the destination and leave only Quick production authority. No production switch back.
 
 ## I / J
 

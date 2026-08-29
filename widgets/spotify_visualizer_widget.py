@@ -34,12 +34,19 @@ from widgets.spotify_visualizer.beat_engine import (
 from widgets.spotify_visualizer.runtime_adapter import (
     LegacyVisualizerRuntimeAdapterMixin,
 )
+from widgets.spotify_visualizer.logical_tick_state_adapter import (
+    LegacyVisualizerLogicalTickStateAdapterMixin,
+)
 from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
 from widgets.spotify_visualizer.startup_contract import VisualizerStartupState
 
 logger = get_logger(__name__)
 
-class SpotifyVisualizerWidget(LegacyVisualizerRuntimeAdapterMixin, QWidget):
+class SpotifyVisualizerWidget(
+    LegacyVisualizerRuntimeAdapterMixin,
+    LegacyVisualizerLogicalTickStateAdapterMixin,
+    QWidget,
+):
     """Temporary QWidget presentation adapter for the visualizer runtime.
 
     Phase D moves non-pixel ownership into ``VisualizerRuntimeController``.
