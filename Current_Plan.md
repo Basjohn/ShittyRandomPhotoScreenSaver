@@ -1,6 +1,6 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-31 after removing the two failed black-flash experiments (deferred-show, forced surface-refresh) and relocalizing the flash to the LG/Display-1 output; maintained h-destination is 77/77 GREEN.
+Last updated: 2026-08-31 after MEASURING the black-flash root cause with PresentMon (fullscreen-flip-promotion PresentMode transitions on the LG/Display-1 output) and landing the coverage-preserving 1px overscan fix; maintained h-destination GREEN.
 
 ## Current checkpoint
 
@@ -340,7 +340,7 @@ Remeasure **visible window dismissal** separately from legal retirement and deve
 
 ## Interleaved black-flash / first-visible-frame reality slice
 
-**Status: proof-frame leak repaired (kept). Two later repairs — deferred first-show and event-driven surface-refresh — physically FAILED and are REMOVED. New binding evidence relocalizes the defect to the LG/Display-1 output itself. Root cause NOT yet proven; investigation continues via PresentMon presentation-mode capture + a historical 1px fullscreen-geometry A/B.**
+**Status: SOLVED (recurring flash). Root cause MEASURED with PresentMon: the exact-cover borderless window is non-deterministically promoted to a hardware fullscreen-flip presentation, and the composition <-> `Hardware: Legacy Flip` PresentMode transitions present the black/stale frames on the LG/Display-1 output (4K 60 Hz secondary TV). Fix: a 1px coverage-preserving overscan (`_fullscreen_compat_geometry`) keeps the window non-exact-cover, so it stays in stable `Composed: Copy with GPU GDI` and never transitions. 6/6 flashing-prone launches -> black=0, operator-confirmed no flashes. Two earlier repairs (deferred first-show, event-driven surface-refresh) physically FAILED and were removed.**
 
 This operator-approved No Quota interleave still does **not** reorder H4-H8. It is now evidence-driven rather than generic J polish.
 
@@ -377,14 +377,15 @@ An old wallpaper/image was physically glimpsed during a flash, but with no match
 - [x] Drop `SplashScreen` role — non-deterministic: identical code gave 0 flashes one launch, 15 the next (both operator-corroborated). Not a reliable fix.
 - [x] `WS_EX_NOACTIVATE` / `WindowDoesNotAcceptFocus` / DWM-transition-disable / Ctrl-poll replacement — PROHIBITED (feature loss); never a valid endpoint.
 
-**Not proven, do not assert:** "Independent Flip vs DWM composition" is a hypothesis, not a verdict; tearing alone does not prove presentation mode. Prove PresentMode with PresentMon/ETW.
+**Solution (measured + operator-confirmed):**
 
-Next (ephemeral, outside the repo; one variable at a time, >=3 launches each because launch behavior is variable):
+- [x] Coverage-preserving 1px overscan (`QuickDisplayWindow._fullscreen_compat_geometry`, `x-1,y-1,w+2,h+2`). PresentMon proof: exact-cover baseline showed `Hardware: Legacy Flip` present rows with black/stale events clustered at the composition<->flip transitions; height-1 (3/3) and overscan (3/3) launches stayed 100% `Composed: Copy with GPU GDI` with black=0. Overscan chosen over height-1 because it loses no visible row. This recovers the historical `_FULLSCREEN_COMPAT_WORKAROUND` principle. Regression: `tests/test_qtquick_window.py::test_fullscreen_compat_geometry_overscans_without_losing_coverage`.
 
-1. capture PresentMon PresentMode/AllowsTearing per frame, correlate +/-250 ms around each detected black/stale frame — did PresentMode change, or did the flash occur while it stayed stable?
-2. historical 1px fullscreen-compat A/B: Display-1 geometry vs the same one logical pixel shorter in height (nothing else changed); then a coverage-preserving overscan variant. Record black/stale counts, PresentMode sequence, tearing, startup.
+Remaining (minor, separate seam): operator still saw at most ~1 flash on startup — the show-before-first-frame interval, distinct from the resolved recurring/activation flash. Carry to J unless it recurs.
 
-Constraints for any fix: no feature loss; no `WS_EX_NOACTIVATE` / `WindowDoesNotAcceptFocus`; no DWM transition disabling; no Ctrl-poll replacement; no permanent diagnostic env var; no second surface; Independent Flip is an optimization, not a correctness requirement.
+Diagnostic method for future presentation issues (ephemeral, NOT committed to the repo): run `C:\tools\PresentMon\PresentMon.exe` capture-all (`--timed N --qpc_time --output_file …`, works unelevated; process rows resolve, `SwapChainAddress` is `0x0` without elevation) alongside a DXGI Desktop-Duplication (`dxcam`) near-black/stale detector timestamped in QPC, then compare `PresentMode`/`AllowsTearing` in a +/-250 ms window around each detected frame. Drive activation with Win32 `SetForegroundWindow` (no cursor motion, so the mouse-move exit gesture never fires). See `Docs/Qt_QML_Observability.md`.
+
+Constraints honored: no feature loss; no `WS_EX_NOACTIVATE`/`WindowDoesNotAcceptFocus`; no DWM transition disabling; no Ctrl-poll replacement; no permanent diagnostic env var/tool; no second surface. Independent/hardware flip is an optimization, not a correctness requirement — SRPSS stays correct in ordinary composition.
 
 Technical route:
 `Docs/QtQuick_Migration/J_Black_Flash_Surface_Continuity_Decomposition_2026-08-30.md`.
@@ -399,7 +400,7 @@ Preserve the currently good Bubble partial/CUSTOM resizing.
 
 ### Black/test-frame/focus/context flashes
 
-Black flashes remain high-priority J/H-conditional work, now relocalized to the LG/Display-1 output itself (see the black-flash slice above). The two prior bounded repairs failed and were removed; do not reintroduce them. Next evidence is PresentMon presentation-mode capture + the historical 1px fullscreen-geometry A/B, not another guessed native-policy change.
+The recurring/activation black flash on the LG/Display-1 output is SOLVED (fullscreen-flip-promotion PresentMode transitions; fixed by the coverage-preserving overscan — see the black-flash slice above). A minor startup-only flash may remain (show-before-first-frame) and is carried to J unless it recurs. The two prior bounded repairs failed and were removed; do not reintroduce them.
 
 ## H re-closure gate
 

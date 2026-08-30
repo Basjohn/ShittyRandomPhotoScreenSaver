@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import QMetaObject, QPointF, Signal, Qt
+from PySide6.QtCore import QMetaObject, QPointF, QRect, Signal, Qt
 from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QScreen
 from PySide6.QtQuick import QQuickWindow
 
@@ -335,13 +335,38 @@ class QuickDisplayWindow(QQuickWindow):
         if self._policy.accepts_focus:
             self.requestActivate()
 
+    @staticmethod
+    def _fullscreen_compat_geometry(geometry: QRect) -> QRect:
+        """Return a coverage-preserving overscan of an exact-cover screen rect.
+
+        Windows non-deterministically promotes an *exact-cover* borderless
+        top-level window to a hardware fullscreen-flip presentation. PresentMon
+        proved the resulting composition <-> ``Hardware: Legacy Flip`` PresentMode
+        transitions are what present the black/stale frames on some outputs
+        (measured on a 4K 60 Hz secondary TV = the "Display-1 flash"); with a
+        non-exact-cover window the mode stays stable ``Composed: Copy with GPU
+        GDI`` and never transitions, so the flash disappears (6/6 launches,
+        black=0). This is the SRPSS historical ``_FULLSCREEN_COMPAT_WORKAROUND``
+        recovered.
+
+        One logical pixel of overscan on every edge disqualifies exact-cover
+        promotion while preserving full visible coverage and centering: only an
+        imperceptible 1px ring is clipped off-screen (vs the historical height-1,
+        which lost a visible bottom row). The display's own geometry/identity is
+        untouched, so image target size and CUSTOM widget geometry are unaffected.
+        """
+
+        adjusted = QRect(geometry)
+        adjusted.adjust(-1, -1, 1, 1)
+        return adjusted
+
     def _apply_screen_geometry(self, screen: QScreen) -> None:
         geometry = screen.geometry()
         if not geometry.isValid() or geometry.width() <= 0 or geometry.height() <= 0:
             raise RuntimeError(
                 f"screen {self._screen_index} has invalid geometry: {geometry.getRect()}"
             )
-        self.setGeometry(geometry)
+        self.setGeometry(self._fullscreen_compat_geometry(geometry))
 
     def _queue_meta_call(self, method: str) -> None:
         if not QMetaObject.invokeMethod(
