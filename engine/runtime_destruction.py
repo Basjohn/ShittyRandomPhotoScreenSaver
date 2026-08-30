@@ -102,12 +102,21 @@ class RuntimeDestructionBarrier:
         reason: str,
         retiring_generation: int | None,
         timeout_ms: int = _DEFAULT_TIMEOUT_MS,
+        purpose: str = "replacement",
     ) -> None:
         app = QCoreApplication.instance()
         if app is None or QCoreApplication.closingDown():
             raise RuntimeError(
                 "Cannot create a runtime destruction barrier without a live Qt event loop"
             )
+        # "replacement" proves a retiring generation drained before a replacement
+        # runtime is constructed; "terminal" proves the same drain during
+        # application exit and must NOT self-cancel merely because terminal
+        # shutdown was requested (that request is precisely why it exists). The
+        # two purposes share observation; they differ only in the completion
+        # gate and what completion is allowed to run.
+        self._purpose = str(purpose or "replacement")
+        self._is_terminal = self._purpose == "terminal"
         # The barrier is deliberately a plain Python owner.  In particular it
         # must not parent QTimers: constructing a QTimer under a Python QObject
         # during PySide lifecycle churn can enter a native-invalid parent path.
@@ -413,9 +422,19 @@ class RuntimeDestructionBarrier:
     def _maybe_complete(self) -> None:
         if not self._sealed or self._completed or self._completion_scheduled:
             return
-        if not qt_replacement_may_run(self._engine_ref()):
-            self.cancel_for_terminal_shutdown()
-            return
+        if not self._is_terminal:
+            if not qt_replacement_may_run(self._engine_ref()):
+                self.cancel_for_terminal_shutdown()
+                return
+        else:
+            # Terminal observation must survive the terminal-shutdown request;
+            # it only stops if the Qt loop itself is already gone, in which case
+            # there is nothing left to observe and terminal finalization runs.
+            app = QCoreApplication.instance()
+            if app is None or QCoreApplication.closingDown():
+                self._completion_scheduled = True
+                self._complete()
+                return
         if self._qobject_labels or self._python_labels:
             return
         resources = self._remaining_generation_resources()
@@ -492,18 +511,31 @@ class RuntimeDestructionBarrier:
         continuation, self._continuation = self._continuation, None
         if continuation is None:
             return
-        if not qt_replacement_may_run(self._engine_ref()):
+        # A replacement continuation must never run during terminal shutdown; a
+        # terminal continuation is the terminal finalization itself and must run
+        # even though qt_replacement_may_run() is (correctly) False.
+        if not self._is_terminal and not qt_replacement_may_run(self._engine_ref()):
             self.cancel_for_terminal_shutdown()
             return
         try:
             continuation()
         except Exception:
             logger.critical(
-                "[LIFECYCLE_BARRIER] Replacement continuation failed reason=%s",
+                "[LIFECYCLE_BARRIER] %s continuation failed reason=%s",
+                "Terminal" if self._is_terminal else "Replacement",
                 self.reason,
                 exc_info=True,
             )
-            QApplication.exit(1)
+            if self._is_terminal:
+                try:
+                    QApplication.quit()
+                except Exception:
+                    logger.error(
+                        "[LIFECYCLE_BARRIER] Terminal finalization quit failed",
+                        exc_info=True,
+                    )
+            else:
+                QApplication.exit(1)
 
     def _on_timeout(self) -> None:
         if self._completed:
@@ -549,8 +581,18 @@ class RuntimeDestructionBarrier:
         # QApplication.exit() takes effect after this callback returns;
         # attribution cannot permit a replacement runtime or change the
         # lifecycle decision.
-        self.cancel_for_terminal_shutdown()
-        QApplication.exit(1)
+        if self._is_terminal:
+            # Terminal drain timed out: the critical log above is the loud
+            # failure record. Still run terminal finalization (clean worker/
+            # process shutdown + quit) so the process terminates rather than
+            # hanging; never force-kill, and never claim a clean success.
+            self._completed = True
+            self._completion_scheduled = False
+            self._dispose_timers()
+            self._run_continuation()
+        else:
+            self.cancel_for_terminal_shutdown()
+            QApplication.exit(1)
         diagnostic_owner_referrers, diagnostic_trace_metadata = (
             self._capture_diagnostic_python_owner_referrers(
                 pending_python_owner_refs
@@ -627,11 +669,13 @@ def create_runtime_destruction_barrier(
     *,
     reason: str,
     retiring_generation: int | None,
+    purpose: str = "replacement",
 ) -> RuntimeDestructionBarrier:
     barrier = RuntimeDestructionBarrier(
         engine,
         reason=reason,
         retiring_generation=retiring_generation,
+        purpose=purpose,
     )
     try:
         qobjects, python_owners = collect_runtime_roots(manager)
