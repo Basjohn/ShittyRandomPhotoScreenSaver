@@ -16,9 +16,6 @@ from rendering.custom_layout_session import (
     DEFAULT_GEOMETRY_VARIANT,
     normalize_geometry_variant,
 )
-from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
-
-
 CUSTOM_LAYOUT_VERSION = 2
 CUSTOM_LAYOUT_SETTINGS_KEY = "custom_layout"
 CUSTOM_LAYOUT_RESTORE_VERSION = 1
@@ -81,7 +78,45 @@ class SnapResolution:
 def get_screen_signature(screen: QScreen | None) -> str:
     """Return the stable display identity used for CUSTOM layout bindings."""
 
-    return MultiMonitorCoordinator._screen_signature(screen)
+    if screen is None:
+        return "screen:none"
+
+    identity_parts: list[str] = []
+    serial_present = False
+    for label, getter in (
+        ("serial", getattr(screen, "serialNumber", None)),
+        ("manufacturer", getattr(screen, "manufacturer", None)),
+        ("model", getattr(screen, "model", None)),
+        ("name", getattr(screen, "name", None)),
+    ):
+        try:
+            if callable(getter):
+                value = getter()
+                if value:
+                    identity_parts.append(f"{label}:{value}")
+                    serial_present = serial_present or label == "serial"
+        except Exception:
+            continue
+
+    geometry_part = ""
+    try:
+        geometry = screen.geometry()
+        geometry_part = (
+            f"geom:{geometry.x()}_{geometry.y()}_"
+            f"{geometry.width()}x{geometry.height()}"
+        )
+    except Exception:
+        pass
+
+    if serial_present and identity_parts:
+        return "|".join(identity_parts)
+    if identity_parts:
+        return "|".join(
+            identity_parts + ([geometry_part] if geometry_part else [])
+        )
+    if geometry_part:
+        return geometry_part
+    return f"id:{id(screen)}"
 
 
 def get_screen_signature_aliases(screen: QScreen | None) -> tuple[str, ...]:

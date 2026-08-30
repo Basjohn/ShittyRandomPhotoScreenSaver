@@ -17,7 +17,8 @@ b49c122c (Quick-only DisplayManager collection/cleanup surface landed on pushed 
 0f7d49b1 (engine replacement-input/CUSTOM cancellation callers moved to semantic owners on pushed main)
 1bc332b3 (retained Media playback truth + terminal Quick callback release landed on pushed main)
 02b5960c (diagnostic-entry/tray physical-host hooks removed on pushed main)
-current bounded checkpoint: route lifecycle resource accounting through Quick semantic ownership
+76940eec (lifecycle resource accounting routed through Quick semantic ownership on pushed main)
+current bounded checkpoint: separate durable generic seams from the caller-dead physical-host tree
 True-F focused gate: 7/7 GREEN
 Settings-overhaul focused reconciliation: 154/154 GREEN
 H destination profile: 60/60 target-isolated GREEN
@@ -316,6 +317,9 @@ The family/runtime destination integration already landed and test-gated include
 - Lifecycle resource accounting now consumes a bounded `DisplayManager`/display-unit Quick ownership snapshot. It counts
   display units, runtimes, windows, runtime managers, retained family presentations, the one visualizer owner/identity and
   first-frame readiness without probing old compositor, QWidget visualizer, fade or widget-manager fields.
+- Engine restart paths no longer toggle or clean the retired multi-monitor QWidget coordinator; the engine settings flag plus
+  generation teardown are authoritative. CUSTOM now owns its persisted screen-signature algorithm directly, and generic timer
+  diagnostics no longer inspect or classify old compositor cadence/transition state.
 - Quick input transport/app-volume/system-volume/mute signals now route through each unit's already-owned retained Media
   presentation, preserving its configuration/runtime-availability admission and the existing neutral service owners. Layout
   slot save/load moved to `DisplayManager` + `SettingsManager`; a successful load emits the existing runtime-generation and
@@ -451,8 +455,8 @@ caller-proven deletion — are therefore the remaining H work and are **CURRENT 
    physical-host compatibility import. Runtime replacement input suppression and settings-open CUSTOM cancellation are also
    routed through the neutral input policy and manager-generation Quick owner with source gates against legacy imports.
    Retained Media playback truth and terminal presenter callback release are also runtime-shaped through a real settings
-   generation replacement. Diagnostic-entry/tray hooks and private physical-host resource probes are gone. Remaining work is
-   broader runtime-shaped proof and deletion of the caller-dead physical-host source tree.
+   generation replacement. Diagnostic-entry/tray hooks, private resource probes and generic coordinator/compositor callers are
+   gone. Remaining work is final caller-graph proof, broader runtime-shaped proof and physical-host source-tree deletion.
 9. **Runtime-shaped production proof and caller-proven deletion.** Prove one/multiple selected displays, image/transition
    routing, ordinary families, the single admitted visualizer, corrected-G owners, readiness, generation/topology replacement
    and clean retirement; then delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, legacy visualizer host/compositor glue,

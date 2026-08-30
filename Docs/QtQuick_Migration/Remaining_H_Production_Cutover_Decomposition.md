@@ -121,6 +121,10 @@ The diagnostic entry point and system tray no longer patch or retain a physical 
 now consumes a bounded Quick/display-manager ownership snapshot rather than private compositor/widget-manager/fade fields.
 Production callers outside the retiring physical-host tree therefore have no remaining presenter-private probe.
 
+Engine replacement paths also no longer toggle/clean the retired QWidget multi-monitor coordinator. The durable CUSTOM
+contract owns the existing persisted screen-signature algorithm directly, and generic timer diagnostics no longer scrape or
+classify compositor state. These are caller separation changes, not replacement owners or compatibility surfaces.
+
 "Coordinated" or "atomic" cutover describes the **finished authority topology**, not the size of one coding session or commit.
 The conversion may span as many explicit checkpoints as needed, including intentionally non-runnable intermediate migration
 states, provided no checkpoint invents two legitimate production authorities or a fake legacy compatibility presenter.

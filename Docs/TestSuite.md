@@ -465,7 +465,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 
 | File | Status | Note |
 | --- | --- | --- |
-| `tests/test_custom_layout_contract.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
+| `tests/test_custom_layout_contract.py` | **KEEP — retained CUSTOM contract** | Retain neutral CUSTOM geometry/persistence proof; the durable contract now owns the exact persisted screen-signature algorithm without the retired multi-monitor coordinator. |
 | `tests/test_custom_layout_manager.py` | **MIGRATION-CRITICAL — H/I (MIXED)** | Neutral CUSTOM session/geometry/persistence survives; direct `EditShellWidget` guide/button/pixel assertions retire/rehome with the legacy shell. |
 | `tests/test_dimming_and_interaction_fixes.py` | **MIGRATION-CRITICAL — G/H** | Rehome display/input/topology behavior to Quick runtime. |
 | `tests/test_display_context_menu.py` | **MIGRATION-CRITICAL — G/H** | Rehome display/input/topology behavior to Quick runtime. |
@@ -745,7 +745,7 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_save_debounce.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_secure_url_launcher.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_storage_paths.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_thread_manager.py` | **KEEP** | Retain; no migration-specific retirement identified. |
+| `tests/test_thread_manager.py` | **KEEP** | Retain generic thread/timer ownership diagnostics; old compositor cadence/transition scraping and classifiers retired in H. |
 | `tests/test_usage_sampler.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 
 ### 10.15 Other / integration

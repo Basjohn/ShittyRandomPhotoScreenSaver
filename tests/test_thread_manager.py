@@ -1019,44 +1019,11 @@ class TestRecurringTimers:
             manager.shutdown()
 
 
-def test_large_timer_gap_warning_suppressed_during_transition_handoff():
-    context = {
-        "display_transition": {
-            "running": False,
-            "pending": False,
-            "last_transition": "GLCompositorRainDropsTransition",
-            "idle_age": 0.02,
-        },
-        "compositor": {
-            "current_transition": None,
-            "has_frame_state": False,
-            "render_strategy": {
-                "timer": {
-                    "state": "PAUSED",
-                }
-            },
-        },
-    }
-
-    assert _should_suppress_large_timer_gap_warning(7557.0, 16, context) is True
-
-
 def test_large_timer_gap_warning_not_suppressed_for_plain_idle_gap():
     context = {
         "display_transition": {
             "running": False,
             "pending": False,
-            "last_transition": "GLCompositorRainDropsTransition",
-            "idle_age": 1.8,
-        },
-        "compositor": {
-            "current_transition": None,
-            "has_frame_state": False,
-            "render_strategy": {
-                "timer": {
-                    "state": "RUNNING",
-                }
-            },
         },
     }
 
@@ -1074,33 +1041,9 @@ def test_large_timer_gap_warning_suppressed_for_visualizer_reconfiguration_windo
             "last_transition": None,
             "idle_age": 12.0,
         },
-        "compositor": {
-            "current_transition": None,
-            "has_frame_state": False,
-            "render_strategy": {
-                "timer": {
-                    "state": "IDLE",
-                }
-            },
-        },
     }
 
     assert _should_suppress_large_timer_gap_warning(140.0, 16, context) is True
-
-
-def test_large_timer_gap_warning_classifies_active_compositor_transition():
-    context = {
-        "display_transition": {
-            "running": False,
-            "pending": False,
-        },
-        "compositor": {
-            "current_transition": "GLCompositorBlockSpinTransition",
-            "has_frame_state": True,
-        },
-    }
-
-    assert _classify_large_timer_gap_warning(context) == "compositor_transition_starvation"
 
 
 def test_large_timer_gap_warning_classifies_visualizer_reconfiguration():

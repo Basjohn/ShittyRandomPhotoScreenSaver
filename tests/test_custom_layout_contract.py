@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, QSize
 
+import inspect
+
+from rendering import custom_layout_contract
 from rendering.custom_layout_contract import (
     CustomLayoutEntry,
     CUSTOM_LAYOUT_TRANSFER_THRESHOLD_PX,
@@ -19,6 +22,22 @@ from rendering.custom_layout_contract import (
     snap_local_rect_for_edit,
     set_screen_layout_entry,
 )
+
+
+def test_custom_layout_contract_owns_screen_signature_without_legacy_coordinator():
+    class _Screen:
+        serialNumber = lambda self: "abc"
+        manufacturer = lambda self: "LG"
+        model = lambda self: "TV"
+        name = lambda self: "Living Room"
+        geometry = lambda self: QRect(10, 20, 1920, 1080)
+
+    source = inspect.getsource(custom_layout_contract)
+    assert "multi_monitor_coordinator" not in source
+    assert "MultiMonitorCoordinator" not in source
+    assert custom_layout_contract.get_screen_signature(_Screen()) == (
+        "serial:abc|manufacturer:LG|model:TV|name:Living Room"
+    )
 
 
 def test_custom_layout_map_round_trips_entries():
