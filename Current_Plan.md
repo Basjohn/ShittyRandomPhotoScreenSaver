@@ -4,12 +4,22 @@ Last updated: 2026-08-30
 
 ## Current checkpoint
 
-G is independently audited and accepted. H is complete on pushed `main`.
+G is independently audited and accepted. H is CLOSED on pushed `main`, including
+the audited bounded correction of two visualizer-routing regressions found in
+the first closure.
 
 ```text
 81b8518b  ordinary-family admission filters each enabled instance through the
           canonical effective monitor route for its logical destination
 9dcb02be  caller-proven legacy physical presentation host deleted
+bc8fd6af  Quick visualizer admission resolves its monitor through the canonical
+          descriptor/effective-route authority (Media outside CUSTOM; the
+          visualizer's own route while CUSTOM), not the raw settings monitor
+6f88cca9  presentation-neutral CUSTOM failover state + lifecycle re-homed under
+          rendering/quick/ (deleted with the legacy host); 39/39 focused GREEN
+28e95d64  DisplayManager admission drives the CUSTOM failover/reclaim lifecycle
+          (one 30s grace, single temporary fallback, retire-confirmed reclaim);
+          no second owner, no legacy host restored
 ```
 
 Pushed-tree H audit:
@@ -20,7 +30,8 @@ Pushed-tree H audit:
   auxiliary/transition hosts, legacy visualizer presenters and unsupported
   backend/fallback owners are absent from `HEAD`;
 - production source contains no import of a deleted physical-host module;
-- the maintained `h-destination` profile is **60/60 GREEN** after deletion;
+- the maintained `h-destination` profile is **63/63 GREEN** (the routing +
+  re-homed CUSTOM failover/capability bars are now part of the H boundary);
 - focused neutral visualizer/Media deletion fallout is **31/31 GREEN**;
 - no `DisplayWidget` compatibility facade, parallel old/Quick presenter,
   duplicate runtime/service/visualizer owner or product switch-back was added.
@@ -56,9 +67,10 @@ Detailed durable H authority remains in:
 
 ## Active task — I residue reconciliation
 
-I is the next admitted phase. It was not started by the H task that closed at
-`9dcb02be`. Begin the next execution with exact current source and this live
-checklist; do not invent a speculative migration redesign.
+I is the next admitted phase. It was not started by the H cutover or its bounded
+routing/failover correction (closed at `28e95d64`). Begin the next execution with
+exact current source and this live checklist; do not invent a speculative
+migration redesign.
 
 - [ ] Derive the exact post-H residue inventory from imports/callers and the
   complete-tree collection diagnostic.
