@@ -94,13 +94,20 @@ def teardown_display_runtime(
         if (
             isinstance(manager, QObject)
             and qt_event_loop_available
-            and reason not in {"application_exit", "engine_cleanup"}
+            and reason != "engine_cleanup"
         ):
+            # Terminal exit arms a terminal-purpose barrier so the same Quick/
+            # QObject/Python/resource drain that replacement already proves is
+            # observed before QApplication.quit(); it never admits a replacement
+            # continuation. engine_cleanup runs on the final teardown path where
+            # the loop may already be gone, so it stays barrier-free.
+            purpose = "terminal" if reason == "application_exit" else "replacement"
             barrier = create_runtime_destruction_barrier(
                 engine,
                 manager,
                 reason=reason,
                 retiring_generation=retiring_generation,
+                purpose=purpose,
             )
     except Exception:
         logger.critical(
@@ -234,6 +241,157 @@ def teardown_display_runtime(
 # ------------------------------------------------------------------
 # Engine stop
 # ------------------------------------------------------------------
+
+def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
+    """Stop-sequence finalization (worker/process shutdown, housekeeping, quit).
+
+    For a non-terminal stop this runs synchronously. For terminal exit it is the
+    barrier continuation, executed only after the terminal-purpose destruction
+    barrier proves the asynchronous Quick retirement drained — so the event loop
+    is never ended while Quick roots are still live. Semantics are unchanged from
+    the previous inline tail; only the timing of the terminal case moved.
+    """
+    from engine.screensaver_engine import EngineState
+
+    # Force-stop shared beat engine audio worker to release audio threads
+    if exit_app:
+        try:
+            from widgets.spotify_visualizer.beat_engine import BeatEngineRegistry, _global_beat_engine
+            if _global_beat_engine is not None:
+                _global_beat_engine.force_stop()
+            BeatEngineRegistry.get_instance().clear()
+            logger.info("Shared beat engine audio worker force-stopped")
+        except Exception as e:
+            logger.debug("Beat engine force-stop failed: %s", e)
+
+    # The opt-in sampler shares the app ThreadManager and must quiesce
+    # before that pool. Keep it alive across settings pauses so a profiling
+    # run remains continuous through the stop/restart cycle.
+    if exit_app:
+        usage_telemetry = getattr(engine, "_usage_telemetry", None)
+        if usage_telemetry is not None:
+            try:
+                usage_telemetry.stop()
+            except Exception as e:
+                logger.debug("[USAGE] Failed to stop usage telemetry: %s", e)
+            engine._usage_telemetry = None
+
+    # Shutdown ProcessSupervisor and all workers
+    if exit_app and engine._process_supervisor:
+        logger.info("Shutting down ProcessSupervisor...")
+        try:
+            engine._process_supervisor.shutdown()
+            logger.info("ProcessSupervisor shutdown complete")
+        except Exception as e:
+            logger.warning("ProcessSupervisor shutdown failed: %s", e, exc_info=True)
+
+    # Shutdown ThreadManager to stop all IO/compute threads
+    if exit_app and engine.thread_manager:
+        logger.info("Shutting down ThreadManager...")
+        try:
+            # wait=True so non-daemon pool threads are joined.
+            # Active tasks were already cancelled above so this should
+            # complete quickly. Stuck threads would be killed by OS on
+            # process exit anyway, but joining avoids lingering processes.
+            shutdown_complete = engine.thread_manager.shutdown(
+                wait=True,
+                timeout=5.0,
+            )
+            if shutdown_complete is False:
+                raise RuntimeError(
+                    "ThreadManager still has executing compute-lane work"
+                )
+            logger.info("ThreadManager shutdown complete")
+        except Exception as e:
+            logger.warning("ThreadManager shutdown failed: %s", e, exc_info=True)
+
+    # Emit a concise image cache summary for profiling.
+    # Dual-tagged for the PERF and cache sidecars so cache investigations
+    # retain their bounded stop summary without adding it to the main log.
+    if is_perf_metrics_enabled() or is_cache_logging_enabled():
+        try:
+            if engine._image_cache is not None:
+                stats = engine._image_cache.get_stats()
+                logger.info(
+                    "[PERF] [CACHE] ImageCache: items=%d/%d, mem=%.1f/%.0fMB, hits=%d, "
+                    "misses=%d, hit_rate=%.1f%%%%, evictions=%d",
+                    stats.get('item_count', 0),
+                    stats.get('max_items', 0),
+                    stats.get('memory_usage_mb', 0.0),
+                    stats.get('max_memory_mb', 0.0),
+                    stats.get('hits', 0),
+                    stats.get('misses', 0),
+                    stats.get('hit_rate_percent', 0.0),
+                    stats.get('evictions', 0),
+                )
+                logger.info(
+                    "[PERF] [CACHE] ImageCacheRepresentations: raw_items=%d raw_mb=%.1f "
+                    "scaled_items=%d scaled_mb=%.1f raw_evictions=%d scaled_evictions=%d "
+                    "raw_evicted_mb=%.1f scaled_evicted_mb=%.1f replacements=%d "
+                    "idempotent_puts_avoided=%d",
+                    int(stats.get("raw_items", 0)),
+                    int(stats.get("raw_bytes", 0)) / (1024 * 1024),
+                    int(stats.get("scaled_items", 0)),
+                    int(stats.get("scaled_bytes", 0)) / (1024 * 1024),
+                    int(stats.get("raw_evictions", 0)),
+                    int(stats.get("scaled_evictions", 0)),
+                    int(stats.get("raw_evicted_bytes", 0)) / (1024 * 1024),
+                    int(stats.get("scaled_evicted_bytes", 0)) / (1024 * 1024),
+                    int(stats.get("replacements", 0)),
+                    int(stats.get("idempotent_puts_avoided", 0)),
+                )
+            cache_flow = getattr(engine, "_cache_runtime_stats", None)
+            if isinstance(cache_flow, dict):
+                logger.info(
+                    "[PERF] [CACHE] ImageCacheFlow: raw_hits=%d raw_misses=%d scaled_hits=%d "
+                    "scaled_misses=%d worker_requests=%d worker_fallbacks=%d "
+                    "scaled_prefetch_requests=%d "
+                    "scaled_prefetch_completed=%d scaled_derivations=%d "
+                    "raw_released_after_scaled=%d raw_prefetch_paths=%d "
+                    "raw_prefetch_skipped_display_ready=%d "
+                    "scaled_reuses_without_put=%d "
+                    "prefetch_resume_scheduled=%d prefetch_resume_runs=%d",
+                    int(cache_flow.get("raw_hits", 0)),
+                    int(cache_flow.get("raw_misses", 0)),
+                    int(cache_flow.get("scaled_hits", 0)),
+                    int(cache_flow.get("scaled_misses", 0)),
+                    int(cache_flow.get("worker_requests", 0)),
+                    int(cache_flow.get("worker_fallbacks", 0)),
+                    int(cache_flow.get("scaled_prefetch_requests", 0)),
+                    int(cache_flow.get("scaled_prefetch_completed", 0)),
+                    int(cache_flow.get("scaled_derivations", 0)),
+                    int(cache_flow.get("raw_released_after_scaled", 0)),
+                    int(cache_flow.get("raw_prefetch_paths", 0)),
+                    int(
+                        cache_flow.get(
+                            "raw_prefetch_skipped_display_ready",
+                            0,
+                        )
+                    ),
+                    int(cache_flow.get("scaled_reuses_without_put", 0)),
+                    int(cache_flow.get("prefetch_resume_scheduled", 0)),
+                    int(cache_flow.get("prefetch_resume_runs", 0)),
+                )
+        except Exception as e:
+            logger.debug("[PERF] ImageCache summary logging failed: %s", e, exc_info=True)
+
+    # Clear class-level flag for widget perf logging
+    with engine._instance_lock:
+        engine.__class__._instance_running = False
+
+    # Transition to final state
+    if not exit_app:
+        # If not exiting, transition to STOPPED (can restart)
+        engine._transition_state(EngineState.STOPPED)
+    # If exit_app=True, stay in SHUTTING_DOWN (terminal state)
+
+    engine.stopped.emit()
+    logger.info("Screensaver engine stopped")
+
+    # Only exit the Qt event loop if requested
+    if exit_app:
+        QApplication.quit()
+
 
 def stop(
     engine: ScreensaverEngine,
@@ -369,144 +527,28 @@ def stop(
         except Exception as e:
             logger.debug("Helper session ticket cleanup skipped: %s", e)
 
-        # Force-stop shared beat engine audio worker to release audio threads
         if exit_app:
-            try:
-                from widgets.spotify_visualizer.beat_engine import BeatEngineRegistry, _global_beat_engine
-                if _global_beat_engine is not None:
-                    _global_beat_engine.force_stop()
-                BeatEngineRegistry.get_instance().clear()
-                logger.info("Shared beat engine audio worker force-stopped")
-            except Exception as e:
-                logger.debug("Beat engine force-stop failed: %s", e)
+            from engine.runtime_destruction import RuntimeDestructionBarrier
 
-        # The opt-in sampler shares the app ThreadManager and must quiesce
-        # before that pool. Keep it alive across settings pauses so a profiling
-        # run remains continuous through the stop/restart cycle.
-        if exit_app:
-            usage_telemetry = getattr(engine, "_usage_telemetry", None)
-            if usage_telemetry is not None:
-                try:
-                    usage_telemetry.stop()
-                except Exception as e:
-                    logger.debug("[USAGE] Failed to stop usage telemetry: %s", e)
-                engine._usage_telemetry = None
-
-        # Shutdown ProcessSupervisor and all workers
-        if exit_app and engine._process_supervisor:
-            logger.info("Shutting down ProcessSupervisor...")
-            try:
-                engine._process_supervisor.shutdown()
-                logger.info("ProcessSupervisor shutdown complete")
-            except Exception as e:
-                logger.warning("ProcessSupervisor shutdown failed: %s", e, exc_info=True)
-
-        # Shutdown ThreadManager to stop all IO/compute threads
-        if exit_app and engine.thread_manager:
-            logger.info("Shutting down ThreadManager...")
-            try:
-                # wait=True so non-daemon pool threads are joined.
-                # Active tasks were already cancelled above so this should
-                # complete quickly. Stuck threads would be killed by OS on
-                # process exit anyway, but joining avoids lingering processes.
-                shutdown_complete = engine.thread_manager.shutdown(
-                    wait=True,
-                    timeout=5.0,
+            barrier = getattr(engine, "_pending_runtime_destruction_barrier", None)
+            if isinstance(barrier, RuntimeDestructionBarrier) and not barrier.is_complete:
+                # Terminal exit must observe the asynchronous Quick retirement to
+                # completion before worker/process shutdown and QApplication.quit();
+                # ending the event loop earlier destroyed still-live Quick roots at
+                # GC (BackgroundRenderItem slot error / access violation, Clock
+                # null-model storm). The terminal-purpose barrier runs the
+                # finalization exactly once on drain (or on a loud timeout); it
+                # never admits a replacement continuation.
+                logger.info(
+                    "[LIFECYCLE] Terminal shutdown deferred until Quick retirement "
+                    "drains generation=%s",
+                    getattr(barrier, "retiring_generation", None),
                 )
-                if shutdown_complete is False:
-                    raise RuntimeError(
-                        "ThreadManager still has executing compute-lane work"
-                    )
-                logger.info("ThreadManager shutdown complete")
-            except Exception as e:
-                logger.warning("ThreadManager shutdown failed: %s", e, exc_info=True)
-
-        # Emit a concise image cache summary for profiling.
-        # Dual-tagged for the PERF and cache sidecars so cache investigations
-        # retain their bounded stop summary without adding it to the main log.
-        if is_perf_metrics_enabled() or is_cache_logging_enabled():
-            try:
-                if engine._image_cache is not None:
-                    stats = engine._image_cache.get_stats()
-                    logger.info(
-                        "[PERF] [CACHE] ImageCache: items=%d/%d, mem=%.1f/%.0fMB, hits=%d, "
-                        "misses=%d, hit_rate=%.1f%%%%, evictions=%d",
-                        stats.get('item_count', 0),
-                        stats.get('max_items', 0),
-                        stats.get('memory_usage_mb', 0.0),
-                        stats.get('max_memory_mb', 0.0),
-                        stats.get('hits', 0),
-                        stats.get('misses', 0),
-                        stats.get('hit_rate_percent', 0.0),
-                        stats.get('evictions', 0),
-                    )
-                    logger.info(
-                        "[PERF] [CACHE] ImageCacheRepresentations: raw_items=%d raw_mb=%.1f "
-                        "scaled_items=%d scaled_mb=%.1f raw_evictions=%d scaled_evictions=%d "
-                        "raw_evicted_mb=%.1f scaled_evicted_mb=%.1f replacements=%d "
-                        "idempotent_puts_avoided=%d",
-                        int(stats.get("raw_items", 0)),
-                        int(stats.get("raw_bytes", 0)) / (1024 * 1024),
-                        int(stats.get("scaled_items", 0)),
-                        int(stats.get("scaled_bytes", 0)) / (1024 * 1024),
-                        int(stats.get("raw_evictions", 0)),
-                        int(stats.get("scaled_evictions", 0)),
-                        int(stats.get("raw_evicted_bytes", 0)) / (1024 * 1024),
-                        int(stats.get("scaled_evicted_bytes", 0)) / (1024 * 1024),
-                        int(stats.get("replacements", 0)),
-                        int(stats.get("idempotent_puts_avoided", 0)),
-                    )
-                cache_flow = getattr(engine, "_cache_runtime_stats", None)
-                if isinstance(cache_flow, dict):
-                    logger.info(
-                        "[PERF] [CACHE] ImageCacheFlow: raw_hits=%d raw_misses=%d scaled_hits=%d "
-                        "scaled_misses=%d worker_requests=%d worker_fallbacks=%d "
-                        "scaled_prefetch_requests=%d "
-                        "scaled_prefetch_completed=%d scaled_derivations=%d "
-                        "raw_released_after_scaled=%d raw_prefetch_paths=%d "
-                        "raw_prefetch_skipped_display_ready=%d "
-                        "scaled_reuses_without_put=%d "
-                        "prefetch_resume_scheduled=%d prefetch_resume_runs=%d",
-                        int(cache_flow.get("raw_hits", 0)),
-                        int(cache_flow.get("raw_misses", 0)),
-                        int(cache_flow.get("scaled_hits", 0)),
-                        int(cache_flow.get("scaled_misses", 0)),
-                        int(cache_flow.get("worker_requests", 0)),
-                        int(cache_flow.get("worker_fallbacks", 0)),
-                        int(cache_flow.get("scaled_prefetch_requests", 0)),
-                        int(cache_flow.get("scaled_prefetch_completed", 0)),
-                        int(cache_flow.get("scaled_derivations", 0)),
-                        int(cache_flow.get("raw_released_after_scaled", 0)),
-                        int(cache_flow.get("raw_prefetch_paths", 0)),
-                        int(
-                            cache_flow.get(
-                                "raw_prefetch_skipped_display_ready",
-                                0,
-                            )
-                        ),
-                        int(cache_flow.get("scaled_reuses_without_put", 0)),
-                        int(cache_flow.get("prefetch_resume_scheduled", 0)),
-                        int(cache_flow.get("prefetch_resume_runs", 0)),
-                    )
-            except Exception as e:
-                logger.debug("[PERF] ImageCache summary logging failed: %s", e, exc_info=True)
-
-        # Clear class-level flag for widget perf logging
-        with engine._instance_lock:
-            engine.__class__._instance_running = False
-
-        # Transition to final state
-        if not exit_app:
-            # If not exiting, transition to STOPPED (can restart)
-            engine._transition_state(EngineState.STOPPED)
-        # If exit_app=True, stay in SHUTTING_DOWN (terminal state)
-
-        engine.stopped.emit()
-        logger.info("Screensaver engine stopped")
-
-        # Only exit the Qt event loop if requested
-        if exit_app:
-            QApplication.quit()
+                barrier.then(lambda eng=engine: _run_stop_finalization(eng, True))
+                return
+        # No barrier armed (no display, or the loop is unavailable), or a
+        # non-terminal stop: finalize synchronously with existing semantics.
+        _run_stop_finalization(engine, exit_app)
 
     except Exception as e:
         logger.exception("Engine stop failed: %s", e)
