@@ -52,24 +52,31 @@ Do not restore `DisplayWidget`, QRhiWidget/GLCompositor presentation, a QWidget 
 
 ### H1 — dual-display Settings/CUSTOM replacement generation dies while screen 1 Media is activating
 
-**Status: instrumented + deterministically fenced; native root owner awaiting the operator's instrumented dual-display repro. No native owner has been changed.**
+**Status: characterized as an intermittent main-thread HANG (not a crash); stack-dump watchdog landed; awaiting a captured hang stack. No native owner has been changed.**
 
-Landed at `ae3eda9a`:
+Landed at `ae3eda9a`, `6c7ef945`:
 
-- **Source audit result.** The generation lifecycle is clean. `_runtime_generation` increments per replacement (`engine._runtime_generation + 1`), a whole new `DisplayManager` is built on the one app-scoped `ThreadManager`, the three shared Media owners are keyed `("runtime", generation)`, and the destruction barrier retires the old generation's owners before the replacement builds. There is **no cross-generation Python owner reuse**. The failure is therefore native (COM/WinRT/pycaw), not a Python cardinality bug.
-- **Instrumentation.** Bounded one-shot `[MEDIA_NATIVE][H1]` breadcrumbs (generation + thread id) at every native boundary: Media family `model_construct`, each lease (`media` / `spotify_volume` / `mute_button`) `lease_attach` + owner `owner_activate` begin/complete, `retained_item_construct`, the GSMTC `winrt_init` marker, the pycaw `core_audio_enumerate` thread, and the process-global system-mute `mute_endpoint` acquire thread (`core/media/media_native_trace.py`). No polling, no per-frame logs; de-duplicated per `(generation, screen, component, stage)` so the replacement generation re-emits its whole timeline.
-- **Deterministic bar.** `tests/test_media_generation_recreation.py` builds the three leases for gen 1, retires (destruction barrier), rebuilds under gen 2 on the same ThreadManager, and asserts old owners retire, new owners are fresh/distinct, no owner crosses the boundary, and every registry returns to zero. Added to `h-destination` (65/65 GREEN). This keeps any future Python-lifecycle regression falsifiable and the native bisect honestly scoped.
+- **Source audit result.** The generation lifecycle is clean. `_runtime_generation` increments per replacement (`engine._runtime_generation + 1`), a whole new `DisplayManager` is built on the one app-scoped `ThreadManager`, the three shared Media owners are keyed `("runtime", generation)`, and the destruction barrier retires the old generation's owners before the replacement builds. There is **no cross-generation Python owner reuse**. The failure is native/runtime, not a Python cardinality bug.
+- **Instrumentation.** Bounded one-shot `[MEDIA_NATIVE][H1]` breadcrumbs (generation + thread id) at every native boundary (`core/media/media_native_trace.py`): Media family `model_construct`, each lease `lease_attach` + owner `owner_activate`, `retained_item_construct`, GSMTC `winrt_init`, pycaw `core_audio_enumerate` thread, system-mute `mute_endpoint` acquire thread. De-duplicated per `(generation, screen, component, stage)`.
+- **Deterministic bar.** `tests/test_media_generation_recreation.py` proves the same-process gen→gen owner lifecycle is clean (old retire, new fresh/distinct, registries return to zero). In `h-destination` (65/65 GREEN).
 
-**Operator step (required before any native fix): instrumented dual-display repro + lease bisect.**
+**Operator run 1 evidence (2026-08-30 13:36, source `4f33981`+instrumentation).** Several Settings/Edit recreations succeeded (gen 0→4 each rebuilt Media fully through `core_audio_enumerate`), then the final `custom_edit` replacement (gen=5) **hung** during screen-1 (LG TV) Media build. Findings:
 
-1. Run source mode with two displays and `[MEDIA_NATIVE][H1]` visible (INFO). Leave Settings (and separately leave CUSTOM via Save/Continue) to force the replacement generation. Capture the log through process death.
-2. Read the **last** `[MEDIA_NATIVE][H1]` line: it names the exact `component`, `stage`, `thread` and `gen` reached before the crash. Compare the endpoint/enumerate/winrt threads across `gen=N` and `gen=N+1` — a component whose native thread differs from where its endpoint was acquired is the order/apartment violation.
-3. If the last stage is ambiguous, bisect the leases in the failing recreation only: (a) `media` alone, (b) `media`+`mute_button`, (c) `media`+`spotify_volume`, (d) full three. This isolates the owning lease. Diagnostic disablement is not a product fallback and must not remain.
-4. Report the last completed stage + thread evidence back here. Only then fix that one native owner at its boundary (preserve one shared owner per generation and the existing ThreadManager; no new worker/poller/presenter), add the native runtime-shaped smoke, and re-run `h-destination`.
+- It is a **hang, not a crash**: the process lingered and was killed manually (ledger O-004).
+- Last breadcrumb: `gen=5 ... component=spotify_volume stage=lease_attach_complete thread=MainThread`. The very next step (`mute_button lease_attach_begin`) never emitted.
+- This truncation is **real, not a dropped-log artifact**: the same run wrote the entire 498-object teardown intact; the async log queue (`_LOG_QUEUE_CAPACITY=4096`, `put_nowait` drop-on-full) never saturated; and **no COM call was in flight at the freeze** — the last Core Audio session enumeration fully released ~10 s earlier (13:36:39).
+- `mute` is disabled, so `mute_button` never activating its owner is expected (not a defect).
+- So the main thread stops between two non-blocking breadcrumbs with **no emitting call to name it** — past what INFO/DEBUG staging can resolve.
 
-Two independent runs have the same shape:
+**Landed response (`6c7ef945`): stack-dump watchdog.** `core/diagnostics/hang_watchdog.py` arms a `faulthandler` all-thread dump around the single recreation choke point (`_construct_and_start_replacement_runtime`, both `settings` and `custom_edit`), disarmed on success. A healthy replacement finishes in << 1 s; if construction does not return in 20 s it dumps every thread's Python stack to `logs/hang_stacks.log` (and `faulthandler.enable()` prints a native stack if the variant is a crash). Verified silent on success, dumping on stall.
 
-Two independent runs have the same shape:
+**Operator step (required before any native fix): capture the hang stack.**
+
+1. Run source mode, two displays, and repeat Settings / Edit-save / Edit-cancel / Reset-layout recreations until one **hangs** (it is intermittent — it took several last time).
+2. When it wedges, wait ~20 s, then read `logs/hang_stacks.log`: the `MainThread` frame names the exact blocking call, and the io_pool/render frames show any counterpart. Send that dump here.
+3. Only then fix that one owner at its boundary (preserve one shared owner per generation and the existing ThreadManager; no new worker/poller/presenter), add the native runtime-shaped smoke, and re-run `h-destination`.
+
+The earlier runs had this shape:
 
 ```text
 old two-display generation teardown
