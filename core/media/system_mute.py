@@ -29,7 +29,20 @@ try:
         interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
         _endpoint_volume = cast(interface, POINTER(IAudioEndpointVolume))
         _available = True
-        logger.debug("[SYSTEM_MUTE] IAudioEndpointVolume acquired successfully")
+        # H1 diagnostic: this process-global COM endpoint is acquired once, on
+        # whichever thread first imports this module, and is thereafter expected
+        # to be called only from that same COM apartment. Record that thread so
+        # the dual-display replacement-generation bisect can confirm or rule out
+        # a cross-generation apartment mismatch as the native termination cause.
+        import threading as _threading
+
+        _acquire_thread = _threading.current_thread()
+        logger.info(
+            "[MEDIA_NATIVE][H1] component=mute_endpoint stage=process_global_acquire "
+            "thread=%s(%s)",
+            _acquire_thread.name,
+            _acquire_thread.ident,
+        )
     else:
         logger.info("[SYSTEM_MUTE] No default speakers found")
 except Exception:

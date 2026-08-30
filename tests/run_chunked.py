@@ -81,6 +81,7 @@ H_DESTINATION_PROFILE = (
     "test_qtquick_visualizer_geometry.py",
     "test_qtquick_visualizer_fade_authority.py",
     "test_qtquick_runtime_reality.py",
+    "test_media_generation_recreation.py",
     "test_visualizer_runtime_controller.py",
     "test_s_hotkey_workflow.py",
     "test_bubble_btf_coalescing.py",

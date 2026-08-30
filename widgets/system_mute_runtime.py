@@ -177,10 +177,23 @@ class _SharedSystemMuteRuntimeOwner:
         self._active_leases.add(lease)
         started_owner = False
         if not self._running:
+            from core.media.media_native_trace import trace_media_native_stage
+
+            trace_media_native_stage(
+                component="mute_button",
+                stage="owner_activate_begin",
+                generation=self._runtime_generation,
+                detail="available=%s" % self._available,
+            )
             self._running = True
             self._owner_generation += 1
             self._poll_token += 1
             started_owner = True
+            trace_media_native_stage(
+                component="mute_button",
+                stage="owner_activate_complete",
+                generation=self._runtime_generation,
+            )
         lease._deliver_snapshot(self.current_snapshot())
         if started_owner and self._available:
             self._schedule_next_poll(

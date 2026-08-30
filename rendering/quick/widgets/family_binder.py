@@ -604,6 +604,7 @@ class MediaFamilyAdapter:
         runtime_manager: Any,
         runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
+        from core.media.media_native_trace import trace_media_native_stage
         from rendering.quick.media_artwork import MediaArtworkImageProvider
 
         from .media import (
@@ -613,6 +614,15 @@ class MediaFamilyAdapter:
             RetainedMediaPresentation,
         )
 
+        # H1 diagnostic: bracket the screen's Media-family construction so the
+        # replacement-generation native termination has a precise last-stage
+        # timeline (generation + thread) at every native boundary below.
+        trace_media_native_stage(
+            component="media_family",
+            stage="model_construct_begin",
+            generation=runtime_generation,
+            screen=display_identity,
+        )
         config = MediaPresentationConfig.from_widgets_mapping(widgets_config)
         style = MediaPresentationStyle.project(config, shadow_values)
         model = MediaPresentationModel(
@@ -621,21 +631,54 @@ class MediaFamilyAdapter:
             MediaArtworkImageProvider(),
             runtime_generation=runtime_generation,
         )
+        trace_media_native_stage(
+            component="media_family",
+            stage="model_construct_complete",
+            generation=runtime_generation,
+            screen=display_identity,
+        )
         # The one media card consumes three neutral leases, each injected into
         # the same model by its own service spec. All are required: a missing
         # lease fails the card closed rather than presenting a half-wired card.
         for lease_widget_id in ("media", "spotify_volume", "mute_button"):
-            if not _attach_runtime_service(
+            trace_media_native_stage(
+                component=lease_widget_id,
+                stage="lease_attach_begin",
+                generation=runtime_generation,
+                screen=display_identity,
+            )
+            attached = _attach_runtime_service(
                 runtime_manager, lease_widget_id, model, widgets_config
-            ):
+            )
+            trace_media_native_stage(
+                component=lease_widget_id,
+                stage="lease_attach_complete",
+                generation=runtime_generation,
+                screen=display_identity,
+                detail="ok=%s" % attached,
+            )
+            if not attached:
                 # Retire any leases already owned for this card before failing
                 # closed, so a partial build never leaves an orphaned lease.
                 for owned in ("media", "spotify_volume", "mute_button"):
                     runtime_manager.retire_widget_service(owned)
                 return None
-        return RetainedMediaPresentation(
+        trace_media_native_stage(
+            component="media_family",
+            stage="retained_item_construct_begin",
+            generation=runtime_generation,
+            screen=display_identity,
+        )
+        retained = RetainedMediaPresentation(
             host=host, model=model, geometry=geometry
         )
+        trace_media_native_stage(
+            component="media_family",
+            stage="retained_item_construct_complete",
+            generation=runtime_generation,
+            screen=display_identity,
+        )
+        return retained
 
 
 def default_ordinary_family_adapters() -> tuple[OrdinaryFamilyAdapter, ...]:
