@@ -612,6 +612,21 @@ def main(*, entrypoint: str = "main"):
         steam_trace=logging_profile.steam_trace,
         diagnostic_build=diagnostic_build,
     )
+    # Route Qt/QML engine messages (binding TypeErrors, missing properties,
+    # shader/component errors) into a bounded, rotating screensaver_qml.log.
+    # These emit through Qt's own stderr channel, invisible to the Python log
+    # pipeline; capture them always so QML issues are diagnosable from files,
+    # not just the console. Console output is preserved.
+    try:
+        from core.logging.qt_message_capture import install_qt_message_capture
+
+        _qml_capture_path = install_qt_message_capture(get_log_dir())
+        logger.info(
+            "[QT_CAPTURE] QML/Qt message capture active at %s",
+            _qml_capture_path or "unavailable",
+        )
+    except Exception:
+        logger.debug("[QT_CAPTURE] Failed to install QML/Qt message capture", exc_info=True)
     diagnostic_record = None
     diagnostic_close = None
     if diagnostic_build:
