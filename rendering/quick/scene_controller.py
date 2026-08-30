@@ -1175,32 +1175,12 @@ class QuickSceneController(QObject):
             str(detail or ""),
         )
 
-    def _request_background_surface_continuity(self, reason: str) -> bool:
-        """Reassert the retained background for one native/same-scene boundary.
-
-        Surface telemetry proved focus swaps and first context-menu opens occur
-        with a stable image identity and no scene-graph invalidation.  They can
-        nevertheless trigger a fresh native composition frame.  Request exactly
-        one background sync plus one window update so that frame redraws current
-        retained content; never create another surface, image owner, or cadence.
-        """
-
-        background = self._background_item
-        if background is None or not self._readiness.admission_open:
-            return False
-        if not background.request_surface_refresh():
-            return False
-        self._window.update()
-        self._trace_surface_event(
-            "background_surface_refresh_requested",
-            probe_frames=2,
-            detail=f"reason={str(reason)}",
-        )
-        return True
-
     def _on_window_active_changed(self) -> None:
+        # Passive telemetry only. The former event-driven background redraw on
+        # activation was a black-flash experiment that did not improve the
+        # focus/menu flash and is removed; the flash lives below the retained
+        # scene (native/presentation), not in this item's redraw cadence.
         self._trace_surface_event("window_active_changed", probe_frames=3)
-        self._request_background_surface_continuity("window_active_changed")
 
     def _on_window_visible_changed(self) -> None:
         self._trace_surface_event("window_visible_changed", probe_frames=3)
@@ -1208,7 +1188,6 @@ class QuickSceneController(QObject):
     def _on_context_menu_visibility_changed(self, visible: bool) -> None:
         event = "context_menu_visible" if visible else "context_menu_hidden"
         self._trace_surface_event(event, probe_frames=3)
-        self._request_background_surface_continuity(event)
 
     def _on_scene_graph_initialized(self) -> None:
         self._publish_readiness(
