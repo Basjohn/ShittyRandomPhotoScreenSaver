@@ -811,7 +811,6 @@ class RetainedClockPresentation:
         fade_opacity: float = 1.0,
         on_mode_toggle: Callable[[str], None] | None = None,
     ) -> None:
-        self._host = host
         self._model = model
         self._display_bounds = display_bounds
         self._display_identity = str(display_identity)
@@ -938,7 +937,7 @@ class RetainedClockPresentation:
             self.set_display_mode(target_mode)
 
     def retire(self) -> bool:
-        return self._host.retire_widget(self._retained)
+        return self._retained.retire()
 
 
 __all__ = [

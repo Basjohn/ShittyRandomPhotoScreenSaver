@@ -316,7 +316,8 @@ H must prove enough to safely establish sole Quick production authority:
 - one intended `WidgetRuntimeManager`/service owner chain;
 - image + transition routing through Quick APIs;
 - retained ordinary families admitted once;
-- G input/CUSTOM/auxiliary/context attached once;
+- G input/CUSTOM/auxiliary/context attached once, including same-item ordinary cross-display transfer when the target has no
+  preconstructed routed-family presentation;
 - exactly one product-level visualizer owner is admitted across participating displays; its controller constructs/configures/
   starts/advances without a QWidget host;
 - canonical technical settings reach the one shared BeatEngine or controller-owned authored-logical state according to actual

@@ -457,6 +457,24 @@ class QuickSceneController(QObject):
 
         self.custom_layout_overlay.model.refresh()
 
+    def transfer_ordinary_widget_to(
+        self,
+        target: "QuickSceneController",
+        model_identity: str,
+    ) -> bool:
+        """Move one retained ordinary presentation to another existing scene."""
+
+        source_host = self.ordinary_widget_host
+        presentation = source_host.presentation_for_model_identity(model_identity)
+        if presentation is None:
+            raise RuntimeError(
+                f"source scene has no retained ordinary presentation: {model_identity!r}"
+            )
+        return source_host.transfer_widget_to(
+            presentation,
+            target.ordinary_widget_host,
+        )
+
     def clear_custom_layout_session(self) -> None:
         """Remove transient edit state without recreating family presentations."""
 

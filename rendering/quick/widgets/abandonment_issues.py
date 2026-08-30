@@ -662,7 +662,6 @@ class RetainedAbandonmentIssuesPresentation:
         fade_opacity: float = 0.0,
         on_settings_requested: Callable[[str], Any] | None = None,
     ) -> None:
-        self._host = host
         self._model = model
         self._on_settings_requested = on_settings_requested
         self._retained: RetainedOverlayWidget = host.create_family_widget(
@@ -769,7 +768,7 @@ class RetainedAbandonmentIssuesPresentation:
         self._model.notify_fade_complete()
 
     def retire(self) -> bool:
-        return self._host.retire_widget(self._retained)
+        return self._retained.retire()
 
 
 __all__ = [

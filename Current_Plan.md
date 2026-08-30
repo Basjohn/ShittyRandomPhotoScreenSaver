@@ -11,7 +11,8 @@ The documentation is reconciled through independently audited pushed source plus
 b826ee74 (retained context-menu population + existing-owner action routing landed on pushed main)
 d1523bd5 (one manager-admitted production Quick visualizer owner + existing frame-pacer synchronization landed on pushed main)
 b7c5c2d2 (one manager-generation Quick CUSTOM owner + committed startup hydration landed on pushed main)
-current bounded checkpoint: ordinary-family per-instance effective monitor-route admission
+81b8518b (ordinary-family per-instance effective monitor-route admission landed on pushed main)
+current bounded checkpoint: routed ordinary CUSTOM same-item cross-display transfer
 True-F focused gate: 7/7 GREEN
 Settings-overhaul focused reconciliation: 154/154 GREEN
 H destination profile: 60/60 target-isolated GREEN
@@ -313,9 +314,11 @@ The family/runtime destination integration already landed and test-gated include
   global `CustomLayoutSession`, binds each existing display overlay plus the cross-display scene coordinator, and owns working
   X, independent Clock variants, family size payloads, uniform/viewport visualizer resize, committed geometry/position/monitor,
   authored reset, Enter/Escape and layout-slot commit/cancel semantics. Startup rehydrates committed CUSTOM rect/payload truth
-  before presentation, and visualizer transfer retargets the same synchronization owner without moving or duplicating logical
-  runtime/cadence authority. Save/reset request the existing manager-identity-fenced rebuild; Cancel restores the same retained
-  items without persistence or recreation.
+  before presentation. A numbered-route ordinary family now moves its one retained presentation between the existing scene
+  hosts during cross-display edit (no prebuilt target duplicate); Cancel moves that same item back and Save persists the new
+  monitor for the fenced rebuild. Visualizer transfer retargets the same synchronization owner without moving or duplicating
+  logical runtime/cadence authority. Save/reset request the existing manager-identity-fenced rebuild; Cancel restores the same
+  retained items without persistence or recreation.
 
 ### H geometry resolution — DECIDED (option A) and BUILT, GREEN, pushed
 

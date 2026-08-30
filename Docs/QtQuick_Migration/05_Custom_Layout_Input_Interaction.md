@@ -18,7 +18,8 @@ H production attachment is owned exactly once by `QuickCustomLayoutOwner` at the
 retained items from each `QuickDisplayUnit`, binds the existing per-display overlay and one cross-display coordinator, and
 persists through the neutral contract helpers. It never calls `CustomLayoutManager`, constructs edit screenshots, or creates
 another family/service/visualizer owner. The existing Quick input owner routes Enter/Escape, and layout-slot actions commit or
-cancel the same active session before their ordinary Settings mutation.
+cancel the same active session before their ordinary Settings mutation. For a numbered-route ordinary family, the coordinator
+reparents its one retained presentation between the existing ordinary scene hosts; it does not require a hidden target copy.
 
 ## Geometry variants
 
@@ -115,6 +116,10 @@ current bounded corrections are owned by `G4_Post_Checkpoint_Audit_Corrections_D
 One live pixel owner: resolve target -> detach source presentation -> target adopts/reprojects -> logical runtime/model
 survives -> target-local active-variant rect -> session display update. No simultaneous source/target copies and no
 silent overwrite of unrelated target variants.
+
+The H production owner now enforces this literally for routed ordinary families: the same retained QML item changes host,
+Cancel returns that item to its source host, and Save leaves it on the selected host until the manager-identity-fenced rebuild
+constructs the next generation from the persisted monitor route. Provider/service ownership is not duplicated during edit.
 
 Retained move requests include proposed global rect and actual pointer position. Python owns screen-choice threshold,
 clamp, snap guides and monitor route. Visualizer transfer preserves snapshot bridge/logical render identity while the
