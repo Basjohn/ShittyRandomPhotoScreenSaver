@@ -940,6 +940,24 @@ class QuickSceneController(QObject):
             self._visualizer_root.setProperty("presentationActive", bool(active))
             self._sync_custom_layout_visualizer()
 
+    def request_visualizer_present(self) -> bool:
+        """Mark the retained visualizer item dirty for one retained sync.
+
+        The GUI-side presentation request from ``QuickVisualizerPresentationSync``
+        after a NEW logical revision is published to the bridge. ``set_presentation``
+        alone only dirties the item when geometry/style change, so successive
+        logical revisions at unchanged presentation would never re-run
+        ``updatePaintNode`` and the retained node would sync once and then freeze.
+        This requests exactly one retained sync opportunity when there is genuinely
+        newer state to consume; it owns no clock, cadence, timer or queue.
+        """
+
+        item = self._visualizer_item
+        if item is None:
+            return False
+        item.update()
+        return True
+
     def quiesce_for_retirement(self) -> None:
         """Close state admission; item deletion waits for legal invalidation."""
 

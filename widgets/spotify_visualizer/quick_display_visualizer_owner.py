@@ -210,9 +210,26 @@ class QuickDisplayVisualizerOwner:
             self._controller,
             resolve_presentation=self._resolve_current_presentation,
             commit_presentation=self._apply_resolved_presentation,
+            request_present=self._request_retained_present,
         )
         self._bound = True
         return self._render_identity
+
+    def _request_retained_present(self) -> None:
+        """Request one retained visualizer sync after a new revision is published.
+
+        Wired into QuickVisualizerPresentationSync so each successful publication
+        of a fresh logical revision marks the retained item dirty even when
+        presentation geometry is unchanged; without it the retained render node
+        synced once and then froze while logical cadence stayed healthy (observed
+        in the 08_30_RuntimeSwap_03_37 run: sync_count=1, render/draw in the
+        thousands). This targets the current presentation runtime so it follows a
+        CUSTOM presentation transfer.
+        """
+
+        if self._retired:
+            return
+        self._presentation_runtime.scene_controller.request_visualizer_present()
 
     def set_playing(self, playing: bool) -> None:
         """Apply canonical Media playback truth to logical + source owners."""
