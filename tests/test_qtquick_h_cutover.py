@@ -17,7 +17,9 @@ from PySide6.QtCore import QObject, QPoint, QRect, QSize
 from PySide6.QtGui import QPixmap
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+import engine.engine_handlers as engine_handlers_module
 import engine.display_manager as display_manager_module
+import engine.screensaver_engine as screensaver_engine_module
 from engine.display_manager import DisplayManager
 from rendering.custom_layout_session import (
     CustomLayoutKey,
@@ -156,6 +158,23 @@ def test_display_manager_has_no_legacy_presenter_compatibility_surface() -> None
         "spotify_visualizer_widget",
         "quiesce_for_runtime_pause",
         "set_processed_image",
+    ):
+        assert retired_token not in source
+
+
+def test_engine_callers_have_no_legacy_presenter_or_custom_owner_import() -> None:
+    source = "\n".join(
+        (
+            inspect.getsource(engine_handlers_module),
+            inspect.getsource(screensaver_engine_module),
+        )
+    )
+    for retired_token in (
+        "DisplayWidget",
+        "rendering.display_widget",
+        "CustomLayoutManager",
+        "rendering.custom_layout_manager",
+        "suppress_pointer_input_globally",
     ):
         assert retired_token not in source
 

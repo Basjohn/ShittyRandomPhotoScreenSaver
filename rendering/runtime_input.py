@@ -15,6 +15,63 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 
+_pointer_input_suppressed_until_ts = 0.0
+_pointer_input_suppression_reason = ""
+
+
+def suppress_runtime_pointer_input(
+    duration_ms: int = 700,
+    *,
+    reason: str = "",
+) -> None:
+    """Arm the process-wide pointer guard across a runtime replacement."""
+
+    global _pointer_input_suppressed_until_ts
+    global _pointer_input_suppression_reason
+
+    duration_sec = max(0.0, float(duration_ms) / 1000.0)
+    _pointer_input_suppressed_until_ts = max(
+        _pointer_input_suppressed_until_ts,
+        time.monotonic() + duration_sec,
+    )
+    _pointer_input_suppression_reason = str(reason or "").strip()
+
+
+def clear_runtime_pointer_input_suppression() -> None:
+    """Clear the replacement pointer guard (primarily for deterministic tests)."""
+
+    global _pointer_input_suppressed_until_ts
+    global _pointer_input_suppression_reason
+
+    _pointer_input_suppressed_until_ts = 0.0
+    _pointer_input_suppression_reason = ""
+
+
+def runtime_pointer_input_is_suppressed(
+    source: str,
+    *,
+    screen_index: int | str = "?",
+) -> bool:
+    """Return whether one pointer event belongs to the replacement guard window."""
+
+    deadline = float(_pointer_input_suppressed_until_ts or 0.0)
+    if deadline <= 0.0:
+        return False
+    now = time.monotonic()
+    if now >= deadline:
+        clear_runtime_pointer_input_suppression()
+        return False
+    logger.debug(
+        "[INPUT_GUARD] Suppressed %s on screen=%s during runtime recreation "
+        "(reason=%s, remaining_ms=%.1f)",
+        source,
+        screen_index,
+        _pointer_input_suppression_reason or "unspecified",
+        max(0.0, (deadline - now) * 1000.0),
+    )
+    return True
+
+
 class RuntimeInputOwner(QObject):
     """Own shared runtime hotkeys and exit gestures for any presentation host."""
 
@@ -205,6 +262,8 @@ class RuntimeInputOwner(QObject):
         event: QMouseEvent,
         global_ctrl_held: bool = False,
     ) -> bool:
+        if self._should_suppress_runtime_pointer_input("mousePressEvent"):
+            return True
         ctrl_mode_active = self.is_ctrl_mode_active() or bool(global_ctrl_held)
         self._mouse_press_pos = self._local_mouse_point(event)
         self._mouse_press_time = time.time()
@@ -226,6 +285,8 @@ class RuntimeInputOwner(QObject):
         event: QMouseEvent,
         global_ctrl_held: bool = False,
     ) -> bool:
+        if self._should_suppress_runtime_pointer_input("mouseMoveEvent"):
+            return True
         if self._context_menu_active:
             return False
         if (
@@ -250,12 +311,16 @@ class RuntimeInputOwner(QObject):
         _event: QMouseEvent,
         global_ctrl_held: bool = False,
     ) -> bool:
+        if self._should_suppress_runtime_pointer_input("mouseReleaseEvent"):
+            return True
         del global_ctrl_held
         self._mouse_press_pos = None
         self._mouse_press_time = 0.0
         return False
 
     def handle_mouse_double_click(self, _event: QMouseEvent) -> bool:
+        if self._should_suppress_runtime_pointer_input("mouseDoubleClickEvent"):
+            return True
         if self._context_menu_active:
             return False
         self.next_image_requested.emit()
@@ -269,6 +334,12 @@ class RuntimeInputOwner(QObject):
 
     def set_exiting(self, exiting: bool) -> None:
         self._exiting = bool(exiting)
+
+    def _should_suppress_runtime_pointer_input(self, source: str) -> bool:
+        return runtime_pointer_input_is_suppressed(
+            source,
+            screen_index=getattr(self, "screen_index", "?"),
+        )
 
     def cleanup(self) -> None:
         if self._ctrl_held:

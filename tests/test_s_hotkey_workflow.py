@@ -333,11 +333,6 @@ def test_settings_request_cancels_active_custom_layout_session_before_stop(monke
 
     calls: list[str] = []
 
-    class _ActiveManager:
-        def cancel_session(self):
-            calls.append("cancel_session")
-            return True
-
     class _FakeDialog:
         def __init__(self, *_args, **_kwargs):
             calls.append("dialog_init")
@@ -347,7 +342,11 @@ def test_settings_request_cancels_active_custom_layout_session_before_stop(monke
             return 0
 
     engine = SimpleNamespace(
-        display_manager=SimpleNamespace(displays=[], cleanup=lambda: calls.append("display_cleanup")),
+        display_manager=SimpleNamespace(
+            displays=[],
+            cleanup=lambda: calls.append("display_cleanup"),
+            cancel_custom_layout_session=lambda: calls.append("cancel_session") or True,
+        ),
         resource_manager=None,
         settings_manager=SimpleNamespace(),
         _display_initialized=False,
@@ -361,8 +360,11 @@ def test_settings_request_cancels_active_custom_layout_session_before_stop(monke
     monkeypatch.setattr(engine_handlers, "AnimationManager", lambda **kwargs: object())
     guard_calls: list[tuple[int, str]] = []
     monkeypatch.setattr(
-        "rendering.display_widget.DisplayWidget.suppress_pointer_input_globally",
-        classmethod(lambda cls, duration_ms=700, reason="": guard_calls.append((int(duration_ms), str(reason)))),
+        engine_handlers,
+        "suppress_runtime_pointer_input",
+        lambda duration_ms=700, reason="": guard_calls.append(
+            (int(duration_ms), str(reason))
+        ),
     )
 
     class _Coordinator:
@@ -377,16 +379,8 @@ def test_settings_request_cancels_active_custom_layout_session_before_stop(monke
         lambda: _Coordinator(),
     )
 
-    monkeypatch.setattr(
-        "rendering.custom_layout_manager.CustomLayoutManager.is_any_session_active",
-        classmethod(lambda cls: True),
-    )
-    monkeypatch.setattr(
-        "rendering.custom_layout_manager.CustomLayoutManager.active_manager",
-        classmethod(lambda cls: _ActiveManager()),
-    )
-
     engine_handlers.on_settings_requested(engine)
+    assert "cancel_session" in calls
     assert guard_calls == [(700, "settings_display_recreation")]
 
 
@@ -396,8 +390,11 @@ def test_custom_layout_reload_arms_pointer_guard(monkeypatch, qt_app):
     guard_calls: list[tuple[int, str]] = []
     load_calls: list[str] = []
     monkeypatch.setattr(
-        "rendering.display_widget.DisplayWidget.suppress_pointer_input_globally",
-        classmethod(lambda cls, duration_ms=700, reason="": guard_calls.append((int(duration_ms), str(reason)))),
+        engine_handlers,
+        "suppress_runtime_pointer_input",
+        lambda duration_ms=700, reason="": guard_calls.append(
+            (int(duration_ms), str(reason))
+        ),
     )
 
     class _Coordinator:

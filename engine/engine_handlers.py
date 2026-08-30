@@ -30,7 +30,7 @@ from core.settings.capability_activation import (
     is_transition_activated,
     normalize_transition_capability_state,
 )
-from rendering.display_widget import DisplayWidget
+from rendering.runtime_input import suppress_runtime_pointer_input
 from ui.settings_dialog import SettingsDialog
 
 if TYPE_CHECKING:
@@ -184,8 +184,8 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
 def request_settings_requested(engine: ScreensaverEngine) -> None:
     """Queue Settings admission after the emitting display input frame returns.
 
-    Destroying the display graph synchronously inside ``DisplayWidget``'s key
-    event / Qt signal stack is undefined native ownership. Script builds can
+    Destroying the display graph synchronously inside a destination window's
+    key event / Qt signal stack is undefined native ownership. Script builds can
     appear to tolerate it while frozen PySide builds terminate in Qt. Carry
     only primitive runtime identity into a zero-delay engine-owned callback,
     then validate that identity before invoking the existing teardown owner.
@@ -298,13 +298,12 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
     engine._sources_changed_during_settings = False
 
     try:
-        from rendering.custom_layout_manager import CustomLayoutManager
-
-        if CustomLayoutManager.is_any_session_active():
-            logger.info("Settings requested during active CUSTOM edit session; cancelling session before teardown")
-            active_manager = CustomLayoutManager.active_manager()
-            if active_manager is not None:
-                active_manager.cancel_session()
+        manager = engine.display_manager
+        if manager is not None and manager.cancel_custom_layout_session():
+            logger.info(
+                "Settings requested during active CUSTOM edit session; "
+                "cancelled session before teardown"
+            )
     except Exception:
         logger.debug("Failed to cancel CUSTOM edit session before settings", exc_info=True)
 
@@ -622,7 +621,7 @@ def _restart_after_settings_dialog_destroyed(
     except Exception:
         logger.debug("Coordinator cleanup after settings failed", exc_info=True)
 
-    DisplayWidget.suppress_pointer_input_globally(
+    suppress_runtime_pointer_input(
         700,
         reason="settings_display_recreation",
     )
@@ -850,7 +849,7 @@ def _restart_after_custom_runtime_destroyed(engine: ScreensaverEngine) -> None:
             exc_info=True,
         )
 
-    DisplayWidget.suppress_pointer_input_globally(
+    suppress_runtime_pointer_input(
         700,
         reason="custom_layout_runtime_reload",
     )
