@@ -175,6 +175,7 @@ def test_engine_callers_have_no_legacy_presenter_or_custom_owner_import() -> Non
         "rendering.display_widget",
         "CustomLayoutManager",
         "rendering.custom_layout_manager",
+        "rendering.multi_monitor_coordinator",
         "suppress_pointer_input_globally",
     ):
         assert retired_token not in source

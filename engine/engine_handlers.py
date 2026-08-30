@@ -315,17 +315,9 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
     except Exception as e:
         logger.debug("[ENGINE] Failed to wake Media runtime from idle: %s", e)
 
-    coordinator = None
-    # Set settings dialog active flag FIRST - this prevents halo from showing
-    try:
-        from rendering.multi_monitor_coordinator import get_coordinator
-        coordinator = get_coordinator()
-        coordinator.set_settings_dialog_active(True)
-    except Exception as e:
-        logger.debug("[ENGINE] Exception suppressed: %s", e)
-
     # Runtime teardown below owns all generation-scoped auxiliary presentation,
-    # including the retained Quick halo and temporary legacy halo scaffolding.
+    # including the retained Quick halo. The engine flag above is the sole
+    # settings-admission truth during teardown/replacement.
 
     # Stop the engine but DON'T exit the app
     _record_diagnostic_stage(
@@ -344,11 +336,6 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
         engine.stop(exit_app=False, reason="settings")
     except Exception:
         engine._settings_dialog_active = False
-        try:
-            if coordinator is not None:
-                coordinator.set_settings_dialog_active(False)
-        except Exception:
-            logger.debug("Coordinator reset after failed Settings teardown failed", exc_info=True)
         logger.critical(
             "[LIFECYCLE] Settings admission aborted because runtime teardown failed",
             exc_info=True,
@@ -612,14 +599,6 @@ def _restart_after_settings_dialog_destroyed(
         generation=getattr(engine, "_runtime_generation", "unknown"),
     )
     engine._settings_dialog_active = False
-    try:
-        from rendering.multi_monitor_coordinator import get_coordinator
-
-        coordinator = get_coordinator()
-        coordinator.set_settings_dialog_active(False)
-        coordinator.cleanup()
-    except Exception:
-        logger.debug("Coordinator cleanup after settings failed", exc_info=True)
 
     suppress_runtime_pointer_input(
         700,
@@ -838,16 +817,6 @@ def _restart_after_custom_runtime_destroyed(engine: ScreensaverEngine) -> None:
 
     if not qt_replacement_may_run(engine):
         return
-    try:
-        from rendering.multi_monitor_coordinator import get_coordinator
-
-        coordinator = get_coordinator()
-        coordinator.cleanup()
-    except Exception:
-        logger.debug(
-            "Coordinator cleanup after custom layout reload failed",
-            exc_info=True,
-        )
 
     suppress_runtime_pointer_input(
         700,

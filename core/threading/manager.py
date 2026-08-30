@@ -295,9 +295,6 @@ def _describe_timer_callable_context(func: Callable) -> dict | None:
             context["parent_screen_index"] = getattr(parent, "screen_index")
         if parent is not None and hasattr(parent, "get_transition_snapshot"):
             context["display_transition"] = parent.get_transition_snapshot()
-        gl_compositor = getattr(parent, "_gl_compositor", None) if parent is not None else None
-        if gl_compositor is not None and hasattr(gl_compositor, "describe_stall_context"):
-            context["compositor"] = gl_compositor.describe_stall_context()
     except Exception:
         logger.debug("[THREADING] Failed to describe timer callable context", exc_info=True)
     try:
@@ -343,41 +340,6 @@ def _should_suppress_large_timer_gap_warning(
         if bool(display_transition.get("running")) or bool(display_transition.get("pending")):
             return True
 
-    compositor = context.get("compositor")
-    if not isinstance(compositor, dict):
-        return False
-
-    if compositor.get("current_transition") or bool(compositor.get("has_frame_state")):
-        return True
-
-    render_strategy = compositor.get("render_strategy")
-    timer_state = None
-    if isinstance(render_strategy, dict):
-        timer = render_strategy.get("timer")
-        if isinstance(timer, dict):
-            timer_state = timer.get("state")
-
-    if not isinstance(display_transition, dict):
-        return False
-
-    last_transition = display_transition.get("last_transition")
-    idle_age = display_transition.get("idle_age")
-    try:
-        idle_age_ms = max(0.0, float(idle_age) * 1000.0) if idle_age is not None else None
-    except Exception:
-        idle_age_ms = None
-
-    # Suppress the first resumed dedicated-timer tick after a transition if most
-    # of the measured gap clearly belonged to the transition-owned cadence window.
-    if (
-        last_transition
-        and timer_state in {"PAUSED", "IDLE"}
-        and idle_age_ms is not None
-        and gap_ms > max(100.0, float(interval_ms) * 2.0)
-        and idle_age_ms <= min(500.0, gap_ms * 0.25)
-    ):
-        return True
-
     return False
 
 
@@ -396,16 +358,6 @@ def _classify_large_timer_gap_warning(context: dict | None) -> str:
     if isinstance(display_transition, dict):
         if bool(display_transition.get("running")) or bool(display_transition.get("pending")):
             return "display_transition_starvation"
-
-    compositor = context.get("compositor")
-    if isinstance(compositor, dict):
-        if compositor.get("current_transition") or bool(compositor.get("has_frame_state")):
-            return "compositor_transition_starvation"
-        render_strategy = compositor.get("render_strategy")
-        if isinstance(render_strategy, dict):
-            timer = render_strategy.get("timer")
-            if isinstance(timer, dict) and timer.get("state") in {"RUNNING", "PAUSED"}:
-                return "compositor_cadence_starvation"
 
     return "unknown_ui_thread_stall"
 
