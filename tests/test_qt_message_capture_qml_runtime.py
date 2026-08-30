@@ -7,7 +7,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QCoreApplication, QUrl
+from PySide6.QtCore import QCoreApplication, QEventLoop, QTimer, QUrl
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 
 from core.logging.qt_message_capture import (
@@ -33,6 +33,16 @@ def test_real_qml_warning_reaches_always_on_sidecar(tmp_path):
         b'import QtQml\nQtObject { Component.onCompleted: console.warn("SRPSS_QML_CAPTURE_PROBE") }',
         QUrl("inline:qt_message_capture_probe.qml"),
     )
+    # The inline type loader compiles asynchronously; a real event loop (driven by
+    # statusChanged), not processEvents(), is required before create() can succeed.
+    if component.status() == QQmlComponent.Status.Loading:
+        loop = QEventLoop()
+        component.statusChanged.connect(lambda _status: loop.quit())
+        QTimer.singleShot(5000, loop.quit)
+        loop.exec()
+    assert component.status() == QQmlComponent.Status.Ready, [
+        error.toString() for error in component.errors()
+    ]
     obj = component.create()
     assert obj is not None, [error.toString() for error in component.errors()]
 

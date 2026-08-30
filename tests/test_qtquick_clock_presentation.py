@@ -462,7 +462,7 @@ def test_quick_window_gives_clock_double_tap_first_refusal_before_next_fallback(
         geometry=OverlayWidgetGeometry(10.0, 10.0, 100.0, 80.0),
         display_bounds=OverlayWidgetGeometry(0.0, 0.0, 160.0, 160.0),
         display_identity="screen:a",
-        on_mode_toggle=toggles.append,
+        on_mode_toggle=lambda mode, _geometry, _size: toggles.append(mode),
     )
     input_controller.next_image_requested.connect(
         lambda: next_requests.append(True)
@@ -725,7 +725,7 @@ def test_clock_family_caller_projects_settings_through_current_scene_host(qt_app
                 ),
                 display_bounds=OverlayWidgetGeometry(0.0, 0.0, 1000.0, 700.0),
                 display_identity=display_signature,
-                on_mode_toggle=lambda mode, wid=widget_id: toggles.append((wid, mode)),
+                on_mode_toggle=lambda mode, _geometry, _size, wid=widget_id: toggles.append((wid, mode)),
             )
             presentation.activate(object())
             presentations.append(presentation)

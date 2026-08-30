@@ -15,7 +15,10 @@ from PySide6.QtQuick import QQuickItem
 
 from core.reddit_preparation import RedditPost
 from rendering.quick.scene_controller import QuickSceneFactory
-from rendering.quick.widgets.family_binder import MediaFamilyAdapter, RedditFamilyAdapter
+from rendering.quick.widgets.family_binder import (
+    MediaFamilyAdapter,
+    default_ordinary_family_adapters,
+)
 from rendering.quick.widgets.host import OrdinaryWidgetPresentationHost, OverlayWidgetGeometry
 
 
@@ -111,18 +114,25 @@ def test_reddit_family_has_a_product_url_opener_and_routes_admitted_click(qt_app
     """A retained Reddit click must leave the family through a real product action seam.
 
     ``RetainedRedditPresentation`` already owns URL admission and an
-    ``on_open_requested`` callback seam. Production family assembly currently
-    leaves that callback as ``None``. This test deliberately does not assert MC
-    vs SCR implementation details; the callback supplied by production remains
-    responsible for choosing direct desktop open vs the established helper queue.
+    ``on_open_requested`` callback seam. The bar exercises the exact production
+    composition path — ``default_ordinary_family_adapters`` threading the
+    destination-owner callback that ``DisplayManager`` supplies — rather than a
+    bare adapter, because the adapter must NOT self-synthesize a URL launcher (a
+    duplicate opener authority). It does not assert MC vs SCR implementation
+    details; the injected callback remains responsible for choosing direct
+    desktop open vs the established helper queue.
     """
 
     owner = QObject()
     factory = QuickSceneFactory(owner)
     context, root, host = _host(factory, owner)
     presentation = None
+    fake_opener = _ProductUrlOpener()
     try:
-        adapter = RedditFamilyAdapter()
+        adapters = default_ordinary_family_adapters(
+            reddit_open_requested=lambda _widget_id, url: fake_opener(url),
+        )
+        adapter = next(a for a in adapters if a.family_id == "reddit")
         presentation = adapter.build(
             widget_id="reddit",
             widgets_config={
@@ -142,15 +152,10 @@ def test_reddit_family_has_a_product_url_opener_and_routes_admitted_click(qt_app
         )
         assert presentation is not None
 
-        # This assertion is intentionally RED on 4f33981: production assembly
-        # never supplies the callback even though the presentation exposes it.
+        # Production composition must thread a usable product opener all the way
+        # into the retained presentation. The adapter itself never fabricates one.
         opener = presentation._on_open_requested
-        assert callable(opener), "Production Reddit family has no product URL opener"
-
-        # Avoid launching a browser/helper from the test while still proving the
-        # retained semantic path invokes its product-action seam exactly once.
-        fake_opener = _ProductUrlOpener()
-        presentation._on_open_requested = fake_opener
+        assert callable(opener), "Production Reddit family composition supplied no product URL opener"
 
         presentation.activate()
         presentation.apply_input_state(
