@@ -55,11 +55,6 @@ class QuickWindowPolicy:
     always_on_top: bool = True
     accepts_focus: bool = True
     blank_cursor: bool = True
-    # Whether the window forces native activation (requestActivate) when it first
-    # becomes visible. Physical [QUICK_SURFACE] evidence ties the Display-1 flash
-    # to native ``window_active_changed`` transitions on the secondary window, so
-    # this is an operator-gated A/B lever, not a default behaviour change.
-    proactively_activate: bool = True
 
     def flags(self) -> Qt.WindowType:
         flags = Qt.WindowType.FramelessWindowHint

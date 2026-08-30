@@ -360,7 +360,7 @@ class QuickDisplayWindow(QQuickWindow):
         if not visible or not self._desired_visible or self._close_queued:
             return
         self.raise_()
-        if self._policy.accepts_focus and self._policy.proactively_activate:
+        if self._policy.accepts_focus:
             self.requestActivate()
 
     def _apply_screen_geometry(self, screen: QScreen) -> None:
