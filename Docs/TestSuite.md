@@ -630,7 +630,7 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_lanczos_scaling.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_open_meteo_provider.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_resource_manager.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_resource_metrics.py` | **KEEP** | Retain; no migration-specific retirement identified. |
+| `tests/test_resource_metrics.py` | **KEEP — H semantic ownership** | Retain detached accounting plus lifecycle ownership proof; display facts come only from the bounded Quick `DisplayManager` snapshot and fail loud/unavailable when that contract is absent. |
 | `tests/test_rss_behavior.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_rss_startup_budget.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_source_head.py` | **KEEP** | Retain; no migration-specific retirement identified. |

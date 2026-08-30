@@ -1,10 +1,24 @@
 from __future__ import annotations
 
 import json
+import inspect
 import logging
 from types import MappingProxyType, SimpleNamespace
 
 from core.performance import resource_metrics
+
+
+def test_display_ownership_accounting_has_no_physical_host_probes():
+    source = inspect.getsource(resource_metrics._display_ownership_summary)
+    for retired_token in (
+        "_gl_compositor",
+        "spotify_visualizer_widget",
+        "_widget_manager",
+        "_custom_layout_manager",
+        "_spotify_bars_overlay",
+        "_fade_coordinator",
+    ):
+        assert retired_token not in source
 
 
 class _Owner:
@@ -278,27 +292,35 @@ def test_lifecycle_detail_is_sidecar_gated_and_summarizes_ownership(
             },
         }
     )
-    fade = SimpleNamespace(
-        _state=SimpleNamespace(name="READY"),
-        _compositor_ready=True,
-        _startup_holds={"critical_gl_startup"},
-    )
-    widget_manager = SimpleNamespace(
-        _widgets={"clock": object(), "spotify_visualizer": object()},
-        _fade_coordinator=fade,
-    )
-    display = SimpleNamespace(
-        _runtime_generation=7,
-        _has_rendered_first_frame=True,
-        _gl_compositor=SimpleNamespace(context=lambda: object()),
-        spotify_visualizer_widget=object(),
-        _widget_manager=widget_manager,
+    display_manager = SimpleNamespace(
+        describe_resource_ownership=lambda: {
+            "display_manager_id": 123,
+            "by_generation": {
+                "7": {
+                    "display_units": 1,
+                    "quick_runtimes": 1,
+                    "quick_windows": 1,
+                    "runtime_managers": 1,
+                    "family_presentations": 2,
+                    "visualizer_owners": 1,
+                    "first_frames_ready": 1,
+                    "visualizer_identities": [
+                        {
+                            "runtime_generation": 7,
+                            "engine_generation": 17,
+                            "activation_id": 23,
+                            "mode_id": "bubble",
+                        }
+                    ],
+                }
+            },
+        }
     )
     engine = SimpleNamespace(
         _image_cache=None,
         _runtime_generation=7,
         _pending_runtime_destruction_barrier=SimpleNamespace(retiring_generation=6),
-        display_manager=SimpleNamespace(displays=(display,)),
+        display_manager=display_manager,
         resource_manager=resource_manager,
         thread_manager=thread_manager,
         _process_supervisor=None,
@@ -342,8 +364,8 @@ def test_lifecycle_detail_is_sidecar_gated_and_summarizes_ownership(
     assert ownership["thread_manager"]["active_tasks_by_generation"] == {"7": 1, "6": 1}
     assert ownership["tracked_bytes"]["tracked_known_bytes"] == 64
     assert ownership["display"]["by_generation"]["7"]["first_frames_ready"] == 1
-    assert ownership["display"]["by_generation"]["7"]["contexts"] == 1
-    assert ownership["display"]["by_generation"]["7"]["fade_states"] == {"READY": 1}
+    assert ownership["display"]["by_generation"]["7"]["quick_windows"] == 1
+    assert ownership["display"]["by_generation"]["7"]["family_presentations"] == 2
     assert ownership["process"]["total_rss_mb"] == 900.0
     assert ownership["process"]["total_private_commit_mb"] == 3100.0
     assert ownership["process"]["main_private_commit_mb"] == 3000.0
@@ -372,25 +394,19 @@ def test_lifecycle_detail_is_sidecar_gated_and_summarizes_ownership(
     assert "resources_json=[" in caplog.text
 
 
-def test_lifecycle_ownership_summary_tolerates_deleted_qt_like_wrappers():
+def test_lifecycle_ownership_summary_does_not_probe_display_objects(caplog):
     class InvalidDisplay:
         @property
-        def _runtime_generation(self):
-            raise RuntimeError("Internal C++ object already deleted")
-
-        @property
-        def _gl_compositor(self):
-            raise RuntimeError("Internal C++ object already deleted")
-
-        @property
-        def _widget_manager(self):
-            raise RuntimeError("Internal C++ object already deleted")
+        def forbidden(self):
+            raise AssertionError("resource accounting probed a display object")
 
     engine = _engine()
     engine._runtime_generation = 9
     engine.display_manager = SimpleNamespace(displays=(InvalidDisplay(),))
 
-    ownership = resource_metrics.collect_lifecycle_ownership_summary(engine)
+    with caplog.at_level(logging.WARNING, logger="core.performance.resource_metrics"):
+        ownership = resource_metrics.collect_lifecycle_ownership_summary(engine)
 
-    assert ownership["display"]["by_generation"]["9"]["displays"] == 1
-    assert ownership["display"]["by_generation"]["9"]["compositors"] == 0
+    assert ownership["display"]["available"] is False
+    assert ownership["display"]["by_generation"] == {}
+    assert "semantic contract missing" in caplog.text

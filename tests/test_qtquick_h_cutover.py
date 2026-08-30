@@ -373,6 +373,17 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         assert engine.release_count == 0
         assert owner.is_started is True
         assert chosen.runtime.frame_pacer.demands & QuickFrameDemand.VISUALIZER
+        ownership = manager.describe_resource_ownership()["by_generation"]["702"]
+        assert ownership["display_units"] == len(qt_app.screens())
+        assert ownership["visualizer_owners"] == 1
+        assert ownership["visualizer_identities"] == [
+            {
+                "runtime_generation": 702,
+                "engine_generation": 17,
+                "activation_id": 23,
+                "mode_id": "bubble",
+            }
+        ]
         owner_runtime = owner.controller.logical_runtime
         assert owner_runtime is not None and owner_runtime.is_running()
 

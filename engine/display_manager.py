@@ -1999,6 +1999,46 @@ class DisplayManager(QObject):
                 states.append(state)
         return tuple(states)
 
+    def describe_resource_ownership(self) -> dict[str, Any]:
+        """Aggregate Quick-native display ownership for lifecycle sidecars."""
+
+        count_fields = (
+            "display_units",
+            "quick_runtimes",
+            "quick_windows",
+            "runtime_managers",
+            "family_presentations",
+            "visualizer_owners",
+            "first_frames_ready",
+        )
+        by_generation: dict[str, dict[str, Any]] = {}
+        for display in self.displays:
+            snapshot = display.resource_ownership_snapshot(
+                first_frame_ready=(
+                    display.screen_index in self._authoritative_first_frame_screens
+                )
+            )
+            generation_key = str(snapshot["runtime_generation"])
+            counts = by_generation.setdefault(
+                generation_key,
+                {
+                    **{field: 0 for field in count_fields},
+                    "visualizer_identities": [],
+                },
+            )
+            for field in count_fields:
+                counts[field] += int(snapshot[field])
+            identities = snapshot["visualizer_identities"]
+            if isinstance(identities, list):
+                counts["visualizer_identities"].extend(
+                    identities[: 8 - len(counts["visualizer_identities"])]
+                )
+
+        return {
+            "display_manager_id": id(self),
+            "by_generation": by_generation,
+        }
+
     def collect_runtime_retirement_roots(
         self,
     ) -> tuple[list[QObject], list[object]]:
