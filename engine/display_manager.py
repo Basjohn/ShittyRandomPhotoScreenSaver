@@ -149,7 +149,7 @@ class DisplayManager(QObject):
         self._quick_readiness_by_screen: dict[int, QuickSceneReadiness] = {}
         self._quick_visualizer_owner: Any | None = None
         self._quick_visualizer_unit: QuickDisplayUnit | None = None
-        self._quick_visualizer_media_presentation: Any | None = None
+        self._quick_visualizer_media_model: Any | None = None
         self._quick_custom_layout_owner = QuickCustomLayoutOwner(
             settings_manager=settings_manager,
             participants_provider=lambda: tuple(self.displays),
@@ -1305,8 +1305,11 @@ class DisplayManager(QObject):
             )
             presentation = chosen.presenter.presentation_for_widget_id("media")
             if presentation is not None:
+                media_model = getattr(presentation, "model", None)
+                if media_model is None:
+                    raise RuntimeError("Quick Media presentation has no model authority")
                 owner.set_playing(
-                    str(getattr(presentation, "playbackState", "unknown")).lower()
+                    str(getattr(media_model, "playbackState", "unknown")).lower()
                     == "playing"
                 )
             owner.start()
@@ -1353,29 +1356,32 @@ class DisplayManager(QObject):
         presentation = unit.presenter.presentation_for_widget_id("media")
         if presentation is None:
             return
-        changed = getattr(presentation, "stateChanged", None)
+        model = getattr(presentation, "model", None)
+        if model is None:
+            raise RuntimeError("Quick Media presentation has no model authority")
+        changed = getattr(model, "stateChanged", None)
         if changed is None or not hasattr(changed, "connect"):
-            raise RuntimeError("Quick Media presentation has no state-change authority")
+            raise RuntimeError("Quick Media model has no state-change authority")
         changed.connect(self._sync_quick_visualizer_playback)
-        self._quick_visualizer_media_presentation = presentation
+        self._quick_visualizer_media_model = model
         self._sync_quick_visualizer_playback()
 
     def _sync_quick_visualizer_playback(self) -> None:
         owner = self._quick_visualizer_owner
-        presentation = self._quick_visualizer_media_presentation
-        if owner is None or presentation is None:
+        model = self._quick_visualizer_media_model
+        if owner is None or model is None:
             return
         owner.set_playing(
-            str(getattr(presentation, "playbackState", "unknown")).lower()
+            str(getattr(model, "playbackState", "unknown")).lower()
             == "playing"
         )
 
     def _disconnect_quick_visualizer_media_route(self) -> None:
         """Detach the sole retained Media -> visualizer playback action route."""
 
-        presentation = self._quick_visualizer_media_presentation
-        if presentation is not None:
-            changed = getattr(presentation, "stateChanged", None)
+        model = self._quick_visualizer_media_model
+        if model is not None:
+            changed = getattr(model, "stateChanged", None)
             if changed is not None and hasattr(changed, "disconnect"):
                 try:
                     changed.disconnect(self._sync_quick_visualizer_playback)
@@ -1383,7 +1389,7 @@ class DisplayManager(QObject):
                     logger.debug(
                         "[SPOTIFY_VIS] Media route already detached during retirement"
                     )
-        self._quick_visualizer_media_presentation = None
+        self._quick_visualizer_media_model = None
 
     def _release_quick_visualizer_routes(
         self,

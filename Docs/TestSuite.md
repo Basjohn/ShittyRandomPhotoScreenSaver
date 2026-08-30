@@ -370,12 +370,12 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_family_size_policy.py` | **KEEP — MIGRATION PERMANENT / H** | Historical deterministic family preferred-size policies under Option-A geometry. |
 | `tests/test_qtquick_geometry_resolver.py` | **KEEP — MIGRATION PERMANENT / H** | Python outer-rect/anchor/clamp authority; no QML outer-position feedback loop. |
 | `tests/test_qtquick_h_cutover.py` | **KEEP — MIGRATION PERMANENT / H** | H authority-cutover/cardinality/deletion bars, including Quick-only DisplayManager and engine caller source surfaces with no legacy presenter/CUSTOM compatibility branch, one canonical manager-admitted visualizer owner, retained menu/double-click mode actions, hidden-boundary hard join, exact-once engine activation transaction, fresh-target reveal and engine-retirement lifecycle. |
-| `tests/test_qtquick_overlay_preferred_size.py` | **KEEP — MIGRATION PERMANENT / H** | Size-only preferred-content signal contract used by Python geometry ownership. |
+| `tests/test_qtquick_overlay_preferred_size.py` | **KEEP — MIGRATION PERMANENT / H** | Size-only preferred-content signal contract used by Python geometry ownership, including terminal disconnection before retained-item retirement. |
 | `tests/test_qtquick_visualizer_admission.py` | **KEEP — MIGRATION PERMANENT / H** | Exactly one admitted Quick visualizer display owner with requested/hold/fallback policy. |
 | `tests/test_qtquick_visualizer_all_five_owner_chain.py` | **KEEP — MIGRATION PERMANENT / H** | Owner-shaped all-five widget-free destination chain. |
 | `tests/test_qtquick_visualizer_double_click.py` | **KEEP — MIGRATION PERMANENT / H** | Retained visualizer mode-cycle semantic admission before global next-image fallback. |
 | `tests/test_qtquick_visualizer_logical_ownership.py` | **KEEP — MIGRATION PERMANENT / H** | Controller-owned authored logical state/runtime ownership without QWidget host. |
-| `tests/test_qtquick_visualizer_owner_edge.py` | **KEEP — MIGRATION PERMANENT / H** | Thin display/generation visualizer ownership edge, single shared-engine acquire/release and hard retirement semantics. |
+| `tests/test_qtquick_visualizer_owner_edge.py` | **KEEP — MIGRATION PERMANENT / H** | Thin display/generation visualizer ownership edge, single shared-engine acquire/release, hard retirement, and terminal callback release semantics. |
 | `tests/test_qtquick_visualizer_pre_cutover_audit.py` | **KEEP — MIGRATION PERMANENT / H** | Standing source/behavior regression bars from the H pre-cutover audit. |
 | `tests/test_qtquick_visualizer_true_f_gate.py` | **KEEP — MIGRATION PERMANENT / H** | Strong True-F technical-engine/logical/bar-count + exact retained-item consumption gate. |
 
@@ -759,7 +759,7 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_line4_6_pipeline_trace.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_log_throttling.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_prewarm_no_deadlock.py` | **MIGRATION-CRITICAL — G/H** | Rehome display/input/topology behavior to Quick runtime. |
-| `tests/test_s_hotkey_workflow.py` | **MIGRATION-CRITICAL — G/H** | Rehome display/input/topology behavior to Quick runtime. |
+| `tests/test_s_hotkey_workflow.py` | **KEEP — MIGRATION PERMANENT / H** | Real Quick settings-generation retirement/replacement with valid image input; no QWidget visibility assumption or retained old-generation owner. |
 | `tests/test_worker_latency_tuning.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/unit/test_policy_compliance.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 

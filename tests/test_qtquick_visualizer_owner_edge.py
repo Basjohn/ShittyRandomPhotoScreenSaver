@@ -128,6 +128,9 @@ def test_edge_constructs_configures_binds_starts_and_retires(qt_app, monkeypatch
         assert logical.is_running() is False
         assert owner.controller.logical_runtime is None
         assert engine.release_count == 1
+        assert owner._sync is None
+        assert owner._pending_mode_activation is None
+        assert owner._presentation_resolver is None
         # Idempotent.
         assert owner.retire() is False
     finally:

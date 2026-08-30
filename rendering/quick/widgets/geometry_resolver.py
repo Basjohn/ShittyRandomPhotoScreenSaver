@@ -263,6 +263,9 @@ class OverlayGeometryBinding:
         self._geometry_sink = geometry_sink
         self._last_content_size: tuple[float, float] | None = None
         self._current_geometry: OverlayWidgetGeometry | None = None
+        self._preferred_size_signal = None
+        self._preferred_size_callback = None
+        self._retired = False
 
     @property
     def policy(self) -> OverlayGeometryPolicy:
@@ -281,6 +284,8 @@ class OverlayGeometryBinding:
         rectangle is identical to the current one (a technical no-op).
         """
 
+        if self._retired:
+            return None
         size = (float(content_size[0]), float(content_size[1]))
         # A non-positive size means the family has not declared a real preferred
         # size yet; keep any prior size rather than raising, and let a committed
@@ -294,8 +299,40 @@ class OverlayGeometryBinding:
     ) -> OverlayWidgetGeometry | None:
         """Re-anchor against new display bounds (e.g. a topology change)."""
 
+        if self._retired:
+            return None
         self._display_bounds = display_bounds
         return self._reapply()
+
+    def bind_preferred_size_signal(self, signal) -> None:
+        """Own the one QML preferred-size connection for terminal disconnection."""
+
+        if self._retired:
+            raise RuntimeError("cannot bind preferred size after geometry retirement")
+        if self._preferred_size_signal is not None:
+            raise RuntimeError("preferred-size signal is already bound")
+        callback = lambda width, height: self.update_content_size((width, height))
+        signal.connect(callback)
+        self._preferred_size_signal = signal
+        self._preferred_size_callback = callback
+
+    def retire(self) -> bool:
+        """Disconnect QML size publication before the retained item retires."""
+
+        if self._retired:
+            return False
+        self._retired = True
+        signal = self._preferred_size_signal
+        callback = self._preferred_size_callback
+        if signal is not None and callback is not None:
+            try:
+                signal.disconnect(callback)
+            except (RuntimeError, TypeError):
+                pass
+        self._preferred_size_signal = None
+        self._preferred_size_callback = None
+        self._geometry_sink = None
+        return True
 
     def _reapply(self) -> OverlayWidgetGeometry | None:
         # A committed CUSTOM rectangle does not need a content size; anchored
@@ -311,7 +348,10 @@ class OverlayGeometryBinding:
         if geometry == self._current_geometry:
             return None
         self._current_geometry = geometry
-        self._geometry_sink(geometry)
+        geometry_sink = self._geometry_sink
+        if geometry_sink is None:
+            return None
+        geometry_sink(geometry)
         return geometry
 
 
@@ -328,9 +368,7 @@ def connect_overlay_preferred_size(item, binding: OverlayGeometryBinding):
 
     signal = getattr(item, "preferredContentSizeChanged", None)
     if signal is not None and hasattr(signal, "connect"):
-        signal.connect(
-            lambda width, height: binding.update_content_size((width, height))
-        )
+        binding.bind_preferred_size_signal(signal)
     try:
         width = float(item.property("preferredContentWidth") or 0.0)
         height = float(item.property("preferredContentHeight") or 0.0)

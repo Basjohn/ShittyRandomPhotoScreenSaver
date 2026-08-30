@@ -152,6 +152,11 @@ def test_preferred_size_drives_anchored_geometry_through_binding(qt_app) -> None
         assert geometry.x == pytest.approx(1920.0 - expected_w - 30.0)
         assert geometry.y == pytest.approx(30.0)
         assert applied == [geometry]
+
+        assert binding.retire() is True
+        item.preferredContentSizeChanged.emit(999.0, 999.0)
+        assert applied == [geometry]
+        assert binding.retire() is False
     finally:
         host.retire_all()
         factory.deleteLater()

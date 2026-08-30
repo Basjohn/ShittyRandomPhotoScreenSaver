@@ -184,6 +184,8 @@ class QuickDisplayPresenter:
         if self._retired:
             return
         self._retired = True
+        for _widget_id, binding in self._geometry_bindings:
+            binding.retire()
         self._geometry_bindings = []
         binder = self._binder
         self._binder = None

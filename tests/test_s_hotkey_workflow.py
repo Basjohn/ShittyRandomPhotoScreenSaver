@@ -4,18 +4,19 @@ Integration test for S hotkey workflow.
 Tests the complete workflow:
 1. Start screensaver
 2. Press S key
-3. Display windows are HIDDEN (not just cleared)
+3. The current destination generation retires
 4. Settings dialog opens (and is visible)
 5. Close settings
-6. Display windows shown again
+6. Replacement destination windows start
 7. Screensaver resumes
 
-CRITICAL: Display widgets must be hidden when settings open,
-otherwise they cover the dialog with black fullscreen windows!
+CRITICAL: Destination runtimes must retire before settings open, otherwise
+their fullscreen windows can cover the dialog.
 """
 import pytest
 import uuid
 from types import SimpleNamespace
+from PySide6.QtGui import QColor, QImage
 
 from core.settings import SettingsManager
 from engine.screensaver_engine import EngineState
@@ -35,7 +36,9 @@ def engine_with_settings(qt_app, tmp_path):
     test_folder = tmp_path / "images"
     test_folder.mkdir()
     test_image = test_folder / "test.jpg"
-    test_image.write_bytes(b"fake image data")
+    image = QImage(32, 32, QImage.Format.Format_RGB32)
+    image.fill(QColor("#204060"))
+    assert image.save(str(test_image))
     
     # Configure settings
     settings.set('sources.folders', [str(test_folder)])
@@ -61,7 +64,7 @@ def test_s_hotkey_opens_settings_without_crash(engine_with_settings, qt_app, qtb
     This test verifies:
     - AttributeError: '_display_initialized' exists
     - NameError: All imports present
-    - Display windows are HIDDEN (not covering dialog)
+    - Destination windows retire before replacement
     """
     engine, settings = engine_with_settings
     
@@ -76,8 +79,7 @@ def test_s_hotkey_opens_settings_without_crash(engine_with_settings, qt_app, qtb
     assert engine.start(), "Engine should start"
     assert engine._running is True, "Engine should be running"
     
-    # The first-frame poison gate may keep displays hidden when this test's
-    # intentionally invalid image cannot produce an authoritative frame.
+    # Retain the current generation before exercising the full replacement.
     assert engine.display_manager is not None
     old_displays = list(engine.display_manager.displays)
 
@@ -87,7 +89,9 @@ def test_s_hotkey_opens_settings_without_crash(engine_with_settings, qt_app, qtb
     assert engine.display_manager is None
     assert engine._display_initialized is False
     for display in old_displays:
-        assert not display.isVisible(), "Old displays must be closed before settings open"
+        assert display.is_retired, "Old destination runtimes must retire before settings open"
+    old_displays.clear()
+    del display
 
     assert engine._running is False, "Engine should be stopped"
 

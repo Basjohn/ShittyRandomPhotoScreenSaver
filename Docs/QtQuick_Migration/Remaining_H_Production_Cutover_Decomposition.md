@@ -113,6 +113,10 @@ now uses the presentation-neutral input policy consumed by `QuickInputController
 the manager-generation Quick owner. Remaining caller proof is non-engine diagnostics/UI residue followed by caller-dead
 physical-host module/test retirement.
 
+Runtime-shaped settings replacement additionally proved that the visualizer playback route must subscribe to the canonical
+retained Media model, and that terminal owners must disconnect preferred-size/synchronization callbacks before releasing their
+retained presentation. Both now complete through the existing Quick owners without a second service or presenter.
+
 "Coordinated" or "atomic" cutover describes the **finished authority topology**, not the size of one coding session or commit.
 The conversion may span as many explicit checkpoints as needed, including intentionally non-runnable intermediate migration
 states, provided no checkpoint invents two legitimate production authorities or a fake legacy compatibility presenter.

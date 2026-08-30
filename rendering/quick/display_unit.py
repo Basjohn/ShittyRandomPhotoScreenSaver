@@ -288,6 +288,7 @@ class QuickDisplayUnit:
                 raise RuntimeError(
                     "visualizer logical runtime did not join; display retirement blocked"
                 )
+            self._visualizer_owner = None
         self._retired = True
         self._presenter.retire()
         self._runtime.retirement_completed.connect(self._runtime.deleteLater)
