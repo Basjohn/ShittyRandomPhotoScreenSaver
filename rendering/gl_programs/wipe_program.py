@@ -109,19 +109,16 @@ void main() {
             5 = Diagonal TR-BL
         """
         try:
-            from rendering.gl_compositor import WipeDirection
-            if direction == WipeDirection.LEFT_TO_RIGHT:
-                return 0
-            elif direction == WipeDirection.RIGHT_TO_LEFT:
-                return 1
-            elif direction == WipeDirection.TOP_TO_BOTTOM:
-                return 2
-            elif direction == WipeDirection.BOTTOM_TO_TOP:
-                return 3
-            elif direction == WipeDirection.DIAG_TL_BR:
-                return 4
-            elif direction == WipeDirection.DIAG_TR_BL:
-                return 5
+            value = getattr(direction, "value", direction)
+            normalized = str(value or "left_to_right").strip().lower()
+            return {
+                "left_to_right": 0,
+                "right_to_left": 1,
+                "top_to_bottom": 2,
+                "bottom_to_top": 3,
+                "diag_tl_br": 4,
+                "diag_tr_bl": 5,
+            }.get(normalized, 0)
         except Exception as e:
             logger.debug("[MISC] Exception suppressed: %s", e)
         return 0  # Default: LEFT_TO_RIGHT

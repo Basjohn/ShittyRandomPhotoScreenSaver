@@ -19,7 +19,7 @@ from core.logging.logger import (
 )
 
 if TYPE_CHECKING:
-    from widgets.spotify_visualizer_widget import SpotifyVisualizerAudioWorker
+    from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker
 
 logger = get_logger(__name__)
 

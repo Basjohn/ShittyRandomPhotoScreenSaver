@@ -7,7 +7,6 @@ from pathlib import Path
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtGui import QKeyEvent
 
-from rendering.input_handler import InputHandler
 from rendering.quick.input_controller import QuickInputController
 from rendering.quick.runtime import QuickDisplayRuntime
 from rendering.quick.scene_controller import QuickSceneFactory
@@ -41,8 +40,7 @@ def _key_release(key: Qt.Key) -> QKeyEvent:
     )
 
 
-def test_legacy_and_quick_input_share_one_neutral_policy_owner():
-    assert issubclass(InputHandler, RuntimeInputOwner)
+def test_quick_input_uses_the_single_neutral_policy_owner():
     assert issubclass(QuickInputController, RuntimeInputOwner)
 
     neutral_source = (ROOT / "rendering" / "runtime_input.py").read_text(
@@ -113,6 +111,7 @@ def test_legacy_and_quick_input_share_one_neutral_policy_owner():
     ):
         assert forbidden not in quick_source
         assert forbidden not in window_source
+    assert not (ROOT / "rendering" / "input_handler.py").exists()
 
 
 def test_every_retained_double_click_owner_declares_fallback_admission() -> None:

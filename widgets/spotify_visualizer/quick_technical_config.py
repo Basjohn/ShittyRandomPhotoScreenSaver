@@ -17,15 +17,18 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from widgets.spotify_visualizer.runtime_config import compute_energy_boost
-
-
 def _clamp(value: object, minimum: float, maximum: float, default: float) -> float:
     try:
         resolved = float(value)
     except (TypeError, ValueError):
         resolved = float(default)
     return max(float(minimum), min(float(maximum), resolved))
+
+
+def _energy_boost(enabled: bool) -> float:
+    """Resolve the canonical worker energy multiplier for the Quick owner."""
+
+    return 1.18 if enabled else 0.85
 
 
 def _apply_worker_only_technical(
@@ -129,7 +132,7 @@ def apply_controller_technical_config(
     set_energy = getattr(engine, "set_energy_boost", None)
     if not callable(set_energy):
         raise RuntimeError("visualizer BeatEngine has no energy-boost authority")
-    set_energy(compute_energy_boost(dynamic_range_enabled))
+    set_energy(_energy_boost(dynamic_range_enabled))
 
     set_agc = getattr(engine, "set_agc_strength", None)
     if not callable(set_agc):

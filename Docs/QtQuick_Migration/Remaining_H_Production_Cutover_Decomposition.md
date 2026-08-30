@@ -40,9 +40,9 @@ No parallel legacy production manager/presenter is permitted.
 ## 3. Migration source seam
 
 The production `engine/display_manager.py` collection constructor routes selected `QScreen` identities to
-`QuickDisplayUnit`; it must not regain a legacy constructor branch. Caller-dead `DisplayWidget` / old physical-host cleanup,
-tests and source may remain only as deletion scaffolding until step 6 proves they are unreachable. Inspect exact callers rather
-than preserving a stale private-attribute inventory or turning that scaffold into a compatibility surface.
+`QuickDisplayUnit`; it must not regain a legacy constructor branch. Step 6 caller proof is now satisfied and the
+`DisplayWidget` / old physical-host production source is deleted. Inspect exact callers rather than restoring a stale
+private-attribute inventory or turning historical residue into a compatibility surface.
 
 Reuse destination owners that already exist; do not create parallel replacements:
 
@@ -106,6 +106,11 @@ regression evidence.
 5. **Prove readiness/lifecycle/generation replacement** with deterministic/runtime-shaped one- and multi-display tests owned by
    the current H destination profile.
 6. **Delete old physical-host callers and source** once caller proof shows the Quick destination is the only production route.
+
+Step 6 is satisfied in the current H deletion checkpoint: production imports contain no deleted presenter/backend/setup
+module, and the maintained destination profile passes all 60 isolated targets after deletion. Obsolete tests/tools/comments
+that refer only to the removed owner are source-derived I residue under `Current_Plan.md`; they are not a reason to restore
+production compatibility modules.
 
 `DisplayManager` now satisfies step 3 at its boundary: construction, semantic collection operations, retirement-root
 enumeration and cleanup contain no legacy presenter import/branch. Engine settings/CUSTOM/monitor replacement input suppression

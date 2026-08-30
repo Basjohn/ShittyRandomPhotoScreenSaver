@@ -371,18 +371,6 @@ def test_settings_request_cancels_active_custom_layout_session_before_stop(monke
         ),
     )
 
-    class _Coordinator:
-        def set_settings_dialog_active(self, active):
-            calls.append(f"settings_dialog_active:{active}")
-
-        def cleanup(self):
-            calls.append("coordinator_cleanup")
-
-    monkeypatch.setattr(
-        "rendering.multi_monitor_coordinator.get_coordinator",
-        lambda: _Coordinator(),
-    )
-
     engine_handlers.on_settings_requested(engine)
     assert "cancel_session" in calls
     assert guard_calls == [(700, "settings_display_recreation")]
@@ -399,15 +387,6 @@ def test_custom_layout_reload_arms_pointer_guard(monkeypatch, qt_app):
         lambda duration_ms=700, reason="": guard_calls.append(
             (int(duration_ms), str(reason))
         ),
-    )
-
-    class _Coordinator:
-        def cleanup(self):
-            return None
-
-    monkeypatch.setattr(
-        "rendering.multi_monitor_coordinator.get_coordinator",
-        lambda: _Coordinator(),
     )
 
     engine = SimpleNamespace(

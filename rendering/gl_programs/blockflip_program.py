@@ -310,20 +310,20 @@ void main() {
             if direction is None:
                 return (1.0, 0.0)
             
-            # Import here to avoid circular imports
-            from transitions.base_transition import SlideDirection
-            
-            if direction == SlideDirection.LEFT:
+            value = getattr(direction, "value", direction)
+            normalized = str(value or "left").strip().lower()
+
+            if normalized == "left":
                 return (1.0, 0.0)
-            elif direction == SlideDirection.RIGHT:
+            elif normalized == "right":
                 return (-1.0, 0.0)
-            elif direction == SlideDirection.DOWN:
+            elif normalized == "down":
                 return (0.0, 1.0)
-            elif direction == SlideDirection.UP:
+            elif normalized == "up":
                 return (0.0, -1.0)
-            elif direction == SlideDirection.DIAG_TL_BR:
+            elif normalized == "diag_tl_br":
                 return (1.0, 1.0)
-            elif direction == SlideDirection.DIAG_TR_BL:
+            elif normalized == "diag_tr_bl":
                 return (-1.0, 1.0)
         except Exception as e:
             logger.debug("[MISC] Exception suppressed: %s", e)

@@ -7,7 +7,7 @@ Reviewed authority:
 ```text
 G: independently audited and accepted; no active G implementation gate.
 H pre-cutover visualizer destination edge: CLOSED, including the stronger True-F technical/retained-consumer proof.
-CURRENT H: coordinated DisplayManager + engine authority cutover and caller-proven legacy physical-host deletion.
+CURRENT H: caller-proven legacy physical-host source deletion audit; maintained destination profile 60/60 GREEN after deletion.
 Settings GUI/theme: large 2026 overhaul reconciled against current ui/ source in this test-maintenance pass.
 ```
 
@@ -79,9 +79,11 @@ A complete-tree run remains available as a **broad reconciliation diagnostic** d
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
 ```
 
-Until the H physical-host deletion and I residue pass are complete, do not interpret that whole-tree command as a single
-production-authority gate. Classify each red against its actual surviving owner first. After H/I retire legacy tests, the
-complete tree should regain normal broad-gate authority.
+Until the I residue pass reconciles tests/tools for the now-deleted physical host, do not interpret that whole-tree command as
+a single production-authority gate. The post-deletion collection diagnostic currently reaches 2,846 tests and reports 58
+legacy-owner collection errors before one old visualizer module aborts collection; those failures are admitted I inventory,
+not a reason to restore H production modules. After I retires/re-homes them, the complete tree should regain normal broad-gate
+authority.
 
 Do not use a red broad-suite run as the only evidence that the active slice failed. Inspect the exact failure/timeout and run
 the smallest focused gate that can falsify the changed contract.
@@ -216,13 +218,12 @@ The H pre-cutover visualizer correction gate is also closed. The standing destin
 - **True-F** canonical technical cache -> shared BeatEngine/logical state -> bar-count coherence -> exact retained Quick item
   consumption without `SpotifyVisualizerWidget`.
 
-### H — CURRENT: production authority cutover
+### H — CURRENT: physical-host deletion audit
 
-The current implementation task is the coordinated `DisplayManager` + engine authority cutover onto Quick display units and
-caller-proven deletion of the old physical host. "Coordinated/atomic" describes the **finished authority topology**, not one
-uninterrupted coding session or one giant commit. Intermediate migration checkpoints may remain intentionally non-runnable
-and may be committed freely; they must not create a second legitimate production presenter or a fake `DisplayWidget`
-compatibility facade.
+The coordinated `DisplayManager` + engine authority cutover onto Quick display units is complete at the production source
+boundary, and the caller-proven old physical host is deleted in the current checkpoint. "Coordinated/atomic" describes the
+**finished authority topology**, not one uninterrupted coding session or one giant commit. The final H audit must not restore
+a second legitimate production presenter or a fake `DisplayWidget` compatibility facade to satisfy obsolete tests.
 
 Use the `h-destination` runner profile as the bounded regression bar while this conversion proceeds. It contains the current
 Quick display/unit/family/geometry/input/CUSTOM owners, all retained family presentations, the corrected visualizer edge and
@@ -432,7 +433,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_visualizer_preset_transfer.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_visualizer_presets.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_visualizer_reactivity_quality.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
-| `tests/test_visualizer_replay.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
+| `tests/test_visualizer_replay.py` | **RETIRE/REHOME — I** | Imports the removed QWidget replay host; the maintained H profile now uses runtime-shaped Settings replacement and controller-owned cadence/bridge tests instead. Preserve only authored-fidelity assertions that still falsify a destination contract. |
 | `tests/test_visualizer_retired_modes.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_visualizer_runtime_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination runtime-controller contract, including presentation-neutral viewport configuration ownership; retain through cutover. |
 | `tests/test_visualizer_settings_plumbing.py` | **MIGRATION-CRITICAL — H/I (MIXED)** | Registry/settings/shader contracts survive; known mode fallback is current. Retire/rehome old presenter/overlay assertions with their source owner. |

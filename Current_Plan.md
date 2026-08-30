@@ -19,7 +19,8 @@ b49c122c (Quick-only DisplayManager collection/cleanup surface landed on pushed 
 02b5960c (diagnostic-entry/tray physical-host hooks removed on pushed main)
 76940eec (lifecycle resource accounting routed through Quick semantic ownership on pushed main)
 191c2f18 (durable CUSTOM/timer/engine seams detached from legacy host on pushed main)
-current bounded checkpoint: remove final destination imports of caller-dead host helpers
+6aadc06a (final destination imports of caller-dead host helpers removed on pushed main)
+current bounded checkpoint: caller-proven physical-host source deletion; final audit/commit pending
 True-F focused gate: 7/7 GREEN
 Settings-overhaul focused reconciliation: 154/154 GREEN
 H destination profile: 60/60 target-isolated GREEN
@@ -71,7 +72,7 @@ Pre-cutover audit disposition — ALL GREEN (`Docs/QtQuick_Migration/H_Pre_Cutov
   fallback (`rendering/quick/visualizer/double_click_admission.py`; scene controller binds the composed hit test).
 
 Next H boundary:
-- perform the coordinated DisplayManager + engine authority cutover, then caller-proven legacy physical-host deletion (below).
+- finish the current deletion checkpoint audit and land the caller-proven legacy physical-host source removal (below).
 ```
 
 Exact later source always outranks this document. **All of G remains complete, independently audited and accepted. The
@@ -103,7 +104,7 @@ G6      retained input / semantic family actions         CLOSED
 G7      retained context + auxiliary pixels              CLOSED (destination sole aux; legacy = H-scaffolding)
 G8      MC / focus closure                               DETERMINISTIC CLOSED; physical A->B->A matrix = J debt
 G-GATE  independent audit of complete checkpointed G     ACCEPTED
-H       production Quick owner/orchestration cutover     ACTIVE; destination gate 60/60 GREEN, DisplayManager cutover CURRENT
+H       production Quick owner/orchestration cutover     ACTIVE; physical-host deletion checkpoint 60/60 GREEN, audit CURRENT
 I       residue only                                     after H
 J       final installed / physical validation            final
 ```
@@ -414,7 +415,7 @@ Quick synchronization edge. The focused regression gate `tests/test_qtquick_visu
 2-pass/5-fail diagnostic state to **7/7 GREEN** without weakening the assertions. Do not reopen this boundary absent exact source
 regression evidence.
 
-### H PRE-CUTOVER correction gate — CLOSED; DisplayManager cutover CURRENT
+### H PRE-CUTOVER correction gate — CLOSED; physical-host deletion audit CURRENT
 
 The bounded correction route `Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md` is closed: steps 1–7
 below are landed and test-gated (Findings A–F GREEN; see the checkpoint disposition above). The reconciled H destination
@@ -460,7 +461,8 @@ caller-proven deletion — are therefore the remaining H work and are **CURRENT 
    routed through the neutral input policy and manager-generation Quick owner with source gates against legacy imports.
    Retained Media playback truth and terminal presenter callback release are also runtime-shaped through a real settings
    generation replacement. Diagnostic-entry/tray hooks, private resource probes and generic coordinator/compositor callers are
-   gone. Remaining work is final caller-graph proof, broader runtime-shaped proof and physical-host source-tree deletion.
+   gone. The caller-proven physical-host source tree is deleted in the current bounded checkpoint; the maintained destination
+   profile is 60/60 GREEN after deletion. Remaining H work is the final diff/caller audit and pushed-checkpoint verification.
 9. **Runtime-shaped production proof and caller-proven deletion.** Prove one/multiple selected displays, image/transition
    routing, ordinary families, the single admitted visualizer, corrected-G owners, readiness, generation/topology replacement
    and clean retirement; then delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, legacy visualizer host/compositor glue,
@@ -473,8 +475,8 @@ identity. If the destruction barrier proves no overlap is possible, keep the sim
 with a test rather than inventing work.
 
 H remains active; this is a bounded H correction gate, not a new phase and not permission to reopen accepted G or the
-widget-free visualizer logical extraction. The legacy `DisplayWidget` production route may remain temporarily while the gate
-is corrected, but no compatibility work should be added solely to improve the half-migrated legacy product.
+widget-free visualizer logical extraction. The legacy `DisplayWidget` production route and physical presenter have now been
+removed; they must not return as compatibility behavior.
 
 The correction gate is CLOSED. H now proceeds through the DisplayManager/engine cutover in bounded, testable checkpoints.
 "Coordinated" describes the final ownership result, **not** a requirement for one uninterrupted agent session or one giant commit.
