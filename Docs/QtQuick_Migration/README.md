@@ -25,6 +25,7 @@ Live phase/checkpoint status is intentionally not duplicated here; read `Current
 | `Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` | G7/G8 auxiliary/focus closure reference |
 | `Remaining_H_Production_Cutover_Decomposition.md` | H production authority wiring, cardinality, lifecycle and old-host deletion |
 | `H_Post_Cutover_Runtime_Reality_Corrections.md` | bounded H correction/evidence for live retained delivery, transition replacement and visible context-menu reality gate |
+| `H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md` | H restoration of the omitted retained middle-click current-mode preset hotswap contract |
 | `H_Pre_Cutover_Visualizer_Edge_Corrections.md` | **closed audit record** for the pre-cutover visualizer edge findings |
 | `H_True_F_Technical_Closure.md` | **closed follow-up evidence** for technical-config ownership + real retained-consumer proof |
 | `Remaining_J_Final_Installed_Acceptance_Decomposition.md` | J compiled/installed/physical acceptance and closure matrix |

@@ -122,9 +122,9 @@ screensaver_qml.log   direct Qt/QML diagnostic sidecar
 
 The Qt/QML capture is installed before `QApplication` / `QQmlEngine` creation and remains alive through final Qt teardown.
 
-The earlier implementation used `RotatingFileHandler(delay=True)`. A perfectly clean run therefore produced **no sidecar file at all**, even though the main log truthfully said capture was installed. The 16:46 source run demonstrates exactly that shape: main log says capture is active at `screensaver_qml.log`, but the supplied log bundle has no QML file because Qt emitted no message and the delayed handler never opened the path.
+The earlier implementation used `RotatingFileHandler(delay=True)`. A perfectly clean run could therefore produce **no sidecar file at all**, even though capture was installed. That implementation-level ambiguity is retired; do not infer it from a bundle when the sidecar is actually present.
 
-That ambiguity is retired. A successful install now eagerly creates the sidecar and writes a session-start marker; clean and broken runs are distinguishable:
+The 2026-08-30 17:37–17:40 operator sidecar is the intended clean shape: it contains `session_start`, then `session_end` with `messages=0`, `categories={}`, `levels={}` and `write_errors=0`. A successful install now eagerly creates the sidecar and writes session markers, so clean and broken runs are distinguishable:
 
 ```text
 file exists + session_start + 0 Qt messages  -> capture alive, clean Qt/QML plane
@@ -186,17 +186,36 @@ RetainedRedditPresentation.on_open_requested
 This keeps URL admission in the retained model/presentation and product opening policy at the existing product authority. It does not make QML aware of helper/task policy and it does not wait for helper readiness during teardown.
 
 Pure product-action coverage in `tests/test_qtquick_family_product_actions.py` is GREEN in the handoff environment. Real PySide production-family composition plus MC/SCR Windows behavior are **AWAITING TEST VALIDATION** before H3 may be called closed.
-## 7. Clock runtime mode persistence — IMPLEMENTED / AWAITING TEST VALIDATION
+## 7. Clock runtime mode + geometry variants — IMPLEMENTED / AWAITING TEST VALIDATION
 
-The retained presentation already had the semantic mode-toggle callback seam; production composition omitted it. The prepared repair injects a weak generation-fenced callback from `ClockFamilyAdapter` to `DisplayManager` and persists only:
+The physical report was more specific than a missing mode-setting write: after recreation the Clock could keep the requested analogue/digital **mode** but fall back to the wrong outer geometry. Source audit found several parts of the same R-45/R-48 contract had been split during the Quick migration:
+
+1. production composition omitted the retained Clock's semantic mode-toggle persistence callback;
+2. pre-bind CUSTOM hydration selected the Clock geometry variant from shared `display_mode` instead of the effective per-display override;
+3. the live Clock changed its retained item rect directly while the display-owned `OverlayGeometryBinding` still held the previous committed rect, so a later preferred-size publication could replay stale geometry;
+4. the retained variant store remembered only rects, was not seeded with both committed analogue/digital variants, and therefore could lose each variant's independent CUSTOM `font_size`;
+5. a partially-authored layout with only the opposite Clock variant had no deterministic target-mode replay path.
+
+The prepared repair keeps the existing ownership model:
 
 ```text
-widgets.<clock instance>.display_mode_overrides[screen_signature] = normalized_mode
+Clock double-click semantic action
+-> RetainedClockPresentation switches mode
+-> mode-specific retained variant state (rect + font_size)
+-> display-owned OverlayGeometryBinding receives the new committed rect
+-> weak generation-fenced DisplayManager product callback
+-> display_mode_overrides[screen_signature]
+-> when position=Custom and no edit transaction is active:
+   canonical custom_layout[screen][clock][analog|digital]
+      rect + font_size only; never display_mode
 ```
 
-The shared `display_mode` remains the baseline. A runtime double-click on one physical display must not rewrite every Clock or force another display to the same mode.
+At admission, both committed Clock variants are now seeded into the retained variant store. The effective per-display mode selects the active variant. If the requested variant is missing but the opposite CUSTOM variant exists, hydration deterministically derives the target shape around the saved centre using the saved font scale; it does not mutate Settings during hydration. A later live toggle/save can canonicalize that variant through the normal Python persistence owner.
 
-`tests/test_qtquick_family_product_actions.py` pins the neutral persistence transform and is GREEN here. Production QML callback wiring, Settings/CUSTOM recreation and restart persistence remain **AWAITING TEST VALIDATION**.
+The shared `display_mode` remains the authored baseline, QML owns no settings or geometry persistence, and an active CUSTOM edit transaction is never bypassed by a behind-the-session geometry write.
+
+Deterministic coverage now includes `tests/test_qtquick_family_product_actions.py` plus `tests/test_qtquick_clock_custom_variant_geometry.py`. The pure product-action tests are GREEN in the handoff environment; the PySide Clock geometry/composition tests and physical Settings/CUSTOM recreation are **AWAITING TEST VALIDATION**.
+
 ## 8. H4 — Media Play/Pause and seek
 
 Previous/Next work through the same retained card, so generic card input is not the first suspect.
@@ -275,7 +294,24 @@ If seek/progress/glow/volume/mute feature controls are disabled merely because C
 
 Inspect parent enabled state, normal feature dependencies and refresh ordering. Remove only the CUSTOM-derived over-lock; do not force-enable controls whose own semantics legitimately disable them.
 
-## 12. H7 — Exit responsiveness classification
+## 12. H8 — Visualizer middle-click preset hotswap
+
+Historical bug records and pre-Quick source prove a distinct runtime gesture that the current Quick migration contracts did not carry forward:
+
+```text
+middle-click retained Visualizer
+-> next preset in current mode
+-> same-mode activation
+-> wraparound including Custom
+```
+
+This is H because the product interaction is absent, not because its animation needs polish. Historical R-12 additionally proves `Custom` is a user-owned snapshot: runtime cycling must snapshot it on departure and restore it on re-entry. U-10 records that runtime preset writes were deliberately narrowed to `widgets.spotify_visualizer` after broad refreshes could blank Media metadata.
+
+Current Quick source has no middle-button semantic admission for the visualizer and its `request_mode_change()` path intentionally rejects a target equal to the current mode. Restore the behavior through a distinct retained middle-click hit/action seam and same-mode preset activation transaction under the existing visualizer owner/controller/BeatEngine. Do not revive the historical QWidget `WidgetManager`; old source is behavior evidence only.
+
+Detailed route: `Docs/QtQuick_Migration/H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md`.
+
+## 13. H7 — Exit responsiveness classification
 
 Latest clean run shows:
 
@@ -290,13 +326,13 @@ Latest clean run shows:
 
 The action/lifecycle route is no longer a multi-second H blocker in this evidence. Script-only recursive `__pycache__` cleanup consumes visible terminal tail in development. Remeasure window disappearance separately; carry purely developer-housekeeping/performance tail into J/cleanup if windows already dismiss promptly.
 
-## 13. Bubble — J-first unless a deterministic delay seam is proved
+## 14. Bubble — J-first unless a deterministic delay seam is proved
 
 Authored cadence/integration remains healthy while physical response is weak/delayed. Do not tune Bubble during Spectrum or unrelated H fixes. J should correlate playback edge -> source freshness -> logical state -> retained publication -> visible result first.
 
 Preserve good Bubble partial/CUSTOM resizing.
 
-## 14. Close discipline
+## 15. Close discipline
 
 - H source tests are necessary, not sufficient.
 - Every physical H run must inspect `screensaver.log` **and** `screensaver_qml.log`.

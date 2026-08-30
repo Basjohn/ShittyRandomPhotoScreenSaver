@@ -12,12 +12,13 @@ H1 is now closed and H2 is now closed:
 H1a  repeated dual-display Settings/CUSTOM recreation hang     CLOSED
 H1b  terminal Quick retirement / Clock model lifetime          CLOSED
 H2   Media artwork provider identity                            CLOSED
-H3   Reddit retained URL opener                                 CURRENT
-H3b  Clock runtime mode-toggle persistence                      PENDING
+H3   Reddit retained URL opener                                 IMPLEMENTED / AWAITING TEST VALIDATION
+H3b  Clock runtime mode-toggle persistence                      IMPLEMENTED / AWAITING TEST VALIDATION
 H4   Media Play/Pause + seek command semantics                  PENDING
 H5a  CUSTOM Visualizer independent display admission            PENDING
 H5b  Spectrum data saturation + wrong topology                  PENDING
 H6   CUSTOM Settings size-lock scope                            PENDING
+H8   Visualizer middle-click preset hotswap                     PENDING / SOURCE-PROVEN CONTRACT OMISSION
 H7   Exit visible-response/perf classification                  PENDING / likely J after measurement
 ```
 
@@ -112,30 +113,100 @@ Historical artwork fade/presentation quality is **not H2**. Artwork currently ap
 
 ## Active H work — execute in order
 
-### H3 — retained Reddit URL click has no production opener
+### H3 — retained Reddit URL opener
 
-**Status: source-proven composition defect; CURRENT.**
+**Status: implementation prepared in the current replacement pack; AWAITING TEST VALIDATION.**
 
-`RetainedRedditPresentation` already owns URL admission and an `on_open_requested` seam. Production `RedditFamilyAdapter` still constructs it without that callback.
+The source-proven composition hole was real: `RetainedRedditPresentation` already owned URL admission and the `on_open_requested` seam, but production `RedditFamilyAdapter` omitted the callback.
 
-Reconnect the retained semantic action to the existing product-level secure URL authority. Preserve product distinction:
+The prepared repair keeps product consequences outside QML/model/presentation:
 
 ```text
-MC / diagnostic interactive build -> direct desktop URL route
-SCR                           -> existing secure helper/queue route + normal saver exit
+Retained Reddit semantic URL action
+-> RedditFamilyAdapter injected callback
+-> weak generation-fenced DisplayManager route
+-> existing core.windows.secure_url_launcher authority
+-> MC / diagnostic: interactive/direct route
+-> ordinary saver: secure handoff, then normal saver exit only after successful handoff
 ```
 
-Prefer the established `core.windows.secure_url_launcher` product authority rather than reproducing helper policy in QML/model/family code. Helper readiness must not block teardown.
+The adapter callback does not strongly retain `DisplayManager`, does not create another helper/poller/owner, and helper readiness does not gate teardown.
 
-Add a production-family composition regression: an admitted Reddit row reaches the product opener exactly once; rejected/untrusted/interaction-disabled actions do not.
+Prepared deterministic coverage:
 
-### H3b — Clock runtime mode toggle must persist across recreation
+```text
+tests/test_qtquick_family_product_actions.py
+```
 
-**Status: source-proven persistence wiring defect.**
+It proves saver handoff opens exactly once then requests normal exit exactly once, interactive builds do not exit, and failed/empty opens do not trigger exit. The pure product-action subset is GREEN in this environment; the real PySide production-family composition and Windows MC/SCR physical behavior remain operator/agent validation.
 
-`RetainedClockPresentation` already accepts `on_mode_toggle`. Production `ClockFamilyAdapter` currently omits it, so runtime analog/digital toggle changes only the live model. Settings/Edit recreation rebuilds from the old persisted mode and appears to “revert” the user's toggle.
+**Validation gate before H3 closes:**
 
-Wire the existing semantic callback to the current Settings authority without moving persistence into QML. Preserve per-display/per-clock mode semantics already defined by the Clock contract. Add a production composition + recreation persistence regression.
+```text
+1. run tests/test_qtquick_family_product_actions.py
+2. run the relevant retained Reddit / h-destination tests on the real environment
+3. MC: admitted Reddit click opens the URL and keeps MC alive
+4. SCR/source-saver path: admitted click hands off once and exits normally
+5. rejected/untrusted/interaction-disabled URL still does not open
+6. inspect screensaver.log + screensaver_qml.log for unexplained action/QML errors
+```
+
+If those are GREEN, mark H3 CLOSED and continue without redesigning the helper/opening authority.
+### H3b — Clock runtime mode + per-variant CUSTOM geometry
+
+**Status: expanded source-proven repair prepared; AWAITING TEST VALIDATION.**
+
+The latest physical run narrowed the symptom: Clock can retain the requested analogue/digital state yet recreate at the wrong geometry. The migration had split the old R-45/R-48 contract across several seams:
+
+```text
+mode persistence:
+retained Clock action -> production callback -> per-display override
+
+recreation geometry:
+effective per-display mode -> matching CUSTOM geometry variant
+
+live toggle geometry:
+mode-specific rect + font scale -> same display-owned OverlayGeometryBinding
+
+CUSTOM persistence:
+custom_layout[screen][clock][analog|digital] -> rect + font_size only
+```
+
+Prepared repair:
+
+- production Clock callback persists only the target instance's `display_mode_overrides[screen_signature]`;
+- pre-bind hydration uses that same identity-aware effective mode rather than the shared baseline;
+- both committed analogue/digital variant states are seeded into the retained Clock (rect **and** variant-specific CUSTOM `font_size`);
+- live CUSTOM mode switching replaces the display-owned geometry binding's committed rect, preventing later preferred-size publication from replaying the stale prior-mode rect;
+- when an explicit target variant is absent but the opposite CUSTOM variant exists, replay derives a centered/clamped target shape using the saved font scale rather than falling to unrelated authored placement;
+- outside an active edit transaction, a runtime mode toggle canonicalizes the target CUSTOM variant through Python Settings/custom-layout authority; active CUSTOM Save/Cancel is never bypassed;
+- geometry payloads never regain `display_mode` behavior authority.
+
+Prepared deterministic coverage:
+
+```text
+tests/test_qtquick_family_product_actions.py
+tests/test_qtquick_clock_custom_variant_geometry.py
+```
+
+The first is GREEN in this environment. The Clock geometry file requires PySide and is **AWAITING TEST VALIDATION** here.
+
+**Validation gate before H3b closes:**
+
+```text
+1. run both focused Clock/product-action tests plus relevant retained Clock / h-destination tests
+2. dual display: put Clock in CUSTOM at an unmistakable non-default position/scale
+3. give analogue and digital visibly different saved rect/scale variants
+4. double-click only one display and verify the other display/Clock is unchanged
+5. toggle analog -> digital -> analog and require each mode to restore its own rect + scale
+6. Settings recreation preserves effective mode and matching geometry
+7. CUSTOM Save/Continue recreation preserves effective mode and matching geometry
+8. restart/reload preserves the same result
+9. inspect custom_layout: variants contain rect/font_size, never display_mode
+10. inspect screensaver.log + screensaver_qml.log for unexplained Clock/QML errors
+```
+
+If GREEN, mark H3b CLOSED and continue to H4.
 
 ### H4 — Media Play/Pause and seek do not execute; Previous/Next do
 
@@ -217,6 +288,31 @@ Find the secondary disable owner (parent container, stale second lock path, depe
 
 Technical route: `Docs/QtQuick_Migration/H6_Custom_Settings_Lock_Scope_Decomposition_2026-08-30.md`.
 
+### H8 — Visualizer middle-click preset hotswap
+
+**Status: deterministic missing product interaction; historical contract exists, current Quick migration contract omitted it.**
+
+Historical runtime behavior and bug records prove that middle-click on the live Visualizer stepped to the next preset in the **current mode**, including the special user-owned Custom slot. The current Quick input/visualizer contract carried double-click mode cycling but not this separate middle-click preset action. Current `RuntimeInputController.handle_mouse_press()` has only right/left-button product handling, and the retained Quick visualizer admission path has a double-click mode-cycle seam only.
+
+Required product contract:
+
+```text
+middle-click inside active retained Visualizer
+-> advance exactly one preset in the current mode, with wraparound
+-> mode identity does not change
+-> leaving Custom snapshots its exact user-owned payload
+-> returning to Custom restores that payload
+-> no next-image / exit / context-menu side effect
+```
+
+Do not fake this through `request_mode_change()`: the current Quick owner correctly rejects a target equal to the current mode. Add a distinct bounded same-mode preset activation transaction through the existing visualizer owner/controller/BeatEngine and retained presentation path. It must preserve one source/logical runtime/pacer, stale-generation fencing, fresh-frame admission and the existing transition/reveal semantics.
+
+Preset persistence must remain narrow: mutate/persist `widgets.spotify_visualizer` only. Do not trigger a whole-`widgets` refresh; historical evidence already records that broad runtime preset writes could blank Media metadata. Curated preset application uses replace semantics so stale keys from the prior preset cannot bleed into the target.
+
+Work this after H5/H6 source changes to avoid overlapping visualizer-activation churn, but close it before H re-closes.
+
+Technical route: `Docs/QtQuick_Migration/H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md`.
+
 ### H7 — Exit visible-response/performance classification
 
 The current clean run routes Exit immediately and completes the terminal Quick barrier in ~250 ms. Script-mode recursive `__pycache__` cleanup then consumes additional terminal time.
@@ -242,16 +338,17 @@ H closes only when:
 1. H1 reconstruction + terminal-retirement regressions remain GREEN;
 2. H2 artwork provider identity remains GREEN and real artwork remains visible;
 3. Reddit URL actions reach the correct product opener;
-4. Clock runtime mode toggle survives Settings/Edit recreation;
+4. Clock runtime mode toggle and its matching per-mode CUSTOM rect/scale survive Settings/Edit recreation;
 5. Media Play/Pause + seek work on the real provider while Previous/Next remain working;
 6. CUSTOM Visualizer can own a different selected display from Media while non-CUSTOM still follows Media;
 7. Spectrum has non-degenerate data and the correct functional continuous-column representation after switch/recreation;
 8. CUSTOM Settings locks only size-authoring controls;
-9. Exit visible response is measured/understood with clean natural termination;
-10. unexpected `screensaver_qml.log` warnings/errors relevant to these paths are reconciled;
-11. maintained `h-destination` is GREEN after the bounded fixes;
-12. every unresolved ledger row whose phase includes H is closed or explicitly carried to J with evidence;
-13. a short dual-display source-mode smoke is GREEN.
+9. middle-click inside the retained Visualizer hotswaps exactly one preset in-place, including a lossless Custom round-trip, without changing mode or disturbing Media;
+10. Exit visible response is measured/understood with clean natural termination;
+11. unexpected `screensaver_qml.log` warnings/errors relevant to these paths are reconciled;
+12. maintained `h-destination` is GREEN after the bounded fixes;
+13. every unresolved ledger row whose phase includes H is closed or explicitly carried to J with evidence;
+14. a short dual-display source-mode smoke is GREEN.
 
 Only then may I start.
 
@@ -291,4 +388,6 @@ Named J cells include:
 - all-five visualizer eyes-on fidelity after H restores Spectrum data/topology;
 - Bubble visible response/latency without sacrificing BTF or its currently good partial resizing;
 - mixed refresh/DPR, off/wake, A->B->A focus/topology, installed performance tails and clean exit;
+- low-priority CUSTOM/Edit guide visibility: existing grid/guide presentation must actually publish useful snap/alignment guides during editing; do not invent a second layout owner;
+- low-priority Quick-native performance/debug overlay parity if the product affordance is still desired; it must consume read-only current metrics and must not resurrect legacy GL presenter/profiler ownership;
 - **Qt/QML sidecar review as part of physical acceptance**, not console-only inspection.

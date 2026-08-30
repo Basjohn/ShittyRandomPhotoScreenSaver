@@ -325,7 +325,9 @@ class ClockFamilyAdapter:
     def __init__(
         self,
         *,
-        on_mode_toggle: Callable[[str, str, str], None] | None = None,
+        on_mode_toggle: Callable[
+            [str, str, str, OverlayWidgetGeometry, Mapping[str, object]], None
+        ] | None = None,
     ) -> None:
         # Product persistence stays outside the retained presentation. The
         # adapter only binds one already-existing semantic callback into the
@@ -373,8 +375,14 @@ class ClockFamilyAdapter:
         mode_callback = None
         if self._on_mode_toggle is not None:
             mode_callback = (
-                lambda target_mode, wid=widget_id, identity=display_identity: (
-                    self._on_mode_toggle(wid, identity, str(target_mode))
+                lambda target_mode, geometry, size_payload, wid=widget_id, identity=display_identity: (
+                    self._on_mode_toggle(
+                        wid,
+                        identity,
+                        str(target_mode),
+                        geometry,
+                        size_payload,
+                    )
                 )
             )
         return RetainedClockPresentation(
@@ -756,7 +764,9 @@ class MediaFamilyAdapter:
 
 def default_ordinary_family_adapters(
     *,
-    clock_mode_toggle: Callable[[str, str, str], None] | None = None,
+    clock_mode_toggle: Callable[
+        [str, str, str, OverlayWidgetGeometry, Mapping[str, object]], None
+    ] | None = None,
     reddit_open_requested: Callable[[str, str], bool] | None = None,
 ) -> tuple[OrdinaryFamilyAdapter, ...]:
     """Return the explicit ordered ordinary-family adapters currently wired.

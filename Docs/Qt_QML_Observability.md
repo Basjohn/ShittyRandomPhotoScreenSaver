@@ -68,6 +68,8 @@ file exists + messages
 => inspect and classify every migration-relevant warning/error
 ```
 
+The 2026-08-30 17:37–17:40 physical source-mode sidecar is a concrete clean example: `session_start` and `session_end` are present, with `messages=0`, empty category/level maps and `write_errors=0`. An almost-empty file is therefore a successful clean capture, not missing evidence.
+
 ## Record schema
 
 Each Qt/QML message preserves, when available:

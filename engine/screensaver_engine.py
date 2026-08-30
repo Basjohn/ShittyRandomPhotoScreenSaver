@@ -910,7 +910,7 @@ class ScreensaverEngine(QObject):
         display_manager: object,
         runtime_generation: int,
     ) -> None:
-        """Snapshot completion of the existing FadeCoordinator reveal path."""
+        """Snapshot completion of the coordinated retained-Quick reveal path."""
 
         if (
             int(signalled_generation) != int(runtime_generation)

@@ -727,11 +727,21 @@ class ClockPresentationModel(QObject):
         return self._snapshot.style.analog_hand_offset_y
 
 
+@dataclass(frozen=True)
+class ClockGeometryVariantState:
+    """One mode-specific Clock CUSTOM shape plus its resize-derived font scale."""
+
+    geometry: OverlayWidgetGeometry
+    font_size: int
+
+
 class ClockGeometryVariantStore:
-    """Session-owned exact Clock geometry keyed by display and variant."""
+    """Session-owned exact Clock geometry/scale keyed by display and variant."""
 
     def __init__(self) -> None:
-        self._rects: dict[tuple[str, str, str], OverlayWidgetGeometry] = {}
+        self._states: dict[
+            tuple[str, str, str], ClockGeometryVariantState
+        ] = {}
 
     @staticmethod
     def _key(widget_id: str, display_identity: str, variant: object) -> tuple[str, str, str]:
@@ -747,8 +757,23 @@ class ClockGeometryVariantStore:
         display_identity: str,
         variant: object,
         geometry: OverlayWidgetGeometry,
+        *,
+        font_size: int,
     ) -> None:
-        self._rects[self._key(widget_id, display_identity, variant)] = geometry
+        self._states[self._key(widget_id, display_identity, variant)] = (
+            ClockGeometryVariantState(
+                geometry=geometry,
+                font_size=max(8, int(font_size)),
+            )
+        )
+
+    def state_for(
+        self,
+        widget_id: str,
+        display_identity: str,
+        variant: object,
+    ) -> ClockGeometryVariantState | None:
+        return self._states.get(self._key(widget_id, display_identity, variant))
 
     def geometry_for(
         self,
@@ -756,7 +781,8 @@ class ClockGeometryVariantStore:
         display_identity: str,
         variant: object,
     ) -> OverlayWidgetGeometry | None:
-        return self._rects.get(self._key(widget_id, display_identity, variant))
+        state = self.state_for(widget_id, display_identity, variant)
+        return None if state is None else state.geometry
 
 
 def _natural_geometry(config: ClockPresentationConfig) -> tuple[float, float]:
@@ -781,7 +807,7 @@ def _natural_geometry(config: ClockPresentationConfig) -> tuple[float, float]:
     return width, height
 
 
-def _centered_clamped_geometry(
+def derive_clock_variant_geometry(
     current: OverlayWidgetGeometry,
     bounds: OverlayWidgetGeometry,
     config: ClockPresentationConfig,
@@ -809,13 +835,18 @@ class RetainedClockPresentation:
         display_identity: str,
         geometry_store: ClockGeometryVariantStore | None = None,
         fade_opacity: float = 1.0,
-        on_mode_toggle: Callable[[str], None] | None = None,
+        on_mode_toggle: Callable[
+            [str, OverlayWidgetGeometry, Mapping[str, object]], None
+        ] | None = None,
     ) -> None:
         self._model = model
         self._display_bounds = display_bounds
         self._display_identity = str(display_identity)
         self._geometry_store = geometry_store or ClockGeometryVariantStore()
         self._on_mode_toggle = on_mode_toggle
+        self._geometry_commit_handler: (
+            Callable[[OverlayWidgetGeometry], object] | None
+        ) = None
         self._retained = host.create_family_widget(
             "clocks",
             initial_properties={"clockModel": model},
@@ -830,6 +861,7 @@ class RetainedClockPresentation:
             self._display_identity,
             model.config.display_mode,
             geometry,
+            font_size=model.config.font_size,
         )
         self._retained.add_retirement_callback(model.retire)
         self._retained.set_custom_layout_size_payload_handler(
@@ -865,6 +897,7 @@ class RetainedClockPresentation:
             self._display_identity,
             self._model.config.display_mode,
             geometry,
+            font_size=self._model.config.font_size,
         )
 
     def _apply_custom_layout_size_payload(
@@ -872,7 +905,42 @@ class RetainedClockPresentation:
         payload: Mapping[str, object],
     ) -> None:
         font_size = int(payload.get("font_size", self._model.config.font_size))
-        self._model.apply_config(replace(self._model.config, font_size=font_size))
+        if self._model.apply_config(
+            replace(self._model.config, font_size=max(8, font_size))
+        ):
+            self._geometry_store.remember(
+                self._model.config.widget_id,
+                self._display_identity,
+                self._model.config.display_mode,
+                self.geometry,
+                font_size=self._model.config.font_size,
+            )
+
+    def set_geometry_commit_handler(
+        self,
+        handler: Callable[[OverlayWidgetGeometry], object] | None,
+    ) -> None:
+        """Bind the display-owned committed-geometry seam for CUSTOM variants."""
+
+        self._geometry_commit_handler = handler
+
+    def seed_geometry_variant(
+        self,
+        mode: object,
+        geometry: OverlayWidgetGeometry,
+        size_payload: Mapping[str, object] | None = None,
+    ) -> None:
+        """Seed one committed mode-specific CUSTOM state without changing pixels."""
+
+        payload = size_payload if isinstance(size_payload, Mapping) else {}
+        font_size = int(payload.get("font_size", self._model.config.font_size))
+        self._geometry_store.remember(
+            self._model.config.widget_id,
+            self._display_identity,
+            mode,
+            geometry,
+            font_size=max(8, font_size),
+        )
 
     def set_display_mode(self, mode: object) -> bool:
         target = normalize_clock_display_mode(mode)
@@ -885,15 +953,27 @@ class RetainedClockPresentation:
             self._display_identity,
             current_mode,
             current_geometry,
+            font_size=self._model.config.font_size,
         )
-        self._model.set_display_mode(target)
-        target_geometry = self._geometry_store.geometry_for(
+        target_state = self._geometry_store.state_for(
             self._model.config.widget_id,
             self._display_identity,
             target,
         )
-        if target_geometry is None:
-            target_geometry = _centered_clamped_geometry(
+        target_font_size = (
+            self._model.config.font_size
+            if target_state is None
+            else target_state.font_size
+        )
+        self._model.apply_config(
+            replace(
+                self._model.config,
+                display_mode=target,
+                font_size=target_font_size,
+            )
+        )
+        if target_state is None:
+            target_geometry = derive_clock_variant_geometry(
                 current_geometry,
                 self._display_bounds,
                 self._model.config,
@@ -903,8 +983,15 @@ class RetainedClockPresentation:
                 self._display_identity,
                 target,
                 target_geometry,
+                font_size=self._model.config.font_size,
             )
-        self._retained.set_geometry(target_geometry)
+        else:
+            target_geometry = target_state.geometry
+        geometry_commit = self._geometry_commit_handler
+        if geometry_commit is not None:
+            geometry_commit(target_geometry)
+        else:
+            self.set_geometry(target_geometry)
         return True
 
     def toggle_display_mode(self) -> None:
@@ -914,7 +1001,11 @@ class RetainedClockPresentation:
             else "analog"
         )
         if self.set_display_mode(target) and self._on_mode_toggle is not None:
-            self._on_mode_toggle(target)
+            self._on_mode_toggle(
+                target,
+                self.geometry,
+                {"font_size": int(self._model.config.font_size)},
+            )
 
     def apply_config(
         self,
@@ -937,15 +1028,18 @@ class RetainedClockPresentation:
             self.set_display_mode(target_mode)
 
     def retire(self) -> bool:
+        self._geometry_commit_handler = None
         return self._retained.retire()
 
 
 __all__ = [
+    "ClockGeometryVariantState",
     "ClockGeometryVariantStore",
     "ClockPresentationConfig",
     "ClockPresentationModel",
     "ClockPresentationSnapshot",
     "ClockPresentationStyle",
+    "derive_clock_variant_geometry",
     "RetainedClockPresentation",
     "normalize_clock_display_mode",
 ]

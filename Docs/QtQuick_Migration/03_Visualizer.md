@@ -567,7 +567,7 @@ shell.
 Persist/restore whole-size scale and viewport extent as separate values. Edge resize is required for all five current
 modes; no current production mode is a destination opt-out.
 
-## 13A. Product display admission and semantic mode-cycle action
+## 13A. Product display admission and semantic mode/preset actions
 
 The current product admits one visualizer instance. Before construction, Python product orchestration resolves the requested
 monitor against participating Quick display units and committed/CUSTOM display geometry. Exactly one participating display
@@ -578,6 +578,13 @@ non-participating.
 A double-click inside the retained visualizer is a semantic **cycle visualizer mode** action. The visualizer hit region gets
 first refusal before the display-level unhandled-double-click fallback (`next image`). Quick/QML may report the hit; Python
 remains mode-cycle authority.
+
+A middle-click inside that same retained visualizer is a distinct semantic **cycle current-mode preset** action. It advances
+exactly one preset with wraparound while mode identity stays fixed. The Custom slot remains a user-owned snapshot: leaving
+Custom snapshots its exact normalized state, and returning restores it. Python owns preset resolution, same-mode activation and
+persistence; QML/Quick owns only retained hit reporting. Persist only `widgets.spotify_visualizer`, never a broad `widgets`
+refresh that can disturb Media state. Same-mode preset activation uses the existing visualizer controller/BeatEngine/logical
+runtime/presentation owners and may not create a second source, runtime, pacer or presentation owner.
 
 ## 14. Lifecycle
 
@@ -627,6 +634,8 @@ Keep focused proof for:
   existing bridge and are consumed through the real retained Quick item/render-node synchronization path;
 - exactly one product-level visualizer display owner is admitted; no per-display duplicate controller/source owner;
 - retained visualizer double-click mode-cycle precedes the global next-image fallback;
+- retained visualizer middle-click advances exactly one preset without changing mode, with wraparound and lossless Custom snapshot round-trip;
+- preset-cycle persistence is visualizer-subtree-only and same-mode activation preserves one owner/logical runtime/pacer;
 - failed authored-runtime join blocks generation/display retirement;
 - non-zero-origin/non-1-DPR geometry;
 - card/shader alignment;

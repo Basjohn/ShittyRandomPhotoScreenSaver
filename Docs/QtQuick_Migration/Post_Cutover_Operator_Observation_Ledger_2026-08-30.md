@@ -86,7 +86,7 @@ Legend:
 | [ ] | O-031 | J | Header borders/radii inconsistent. | Explain setting-driven differences or remove. |
 | [ ] | O-032 | **H — awaiting validation** | Reddit URLs did not open even in MC. | H3 production opener wiring is prepared in the replacement pack. Validate MC direct-open/no-exit and saver secure-handoff/normal-exit, plus `screensaver_qml.log`, before closing. |
 | [x] | O-033 | preservation | Gmail URL opening works. | Preserve. |
-| [ ] | O-048 | **H — awaiting validation** | Runtime Clock analogue/digital toggle could revert after Settings/Edit recreation because production omitted the persistence callback. | Prepared H3b callback persists only the target Clock/display override. Validate isolation + Settings/CUSTOM recreation + restart before closing. |
+| [ ] | O-048 | **H — awaiting validation** | Clock can preserve analogue/digital state yet recreate at the wrong geometry/scale after Settings/Edit. | H3b now aligns per-display mode selection with the matching CUSTOM variant, seeds independent analogue/digital rect+font states, keeps the display-owned geometry binding coherent during live toggles, and canonicalizes target variants outside active edit transactions. Validate analog↔digital variant restoration + Settings/CUSTOM recreation + restart before closing. |
 
 ## Achievement Pulse
 
@@ -102,12 +102,15 @@ Legend:
 |---|---|---|---|---|
 | [ ] | O-037 | J | OS cursor + retained halo/cursor shape can appear as double cursors. | One coherent visible pointer treatment; same-scene auxiliary ownership remains. |
 | [ ] | O-038 | J | Non-CUSTOM widgets dog-pile; Media/Visualizer overlap rather than using intended adjacent free space. | Ordinary layout should prefer usable adjacent region. CUSTOM committed overlap/cross-display remains legal. |
+| [ ] | O-049 | **J low priority / H conditional** | CUSTOM/Edit currently shows no useful alignment/snap guidelines to the operator. | The retained Quick overlay already has grid/guide visuals and a `set_guides(...)` seam, but current source has no caller of that seam. Preserve as low-priority J interaction parity; if taken up, wire guide publication from the existing Python snap/layout owner rather than inventing another geometry owner. |
+| [ ] | O-050 | **J low priority** | No performance/debug overlay is currently visible. | Preserve as a later operator/debug affordance. Any replacement must be Quick-native/read-only over current metrics and must not resurrect `gl_profiler.py`, QWidget/QRhi/GL presenter ownership, or another rendering surface. |
+| [ ] | O-051 | **H** | Middle-click on the live Visualizer no longer hotswaps to the next preset in the current mode. | H8. Restore retained middle-button semantic admission and a same-mode preset activation transaction. Preserve wraparound, exact Custom snapshot round-trip, narrow `widgets.spotify_visualizer` persistence, one visualizer owner/runtime/pacer, and no next-image/exit/context-menu side effect. |
 
 ## Observability
 
 | State | ID | Phase | Observation | Durable handling / close condition |
 | --- | --- | --- | --- | --- |
-| [x] | O-047 | permanent | Qt/QML diagnostics were previously invisible to Python log review. | Always-on `screensaver_qml.log` is permanent; every physical Quick H/J gate inspects it. Clean runs must still create the file/session markers. |
+| [x] | O-047 | permanent | Qt/QML diagnostics were previously invisible to Python log review. | Always-on `screensaver_qml.log` is permanent; every physical Quick H/J gate inspects it. Latest supplied sidecar proves the clean shape: session markers present, `messages=0`, `write_errors=0`. |
 
 ## Closure use
 

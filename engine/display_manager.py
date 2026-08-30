@@ -8,7 +8,7 @@ import time
 import weakref
 from dataclasses import asdict
 from types import MappingProxyType, SimpleNamespace
-from typing import Any, List, Dict, Optional, Set
+from typing import Any, List, Dict, Optional, Set, Mapping
 from PySide6.QtCore import QObject, Signal, QUrl
 from PySide6.QtGui import QGuiApplication, QScreen, QPixmap, QDesktopServices
 
@@ -31,12 +31,14 @@ from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.custom_layout_hydration import (
     apply_quick_committed_payloads,
     resolve_quick_committed_geometry,
+    resolve_quick_committed_variant_state,
     resolve_quick_custom_entry,
 )
 from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
 from rendering.quick.display_unit import QuickDisplayUnit, create_quick_display_unit
 from rendering.quick.display_processing import DisplayProcessingDescriptor
 from rendering.quick.scene_controller import QuickSceneFactory
+from rendering.quick.startup_reveal import QuickStartupRevealCoordinator
 from rendering.quick.state import (
     QuickSceneReadiness,
     QuickWindowPolicy,
@@ -175,7 +177,9 @@ class DisplayManager(QObject):
         self._authoritative_first_frame_screens: Set[int] = set()
         self._authoritative_first_frame_emitted = False
         self._startup_reveal_screens: Set[int] = set()
+        self._startup_reveal_started = False
         self._startup_reveal_emitted = False
+        self._quick_startup_reveal: QuickStartupRevealCoordinator | None = None
         
         # Phase 3: Multi-display synchronization (lock-free)
         self._transition_ready_queue: Optional[SPSCQueue] = None
@@ -1023,7 +1027,7 @@ class DisplayManager(QObject):
             readiness.ready_for_reveal
             and unit.screen_index in self._authoritative_first_frame_screens
         ):
-            self._on_startup_reveal_completed(unit.screen_index)
+            self._mark_startup_reveal_ready(unit.screen_index)
 
     def _on_quick_runtime_retired(self, screen_index: int) -> None:
         self._retiring_quick_units.pop(int(screen_index), None)
@@ -1121,6 +1125,7 @@ class DisplayManager(QObject):
         self._display_startup_ready_emitted_generation = -1
 
         self._admit_quick_visualizer(pending_displays)
+        self._prepare_quick_startup_reveal(pending_displays)
 
         # Preserve staggered show behavior without processEvents() re-entry.
         # Display registration happens before this loop, so visualizer owner
@@ -1560,6 +1565,8 @@ class DisplayManager(QObject):
             widget_id: str,
             display_identity: str,
             mode: str,
+            geometry: object,
+            size_payload: Mapping[str, object],
         ) -> None:
             manager = manager_ref()
             if (
@@ -1572,6 +1579,8 @@ class DisplayManager(QObject):
                 widget_id,
                 display_identity,
                 mode,
+                geometry=geometry,
+                size_payload=size_payload,
             )
 
         def _open_reddit(widget_id: str, url: str) -> bool:
@@ -1594,12 +1603,17 @@ class DisplayManager(QObject):
         widget_id: str,
         display_identity: str,
         mode: str,
+        *,
+        geometry: object | None = None,
+        size_payload: Mapping[str, object] | None = None,
     ) -> None:
-        """Persist one retained Clock's per-display mode without rebuilding.
+        """Persist one retained Clock's per-display mode and CUSTOM variant.
 
         The shared ``display_mode`` setting remains the authored baseline. Runtime
-        double-click writes only ``display_mode_overrides[screen_signature]`` for
-        the affected Clock instance, preserving mixed analogue/digital displays.
+        double-click writes only the matching screen override. If this Clock is
+        CUSTOM-positioned, the exact target mode rect + resize-derived font scale
+        are committed under that mode's independent geometry variant as well.
+        Behavior never leaks into the geometry payload.
         """
 
         if self._retired:
@@ -1607,22 +1621,127 @@ class DisplayManager(QObject):
         settings = self.settings_manager
         normalized_widget_id = str(widget_id or "")
         identity = str(display_identity or "").strip()
-        if settings is None or normalized_widget_id not in {"clock", "clock2", "clock3"} or not identity:
+        if (
+            settings is None
+            or normalized_widget_id not in {"clock", "clock2", "clock3"}
+            or not identity
+        ):
             return
 
-        from rendering.quick.widgets.clock import normalize_clock_display_mode
-        from core.widget_product_actions import (
-            update_clock_display_mode_override,
+        from PySide6.QtCore import QRect
+
+        from core.widget_product_actions import update_clock_display_mode_override
+        from rendering.custom_layout_contract import (
+            CustomLayoutEntry,
+            canonicalize_screen_layout_bucket,
+            clamp_local_rect_to_bounds,
+            get_screen_signature,
+            load_custom_layout_map,
+            normalize_local_rect,
+            set_screen_layout_entry,
+            write_custom_layout_map,
         )
+        from rendering.quick.widgets.clock import normalize_clock_display_mode
+        from rendering.widget_descriptors import is_custom_position_selected_for_widget
 
         normalized_mode = normalize_clock_display_mode(mode)
-        widgets, changed = update_clock_display_mode_override(
+        widgets, mode_changed = update_clock_display_mode_override(
             settings.get_widgets_map(),
             widget_id=normalized_widget_id,
             display_identity=identity,
             normalized_mode=normalized_mode,
         )
-        if not changed:
+
+        geometry_changed = False
+        if (
+            geometry is not None
+            and is_custom_position_selected_for_widget(normalized_widget_id, widgets)
+        ):
+            # CUSTOM's edit transaction owns working geometry. The edit overlay
+            # normally consumes Clock double-clicks; if one leaks through, do not
+            # bypass Save/Cancel by mutating committed geometry behind the session.
+            if self._quick_custom_layout_owner.is_active:
+                logger.debug(
+                    "[CLOCK] Deferred CUSTOM variant persistence during active edit "
+                    "widget=%s display=%s mode=%s",
+                    normalized_widget_id,
+                    identity,
+                    normalized_mode,
+                )
+            else:
+                live_screen = next(
+                    (
+                        screen
+                        for screen in QGuiApplication.screens()
+                        if get_screen_signature(screen) == identity
+                    ),
+                    None,
+                )
+                if live_screen is None:
+                    logger.warning(
+                        "[CLOCK] Could not resolve display for CUSTOM variant "
+                        "widget=%s display=%s mode=%s",
+                        normalized_widget_id,
+                        identity,
+                        normalized_mode,
+                    )
+                else:
+                    try:
+                        local = clamp_local_rect_to_bounds(
+                            QRect(
+                                int(round(float(getattr(geometry, "x")))),
+                                int(round(float(getattr(geometry, "y")))),
+                                max(1, int(round(float(getattr(geometry, "width"))))),
+                                max(1, int(round(float(getattr(geometry, "height"))))),
+                            ),
+                            live_screen.geometry().size(),
+                        )
+                    except (TypeError, ValueError, AttributeError):
+                        logger.warning(
+                            "[CLOCK] Invalid CUSTOM target geometry "
+                            "widget=%s display=%s mode=%s geometry=%r",
+                            normalized_widget_id,
+                            identity,
+                            normalized_mode,
+                            geometry,
+                        )
+                    else:
+                        custom_map = load_custom_layout_map(widgets)
+                        signature = canonicalize_screen_layout_bucket(
+                            custom_map, live_screen
+                        ) or identity
+                        payload = (
+                            dict(size_payload)
+                            if isinstance(size_payload, Mapping)
+                            else {}
+                        )
+                        payload.pop("display_mode", None)
+                        payload.pop("geometry_variant", None)
+                        if "font_size" in payload:
+                            try:
+                                payload["font_size"] = max(
+                                    8, int(payload["font_size"])
+                                )
+                            except (TypeError, ValueError):
+                                payload.pop("font_size", None)
+                        set_screen_layout_entry(
+                            custom_map,
+                            signature,
+                            normalized_widget_id,
+                            CustomLayoutEntry(
+                                widget_id=normalized_widget_id,
+                                geometry_variant=normalized_mode,
+                                rect=normalize_local_rect(
+                                    local, live_screen.geometry().size()
+                                ),
+                                size_payload=payload,
+                                resize_mode="clock_font",
+                            ),
+                        )
+                        write_custom_layout_map(widgets, custom_map)
+                        geometry_changed = True
+
+        if not mode_changed and not geometry_changed:
             return
 
         settings.set_widgets_map(widgets, emit_change=False)
@@ -1633,7 +1752,9 @@ class DisplayManager(QObject):
         # the next full Settings snapshot is taken.
         self._widgets_config_snapshot = dict(widgets)
         logger.info(
-            "[CLOCK] Persisted Quick per-display mode widget=%s display=%s mode=%s",
+            "[CLOCK] Persisted Quick per-display mode%s "
+            "widget=%s display=%s mode=%s",
+            " + CUSTOM variant" if geometry_changed else "",
             normalized_widget_id,
             identity,
             normalized_mode,
@@ -1727,6 +1848,18 @@ class DisplayManager(QObject):
                         self._widgets_config_snapshot,
                         live_screen,
                         widget_id,
+                    )
+                ),
+                committed_variant_state_resolver=(
+                    lambda widget_id, variant, live_screen=screen: (
+                        resolve_quick_committed_variant_state(
+                            self._widgets_config_snapshot,
+                            live_screen,
+                            widget_id,
+                            geometry_variant=variant,
+                        )
+                        if widget_id in {"clock", "clock2", "clock3"}
+                        else None
                     )
                 ),
             )
@@ -2036,10 +2169,56 @@ class DisplayManager(QObject):
             )
         readiness = self._quick_readiness_by_screen.get(int(screen_index))
         if readiness is not None and readiness.ready_for_reveal:
-            self._on_startup_reveal_completed(int(screen_index))
+            self._mark_startup_reveal_ready(int(screen_index))
 
-    def _on_startup_reveal_completed(self, screen_index: int) -> None:
-        """Publish once after every display's existing FadeCoordinator completes."""
+    def _apply_quick_startup_reveal_opacity(self, opacity: float) -> int:
+        """Apply the one shared ordinary-widget startup scalar to live displays."""
+
+        affected = 0
+        for display in tuple(self.displays):
+            if display.is_retired:
+                continue
+            affected += len(display.presenter.set_family_fade_opacity(opacity))
+        return affected
+
+    def _prepare_quick_startup_reveal(
+        self,
+        pending_displays: list[QuickDisplayUnit],
+    ) -> None:
+        """Prime admitted ordinary families at opacity zero before first show."""
+
+        self._cancel_quick_startup_reveal()
+        generation = int(self._runtime_generation or 0)
+        manager_ref = weakref.ref(self)
+
+        def _opacity_sink(opacity: float) -> int:
+            manager = manager_ref()
+            if (
+                manager is None
+                or manager._retired
+                or int(manager._runtime_generation or 0) != generation
+            ):
+                return 0
+            return manager._apply_quick_startup_reveal_opacity(opacity)
+
+        coordinator = QuickStartupRevealCoordinator(
+            runtime_generation=generation,
+            opacity_sink=_opacity_sink,
+            parent=self,
+        )
+        coordinator.completed.connect(self._on_quick_startup_reveal_finished)
+        self._quick_startup_reveal = coordinator
+        target_count = coordinator.prime()
+        logger.info(
+            "[STARTUP_REVEAL] Primed coordinated ordinary reveal "
+            "generation=%s displays=%d families=%d",
+            generation,
+            len(pending_displays),
+            target_count,
+        )
+
+    def _mark_startup_reveal_ready(self, screen_index: int) -> None:
+        """Start the coordinated reveal once every selected display is ready."""
 
         self._startup_reveal_screens.add(int(screen_index))
         expected = {
@@ -2048,12 +2227,60 @@ class DisplayManager(QObject):
         }
         if (
             self._startup_reveal_emitted
+            or self._startup_reveal_started
             or not expected
             or not expected.issubset(self._startup_reveal_screens)
         ):
             return
+
+        self._startup_reveal_started = True
+        coordinator = self._quick_startup_reveal
+        if coordinator is None:
+            # Defensive no-animation shape: completion must still reflect the
+            # actual readiness gate rather than being emitted per display.
+            self._on_quick_startup_reveal_finished(
+                int(self._runtime_generation or 0)
+            )
+            return
+
+        logger.info(
+            "[STARTUP_REVEAL] Starting coordinated ordinary reveal "
+            "generation=%s displays=%d families=%d",
+            int(self._runtime_generation or 0),
+            len(expected),
+            coordinator.target_count,
+        )
+        coordinator.start()
+
+    def _on_quick_startup_reveal_finished(self, generation: int) -> None:
+        """Publish lifecycle completion only after the shared fade actually ends."""
+
+        if (
+            self._retired
+            or self._startup_reveal_emitted
+            or int(generation) != int(self._runtime_generation or 0)
+        ):
+            return
         self._startup_reveal_emitted = True
-        self.startup_reveal_completed.emit(int(self._runtime_generation or 0))
+        logger.info(
+            "[STARTUP_REVEAL] Coordinated ordinary reveal complete generation=%s",
+            generation,
+        )
+        self.startup_reveal_completed.emit(int(generation))
+
+    def _cancel_quick_startup_reveal(self) -> None:
+        """Retire the generation's shared reveal without false completion."""
+
+        coordinator = self._quick_startup_reveal
+        self._quick_startup_reveal = None
+        if coordinator is None:
+            return
+        try:
+            coordinator.completed.disconnect(self._on_quick_startup_reveal_finished)
+        except (RuntimeError, TypeError):
+            pass
+        coordinator.cancel()
+        coordinator.deleteLater()
     
     def set_process_supervisor(self, supervisor) -> None:
         """Retain the process owner used by admitted generation services."""
@@ -2594,6 +2821,7 @@ class DisplayManager(QObject):
     
     def cleanup(self) -> None:
         """Retire every display generation through its authoritative owner."""
+        self._cancel_quick_startup_reveal()
         self._display_startup_generation += 1
         self._display_startup_ready_expected = set()
         self._display_startup_ready_seen = set()
@@ -2601,6 +2829,7 @@ class DisplayManager(QObject):
         self._authoritative_first_frame_screens.clear()
         self._authoritative_first_frame_emitted = False
         self._startup_reveal_screens.clear()
+        self._startup_reveal_started = False
         self._startup_reveal_emitted = False
         count = len(self.displays)
         logger.info("Cleaning up %d display runtimes", count)
@@ -2668,6 +2897,7 @@ class DisplayManager(QObject):
         if self._retired:
             return
         self._retired = True
+        self._cancel_quick_startup_reveal()
         # Retire the process-scoped CUSTOM failover record with this generation so
         # a stale grace/fallback cannot leak into a replacement generation and a
         # fresh outage arms a fresh grace generation.
