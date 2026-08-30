@@ -71,6 +71,18 @@ class QuickDisplayPresenter:
         return tuple(widget_id for widget_id, _binding in self._geometry_bindings)
 
     def geometry_for(self, widget_id: str) -> OverlayWidgetGeometry | None:
+        """Return the current Python-authored retained outer rectangle.
+
+        Family-owned dynamic geometry (Clock mode variants) can legitimately
+        advance after the initial preferred-size binding.  Read the retained
+        presentation's explicit geometry when it exposes one, then fall back to
+        the binding cache for ordinary static families.
+        """
+
+        presentation = self.presentation_for_widget_id(widget_id)
+        geometry = getattr(presentation, "geometry", None)
+        if isinstance(geometry, OverlayWidgetGeometry):
+            return geometry
         for bound_id, binding in self._geometry_bindings:
             if bound_id == widget_id:
                 return binding.current_geometry
@@ -84,6 +96,34 @@ class QuickDisplayPresenter:
             return None
         return binder.presentation_for_widget_id(widget_id)
 
+    def set_family_fade_opacity(self, opacity: float) -> tuple[str, ...]:
+        """Project one coordinated startup opacity onto every retained family.
+
+        This is intentionally a presentation-only fan-out.  It owns no timing
+        and creates no per-widget animation; the generation-scoped startup
+        reveal coordinator supplies the single scalar.
+        """
+
+        if self._retired:
+            return ()
+        changed: list[str] = []
+        for widget_id in self.bound_widget_ids:
+            presentation = self.presentation_for_widget_id(widget_id)
+            setter = getattr(presentation, "set_fade_opacity", None)
+            if not callable(setter):
+                continue
+            try:
+                setter(float(opacity))
+            except (RuntimeError, TypeError, ValueError):
+                logger.warning(
+                    "[STARTUP_REVEAL] Failed to set family opacity widget=%s",
+                    widget_id,
+                    exc_info=True,
+                )
+                continue
+            changed.append(widget_id)
+        return tuple(changed)
+
     def bind_families(
         self,
         *,
@@ -92,6 +132,10 @@ class QuickDisplayPresenter:
         shadow_values: Mapping[str, object] | None = None,
         thread_manager: Any | None = None,
         committed_rect_resolver: Callable[[str], OverlayWidgetGeometry | None]
+        | None = None,
+        committed_variant_state_resolver: Callable[
+            [str, str], tuple[OverlayWidgetGeometry, Mapping[str, object]] | None
+        ]
         | None = None,
     ) -> tuple[str, ...]:
         """Build and place every admitted family for this display generation."""
@@ -107,6 +151,9 @@ class QuickDisplayPresenter:
             widgets_config if isinstance(widgets_config, Mapping) else {}
         )
         resolve_committed = committed_rect_resolver or (lambda _widget_id: None)
+        resolve_variant_state = committed_variant_state_resolver or (
+            lambda _widget_id, _variant: None
+        )
         host = self._runtime.scene_controller.ordinary_widget_host
         manager = self._runtime.widget_runtime_manager
         display_signature = str(self._runtime.display_identity.screen_key)
@@ -154,11 +201,41 @@ class QuickDisplayPresenter:
                 policy = resolve_overlay_geometry_policy(
                     widget_id, config, committed_rect=resolve_committed(widget_id)
                 )
+            presentation = self.presentation_for_widget_id(widget_id)
+            family_geometry_sink = getattr(presentation, "set_geometry", None)
+            geometry_sink = (
+                family_geometry_sink
+                if callable(family_geometry_sink)
+                else overlay.set_geometry
+            )
             binding = OverlayGeometryBinding(
                 policy=policy,
                 display_bounds=display_bounds,
-                geometry_sink=overlay.set_geometry,
+                geometry_sink=geometry_sink,
             )
+
+            # Clock keeps independent committed analogue/digital rect + font-scale
+            # states. Seed both before interaction so switching mode restores an
+            # already-authored target variant instead of deriving over it.
+            seed_variant = getattr(presentation, "seed_geometry_variant", None)
+            if callable(seed_variant):
+                for variant in ("digital", "analog"):
+                    state = resolve_variant_state(widget_id, variant)
+                    if state is None:
+                        continue
+                    variant_geometry, size_payload = state
+                    seed_variant(variant, variant_geometry, size_payload)
+
+            # For an active committed CUSTOM Clock, dynamic mode switching must
+            # replace this binding's committed rect as well as the pixels. That
+            # keeps later preferred-size publication from replaying the stale
+            # prior-mode rect. Anchored/non-CUSTOM families keep normal policy.
+            set_commit_handler = getattr(
+                presentation, "set_geometry_commit_handler", None
+            )
+            if callable(set_commit_handler) and policy.has_committed_rect:
+                set_commit_handler(binding.set_committed_rect)
+
             # QML reports size only; Python resolves + assigns the outer rect. A
             # committed rect (CUSTOM / Clock per-variant) wins and suppresses this.
             connect_overlay_preferred_size(overlay.item, binding)

@@ -304,6 +304,29 @@ class OverlayGeometryBinding:
         self._display_bounds = display_bounds
         return self._reapply()
 
+    def set_committed_rect(
+        self, committed_rect: OverlayWidgetGeometry | None
+    ) -> OverlayWidgetGeometry | None:
+        """Replace the Python-owned committed rectangle and reapply once.
+
+        Dynamic family variants (currently Clock analogue/digital CUSTOM shapes)
+        must update the same geometry binding that owns preferred-size replay.
+        Otherwise a later implicit-size signal can replay the stale prior variant
+        over pixels that the family changed directly.
+        """
+
+        if self._retired:
+            return None
+        if committed_rect == self._policy.committed_rect:
+            return None
+        self._policy = OverlayGeometryPolicy(
+            widget_id=self._policy.widget_id,
+            anchor=self._policy.anchor,
+            margin=self._policy.margin,
+            committed_rect=committed_rect,
+        )
+        return self._reapply()
+
     def bind_preferred_size_signal(self, signal) -> None:
         """Own the one QML preferred-size connection for terminal disconnection."""
 

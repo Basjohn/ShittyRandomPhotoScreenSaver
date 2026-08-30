@@ -13,6 +13,7 @@ H2 Media artwork provider identity: CLOSED; exact engine-registered provider is 
 H3 Reddit production opener: implementation prepared; AWAITING TEST VALIDATION.
 H3b Clock runtime mode-toggle persistence: implementation prepared; AWAITING TEST VALIDATION.
 H4-H6: pending per Current_Plan.
+H8 Visualizer middle-click preset hotswap: pending; source-proven historical contract omitted from the current Quick interaction contract.
 Qt/QML observability: permanent always-on direct `screensaver_qml.log`; physical Quick gates inspect it alongside the Python log.
 I residue reconciliation: BLOCKED until H re-closes.
 ```
@@ -266,6 +267,7 @@ H4 Media Play/Pause + seek provider-result semantics: pending
 H5a CUSTOM Visualizer independent display admission: pending
 H5b Spectrum upstream saturation + wrong topology: pending
 H6 CUSTOM Settings size-lock scope: pending
+H8 Visualizer middle-click preset hotswap: pending; requires retained middle-button admission + same-mode activation coverage
 H7 exit visible-response/perf classification: pending / likely J if windows dismiss promptly
 ```
 
@@ -290,6 +292,7 @@ Current post-cutover focused additions:
 | `tests/test_qtquick_family_product_actions.py` | **ADDED — H3/H3b + PERMANENT PRODUCT SEMANTICS** | Pins Reddit saver-vs-interactive consequences and per-display Clock mode override persistence. Pure subset GREEN in handoff environment; production PySide composition still needs physical/runtime validation. |
 | `tests/test_settings_eventfilter_teardown_guards.py` | **CLOSED H1b / KEEP** | Late Settings helper events cannot dereference retired targets. |
 | `tests/test_visualizer_custom_route_contract.py` | **PERMANENT ROUTING PIN** | CUSTOM Visualizer owns its monitor; non-CUSTOM follows Media. |
+| H8 focused runtime tests (to add with implementation) | **PENDING H CONTRACT** | Must pin middle-click hit consumption, one-step/wraparound, unchanged mode, Custom -> curated -> Custom exact restoration, subtree-only persistence, no Media mutation, one same-mode activation transaction, active-transition rejection, recreation/restart persistence, and all-five-mode coverage. |
 | `tests/test_custom_resize_lock_scope.py` | **PERMANENT SETTINGS PIN** | Media CUSTOM lock metadata contains size-authoring controls only. |
 
 Qt/QML capture tests are not a substitute for real QML runtime evidence; physical gates must inspect `screensaver_qml.log`.

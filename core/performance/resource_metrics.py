@@ -451,6 +451,21 @@ def _display_ownership_summary(
 ) -> dict[str, Any]:
     """Consume the display orchestrator's bounded Quick ownership contract."""
 
+    if display_manager is None:
+        # Teardown snapshots can legitimately run after engine.display_manager
+        # has been detached while the destruction barrier still owns retiring
+        # roots.  That is not a missing semantic contract and should not produce
+        # a misleading warning during every healthy replacement/exit.
+        logger.debug(
+            "[LIFECYCLE] Display ownership snapshot unavailable: "
+            "no live DisplayManager (already detached)"
+        )
+        return {
+            "available": False,
+            "display_manager_id": None,
+            "by_generation": {},
+        }
+
     getter = _safe_getattr(display_manager, "describe_resource_ownership")
     if not callable(getter):
         logger.warning(
@@ -458,9 +473,7 @@ def _display_ownership_summary(
         )
         return {
             "available": False,
-            "display_manager_id": (
-                id(display_manager) if display_manager is not None else None
-            ),
+            "display_manager_id": id(display_manager),
             "by_generation": {},
         }
     try:

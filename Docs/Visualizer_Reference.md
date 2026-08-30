@@ -327,7 +327,7 @@ top/bottom     -> viewport height
 Viewport resizing is part of the destination CUSTOM contract, not optional QoL and not permission to stretch a
 rendered image. Save/Cancel and layout slots preserve scale and extent separately.
 
-## 14A. Visualizer display admission / semantic mode cycle
+## 14A. Visualizer display admission / semantic mode + preset cycles
 
 Current product semantics admit one visualizer instance. Python orchestration resolves the requested monitor against actual
 participating Quick displays and constructs exactly one visualizer owner. Non-owning displays do not duplicate controller,
@@ -336,6 +336,12 @@ fallback/transfer behavior.
 
 Retained visualizer double-click means cycle visualizer mode. The global display double-click means next image only when no
 retained family/visualizer semantic hit consumes it.
+
+Retained visualizer **middle-click** is a separate runtime action: advance exactly one preset in the current mode, wrapping
+through that mode's curated slots and Custom without changing mode identity. `Custom` is a user-owned snapshot, not an
+ordinary preset payload: leaving it snapshots the exact current Custom state and returning restores that state. Runtime preset
+cycling persists only the visualizer settings subtree and must not refresh unrelated Media/widget state. Quick/QML may report
+the retained hit; Python owns preset resolution, activation and persistence.
 
 ## 14B. Retirement
 

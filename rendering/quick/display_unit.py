@@ -116,6 +116,10 @@ class QuickDisplayUnit:
         thread_manager: Any | None = None,
         committed_rect_resolver: Callable[[str], OverlayWidgetGeometry | None]
         | None = None,
+        committed_variant_state_resolver: Callable[
+            [str, str], tuple[OverlayWidgetGeometry, Mapping[str, object]] | None
+        ]
+        | None = None,
     ) -> tuple[str, ...]:
         """Bind + place this display generation's ordinary families (option A)."""
 
@@ -125,6 +129,7 @@ class QuickDisplayUnit:
             shadow_values=shadow_values,
             thread_manager=thread_manager,
             committed_rect_resolver=committed_rect_resolver,
+            committed_variant_state_resolver=committed_variant_state_resolver,
         )
 
     def reanchor_for_current_bounds(self) -> None:

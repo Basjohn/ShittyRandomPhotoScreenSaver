@@ -256,7 +256,12 @@ Floor:
 
 - no unreadable dog-pile;
 - Media + Visualizer honor their established ordinary free-space relationship where room exists;
-- CUSTOM user geometry wins and may intentionally overlap/cross displays.
+- CUSTOM user geometry wins and may intentionally overlap/cross displays;
+- Edit mode exposes useful alignment/snap guides when relationships are actually available. Current Quick already contains guide presentation seams; this is an outcome to reconnect, not a reason to restore old layout code.
+
+Low-priority diagnostic parity:
+
+- preserve the remembered performance/debug overlay affordance as later Quick-native read-only observability work; no legacy GL profiler/presenter resurrection.
 
 Plus:
 
@@ -280,7 +285,11 @@ When a J cell is unclear:
 
 Do not copy old classes wholesale and “port them later.”
 
-## 8. J close condition
+## 8. Interaction-contract survival sweep
+
+Before J closes, perform one bounded inventory of explicit historical user gestures/affordances against the retained Quick interaction surface: mouse buttons, wheel/resize semantics, double-click actions, context actions, edit guides and diagnostic affordances. This is a **detection guardrail**, not permission to turn every historical mechanism into current architecture. If a valuable deterministic product action is missing, promote it to the smallest owning correction (as H8 does for middle-click preset cycling); if only its presentation/feel is deficient, keep it in J. Obsolete presenter mechanisms remain obsolete.
+
+## 9. J close condition
 
 J is not complete when the program is merely functional or when each card has been independently prettified.
 

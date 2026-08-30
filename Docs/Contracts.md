@@ -181,7 +181,10 @@ stored several ownership classes together.
 Binding or directly draining a render bridge is not delivery proof. The synchronization owner must populate it with a complete,
 identity-fenced snapshot **and the retained visualizer item/node must actually admit that snapshot**. A failed authored-runtime
 join blocks visualizer/display generation retirement. Retained visualizer double-click is semantic mode-cycle input and must be
-admitted before the display-level next-image fallback.
+admitted before the display-level next-image fallback. Retained visualizer middle-click is semantic same-mode preset-cycle
+input: it advances one preset with wraparound, preserves mode identity, snapshots/restores the user-owned Custom slot, and
+persists only `widgets.spotify_visualizer`. It must not become a whole-widget refresh, second visualizer owner, or disguised
+cross-mode request.
 
 Visualizer geometry has two independent persisted dimensions of intent:
 

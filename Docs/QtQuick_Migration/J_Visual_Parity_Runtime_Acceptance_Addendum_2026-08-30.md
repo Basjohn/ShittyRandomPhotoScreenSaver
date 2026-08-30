@@ -173,6 +173,7 @@ These observations are deliberately *not* extra J work:
 - Visualizer refusing its own different CUSTOM display: H routing/admission contract;
 - Spectrum's repeated all-1.00 35-bar payload **and** dense segmented-block topology replacing the intended continuous-column Spectrum/Organ representation: H functional defects until correct data + basic topology are restored;
 - CUSTOM disabling non-size Media controls: H Settings ownership defect.
+- missing Visualizer middle-click current-mode preset hotswap: H8 deterministic interaction restoration, including Custom snapshot semantics; J may later judge transition feel only after the action exists.
 
 J should inherit only the remaining eyes-on/fidelity work after those owners are functionally correct.
 
@@ -188,3 +189,20 @@ J physical acceptance reads `screensaver_qml.log` alongside `screensaver.log`. A
 The sidecar itself must exist even on a zero-message clean run and contain session markers. This is capture-health evidence, not cosmetic logging.
 
 See `Docs/Qt_QML_Observability.md`.
+
+## 13. Low-priority retained operator affordances
+
+These are explicitly preserved so they are not forgotten, but they do **not** reorder the active H blockers.
+
+### CUSTOM/Edit alignment guides
+
+The operator currently sees no useful alignment/snap guidelines in Edit mode. Current Quick source already contains grid/safe-gutter/vertical/horizontal guide presentation and a Python `set_guides(...)` seam, but no production caller currently publishes guide sets into that seam. Treat this as low-priority J interaction parity unless later evidence shows snapping itself is semantically wrong. Reuse the existing Python snap/layout authority; do not add QML geometry truth or a second layout owner.
+
+Acceptance: while moving/resizing an item, useful centre/peer/edge snap relationships visibly appear and clear with the same transaction, without changing Save/Cancel semantics or ordinary non-CUSTOM layout.
+
+### Performance/debug overlay
+
+The operator also reports that the prior performance/debug overlay affordance is absent. Preserve this as low-priority J/diagnostic work. A future overlay may consume bounded read-only metrics already owned by current performance/runtime instrumentation, but must be a retained Quick presentation under the accepted scene and must not resurrect the legacy `gl_profiler.py` rendering path, QWidget/QRhi/GL presenter ownership, another accelerated window, or a new cadence owner.
+
+Acceptance: when explicitly enabled for diagnostics, one lightweight Quick-native overlay shows the agreed useful metrics and disappears cleanly; normal product mode pays no hidden polling/render-owner cost merely because the feature exists.
+

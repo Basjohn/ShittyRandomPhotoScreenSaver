@@ -40,6 +40,7 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | G4 post-checkpoint correction playbook | `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` |
 | G7/G8 auxiliary/focus implementation route | `Docs/QtQuick_Migration/Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` |
 | H production cutover implementation route | `Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md` |
+| H8 retained visualizer middle-click preset hotswap | `Docs/QtQuick_Migration/H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md` |
 | closed H visualizer edge audit evidence | `Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md` |
 | closed True-F technical/retained-consumer evidence | `Docs/QtQuick_Migration/H_True_F_Technical_Closure.md` |
 | J final installed/physical acceptance route | `Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md` |
@@ -50,7 +51,7 @@ reorientation file under `Docs/` unless the operator explicitly asks for a repos
 
 ## Runtime observability
 
-Qt Quick acceptance has two first-class log planes: `screensaver.log` and always-on `screensaver_qml.log`. The latter is direct Qt/QML message-handler evidence and must exist even on a zero-message clean run. Read `Docs/Qt_QML_Observability.md` before changing capture lifetime, sidecar semantics or considering an OS-level stderr redirect.
+Qt Quick acceptance has two first-class log planes: `screensaver.log` and always-on `screensaver_qml.log`. The latter is direct Qt/QML message-handler evidence and must exist even on a zero-message clean run. Read `Docs/Qt_QML_Observability.md` before changing capture lifetime, sidecar semantics or considering an OS-level stderr redirect. Permanent health coverage includes both a fake-handler contract test and a real `QQmlEngine` warning probe (`tests/test_qt_message_capture_qml_runtime.py`).
 
 Physical H/J Quick gates are not fully evidenced by the Python log alone.
 
