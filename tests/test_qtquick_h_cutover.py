@@ -9,6 +9,7 @@ QuickSceneController + runtime controller chain, not a stand-in sink.
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 import inspect
 from types import SimpleNamespace
 
@@ -283,7 +284,7 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
                 "family_activation": {"media": True, "visualizers": True},
                 "clock": {"enabled": False},
                 "weather": {"enabled": False},
-                "media": {"enabled": False},
+                "media": {"enabled": True, "monitor": "ALL"},
                 "reddit": {"enabled": False},
                 "gmail": {"enabled": False},
                 "achievement_pulse": {"enabled": False},
@@ -374,6 +375,16 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         assert chosen.runtime.frame_pacer.demands & QuickFrameDemand.VISUALIZER
         owner_runtime = owner.controller.logical_runtime
         assert owner_runtime is not None and owner_runtime.is_running()
+
+        media_presentation = chosen.presenter.presentation_for_widget_id("media")
+        assert media_presentation is not None
+        media_model = media_presentation.model
+        assert manager._quick_visualizer_media_model is media_model
+        assert engine.playback[-1] is False
+        media_model._replace_snapshot(
+            replace(media_model._snapshot, playback_state="playing")
+        )
+        assert engine.playback[-1] is True
 
         # The retained menu and visualizer-region double-click both route into
         # this exact owner. A zero-duration test clock preserves the real

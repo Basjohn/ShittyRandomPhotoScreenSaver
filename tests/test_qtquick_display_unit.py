@@ -158,6 +158,7 @@ def test_unit_visualizer_owner_is_single_and_blocks_runtime_retirement(qt_app) -
         assert owner.retire_calls == 2
         assert unit.is_retired is True
         assert unit.is_visualizer_participant() is False
+        assert unit.runtime_retirement_roots()[1] == (unit, unit.presenter)
     finally:
         if not unit.is_retired:
             owner.allow_join = True

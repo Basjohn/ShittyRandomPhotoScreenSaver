@@ -585,6 +585,9 @@ class QuickDisplayVisualizerOwner:
             self._engine_acquired = False
         self._retired = True
         self._controller.close_render_admission()
+        self._sync = None
+        self._pending_mode_activation = None
+        self._presentation_resolver = None
         return True
 
 
