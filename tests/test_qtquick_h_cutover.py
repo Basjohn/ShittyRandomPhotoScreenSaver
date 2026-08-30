@@ -9,6 +9,7 @@ QuickSceneController + runtime controller chain, not a stand-in sink.
 from __future__ import annotations
 
 from copy import deepcopy
+import inspect
 from types import SimpleNamespace
 
 import pytest
@@ -16,6 +17,7 @@ from PySide6.QtCore import QObject, QPoint, QRect, QSize
 from PySide6.QtGui import QPixmap
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+import engine.display_manager as display_manager_module
 from engine.display_manager import DisplayManager
 from rendering.custom_layout_session import (
     CustomLayoutKey,
@@ -142,6 +144,20 @@ class _ManagerVisualizerEngine:
 
     def get_perf_diagnostics(self):
         return {}
+
+
+def test_display_manager_has_no_legacy_presenter_compatibility_surface() -> None:
+    source = inspect.getsource(display_manager_module)
+    for retired_token in (
+        "DisplayWidget",
+        "rendering.display_widget",
+        "_gl_compositor",
+        "_custom_layout_manager",
+        "spotify_visualizer_widget",
+        "quiesce_for_runtime_pause",
+        "set_processed_image",
+    ):
+        assert retired_token not in source
 
 
 @pytest.mark.qt

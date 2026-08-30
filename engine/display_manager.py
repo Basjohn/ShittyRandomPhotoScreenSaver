@@ -9,7 +9,7 @@ import weakref
 from dataclasses import asdict
 from types import MappingProxyType
 from typing import Any, List, Dict, Optional, Set
-from PySide6.QtCore import QObject, QSize, Signal, QUrl
+from PySide6.QtCore import QObject, Signal, QUrl
 from PySide6.QtGui import QGuiApplication, QScreen, QPixmap, QDesktopServices
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
@@ -22,7 +22,6 @@ from core.settings.capability_activation import (
 )
 from core.settings.defaults import get_default_settings
 from rendering.display_modes import DisplayMode
-from rendering.display_widget import DisplayWidget
 from rendering.transition_registry import (
     canonicalize_transition_name,
     is_transition_available_for_hw,
@@ -47,7 +46,6 @@ from rendering.quick.transitions.request_resolution import (
     ResolvedQuickTransitionSpec,
     resolve_quick_transition_spec,
 )
-from transitions.overlay_manager import hide_all_overlays
 from utils.lockfree.spsc_queue import SPSCQueue
 
 logger = get_logger(__name__)
@@ -406,7 +404,7 @@ class DisplayManager(QObject):
         self.monitors_changed.emit(new_count)
 
     def _get_allowed_screen_indices(self, screen_count: int) -> set[int]:
-        """Resolve which screen indices should create DisplayWidgets.
+        """Resolve which screen indices should create Quick display units.
 
         Uses the canonical display.show_on_monitors setting:
         - 'ALL' (default) means all screens.
@@ -1545,15 +1543,11 @@ class DisplayManager(QObject):
         
         while len(self.displays) > screen_count:
             display = self.displays.pop()
-            if isinstance(display, DisplayWidget):
-                display.close()
-                display.deleteLater()
-            else:
-                if not isinstance(display, QuickDisplayUnit):
-                    raise RuntimeError("display unit has no retirement contract")
-                self._disconnect_quick_visualizer_media_route()
-                self._begin_quick_unit_retirement(display)
-                self._release_quick_visualizer_routes(display)
+            if not isinstance(display, QuickDisplayUnit):
+                raise RuntimeError("display collection member is not a Quick display unit")
+            self._disconnect_quick_visualizer_media_route()
+            self._begin_quick_unit_retirement(display)
+            self._release_quick_visualizer_routes(display)
             logger.info("Removed excess display runtime")
     
     def _on_exit_requested(self) -> None:
@@ -1567,7 +1561,6 @@ class DisplayManager(QObject):
         return {
             int(getattr(display, "screen_index", position))
             for position, display in enumerate(self.displays)
-            if not isinstance(display, DisplayWidget)
         }
 
     def _reset_quick_transition_batch(self) -> None:
@@ -1768,13 +1761,6 @@ class DisplayManager(QObject):
         owner = self._quick_visualizer_owner
         if owner is not None:
             owner.controller.process_supervisor = supervisor
-        for display in self.displays:
-            if not isinstance(display, DisplayWidget):
-                continue
-            try:
-                display.set_process_supervisor(supervisor)
-            except Exception:
-                logger.debug("Failed to set ProcessSupervisor on display", exc_info=True)
     
     def show_image(self, pixmap: QPixmap, image_path: str = "", 
                    screen_index: Optional[int] = None) -> None:
@@ -1795,8 +1781,6 @@ class DisplayManager(QObject):
             display = self._display_for_screen_index(screen_index)
             if display is None:
                 logger.warning(f"[FALLBACK] Invalid screen index: {screen_index}")
-            elif isinstance(display, DisplayWidget):
-                display.set_image(pixmap, image_path)
             else:
                 self._present_quick_image(
                     display,
@@ -1811,9 +1795,6 @@ class DisplayManager(QObject):
                 if quick_screens and not self._transition_work_pending:
                     self._begin_quick_transition_batch(quick_screens)
                 for display in self.displays:
-                    if isinstance(display, DisplayWidget):
-                        display.set_image(pixmap, image_path)
-                        continue
                     self._present_quick_image(
                         display,
                         pixmap,
@@ -1851,9 +1832,6 @@ class DisplayManager(QObject):
         display = self._display_for_screen_index(screen_index)
         if display is None:
             raise IndexError(f"no selected display for screen index {screen_index}")
-        if isinstance(display, DisplayWidget):
-            display.set_processed_image(processed_pixmap, original_pixmap, image_path)
-            return
         self._present_quick_image(display, processed_pixmap, image_path)
     
     def show_error(self, message: str, screen_index: Optional[int] = None) -> None:
@@ -1866,9 +1844,7 @@ class DisplayManager(QObject):
         """
         if screen_index is not None:
             display = self._display_for_screen_index(screen_index)
-            if isinstance(display, DisplayWidget):
-                display.show_error(message)
-            elif display is not None:
+            if display is not None:
                 logger.error(
                     "[DISPLAY] Runtime error for screen %s: %s",
                     screen_index,
@@ -1876,9 +1852,6 @@ class DisplayManager(QObject):
                 )
         else:
             for display in self.displays:
-                if isinstance(display, DisplayWidget):
-                    display.show_error(message)
-                    continue
                 logger.error(
                     "[DISPLAY] Runtime error for screen %s: %s",
                     getattr(display, "screen_index", "?"),
@@ -1897,14 +1870,7 @@ class DisplayManager(QObject):
     def quiesce_all(self) -> None:
         """Suppress late display/widget work before clear/hide/cleanup proceeds."""
         for display in self.displays:
-            quiesce = getattr(display, "quiesce", None)
-            if callable(quiesce):
-                quiesce()
-                continue
-            legacy_quiesce = getattr(display, "quiesce_for_runtime_pause", None)
-            if not callable(legacy_quiesce):
-                raise RuntimeError("display collection member has no quiesce contract")
-            legacy_quiesce()
+            display.quiesce()
         logger.info("All displays quiesced")
     
     def hide_all(self) -> None:
@@ -1914,16 +1880,9 @@ class DisplayManager(QObject):
         logger.info("All displays hidden")
     
     def show_all(self) -> None:
-        """Show all display widgets (after dialogs close)."""
+        """Show all Quick display windows after dialogs close."""
         for display in self.displays:
-            try:
-                if hasattr(display, "reset_after_settings"):
-                    display.reset_after_settings()
-            except Exception as e:
-                logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
             display.show_on_screen()
-            if isinstance(display, DisplayWidget):
-                hide_all_overlays(display)
         logger.info("All displays shown")
     
     def set_display_mode(self, mode: DisplayMode) -> None:
@@ -1934,9 +1893,6 @@ class DisplayManager(QObject):
             mode: New display mode
         """
         self.display_mode = mode
-        for display in self.displays:
-            if isinstance(display, DisplayWidget):
-                display.set_display_mode(mode)
         logger.info(f"Display mode changed to {mode} for all screens")
     
     def set_same_image_mode(self, enabled: bool) -> None:
@@ -1962,14 +1918,7 @@ class DisplayManager(QObject):
         """
         for display in self.displays:
             try:
-                if not isinstance(display, DisplayWidget):
-                    display.runtime.auxiliary_controller.set_dimming(enabled, opacity)
-                    continue
-                display._dimming_enabled = enabled
-                display._dimming_opacity = opacity
-                comp = getattr(display, "_gl_compositor", None)
-                if comp is not None and hasattr(comp, "set_dimming"):
-                    comp.set_dimming(enabled, opacity)
+                display.runtime.auxiliary_controller.set_dimming(enabled, opacity)
             except Exception as e:
                 logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
         logger.debug("Dimming updated on all %d displays: enabled=%s, opacity=%.0f%%",
@@ -1982,43 +1931,21 @@ class DisplayManager(QObject):
     def snapshot_processing_descriptors(
         self,
     ) -> tuple[DisplayProcessingDescriptor, ...]:
-        """Return immutable per-display inputs without exposing presenter objects.
-
-        During the H conversion the collection still contains ``DisplayWidget``
-        instances. The final Quick collection exposes the same semantic snapshot
-        directly from ``QuickDisplayUnit``. Engine consumers see only this
-        contract; neither presenter is emulated by the other.
-        """
+        """Return immutable per-display inputs without exposing presenter objects."""
 
         targets: list[DisplayProcessingDescriptor] = []
-        for index, display in enumerate(self.displays):
+        for display in self.displays:
             snapshot = getattr(display, "processing_descriptor", None)
-            if callable(snapshot):
-                target = snapshot(self.display_mode)
-                if not isinstance(target, DisplayProcessingDescriptor):
-                    raise TypeError(
-                        "display unit returned an invalid processing-target snapshot"
-                    )
-                targets.append(target)
-                continue
-
-            if not isinstance(display, DisplayWidget):
+            if not callable(snapshot):
                 raise TypeError(
                     "display collection member has no processing-target contract"
                 )
-            pixel_size = display.get_target_size()
-            dpr = float(getattr(display, "_device_pixel_ratio", 1.0))
-            if dpr <= 0.0:
-                raise ValueError("legacy display reported a non-positive DPR")
-            targets.append(
-                DisplayProcessingDescriptor(
-                    screen_index=int(getattr(display, "screen_index", index)),
-                    target_size=QSize(pixel_size),
-                    logical_size=QSize(int(display.width()), int(display.height())),
-                    display_mode=self.display_mode,
-                    device_pixel_ratio=dpr,
+            target = snapshot(self.display_mode)
+            if not isinstance(target, DisplayProcessingDescriptor):
+                raise TypeError(
+                    "display unit returned an invalid processing-target snapshot"
                 )
-            )
+            targets.append(target)
         return tuple(targets)
 
     def has_presented_image(self) -> bool:
@@ -2027,10 +1954,6 @@ class DisplayManager(QObject):
         if self.current_images:
             return True
         for display in self.displays:
-            if isinstance(display, DisplayWidget):
-                if bool(getattr(display, "current_image_path", None)):
-                    return True
-                continue
             runtime = getattr(display, "runtime", None)
             scene = getattr(runtime, "scene_controller", None)
             if scene is not None and getattr(scene, "presentation_image", None) is not None:
@@ -2042,11 +1965,8 @@ class DisplayManager(QObject):
 
         awakened = 0
         for display in self.displays:
-            if isinstance(display, DisplayWidget):
-                runtime_manager = getattr(display, "_widget_runtime_manager", None)
-            else:
-                runtime = getattr(display, "runtime", None)
-                runtime_manager = getattr(runtime, "widget_runtime_manager", None)
+            runtime = getattr(display, "runtime", None)
+            runtime_manager = getattr(runtime, "widget_runtime_manager", None)
             service_getter = getattr(runtime_manager, "get_widget_service", None)
             service = service_getter("media") if callable(service_getter) else None
             wake = getattr(service, "wake_from_idle", None)
@@ -2074,13 +1994,7 @@ class DisplayManager(QObject):
     def collect_runtime_retirement_roots(
         self,
     ) -> tuple[list[QObject], list[object]]:
-        """Collect exact generation roots for the replacement barrier.
-
-        Destination display units publish their own root topology. The
-        temporary legacy branch remains centralized here until the QWidget
-        presenter is caller-dead and deleted; no engine/lifecycle caller needs
-        to know either concrete display shape.
-        """
+        """Collect exact Quick-generation roots for the replacement barrier."""
 
         qobjects: list[QObject] = []
         python_owners: list[object] = []
@@ -2110,77 +2024,15 @@ class DisplayManager(QObject):
         _append_qobject_tree(self)
         for display in self.displays:
             roots = getattr(display, "runtime_retirement_roots", None)
-            if callable(roots):
-                display_qobjects, display_python_owners = roots()
-                for root in display_qobjects:
-                    _append_qobject_tree(root)
-                for owner in display_python_owners:
-                    _append_unique(python_owners, owner)
-                continue
-
-            # Current physical-host roots. Delete this branch with the retired
-            # QWidget presenter after the Quick production route is proven.
-            _append_qobject_tree(display)
-            for attr_name in (
-                "_gl_compositor",
-                "_compositor",
-                "_spotify_bars_overlay",
-                "spotify_visualizer_widget",
-                "media_widget",
-                "_ctrl_cursor_hint",
-                "_input_handler",
-                "_transition_controller",
-                "_image_presenter",
-            ):
-                _append_qobject_tree(getattr(display, attr_name, None))
-
-            for attr_name in (
-                "_widget_manager",
-                "_custom_layout_manager",
-                "_transition_factory",
-                "_pixel_shift_manager",
-            ):
-                _append_unique(python_owners, getattr(display, attr_name, None))
-
-            widget_manager = getattr(display, "_widget_manager", None)
-            if widget_manager is not None:
-                for attr_name in ("_fade_coordinator", "_factory_registry"):
-                    _append_unique(
-                        python_owners,
-                        getattr(widget_manager, attr_name, None),
-                    )
-
-            custom_manager = getattr(display, "_custom_layout_manager", None)
-            if custom_manager is not None:
-                _append_qobject_tree(getattr(custom_manager, "_grid_overlay", None))
-                for state in list(
-                    getattr(custom_manager, "_shell_states", {}).values()
-                ):
-                    _append_qobject_tree(getattr(state, "shell", None))
-                    _append_qobject_tree(getattr(state, "widget", None))
-
-            compositor = getattr(display, "_gl_compositor", None)
-            if compositor is not None:
-                for attr_name in (
-                    "_deferred_warmup_context",
-                    "_deferred_warmup_surface",
-                ):
-                    _append_qobject_tree(getattr(compositor, attr_name, None))
-                for attr_name in ("_render_strategy_manager", "_transition_renderer"):
-                    _append_unique(
-                        python_owners,
-                        getattr(compositor, attr_name, None),
-                    )
-                strategy_manager = getattr(
-                    compositor,
-                    "_render_strategy_manager",
-                    None,
+            if not callable(roots):
+                raise TypeError(
+                    "display collection member has no retirement-root contract"
                 )
-                if strategy_manager is not None:
-                    _append_unique(
-                        python_owners,
-                        getattr(strategy_manager, "_timer", None),
-                    )
+            display_qobjects, display_python_owners = roots()
+            for root in display_qobjects:
+                _append_qobject_tree(root)
+            for owner in display_python_owners:
+                _append_unique(python_owners, owner)
 
         return qobjects, python_owners
     
@@ -2197,9 +2049,6 @@ class DisplayManager(QObject):
         """
         result: list[dict] = []
         for display in self.displays:
-            if isinstance(display, DisplayWidget):
-                result.append(display.get_screen_info())
-                continue
             runtime = getattr(display, "runtime", None)
             identity = getattr(runtime, "display_identity", None)
             as_dict = getattr(identity, "as_dict", None)
@@ -2253,20 +2102,6 @@ class DisplayManager(QObject):
             self._finish_quick_transition_batch_if_complete()
         elif not destination_screens:
             self._transition_work_pending = bool(pending)
-
-        # Temporary deletion scaffold only. Production construction never adds
-        # a DisplayWidget or mixes presenter families in this collection.
-        displays = (
-            self.displays
-            if screen_index is None
-            else [self._display_for_screen_index(screen_index)]
-        )
-        for display in displays:
-            if not isinstance(display, DisplayWidget):
-                continue
-            setter = getattr(display, "set_transition_work_pending", None)
-            if callable(setter):
-                setter(pending)
 
     def has_transition_work_pending(self) -> bool:
         """Return True if image-change work is pending or any transition is running."""
@@ -2401,9 +2236,6 @@ class DisplayManager(QObject):
         if quick_screens and not self._transition_work_pending:
             self._begin_quick_transition_batch(quick_screens)
         for display in self.displays:
-            if isinstance(display, DisplayWidget):
-                display.set_image(pixmap, image_path)
-                continue
             self._present_quick_image(
                 display,
                 pixmap,
@@ -2432,150 +2264,56 @@ class DisplayManager(QObject):
         count = len(self.displays)
         logger.info("Cleaning up %d display runtimes", count)
 
-        quick_units = [
-            display
-            for display in self.displays
-            if isinstance(display, QuickDisplayUnit)
-        ]
-        if quick_units:
-            if len(quick_units) != count:
-                raise RuntimeError(
-                    "mixed legacy/Quick display ownership is not a valid production topology"
-                )
-
-            failed_units: list[QuickDisplayUnit] = []
-            cleanup_errors: list[str] = []
-            self._quick_custom_layout_owner.retire()
-            self._disconnect_quick_visualizer_media_route()
-            for unit in quick_units:
-                screen_index = int(unit.screen_index)
-                try:
-                    if is_perf_metrics_enabled():
-                        logger.info(
-                            "[PERF][DISPLAY_MANAGER] cleanup_display screen=%s state=%s",
-                            screen_index,
-                            unit.runtime.describe_runtime_state(),
-                        )
-                    unit.quiesce()
-                    unit.clear()
-                    self._begin_quick_unit_retirement(unit)
-                    self._release_quick_visualizer_routes(unit)
-                except Exception as exc:
-                    failed_units.append(unit)
-                    cleanup_errors.append(
-                        f"screen={screen_index} type={type(exc).__name__} error={exc}"
-                    )
-                    logger.error(
-                        "Quick display retirement failed (screen_index=%s): %s",
-                        screen_index,
-                        exc,
-                        exc_info=True,
-                    )
-
-            self.displays = failed_units
-            self.current_images.clear()
-            self._transition_work_pending = False
-            self._reset_quick_transition_batch()
-            self._quick_readiness_by_screen.clear()
-            self._display_image_accounting_by_id.clear()
-            self._publish_display_image_accounting()
-            if cleanup_errors:
-                raise RuntimeError(
-                    "Quick display retirement incomplete: "
-                    + " | ".join(cleanup_errors)
-                )
-            logger.info(
-                "Display manager began asynchronous retirement for %d Quick units",
-                count,
+        if any(not isinstance(display, QuickDisplayUnit) for display in self.displays):
+            raise RuntimeError(
+                "display collection contains a non-Quick production presenter"
             )
-            return
 
-        # Temporary physical-host cleanup branch. Delete this with the retired
-        # QWidget presenter once its tests and callers are removed in H.
-
-        try:
-            from rendering.display_widget import DisplayWidget
-            from PySide6.QtGui import QGuiApplication
-
-            owner = DisplayWidget._event_filter_owner
-            if owner is not None:
-                app = QGuiApplication.instance()
-                if app is not None:
-                    app.removeEventFilter(owner)
-
-            DisplayWidget._global_ctrl_held = False
-            DisplayWidget._halo_owner = None
-            DisplayWidget._event_filter_installed = False
-            DisplayWidget._event_filter_owner = None
-            DisplayWidget._focus_owner = None
-            DisplayWidget._instances_by_screen.clear()
-            logger.debug("[CLEANUP] Reset all DisplayWidget global state")
-        except Exception as exc:
-            logger.debug("[DISPLAY_MANAGER] Global state reset failed: %s", exc)
-
-        pending_reddit_urls: list[str] = []
-        failed_displays = []
+        failed_units: list[QuickDisplayUnit] = []
         cleanup_errors: list[str] = []
-
-        for idx, display in enumerate(list(self.displays)):
-            screen_index = getattr(display, "screen_index", idx)
-            logger.debug(
-                "Cleaning up display widget (index=%d/%d, screen_index=%s)",
-                idx,
-                count,
-                screen_index,
-            )
-
-            url = getattr(display, "_pending_reddit_url", None)
-            prequeued = bool(getattr(display, "_pending_reddit_url_prequeued", False))
-            if isinstance(url, str) and url and not prequeued:
-                pending_reddit_urls.append(url)
-            setattr(display, "_pending_reddit_url", None)
-            setattr(display, "_pending_reddit_url_prequeued", False)
-
+        self._quick_custom_layout_owner.retire()
+        self._disconnect_quick_visualizer_media_route()
+        for unit in tuple(self.displays):
+            screen_index = int(unit.screen_index)
             try:
                 if is_perf_metrics_enabled():
                     logger.info(
                         "[PERF][DISPLAY_MANAGER] cleanup_display screen=%s state=%s",
                         screen_index,
-                        display.describe_runtime_state(),
+                        unit.runtime.describe_runtime_state(),
                     )
-                display.quiesce_for_runtime_pause()
-                display.clear()
-                cleanup_runtime = getattr(display, "cleanup_runtime", None)
-                if not callable(cleanup_runtime):
-                    raise RuntimeError("DisplayWidget has no cleanup_runtime() contract")
-                cleanup_runtime("display_manager_cleanup")
-                display.close()
-                display._image_resource_accounting_publisher = None
-                self._display_image_accounting_by_id.pop(id(display), None)
-                display.deleteLater()
+                unit.quiesce()
+                unit.clear()
+                self._begin_quick_unit_retirement(unit)
+                self._release_quick_visualizer_routes(unit)
             except Exception as exc:
-                failed_displays.append(display)
+                failed_units.append(unit)
                 cleanup_errors.append(
                     f"screen={screen_index} type={type(exc).__name__} error={exc}"
                 )
                 logger.error(
-                    "Display runtime cleanup failed (index=%d, screen_index=%s): %s",
-                    idx,
+                    "Quick display retirement failed (screen_index=%s): %s",
                     screen_index,
                     exc,
                     exc_info=True,
                 )
 
-        self._deferred_reddit_urls = pending_reddit_urls
+        self.displays = failed_units
+        self.current_images.clear()
+        self._transition_work_pending = False
+        self._reset_quick_transition_batch()
+        self._quick_readiness_by_screen.clear()
+        self._display_image_accounting_by_id.clear()
         self._publish_display_image_accounting()
         if cleanup_errors:
-            # Retain failed objects so a caller can inspect or retry; clearing the
-            # list here would falsely declare ownership released.
-            self.displays = failed_displays
             raise RuntimeError(
-                "Display runtime cleanup incomplete: " + " | ".join(cleanup_errors)
+                "Quick display retirement incomplete: "
+                + " | ".join(cleanup_errors)
             )
-
-        self.displays.clear()
-        self.current_images.clear()
-        logger.info("Display manager cleanup complete")
+        logger.info(
+            "Display manager began asynchronous retirement for %d Quick units",
+            count,
+        )
 
     def retire_runtime(self) -> None:
         """Detach process-level routes and queue this retired manager for deletion.
