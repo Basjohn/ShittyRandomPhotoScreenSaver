@@ -719,7 +719,7 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_build_layout.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_build_runner.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_decorators.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_diagnostic_build.py` | **KEEP** | Retain; no migration-specific retirement identified. |
+| `tests/test_diagnostic_build.py` | **KEEP** | Retain diagnostic build/entrypoint/crash-capture proof; the entrypoint source gate rejects retired `DisplayWidget` patching. |
 | `tests/test_event_loop_recorder.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_event_scheduler.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_events.py` | **KEEP** | Retain; no migration-specific retirement identified. |

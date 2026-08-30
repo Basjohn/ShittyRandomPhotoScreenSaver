@@ -117,6 +117,10 @@ Runtime-shaped settings replacement additionally proved that the visualizer play
 retained Media model, and that terminal owners must disconnect preferred-size/synchronization callbacks before releasing their
 retained presentation. Both now complete through the existing Quick owners without a second service or presenter.
 
+The diagnostic entry point and system tray no longer patch or retain a physical display widget. The remaining non-engine
+production probe is lifecycle resource accounting; it must consume a bounded Quick/display-manager semantic snapshot rather
+than preserve private compositor/widget-manager fields.
+
 "Coordinated" or "atomic" cutover describes the **finished authority topology**, not the size of one coding session or commit.
 The conversion may span as many explicit checkpoints as needed, including intentionally non-runnable intermediate migration
 states, provided no checkpoint invents two legitimate production authorities or a fake legacy compatibility presenter.
