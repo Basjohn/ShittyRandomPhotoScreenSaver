@@ -12,7 +12,8 @@ H1b terminal retirement / retained model lifetime / Settings event-filter teardo
 H2 Media artwork provider identity: CLOSED; exact engine-registered provider is injected and artwork is physically visible.
 H3 Reddit production opener: implementation prepared; AWAITING TEST VALIDATION.
 H3b Clock runtime mode-toggle persistence: implementation prepared; AWAITING TEST VALIDATION.
-H4-H6: pending per Current_Plan.
+H4 Media command-result semantics: implemented / deterministic focused gates GREEN; physical Spotify gate pending.
+H5-H6: pending per Current_Plan.
 H8 Visualizer middle-click preset hotswap: pending; source-proven historical contract omitted from the current Quick interaction contract.
 Qt/QML observability: permanent always-on direct `screensaver_qml.log`; physical Quick gates inspect it alongside the Python log.
 I residue reconciliation: BLOCKED until H re-closes.
@@ -263,7 +264,7 @@ H1b terminal retirement + Clock model lifetime + Settings event-filter teardown:
 H2 Media artwork provider composition: CLOSED / permanent cross-layer identity regression
 H3 Reddit product opener composition: IMPLEMENTED / AWAITING TEST VALIDATION
 H3b Clock runtime mode-toggle persistence: IMPLEMENTED / AWAITING TEST VALIDATION
-H4 Media Play/Pause + seek provider-result semantics: pending
+H4 Media Play/Pause + seek provider-result semantics: IMPLEMENTED / deterministic focused gates GREEN / physical Spotify gate pending
 H5a CUSTOM Visualizer independent display admission: pending
 H5b Spectrum upstream saturation + wrong topology: pending
 H6 CUSTOM Settings size-lock scope: pending
@@ -609,12 +610,12 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_audio_capture_block_size.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_media_command_ingress.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_media_keys.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_media_provider_registry.py` | **KEEP** | Retain; no migration-specific retirement identified. |
+| `tests/test_media_provider_registry.py` | **KEEP — PERMANENT** | Provider identities plus canonical GSMTC Play/Pause/Toggle capability projection, exact command selection and absolute seek-tick contract. |
 | `tests/test_media_provider_runtime.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_qtquick_media_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Media core plus transport/progress/app-volume/system-mute/input admission, separate neutral-owner injection, real runtime-owner/host lifecycle and no-recreation destination coverage; retain through cutover. |
+| `tests/test_qtquick_media_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Media core plus enabled-glyph/transport/progress/app-volume/system-mute/input admission, separate neutral-owner injection, real runtime-owner/host lifecycle and no-recreation destination coverage; retain through cutover. |
 | `tests/test_media_runtime_artwork.py` | **KEEP — PERMANENT** | Presentation-neutral artwork decode, stable key and unchanged-payload deduplication contract. |
 | `tests/test_media_runtime_state.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_media_runtime.py` | **KEEP — PERMANENT** | Shared Media owner/lease/controller/poll/state/artwork/generation contract; presentation-neutral after F4. |
+| `tests/test_media_runtime.py` | **KEEP — PERMANENT** | Shared Media owner/lease/controller/poll/state/artwork/generation plus provider-command completion/reconciliation contract; presentation-neutral after F4. |
 | `tests/test_media_volume_runtime.py` | **KEEP — PERMANENT** | Shared app-volume owner/lease/read-write generation/coalescing plus neutral Media-anchor injection contract. |
 | `tests/test_system_mute_runtime.py` | **KEEP — PERMANENT** | Shared system-audio endpoint/poll/action/lease plus neutral Media-anchor injection contract. |
 | `tests/test_media_widget_runtime_methods.py` | **MIGRATION-CRITICAL — H** | Temporary non-painting accepted-state/runtime/Visualizer anchor, geometry and neutral auxiliary-action lifecycle; retire/rehome with physical host cutover. |

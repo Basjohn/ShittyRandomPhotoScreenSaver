@@ -12,7 +12,11 @@ from typing import Any
 import pytest
 from PySide6.QtGui import QImage
 
-from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
+from core.media.media_controller import (
+    MediaCommandResult,
+    MediaPlaybackState,
+    MediaTrackInfo,
+)
 from core.threading.manager import ThreadManager
 from widgets import media_runtime
 from widgets.media_runtime import (
@@ -112,16 +116,21 @@ class _Controller:
         self.runtime_generation = None
         self.query_calls: list[tuple[str, ...]] = []
         self.play_pause_calls = 0
+        self.play_pause_states: list[MediaPlaybackState | None] = []
         self.next_calls = 0
         self.previous_calls = 0
         self.seek_calls: list[float] = []
         self.retire_calls = 0
+        self.command_result_handler = None
 
     def set_thread_manager(self, thread_manager) -> None:
         self.thread_manager = thread_manager
 
     def set_runtime_generation(self, runtime_generation) -> None:
         self.runtime_generation = runtime_generation
+
+    def set_command_result_handler(self, handler) -> None:
+        self.command_result_handler = handler
 
     def retire(self) -> None:
         self.retire_calls += 1
@@ -136,17 +145,39 @@ class _Controller:
     def get_current_track(self):
         raise AssertionError("shared owner must use its existing I/O worker")
 
-    def play_pause(self) -> None:
+    def play_pause(self, desired_state=None) -> bool:
         self.play_pause_calls += 1
+        self.play_pause_states.append(desired_state)
+        return True
 
-    def next(self) -> None:
+    def next(self) -> bool:
         self.next_calls += 1
+        return True
 
-    def previous(self) -> None:
+    def previous(self) -> bool:
         self.previous_calls += 1
+        return True
 
-    def seek_fraction(self, fraction: float) -> None:
+    def seek_fraction(self, fraction: float) -> bool:
         self.seek_calls.append(float(fraction))
+        return True
+
+    def complete_command(
+        self,
+        action: str,
+        *,
+        succeeded: bool,
+        operation: str | None = None,
+    ) -> None:
+        assert self.command_result_handler is not None
+        self.command_result_handler(
+            MediaCommandResult(
+                action=action,
+                operation=operation or action,
+                succeeded=succeeded,
+                provider_result=succeeded,
+            )
+        )
 
     def is_app_process_running(self) -> bool:
         return True
@@ -617,6 +648,9 @@ def test_optimistic_playback_epoch_is_shared_and_pins_contradictory_result(
     assert [s.info.state for s in first_consumer.snapshots] == [MediaPlaybackState.PAUSED]
     assert [s.info.state for s in second_consumer.snapshots] == [MediaPlaybackState.PAUSED]
     assert factory.controllers[0][1].play_pause_calls == 1
+    assert factory.controllers[0][1].play_pause_states == [
+        MediaPlaybackState.PAUSED
+    ]
     assert confirmations[0][0] == 300
 
     first_consumer.snapshots.clear()
@@ -646,7 +680,14 @@ def test_seek_routes_clamped_fraction_without_optimistic_timeline_authority() ->
     assert service.seek_fraction(1.5) is True
     assert factory.controllers[0][1].seek_calls == [1.0]
     assert consumer.snapshots[-1].info.position_ms == accepted_position
+    assert service.refresh(bust_cache=True) is True
     assert len(tm.jobs) == 1
+    factory.controllers[0][1].complete_command("seek", succeeded=True)
+    assert len(tm.jobs) == 1
+    assert service.shared_owner._command_refresh_pending is True
+    tm.complete()
+    assert len(tm.jobs) == 1
+    assert service.shared_owner._command_refresh_pending is False
     assert service.seek_fraction(float("nan")) is False
     assert factory.controllers[0][1].seek_calls == [1.0]
 
@@ -656,6 +697,33 @@ def test_seek_routes_clamped_fraction_without_optimistic_timeline_authority() ->
     )
     assert service.seek_fraction(0.25) is False
     assert factory.controllers[0][1].seek_calls == [1.0]
+
+
+def test_rejected_play_pause_completion_clears_optimism_and_reconciles() -> None:
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track(MediaPlaybackState.PLAYING)})
+    consumer = _Consumer(tm)
+    service = _lease(consumer, factory)
+    service.start()
+    tm.complete()
+
+    assert service.play_pause() is True
+    owner = service.shared_owner
+    controller = factory.controllers[0][1]
+    assert owner.expected_playback_state == MediaPlaybackState.PAUSED
+    assert consumer.snapshots[-1].info.state == MediaPlaybackState.PAUSED
+    assert len(tm.jobs) == 0
+
+    controller.complete_command(
+        "play_pause",
+        succeeded=False,
+        operation="pause",
+    )
+
+    assert owner.expected_playback_state is None
+    assert len(tm.jobs) == 1
+    tm.complete()
+    assert consumer.snapshots[-1].info.state == MediaPlaybackState.PLAYING
 
 
 def test_failover_persists_once_and_syncs_every_display_volume_target() -> None:

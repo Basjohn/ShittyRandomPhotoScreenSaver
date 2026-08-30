@@ -927,6 +927,9 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
                 ctrl_held=True,
             )
         ) is True
+        play_pause_button = item.findChild(QQuickItem, "mediaPlayPauseButton")
+        assert play_pause_button is not None
+        assert play_pause_button.opacity() == pytest.approx(1.0)
         item.playPauseRequested.emit()
         item.previousRequested.emit()
         item.nextRequested.emit()

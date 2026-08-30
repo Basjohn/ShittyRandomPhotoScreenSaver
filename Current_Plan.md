@@ -212,7 +212,7 @@ If GREEN, mark H3b CLOSED and continue to H4.
 
 ### H4 — Media Play/Pause and seek do not execute; Previous/Next do
 
-**Status: operator-reproducible; generic retained-card input is not the first suspect.**
+**Status: IMPLEMENTED / deterministic focused gates GREEN; physical Spotify validation pending.**
 
 Trace the real command boundary:
 
@@ -226,6 +226,23 @@ semantic request
 Do not treat queue submission as success. Do not block the GUI waiting for WinRT. Preserve Previous/Next, which already work through the same card.
 
 Verify Spotify's actual toggle behavior and the seek units/result of `try_change_playback_position_async()`.
+
+Live closure checklist:
+
+- [x] Project canonical GSMTC `is_play_enabled`, `is_pause_enabled`, and
+  `is_play_pause_toggle_enabled`; the retired/nonexistent `is_play_pause_enabled`
+  spelling no longer greys the retained glyph.
+- [x] Choose state-specific Play/Pause when supported and Toggle only when that
+  is the provider capability; preserve working Previous/Next.
+- [x] Keep GUI submission non-blocking while separately carrying the real WinRT
+  Boolean/exception outcome to the one shared Media runtime owner.
+- [x] Reconcile only after command completion; if a poll is already in flight,
+  coalesce exactly one completion-driven follow-up refresh.
+- [x] Preserve seek as absolute GSMTC 100 ns ticks and treat `False` as provider
+  rejection rather than queue success.
+- [ ] Physical current-source Spotify gate: with Ctrl held, glyph is enabled;
+  Play -> Pause -> Play changes Spotify; seek near 25% and 75% lands correctly;
+  Previous/Next remain working; inspect both runtime logs for command outcome.
 
 ### H5a — CUSTOM Visualizer must remain independent of Media's display route
 

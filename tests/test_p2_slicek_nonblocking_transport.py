@@ -69,6 +69,24 @@ class TestCommandIsFireAndForget:
         assert backend_done.wait(2.0), "the backend never completed off-thread"
         assert runs == [1], "the backend did not run exactly once"
 
+    def test_provider_boolean_is_reported_after_submission_completes(self):
+        ctrl = _controller()
+        completed = threading.Event()
+        results = []
+        ctrl.set_command_result_handler(
+            lambda result: (results.append(result), completed.set())
+        )
+
+        async def _rejected():
+            return False
+
+        assert ctrl._submit_command("seek", lambda: _rejected()) is True
+        assert completed.wait(2.0), "the provider completion was not reported"
+        assert len(results) == 1
+        assert results[0].action == "seek"
+        assert results[0].succeeded is False
+        assert results[0].provider_result is False
+
     def test_the_blocking_run_coroutine_is_the_negative_control(self):
         """The old path `_invoke_simple_action` used must actually block."""
         ctrl = _controller()
@@ -92,7 +110,9 @@ class TestCommandIsFireAndForget:
 
         calls: list[str] = []
         monkeypatch.setattr(
-            ctrl, "_submit_command", lambda name, factory: calls.append(name)
+            ctrl,
+            "_submit_command",
+            lambda name, factory, **_kwargs: calls.append(name) or True,
         )
 
         ctrl.play_pause()
