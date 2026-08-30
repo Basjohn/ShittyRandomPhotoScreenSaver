@@ -1,6 +1,23 @@
 # Black Flash / First-Visible-Frame Surface Continuity Decomposition
 
-Date: 2026-08-30
+Date: 2026-08-30 (superseded in part 2026-08-31)
+
+> **STATUS 2026-08-31 — two repairs in §4 FAILED and were REMOVED.**
+> The §4.1 deferred first-show (`prepare_on_screen`/`commit_prepared_show`) made
+> startup visibly worse (image -> black -> image); reverted to immediate
+> `show_on_screen()`. The §4.2 event-driven surface-refresh redraw on
+> activation/menu did not improve the flash; removed (with
+> `request_surface_refresh` and `background_surface_refresh_requested`).
+> **Kept:** §2 proof-band removal, `[QUICK_SURFACE]` passive telemetry, and the
+> `intentional_base_frame_ready` readiness semantics.
+> **New binding evidence:** a single-window MC A/B (LG-only -> flash, MSI-only ->
+> clean, LG-only -> flash) shows the flash follows the **LG/Display-1 output**
+> (60 Hz TV, DPR 1.5, 3840x2160) even as the sole window — so §3.2/§3.3's
+> two-window/activation framing is not the root cause. Presentation mode is NOT
+> proven (tearing alone is not proof); measure with PresentMon/ETW. The prior
+> "independent flip vs DWM composition" language below is a hypothesis, not a
+> verdict. See Current_Plan.md "Interleaved black-flash" for the live plan and
+> the failed-approaches checklist.
 
 This is a high-priority J / H-conditional decomposition. The physical trace has now separated the former generic “black flash” report into distinct owners instead of treating it as visual polish by default.
 

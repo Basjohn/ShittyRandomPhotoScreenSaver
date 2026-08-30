@@ -131,15 +131,8 @@ class QuickDisplayWindow(QQuickWindow):
     ) -> None:
         self._semantic_double_click_hit_test = hit_test
 
-    def prepare_on_screen(self) -> None:
-        """Commit screen placement and visible intent without exposing the window.
-
-        Startup image processing needs the final display geometry before the first
-        physical show, but showing a QQuickWindow with no retained base image lets
-        its native black clear reach the desktop.  This split lets the runtime arm
-        the exact screen/geometry first and commit visibility only after a real
-        ``PresentationImage`` has been published into the retained scene.
-        """
+    def show_on_screen(self) -> None:
+        """Commit exact physical-screen placement before making the window visible."""
 
         if self._close_queued:
             raise RuntimeError("cannot show a retiring Quick display window")
@@ -152,28 +145,7 @@ class QuickDisplayWindow(QQuickWindow):
             self.setScreen(screen)
         self._apply_screen_geometry(screen)
         self._desired_visible = True
-
-    def commit_prepared_show(self) -> bool:
-        """Expose a previously prepared window exactly once when still desired."""
-
-        if self._close_queued or self._binding_loss is not None:
-            return False
-        if not self._desired_visible or self.isVisible():
-            return False
         self._queue_meta_call("show")
-        return True
-
-    def show_on_screen(self) -> None:
-        """Prepare and immediately expose this window.
-
-        Production runtime startup normally uses the split prepare/commit path so
-        the first visible frame already owns a real image.  This immediate helper
-        remains the explicit low-level operation for callers that have already
-        established their presentation state.
-        """
-
-        self.prepare_on_screen()
-        self.commit_prepared_show()
 
     def queue_hide(self) -> None:
         """Hide through Qt's event loop so Python never waits on the render thread."""

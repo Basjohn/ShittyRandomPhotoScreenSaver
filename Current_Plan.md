@@ -1,6 +1,6 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-30 after source-mode run at `1849f2a44154132d6df45e327165b1cd79103bfa` and direct source/log reconciliation.
+Last updated: 2026-08-31 after removing the two failed black-flash experiments (deferred-show, forced surface-refresh) and relocalizing the flash to the LG/Display-1 output; maintained h-destination is 77/77 GREEN.
 
 ## Current checkpoint
 
@@ -340,7 +340,7 @@ Remeasure **visible window dismissal** separately from legal retirement and deve
 
 ## Interleaved black-flash / first-visible-frame reality slice
 
-**Status: proof-frame leak repaired; physical trace localized startup ordering and native/same-scene continuity; second bounded repair IMPLEMENTED / AWAITING TEST VALIDATION.**
+**Status: proof-frame leak repaired (kept). Two later repairs — deferred first-show and event-driven surface-refresh — physically FAILED and are REMOVED. New binding evidence relocalizes the defect to the LG/Display-1 output itself. Root cause NOT yet proven; investigation continues via PresentMon presentation-mode capture + a historical 1px fullscreen-geometry A/B.**
 
 This operator-approved No Quota interleave still does **not** reorder H4-H8. It is now evidence-driven rather than generic J polish.
 
@@ -357,28 +357,37 @@ first context-menu open on each display:
 two rapid flashes possible; retained image + scene graph stay stable; later same-display open is clean
 ```
 
-An old wallpaper/image was physically glimpsed during a first-menu flash, but there was no matching image-publication event. Treat this as stale/native/back-buffer exposure, not image-selection state.
+An old wallpaper/image was physically glimpsed during a flash, but with no matching image-publication event. Treat this as stale/native/back-buffer exposure, not image-selection state.
 
-Current bounded repair:
+**New binding evidence (single-window MC A/B):** running one continuous MC process and switching the sole SRPSS window between outputs gave: LG/Display-1 only -> black flashes; MSI/Display-0 only -> completely clean; LG/Display-1 again -> black flashes. The defect **follows the LG output (a 60 Hz TV, DPR 1.5, physical 3840x2160) even when it is the ONLY SRPSS window.** This kills the earlier "secondary window / two-window activation" framing.
 
-- `QuickDisplayWindow` now separates exact-screen/geometry preparation from native show commit;
-- `QuickDisplayRuntime.show_on_screen()` arms visible intent but keeps an image-less scene hidden;
-- first real `PresentationImage` publication commits that prepared show; an already-primed retained scene re-shows immediately;
-- activation changes and context-menu visible/hidden boundaries request exactly one `BackgroundRenderItem` refresh plus one `QQuickWindow.update()`, reasserting the same retained image without changing semantic state or adding a cadence owner;
-- `[QUICK_SURFACE] background_surface_refresh_requested` records those bounded redraw requests.
+**Removed as physically failed (do not reintroduce):**
 
-Focused regression:
+- deferred first-show (`prepare_on_screen()` / `commit_prepared_show()` gating the native show on first `PresentationImage`) — it made startup visibly WORSE (image -> black -> image); reverted to the immediate `show_on_screen()`;
+- event-driven surface-refresh (`_request_background_surface_continuity()` -> `BackgroundRenderItem.request_surface_refresh()` + `QQuickWindow.update()` on activation/menu) — it did not improve the focus/menu flash; removed.
 
-```text
-tests/test_qtquick_black_flash_contract.py
-```
+**Kept:** production proof-colour-band removal (opt-in only); `[QUICK_SURFACE]` telemetry (passive); real-image readiness semantics (`intentional_base_frame_ready`) independent of the removed show gate. Focused regression `tests/test_qtquick_black_flash_contract.py` now pins only proof opt-in + readiness.
 
-It now pins proof opt-in, real-image first-frame readiness, first-show image gating, first-image show commit and single event-driven background continuity refresh. It is **AWAITING TEST VALIDATION** under real PySide6.
+**Failed approaches (physically disproven — do NOT retry):**
+
+- [x] Persistent scene graph + graphics (`setPersistentGraphics/SceneGraph(True)`) — operator saw no change; telemetry: SG is never invalidated mid-flash, so persistence cannot matter.
+- [x] Event-driven surface-refresh redraw on activation/menu (`BackgroundRenderItem` refresh + `QQuickWindow.update()`) — did not improve focus/menu flash. Removed.
+- [x] Deferred first-show (gate native show on first image) — made startup visibly worse (image -> black -> image). Removed.
+- [x] VSync ON (`swapInterval=1`) alone — no reliable reduction; single-run counts are inside a large launch-to-launch variance band.
+- [x] Drop `SplashScreen` role — non-deterministic: identical code gave 0 flashes one launch, 15 the next (both operator-corroborated). Not a reliable fix.
+- [x] `WS_EX_NOACTIVATE` / `WindowDoesNotAcceptFocus` / DWM-transition-disable / Ctrl-poll replacement — PROHIBITED (feature loss); never a valid endpoint.
+
+**Not proven, do not assert:** "Independent Flip vs DWM composition" is a hypothesis, not a verdict; tearing alone does not prove presentation mode. Prove PresentMode with PresentMon/ETW.
+
+Next (ephemeral, outside the repo; one variable at a time, >=3 launches each because launch behavior is variable):
+
+1. capture PresentMon PresentMode/AllowsTearing per frame, correlate +/-250 ms around each detected black/stale frame — did PresentMode change, or did the flash occur while it stayed stable?
+2. historical 1px fullscreen-compat A/B: Display-1 geometry vs the same one logical pixel shorter in height (nothing else changed); then a coverage-preserving overscan variant. Record black/stale counts, PresentMode sequence, tearing, startup.
+
+Constraints for any fix: no feature loss; no `WS_EX_NOACTIVATE` / `WindowDoesNotAcceptFocus`; no DWM transition disabling; no Ctrl-poll replacement; no permanent diagnostic env var; no second surface; Independent Flip is an optimization, not a correctness requirement.
 
 Technical route:
 `Docs/QtQuick_Migration/J_Black_Flash_Surface_Continuity_Decomposition_2026-08-30.md`.
-
-Next physical decision: if startup clears and focus/menu flashes improve, preserve these contracts. If focus still flashes while `background_surface_refresh_requested` is present and image/scene remain stable, investigate native `QQuickWindow` activation/composition policy next. If only first-menu flash remains, inspect/prewarm the retained menu's first-visible QSG resources rather than altering the base image.
 
 ## H observations intentionally carried to J unless a deterministic seam appears
 
@@ -390,7 +399,7 @@ Preserve the currently good Bubble partial/CUSTOM resizing.
 
 ### Black/test-frame/focus/context flashes
 
-Black flashes remain high-priority J/H-conditional work. Trace now proves startup had an early-exposure seam, while focus and first-menu flashes occur with stable image identity and scene graph. Preserve the current bounded repairs and classify the next physical result before changing native window policy or menu resource lifetime.
+Black flashes remain high-priority J/H-conditional work, now relocalized to the LG/Display-1 output itself (see the black-flash slice above). The two prior bounded repairs failed and were removed; do not reintroduce them. Next evidence is PresentMon presentation-mode capture + the historical 1px fullscreen-geometry A/B, not another guessed native-policy change.
 
 ## H re-closure gate
 

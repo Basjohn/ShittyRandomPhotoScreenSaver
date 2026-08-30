@@ -129,21 +129,6 @@ class BackgroundRenderItem(QQuickItem):
         self._transition_run = run
         self.update()
 
-    def request_surface_refresh(self) -> bool:
-        """Request one retained background sync without changing semantic state.
-
-        Native activation and first-visible context-menu composition can ask Qt
-        for a new window frame even while the image identity is unchanged.  Mark
-        this existing full-scene item dirty so that frame re-synchronizes and
-        redraws the same retained ``PresentationImage`` instead of depending on
-        stale/native back-buffer contents.  This owns no timer or repaint loop.
-        """
-
-        if self._presentation_image is None and self._transition_run is None:
-            return False
-        self.update()
-        return True
-
     def _bind_window_invalidation(self, window) -> None:
         if window is self._bound_window:
             return
