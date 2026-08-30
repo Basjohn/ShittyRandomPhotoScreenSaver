@@ -218,6 +218,20 @@ class OrdinaryFamilyPresentationBinder:
         config: Mapping[str, object] = (
             widgets_config if isinstance(widgets_config, Mapping) else {}
         )
+        # Two-phase display-family assembly. Phase 1 resolves/builds/owns every
+        # admitted retained presentation in the stable adapter order WITHOUT
+        # activating any of them. Phase 2 then activates each successfully built
+        # presentation exactly once, in the same order.
+        #
+        # The previous single loop interleaved build with activation, so a built
+        # family's provider/native/artwork work (submitted to I/O workers) could
+        # begin while a *later* admitted family's QML component was still being
+        # constructed on the GUI thread. That concurrency intermittently wedged
+        # screen-1 replacement construction (H1: MainThread stuck deep in
+        # QQmlComponent.createWithInitialProperties for a later family while an
+        # I/O worker ran a decode for an already-activated earlier family).
+        # Deferring all activation until construction has fully returned removes
+        # that overlap without changing admission, ownership or retirement.
         for adapter in self._adapters:
             family_id = adapter.family_id
             if not self._runtime_manager.is_family_effective(config, family_id):
@@ -263,19 +277,27 @@ class OrdinaryFamilyPresentationBinder:
                     continue
                 if retained is None:
                     continue
-                if self._thread_manager is not None:
-                    activate = getattr(retained, "activate", None)
-                    if callable(activate):
-                        try:
-                            activate(self._thread_manager)
-                        except Exception:
-                            logger.debug(
-                                "[FAMILY_BINDER] Failed to activate %s",
-                                widget_id,
-                                exc_info=True,
-                            )
+                # Own the built presentation now so retire_all() covers it even if
+                # its later activation fails; activation itself is deferred.
                 self._bound.append(retained)
                 self._bound_widget_ids.append(widget_id)
+
+        # Phase 2 — activate every successfully built presentation exactly once,
+        # in build order, only after all admitted construction has returned. A
+        # failed activation is contained and never unbinds the presentation.
+        if self._thread_manager is not None:
+            for widget_id, retained in zip(self._bound_widget_ids, self._bound):
+                activate = getattr(retained, "activate", None)
+                if not callable(activate):
+                    continue
+                try:
+                    activate(self._thread_manager)
+                except Exception:
+                    logger.debug(
+                        "[FAMILY_BINDER] Failed to activate %s",
+                        widget_id,
+                        exc_info=True,
+                    )
         return tuple(self._bound_widget_ids)
 
     def retire_all(self) -> None:

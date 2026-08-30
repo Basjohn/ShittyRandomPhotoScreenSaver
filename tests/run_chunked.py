@@ -38,6 +38,7 @@ H_DESTINATION_PROFILE = (
     "test_qtquick_display_presenter.py",
     "test_qtquick_display_unit.py",
     "test_qtquick_family_binder.py",
+    "test_qtquick_family_binder_two_phase.py",
     "test_qtquick_family_size_policy.py",
     "test_qtquick_geometry_resolver.py",
     "test_qtquick_overlay_preferred_size.py",
