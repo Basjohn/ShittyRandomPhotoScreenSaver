@@ -216,7 +216,7 @@ The shared `display_mode` remains the authored baseline, QML owns no settings or
 
 Deterministic coverage now includes `tests/test_qtquick_family_product_actions.py` plus `tests/test_qtquick_clock_custom_variant_geometry.py`. The pure product-action tests are GREEN in the handoff environment; the PySide Clock geometry/composition tests and physical Settings/CUSTOM recreation are **AWAITING TEST VALIDATION**.
 
-## 8. H4 — Media Play/Pause and seek
+## 8. H4 — Media Play/Pause and seek — IMPLEMENTED / PHYSICAL GATE PENDING
 
 Previous/Next work through the same retained card, so generic card input is not the first suspect.
 
@@ -230,6 +230,29 @@ request
 ```
 
 Queue submission is not success. Do not block GUI waiting for WinRT.
+
+Exact-current correction keeps the existing controller/shared-owner topology:
+
+```text
+retained semantic action
+-> non-blocking controller queue admission
+-> exact state-specific Play/Pause or provider Toggle / absolute seek ticks
+-> MediaCommandResult(real Boolean or captured exception)
+-> generation-fenced shared Media owner
+-> completion-driven accepted-state refresh
+```
+
+The grey glyph was the same source boundary: the query read
+`is_play_pause_enabled`, which is not the GSMTC playback-controls property.
+Current projection uses canonical `is_play_enabled`, `is_pause_enabled`, and
+`is_play_pause_toggle_enabled`, with the aggregate admission fact chosen for the
+current playback state.
+
+Focused deterministic proof covers canonical capability projection, direct and
+toggle provider selection, 100 ns absolute seek units, non-blocking queue
+admission versus provider `False`, completion-driven refresh coalescing, rejected
+optimistic playback reconciliation, and the enabled retained QML glyph. Physical
+Spotify Play -> Pause -> Play plus 25%/75% seek remains the closure gate.
 
 ## 9. H5a — CUSTOM Visualizer independent monitor
 

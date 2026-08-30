@@ -6,7 +6,11 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import core.media.provider_registry as provider_registry
-from core.media.media_controller import MediaPlaybackState, WindowsGlobalMediaController
+from core.media.media_controller import (
+    MediaPlaybackState,
+    MediaTrackInfo,
+    WindowsGlobalMediaController,
+)
 from core.media.provider_registry import (
     get_media_provider_display_name,
     get_provider_failover_candidates,
@@ -272,7 +276,9 @@ def test_io_worker_failover_runs_one_inline_gsmtc_query_without_nested_submit() 
 
         def get_playback_info(self):
             controls = SimpleNamespace(
-                is_play_pause_enabled=True,
+                is_play_enabled=True,
+                is_pause_enabled=True,
+                is_play_pause_toggle_enabled=False,
                 is_next_enabled=True,
                 is_previous_enabled=True,
                 is_playback_position_enabled=True,
@@ -321,6 +327,9 @@ def test_io_worker_failover_runs_one_inline_gsmtc_query_without_nested_submit() 
     assert info.position_ms == 60_000
     assert info.duration_ms == 240_000
     assert info.can_seek is True
+    assert info.can_play_pause is True
+    assert info.can_play is True
+    assert info.can_pause is True
     assert browser.timeline_reads == 1
     assert _MediaManager.requests == 1
 
@@ -355,7 +364,11 @@ def test_gsmtc_seek_fraction_routes_absolute_timeline_ticks_without_blocking(
     monkeypatch.setattr(
         controller,
         "_invoke_simple_action",
-        lambda name, factory: captured.update(name=name, factory=factory),
+        lambda name, factory, **kwargs: captured.update(
+            name=name,
+            factory=factory,
+            **kwargs,
+        ) or True,
     )
 
     class _SeekSession:
@@ -373,11 +386,62 @@ def test_gsmtc_seek_fraction_routes_absolute_timeline_ticks_without_blocking(
             return True
 
     session = _SeekSession()
-    controller.seek_fraction(0.25)
+    assert controller.seek_fraction(0.25) is True
 
     assert captured["name"] == "seek"
     assert asyncio.run(captured["factory"](session)) is True
     assert session.targets == [65_000 * 10_000]
+
+
+def test_gsmtc_play_pause_uses_exact_state_specific_provider_command(monkeypatch) -> None:
+    controller = _controller("spotify")
+    controller._available = True
+    controller._MediaManager = object()
+    controller._last_valid_info = MediaTrackInfo(
+        state=MediaPlaybackState.PLAYING,
+        can_play_pause=True,
+        can_pause=True,
+    )
+    captured = {}
+    monkeypatch.setattr(
+        controller,
+        "_invoke_simple_action",
+        lambda name, factory, **kwargs: captured.update(
+            name=name,
+            factory=factory,
+            **kwargs,
+        ) or True,
+    )
+
+    class _Session:
+        def __init__(self) -> None:
+            self.calls = []
+
+        async def try_pause_async(self):
+            self.calls.append("pause")
+            return True
+
+        async def try_toggle_play_pause_async(self):
+            self.calls.append("toggle")
+            return True
+
+    session = _Session()
+
+    assert controller.play_pause(MediaPlaybackState.PAUSED) is True
+    assert captured["name"] == "play_pause"
+    assert captured["operation"] == "pause"
+    assert asyncio.run(captured["factory"](session)) is True
+    assert session.calls == ["pause"]
+
+    controller._last_valid_info = MediaTrackInfo(
+        state=MediaPlaybackState.PLAYING,
+        can_play_pause=True,
+        can_toggle_play_pause=True,
+    )
+    assert controller.play_pause(MediaPlaybackState.PAUSED) is True
+    assert captured["operation"] == "toggle_play_pause"
+    assert asyncio.run(captured["factory"](session)) is True
+    assert session.calls == ["pause", "toggle"]
 
 
 def test_session_selection_rejects_unrelated_and_false_positive_sources() -> None:

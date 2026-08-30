@@ -37,6 +37,7 @@ from PySide6.QtGui import QImage, QImageReader
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.media.media_controller import (
     BaseMediaController,
+    MediaCommandResult,
     MediaPlaybackState,
     MediaTrackInfo,
     create_media_controller,
@@ -111,6 +112,9 @@ def _clone_track_info(
         album_artist=info.album_artist,
         state=state if state is not None else info.state,
         can_play_pause=info.can_play_pause,
+        can_play=info.can_play,
+        can_pause=info.can_pause,
+        can_toggle_play_pause=info.can_toggle_play_pause,
         can_next=info.can_next,
         can_previous=info.can_previous,
         can_seek=info.can_seek,
@@ -286,6 +290,7 @@ class _SharedMediaRuntimeOwner:
         self._provider_generation = 0
         self._refresh_in_flight = False
         self._refresh_in_flight_request = 0
+        self._command_refresh_pending = False
 
         self._update_timer = None
         self._update_timer_handle: OverlayTimerHandle | None = None
@@ -488,6 +493,29 @@ class _SharedMediaRuntimeOwner:
                 setter(self._runtime_generation)
             except Exception:
                 logger.debug("[MEDIA_RUNTIME] Controller generation injection failed", exc_info=True)
+        result_setter = getattr(controller, "set_command_result_handler", None)
+        if callable(result_setter):
+            owner_ref = weakref.ref(self)
+            owner_generation = self._owner_generation
+            provider_generation = self._provider_generation
+            runtime_generation = self._runtime_generation
+
+            def _on_command_result(result: MediaCommandResult) -> None:
+                def _deliver() -> None:
+                    owner = owner_ref()
+                    if owner is not None:
+                        owner._commit_command_result(
+                            controller,
+                            result,
+                            owner_generation=owner_generation,
+                            provider_generation=provider_generation,
+                        )
+
+                _deliver._srpss_runtime_generation = runtime_generation
+                ThreadManager.run_on_ui_thread(_deliver)
+
+            _on_command_result._srpss_runtime_generation = runtime_generation
+            result_setter(_on_command_result)
 
     def _ensure_controller(self) -> BaseMediaController:
         controller = self._controller
@@ -533,6 +561,7 @@ class _SharedMediaRuntimeOwner:
         self._request_id += 1
         self._refresh_in_flight = False
         self._refresh_in_flight_request = self._request_id
+        self._command_refresh_pending = False
         self._clear_query_cache()
         self._reset_playback_confirmation()
         self._runtime_state = MediaWidgetRuntimeState()
@@ -786,6 +815,9 @@ class _SharedMediaRuntimeOwner:
                 finally:
                     if owner._refresh_in_flight_request == request_id:
                         owner._refresh_in_flight = False
+                        if owner._command_refresh_pending:
+                            owner._command_refresh_pending = False
+                            owner.refresh(bust_cache=True)
 
             _deliver._srpss_runtime_generation = runtime_generation
             ThreadManager.run_on_ui_thread(_deliver)
@@ -971,6 +1003,33 @@ class _SharedMediaRuntimeOwner:
         self._expected_playback_epoch = None
         self._playback_confirmation_deadline_monotonic = 0.0
 
+    def _commit_command_result(
+        self,
+        controller: BaseMediaController,
+        result: MediaCommandResult,
+        *,
+        owner_generation: int,
+        provider_generation: int,
+    ) -> None:
+        """Reconcile only a current controller's real provider completion."""
+
+        if (
+            self._retired
+            or not self._running
+            or controller is not self._controller
+            or owner_generation != self._owner_generation
+            or provider_generation != self._provider_generation
+            or not isinstance(result, MediaCommandResult)
+        ):
+            return
+        if result.action == "play_pause" and not result.succeeded:
+            self._reset_playback_confirmation()
+        self._clear_query_cache()
+        if self._refresh_in_flight:
+            self._command_refresh_pending = True
+        else:
+            self.refresh(bust_cache=True)
+
     def _begin_playback_confirmation(self, state: MediaPlaybackState) -> None:
         self._reset_playback_confirmation()
         self._playback_epoch += 1
@@ -1036,14 +1095,8 @@ class _SharedMediaRuntimeOwner:
     def play_pause(self, *, execute: bool = True) -> bool:
         if self._retired or not self._running:
             return False
-        controller = self._ensure_controller()
-        if execute:
-            try:
-                controller.play_pause()
-            except Exception:
-                logger.debug("[MEDIA_RUNTIME] play_pause failed", exc_info=True)
-                return False
         info = self._current_info
+        next_state = None
         if info is not None and info.state in (
             MediaPlaybackState.PLAYING,
             MediaPlaybackState.PAUSED,
@@ -1053,6 +1106,15 @@ class _SharedMediaRuntimeOwner:
                 if info.state == MediaPlaybackState.PLAYING
                 else MediaPlaybackState.PLAYING
             )
+        controller = self._ensure_controller()
+        if execute:
+            try:
+                if not controller.play_pause(next_state):
+                    return False
+            except Exception:
+                logger.debug("[MEDIA_RUNTIME] play_pause failed", exc_info=True)
+                return False
+        if info is not None and next_state is not None:
             optimistic = replace(info, state=next_state)
             self._begin_playback_confirmation(next_state)
             self._publish(optimistic)
@@ -1084,13 +1146,15 @@ class _SharedMediaRuntimeOwner:
         controller = self._ensure_controller()
         if execute:
             try:
-                controller.seek_fraction(bounded_fraction)
+                if not controller.seek_fraction(bounded_fraction):
+                    return False
             except Exception:
                 logger.debug("[MEDIA_RUNTIME] seek failed", exc_info=True)
                 return False
         # The accepted provider snapshot remains authoritative; seeking does
         # not optimistically rewrite the displayed position.
-        self.refresh(bust_cache=True)
+        if not execute:
+            self.refresh(bust_cache=True)
         return True
 
     def _transport_without_optimistic(self, action: str, *, execute: bool) -> bool:
@@ -1099,11 +1163,13 @@ class _SharedMediaRuntimeOwner:
         controller = self._ensure_controller()
         if execute:
             try:
-                getattr(controller, action)()
+                if not getattr(controller, action)():
+                    return False
             except Exception:
                 logger.debug("[MEDIA_RUNTIME] %s failed", action, exc_info=True)
                 return False
-        self.refresh(bust_cache=True)
+        if not execute:
+            self.refresh(bust_cache=True)
         return True
 
     # ------------------------------------------------------------------
@@ -1121,6 +1187,7 @@ class _SharedMediaRuntimeOwner:
         self._request_id += 1
         self._refresh_in_flight = False
         self._refresh_in_flight_request = self._request_id
+        self._command_refresh_pending = False
         self._stop_timer()
         self._reset_playback_confirmation()
         self._clear_query_cache()

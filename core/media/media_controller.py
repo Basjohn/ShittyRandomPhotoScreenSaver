@@ -9,15 +9,15 @@ cadence and submits potentially blocking reads through ThreadManager.
 
 On Windows, GSMTC/WinRT calls are treated as potentially blocking IO
 and are executed via ThreadManager with a hard timeout so they cannot
-stall the UI thread or test runner. All failures are soft (logged at
-debug/info) and never raise into the caller.
+stall the UI thread or test runner. All failures are soft, reported through the
+asynchronous command-result contract, and never raise into the caller.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
 import math
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
 import threading
 
 from core.logging.logger import get_logger, is_verbose_logging
@@ -53,6 +53,12 @@ class MediaTrackInfo:
     album_artist: str = ""
     state: MediaPlaybackState = MediaPlaybackState.UNKNOWN
     can_play_pause: bool = False
+    # Preserve the provider's exact GSMTC transport capabilities so the
+    # controller can choose a state-specific Play/Pause request when offered,
+    # while the presentation consumes only the aggregate fact above.
+    can_play: bool = False
+    can_pause: bool = False
+    can_toggle_play_pause: bool = False
     can_next: bool = False
     can_previous: bool = False
     can_seek: bool = False
@@ -64,6 +70,17 @@ class MediaTrackInfo:
     # These fields never introduce their own timer or polling cadence.
     position_ms: Optional[int] = None
     duration_ms: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class MediaCommandResult:
+    """Completed provider result for one asynchronously submitted command."""
+
+    action: str
+    operation: str
+    succeeded: bool
+    provider_result: bool | None
+    error: str = ""
 
 
 class BaseMediaController:
@@ -78,6 +95,7 @@ class BaseMediaController:
         self._runtime_generation = None
         self._retired = False
         self._task_owner_id = f"{id(self):x}"
+        self._command_result_handler: Callable[[MediaCommandResult], None] | None = None
 
     def set_thread_manager(self, thread_manager) -> None:
         """Inject the engine-owned ThreadManager."""
@@ -87,28 +105,40 @@ class BaseMediaController:
         """Tag controller work for the owning screensaver runtime generation."""
         self._runtime_generation = runtime_generation
 
+    def set_command_result_handler(
+        self,
+        handler: Callable[[MediaCommandResult], None] | None,
+    ) -> None:
+        """Install the neutral runtime owner's asynchronous completion sink."""
+
+        self._command_result_handler = handler
+
     def retire(self) -> None:
         """Close new command/query admission; in-flight WinRT work may finish fenced."""
         self._retired = True
         self._thread_manager = None
+        self._command_result_handler = None
 
     def get_current_track(self) -> Optional[MediaTrackInfo]:  # pragma: no cover - interface
         """Return a snapshot of the current track or None if unavailable."""
 
         raise NotImplementedError
 
-    # Control methods are best-effort; implementations should swallow
-    # errors and only log at debug level.
-    def play_pause(self) -> None:  # pragma: no cover - interface
+    # Control methods return queue admission immediately. The asynchronous
+    # MediaCommandResult reports the provider's actual completion separately.
+    def play_pause(
+        self,
+        desired_state: MediaPlaybackState | None = None,
+    ) -> bool:  # pragma: no cover - interface
         raise NotImplementedError
 
-    def next(self) -> None:  # pragma: no cover - interface
+    def next(self) -> bool:  # pragma: no cover - interface
         raise NotImplementedError
 
-    def previous(self) -> None:  # pragma: no cover - interface
+    def previous(self) -> bool:  # pragma: no cover - interface
         raise NotImplementedError
 
-    def seek_fraction(self, fraction: float) -> None:  # pragma: no cover - interface
+    def seek_fraction(self, fraction: float) -> bool:  # pragma: no cover - interface
         raise NotImplementedError
 
     def is_app_process_running(self) -> bool:
@@ -127,20 +157,28 @@ class NoOpMediaController(BaseMediaController):
     def get_current_track(self) -> Optional[MediaTrackInfo]:
         return None
 
-    def play_pause(self) -> None:
+    def play_pause(
+        self,
+        desired_state: MediaPlaybackState | None = None,
+    ) -> bool:
+        del desired_state
         # Intentionally a no-op
         logger.debug("[MEDIA] play_pause called on NoOpMediaController")
+        return False
 
-    def next(self) -> None:
+    def next(self) -> bool:
         logger.debug("[MEDIA] next called on NoOpMediaController")
+        return False
 
-    def previous(self) -> None:
+    def previous(self) -> bool:
         logger.debug("[MEDIA] previous called on NoOpMediaController")
+        return False
 
-    def seek_fraction(self, fraction: float) -> None:
+    def seek_fraction(self, fraction: float) -> bool:
         logger.debug(
             "[MEDIA] seek_fraction(%s) called on NoOpMediaController", fraction
         )
+        return False
 
 
 class WindowsGlobalMediaController(BaseMediaController):
@@ -220,7 +258,7 @@ class WindowsGlobalMediaController(BaseMediaController):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-    def _run_coro_in_isolated_loop(self, coro_factory) -> object:
+    def _run_coro_in_isolated_loop(self, coro_factory, *, on_error=None) -> object:
         """Run one coroutine to completion in its own event loop; return result.
 
         Shared by the blocking query path (`_run_coroutine`) and the
@@ -245,9 +283,18 @@ class WindowsGlobalMediaController(BaseMediaController):
                         return await asyncio.wait_for(coro, timeout=2.0)
                     except asyncio.TimeoutError:
                         logger.debug("[MEDIA] Coroutine timed out, returning None")
+                        if callable(on_error):
+                            on_error("timeout")
                         return None
                     except MemoryError:
                         logger.error("[MEDIA] MemoryError in GSMTC coroutine — returning None")
+                        if callable(on_error):
+                            on_error("MemoryError")
+                        return None
+                    except Exception as exc:
+                        logger.debug("[MEDIA] GSMTC coroutine failed", exc_info=True)
+                        if callable(on_error):
+                            on_error(f"{type(exc).__name__}: {exc}")
                         return None
 
                 return loop.run_until_complete(_runner())
@@ -258,19 +305,29 @@ class WindowsGlobalMediaController(BaseMediaController):
                     logger.debug("[MEDIA] Loop close failed")
         except MemoryError:
             logger.error("[MEDIA] MemoryError in GSMTC loop runner — returning None")
+            if callable(on_error):
+                on_error("MemoryError")
             return None
-        except Exception:
+        except Exception as exc:
             logger.debug("[MEDIA] GSMTC loop runner failed", exc_info=True)
+            if callable(on_error):
+                on_error(f"{type(exc).__name__}: {exc}")
             return None
 
-    def _submit_command(self, action_name: str, coro_factory) -> None:
+    def _submit_command(
+        self,
+        action_name: str,
+        coro_factory,
+        *,
+        operation: str | None = None,
+    ) -> bool:
         """Fire-and-forget a transport command on the IO owner.
 
         The GUI caller never waits for WinRT completion - that synchronous wait
         (via `_run_coroutine`'s `done.wait()`) stalled the GUI event loop on the
         Pause/Play edge, showing up as `dispatch_pending_skips` and a visible
-        hitch. The optimistic UI state and control feedback are applied by the
-        caller immediately, and normal refresh reconciles the real state later.
+        hitch. Queue admission returns immediately; the provider's Boolean
+        result is delivered separately and drives state reconciliation.
 
         Command dedup is preserved: a duplicate arriving while one command is
         still inflight is dropped, exactly as the old shared inflight guard did -
@@ -278,26 +335,57 @@ class WindowsGlobalMediaController(BaseMediaController):
         """
 
         if getattr(self, "_retired", False):
-            return
+            return False
         tm = self._thread_manager
         if tm is None:
             logger.warning(
                 "[MEDIA] ThreadManager not injected for GSMTC controller; skipping %s",
                 action_name,
             )
-            return
+            return False
         if self._command_inflight:
             logger.debug(
                 "[MEDIA] Dropping %s: a transport command is already inflight",
                 action_name,
             )
-            return
+            return False
 
         self._command_inflight = True
+        provider_operation = str(operation or action_name)
+        result_handler = self._command_result_handler
 
         def _run_and_clear() -> None:
+            error_holder: list[str] = []
             try:
-                self._run_coro_in_isolated_loop(coro_factory)
+                raw_result = self._run_coro_in_isolated_loop(
+                    coro_factory,
+                    on_error=lambda error: error_holder.append(str(error)),
+                )
+                provider_result = raw_result if isinstance(raw_result, bool) else None
+                result = MediaCommandResult(
+                    action=action_name,
+                    operation=provider_operation,
+                    succeeded=provider_result is True,
+                    provider_result=provider_result,
+                    error=error_holder[-1] if error_holder else "",
+                )
+                if result.succeeded:
+                    logger.info(
+                        "[MEDIA] GSMTC command completed action=%s operation=%s result=True",
+                        action_name,
+                        provider_operation,
+                    )
+                else:
+                    logger.warning(
+                        "[MEDIA] GSMTC command rejected action=%s operation=%s "
+                        "result=%r error=%s",
+                        action_name,
+                        provider_operation,
+                        provider_result,
+                        result.error or "none",
+                    )
+                if callable(result_handler) and not getattr(self, "_retired", False):
+                    result_handler(result)
             finally:
                 # Cleared on the IO worker once the WinRT command really finished.
                 self._command_inflight = False
@@ -319,6 +407,8 @@ class WindowsGlobalMediaController(BaseMediaController):
         except Exception:
             self._command_inflight = False
             logger.debug("[MEDIA] Failed to submit %s command", action_name, exc_info=True)
+            return False
+        return True
 
     def _run_coroutine(self, coro_factory, *, already_on_io_worker: bool = False):
         """Run an async coroutine in an isolated event loop.
@@ -733,7 +823,28 @@ class WindowsGlobalMediaController(BaseMediaController):
 
             try:
                 if controls is not None:
-                    info.can_play_pause = bool(getattr(controls, "is_play_pause_enabled", False))
+                    info.can_play = bool(getattr(controls, "is_play_enabled", False))
+                    info.can_pause = bool(getattr(controls, "is_pause_enabled", False))
+                    info.can_toggle_play_pause = bool(
+                        getattr(controls, "is_play_pause_toggle_enabled", False)
+                    )
+                    if info.state == MediaPlaybackState.PLAYING:
+                        info.can_play_pause = bool(
+                            info.can_pause or info.can_toggle_play_pause
+                        )
+                    elif info.state in (
+                        MediaPlaybackState.PAUSED,
+                        MediaPlaybackState.STOPPED,
+                    ):
+                        info.can_play_pause = bool(
+                            info.can_play or info.can_toggle_play_pause
+                        )
+                    else:
+                        info.can_play_pause = bool(
+                            info.can_play
+                            or info.can_pause
+                            or info.can_toggle_play_pause
+                        )
                     info.can_next = bool(getattr(controls, "is_next_enabled", False))
                     info.can_previous = bool(getattr(controls, "is_previous_enabled", False))
                     info.can_seek = bool(
@@ -867,18 +978,24 @@ class WindowsGlobalMediaController(BaseMediaController):
             already_on_io_worker=True,
         )
 
-    def _invoke_simple_action(self, action_name: str, coro_factory) -> None:
+    def _invoke_simple_action(
+        self,
+        action_name: str,
+        coro_factory,
+        *,
+        operation: str | None = None,
+    ) -> bool:
         if (
             getattr(self, "_retired", False)
             or not self._available
             or self._MediaManager is None
         ):
-            return
+            return False
 
         async def _act():
             mgr = await self._MediaManager.request_async()
             if mgr is None:
-                return
+                return False
 
             # Send controls to the same provider-filtered session that
             # `get_current_track` uses, not whatever
@@ -889,58 +1006,79 @@ class WindowsGlobalMediaController(BaseMediaController):
                 logger.debug("[MEDIA] Failed to select %s session for %s", self._app_filter, action_name, exc_info=True)
                 session = None
             if session is None:
-                return
-            try:
-                await coro_factory(session)
-            except Exception:
-                logger.debug("[MEDIA] %s failed", action_name, exc_info=True)
+                return False
+            return bool(await coro_factory(session))
 
         # Fire-and-forget: the GUI must not block on WinRT completion.
-        self._submit_command(action_name, lambda: _act())
+        return self._submit_command(
+            action_name,
+            lambda: _act(),
+            operation=operation,
+        )
 
-    def play_pause(self) -> None:  # pragma: no cover - requires winrt
-        self._invoke_simple_action("play_pause", lambda s: s.try_toggle_play_pause_async())
+    def play_pause(
+        self,
+        desired_state: MediaPlaybackState | None = None,
+    ) -> bool:  # pragma: no cover - requires winrt
+        info = self._last_valid_info
+        if desired_state == MediaPlaybackState.PLAYING and (
+            info is None or info.can_play
+        ):
+            return self._invoke_simple_action(
+                "play_pause",
+                lambda s: s.try_play_async(),
+                operation="play",
+            )
+        if desired_state == MediaPlaybackState.PAUSED and (
+            info is None or info.can_pause
+        ):
+            return self._invoke_simple_action(
+                "play_pause",
+                lambda s: s.try_pause_async(),
+                operation="pause",
+            )
+        return self._invoke_simple_action(
+            "play_pause",
+            lambda s: s.try_toggle_play_pause_async(),
+            operation="toggle_play_pause",
+        )
 
-    def next(self) -> None:  # pragma: no cover - requires winrt
-        self._invoke_simple_action("next", lambda s: s.try_skip_next_async())
+    def next(self) -> bool:  # pragma: no cover - requires winrt
+        return self._invoke_simple_action("next", lambda s: s.try_skip_next_async())
 
-    def previous(self) -> None:  # pragma: no cover - requires winrt
-        self._invoke_simple_action("previous", lambda s: s.try_skip_previous_async())
+    def previous(self) -> bool:  # pragma: no cover - requires winrt
+        return self._invoke_simple_action("previous", lambda s: s.try_skip_previous_async())
 
-    def seek_fraction(self, fraction: float) -> None:  # pragma: no cover - requires winrt
+    def seek_fraction(self, fraction: float) -> bool:  # pragma: no cover - requires winrt
         """Seek the selected provider session without blocking the GUI caller."""
 
         try:
             parsed_fraction = float(fraction)
         except (TypeError, ValueError):
-            return
+            return False
         if not math.isfinite(parsed_fraction):
-            return
+            return False
         bounded_fraction = max(0.0, min(1.0, parsed_fraction))
 
         async def _seek(session):
-            try:
-                timeline = session.get_timeline_properties()
-                start_ms = self._timespan_to_milliseconds(
-                    getattr(timeline, "start_time", None)
-                )
-                end_ms = self._timespan_to_milliseconds(
-                    getattr(timeline, "end_time", None)
-                )
-                if start_ms is None or end_ms is None or end_ms <= start_ms:
-                    return False
-                target_ms = start_ms + int(
-                    round((end_ms - start_ms) * bounded_fraction)
-                )
-                # WinRT playback positions use 100 ns ticks.
-                return await session.try_change_playback_position_async(
-                    target_ms * 10_000
-                )
-            except Exception:
-                logger.debug("[MEDIA] seek failed", exc_info=True)
+            timeline = session.get_timeline_properties()
+            start_ms = self._timespan_to_milliseconds(
+                getattr(timeline, "start_time", None)
+            )
+            end_ms = self._timespan_to_milliseconds(
+                getattr(timeline, "end_time", None)
+            )
+            if start_ms is None or end_ms is None or end_ms <= start_ms:
                 return False
+            target_ms = start_ms + int(
+                round((end_ms - start_ms) * bounded_fraction)
+            )
+            # WinRT playback positions use 100 ns ticks.
+            return await session.try_change_playback_position_async(
+                target_ms * 10_000
+            )
 
-        self._invoke_simple_action("seek", _seek)
+        return self._invoke_simple_action("seek", _seek)
 
     # ------------------------------------------------------------------
     # Process detection (lightweight, no GSMTC overhead)

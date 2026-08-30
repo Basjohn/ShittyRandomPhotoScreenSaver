@@ -128,6 +128,12 @@ QML semantic action -> Python admission/action owner -> business side effect -> 
 
 QML does not directly own URLs/backend calls, persistence, provider/cache policy or refresh cadence.
 
+Media action ingress stays non-blocking, but worker submission is only admission.
+The existing shared Media owner consumes the real GSMTC Boolean/exception result
+and then reconciles accepted state; no presenter or second command owner may
+infer success from queueing. Canonical Play/Pause/Toggle capabilities drive both
+glyph admission and the exact provider method. Seek uses absolute 100 ns ticks.
+
 Dynamic image precedent is process-engine `MediaArtworkImageProvider` over runtime-owned decoded `QImage` with stable
 identity/bounded retention. No QPixmap worker transport, base64/tempfile churn or unchanged reupload.
 

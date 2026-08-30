@@ -121,6 +121,13 @@ QML semantic action
 
 QML does not persist settings or directly invoke providers/backends.
 
+Media transport is non-blocking at GUI ingress. Queue admission is not provider
+success: GSMTC Play/Pause/Toggle/Previous/Next/seek publishes its asynchronous
+Boolean or exception outcome to the single shared Media runtime owner, which
+generation-fences it and then refreshes accepted state. Play/Pause capability is
+the state-appropriate union of canonical GSMTC Play, Pause and Toggle controls;
+seek position is an absolute 100 ns tick value.
+
 ## Dynamic images
 
 Use stable identity and bounded presentation image ownership. Proven Media shape:
