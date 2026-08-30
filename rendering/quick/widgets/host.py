@@ -363,6 +363,30 @@ class OrdinaryWidgetPresentationHost:
             widget.set_card_style(card_style)
         return widget
 
+    def registered_image_provider(self, provider_id: str):
+        """Return the image provider registered on this host's QML engine.
+
+        Retained families that publish images by URL (e.g. Media artwork ->
+        ``image://mediaartwork/<id>``) must publish into the *same* provider
+        instance the engine resolves those URLs against — the one the scene
+        factory registered — not a private duplicate. Returns ``None`` when the
+        engine or provider is unavailable so callers can fail closed.
+        """
+
+        context = self._context
+        if context is None:
+            return None
+        try:
+            engine = context.engine()
+        except (RuntimeError, AttributeError):
+            return None
+        if engine is None:
+            return None
+        try:
+            return engine.imageProvider(str(provider_id))
+        except (RuntimeError, TypeError):
+            return None
+
     def presentation_for_model_identity(
         self,
         model_identity: str,

@@ -645,12 +645,28 @@ class MediaFamilyAdapter:
             generation=runtime_generation,
             screen=display_identity,
         )
+        # Publish decoded artwork into the SAME provider the scene factory
+        # registered on this host's QML engine, so an emitted
+        # image://mediaartwork/<id> URL resolves against the instance that owns
+        # the image. A private per-card provider (the prior bug) decoded real
+        # artwork the engine's registered provider never saw, so the artwork box
+        # stayed empty. Fail the card closed if the engine provider is absent
+        # rather than silently building an unresolvable card.
+        artwork_provider = host.registered_image_provider(
+            MediaArtworkImageProvider.provider_id
+        )
+        if not isinstance(artwork_provider, MediaArtworkImageProvider):
+            logger.debug(
+                "[FAMILY_BINDER] Engine-registered Media artwork provider "
+                "unavailable; failing Media card closed",
+            )
+            return None
         config = MediaPresentationConfig.from_widgets_mapping(widgets_config)
         style = MediaPresentationStyle.project(config, shadow_values)
         model = MediaPresentationModel(
             config,
             style,
-            MediaArtworkImageProvider(),
+            artwork_provider,
             runtime_generation=runtime_generation,
         )
         trace_media_native_stage(
