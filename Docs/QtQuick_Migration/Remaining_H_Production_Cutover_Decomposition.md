@@ -125,6 +125,9 @@ Engine replacement paths also no longer toggle/clean the retired QWidget multi-m
 contract owns the existing persisted screen-signature algorithm directly, and generic timer diagnostics no longer scrape or
 classify compositor state. These are caller separation changes, not replacement owners or compatibility surfaces.
 
+Detached image-record aggregation is now a Quick-boundary helper, while the destination `WidgetRuntimeManager` has no dormant
+bridge into old `widget_setup_all` failover behavior. Neither destination owner imports a physical-host setup/accounting module.
+
 "Coordinated" or "atomic" cutover describes the **finished authority topology**, not the size of one coding session or commit.
 The conversion may span as many explicit checkpoints as needed, including intentionally non-runnable intermediate migration
 states, provided no checkpoint invents two legitimate production authorities or a fake legacy compatibility presenter.

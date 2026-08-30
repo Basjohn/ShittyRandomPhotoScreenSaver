@@ -18,7 +18,8 @@ b49c122c (Quick-only DisplayManager collection/cleanup surface landed on pushed 
 1bc332b3 (retained Media playback truth + terminal Quick callback release landed on pushed main)
 02b5960c (diagnostic-entry/tray physical-host hooks removed on pushed main)
 76940eec (lifecycle resource accounting routed through Quick semantic ownership on pushed main)
-current bounded checkpoint: separate durable generic seams from the caller-dead physical-host tree
+191c2f18 (durable CUSTOM/timer/engine seams detached from legacy host on pushed main)
+current bounded checkpoint: remove final destination imports of caller-dead host helpers
 True-F focused gate: 7/7 GREEN
 Settings-overhaul focused reconciliation: 154/154 GREEN
 H destination profile: 60/60 target-isolated GREEN
@@ -320,6 +321,9 @@ The family/runtime destination integration already landed and test-gated include
 - Engine restart paths no longer toggle or clean the retired multi-monitor QWidget coordinator; the engine settings flag plus
   generation teardown are authoritative. CUSTOM now owns its persisted screen-signature algorithm directly, and generic timer
   diagnostics no longer inspect or classify old compositor cadence/transition state.
+- Detached presentation-image aggregation now lives at the Quick image boundary, and the destination runtime manager no longer
+  imports the retired E2.7 `widget_setup_all` failover bridge. The old image-accounting and widget-setup modules are therefore
+  no longer dependencies of either destination production owner.
 - Quick input transport/app-volume/system-volume/mute signals now route through each unit's already-owned retained Media
   presentation, preserving its configuration/runtime-availability admission and the existing neutral service owners. Layout
   slot save/load moved to `DisplayManager` + `SettingsManager`; a successful load emits the existing runtime-generation and

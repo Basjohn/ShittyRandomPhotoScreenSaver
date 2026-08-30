@@ -14,6 +14,7 @@ from rendering.quick.display_image_route import (
     present_processed_pixmap,
     presentation_image_from_processed_pixmap,
 )
+from rendering.quick.image_accounting import aggregate_presentation_image_accounting
 from rendering.quick.runtime import QuickDisplayRuntime
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
@@ -37,6 +38,25 @@ def _make_runtime(qt_app, generation: int):
         window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
     )
     return runtime, factory
+
+
+def test_quick_image_accounting_deduplicates_detached_records() -> None:
+    shared = {"resource_id": "presentation:a", "tracked_bytes": 64}
+    snapshot = aggregate_presentation_image_accounting(
+        (
+            {"resources": (shared,)},
+            {
+                "resources": (
+                    shared,
+                    {"resource_id": "presentation:b", "tracked_bytes": 32},
+                )
+            },
+        ),
+        generation=7,
+    )
+    assert snapshot["generation"] == 7
+    assert snapshot["resource_count"] == 2
+    assert snapshot["total_tracked_bytes"] == 96
 
 
 @pytest.mark.qt

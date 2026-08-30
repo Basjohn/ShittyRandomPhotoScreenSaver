@@ -292,32 +292,6 @@ class WidgetRuntimeManager:
             self.retire_widget_service(widget_id)
 
     # ------------------------------------------------------------------ #
-    # Capability-deactivation reaction dispatch                          #
-    # ------------------------------------------------------------------ #
-    def handle_capability_change(self, settings_manager: Any) -> None:
-        """React to a capability-activation change at the owner boundary.
-
-        This dispatches the E2.7 canonical Visualizer failover retirement: when
-        Media or Visualizers becomes ineffective, a pending grace / live temporary
-        fallback must be retired so it cannot stay stuck. It is a transitional
-        bridge to that specific closed E2.7 lifecycle only — NOT a generic
-        in-place family live-retirement mechanism (family activation is applied
-        through the Settings-owned runtime teardown/recreation path, per
-        ``Current_Plan.md``). Lazy import avoids a module-load cycle with
-        ``widget_setup_all``.
-        """
-        try:
-            from rendering.widget_setup_all import (
-                retire_visualizer_failover_on_capability_change,
-            )
-            retire_visualizer_failover_on_capability_change(settings_manager)
-        except Exception:
-            logger.debug(
-                "[WIDGET_RUNTIME] Visualizer failover deactivation retirement failed",
-                exc_info=True,
-            )
-
-    # ------------------------------------------------------------------ #
     # Runtime lifecycle routing (presentation-neutral)                   #
     # ------------------------------------------------------------------ #
     def _registry(self) -> Mapping[str, Any]:
