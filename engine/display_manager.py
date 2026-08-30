@@ -475,41 +475,13 @@ class DisplayManager(QObject):
         logger.info("Screen removed: %s" % screen.name())
         self._schedule_monitor_reconcile("screenRemoved")
 
-    @staticmethod
-    def _quick_activation_experiment() -> dict[str, bool]:
-        """Operator-gated Display-1 flash A/B: does the window need activation?
-
-        Physical `[QUICK_SURFACE]` evidence ties every recurring Display-1 flash
-        to a native `window_active_changed` on the secondary window (scene graph
-        and frames stay healthy throughout). This lets the operator A/B the
-        window activation policy against the `tools/black_flash_capture.py`
-        counts. It is INERT by default; only an explicit env value changes
-        behaviour, and nothing is committed as the default until a variant is
-        physically proven to remove the flash without breaking required input.
-
-        ``SRPSS_QUICK_ACTIVATION``:
-          ``no-activate`` keep focatability but stop forcing activation on show
-                          (keyboard still works via click-to-focus);
-          ``no-focus``    WS_EX_NOACTIVATE: the window never activates (strongest
-                          flash candidate, but general keyboard input is lost -
-                          media keys still arrive via raw input).
-        """
-
-        mode = os.environ.get("SRPSS_QUICK_ACTIVATION", "").strip().lower()
-        if mode == "no-activate":
-            return {"accepts_focus": True, "proactively_activate": False}
-        if mode == "no-focus":
-            return {"accepts_focus": False, "proactively_activate": False}
-        return {"accepts_focus": True, "proactively_activate": True}
-
     def _quick_window_policy(self) -> QuickWindowPolicy:
         """Resolve the production top-level role without importing QWidget policy."""
 
         from core.mc import is_mc_build
 
-        activation = self._quick_activation_experiment()
         if not is_mc_build():
-            return QuickWindowPolicy(**activation)
+            return QuickWindowPolicy()
         use_splash = (
             os.environ.get("SRPSS_MC_WINDOW_FLAGS", "").strip().lower()
             == "splash"
@@ -529,7 +501,6 @@ class DisplayManager(QObject):
                 else QuickWindowRole.MEDIA_CENTER_TOOL
             ),
             always_on_top=always_on_top,
-            **activation,
         )
 
     def _interaction_mode_enabled(self) -> bool:

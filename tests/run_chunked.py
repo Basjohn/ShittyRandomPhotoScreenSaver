@@ -112,11 +112,9 @@ H_DESTINATION_PROFILE = (
     "test_lifecycle_display_ownership_logging.py",
     "test_qt_message_capture_contract.py",
     "test_qt_message_capture_qml_runtime.py",
-    # Black-flash / native surface-continuity contract and the global
-    # single-context-menu owner (Display-1 flash investigation).
-    "test_qtquick_black_flash_contract.py",
+    # Exactly one product context menu across all displays (real bug, independent
+    # of the black-flash investigation).
     "test_qtquick_context_menu_single_owner.py",
-    "test_quick_window_activation_experiment.py",
 )
 
 PROFILES = {
