@@ -637,31 +637,42 @@ def _construct_and_start_replacement_runtime(
         return False
     engine._runtime_lifecycle_event = event
 
-    log_lifecycle_resource_snapshot(
-        engine,
-        event=event,
-        stage="before_replacement_construction",
-    )
-    if not engine._initialize_display():
-        logger.error("Failed to initialize replacement display runtime; quitting")
-        QApplication.quit()
-        return False
-    log_lifecycle_resource_snapshot(
-        engine,
-        event=event,
-        stage="after_replacement_before_first_frame",
-    )
-    engine._setup_rotation_timer()
-    if not engine.start():
-        logger.error("Failed to start replacement display runtime; quitting")
-        QApplication.quit()
-        return False
-    log_lifecycle_resource_snapshot(
-        engine,
-        event=event,
-        stage="after_restart",
-    )
-    return True
+    # H1 diagnostic: the dual-display replacement generation intermittently hangs
+    # the main thread during screen-1 Media/native construction (H doc §3). A
+    # healthy replacement completes in well under a second, so arm an all-thread
+    # stack-dump watchdog and disarm it once construction returns; a fired dump
+    # names the exact wedged frame the breadcrumbs cannot.
+    from core.diagnostics.hang_watchdog import arm as _arm_hang, disarm as _disarm_hang
+
+    _arm_hang("replacement_construction:%s" % event, timeout_s=20.0)
+    try:
+        log_lifecycle_resource_snapshot(
+            engine,
+            event=event,
+            stage="before_replacement_construction",
+        )
+        if not engine._initialize_display():
+            logger.error("Failed to initialize replacement display runtime; quitting")
+            QApplication.quit()
+            return False
+        log_lifecycle_resource_snapshot(
+            engine,
+            event=event,
+            stage="after_replacement_before_first_frame",
+        )
+        engine._setup_rotation_timer()
+        if not engine.start():
+            logger.error("Failed to start replacement display runtime; quitting")
+            QApplication.quit()
+            return False
+        log_lifecycle_resource_snapshot(
+            engine,
+            event=event,
+            stage="after_restart",
+        )
+        return True
+    finally:
+        _disarm_hang("replacement_construction:%s" % event)
 
 
 def on_custom_layout_reload_requested(
