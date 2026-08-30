@@ -335,6 +335,51 @@ def test_media_card_builds_with_all_three_owned_leases(qt_app) -> None:
 
 
 @pytest.mark.qt
+def test_media_publishes_into_the_engine_registered_artwork_provider(qt_app) -> None:
+    # H2: the Media model must publish decoded artwork into the SAME provider the
+    # scene factory registered on the QML engine, so image://mediaartwork/<id>
+    # URLs resolve. A private per-card provider (the prior bug) decoded artwork
+    # the engine never saw, leaving the artwork box empty.
+    from PySide6.QtCore import QSize
+    from PySide6.QtGui import QImage
+
+    runtime, factory = _make_runtime(qt_app, 91)
+    try:
+        binder = _binder(
+            runtime,
+            adapters=(MediaFamilyAdapter(),),
+            runtime_generation=91,
+        )
+        binder.bind({"media": {"enabled": True, "provider": "spotify"}})
+        presentation = binder.presentation_for_widget_id("media")
+        assert presentation is not None
+
+        host = runtime.scene_controller.ordinary_widget_host
+        registered = host.registered_image_provider("mediaartwork")
+        # The provider resolved from the engine is the concrete artwork provider,
+        # and the presentation's model publishes into that exact instance rather
+        # than a private duplicate.
+        from rendering.quick.media_artwork import MediaArtworkImageProvider
+
+        assert isinstance(registered, MediaArtworkImageProvider)
+        assert presentation.model._artwork_provider is registered
+
+        # Cross-layer: an identity published through the model's provider is
+        # resolvable through the engine-registered provider the QML Image uses.
+        image = QImage(8, 8, QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(0xFF2277CC)
+        url = presentation.model._artwork_provider.publish((image.sizeInBytes(), "abc123"), image)
+        assert url.startswith("image://mediaartwork/")
+        identity = url.rsplit("/", 1)[-1]
+        resolved = registered.requestImage(identity, QSize(), QSize())
+        assert not resolved.isNull()
+    finally:
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
 def test_steam_family_gated_off_builds_nothing_but_enabling_admits_card(
     qt_app,
 ) -> None:
