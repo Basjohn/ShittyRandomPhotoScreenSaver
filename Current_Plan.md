@@ -1,48 +1,39 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-30
+Last updated: 2026-08-30 post-cutover audit at pushed `4f33981ef374301d6a66e1651917eb23a2686f8c`
 
 ## Current checkpoint
 
-G is independently audited and accepted. The H production-authority cutover and
-legacy physical-host deletion landed, but **H closure is narrowly reopened** by
-post-cutover audit + the first real source-mode runtime reality run. I is blocked
-until the demonstrated deterministic runtime defects below are corrected and a
-short operator smoke passes.
+G remains independently audited and accepted. The H production-authority cutover and caller-proven deletion of the old physical host remain accepted architecture. **H itself is still OPEN. I is NOT admitted.**
 
-Exact pushed `main` at the time these runtime-reality tests were authored is
-`bd27f903cbc6ae793e25bfb8092f0e9211caef30`. That checkpoint had re-declared
-H CLOSED after the routing/failover correction, but the preserved real runtime
-evidence below narrowly reopens H until its demonstrated live seams are fixed:
+The first post-cutover runtime-reality pass exposed four deterministic seams which have now been corrected and added to the maintained destination boundary:
 
 ```text
-9dcb02be  caller-proven legacy physical presentation host deleted
-bc8fd6a   Quick visualizer admission restored to canonical effective monitor routing
-6f88cca   neutral Visualizer CUSTOM 30 s failover/reclaim lifecycle re-homed
-28e95d6   DisplayManager wired the re-homed failover/reclaim lifecycle
-bd27f90   docs re-declared H CLOSED after that bounded correction
+da3dafab  controller-owned tick diagnostic defaults
+cad4e6d2  active transition replacement -> cancel to destination, then replace
+adcfd96d  successive visualizer revisions request retained presentation
+747e3140  context menu no longer self-dismisses on its opening right-click
+e1d80f4d  runtime-reality file added to h-destination; reported 64/64 GREEN
 ```
 
-The previous structural H deletion checkpoint passed the maintained
-`h-destination` profile 60/60. That remains useful structural evidence, but the
-real runtime run below proved the profile did not yet falsify several live
-product seams.
+Keep those fixes. Do not reopen them without exact regression evidence.
 
-The first post-swap runtime evidence is preserved at:
+A second real dual-display smoke, including source `4f33981`, then exposed additional product failures. These are now the active H boundary. Visual parity remains explicitly separated into J.
 
-```text
-logs/evidence_chest/08_30_RuntimeSwap_03_37/
-```
+Detailed evidence, ownership hypotheses and gates are in:
 
-Its own `[SOURCE_HEAD]` records `427eafed8cff8b932bc64efee964764ce3f02260`,
-so that run **predates** both `bc8fd6a` and `6f88cca`. Do not use the runtime run
-to claim those two later routing/failover corrections failed. Re-audit them on
-exact current source, then leave them alone unless current evidence reopens them.
+`Docs/QtQuick_Migration/H_Post_Cutover_Runtime_Reality_Corrections.md`
 
-The production architecture itself remains the accepted destination:
+The complete operator-observation backlog, including positive preservation targets, is in:
+
+`Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md`
+
+**Parity rule:** the pre-Quick implementation is a user-visible outcome/design-language reference only. It may be used to establish how sizing, spacing, clipping, artwork, controls, refresh treatment and interaction felt when those behaviors were better. It is never permission to restore, wrap, adapt or depend on the deleted QWidget/QRhi/GL presenter architecture. Reproduce good outcomes in the accepted Quick architecture; preserve genuine Quick improvements.
+
+## Production architecture — still accepted
 
 ```text
-selected display
+selected physical display
 -> DisplayManager semantic orchestration
 -> one QuickDisplayUnit
 -> one QuickDisplayRuntime
@@ -55,179 +46,219 @@ selected display
 -> exactly one product-level visualizer owner across participating displays
 ```
 
-The old `DisplayWidget`/GL-compositor physical presenter remains deleted. These
-corrections are not permission to restore it, add a compatibility facade, or
-create a second owner/pacer/presenter.
+Do not restore `DisplayWidget`, QRhiWidget/GLCompositor presentation, a QWidget compatibility facade, a second presenter, a second visualizer owner/pacer, or a software fallback.
 
-## Active task — H post-cutover runtime-reality corrections
+## Active H blockers — work in this order
 
-Detailed evidence and boundaries are in:
+### H1 — dual-display Settings/CUSTOM replacement generation dies while screen 1 Media is activating
 
-`Docs/QtQuick_Migration/H_Post_Cutover_Runtime_Reality_Corrections.md`
+**Status: instrumented + deterministically fenced; native root owner awaiting the operator's instrumented dual-display repro. No native owner has been changed.**
 
-Work the smallest demonstrated owner for each defect. Verify exact current
-source first because the evidence run predates the two visualizer routing/failover
-commits above.
+Landed at `ae3eda9a`:
 
-### A. Already landed; audited on current source, not redone
+- **Source audit result.** The generation lifecycle is clean. `_runtime_generation` increments per replacement (`engine._runtime_generation + 1`), a whole new `DisplayManager` is built on the one app-scoped `ThreadManager`, the three shared Media owners are keyed `("runtime", generation)`, and the destruction barrier retires the old generation's owners before the replacement builds. There is **no cross-generation Python owner reuse**. The failure is therefore native (COM/WinRT/pycaw), not a Python cardinality bug.
+- **Instrumentation.** Bounded one-shot `[MEDIA_NATIVE][H1]` breadcrumbs (generation + thread id) at every native boundary: Media family `model_construct`, each lease (`media` / `spotify_volume` / `mute_button`) `lease_attach` + owner `owner_activate` begin/complete, `retained_item_construct`, the GSMTC `winrt_init` marker, the pycaw `core_audio_enumerate` thread, and the process-global system-mute `mute_endpoint` acquire thread (`core/media/media_native_trace.py`). No polling, no per-frame logs; de-duplicated per `(generation, screen, component, stage)` so the replacement generation re-emits its whole timeline.
+- **Deterministic bar.** `tests/test_media_generation_recreation.py` builds the three leases for gen 1, retires (destruction barrier), rebuilds under gen 2 on the same ThreadManager, and asserts old owners retire, new owners are fresh/distinct, no owner crosses the boundary, and every registry returns to zero. Added to `h-destination` (65/65 GREEN). This keeps any future Python-lifecycle regression falsifiable and the native bisect honestly scoped.
 
-- [x] Canonical effective visualizer monitor routing outside vs inside CUSTOM
-  landed at `bc8fd6a`.
-- [x] Permanent E2.7 Visualizer CUSTOM 30-second grace/fallback/reclaim state
-  landed at `6f88cca`.
-- [x] Independently audited both on exact current source: routing + failover +
-  remote-capability focused suites are **44/44 GREEN**; no redo needed.
+**Operator step (required before any native fix): instrumented dual-display repro + lease bisect.**
 
-### B. Deterministic runtime failures exposed by `427eafed` — CORRECTED
+1. Run source mode with two displays and `[MEDIA_NATIVE][H1]` visible (INFO). Leave Settings (and separately leave CUSTOM via Save/Continue) to force the replacement generation. Capture the log through process death.
+2. Read the **last** `[MEDIA_NATIVE][H1]` line: it names the exact `component`, `stage`, `thread` and `gen` reached before the crash. Compare the endpoint/enumerate/winrt threads across `gen=N` and `gen=N+1` — a component whose native thread differs from where its endpoint was acquired is the order/apartment violation.
+3. If the last stage is ambiguous, bisect the leases in the failing recreation only: (a) `media` alone, (b) `media`+`mute_button`, (c) `media`+`spotify_volume`, (d) full three. This isolates the owning lease. Diagnostic disablement is not a product fallback and must not remain.
+4. Report the last completed stage + thread evidence back here. Only then fix that one native owner at its boundary (preserve one shared owner per generation and the existing ThreadManager; no new worker/poller/presenter), add the native runtime-shaped smoke, and re-run `h-destination`.
 
-All four demonstrated seams are fixed and GREEN via
-`tests/test_qtquick_runtime_reality.py` (now in the `h-destination` boundary;
-whole profile **64/64 GREEN**). The context-menu click is delivered through the
-`QQuickWindow` delivery agent (`sendEvent`) because `QTest.mouseClick`'s OS input
-queue hangs/crashes this environment's window; that is the same real path that
-reproduced the self-dismiss, so the gate is strengthened, not weakened.
+Two independent runs have the same shape:
 
-- [x] **Live visualizer retained delivery** (`adcfd96d`): the owner never passed
-  the optional `request_present` callback and `set_presentation` only dirties the
-  item on geometry/style change, so successive logical revisions never re-ran
-  `updatePaintNode` (`sync_count=1`). Wired `request_present ->
-  scene_controller.request_visualizer_present -> item.update()`; the display
-  frame pacer remains the sole GUI sync opportunity (no second cadence owner).
-- [x] **Transition replacement/interruption** (`cad4e6d2`): a valid image during
-  an active run now cancels that run to its authored destination exactly once
-  (`CANCELLED_TO_DESTINATION`) and starts the replacement from that source; the
-  controller fences the superseded run's stale completion. No black clear, no
-  bare reject.
-- [x] **Visible retained context menu** (`747e3140`): the opening right-click
-  flipped `menuVisible` true, which made the dismiss scrim visible, and the same
-  press was re-delivered to that scrim's `onPressed`, self-dismissing the menu
-  (anchor set, `visible=False`). The scrim is now armed only after the opening
-  event completes (`Qt.callLater`, one-shot). Verified through the delivery-agent
-  path: opening press keeps the menu open; a subsequent click still dismisses.
-- [x] **Visualizer diagnostic-state initialization** (`da3dafab`):
-  `install_default_logical_tick_state` now installs `_last_tick_spike_log_ts=0.0`
-  and `_dt_spike_log_cooldown=0.75` (legacy defaults), so the delegated tick path
-  no longer raises `AttributeError`.
-
-The focused deterministic gate supplied with this plan is:
-
-```powershell
-pytest tests/test_qtquick_runtime_reality.py -q --tb=short
-```
-
-Remaining H re-closure gate: the source-mode operator smoke below. H is NOT
-closed and I is NOT started until that smoke passes on real displays.
-
-## H -> I runtime reality gate
-
-Before I is admitted, perform one short source-mode operator smoke against the
-exact corrected checkpoint. This is deliberately **not** a new benchmark or a
-large test project.
-
-Required smoke:
-
-1. cold start and wait for both displays' intentional first frames;
-2. confirm the visualizer visibly evolves for several seconds, not merely that
-   logical cadence telemetry advances;
-3. open the retained context menu on a real display, leave it visible, execute
-   one harmless action, then enter and cancel CUSTOM;
-4. request Next once, then request Next again while that transition is still
-   active; no exception, stuck transition or black handoff;
-5. open/close Settings so the display generation recreates, then click/focus
-   between both displays;
-6. exit normally and confirm process termination.
-
-If that smoke exposes a reproducible deterministic ownership/routing/action
-failure, keep H open and fix the smallest owner. Visual ugliness without a
-broken deterministic contract is recorded for J instead.
-
-## Explicit J evidence from the first runtime run
-
-The same `427eafed` run also exposed issues that should **not** be mixed into the
-bounded H corrections unless current evidence proves a deterministic contract
-failure:
-
-- frequent visible black flashes at startup, focus/click and transition edges;
-- no operator-visible gentle widget fade despite a `fade_reveal_completed`
-  telemetry milestone;
-- inconsistent refresh-spiral presentation between widget/header surfaces;
-- several ordinary widget content/outer-size relationships looked wrong;
-- transitions fundamentally rendered but looked visually flaky.
-
-J must treat these as named acceptance cells, not vague "visual parity" debt.
-The first run showed why cross-layer proof matters:
+Two independent runs have the same shape:
 
 ```text
-ready/reveal telemetry fired        != operator saw a clean fade with no black flash
-logical visualizer cadence is 90 Hz != retained pixels visibly evolve
-context-menu model accepted input   != the operator can see/use the menu
+old two-display generation teardown
+-> destruction barrier completes normally
+-> replacement display initialization starts
+-> screen 0 Quick unit completes
+-> screen 1 starts family binding
+-> Windows GSMTC controller initialized
+-> Media shared poll owner/timer created
+-> comtypes/Core Audio releases begin
+-> process/log ends before screen 1 unit completion
 ```
 
-A one-shot widget-layout diagnostic at startup/recreation is desired for J:
-widget id, effective display route, preferred content size, final outer rect,
-CUSTOM override if any, DPR and clamp result. It must not become polling or a
-per-frame geometry stream.
+CUSTOM evidence: source `747e314`, 04:34:14.  
+Settings evidence: source `4f33981`, 04:47:07.
 
-The near-hang on exit is **not currently evidence of Quick retirement failure**:
-the observed display/process/thread teardown completed in the 03:10:07 second;
-the final ~2 seconds were logged pycache cleanup before normal exit code 0.
-Re-test shutdown in J, but do not redesign Quick teardown from that observation.
+The old generation is not hanging: its destruction barrier completes. Do not redesign Quick retirement from this evidence. The strongest current suspect is replacement-generation Media/native service activation — especially the app-volume/Core Audio lease — because the termination sits on that exact boundary in both runs. This is still a hypothesis, not permission to add arbitrary `CoInitialize` calls.
 
-## I residue reconciliation — blocked until H runtime reality gate is GREEN
+Required next work:
 
-When H is re-closed, I remains the intentionally boring source-driven cleanup
-phase:
+1. add bounded stage breadcrumbs around Media model construction, each of its three service builds/injections (`media`, `spotify_volume`, `mute_button`), retained-item construction, and each service activation;
+2. reproduce dual-display replacement;
+3. perform a minimal capability/lease bisect (primary Media vs app-volume vs mute) to identify the actual native owner;
+4. fix that owner only;
+5. add a repeat-recreation regression/harness that reuses the real process/runtime-generation boundary rather than only constructing a fresh first generation;
+6. prove Settings **and** CUSTOM Save/Continue recreate both selected displays and the process remains alive.
 
-- [ ] derive the exact post-H residue inventory from imports/callers and the
-  complete-tree collection diagnostic;
-- [ ] preserve/re-home only surviving neutral/Quick contracts from old-owner
-  tests; delete pure retired-presenter assertions;
-- [ ] remove caller-dead old-presenter adapters, aliases, tools, logger routes,
-  comments and migration spikes with no destination consumer;
-- [ ] restore clean full-tree collection and broad-suite authority;
-- [ ] keep `Docs/TestSuite.md`, `Future_Cleanup.md`, `Index.md` and `Spec.md`
-  current after material residue slices.
+One-display MC recreation working is useful contrast evidence; preserve it in the matrix.
 
-I must not "clean up" the new H runtime-reality tests or the retained physical J
-smoke cells merely because their filenames/ancestry are old.
+### H2 — Media artwork decoded but cannot reach the QML engine provider
+
+**Status: source-proven wiring defect.**
+
+`QuickSceneFactory` registers one `MediaArtworkImageProvider` on the shared `QQmlEngine`. Production `MediaFamilyAdapter`, however, constructs a different `MediaArtworkImageProvider` and injects that private instance into `MediaPresentationModel`.
+
+The model publishes decoded artwork into its private provider and emits an `image://mediaartwork/<identity>` URL. QML resolves that URL against the engine-registered provider, which does not own the image. Runtime logs independently prove source decode succeeds (`decode_ok=True`, real payload bytes), matching the operator's “artwork never loads.”
+
+Required fix: the Media presentation for a Quick scene must publish into the **same provider instance registered on that scene factory's QQmlEngine**. Inject that provider through the existing presentation assembly; do not register duplicate providers or create one per Media card.
+
+Add a cross-layer test that builds Media through the production Quick family assembly and asserts the model's publication is resolvable by the factory's registered provider.
+
+### H3 — retained Reddit URL click has no production opener
+
+**Status: source-proven wiring defect.**
+
+`RedditPresentationModel.admit_url()` is present. `RetainedRedditPresentation` exposes the correct `on_open_requested` seam and its focused tests pass only because tests explicitly inject a callback. Production `RedditFamilyAdapter` constructs `RetainedRedditPresentation` without `on_open_requested`, so `_handle_open_requested()` necessarily returns false after URL admission.
+
+This cleanly explains why Gmail links work but Reddit links do not, including MC where the direct-open mechanism is otherwise simple.
+
+Required fix: connect the retained Reddit semantic action to the existing product-level Reddit opening authority. Preserve the established product distinction:
+
+```text
+MC -> direct user-desktop open
+SCR -> existing deferred/helper queue authority and normal saver exit
+```
+
+Do not recreate helper policy in QML or the family model. Do not let helper readiness block saver teardown.
+
+Add a production-family assembly regression: an admitted retained Reddit row click must reach the injected product opener exactly once; untrusted URL and disabled interaction must remain rejected.
+
+### H4 — Media Play/Pause and seek do not execute; Previous/Next do
+
+**Status: operator-reproducible; routing exists, final command semantics unproven.**
+
+The retained QML signals and Python presentation handlers exist for all four actions. Since Previous/Next work through the same retained card and interaction admission, do not rewrite the QML control strip or generic input path first.
+
+Investigate the narrower GSMTC action boundary:
+
+- record bounded action result telemetry: requested -> submitted -> WinRT result/exception -> reconciliation refresh;
+- do not block the GUI waiting for WinRT;
+- do not report action success solely because a worker task was queued;
+- verify Spotify's real toggle semantics; if `try_toggle_play_pause_async()` is unreliable, compare explicit play/pause operations against the current accepted playback state before choosing a repair;
+- verify the timeline/seek units and the boolean result of `try_change_playback_position_async()`.
+
+Previous/Next are the working control group. Preserve their behavior.
+
+### H5 — Spectrum is visually broken when switched to; other modes are good
+
+**Status: operator-reproducible; localize before editing.**
+
+Current logs show the mode switch itself is admitted cleanly: old logical runtime joins, the BeatEngine activation generation changes, the logical runtime restarts, `spectrum.frag` loads and the mode is persisted. That does **not** prove Spectrum pixels are correct.
+
+Create a focused mode-switch reality gate that starts from another known-good mode, switches to Spectrum, then proves:
+
+- mode identity is Spectrum through logical -> render snapshot -> retained node;
+- Spectrum receives current non-stale authored bar/state data;
+- its presentation geometry/uniforms match the committed item;
+- the retained node actually draws Spectrum after the switch.
+
+Do not change shared visualizer cadence or Bubble to fix a Spectrum-only failure.
+
+### H6 — context-menu exit responsiveness: instrument, then classify
+
+**Status: operator-visible, cause unknown.**
+
+Add only bounded lifecycle timestamps around:
+
+```text
+context action accepted
+-> exit signal emitted
+-> input admission closed
+-> Quick windows hidden/closed for visible response
+-> display producers retired
+-> worker/process joins
+-> QApplication quit
+```
+
+If action admission or visible dismissal is delayed, repair the smallest H owner. If visible exit is immediate and only terminal joining is slow, carry the measured tail into J lifecycle/performance acceptance. Do not add arbitrary sleeps or abandon clean joins.
+
+## H runtime observations that are NOT blockers by themselves
+
+### Bubble
+
+Current source-mode evidence after `adcfd96d` is healthy on objective authored/runtime measures:
+
+- retained visualizer `sync_count` reaches the thousands rather than freezing at 1;
+- Bubble authored cadence stays about 89.8–89.9 FPS;
+- Bubble requested/integrated ratio is `1.000` with zero integration failures.
+
+The operator is unsure whether Bubble feels slightly less reactive. Preserve that as a J eyes-on comparison; do not retune Bubble without stronger evidence.
+
+**Positive physical observation:** Bubble partial/CUSTOM resizing currently works quite well. Preserve that as a provisional J pass/protection target while fixing Spectrum and other parity debt; it does not certify every mode or viewport shape.
+
+### Focus/click flicker and other presentation ugliness
+
+Whole-scene flicker when clicking/focusing a display, black flashes, transition visual flakiness and widget-shell parity are J presentation evidence **unless** instrumentation proves focus is resetting semantic base-image/reveal state. If that deterministic state reset is found, reopen only that owner in H.
+
+## H re-closure gate
+
+H can re-close only when all of the following are true on exact current source:
+
+1. the existing four runtime-reality regressions remain GREEN;
+2. dual-display Settings close/recreate succeeds and process remains alive;
+3. dual-display CUSTOM Save/Continue close/recreate succeeds and process remains alive;
+4. Media artwork visibly resolves from a real decoded runtime snapshot through the engine-registered provider;
+5. Reddit admitted URLs reach the correct MC/SCR product opener;
+6. Media Play/Pause and seek work on the real provider while Previous/Next remain working;
+7. Spectrum survives a real mode switch and visibly renders correctly;
+8. context-menu Exit has measured/understood responsiveness with no action-routing failure;
+9. process termination leaves no orphaned worker process attributable to an abnormal replacement crash;
+10. maintained `h-destination` is rerun once after the bounded fixes and remains GREEN;
+11. every unresolved ledger row whose phase includes **H** is either closed with evidence or explicitly carried into J with a recorded reason.
+
+Then run a short source-mode two-display smoke. Only after that smoke is GREEN may I start.
+
+## I residue reconciliation — blocked
+
+I remains intentionally boring source/test/tool residue cleanup after H. Do not use I to absorb these runtime defects and do not restore legacy presentation to satisfy old tests.
+
+When admitted:
+
+- derive exact residue from callers/imports and broad collection;
+- preserve/re-home surviving neutral/Quick contracts only;
+- delete pure retired-presenter assertions and caller-dead adapters/tools/comments;
+- restore meaningful broad-suite authority;
+- reconcile `Docs/TestSuite.md`, `Future_Cleanup.md`, `Index.md` and `Spec.md` as needed.
+
+## J acceptance inputs — explicit, not vague parity debt
+
+Follow the existing J decomposition plus:
+
+`Docs/QtQuick_Migration/J_Visual_Parity_Runtime_Acceptance_Addendum_2026-08-30.md`
+
+Mandatory observation ledger:
+
+`Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md`
+
+Finishing the current coding prompts does **not** close this ledger. J closure must account for every unresolved physical/visual row.
+
+Named cells now include:
+
+- startup/focus/transition black flash and whole-scene flicker;
+- actual gentle reveal/fade;
+- Media shell/proportions/artwork/header/control-strip parity;
+- Gmail row clipping and header/refresh parity;
+- Reddit/Gmail/Media logo/header alignment consistency;
+- Achievement Pulse icon placement, unlocked-count space and wasted-area removal;
+- consistent header border thickness/chrome;
+- optional Media `Junk` and `Paused` metadata lines;
+- all-five visualizer eyes-on fidelity, with Bubble feel and Spectrum switching explicit; preserve the currently good Bubble partial-resize behavior;
+- physical A->B->A focus, mixed refresh/DPR, off/wake, performance tails and clean exit.
 
 ## Binding invariants
 
-- One selected physical display owns one standalone `QQuickWindow`, one
-  retained scene and one display runtime/service owner chain.
-- No `QQuickWidget`, second accelerated surface, hidden QWidget presenter,
-  software/QRhi fallback presenter or presentation screenshot facade.
-- No duplicate legacy/Quick production presenter, provider/service manager,
-  visualizer controller/source/logical runtime/mailbox/render bridge or CUSTOM
-  owner.
-- Python owns semantic/settings/provider/runtime truth; QML consumes bounded
-  presentation state and emits semantic actions.
-- Ordinary family admission resolves activation/effectiveness, instance
-  `enabled`, and canonical effective `monitor` routing before construction.
-- Outside CUSTOM the visualizer follows canonical effective Media monitor
-  routing; committed CUSTOM layout may own the visualizer's persisted route.
-- CUSTOM keeps committed geometry separate from temporary working geometry;
-  visualizer committed viewport extent remains authoritative outside editing.
-- Visualizer authored cadence remains presentation-independent; the display's
-  existing Quick frame pacer is the sole GUI synchronization opportunity.
-- Transition interruption/replacement must remain exactly-once and must not use
-  a black clear as an ownership shortcut.
-- Old generation admission closes and logical work joins before legal
-  scene/window retirement; generation `0` remains valid.
-- Fallbacks are fail-loud, product-authorized and destination-owned; old
-  presentation code is not a fallback.
-
-## Deferred J acceptance
-
-J owns compiled/installed and physical acceptance after H/I. Follow
-`Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md`.
-The first post-swap runtime observations above are now explicit J inputs.
-
-The two real-physical-display cells in `tests/test_qtquick_runtime.py` remain J
-evidence. Do not weaken/delete them merely to manufacture an I broad-suite pass.
-
-## Unrelated debt
-
-`Future_Cleanup.md` is authoritative. Do not re-admit unrelated Settings theme,
-Reddit helper or retired Presets work unless exact current callers make it part
-of the active correction/cleanup boundary.
+- One selected physical display owns one standalone `QQuickWindow`, one retained scene and one display runtime/service chain.
+- No `QQuickWidget`, second accelerated presenter, hidden QWidget presenter, QRhi/software fallback or screenshot facade.
+- Python owns semantic/settings/provider/runtime truth; QML consumes bounded presentation state and emits semantic actions.
+- Ordinary family admission resolves capability, instance `enabled` and canonical effective monitor route before construction.
+- Visualizer authored cadence remains presentation-independent; the existing display Quick frame pacer is the sole GUI presentation opportunity.
+- Transition interruption/replacement remains exactly-once and never uses a black clear as an ownership shortcut.
+- Old generation admission closes and logical work joins before scene/window retirement; generation `0` is valid.
+- Fallbacks are product-authorized, destination-owned and fail-loud. Deleted legacy presentation is not a fallback.
