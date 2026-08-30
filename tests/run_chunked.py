@@ -80,6 +80,7 @@ H_DESTINATION_PROFILE = (
     "test_qtquick_visualizer_devcurve.py",
     "test_qtquick_visualizer_geometry.py",
     "test_qtquick_visualizer_fade_authority.py",
+    "test_qtquick_runtime_reality.py",
     "test_visualizer_runtime_controller.py",
     "test_s_hotkey_workflow.py",
     "test_bubble_btf_coalescing.py",
