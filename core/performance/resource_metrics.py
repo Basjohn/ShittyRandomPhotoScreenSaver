@@ -449,116 +449,63 @@ def _display_ownership_summary(
     current_generation: Any,
     retiring_generation: Any,
 ) -> dict[str, Any]:
-    """Count existing display-owned roots without invoking lifecycle or GL work."""
-    displays = _safe_getattr(display_manager, "displays", ()) or ()
-    try:
-        displays = tuple(displays)
-    except TypeError:
-        displays = ()
+    """Consume the display orchestrator's bounded Quick ownership contract."""
 
-    by_generation: dict[str, dict[str, Any]] = {}
-    for display in displays:
-        generation = _safe_getattr(display, "_runtime_generation")
-        if generation is None:
-            generation = current_generation
-        generation_key = "unassigned" if generation is None else str(generation)
-        counts = by_generation.setdefault(
-            generation_key,
-            {
-                "displays": 0,
-                "widget_managers": 0,
-                "widgets": 0,
-                "visualizers": 0,
-                "overlays": 0,
-                "compositors": 0,
-                "contexts": 0,
-                "offscreen_surfaces": 0,
-                "first_frames_ready": 0,
-                "visualizer_identities": [],
-                "fade_states": {},
-                "fade_compositor_ready": 0,
-                "fade_startup_holds": 0,
-            },
+    getter = _safe_getattr(display_manager, "describe_resource_ownership")
+    if not callable(getter):
+        logger.warning(
+            "[LIFECYCLE] Display ownership snapshot unavailable: semantic contract missing"
         )
-        counts["displays"] += 1
-        if bool(_safe_getattr(display, "_has_rendered_first_frame", False)):
-            counts["first_frames_ready"] += 1
+        return {
+            "available": False,
+            "display_manager_id": (
+                id(display_manager) if display_manager is not None else None
+            ),
+            "by_generation": {},
+        }
+    try:
+        snapshot = getter()
+    except Exception:
+        logger.warning(
+            "[LIFECYCLE] Display ownership snapshot failed",
+            exc_info=True,
+        )
+        return {
+            "available": False,
+            "display_manager_id": id(display_manager),
+            "by_generation": {},
+        }
+    if not isinstance(snapshot, Mapping):
+        logger.warning(
+            "[LIFECYCLE] Display ownership snapshot rejected: expected mapping"
+        )
+        return {
+            "available": False,
+            "display_manager_id": id(display_manager),
+            "by_generation": {},
+        }
 
-        compositor = _safe_getattr(display, "_gl_compositor")
-        if compositor is not None:
-            counts["compositors"] += 1
-            context_getter = _safe_getattr(compositor, "context")
-            if callable(context_getter):
-                try:
-                    if context_getter() is not None:
-                        counts["contexts"] += 1
-                except (ReferenceError, RuntimeError):
-                    pass
-            if _safe_getattr(compositor, "_deferred_warmup_context") is not None:
-                counts["contexts"] += 1
-            if _safe_getattr(compositor, "_deferred_warmup_surface") is not None:
-                counts["offscreen_surfaces"] += 1
-
-        visualizer = _safe_getattr(display, "spotify_visualizer_widget")
-        if visualizer is not None:
-            counts["visualizers"] += 1
-            engine = _safe_getattr(visualizer, "_engine")
-            generation_getter = _safe_getattr(engine, "get_generation_id")
-            activation_getter = _safe_getattr(engine, "get_activation_id")
-            overlay = _safe_getattr(display, "_spotify_bars_overlay")
-            identity = {
-                "engine_generation": (
-                    _safe_call(generation_getter)
-                ),
-                "engine_activation": (
-                    _safe_call(activation_getter)
-                ),
-                "overlay_generation": _safe_getattr(
-                    overlay, "_engine_generation"
-                ),
-                "overlay_activation": _safe_getattr(overlay, "_activation_id"),
-            }
-            if len(counts["visualizer_identities"]) < 8:
-                counts["visualizer_identities"].append(identity)
-        for overlay_name in (
-            "_spotify_bars_overlay",
-            "_ctrl_cursor_hint",
-        ):
-            if _safe_getattr(display, overlay_name) is not None:
-                counts["overlays"] += 1
-        custom_manager = _safe_getattr(display, "_custom_layout_manager")
-        if _safe_getattr(custom_manager, "_grid_overlay") is not None:
-            counts["overlays"] += 1
-        widget_manager = _safe_getattr(display, "_widget_manager")
-        if widget_manager is None:
-            continue
-        counts["widget_managers"] += 1
-        widgets = _safe_getattr(widget_manager, "_widgets", {})
-        widget_items = _safe_items(widgets)
-        counts["widgets"] += len(widget_items)
-
-        fade = _safe_getattr(widget_manager, "_fade_coordinator")
-        if fade is None:
-            continue
-        state = _safe_getattr(_safe_getattr(fade, "_state"), "name", "unknown")
-        fade_states = counts["fade_states"]
-        fade_states[str(state)] = fade_states.get(str(state), 0) + 1
-        if bool(_safe_getattr(fade, "_compositor_ready", False)):
-            counts["fade_compositor_ready"] += 1
-        holds = _safe_getattr(fade, "_startup_holds", ())
-        try:
-            counts["fade_startup_holds"] += len(holds)
-        except TypeError:
-            pass
+    raw_by_generation = snapshot.get("by_generation", {})
+    by_generation = (
+        {str(key): value for key, value in raw_by_generation.items()}
+        if isinstance(raw_by_generation, Mapping)
+        else {}
+    )
 
     generation_keys = _bounded_generation_count_mapping(
-        {key: counts["displays"] for key, counts in by_generation.items()},
+        {
+            str(key): int(counts.get("display_units", 0) or 0)
+            for key, counts in by_generation.items()
+            if isinstance(counts, Mapping)
+        },
         current_generation=current_generation,
         retiring_generation=retiring_generation,
     )
     selected = set(generation_keys) - {"other_generations"}
     omitted_displays = sum(
-        counts["displays"] for key, counts in by_generation.items() if key not in selected
+        int(counts.get("display_units", 0) or 0)
+        for key, counts in by_generation.items()
+        if key not in selected and isinstance(counts, Mapping)
     )
     selected_details = {
         key: by_generation[key]
@@ -566,9 +513,12 @@ def _display_ownership_summary(
         if key in by_generation
     }
     if omitted_displays:
-        selected_details["other_generations"] = {"displays": omitted_displays}
+        selected_details["other_generations"] = {
+            "display_units": omitted_displays
+        }
     return {
-        "display_manager_id": id(display_manager) if display_manager is not None else None,
+        "available": True,
+        "display_manager_id": snapshot.get("display_manager_id", id(display_manager)),
         "by_generation": selected_details,
     }
 

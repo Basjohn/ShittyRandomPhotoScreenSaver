@@ -262,6 +262,51 @@ class QuickDisplayUnit:
             python_owners.append(self._visualizer_owner)
         return ((self._runtime, self._runtime.window), tuple(python_owners))
 
+    def resource_ownership_snapshot(
+        self,
+        *,
+        first_frame_ready: bool,
+    ) -> dict[str, object]:
+        """Return bounded Quick-native ownership facts for lifecycle diagnostics.
+
+        This is deliberately counts/identity only. Resource accounting must not
+        recover physical presenter objects or inspect QSG/Qt-owned internals.
+        """
+
+        visualizer = self._visualizer_owner
+        identity = getattr(visualizer, "render_identity", None)
+        visualizer_identities: list[dict[str, object]] = []
+        visualizer_live = visualizer is not None and not bool(
+            getattr(visualizer, "is_retired", False)
+        )
+        if visualizer_live:
+            if identity is not None:
+                visualizer_identities.append(
+                    {
+                        "runtime_generation": getattr(
+                            identity, "runtime_generation", None
+                        ),
+                        "engine_generation": getattr(
+                            identity, "engine_generation", None
+                        ),
+                        "activation_id": getattr(identity, "activation_id", None),
+                        "mode_id": getattr(identity, "mode_id", None),
+                    }
+                )
+
+        live = not self._retired
+        return {
+            "runtime_generation": self._runtime.runtime_generation,
+            "display_units": 1,
+            "quick_runtimes": int(live),
+            "quick_windows": int(live),
+            "runtime_managers": int(live),
+            "family_presentations": len(self._presenter.bound_widget_ids),
+            "visualizer_owners": int(visualizer_live),
+            "first_frames_ready": int(bool(first_frame_ready)),
+            "visualizer_identities": visualizer_identities,
+        }
+
     # -- visibility / lifecycle -------------------------------------------- #
     def show_on_screen(self) -> None:
         self._runtime.show_on_screen()

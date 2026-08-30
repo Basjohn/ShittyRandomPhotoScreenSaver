@@ -79,6 +79,18 @@ def test_unit_assembles_chain_and_binds_families(qt_app) -> None:
         assert target.device_pixel_ratio == pytest.approx(
             unit.runtime.display_identity.device_pixel_ratio
         )
+        ownership = unit.resource_ownership_snapshot(first_frame_ready=True)
+        assert ownership == {
+            "runtime_generation": 96,
+            "display_units": 1,
+            "quick_runtimes": 1,
+            "quick_windows": 1,
+            "runtime_managers": 1,
+            "family_presentations": 1,
+            "visualizer_owners": 0,
+            "first_frames_ready": 1,
+            "visualizer_identities": [],
+        }
         qobjects, python_owners = unit.runtime_retirement_roots()
         assert qobjects == (unit.runtime, unit.runtime.window)
         assert all(isinstance(root, QObject) for root in qobjects)
