@@ -370,6 +370,13 @@ def install_default_logical_tick_state(state: Any, *, bar_count: int) -> None:
     state._dt_spike_threshold_ms = 42.0
     state._last_update_ts = -1.0
 
+    # Tick dt-spike diagnostic (read by the delegated tick path via
+    # tick_helpers.log_tick_spike). Mirrors the legacy widget's post-construction
+    # defaults exactly - an ownership move, not a retune. Without these the first
+    # authored spike raised AttributeError on _last_tick_spike_log_ts.
+    state._dt_spike_log_cooldown = 0.75
+    state._last_tick_spike_log_ts = 0.0
+
     # Bubble runtime state (the simulation owns its own interior state).
     state._bubble_count = 0
     state._bubble_pos_data = []
