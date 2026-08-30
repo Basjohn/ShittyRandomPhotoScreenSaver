@@ -1777,10 +1777,6 @@ class DisplayManager(QObject):
         """Publish or transition one processed image through a destination unit."""
 
         screen_index = int(getattr(display, "screen_index"))
-        if not self._transition_work_pending:
-            self._begin_quick_transition_batch(
-                implicit_expected_screens or {screen_index}
-            )
 
         capture = getattr(display, "capture_image", None)
         current_image = getattr(display, "current_image", None)
@@ -1792,6 +1788,28 @@ class DisplayManager(QObject):
         ):
             raise TypeError("display unit has no Quick image/transition contract")
 
+        # Interruption/replacement (surviving product contract): a valid new image
+        # arriving during an active run cancels that run to its authored
+        # destination exactly once, so the resolved destination becomes the
+        # coherent source for the replacement run. Never a black clear and never a
+        # bare reject; the transition controller fences the superseded run's stale
+        # completion by run id / generation, so it cannot overwrite the
+        # replacement. The cancel is performed before the batch is (re)opened so a
+        # single-screen batch that finalizes on cancel reopens cleanly while a
+        # still-active multi-screen batch simply absorbs the replacement.
+        if bool(getattr(display, "has_running_transition")()):
+            cancel = getattr(display, "cancel_transition", None)
+            if not callable(cancel) or not cancel(reason="image-replacement"):
+                raise RuntimeError(
+                    f"screen {screen_index} could not cancel its active Quick "
+                    "transition for a replacement image"
+                )
+
+        if not self._transition_work_pending:
+            self._begin_quick_transition_batch(
+                implicit_expected_screens or {screen_index}
+            )
+
         destination = capture(pixmap, image_path=image_path)
         source = current_image()
         if source is None:
@@ -1800,11 +1818,6 @@ class DisplayManager(QObject):
             self._on_image_displayed(screen_index, image_path)
             self._finish_quick_transition_batch_if_complete()
             return
-
-        if bool(getattr(display, "has_running_transition")()):
-            raise RuntimeError(
-                f"screen {screen_index} already has an active Quick transition"
-            )
 
         spec = self._resolve_quick_transition_batch_spec()
         if spec is None:
