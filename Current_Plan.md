@@ -309,6 +309,8 @@ The family/runtime destination integration already landed and test-gated include
   not wrapper-only attributes. Terminal visualizer/presenter retirement clears self-bound synchronization callbacks and
   disconnects QML preferred-size publication before retained items retire, allowing the replacement barrier to release the
   complete generation without late geometry callbacks.
+- The diagnostic entry point and tray UI no longer import, patch, retain or iterate `DisplayWidget`; the tray remains the
+  product-level Settings/Exit surface, while Quick window authority stays inside the display runtime.
 - Quick input transport/app-volume/system-volume/mute signals now route through each unit's already-owned retained Media
   presentation, preserving its configuration/runtime-availability admission and the existing neutral service owners. Layout
   slot save/load moved to `DisplayManager` + `SettingsManager`; a successful load emits the existing runtime-generation and
@@ -444,8 +446,8 @@ caller-proven deletion — are therefore the remaining H work and are **CURRENT 
    physical-host compatibility import. Runtime replacement input suppression and settings-open CUSTOM cancellation are also
    routed through the neutral input policy and manager-generation Quick owner with source gates against legacy imports.
    Retained Media playback truth and terminal presenter callback release are also runtime-shaped through a real settings
-   generation replacement. Remaining work is non-engine caller cleanup, broader runtime-shaped proof, and deletion of the
-   caller-dead physical-host source tree.
+   generation replacement. Diagnostic-entry/tray physical-host hooks are gone. Remaining work is Quick-semantic resource
+   accounting, broader runtime-shaped proof, and deletion of the caller-dead physical-host source tree.
 9. **Runtime-shaped production proof and caller-proven deletion.** Prove one/multiple selected displays, image/transition
    routing, ordinary families, the single admitted visualizer, corrected-G owners, readiness, generation/topology replacement
    and clean retirement; then delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, legacy visualizer host/compositor glue,

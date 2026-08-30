@@ -86,11 +86,6 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
 
         self.setContextMenu(menu)
         
-        # Connect double-click to bring screensaver to foreground
-        self.activated.connect(self._on_tray_activated)
-        
-        self._display_widgets = []  # Store display widgets for on-top control
-
         # Only show the icon if the system tray is available; if not,
         # log and leave the instance inert.
         if QSystemTrayIcon.isSystemTrayAvailable():
@@ -114,43 +109,3 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
         except Exception:
             # Never let tray registration failure affect startup.
             logger.debug("Failed to register tray icon with ResourceManager", exc_info=True)
-
-    def _on_tray_activated(self, reason):
-        """Handle tray icon activation (clicks).
-        
-        Double-click enables always-on-top to bring the screensaver
-        back to the foreground smoothly without flashing.
-        
-        Args:
-            reason: QSystemTrayIcon.ActivationReason
-        """
-        logger.info("[SYSTEM_TRAY] Tray activated: reason=%s", reason)
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            logger.info("[SYSTEM_TRAY] Double-click detected on systray icon")
-            if not self._display_widgets:
-                logger.warning("[SYSTEM_TRAY] No display widgets registered for double-click handling")
-            
-            try:
-                for widget in self._display_widgets:
-                    if hasattr(widget, '_on_context_always_on_top_toggled'):
-                        widget._on_context_always_on_top_toggled(True)
-                        logger.info("[SYSTEM_TRAY] Double-click: enabled always-on-top for display widget")
-                    else:
-                        logger.warning("[SYSTEM_TRAY] Display widget missing _on_context_always_on_top_toggled method")
-            except Exception as e:
-                logger.warning("[SYSTEM_TRAY] Failed to enable always-on-top on double-click: %s", e)
-                app = QApplication.instance()
-                if app:
-                    for widget in app.topLevelWidgets():
-                        if widget.isVisible() and hasattr(widget, 'raise_'):
-                            widget.raise_()
-                            widget.activateWindow()
-                            logger.info("[SYSTEM_TRAY] Fallback: raised widget to foreground")
-    
-    def set_display_widgets(self, widgets: list) -> None:
-        """Set display widgets for on-top control.
-        
-        Args:
-            widgets: List of DisplayWidget instances
-        """
-        self._display_widgets = widgets

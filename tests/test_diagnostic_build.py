@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 from core import build_profile
@@ -134,3 +135,7 @@ def test_diagnostic_entrypoint_defaults_to_run_without_overriding_explicit_mode(
     monkeypatch.setattr(main_diagnostic.sys, "argv", ["SRPSS_Diagnostic.exe", "/c:1234"])
     main_diagnostic._inject_run_mode_arg()
     assert main_diagnostic.sys.argv == ["SRPSS_Diagnostic.exe", "/c:1234"]
+
+    source = Path(main_diagnostic.__file__).read_text(encoding="utf-8")
+    assert "rendering.display_widget" not in source
+    assert "DisplayWidget" not in source
