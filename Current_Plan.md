@@ -23,7 +23,11 @@ H1's intermittent dual-display reconstruction hang is now materially improved by
 af8896b5  docs checkpoint awaiting repeated physical gate
 ```
 
-The operator then ran one dual-display source process at `af8896b5` through **3 Settings recreation cycles and 5 CUSTOM Save/Continue recreation cycles with no watchdog dump and no recreation hang**. That is enough to close the reconstruction-hang subproblem. It does **not** close H1 as a whole because ordinary terminal Exit still tears down unsafely and ends in a Windows access violation after the application has already logged `Exiting (code=0)`.
+The operator then ran one dual-display source process at `af8896b5` through **3 Settings recreation cycles and 5 CUSTOM Save/Continue recreation cycles with no watchdog dump and no recreation hang** (H1a). H1b (terminal retirement + Settings teardown hygiene) is now also **physically GREEN** — see the H1b section below. **H1 is CLOSED. H2 is CURRENT.**
+
+New diagnostic infrastructure landed while closing H1b: `core/logging/qt_message_capture.py` (`33480283`) routes Qt/QML engine messages — which emit through Qt's stderr channel, invisible to the Python log pipeline — into a bounded, rotating `logs/screensaver_qml.log`. This closed the blind spot that had hidden the Clock storm, and immediately surfaced H2's runtime signature (`QML Image: Failed to get image from provider: image://mediaartwork/…`).
+
+Observation carried forward (not a blocker, not H1b): a runtime Clock analog/digital mode toggle **reverts after an Edit/Settings save**. Source cause is the same class as H2/H3 — `ClockFamilyAdapter.build` constructs `RetainedClockPresentation` without an `on_mode_toggle` persistence callback, so a runtime toggle updates the in-memory model but is never written to settings; recreation rebuilds from the persisted (old) mode. Classify as a small H persistence-wiring item or J depending on intended product behaviour; unrelated to the terminal/retirement work.
 
 Detailed current evidence and ownership analysis are in:
 
@@ -108,9 +112,11 @@ Settings 14:46:27
 
 No watchdog stack dump followed any of them. Both replacement displays returned repeatedly. Keep `tests/test_qtquick_family_binder_two_phase.py` and do not reopen the old Media-COM/Gmail-construction theories without a new hang.
 
-### H1b — terminal Quick retirement and Settings teardown hygiene
+### H1b — terminal Quick retirement and Settings teardown hygiene — CLOSED (physically GREEN)
 
-**Status: repair LANDED (`dcf3ced9`, `f111db61`); awaiting the operator's dual-display terminal-Exit physical gate. H2 waits until that gate is GREEN.**
+**Status: CLOSED. Operator run 2026-08-30 16:27 (build with `[QT_CAPTURE]` active) confirmed: terminal barrier `complete reason=application_exit elapsed_ms=203` → `Exiting(code=0)`; no access violation / no `BackgroundRenderItem` slot error; `logs/screensaver_qml.log` shows ZERO `ClockAnalogueFace.qml … Cannot read property … of null` (storm gone); no Settings `eventFilter` exceptions; process terminated naturally. The only QML messages captured were the H2 artwork-provider failures.**
+
+Landed: event-filter guards (`dcf3ced9`), terminal-purpose destruction barrier + staged terminal stop (`f111db61`), parentless-model lifetime bound to its item (`d4c46559`), Qt/QML message capture (`33480283`). Deterministic bars: `test_settings_eventfilter_teardown_guards.py`, `test_terminal_runtime_destruction.py`, `test_qtquick_retained_model_lifetime.py`, `test_qt_message_capture.py`; h-destination GREEN.
 
 **Landed:**
 - **Settings event-filter hygiene (`dcf3ced9`).** `_ControlShadowHelper.eventFilter` and `ComboKnobController.eventFilter` read the tracked target (`_widget` / `_host`) through a guarded local reference and return early when it is absent; on Destroy, removal tolerates an already-invalid target. `tests/test_settings_eventfilter_teardown_guards.py` proves a late Qt event after Python-side teardown cannot raise.
