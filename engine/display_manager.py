@@ -26,7 +26,10 @@ from rendering.transition_registry import (
     canonicalize_transition_name,
     is_transition_available_for_hw,
 )
-from rendering.quick.context_menu import build_quick_context_menu_entries
+from rendering.quick.context_menu import (
+    build_quick_context_menu_entries,
+    enforce_single_visible_context_menu,
+)
 from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.custom_layout_hydration import (
     apply_quick_committed_payloads,
@@ -472,13 +475,41 @@ class DisplayManager(QObject):
         logger.info("Screen removed: %s" % screen.name())
         self._schedule_monitor_reconcile("screenRemoved")
 
+    @staticmethod
+    def _quick_activation_experiment() -> dict[str, bool]:
+        """Operator-gated Display-1 flash A/B: does the window need activation?
+
+        Physical `[QUICK_SURFACE]` evidence ties every recurring Display-1 flash
+        to a native `window_active_changed` on the secondary window (scene graph
+        and frames stay healthy throughout). This lets the operator A/B the
+        window activation policy against the `tools/black_flash_capture.py`
+        counts. It is INERT by default; only an explicit env value changes
+        behaviour, and nothing is committed as the default until a variant is
+        physically proven to remove the flash without breaking required input.
+
+        ``SRPSS_QUICK_ACTIVATION``:
+          ``no-activate`` keep focatability but stop forcing activation on show
+                          (keyboard still works via click-to-focus);
+          ``no-focus``    WS_EX_NOACTIVATE: the window never activates (strongest
+                          flash candidate, but general keyboard input is lost -
+                          media keys still arrive via raw input).
+        """
+
+        mode = os.environ.get("SRPSS_QUICK_ACTIVATION", "").strip().lower()
+        if mode == "no-activate":
+            return {"accepts_focus": True, "proactively_activate": False}
+        if mode == "no-focus":
+            return {"accepts_focus": False, "proactively_activate": False}
+        return {"accepts_focus": True, "proactively_activate": True}
+
     def _quick_window_policy(self) -> QuickWindowPolicy:
         """Resolve the production top-level role without importing QWidget policy."""
 
         from core.mc import is_mc_build
 
+        activation = self._quick_activation_experiment()
         if not is_mc_build():
-            return QuickWindowPolicy()
+            return QuickWindowPolicy(**activation)
         use_splash = (
             os.environ.get("SRPSS_MC_WINDOW_FLAGS", "").strip().lower()
             == "splash"
@@ -498,6 +529,7 @@ class DisplayManager(QObject):
                 else QuickWindowRole.MEDIA_CENTER_TOOL
             ),
             always_on_top=always_on_top,
+            **activation,
         )
 
     def _interaction_mode_enabled(self) -> bool:
@@ -646,6 +678,30 @@ class DisplayManager(QObject):
         for display in tuple(self.displays):
             if isinstance(display, QuickDisplayUnit) and not display.is_retired:
                 self._refresh_quick_context_menu(display)
+
+    def _enforce_single_quick_context_menu(
+        self, opening_unit: QuickDisplayUnit
+    ) -> None:
+        """Keep exactly one retained context menu visible across all displays.
+
+        Fired when one display's menu becomes visible. Every other live display's
+        menu is dismissed so a second display cannot leave a stale menu on screen.
+        Only the opening display keeps its menu; retired/absent units are skipped.
+        """
+
+        try:
+            opened_model = opening_unit.runtime.context_menu_model
+        except RuntimeError:
+            return
+        models = []
+        for display in tuple(self.displays):
+            if not isinstance(display, QuickDisplayUnit) or display.is_retired:
+                continue
+            try:
+                models.append(display.runtime.context_menu_model)
+            except RuntimeError:
+                continue
+        enforce_single_visible_context_menu(models, opened_model)
 
     @staticmethod
     def _context_toggle_value(payload: str) -> bool | None:
@@ -852,6 +908,15 @@ class DisplayManager(QObject):
             lambda _position, display=unit: self._refresh_quick_context_menu(
                 display
             )
+        )
+        # Exactly one product context menu globally: when this display's retained
+        # menu becomes visible, retire any menu still open on another display.
+        runtime.context_menu_model.visibilityChanged.connect(
+            lambda visible, opening=unit: self._enforce_single_quick_context_menu(
+                opening
+            )
+            if visible
+            else None
         )
         runtime.play_pause_requested.connect(
             lambda display=unit: display.request_media_transport("play")

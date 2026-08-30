@@ -291,8 +291,37 @@ class QuickContextMenuModel(QObject):
         return walk(self._entries)
 
 
+def enforce_single_visible_context_menu(
+    models: Iterable["QuickContextMenuModel"],
+    opened_model: "QuickContextMenuModel",
+) -> list["QuickContextMenuModel"]:
+    """Dismiss every retained menu model except the one that just opened.
+
+    There is exactly one product context menu globally: opening one display's
+    menu must retire any menu still visible on another display. This is a pure
+    coordination helper over the per-generation menu models the cross-display
+    owner already holds; it creates no new menu, window or surface. A model whose
+    C++ object has already retired is skipped rather than raising. Returns the
+    models that were actually dismissed by this call.
+    """
+
+    dismissed: list["QuickContextMenuModel"] = []
+    for model in models:
+        if model is opened_model:
+            continue
+        try:
+            if model.dismiss():
+                dismissed.append(model)
+        except RuntimeError:
+            # A concurrently retiring generation's model may already be gone;
+            # single-menu enforcement must never fault on a dead sibling.
+            continue
+    return dismissed
+
+
 __all__ = [
     "QuickContextMenuEntry",
     "QuickContextMenuModel",
     "build_quick_context_menu_entries",
+    "enforce_single_visible_context_menu",
 ]
