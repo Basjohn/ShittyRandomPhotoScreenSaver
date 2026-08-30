@@ -174,7 +174,14 @@ class _ControlShadowHelper(QObject):
         self._apply()
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # type: ignore[override]
-        if watched is self._widget:
+        # A late Qt event can reach this override after Python-side teardown has
+        # cleared the tracked widget (terminal Exit / Settings teardown). Read the
+        # target through a guarded local reference and tolerate an already-invalid
+        # widget so the override can never raise during retirement.
+        target = getattr(self, "_widget", None)
+        if target is None:
+            return super().eventFilter(watched, event)
+        if watched is target:
             etype = event.type()
             if etype in (
                 QEvent.Type.EnabledChange,
@@ -183,7 +190,10 @@ class _ControlShadowHelper(QObject):
             ):
                 self._apply()
             elif etype == QEvent.Type.Destroy:
-                self._widget.removeEventFilter(self)
+                try:
+                    target.removeEventFilter(self)
+                except RuntimeError:
+                    pass
         return super().eventFilter(watched, event)
 
     def reconfigure(

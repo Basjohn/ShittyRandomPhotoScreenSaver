@@ -107,7 +107,12 @@ class ComboKnobController(QObject):
     # Event handling
     # ------------------------------------------------------------------
     def eventFilter(self, watched, event):  # type: ignore[override]
-        if watched is not self._host:
+        # A late Qt event can reach this override after Python-side teardown has
+        # cleared the tracked host (terminal Exit / Settings teardown). Read the
+        # host through a guarded local reference so the override can never raise
+        # during retirement.
+        host = getattr(self, "_host", None)
+        if host is None or watched is not host:
             return super().eventFilter(watched, event)
 
         etype = event.type()
