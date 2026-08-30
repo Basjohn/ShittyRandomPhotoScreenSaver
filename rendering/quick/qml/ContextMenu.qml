@@ -13,9 +13,17 @@ Item {
     visible: contextMenuModel !== null && contextMenuModel.menuVisible
     enabled: visible
 
+    // Click-outside-to-dismiss scrim. It must NOT dismiss on the very press that
+    // opened the menu: that opening press flips menuVisible true (from the Python
+    // input owner), which makes this scrim visible, and the same event is then
+    // delivered here - self-dismissing the menu before it is ever seen. Arm the
+    // scrim only AFTER the opening event completes (deferred via Qt.callLater, not
+    // a polling timer), so only a genuinely subsequent press dismisses.
     MouseArea {
+        id: dismissScrim
         anchors.fill: parent
         acceptedButtons: Qt.AllButtons
+        enabled: false
         onPressed: menuRoot.contextMenuModel.dismiss()
     }
 
@@ -268,8 +276,18 @@ Item {
         target: menuRoot.contextMenuModel
 
         function onVisibilityChanged(visible) {
-            if (!visible)
+            if (!visible) {
                 menuRoot.activeSubmenuIndex = -1
+                dismissScrim.enabled = false
+            } else {
+                // Defer arming past the opening event's delivery so the press
+                // that opened the menu cannot immediately dismiss it.
+                dismissScrim.enabled = false
+                Qt.callLater(function() {
+                    if (menuRoot.contextMenuModel && menuRoot.contextMenuModel.menuVisible)
+                        dismissScrim.enabled = true
+                })
+            }
         }
     }
 }
