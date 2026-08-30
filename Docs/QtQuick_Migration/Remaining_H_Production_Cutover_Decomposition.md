@@ -364,6 +364,44 @@ mixed refresh/DPR, off/wake, real Winlogon/MC, full eyes-on parity, the deferred
 viewport matrix, performance tails and clean installed shutdown. Physical source-mode smoke cells may be useful early evidence,
 but they are not the deterministic H authority-flip gate.
 
+
+## 12A. Post-cutover runtime reality gate before I
+
+The first real production-source Quick run at source head
+`427eafed8cff8b932bc64efee964764ce3f02260` is preserved under
+`logs/evidence_chest/08_30_RuntimeSwap_03_37/`. It showed why deterministic
+construction/cardinality tests are necessary but not sufficient to admit Phase I.
+
+Before I begins, H additionally requires one short source-mode runtime reality
+smoke after the current deterministic corrections:
+
+- successive Visualizer logical revisions visibly reach the retained consumer;
+- a second image request during an active transition follows the surviving
+  interruption/replacement contract rather than raising or clearing to black;
+- the retained context menu is visibly present and its action path works through
+  the real QML surface;
+- Settings recreation preserves the same single-owner topology;
+- process exit terminates cleanly.
+
+Known `427eafed` evidence localizes the first three as deterministic H defects:
+logical Visualizer cadence remained ~88–90 Hz while retained visualizer
+`sync_count` stayed at 1; the image pipeline raised `screen 0 already has an
+active Quick transition` twice; and the menu state carried 13 entries plus click
+anchors while no menu was visible to the operator.
+
+The run predates later visualizer monitor-routing and 30-second CUSTOM
+failover/reclaim corrections (`bc8fd6a`, `6f88cca`). Those corrections must be
+audited on current source but must not be reimplemented inside this runtime gate.
+
+Use `Docs/QtQuick_Migration/H_Post_Cutover_Runtime_Reality_Corrections.md` for the
+bounded evidence/fix decomposition. H remains structurally Quick-only throughout;
+this gate cannot restore an old presenter or create a second owner/pacer.
+
+A short operator smoke is a gate, not a benchmark project. Visual-quality debt
+such as black-flash frequency, fade feel, widget visual sizing and effect parity
+belongs to J unless the smoke demonstrates a specific deterministic product
+contract failure.
+
 ## 13. Rejected H shortcuts
 
 Do not:

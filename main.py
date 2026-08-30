@@ -877,6 +877,34 @@ def main(*, entrypoint: str = "main"):
     if diagnostic_record is not None:
         diagnostic_record("main_return", exit_code=exit_code)
 
+    # Qt/QML diagnostics are a separate direct sidecar. Snapshot + flush them
+    # while ordinary logging is still alive so the main log records whether the
+    # process observed any Qt/QML messages. The capture itself remains installed
+    # until atexit so QApplication/Qt teardown can still emit into the sidecar.
+    try:
+        from core.logging.qt_message_capture import (
+            flush_qt_message_capture,
+            get_qt_message_capture_metrics,
+        )
+
+        qt_capture_metrics = get_qt_message_capture_metrics()
+        qt_levels = qt_capture_metrics.get("counts_by_level", {})
+        logger.info(
+            "[QT_CAPTURE] pre-exit snapshot session=%s messages=%d "
+            "warning=%d error=%d critical=%d write_errors=%d path=%s",
+            qt_capture_metrics.get("session_id") or "-",
+            int(qt_capture_metrics.get("message_count", 0)),
+            int(qt_levels.get("WARNING", 0)),
+            int(qt_levels.get("ERROR", 0)),
+            int(qt_levels.get("CRITICAL", 0)),
+            int(qt_capture_metrics.get("write_errors", 0)),
+            qt_capture_metrics.get("path") or "unavailable",
+        )
+        if not flush_qt_message_capture():
+            logger.warning("[QT_CAPTURE] Sidecar flush failed before ordinary log close")
+    except Exception:
+        logger.debug("[QT_CAPTURE] Pre-exit snapshot failed", exc_info=True)
+
     logging_flushed_for_parser = flush_logging()
     if not logging_flushed_for_parser and diagnostic_record is not None:
         diagnostic_record(

@@ -1,56 +1,51 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-30 physical H1 verification and clean-exit reconciliation at pushed `af8896b52fbee153fe1cd0b627a55455c14625d1`.
+Last updated: 2026-08-30 after source-mode run at `1849f2a44154132d6df45e327165b1cd79103bfa` and direct source/log reconciliation.
 
 ## Current checkpoint
 
-G remains independently audited and accepted. The H production-authority cutover and caller-proven deletion of the old physical host remain accepted architecture. **H itself is still OPEN. I is NOT admitted.**
+G remains accepted. The H production-authority cutover and caller-proven deletion of the old physical host remain accepted architecture. **H is still OPEN. I is NOT admitted.**
 
-The earlier post-cutover runtime-reality corrections remain accepted:
-
-```text
-da3dafab  controller-owned tick diagnostic defaults
-cad4e6d2  active transition replacement -> cancel to destination, then replace
-adcfd96d  successive visualizer revisions request retained presentation
-747e3140  context menu no longer self-dismisses on its opening right-click
-```
-
-H1's intermittent dual-display reconstruction hang is now materially improved by:
+H1 is now closed and H2 is now closed:
 
 ```text
-6c7ef945  bounded replacement-construction hang watchdog
-2220782d  build all admitted retained families before activating any
-af8896b5  docs checkpoint awaiting repeated physical gate
+H1a  repeated dual-display Settings/CUSTOM recreation hang     CLOSED
+H1b  terminal Quick retirement / Clock model lifetime          CLOSED
+H2   Media artwork provider identity                            CLOSED
+H3   Reddit retained URL opener                                 CURRENT
+H3b  Clock runtime mode-toggle persistence                      PENDING
+H4   Media Play/Pause + seek command semantics                  PENDING
+H5a  CUSTOM Visualizer independent display admission            PENDING
+H5b  Spectrum data saturation + wrong topology                  PENDING
+H6   CUSTOM Settings size-lock scope                            PENDING
+H7   Exit visible-response/perf classification                  PENDING / likely J after measurement
 ```
 
-The operator then ran one dual-display source process at `af8896b5` through **3 Settings recreation cycles and 5 CUSTOM Save/Continue recreation cycles with no watchdog dump and no recreation hang** (H1a). H1b (terminal retirement + Settings teardown hygiene) is now also **physically GREEN** — see the H1b section below. **H1 is CLOSED. H2 is CURRENT.**
+The maintained H destination profile must remain GREEN after each bounded source change. H is not closed by unit tests alone: every H/H-J row in the operator ledger must be reconciled and the final dual-display source-mode smoke must remain physically clean.
 
-New diagnostic infrastructure landed while closing H1b: `core/logging/qt_message_capture.py` (`33480283`) routes Qt/QML engine messages — which emit through Qt's stderr channel, invisible to the Python log pipeline — into a bounded, rotating `logs/screensaver_qml.log`. This closed the blind spot that had hidden the Clock storm, and immediately surfaced H2's runtime signature (`QML Image: Failed to get image from provider: image://mediaartwork/…`).
+Detailed evidence: `Docs/QtQuick_Migration/H_Post_Cutover_Runtime_Reality_Corrections.md`  
+Operator backlog: `Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md`
 
-Observation carried forward (not a blocker, not H1b): a runtime Clock analog/digital mode toggle **reverts after an Edit/Settings save**. Source cause is the same class as H2/H3 — `ClockFamilyAdapter.build` constructs `RetainedClockPresentation` without an `on_mode_toggle` persistence callback, so a runtime toggle updates the in-memory model but is never written to settings; recreation rebuilds from the persisted (old) mode. Classify as a small H persistence-wiring item or J depending on intended product behaviour; unrelated to the terminal/retirement work.
+## Permanent Qt/QML observability baseline
 
-Detailed current evidence and ownership analysis are in:
+Qt/QML has a diagnostic plane separate from Python logging. `core/logging/qt_message_capture.py` is therefore permanent always-on infrastructure, not temporary H instrumentation.
 
-`Docs/QtQuick_Migration/H_Post_Cutover_Runtime_Reality_Corrections.md`
-
-The complete physical observation backlog is in:
-
-`Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md`
-
-Focused technical decompositions for the new evidence are:
+Normal source/runtime acceptance now reads **both**:
 
 ```text
-Docs/QtQuick_Migration/H1b_Terminal_Retirement_And_Settings_Teardown_Decomposition_2026-08-30.md
-Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md
-Docs/QtQuick_Migration/H6_Custom_Settings_Lock_Scope_Decomposition_2026-08-30.md
+screensaver.log       Python/runtime narrative + WARNING+
+screensaver_qml.log   direct Qt/QML message-handler evidence
 ```
 
-**Parity+ rule:** Phase J uses proven historical presentation as a **quality floor, not a ceiling**. Primary visual references are the 4.7.2/4.7.0 release screenshots; `15099d3` is the cleaner old-code behavior reference and `3fe5df6` is a later mixed reference that already contains some migration work. Recover good historical outcomes, preserve genuine Quick improvements, and improve weak legacy behavior rather than reproducing bugs. Historical implementation is never authority: do not restore, wrap, adapt or depend on the deleted QWidget/QRhi/GL presenter architecture.
+The Qt/QML capture must be installed before `QApplication` / `QQmlEngine` creation and remain active through final Qt teardown. A clean run still creates `screensaver_qml.log` and records capture session markers; the previous `delay=True` behavior, where a clean run produced no file at all, is retired because “file missing” was ambiguous with “capture failed.”
 
-Durable reference:
-`Docs/QtQuick_Migration/J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md`
+The sidecar records timestamp, severity, PID, thread identity, Qt category, source file/line/function when available, sequence, and message. It is direct/synchronous and independently rotated so Qt/QML failures are not dependent on the ordinary asynchronous log queue.
 
-## Production architecture — still binding
+Unexpected Qt/QML warnings/errors that correlate with the current migration surface are first-class evidence. Do not call a physical H/J gate GREEN merely because `screensaver.log` is clean.
+
+This is **not** an OS-level fd-2 tee. Raw non-Qt native stderr remains a separate diagnostic plane. Do not add `os.dup2` redirection casually: a true tee changes crash persistence, subprocess inheritance and shutdown semantics. See `Docs/Qt_QML_Observability.md`.
+
+## Production architecture — binding
 
 ```text
 selected physical display
@@ -74,357 +69,226 @@ Other binding invariants:
 - `QuickSceneController` owns Quick item creation/retirement.
 - One `WidgetRuntimeManager` per display generation.
 - No duplicate provider/service manager, BeatEngine/source owner, logical visualizer runtime, mailbox/bridge, CUSTOM owner or cadence owner.
-- Old-generation admission closes and authored/logical work joins before scene/window retirement.
-- Generation `0` is valid.
+- Old-generation admission closes and authored/logical work joins before scene/window retirement; generation `0` is valid.
 - Fallbacks are product-authorized, destination-owned and fail-loud.
 - QML reports preferred content size only; Python owns anchor + margin + clamp + x/y + final outer rect.
 - CUSTOM committed geometry outranks family/default geometry.
 - Outside CUSTOM, Visualizer effective position/monitor routing follows Media.
-- In committed CUSTOM, Visualizer owns its own persisted monitor/geometry, may overlap, and may live on a different selected display from Media.
+- In committed CUSTOM, Visualizer owns its own persisted monitor/geometry, may overlap and may live on another selected display from Media.
 - Bubble authored cadence remains presentation-independent; the display Quick frame pacer is the sole GUI presentation opportunity.
-- Bubble Temporal Fidelity remains binding. Do not reduce cadence or retune its physics merely to hide a presentation problem.
+- Bubble Temporal Fidelity remains binding. Do not reduce cadence or retune physics merely to hide a presentation problem.
 
-## Active H work — execute in this order
+## Closed H1 — preserve, do not reopen without regression evidence
 
-### H1a — dual-display reconstruction hang
+### H1a reconstruction
 
-**Status: PHYSICAL GATE PASSED at `af8896b5`; preserve the repair.**
+`2220782d` changed ordinary-family assembly to build all admitted retained family QML first and activate successfully built families afterward. The operator then completed 3 Settings recreation cycles + 5 CUSTOM Save/Continue cycles in one dual-display process without a watchdog dump.
 
-Landed repair `2220782d` makes `OrdinaryFamilyPresentationBinder.bind()` two-phase:
+### H1b terminal retirement
 
-```text
-phase A: resolve/build/own every admitted retained family
-phase B: activate every successfully built family exactly once, in stable order
-```
-
-The operator's verification process produced watchdog arm records for:
+Terminal shutdown now has a terminal-purpose destruction barrier, staged finalization, safe Settings helper event filters and retained-model lifetime long enough for QML item retirement. Later physical runs prove:
 
 ```text
-CUSTOM  14:41:01
-Settings 14:42:22
-CUSTOM  14:43:03
-CUSTOM  14:43:20
-Settings 14:44:51
-CUSTOM  14:45:17
-CUSTOM  14:45:30
-Settings 14:46:27
+application_exit barrier arms
+-> Quick roots retire
+-> barrier completes (~200–250 ms)
+-> ThreadManager/process finalization
+-> clean code=0 exit
 ```
 
-No watchdog stack dump followed any of them. Both replacement displays returned repeatedly. Keep `tests/test_qtquick_family_binder_two_phase.py` and do not reopen the old Media-COM/Gmail-construction theories without a new hang.
+No `BackgroundRenderItem::` slot error, Windows access violation, Clock null-model retirement storm or Settings event-filter exception remains in the accepted physical gate.
 
-### H1b — terminal Quick retirement and Settings teardown hygiene — CLOSED (physically GREEN)
+The former failure is historical evidence only; do not keep its old “required next work” in active plan text.
 
-**Status: CLOSED. Operator run 2026-08-30 16:27 (build with `[QT_CAPTURE]` active) confirmed: terminal barrier `complete reason=application_exit elapsed_ms=203` → `Exiting(code=0)`; no access violation / no `BackgroundRenderItem` slot error; `logs/screensaver_qml.log` shows ZERO `ClockAnalogueFace.qml … Cannot read property … of null` (storm gone); no Settings `eventFilter` exceptions; process terminated naturally. The only QML messages captured were the H2 artwork-provider failures.**
+## Closed H2 — Media artwork provider identity
 
-Landed: event-filter guards (`dcf3ced9`), terminal-purpose destruction barrier + staged terminal stop (`f111db61`), parentless-model lifetime bound to its item (`d4c46559`), Qt/QML message capture (`33480283`). Deterministic bars: `test_settings_eventfilter_teardown_guards.py`, `test_terminal_runtime_destruction.py`, `test_qtquick_retained_model_lifetime.py`, `test_qt_message_capture.py`; h-destination GREEN.
+Current production `MediaFamilyAdapter` obtains the `MediaArtworkImageProvider` already registered on the scene factory's `QQmlEngine` via the host and injects that exact provider into `MediaPresentationModel`. The old private-per-card provider split is gone.
 
-**Landed:**
-- **Settings event-filter hygiene (`dcf3ced9`).** `_ControlShadowHelper.eventFilter` and `ComboKnobController.eventFilter` read the tracked target (`_widget` / `_host`) through a guarded local reference and return early when it is absent; on Destroy, removal tolerates an already-invalid target. `tests/test_settings_eventfilter_teardown_guards.py` proves a late Qt event after Python-side teardown cannot raise.
-- **Terminal retirement drain (`f111db61`).** `RuntimeDestructionBarrier` gained a `purpose` (`replacement` | `terminal`). A terminal-purpose barrier no longer self-cancels when terminal shutdown is requested (`_maybe_complete` / `_run_continuation` skip the `qt_replacement_may_run` gate for terminal), so it observes the SAME Quick/QObject/Python/resource roots to completion and then runs a terminal finalization exactly once; it never admits a replacement. `teardown_display_runtime` arms a terminal-purpose barrier for `application_exit` (`engine_cleanup` stays barrier-free). Terminal `stop()` is staged: intent → quiesce/clear → begin Quick retirement → observe the barrier to completion → `_run_stop_finalization` (beat engine / usage telemetry / ProcessSupervisor / ThreadManager shutdown, housekeeping, `QApplication.quit()`). On terminal timeout the barrier fails loudly but still finalizes and terminates — no force-kill, no claimed success. Replacement-barrier and non-terminal-stop semantics are unchanged; no `processEvents`/sleeps/`gc.collect`/kill/leak. `tests/test_terminal_runtime_destruction.py` pins: terminal waits for roots, finalizes exactly once despite `qt_replacement_may_run()` being False, refuses a replacement continuation during terminal shutdown, and leaves replacement behaviour unchanged.
-- h-destination 68/68 GREEN.
+The operator's latest source-mode run physically confirms Media artwork now displays.
 
-**Operator run (2026-08-30 15:49–15:51) — terminal drain confirmed, storm root-caused:**
-- Both exits show `[LIFECYCLE_BARRIER] armed reason=application_exit` → `complete` (250 ms / 235 ms) → ThreadManager shutdown → `Exiting(code=0)`, with `BackgroundRenderItem` and `QQmlEngine` destroyed **through the barrier** before exit. The **Windows access violation and `BackgroundRenderItem::` slot error are GONE** (operator confirmed console clean). §G resolved by the terminal drain.
-- The **Clock null-model storm persisted** — but it is **QML-engine `TypeError`s printed to stderr** (`ClockAnalogueFace.qml: Cannot read property '…' of null`), which never enter the Python logger, so log scans (mine included) showed zero. Root cause (per §F): the retained item is retired with deferred `deleteLater()` while the Clock model is a parentless Python-owned QObject destroyed synchronously when its owner drops — so the still-live item's bindings re-evaluate against a null model during retirement.
+**Preserve as permanent cross-layer contract:** decoded artwork must publish into the exact engine-registered provider that resolves `image://mediaartwork/<identity>`.
 
-**Landed (`d4c46559`):** `OrdinaryWidgetPresentationHost.create_family_widget` parents any *parentless* QObject model passed as an initial property to its item, so the model outlives the item's binding teardown and dies with the item. Already-parented models (Media/Gmail/Steam, parented to a generation-scoped window whose generation their neutral service reads via `consumer.parent()`) are left untouched. No per-property QML null guards. New retirement bar `tests/test_qtquick_retained_model_lifetime.py`; h-destination 69/69.
+Historical artwork fade/presentation quality is **not H2**. Artwork currently appears but lacks the nicer historical transition/fade; that is a named J Parity+ row.
 
-For reference, the originally observed terminal failure this repair targets:
-
-The same physical run ends this way:
-
-```text
-Exit requested
--> RUNNING -> SHUTTING_DOWN
--> displays quiesced/cleared
--> DisplayManager begins asynchronous retirement for 2 Quick units
--> ThreadManager shutdown
--> application logs normal Exiting(code=0)
--> AttributeError: Slot 'BackgroundRenderItem::' not found
--> Windows fatal exception: access violation
--> GC / no Python frame
-```
-
-Before that terminal crash, retiring Clock QML repeatedly evaluates against a `null` model (`fontFamily`, `timezoneText`, `textColor`, `showSeparator`, angles, shadow values, etc.). This is **not a missing-font diagnosis**; the common failure is that the QML model reference is null during retirement.
-
-Current source also proves a lifecycle-order gap:
-
-- replacement teardown creates a `RuntimeDestructionBarrier`;
-- `application_exit` and `engine_cleanup` deliberately skip that barrier;
-- `DisplayManager.cleanup()` only **begins asynchronous** Quick retirement;
-- `QuickDisplayUnit.retire()` relies on `retirement_completed` / `deleteLater`;
-- terminal `stop()` proceeds into process/thread shutdown and `QApplication.quit()` without waiting for those Quick roots to finish.
-
-Repair the terminal retirement boundary using the existing lifecycle authority. Do **not** hide the problem with QML null-property fallbacks, missing-font work, forced `gc.collect()`, arbitrary sleeps, event-loop pumping, process kill, leaked windows, or a second shutdown manager.
-
-Required sequence:
-
-1. Make Settings helper event filters safe under late destruction:
-   - `_ControlShadowHelper.eventFilter()` may not assume `_widget` still exists;
-   - `ComboKnobController.eventFilter()` may not assume `_host` still exists;
-   - late callbacks must return harmlessly rather than raise through Qt.
-2. Separate **retirement completion proof** from **replacement admission** in the existing destruction machinery:
-   - terminal shutdown must be allowed to observe old Quick/QObject roots to completion;
-   - terminal shutdown must never execute a replacement continuation;
-   - keep the Qt event loop alive long enough for legal `deleteLater` / render-safe retirement to complete;
-   - only after the retirement drain is complete may terminal pool/process teardown and `QApplication.quit()` finish.
-3. Preserve replacement barrier behavior exactly.
-4. After the ordering repair, verify whether the Clock null-model storm disappears naturally. If it remains, inspect retained item/model retirement ordering; do not treat each QML property warning independently.
-5. The `BackgroundRenderItem::` slot error and final access violation must be gone.
-6. Keep visible Exit responsiveness measured separately: current action -> quiesce/clear happens in the same logged second; the current ~2 s tail includes pycache cleanup, but final latency is not accepted until clean shutdown is restored.
-
-Focused tests supplied in the handoff:
-
-```text
-tests/test_settings_eventfilter_teardown_guards.py
-```
-
-Add/extend runtime-shaped lifecycle coverage for the terminal retirement drain once its exact API is chosen. Do not encode a second lifecycle architecture in the test.
-
-H1b physical close condition:
-
-```text
-dual-display source mode
--> ordinary context-menu Exit
--> visible windows dismiss promptly
--> no Clock null-model error storm attributable to retirement
--> no BackgroundRenderItem slot error
--> no Windows fatal exception/access violation
--> process exits naturally
-```
-
-A second clean ordinary Exit is useful confidence if the first is GREEN.
-
-### H2 — Media artwork decoded but cannot reach the QML engine provider
-
-**Status: source-proven wiring defect; NEXT after H1b is GREEN.**
-
-`QuickSceneFactory` registers one `MediaArtworkImageProvider` on the shared `QQmlEngine`. Production Media construction creates/injects another provider into `MediaPresentationModel`. Decoded artwork is therefore published into an object QML never resolves.
-
-Required fix:
-
-- inject the exact engine-registered artwork provider through the existing Quick family assembly;
-- do not register a duplicate image provider or create one per card;
-- add a production-composition cross-layer regression;
-- physically verify real artwork after decode.
+## Active H work — execute in order
 
 ### H3 — retained Reddit URL click has no production opener
 
-**Status: source-proven wiring defect.**
+**Status: source-proven composition defect; CURRENT.**
 
-Production `RedditFamilyAdapter` does not provide `RetainedRedditPresentation`'s existing opener callback. Reconnect the semantic action to established product authority:
+`RetainedRedditPresentation` already owns URL admission and an `on_open_requested` seam. Production `RedditFamilyAdapter` still constructs it without that callback.
+
+Reconnect the retained semantic action to the existing product-level secure URL authority. Preserve product distinction:
 
 ```text
-MC  -> direct desktop URL open
-SCR -> existing deferred/helper queue + normal saver exit
+MC / diagnostic interactive build -> direct desktop URL route
+SCR                           -> existing secure helper/queue route + normal saver exit
 ```
 
-No helper policy belongs in QML/model and helper readiness must not block teardown.
+Prefer the established `core.windows.secure_url_launcher` product authority rather than reproducing helper policy in QML/model/family code. Helper readiness must not block teardown.
+
+Add a production-family composition regression: an admitted Reddit row reaches the product opener exactly once; rejected/untrusted/interaction-disabled actions do not.
+
+### H3b — Clock runtime mode toggle must persist across recreation
+
+**Status: source-proven persistence wiring defect.**
+
+`RetainedClockPresentation` already accepts `on_mode_toggle`. Production `ClockFamilyAdapter` currently omits it, so runtime analog/digital toggle changes only the live model. Settings/Edit recreation rebuilds from the old persisted mode and appears to “revert” the user's toggle.
+
+Wire the existing semantic callback to the current Settings authority without moving persistence into QML. Preserve per-display/per-clock mode semantics already defined by the Clock contract. Add a production composition + recreation persistence regression.
 
 ### H4 — Media Play/Pause and seek do not execute; Previous/Next do
 
-**Status: operator-reproducible; narrow command boundary.**
+**Status: operator-reproducible; generic retained-card input is not the first suspect.**
 
-Preserve Previous/Next as the working control group. Instrument:
+Trace the real command boundary:
 
 ```text
-request
+semantic request
 -> worker submission
--> real WinRT result/exception
--> state reconciliation
+-> real WinRT method result / bool / exception
+-> state reconciliation refresh
 ```
 
-Verify real Spotify toggle semantics and seek units/result. Queueing a worker task is not command success. Do not block the GUI.
+Do not treat queue submission as success. Do not block the GUI waiting for WinRT. Preserve Previous/Next, which already work through the same card.
+
+Verify Spotify's actual toggle behavior and the seek units/result of `try_change_playback_position_async()`.
 
 ### H5a — CUSTOM Visualizer must remain independent of Media's display route
 
-**Status: operator-reproducible functional regression; existing source contract already says this should work.**
+**Status: operator-reproducible functional regression against an existing contract.**
 
-The operator reports that when Media lives on one display and the committed CUSTOM Visualizer belongs on another, the Visualizer does not even try to activate.
+Non-CUSTOM Visualizer follows Media's effective monitor. CUSTOM Visualizer owns its own persisted monitor/geometry and may live on another selected display. `QuickDisplayUnit.is_visualizer_participant()` does not require Media on that display.
 
-The intended routing contract is already explicit in current source:
-
-```text
-non-CUSTOM visualizer -> effective route comes from Media
-CUSTOM visualizer     -> own spotify_visualizer position/monitor route is authoritative
-```
-
-`QuickDisplayUnit.is_visualizer_participant()` is also independent of Media presence. Therefore **do not redesign routing** and do not re-couple Visualizer construction to a Media card on the same screen.
-
-Use the technical decomposition to trace one generation:
+Trace once per generation:
 
 ```text
-visualizer persisted position
-visualizer persisted monitor
-Media monitor
-custom=True/False
-resolved effective monitor
-requested zero-based screen
-live participant set
-chosen/failover owner
-construct-owner result/rejection reason
+spotify_visualizer.position / monitor
+media.monitor
+custom decision
+effective monitor
+requested screen
+participant set
+CUSTOM failover state
+chosen unit
+construct result / reject reason
 ```
 
-Focused semantic test supplied:
+Do not redesign routing or re-couple Visualizer ownership to a same-screen Media card.
+
+Technical route: `Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md`.
+
+### H5b — Spectrum saturation + wrong functional presentation topology
+
+**Status: operator-reproducible; two branches must be localized independently.**
+
+Current evidence:
+
+1. Spectrum authored/computed payload repeatedly saturates near/all `1.00` before shader presentation.
+2. Physical Organ/Spectrum presentation is the wrong representation family: a dense full-height matrix of tiny segmented blocks instead of the intended bottom-aligned continuous frequency columns.
+
+Saturation may explain pinned energy; it does not explain the topology substitution.
+
+Trace:
 
 ```text
-tests/test_visualizer_custom_route_contract.py
+data: FFT/bands -> Spectrum shaping -> floor/gain/expansion/normalization -> clamp -> final vector
+presentation: mode/preset -> render snapshot -> renderer -> primitive/topology -> retained draw
 ```
 
-Add a production admission test once the failing seam is identified: Media route 1 + Visualizer CUSTOM route 2 must yield the one Visualizer owner on selected participant 2. The same configuration with a non-CUSTOM Visualizer must follow Media route 1.
+H stops when live Spectrum data is non-degenerate and the correct functional continuous-column representation survives switch/recreation. Exact spacing/glow/gradient/line-thickness polish belongs to J Parity+.
 
-### H5b — Spectrum data saturation + wrong functional presentation topology
+Do not alter Bubble/shared cadence while fixing Spectrum.
 
-**Status: operator-reproducible; H owns the broken functional representation, J owns later Parity+ polish.**
-
-The latest visualizer sidecar proves one upstream defect: Spectrum activation uses `bar_count=35`, then repeatedly publishes authored/computed bars where essentially every value is clamped to `1.00`.
-
-Physical comparison now proves a second, independent-looking symptom: the current Quick Spectrum/Organ output is a dense full-height matrix of tiny segmented blocks, while the intended Organ/Spectrum family is a modest set of bottom-aligned continuous vertical frequency columns with variable heights. Saturated data can explain pinned energy; it does **not** by itself explain the wholesale primitive/topology substitution.
-
-Use the historical reference only as a user-visible oracle:
-- release 4.7.2 / 4.7.0 screenshots;
-- `15099d3` as cleaner old behavior code;
-- `3fe5df6` only as a later mixed reference.
-
-Do not copy old presenter code.
-
-Required sequence:
-
-1. reproduce with the operator's Organ preset 1/current Spectrum activation;
-2. prove canonical mode + preset identity;
-3. capture bounded data stages: raw FFT/bands -> Spectrum mapping -> pre-gain/floor bars -> post-normalization/expansion bars -> clamp count;
-4. identify why the 35-bar payload saturates and repair the smallest Spectrum-specific owner;
-5. independently trace presentation identity: render snapshot mode/preset -> renderer implementation -> primitive/segment topology -> retained draw;
-6. identify why Organ/Spectrum resolves to the current dense segmented matrix instead of the intended continuous-column representation;
-7. repair the smallest presentation-selection/topology owner without changing shared cadence or resurrecting legacy rendering;
-8. verify non-degenerate live bars and recognizably correct Spectrum/Organ topology after both mode switch and recreation.
-
-**H acceptance is intentionally bounded:** correct data + correct functional Spectrum representation family. Exact column spacing, glow, gradient/rainbow elegance, line thickness and screenshot-level polish belong to J Parity+ once the representation is correct.
-
-Do not change Bubble/shared cadence to fix Spectrum.
 ### H6 — CUSTOM Settings may lock only size-authoring controls
 
-**Status: operator-reproducible functional Settings defect.**
+**Status: operator-reproducible Settings ownership defect.**
 
-CUSTOM geometry owns size. It does not own ordinary feature/appearance semantics.
-
-For Media, the canonical descriptor already says the CUSTOM resize lock is only:
+For Media, canonical CUSTOM size-lock metadata is only:
 
 ```text
 media_font_size
 media_artwork_size
 ```
 
-Yet physical Settings currently greys out seek/progress/glow and other non-size controls while CUSTOM is active.
+CUSTOM itself must not disable progress/seek/glow/volume/mute feature controls. Normal feature/provider dependency gates still apply.
 
-Required fix:
+Find the secondary disable owner (parent container, stale second lock path, dependency refresh ordering, etc.) and remove only the CUSTOM-derived over-lock. Do not force-enable controls that are legitimately disabled by their own semantics.
 
-- retain normal dependency gating (`show controls`, `show progress`, `glow enabled`, provider capability, etc.);
-- CUSTOM itself may disable only true size-authoring controls;
-- determine whether the observed extra lock comes from a parent container enable state, a second/stale lock owner, or dependency refresh order;
-- fix the smallest secondary owner rather than broadening the descriptor.
+Technical route: `Docs/QtQuick_Migration/H6_Custom_Settings_Lock_Scope_Decomposition_2026-08-30.md`.
 
-Focused intent test supplied:
+### H7 — Exit visible-response/performance classification
 
-```text
-tests/test_custom_resize_lock_scope.py
-```
+The current clean run routes Exit immediately and completes the terminal Quick barrier in ~250 ms. Script-mode recursive `__pycache__` cleanup then consumes additional terminal time.
 
-This test should already be GREEN on current source; that is useful evidence that the defect lies outside the canonical descriptor.
+Remeasure **visible window dismissal** separately from legal retirement and developer housekeeping. If visible dismissal is prompt, carry remaining tail/pycache policy into J/performance or cleanup rather than reopening lifecycle ownership.
 
-### H7 — Exit responsiveness after clean-exit repair
+## H observations intentionally carried to J unless a deterministic seam appears
 
-**Status: partially localized; defer final classification until H1b is clean.**
+### Bubble response
 
-Current log shows:
+Bubble remains physically weak/delayed despite healthy authored ~90 Hz cadence/integration. Do not tune sensitivity/physics during unrelated H work. J must correlate playback edge -> source freshness -> logical Bubble state -> retained publication -> visible consequence. Promote only a proven stale/delayed owner seam.
 
-```text
-14:46:41 Exit accepted
-14:46:41 SHUTTING_DOWN
-14:46:41 displays quiesced/cleared
-14:46:41 async retirement begins
-14:46:41 ThreadManager shut down
-14:46:41 pycache cleanup starts
-14:46:43 pycache cleanup ends / Exiting logged
-```
+Preserve the currently good Bubble partial/CUSTOM resizing.
 
-So the context action itself does not appear to be the multi-second owner in this run. Remeasure after H1b. If windows dismiss immediately and only optional housekeeping consumes tail time, carry that as J/performance/maintenance cleanup. If visible windows remain after action acceptance, repair the smallest visible-dismiss owner in H.
+### Black/test-frame/focus/context flashes
 
-## H observations that remain J unless a deterministic owner defect is proved
-
-### Bubble reactivity
-
-Bubble still physically feels barely reactive: delayed visible start/stop and little contraction/expansion. Raw authored metrics remain healthy (~90 Hz and requested/integrated ratio 1.000), so **do not tune Bubble now**.
-
-J must correlate:
-
-```text
-playback edge
--> audio/source freshness
--> logical Bubble state
--> retained publication
--> visible geometry/energy consequence
-```
-
-A stale/delayed deterministic owner is repaired at that seam. Otherwise authored visible-response tuning waits for J. Preserve the currently good Bubble partial/CUSTOM resize behavior.
-
-### Black flashes, test-colour-band startup flash and focus flicker
-
-These remain high-priority J physical-presentation defects unless bounded tracing proves semantic image/reveal state is reset or an actual diagnostic frame is admitted into production. Do not add black clears or repaint loops.
+Black flashes, apparent startup diagnostic/test colour bands, focus flicker and context-menu flash remain high-priority J physical presentation defects unless tracing proves an actual semantic reset/test frame is admitted.
 
 ## H re-closure gate
 
-H can re-close only when all of the following are true on exact current source:
+H closes only when:
 
-1. the accepted runtime-reality regressions remain GREEN;
-2. H1a two-phase family construction remains GREEN and the repeated dual-display recreation pass is preserved;
-3. ordinary terminal Exit completes without QML retirement storms, dangling slot errors, Windows fatal exception or lingering process;
-4. Settings helper teardown produces no Python event-filter AttributeErrors;
-5. Media artwork visibly resolves from a real decoded snapshot through the engine-registered provider;
-6. Reddit admitted URLs reach the correct MC/SCR opener;
-7. Media Play/Pause and seek work while Previous/Next remain working;
-8. CUSTOM Visualizer can own a different selected display from Media while non-CUSTOM still follows Media;
-9. Spectrum produces non-degenerate live bars and the correct functional Organ/Spectrum representation family (continuous frequency columns rather than the current dense segmented matrix) after mode switch and recreation;
-10. CUSTOM Settings locks only controls whose values author committed size; ordinary feature/appearance controls remain usable subject to their normal dependency gates;
-11. Exit visible responsiveness is measured/understood after clean terminal retirement;
-12. maintained `h-destination` is rerun once after the bounded fixes and remains GREEN;
-13. every unresolved ledger row whose phase includes **H** is closed or explicitly carried into J with a recorded reason;
-14. a short final dual-display source-mode smoke is GREEN.
+1. H1 reconstruction + terminal-retirement regressions remain GREEN;
+2. H2 artwork provider identity remains GREEN and real artwork remains visible;
+3. Reddit URL actions reach the correct product opener;
+4. Clock runtime mode toggle survives Settings/Edit recreation;
+5. Media Play/Pause + seek work on the real provider while Previous/Next remain working;
+6. CUSTOM Visualizer can own a different selected display from Media while non-CUSTOM still follows Media;
+7. Spectrum has non-degenerate data and the correct functional continuous-column representation after switch/recreation;
+8. CUSTOM Settings locks only size-authoring controls;
+9. Exit visible response is measured/understood with clean natural termination;
+10. unexpected `screensaver_qml.log` warnings/errors relevant to these paths are reconciled;
+11. maintained `h-destination` is GREEN after the bounded fixes;
+12. every unresolved ledger row whose phase includes H is closed or explicitly carried to J with evidence;
+13. a short dual-display source-mode smoke is GREEN.
 
 Only then may I start.
 
-## I residue reconciliation — blocked
+## I — blocked residue reconciliation
 
-I remains source/test/tool residue cleanup after H. Do not use I to absorb these runtime defects and do not restore legacy presentation to satisfy stale tests.
+I remains source/test/tool residue cleanup only. Do not use it to absorb current runtime failures and do not restore legacy presentation to satisfy stale tests.
 
-## J acceptance inputs — explicit Parity+ destination
+## J — Parity+ destination
 
-Use:
+J is **Parity+**: proven historical user-visible quality/behavior is the floor where it was better, not the ceiling. Preserve genuine Quick improvements and fix historical shortcomings rather than reproducing bugs.
+
+Read together:
 
 ```text
 Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md
 Docs/QtQuick_Migration/J_Visual_Parity_Runtime_Acceptance_Addendum_2026-08-30.md
 Docs/QtQuick_Migration/J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md
 Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md
+Docs/Qt_QML_Observability.md
 ```
+
+Primary visual references are the 4.7.2/4.7.0 release screenshots. `15099d3` is the cleaner historical behavior-code reference; `3fe5df6` is a later mixed reference with migration work. Historical code is never implementation authority.
 
 Named J cells include:
 
-- startup/focus/context-menu/transition black flash and whole-scene flicker;
-- intermittent startup flash resembling diagnostic/test colour bands;
+- startup/focus/context-menu/transition black flash and apparent test-colour-band flash;
 - actual gentle reveal/fade;
-- Media proportions/artwork sizing/header/control-strip parity after H2 restores data;
-- Gmail row clipping and refresh/header parity;
-- Reddit/Gmail/Media logo/header consistency;
-- Achievement Pulse icon placement, unlocked-count allocation and dead-space removal;
-- consistent header border/chrome;
-- optional Media `Junk` / `Paused` metadata;
-- one coherent visible pointer treatment (no OS cursor + cursor halo double pointer);
-- adjacent/outside Media app-volume accessory as the canonical existing toggle outcome;
-- ordinary/non-CUSTOM widget placement without dog-piling, especially Media + Visualizer adjacent free-space placement;
+- Media Parity+: proportions, artwork sizing/chrome, **artwork change fade**, header/control-strip balance, optional metadata;
+- preserve the newer transport strip where it is better;
+- adjacent/outside adjustable Media app-volume accessory as the canonical established toggle outcome;
+- Gmail clipping/refresh/header alignment;
+- Achievement Pulse packing/icon/count allocation;
+- one coherent visible pointer treatment (no OS cursor + halo duplication);
+- ordinary non-CUSTOM free-space composition, especially Media + Visualizer, without dog-piling;
 - CUSTOM overlap/cross-display authority untouched by ordinary collision avoidance;
-- context submenus that dismiss/switch coherently after hover leave;
-- Bubble visible reactivity/latency while preserving BTF and good partial resizing;
-- physical A->B->A focus, mixed refresh/DPR, off/wake, performance tails and clean installed exit.
-
-Finishing the active coding slice never closes this list by implication.
+- coherent context-submenu hover-leave lifetime;
+- all-five visualizer eyes-on fidelity after H restores Spectrum data/topology;
+- Bubble visible response/latency without sacrificing BTF or its currently good partial resizing;
+- mixed refresh/DPR, off/wake, A->B->A focus/topology, installed performance tails and clean exit;
+- **Qt/QML sidecar review as part of physical acceptance**, not console-only inspection.

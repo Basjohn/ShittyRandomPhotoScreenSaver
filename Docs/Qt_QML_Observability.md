@@ -1,0 +1,191 @@
+# Qt / QML Observability Contract
+
+Last updated: 2026-08-30
+
+## Purpose
+
+SRPSS has more than one diagnostic plane. Python logging alone is not sufficient evidence for a Qt Quick application.
+
+Qt/QML binding failures, component warnings, signal/slot complaints, scene-graph diagnostics and other Qt messages travel through Qt's own message-handler path. During the Quick migration this blind spot hid a real Clock retirement failure even while the Python logs looked clean.
+
+The capture is now **permanent always-on product infrastructure**.
+
+## Diagnostic planes
+
+| Plane | Primary artifact | Scope |
+| --- | --- | --- |
+| Python/runtime | `screensaver.log` + enabled family sidecars | Python owners, runtime sequence, provider/service/perf/lifecycle telemetry |
+| Qt/QML | `screensaver_qml.log` | Qt message handler, QML bindings/components, Qt signal/slot/scene diagnostics |
+| Diagnostic fatal | `diagnostic_crash.log` | Diagnostic-build `faulthandler` + uncaught Python/fatal breadcrumbs |
+| Raw non-Qt stderr | console / process stderr | Native/library writes that bypass both Python logging and Qt message handler |
+
+Do not silently treat these as interchangeable.
+
+## Always-on Qt/QML capture
+
+Implementation: `core/logging/qt_message_capture.py`.
+
+Required lifecycle:
+
+```text
+ordinary logging path resolved
+-> install Qt message capture
+-> configure Quick graphics
+-> create QApplication
+-> create QQmlEngine / QQuickWindows
+-> run application
+-> retire all Quick/QML objects
+-> return from main / destroy QApplication
+-> atexit closes Qt capture
+```
+
+The handler must be installed **before `QApplication` and any `QQmlEngine` are created** and remain active through final Qt destruction.
+
+## Sidecar existence is itself evidence
+
+A successful install must eagerly create `screensaver_qml.log` and write a `session_start` marker.
+
+This removes the former ambiguity caused by `RotatingFileHandler(delay=True)`:
+
+```text
+old clean run:
+main log says capture active
++ Qt emits zero messages
++ sidecar file never opens
+=> missing file could mean either "clean" or "capture unavailable"
+```
+
+New contract:
+
+```text
+file exists + session_start + zero messages
+=> capture was alive and Qt/QML plane was clean
+
+file does not exist
+=> capture/setup/path/packaging problem; do not claim Qt/QML evidence
+
+file exists + messages
+=> inspect and classify every migration-relevant warning/error
+```
+
+## Record schema
+
+Each Qt/QML message preserves, when available:
+
+```text
+timestamp with milliseconds
+severity
+process id
+thread name + Python thread id
+monotonic sidecar sequence
+Qt category
+source file + line + function
+message payload
+```
+
+The sidecar also writes session markers and final counts by severity/category.
+
+The exact human format may evolve. Do not remove those fields without replacing their diagnostic value.
+
+## Persistence / failure behavior
+
+The Qt/QML sidecar is deliberately direct and synchronous rather than routed through the ordinary queued logger.
+
+Reasons:
+
+- QML/Qt errors can occur while the ordinary logging queue is saturated or closing;
+- Qt fatal/error evidence may be immediately followed by native termination;
+- message-handler recursion must remain bounded and simple.
+
+The file is rotated and size-bounded. It must not become a frame telemetry stream.
+
+A Qt message callback may **never raise into Qt**.
+
+## Console / previous-handler preservation
+
+Installing SRPSS capture must not silently steal another Qt handler.
+
+If a pre-existing Qt message handler exists, capture first and then delegate to it. If Qt had no custom handler, preserve useful script/debug console behavior by echoing a compact equivalent to the original stderr route.
+
+Uninstall must restore the prior handler rather than blindly installing `None`.
+
+## Runtime gate rule
+
+For any H/J source-mode or installed physical claim involving Quick/QML:
+
+1. read `screensaver.log` for the main runtime sequence;
+2. read `screensaver_qml.log` for Qt/QML evidence over the same timestamp range;
+3. follow owning family sidecars when needed;
+4. do not call the gate GREEN while unexplained migration-relevant Qt/QML warnings/errors remain.
+
+This does **not** mean every third-party informational Qt line is automatically a product failure. It means the diagnostic plane must be intentionally classified rather than ignored.
+
+## Examples of first-class Qt/QML evidence
+
+- `Cannot read property ... of null` during retained model teardown;
+- `QML Image: Failed to get image from provider: image://mediaartwork/...`;
+- required property/component creation errors;
+- invalid signal/slot connection diagnostics;
+- shader/component load failures;
+- scene-graph warnings tied to the current runtime transition.
+
+These messages may identify an H functional/lifecycle seam even when Python owners report normal completion.
+
+## Correlation
+
+Use timestamp + source/category + main-log runtime generation/activity to correlate Qt/QML records.
+
+Do not add per-frame generation queries inside the Qt message handler merely to decorate logs. The capture path must remain passive and cheap.
+
+If future investigations repeatedly need exact runtime-generation identity inside Qt/QML messages, add one process-owned, read-only correlation provider with a focused performance/lifetime review rather than coupling the handler to display owners.
+
+## Raw stderr / `os.dup2` decision
+
+Current production capture does **not** install an OS-level stderr tee.
+
+That boundary is intentional. A true fd-2 tee is materially different from `qInstallMessageHandler`:
+
+- native/C libraries can write to fd 2 without Qt;
+- redirecting fd 2 changes subprocess/standard-handle inheritance;
+- a background pipe-based tee can lose the final bytes if the process dies before the reader drains;
+- direct fd-to-file redirection is more crash-resilient but sacrifices normal console parity unless another route mirrors it;
+- frozen Windows behavior must be tested separately from script mode.
+
+Therefore add permanent fd-2 capture only after a demonstrated non-Qt stderr gap and with an explicit design answering:
+
+```text
+console preservation?
+subprocess inheritance?
+rotation/bounds?
+hard-crash persistence?
+shutdown order?
+frozen/script differences?
+```
+
+Do not use `os.dup2` merely because it sounds more comprehensive.
+
+## Tests
+
+Permanent coverage should prove:
+
+- successful install eagerly creates the sidecar;
+- clean session writes start/end markers with zero-message summary;
+- warning/error callback records category + source context;
+- previous Qt message handler is delegated/restored;
+- log-dir relocation does not install a second Qt callback;
+- sidecar metrics count messages/severities/categories;
+- callback exceptions never escape into Qt;
+- capture remains independent of ordinary logger queue state;
+- a real `QQmlEngine` warning reaches the sidecar through Qt's actual message-handler path (`tests/test_qt_message_capture_qml_runtime.py`).
+
+The fake-handler contract tests are GREEN in the handoff environment. The real-QML probe requires PySide6 and is **AWAITING TEST VALIDATION** in the Windows/runtime environment. Physical/frozen acceptance still matters because even a real local `QQmlEngine` probe cannot prove every scene-graph/driver path.
+
+## Guardrails
+
+- always-on does not mean high-volume;
+- no per-frame QML debug chatter;
+- no control flow driven by whether logging succeeded;
+- no swallowing fatal/error evidence to keep a test green;
+- no duplicated Quick owner just to expose diagnostics;
+- no migration gate based solely on the console;
+- no raw stderr redirection without an explicit subprocess/crash design.

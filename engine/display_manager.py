@@ -1541,6 +1541,151 @@ class DisplayManager(QObject):
                 exc_info=True,
             )
 
+    def _quick_ordinary_family_adapters(self):
+        """Build one generation's family adapters with weak product-action routes.
+
+        Retained presentations emit semantic actions only. DisplayManager owns the
+        product persistence/URL consequences, but adapters must not keep a strong
+        manager reference alive through display -> presenter -> binder ownership.
+        """
+
+        from rendering.quick.widgets.family_binder import (
+            default_ordinary_family_adapters,
+        )
+
+        manager_ref = weakref.ref(self)
+        generation = self._runtime_generation
+
+        def _persist_clock_mode(
+            widget_id: str,
+            display_identity: str,
+            mode: str,
+        ) -> None:
+            manager = manager_ref()
+            if (
+                manager is None
+                or manager._retired
+                or manager._runtime_generation != generation
+            ):
+                return
+            manager._persist_quick_clock_mode_override(
+                widget_id,
+                display_identity,
+                mode,
+            )
+
+        def _open_reddit(widget_id: str, url: str) -> bool:
+            manager = manager_ref()
+            if (
+                manager is None
+                or manager._retired
+                or manager._runtime_generation != generation
+            ):
+                return False
+            return manager._open_quick_reddit_url(widget_id, url)
+
+        return default_ordinary_family_adapters(
+            clock_mode_toggle=_persist_clock_mode,
+            reddit_open_requested=_open_reddit,
+        )
+
+    def _persist_quick_clock_mode_override(
+        self,
+        widget_id: str,
+        display_identity: str,
+        mode: str,
+    ) -> None:
+        """Persist one retained Clock's per-display mode without rebuilding.
+
+        The shared ``display_mode`` setting remains the authored baseline. Runtime
+        double-click writes only ``display_mode_overrides[screen_signature]`` for
+        the affected Clock instance, preserving mixed analogue/digital displays.
+        """
+
+        if self._retired:
+            return
+        settings = self.settings_manager
+        normalized_widget_id = str(widget_id or "")
+        identity = str(display_identity or "").strip()
+        if settings is None or normalized_widget_id not in {"clock", "clock2", "clock3"} or not identity:
+            return
+
+        from rendering.quick.widgets.clock import normalize_clock_display_mode
+        from core.widget_product_actions import (
+            update_clock_display_mode_override,
+        )
+
+        normalized_mode = normalize_clock_display_mode(mode)
+        widgets, changed = update_clock_display_mode_override(
+            settings.get_widgets_map(),
+            widget_id=normalized_widget_id,
+            display_identity=identity,
+            normalized_mode=normalized_mode,
+        )
+        if not changed:
+            return
+
+        settings.set_widgets_map(widgets, emit_change=False)
+        settings.save()
+
+        # Keep this generation's detached routing/config snapshot coherent so a
+        # later owner-local operation cannot re-publish stale Clock state before
+        # the next full Settings snapshot is taken.
+        self._widgets_config_snapshot = dict(widgets)
+        logger.info(
+            "[CLOCK] Persisted Quick per-display mode widget=%s display=%s mode=%s",
+            normalized_widget_id,
+            identity,
+            normalized_mode,
+        )
+
+    def _open_quick_reddit_url(self, widget_id: str, url: str) -> bool:
+        """Route one admitted Reddit URL through the existing product authority.
+
+        MC/diagnostic builds remain interactive and open directly. The ordinary
+        saver uses the existing secure URL launcher, then exits normally after a
+        successful handoff; helper readiness never gates saver teardown.
+        """
+
+        if self._retired:
+            return False
+        normalized_url = str(url or "").strip()
+        if not normalized_url:
+            return False
+
+        from core.build_profile import is_diagnostic_build
+        from core.mc import is_mc_build
+        from core.windows.secure_url_launcher import open_url
+
+        from core.widget_product_actions import (
+            dispatch_reddit_url_product_action,
+        )
+
+        interactive = bool(is_mc_build() or is_diagnostic_build())
+
+        def _open(target: str) -> bool:
+            return bool(
+                open_url(
+                    target,
+                    prefer_direct=interactive,
+                    source=f"reddit:{str(widget_id or 'reddit')}",
+                )
+            )
+
+        opened = dispatch_reddit_url_product_action(
+            normalized_url,
+            opener=_open,
+            request_saver_exit=self._on_exit_requested,
+            interactive_build=interactive,
+        )
+        if opened:
+            logger.info(
+                "[REDDIT] Quick URL action admitted widget=%s route=%s",
+                str(widget_id or "reddit"),
+                "interactive" if interactive else "screensaver-handoff",
+            )
+        return bool(opened)
+
     def _create_display_for_screen(
         self,
         screen_index: int,
@@ -1569,6 +1714,7 @@ class DisplayManager(QObject):
                 ctrl_coordinator=self._quick_ctrl_coordinator,
                 interaction_mode_provider=self._interaction_mode_enabled,
                 custom_layout_active_provider=self._quick_custom_layout_active,
+                adapters=self._quick_ordinary_family_adapters(),
             )
             self._connect_quick_runtime(display, startup_generation=self._display_startup_generation)
             screen = screens[int(screen_index)]

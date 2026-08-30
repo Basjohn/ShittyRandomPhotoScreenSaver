@@ -73,6 +73,30 @@ Every J acceptance run must identify enough provenance to prevent evidence from 
 Do not carry a pass forward across a code/build change that touches the tested owner without classifying whether the evidence
 still applies.
 
+
+## 3A. Lesson from the first post-cutover production-source run
+
+The first real source-mode Quick run is preserved at
+`logs/evidence_chest/08_30_RuntimeSwap_03_37/` with source head
+`427eafed8cff8b932bc64efee964764ce3f02260`.
+
+It demonstrated an important acceptance rule: **cross-layer milestones are not
+substitutes for the visible/product consequence they are meant to support.** In
+particular:
+
+```text
+logical Visualizer cadence is healthy != retained pixels visibly evolve
+render/draw calls are high             != successive snapshots were synchronized
+context-menu model accepted/opened     != the QML menu was visible/usable
+fade/reveal milestone fired            != the operator saw a clean gentle fade
+```
+
+The deterministic defects exposed by that run are routed back to H before I/J;
+J must not inherit them as accepted debt. The remaining observations become
+named J cells: black flashes on startup/focus/transition edges, actual widget
+fade quality, ordinary-widget content sizing, refresh-spiral consistency and
+transition visual stability.
+
 ## 4. Deterministic preflight before expensive physical work
 
 Before operator-heavy acceptance, run the bounded relevant suite and reconcile obvious stale tests first.
@@ -149,6 +173,8 @@ For each relevant cell verify:
 - no stale old-generation scene/action callback;
 - no duplicate provider/widget/visualizer owner;
 - no black/stale/previous-generation reveal in place of explicit readiness;
+- focus/click A -> B -> A does not blank either retained scene or replay a
+  black base frame;
 - correct recovery/recreation without moving live render resources illegally between windows.
 
 If hardware cannot exercise a matrix cell, record the cell as unrun rather than converting synthetic coverage into a
@@ -165,7 +191,8 @@ Eyes-on acceptance must inspect the production Quick pixels, not a compatibility
 Check representative and edge-case image content plus every supported transition family as currently admitted:
 
 - ordinary progression;
-- interruption/cycle/replacement;
+- interruption/cycle/replacement, including a second manual Next while the
+  first transition is active;
 - fade/opacity ownership;
 - geometry/crop/scaling;
 - no flash/black/stale-frame handoff;
@@ -182,10 +209,19 @@ Check enabled substantive families and representative styling extremes:
 - borders/corners;
 - opacity;
 - shadows including direction/spread/blur;
+- loading/refresh indicators (including spiral placement/visibility) are
+  consistent with the authored family surface rather than appearing on only an
+  arbitrary subset;
 - action hit regions and one-shot semantic actions;
 - capability/ordinary ON/OFF behavior;
 - provider/model dormancy where relevant;
 - CUSTOM move/resize/duplicate/X/Save/Cancel/layout slots.
+
+When sizing is under investigation, capture one bounded startup/recreation
+layout snapshot rather than polling: widget/instance id, effective display
+route, preferred content size, final outer rect, committed CUSTOM override if
+any, DPR and clamp result/reason. The diagnostic must not become per-frame
+geometry feedback.
 
 Do not require every possible provider/account to be live if a production-shaped deterministic/synthetic model proves the
 presentation contract; do require real provider/lifecycle checks where network/account ownership itself is the acceptance
@@ -203,7 +239,10 @@ Bubble
 DevCurve
 ```
 
-Check authored feel, geometry, shell/clip, shadows and transition coexistence. Bubble Temporal Fidelity remains binding.
+Check authored feel, geometry, shell/clip, shadows and transition coexistence.
+Require visible evolution of successive retained states; logical ~90 Hz cadence
+or render-call counts alone do not prove this. Bubble Temporal Fidelity remains
+binding.
 
 ### Deferred G4 viewport gate
 
@@ -245,7 +284,8 @@ Verify at minimum:
 - A -> B -> A focus switching on multi-display;
 - Ctrl/interaction state does not stick;
 - single/double-click exclusivity;
-- context menu open/dismiss/action paths;
+- context menu open/dismiss/action paths, including operator-visible retained
+  QML presence rather than model-only admission;
 - cursor halo/inactivity behavior;
 - Settings/CUSTOM transitions;
 - Clock/media/widget semantic interactions;
@@ -283,7 +323,10 @@ Require:
 - scene/render resources retire on legal owner/thread/context;
 - stale callbacks cannot affect the replacement generation;
 - no destruction-barrier hang hidden by increasing timeouts;
-- process actually terminates.
+- process actually terminates;
+- shutdown timing is attributed by phase so unrelated post-teardown work (for
+  example explicit cache/pycache cleanup) is not misdiagnosed as a Quick
+  destruction-barrier hang.
 
 ## 10. Performance / physical cadence
 

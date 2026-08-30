@@ -322,6 +322,16 @@ class OrdinaryFamilyPresentationBinder:
 class ClockFamilyAdapter:
     """Adapter for the Clock family (clock/clock2/clock3)."""
 
+    def __init__(
+        self,
+        *,
+        on_mode_toggle: Callable[[str, str, str], None] | None = None,
+    ) -> None:
+        # Product persistence stays outside the retained presentation. The
+        # adapter only binds one already-existing semantic callback into the
+        # presentation for this display/widget identity.
+        self._on_mode_toggle = on_mode_toggle
+
     @property
     def family_id(self) -> str:
         return "clocks"
@@ -360,12 +370,20 @@ class ClockFamilyAdapter:
         )
         style = ClockPresentationStyle.project(config, shadow_values)
         model = ClockPresentationModel(config, style)
+        mode_callback = None
+        if self._on_mode_toggle is not None:
+            mode_callback = (
+                lambda target_mode, wid=widget_id, identity=display_identity: (
+                    self._on_mode_toggle(wid, identity, str(target_mode))
+                )
+            )
         return RetainedClockPresentation(
             host=host,
             model=model,
             geometry=geometry,
             display_bounds=display_bounds,
             display_identity=display_identity,
+            on_mode_toggle=mode_callback,
         )
 
 
@@ -416,6 +434,13 @@ class WeatherFamilyAdapter:
 class RedditFamilyAdapter:
     """Adapter for the Reddit family (reddit/reddit2)."""
 
+    def __init__(
+        self,
+        *,
+        on_open_requested: Callable[[str, str], bool] | None = None,
+    ) -> None:
+        self._on_open_requested = on_open_requested
+
     @property
     def family_id(self) -> str:
         return "reddit"
@@ -454,8 +479,18 @@ class RedditFamilyAdapter:
             runtime_manager, widget_id, model, widgets_config
         ):
             return None
+        open_callback = None
+        if self._on_open_requested is not None:
+            open_callback = (
+                lambda url, wid=widget_id: bool(
+                    self._on_open_requested(wid, str(url))
+                )
+            )
         return RetainedRedditPresentation(
-            host=host, model=model, geometry=geometry
+            host=host,
+            model=model,
+            geometry=geometry,
+            on_open_requested=open_callback,
         )
 
 
@@ -719,18 +754,24 @@ class MediaFamilyAdapter:
         return retained
 
 
-def default_ordinary_family_adapters() -> tuple[OrdinaryFamilyAdapter, ...]:
+def default_ordinary_family_adapters(
+    *,
+    clock_mode_toggle: Callable[[str, str, str], None] | None = None,
+    reddit_open_requested: Callable[[str, str], bool] | None = None,
+) -> tuple[OrdinaryFamilyAdapter, ...]:
     """Return the explicit ordered ordinary-family adapters currently wired.
 
-    Order is the deterministic build order; it does not imply Z-order, which the
-    host owns.
+    Product semantic actions are injected only into the two families that need
+    them. The adapters remain lifetime-neutral and hold no DisplayManager owner;
+    production supplies weak callbacks. Order is deterministic build order and
+    does not imply Z-order, which the host owns.
     """
 
     return (
-        ClockFamilyAdapter(),
+        ClockFamilyAdapter(on_mode_toggle=clock_mode_toggle),
         WeatherFamilyAdapter(),
         MediaFamilyAdapter(),
-        RedditFamilyAdapter(),
+        RedditFamilyAdapter(on_open_requested=reddit_open_requested),
         GmailFamilyAdapter(),
         AchievementPulseFamilyAdapter(),
         AbandonmentIssuesFamilyAdapter(),
