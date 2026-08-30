@@ -1197,6 +1197,29 @@ class DisplayManager(QObject):
             return -1
         return monitor_number - 1
 
+    @classmethod
+    def _resolve_visualizer_requested_screen_index(cls, widgets: object) -> int:
+        """Resolve the visualizer's canonical effective monitor route.
+
+        Delegates to the descriptor/effective-routing authority so the product
+        contract is honoured without duplicating it here: outside CUSTOM the
+        ``spotify_visualizer`` edge follows Media's effective monitor route, while
+        CUSTOM ownership makes the visualizer's own persisted monitor route
+        authoritative. The resolved ``ALL``/1-based value is normalised to a
+        zero-based requested screen index (``ALL`` -> first participant).
+        """
+
+        from rendering.widget_descriptors import (
+            get_effective_monitor_value_for_widget,
+        )
+
+        effective_monitor = get_effective_monitor_value_for_widget(
+            "spotify_visualizer",
+            widgets if isinstance(widgets, dict) else {},
+            default="ALL",
+        )
+        return cls._requested_visualizer_screen_index(effective_monitor)
+
     def _admit_quick_visualizer(
         self,
         participants: list[QuickDisplayUnit],
@@ -1234,7 +1257,7 @@ class DisplayManager(QObject):
             resolve_quick_visualizer_owner_unit,
         )
 
-        requested = self._requested_visualizer_screen_index(model.monitor)
+        requested = self._resolve_visualizer_requested_screen_index(widgets)
         chosen = resolve_quick_visualizer_owner_unit(requested, participants)
         if chosen is None:
             logger.warning(
