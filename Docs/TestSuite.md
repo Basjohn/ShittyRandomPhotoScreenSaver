@@ -5,21 +5,27 @@ Last updated: 2026-08-30
 Reviewed authority:
 
 ```text
-G: independently audited and accepted; no active G implementation gate.
-H pre-cutover visualizer destination edge: CLOSED, including the stronger True-F technical/retained-consumer proof.
-H production cutover/deletion: CLOSED at 9dcb02be; maintained destination profile 60/60 GREEN after deletion.
-CURRENT I: source-driven legacy test/tool/adapter residue reconciliation and broad-suite restoration.
-Settings GUI/theme: large 2026 overhaul reconciled against current ui/ source in this test-maintenance pass.
+G: independently audited and accepted.
+H production Quick authority / old physical-host deletion: structurally accepted.
+H1a reconstruction hang: CLOSED; repeated dual-display Settings/CUSTOM physical gate passed.
+H1b terminal retirement / retained model lifetime / Settings event-filter teardown: CLOSED; later dual-display exits are clean.
+H2 Media artwork provider identity: CLOSED; exact engine-registered provider is injected and artwork is physically visible.
+H3 Reddit production opener: implementation prepared; AWAITING TEST VALIDATION.
+H3b Clock runtime mode-toggle persistence: implementation prepared; AWAITING TEST VALIDATION.
+H4-H6: pending per Current_Plan.
+Qt/QML observability: permanent always-on direct `screensaver_qml.log`; physical Quick gates inspect it alongside the Python log.
+I residue reconciliation: BLOCKED until H re-closes.
 ```
 
 This document is the SRPSS testing strategy and **live test-file inventory/retirement ledger**. It is not a phase changelog.
 `Current_Plan.md` owns the current implementation sequence and exact checkpoint. Exact source outranks this inventory when
 later work has landed.
 
-The whole top-level test tree is **not currently one homogeneous H gate**. Until H/I remove the legacy `DisplayWidget`,
-GLCompositor, old QWidget edit-shell and related presenter tests, a whole-tree run intentionally mixes destination Quick
-contracts with tests whose implementation owners are scheduled for deletion. Whole-tree results remain valuable for debt
-reconciliation, but an unrelated legacy red does not reopen a previously proven H destination gate by itself.
+The whole top-level test tree is **not currently one homogeneous current-owner gate**. H has deleted the legacy physical
+`DisplayWidget`/GLCompositor presenter, while the tree still contains tests/tools whose implementation owners are already
+gone or are awaiting I re-home/deletion. A whole-tree run therefore mixes destination Quick contracts with admitted residue.
+Whole-tree results remain valuable for debt reconciliation, but an unrelated legacy red does not reopen a proven destination
+contract by itself.
 
 This reconciliation also accounts for the Settings GUI overhaul that did not travel through the usual migration-agent doc
 loop: stale direct imports of the retired `NoSourcesPopup`, retired `ui.widgets.color_swatch`, and the old
@@ -101,6 +107,45 @@ Validation levels:
 - **E — manual visual:** Bubble feel/BTF, transition visual parity, Spectrum idle visibility, Pause/Play hitch, startup/reveal, widget visual parity/shadows.
 
 Use `Docs/Harness_Index.md` for recurring real-GL/physical/runtime harness commands.
+
+
+### 2A. H -> I source-mode runtime reality smoke
+
+A maintained pytest profile proves deterministic ownership contracts but does not replace Windows/driver/QML evidence.
+
+Closed physical gates now include:
+
+```text
+H1a: 3 Settings + 5 CUSTOM dual-display recreations, no watchdog dump
+H1b: terminal destruction barrier completes before final process/Qt shutdown; clean natural exit
+H2: real Media artwork resolves through the engine-registered provider
+```
+
+The Qt Quick runtime has a second diagnostic plane. Every physical H/J Quick claim must inspect:
+
+```text
+screensaver.log
+screensaver_qml.log
+```
+
+A successful Qt/QML capture eagerly creates `screensaver_qml.log` even when Qt emits zero messages. The file therefore doubles as capture-health evidence. See `Docs/Qt_QML_Observability.md`.
+
+Permanent/focused regression coverage should preserve:
+
+```text
+tests/test_qtquick_family_binder_two_phase.py
+tests/test_settings_eventfilter_teardown_guards.py
+tests/test_terminal_runtime_destruction.py
+tests/test_qtquick_retained_model_lifetime.py
+tests/test_qt_message_capture.py
+tests/test_qt_message_capture_contract.py
+```
+
+Reddit URL opening and Clock runtime mode persistence now have bounded prepared repairs and focused pure tests; they remain open only for real PySide/Windows validation. After those gates, active H continues with Media command semantics, Visualizer routing/Spectrum and CUSTOM Settings lock scope.
+
+Spectrum has two H-level evidence streams: repeated live bar payload saturation before shader presentation **and** the wrong basic Organ/Spectrum topology. A test that proves only shader load/draw count is insufficient.
+
+The short operator smoke remains mandatory for black/test-frame flashes, Bubble visible response, clipping, cursor duplication, layout composition and other J Parity+ facts.
 
 ## 3. Failure triage and stale-test rule
 
@@ -205,48 +250,50 @@ E2/E2.7, E1, E3 and E4 are closed and Phase E is structurally **CLOSED**. F0 dep
 
 ### Closed foundations
 
-E, F and complete G are closed at their accepted boundaries. Their surviving neutral/destination tests remain permanent
-regressions, but they are not active implementation gates and should not be rewritten back into QWidget presentation tests.
+E, F and complete G are closed at their accepted boundaries. The H production authority flip/deletion is structurally accepted; the deleted old physical presenter is not a legitimate test target merely because I residue still references it.
 
-The H pre-cutover visualizer correction gate is also closed. The standing destination evidence includes:
+### H — OPEN: post-cutover runtime reality
 
-- all-five logical configuration ownership;
-- one GUI/Quick presentation synchronization edge;
-- single-display visualizer admission;
-- semantic visualizer double-click mode cycling;
-- hard authored-runtime join/retirement barrier;
-- neutral presentation configuration;
-- **True-F** canonical technical cache -> shared BeatEngine/logical state -> bar-count coherence -> exact retained Quick item
-  consumption without `SpotifyVisualizerWidget`.
+`Current_Plan.md` owns exact sequence. Current state:
 
-### H — CLOSED: production authority and physical-host deletion
+```text
+H1a dual-display reconstruction: CLOSED
+H1b terminal retirement + Clock model lifetime + Settings event-filter teardown: CLOSED
+H2 Media artwork provider composition: CLOSED / permanent cross-layer identity regression
+H3 Reddit product opener composition: IMPLEMENTED / AWAITING TEST VALIDATION
+H3b Clock runtime mode-toggle persistence: IMPLEMENTED / AWAITING TEST VALIDATION
+H4 Media Play/Pause + seek provider-result semantics: pending
+H5a CUSTOM Visualizer independent display admission: pending
+H5b Spectrum upstream saturation + wrong topology: pending
+H6 CUSTOM Settings size-lock scope: pending
+H7 exit visible-response/perf classification: pending / likely J if windows dismiss promptly
+```
 
-The coordinated `DisplayManager` + engine authority cutover onto Quick display units is complete at the production source
-boundary, and the caller-proven old physical host is deleted at `9dcb02be`. "Coordinated/atomic" describes the **finished
-authority topology**, not one uninterrupted coding session or one giant commit. I must not restore a second legitimate
-production presenter or a fake `DisplayWidget` compatibility facade to satisfy obsolete tests.
+Use `h-destination` as the maintained deterministic bar and extend it only for surviving destination contracts. H re-closes only after every H ledger row is reconciled, both Python + Qt/QML logs are clean/understood, and the final dual-display source smoke remains physically GREEN.
 
-Use the `h-destination` runner profile as the bounded regression bar while this conversion proceeds. It contains the current
-Quick display/unit/family/geometry/input/CUSTOM owners, all retained family presentations, the corrected visualizer edge and
-authored fidelity bars, plus destination transition contracts. Extend the profile only for a surviving H contract; do not
-add old physical-host tests merely to make the profile look broad.
+### I — BLOCKED
 
-H runtime-shaped proof must ultimately cover one/multiple selected displays, image/transition routing, ordinary families,
-the one admitted visualizer, generation/topology replacement, clean retirement and caller-proven old-host deletion.
+Residue-only source/test/tool reconciliation after H. Do not use I to absorb current runtime failures or restore deleted presenter owners to satisfy stale tests.
 
-### I — CURRENT
+### J — pending H re-close
 
-Residue-only source **and test** reconciliation after the authority flip. Delete/rehome legacy `DisplayWidget`, GLCompositor,
-QWidget edit-shell/auxiliary and old visualizer-presenter tests only after caller/source proof establishes that their owner is
-gone and the surviving product contract is covered by destination tests. At the end of I, restore the whole-tree suite as a
-normal broad regression authority rather than carrying permanent ignore lists.
-
-### J
-
-Comprehensive compiled/installed 1/2/N-display, mixed-refresh/DPR/topology/off-wake, full eyes-on parity, physical tail
-metrics and clean-exit validation. Architecture-selection spike tests may retire only after final evidence exists.
+Comprehensive **Parity+** physical visual/fidelity/installed acceptance. Use the J decomposition, J addendum, `J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md`, mandatory operator ledger and `Docs/Qt_QML_Observability.md`. Historical screenshots/code establish user-visible floor/behavior only; current Quick architecture remains implementation authority.
 
 ## 6. Immediate test-maintenance state
+
+Current post-cutover focused additions:
+
+| File | Status | Disposition |
+| --- | --- | --- |
+| `tests/test_qt_message_capture_contract.py` | **ADDED — PERMANENT OBSERVABILITY** | Eager sidecar creation/session markers, structured Qt context, prior-handler delegation/restoration, sink relocation and metrics. |
+| `tests/test_qt_message_capture_qml_runtime.py` | **ADDED — PERMANENT REAL-QML OBSERVABILITY** | Real `QQmlEngine`/`console.warn` probe must reach the direct sidecar and session markers; requires PySide runtime, so awaiting execution in the real environment. |
+| `tests/test_qtquick_family_product_actions.py` | **ADDED — H3/H3b + PERMANENT PRODUCT SEMANTICS** | Pins Reddit saver-vs-interactive consequences and per-display Clock mode override persistence. Pure subset GREEN in handoff environment; production PySide composition still needs physical/runtime validation. |
+| `tests/test_settings_eventfilter_teardown_guards.py` | **CLOSED H1b / KEEP** | Late Settings helper events cannot dereference retired targets. |
+| `tests/test_visualizer_custom_route_contract.py` | **PERMANENT ROUTING PIN** | CUSTOM Visualizer owns its monitor; non-CUSTOM follows Media. |
+| `tests/test_custom_resize_lock_scope.py` | **PERMANENT SETTINGS PIN** | Media CUSTOM lock metadata contains size-authoring controls only. |
+
+Qt/QML capture tests are not a substitute for real QML runtime evidence; physical gates must inspect `screensaver_qml.log`.
+
 
 The Settings-overhaul drift found during the pre-cutover caution run is reconciled in this pass:
 
@@ -728,6 +775,9 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_flow_layout.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_fresh_start_logging.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_logging_config.py` | **KEEP — PERMANENT** | Logging bootstrap/family routing and exact rotating-handler policy; Diagnostic uses 2 MiB chunks with deliberately deeper bounded main/usage/lifecycle retention. |
+| `tests/test_qt_message_capture_contract.py` | **KEEP — PERMANENT** | Process-scoped Qt/QML capture health: eager file/session markers, structured context, prior-handler preservation and passive metrics; complements real PySide/QML tests. |
+| `tests/test_qt_message_capture_qml_runtime.py` | **KEEP — PERMANENT** | Real Qt/QML message-handler smoke; proves actual QML warnings reach the sidecar. |
+| `tests/test_qtquick_family_product_actions.py` | **KEEP — PERMANENT** | Presentation-neutral product consequences for retained Reddit URL actions and per-display Clock runtime mode persistence. |
 | `tests/test_logging_console_encoding.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_logging_routing.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_main_run_lifetime.py` | **KEEP** | Retain; no migration-specific retirement identified. |

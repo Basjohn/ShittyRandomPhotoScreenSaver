@@ -1,6 +1,6 @@
 # Qt Quick Production Migration — Technical Index
 
-Last updated: 2026-08-29
+Last updated: 2026-08-30
 
 Sequence/work admission comes only from `Current_Plan.md`.
 
@@ -24,9 +24,17 @@ Live phase/checkpoint status is intentionally not duplicated here; read `Current
 | `G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` | G4 ownership/spatial correction closure reference |
 | `Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` | G7/G8 auxiliary/focus closure reference |
 | `Remaining_H_Production_Cutover_Decomposition.md` | H production authority wiring, cardinality, lifecycle and old-host deletion |
+| `H_Post_Cutover_Runtime_Reality_Corrections.md` | bounded H correction/evidence for live retained delivery, transition replacement and visible context-menu reality gate |
 | `H_Pre_Cutover_Visualizer_Edge_Corrections.md` | **closed audit record** for the pre-cutover visualizer edge findings |
 | `H_True_F_Technical_Closure.md` | **closed follow-up evidence** for technical-config ownership + real retained-consumer proof |
 | `Remaining_J_Final_Installed_Acceptance_Decomposition.md` | J compiled/installed/physical acceptance and closure matrix |
+| `J_Visual_Parity_Runtime_Acceptance_Addendum_2026-08-30.md` | current J physical/parity acceptance cells |
+| `J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md` | historical quality floor + Parity+ outcome rules |
+| `Post_Cutover_Operator_Observation_Ledger_2026-08-30.md` | mandatory unresolved/closed physical observation ledger |
+
+## Qt/QML observability rule
+
+Migration runtime evidence is not Python-log-only. `Docs/Qt_QML_Observability.md` owns the permanent always-on `screensaver_qml.log` contract. H/J physical Quick gates inspect it beside `screensaver.log`; unexplained migration-relevant QML/Qt diagnostics must be classified before closure.
 
 ## Migration scaffolding rule
 

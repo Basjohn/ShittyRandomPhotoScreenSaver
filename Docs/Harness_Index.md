@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-08-29
+Last updated: 2026-08-30
 
 Compact routing for recurring investigation and migration sign-off commands.
 
@@ -44,6 +44,21 @@ python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
 Do not treat a red whole-tree run as proof the active slice failed until the relevant failure/log and owner classification are
 inspected. A completed pytest summary followed by a process that never exits strongly suggests shutdown/lifecycle ownership and
 should be isolated rather than hidden with a longer timeout.
+
+## 1A. Qt/QML sidecar evidence
+
+For any runtime-shaped or physical Quick/QML claim, collect and inspect both:
+
+```text
+logs/screensaver.log
+logs/screensaver_qml.log
+```
+
+A successful capture eagerly creates `screensaver_qml.log` with a session marker even when Qt emits zero messages. Missing sidecar therefore means the Qt/QML evidence plane is unavailable and the run cannot prove “no QML errors.”
+
+Focused capture validation: `pytest tests/test_qt_message_capture_contract.py tests/test_qt_message_capture_qml_runtime.py -q --tb=short`. The second test requires real PySide6/QQmlEngine.
+
+Relevant Qt/QML warning/error lines must be correlated to the same timestamp window before calling H/J GREEN. Use `Docs/Qt_QML_Observability.md` for capture semantics and the raw-stderr boundary.
 
 ## 2. Phase-C Quick transition regression harnesses
 

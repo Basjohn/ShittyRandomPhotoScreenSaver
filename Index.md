@@ -33,6 +33,7 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | safety | `Docs/Guardrails.md` |
 | test inventory/retirement | `Docs/TestSuite.md` |
 | harness/command routing | `Docs/Harness_Index.md` |
+| logging / Qt-QML observability | `Docs/Logging_Guide.md` + `Docs/Qt_QML_Observability.md` |
 | deferred deletion/debt | `Future_Cleanup.md` |
 | deferred features | `Future_Work.md` |
 | G4 durable scale/extent contract | `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` |
@@ -42,9 +43,16 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | closed H visualizer edge audit evidence | `Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md` |
 | closed True-F technical/retained-consumer evidence | `Docs/QtQuick_Migration/H_True_F_Technical_Closure.md` |
 | J final installed/physical acceptance route | `Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md` |
+| J Parity+ historical visual/interaction floor | `Docs/QtQuick_Migration/J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md` |
 
 Reorientation/handoff files are conversation/operator artifacts, not repository architecture. Do not add a current
 reorientation file under `Docs/` unless the operator explicitly asks for a repository handoff artifact.
+
+## Runtime observability
+
+Qt Quick acceptance has two first-class log planes: `screensaver.log` and always-on `screensaver_qml.log`. The latter is direct Qt/QML message-handler evidence and must exist even on a zero-message clean run. Read `Docs/Qt_QML_Observability.md` before changing capture lifetime, sidecar semantics or considering an OS-level stderr redirect.
+
+Physical H/J Quick gates are not fully evidenced by the Python log alone.
 
 ## Settings themes
 

@@ -1,6 +1,6 @@
 # Logging Guide
 
-Last updated: 2026-08-15
+Last updated: 2026-08-30
 
 ## Purpose
 
@@ -51,6 +51,22 @@ It may not:
 
 Raw `print()`/stdout written outside Python logging is outside this formatter contract.
 
+## Always-On Qt / QML Diagnostic Plane
+
+Qt/QML messages do **not** originate in the ordinary Python logging pipeline. A clean `screensaver.log` is therefore not sufficient Quick-runtime evidence.
+
+`core/logging/qt_message_capture.py` installs one process-scoped Qt message handler before `QApplication` / `QQmlEngine` creation and writes a direct, bounded `screensaver_qml.log`. The capture remains alive through final Qt teardown.
+
+The sidecar is always on, even when no optional logging flags are enabled. A successful install eagerly creates the file and writes `session_start`; final atexit writes `session_end` plus severity/category counts. This deliberately distinguishes a clean Qt/QML run from a failed/missing capture.
+
+The Qt/QML sidecar records milliseconds, severity, PID, thread, sequence, category, source file/line/function when available, and message. It is synchronous/direct rather than routed through `SRPSSLogWriter`, because the channel exists specifically to retain Qt/QML diagnostics that may occur during queue saturation/closing/native failure.
+
+For source-mode/installed Quick acceptance, inspect `screensaver.log` and `screensaver_qml.log` together. Unexpected migration-relevant QML binding/component/provider/signal/slot/scene warnings are first-class evidence.
+
+Permanent capture tests: `tests/test_qt_message_capture_contract.py` (fake-handler contract) and `tests/test_qt_message_capture_qml_runtime.py` (real QQmlEngine warning path; requires PySide runtime).
+
+The capture is **not** a process-level stderr redirect. Raw non-Qt native fd-2 writes remain outside ordinary release-file capture; Diagnostic `faulthandler` is a separate direct fatal plane. See `Docs/Qt_QML_Observability.md` before adding an OS-level stderr tee.
+
 ## Dedicated Families
 
 Existing sidecars remain the first destinations for their domains:
@@ -82,6 +98,7 @@ Current intended retention profile:
 | Log family | Ordinary retention | Diagnostic retention |
 |---|---:|---:|
 | `screensaver.log` | active + 7 backups ≈ 16 MiB | active + 11 backups ≈ 24 MiB |
+| `screensaver_qml.log` | active + 3 backups ≈ 8 MiB | same; always-on direct Qt/QML plane |
 | most enabled sidecars | active + 5 backups ≈ 12 MiB | normally the same unless listed below |
 | `screensaver_usage.log` | active + 5 backups ≈ 12 MiB | active + 11 backups ≈ 24 MiB |
 | `screensaver_lifecycle.log` | active + 5 backups ≈ 12 MiB | active + 11 backups ≈ 24 MiB |
@@ -179,7 +196,8 @@ The safety contract is therefore layered:
 2. WARNING+ saturation has a serialized direct-main emergency path;
 3. once the writer dequeues a record, persistent sinks are serviced before console output;
 4. shutdown uses the bounded controller-aware drain/close contract;
-5. Diagnostic fatal/native crash breadcrumbs and faulthandler output are direct and independent of the normal queue.
+5. Qt/QML messages are captured directly in `screensaver_qml.log`, independent of the normal queue;
+6. Diagnostic fatal/native crash breadcrumbs and faulthandler output are direct and independent of both normal logging and the Qt/QML sidecar.
 
 Do not "solve" abrupt-crash uncertainty by moving normal file I/O back onto render/UI
 callers.
@@ -228,13 +246,14 @@ unless a specific frozen-only failure requires it.
 
 ## Correlation Workflow
 
-1. Read `screensaver.log` for sequence and all warnings/errors.
-2. Follow the owning sidecar for routine family detail.
-3. Use shared timestamps/correlation ids to cross-reference perf/usage/lifecycle/cache/viz.
-4. Use verbose only when the general + family sidecars are insufficient.
-5. For long captures, include the rotations that overlap the interval being claimed.
+1. Read `screensaver.log` for the Python/runtime sequence and all ordinary WARNING+.
+2. Read `screensaver_qml.log` over the same range for Qt/QML evidence.
+3. Follow the owning family sidecar for routine domain detail.
+4. Use shared timestamps/correlation ids to cross-reference perf/usage/lifecycle/cache/viz.
+5. Use verbose only when the general + dedicated sidecars are insufficient.
+6. For long captures, include the rotations that overlap the interval being claimed.
 
-The main log is the spine. The sidecars are the detailed forensic payload.
+The main log is the spine. The sidecars are the detailed forensic payload. And the spine must stay sexy.
 
 ## Guardrails
 
@@ -245,4 +264,6 @@ The main log is the spine. The sidecars are the detailed forensic payload.
 - no hiding WARNING+ from main;
 - no performance claim achieved by deleting evidence instead of routing it cheaply;
 - no unbounded logging queue;
-- no console formatting that becomes a persistence dependency.
+- no console formatting that becomes a persistence dependency;
+- no Quick/QML physical acceptance based only on the Python log;
+- no OS-level stderr tee without explicit crash/subprocess/console semantics.
