@@ -37,7 +37,7 @@ The exhaustive per-observation checklist is `Post_Cutover_Operator_Observation_L
 Required eyes-on cells:
 
 - cold start: no full-scene black flash before intentional first frame;
-- no intermittent flash of diagnostic/test colour bands or other non-product placeholder pixels. If a bounded startup trace proves an actual diagnostic/test frame is admitted as readiness content, repair that deterministic owner before treating the symptom as J polish;
+- no intermittent flash of diagnostic/test colour bands or other non-product placeholder pixels. The Phase-A Slide proof leak is now source-proven and repaired as opt-in-only; physical validation remains. Use `J_Black_Flash_Surface_Continuity_Decomposition_2026-08-30.md` and `[QUICK_SURFACE]` for any remaining black/focus/context flash classification;
 - first reveal: a clearly visible gentle reveal/fade rather than telemetry-only completion;
 - click/focus current display: no whole-scene flicker;
 - A -> B -> A focus across physical displays: no scene clear, reveal restart, stale frame or opacity jump;

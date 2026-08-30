@@ -277,6 +277,20 @@ Use `h-destination` as the maintained deterministic bar and extend it only for s
 
 Residue-only source/test/tool reconciliation after H. Do not use I to absorb current runtime failures or restore deleted presenter owners to satisfy stale tests.
 
+### Black-flash / first-visible-frame focused contract — prepared
+
+`tests/test_qtquick_black_flash_contract.py` pins five surface-continuity rules:
+
+```text
+no-image production state does not instantiate the Phase-A colour-band proof node
+startup reveal readiness requires a rendered real image identity, not any render count
+runtime show intent remains hidden while no retained PresentationImage exists
+first real image publication commits an armed hidden show
+activation/menu continuity requests one retained background refresh + one window update only
+```
+
+The test requires PySide6 and is **AWAITING TEST VALIDATION** in the real development environment. Physical acceptance still requires `[QUICK_SURFACE]` correlation because unit tests cannot prove Windows/DWM presentation continuity.
+
 ### J — pending H re-close
 
 Comprehensive **Parity+** physical visual/fidelity/installed acceptance. Use the J decomposition, J addendum, `J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md`, mandatory operator ledger and `Docs/Qt_QML_Observability.md`. Historical screenshots/code establish user-visible floor/behavior only; current Quick architecture remains implementation authority.

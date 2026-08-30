@@ -33,8 +33,8 @@ def test_real_qml_warning_reaches_always_on_sidecar(tmp_path):
         b'import QtQml\nQtObject { Component.onCompleted: console.warn("SRPSS_QML_CAPTURE_PROBE") }',
         QUrl("inline:qt_message_capture_probe.qml"),
     )
-    # The inline type loader compiles asynchronously; a real event loop (driven by
-    # statusChanged), not processEvents(), is required before create() can succeed.
+    # Inline QML compilation may remain Loading after setData(). Drive a real
+    # event loop until statusChanged rather than creating a not-yet-ready type.
     if component.status() == QQmlComponent.Status.Loading:
         loop = QEventLoop()
         component.statusChanged.connect(lambda _status: loop.quit())
