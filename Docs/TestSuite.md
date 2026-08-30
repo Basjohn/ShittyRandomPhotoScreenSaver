@@ -257,7 +257,7 @@ The Settings-overhaul drift found during the pre-cutover caution run is reconcil
 | `tests/test_visualizer_settings_plumbing.py` | **PARTIALLY RECONCILED / H-I MIXED** | Known unknown-mode assertion now follows the canonical registry fallback. Surviving settings contracts remain; legacy presenter/overlay portions retire or rehome with their owners in H/I. |
 | `tests/test_settings_theme_system.py` | **ADDED — PERMANENT** | Locks the centralized Settings ThemeSpec runtime transaction, catalog/default-mirror rules, persisted fallback semantics and temporary path-resolution precedence. |
 | `tests/run_chunked.py` | **RECONCILED** | Adds one collection preflight and a maintained, **target-isolated** `h-destination` profile so QQuick teardown cannot poison unrelated targets; whole-tree mode remains available for reconciliation. |
-| `tests/test_qtquick_custom_layout_owner.py` | **ADDED — H DESTINATION** | Proves one manager-generation CUSTOM owner, same-item Cancel, exact committed geometry/size/enabled Save, retained menu/Enter/Escape routes, and visualizer transfer retargeting without duplicate logical/presentation ownership. |
+| `tests/test_qtquick_custom_layout_owner.py` | **ADDED — H DESTINATION** | Proves one manager-generation CUSTOM owner, same-item Cancel, exact committed geometry/size/enabled Save, routed ordinary same-item A-to-B transfer/Cancel/Save without a target duplicate, retained menu/Enter/Escape routes, and visualizer transfer retargeting without duplicate logical/presentation ownership. |
 
 Remaining non-blocking ledger debt belongs to the owner named by each row, not to the current H admission decision:
 

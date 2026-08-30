@@ -90,6 +90,7 @@ class RetainedOverlayWidget:
     def __init__(self, item: QQuickItem, *, model_identity: str | None = None) -> None:
         self._item: QQuickItem | None = item
         self._model_identity = str(model_identity or "").strip()
+        self._host: OrdinaryWidgetPresentationHost | None = None
         self._retirement_callbacks: list[Callable[[], None]] = []
         self._custom_layout_size_payload_handler: Callable[
             [Mapping[str, object]], None
@@ -175,9 +176,16 @@ class RetainedOverlayWidget:
         handler = self._input_state_handler
         return bool(handler is not None and handler(input_state))
 
+    def retire(self) -> bool:
+        """Retire through the host that currently owns this retained item."""
+
+        host = self._host
+        return bool(host is not None and host.retire_widget(self))
+
     def _retire(self) -> None:
         item = self._item
         self._item = None
+        self._host = None
         callbacks = self._retirement_callbacks
         self._retirement_callbacks = []
         self._custom_layout_size_payload_handler = None
@@ -321,6 +329,7 @@ class OrdinaryWidgetPresentationHost:
             item,
             model_identity=normalized_identity or None,
         )
+        widget._host = self
         self._live.append(widget)
         if normalized_identity:
             self._by_model_identity[normalized_identity] = widget
@@ -390,6 +399,53 @@ class OrdinaryWidgetPresentationHost:
                 live._retire()
                 return True
         return False
+
+    def transfer_widget_to(
+        self,
+        widget: RetainedOverlayWidget,
+        target: "OrdinaryWidgetPresentationHost",
+    ) -> bool:
+        """Move one retained presentation to another live host without cloning it.
+
+        The target becomes the presentation's scene/lifecycle host. The family
+        model and any neutral runtime-service owner remain unchanged; CUSTOM
+        Save rebuilds the generation on the newly persisted monitor route.
+        """
+
+        if target is self:
+            return widget in self._live
+        if self._retired or target._retired:
+            raise RuntimeError("cannot transfer through a retired presentation host")
+        if widget not in self._live or widget._host is not self:
+            raise ValueError("ordinary presentation is not owned by the source host")
+        source_item = self._host_item
+        target_item = target._host_item
+        if source_item is None:
+            raise RuntimeError("source ordinary presentation host is incomplete")
+        if target_item is None:
+            raise RuntimeError("target ordinary presentation host is incomplete")
+        identity = widget.model_identity
+        if identity and identity in target._by_model_identity:
+            raise ValueError(f"target already owns model identity: {identity!r}")
+
+        item = widget.item
+        if target._input_state is not None:
+            widget._apply_input_state(target._input_state)
+        try:
+            item.setParentItem(target_item)
+            item.setParent(target_item)
+        except Exception:
+            item.setParentItem(source_item)
+            item.setParent(source_item)
+            raise
+        self._live.remove(widget)
+        if identity:
+            self._by_model_identity.pop(identity, None)
+        target._live.append(widget)
+        if identity:
+            target._by_model_identity[identity] = widget
+        widget._host = target
+        return True
 
     def retire_all(self) -> None:
         """Terminally retire every live widget for this display generation."""

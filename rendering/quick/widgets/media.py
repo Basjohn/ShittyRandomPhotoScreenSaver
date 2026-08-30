@@ -1036,7 +1036,6 @@ class RetainedMediaPresentation:
         geometry: OverlayWidgetGeometry,
         fade_opacity: float = 1.0,
     ) -> None:
-        self._host = host
         self._model = model
         self._retained: RetainedOverlayWidget = host.create_family_widget(
             "media",
@@ -1191,7 +1190,7 @@ class RetainedMediaPresentation:
         return self._model.request_system_mute_refresh(force=force, source=source)
 
     def retire(self) -> bool:
-        return self._host.retire_widget(self._retained)
+        return self._retained.retire()
 
 
 __all__ = [

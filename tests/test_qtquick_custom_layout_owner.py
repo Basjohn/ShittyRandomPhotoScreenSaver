@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from types import SimpleNamespace
 
 from PySide6.QtCore import QEvent, QPoint, QRect, Qt
 from PySide6.QtGui import QKeyEvent
@@ -82,17 +83,25 @@ def _clock_widgets() -> dict:
     }
 
 
-def _clock_unit(qt_app, widgets: dict, *, generation: int = 810):
+def _clock_unit(
+    qt_app,
+    widgets: dict,
+    *,
+    generation: int = 810,
+    screen_index: int = 0,
+    factory: QuickSceneFactory | None = None,
+    ctrl_coordinator: SharedCtrlCoordinator | None = None,
+):
     screen = qt_app.primaryScreen()
     assert screen is not None
-    factory = QuickSceneFactory()
+    factory = factory or QuickSceneFactory()
     unit = create_quick_display_unit(
         screen=screen,
-        screen_index=0,
+        screen_index=screen_index,
         runtime_generation=generation,
         scene_factory=factory,
         window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
-        ctrl_coordinator=SharedCtrlCoordinator(),
+        ctrl_coordinator=ctrl_coordinator or SharedCtrlCoordinator(),
         adapters=(ClockFamilyAdapter(),),
     )
     unit.bind_families(
@@ -373,5 +382,100 @@ def test_visualizer_custom_transfer_retargets_same_owner_publication(qt_app) -> 
         owner.retire()
         source.close_runtime()
         target.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+def test_routed_ordinary_custom_transfer_moves_same_item_cancel_and_save(qt_app) -> None:
+    widgets = _clock_widgets()
+    widgets["clock"]["monitor"] = "1"
+    settings = _Settings(widgets)
+    factory = QuickSceneFactory()
+    coordinator = SharedCtrlCoordinator()
+    units = tuple(
+        _clock_unit(
+            qt_app,
+            widgets,
+            generation=816,
+            screen_index=index,
+            factory=factory,
+            ctrl_coordinator=coordinator,
+        )[0]
+        for index in (0, 1)
+    )
+    assert units[0].presenter.bound_widget_ids == ("clock",)
+    assert units[1].presenter.bound_widget_ids == ()
+
+    logical_screens = tuple(
+        SimpleNamespace(
+            geometry=lambda rect=QRect(x, 0, 800, 600): QRect(rect),
+            name=lambda name=name: name,
+            serialNumber=lambda name=name: name,
+            manufacturer=lambda: "",
+            model=lambda: "",
+        )
+        for name, x in (("logical-a", 0), ("logical-b", 800))
+    )
+    routes = tuple(
+        SimpleNamespace(
+            screen_index=unit.screen_index,
+            presenter=unit.presenter,
+            is_retired=False,
+            runtime=SimpleNamespace(
+                window=SimpleNamespace(screen=lambda screen=screen: screen),
+                scene_controller=unit.runtime.scene_controller,
+            ),
+        )
+        for unit, screen in zip(units, logical_screens)
+    )
+    reloads: list[str] = []
+    owner = QuickCustomLayoutOwner(
+        settings_manager=settings,
+        participants_provider=lambda: routes,
+        visualizer_provider=lambda: (None, None),
+        reload_request=reloads.append,
+    )
+    source_host = units[0].runtime.scene_controller.ordinary_widget_host
+    target_host = units[1].runtime.scene_controller.ordinary_widget_host
+    family = units[0].presenter.presentation_for_widget_id("clock")
+    assert family is not None
+    retained_item = family.item
+
+    def _move_to_target() -> None:
+        source_model = units[0].runtime.scene_controller.custom_layout_overlay.model
+        assert source_model.rowCount() == 1
+        source_model.moveItem(0, 860.0, 120.0, 900.0, 150.0)
+
+    try:
+        assert owner.start() is True
+        _move_to_target()
+        assert source_host.presentation_for_model_identity("clock") is None
+        moved = target_host.presentation_for_model_identity("clock")
+        assert moved is not None
+        assert moved.item is retained_item
+        target_model = units[1].runtime.scene_controller.custom_layout_overlay.model
+        assert target_model.rowCount() == 1
+
+        assert owner.cancel() is True
+        restored = source_host.presentation_for_model_identity("clock")
+        assert restored is not None
+        assert restored.item is retained_item
+        assert target_host.presentation_for_model_identity("clock") is None
+        assert settings.widgets["clock"]["monitor"] == "1"
+        assert reloads == []
+
+        assert owner.start() is True
+        _move_to_target()
+        assert owner.save() is True
+        moved = target_host.presentation_for_model_identity("clock")
+        assert moved is not None
+        assert moved.item is retained_item
+        assert settings.widgets["clock"]["monitor"] == "2"
+        assert settings.widgets["clock"]["position"] == "Custom"
+        assert reloads == ["save_continue"]
+    finally:
+        owner.retire()
+        units[0].retire()
+        units[1].retire()
         factory.deleteLater()
         qt_app.processEvents()

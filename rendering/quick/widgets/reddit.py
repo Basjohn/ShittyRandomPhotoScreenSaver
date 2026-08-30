@@ -749,7 +749,6 @@ class RetainedRedditPresentation:
         on_open_requested: Callable[[str], Any] | None = None,
         on_refresh_requested: Callable[[], Any] | None = None,
     ) -> None:
-        self._host = host
         self._model = model
         self._on_open_requested = on_open_requested
         self._on_refresh_requested = on_refresh_requested
@@ -849,7 +848,7 @@ class RetainedRedditPresentation:
         return self._model.request_refresh()
 
     def retire(self) -> bool:
-        return self._host.retire_widget(self._retained)
+        return self._retained.retire()
 
 
 __all__ = [
