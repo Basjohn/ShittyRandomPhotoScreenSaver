@@ -1,6 +1,6 @@
 # Runtime Presentation Architecture
 
-Last updated: 2026-08-28
+Last updated: 2026-08-30
 
 ## 1. Decision
 
@@ -25,7 +25,7 @@ This decision is closed unless new production evidence contradicts it.
 
 ## 2. Migration status
 
-Source may still route startup through the previous physical presenter until H:
+H removed the previous physical presenter after the Quick destination became production-authoritative:
 
 ```text
 DisplayWidget
@@ -33,9 +33,8 @@ DisplayWidget
           └── OpenGL QRhiWidget path
 ```
 
-That is temporary source scaffolding, not a requirement that the legacy half-migrated application remain functional.
-Caller-dead family/CUSTOM/auxiliary/transition/visualizer pixels should retire as soon as their destination contract is
-owned and proven; only the inseparable physical-host edge needs to survive to H.
+Those classes are historical topology only; they no longer exist in production source. Caller-dead family/CUSTOM/auxiliary/
+transition/visualizer pixels retired with the inseparable physical-host edge.
 
 Do not:
 
@@ -44,8 +43,8 @@ Do not:
 - treat old class names as permanent product contracts;
 - add a production runtime switch between old and Quick presenters.
 
-H makes Quick production-authoritative and deletes the remaining physical host. J, not the old presenter, proves the
-complete installed product.
+H made Quick production-authoritative and deleted the remaining physical host. J, not the old presenter, proves the complete
+installed product.
 
 ## 3. One-surface invariant
 

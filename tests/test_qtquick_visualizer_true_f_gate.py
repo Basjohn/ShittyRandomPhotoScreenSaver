@@ -37,7 +37,6 @@ from widgets.spotify_visualizer.quick_display_visualizer_owner import (
     QuickDisplayVisualizerOwner,
 )
 from widgets.spotify_visualizer.technical_config import build_technical_cache
-from widgets.spotify_visualizer.runtime_config import compute_energy_boost
 
 
 class _TechnicalWorker:
@@ -181,9 +180,8 @@ def test_quick_owner_applies_cached_technical_config_to_shared_engine() -> None:
 
     assert engine.floor_configs[-1] == (False, pytest.approx(0.27))
     assert engine.sensitivity_configs[-1] == (False, pytest.approx(0.44))
-    assert engine.energy_boosts[-1] == pytest.approx(
-        compute_energy_boost(bool(config["dynamic_range_enabled"]))
-    )
+    assert bool(config["dynamic_range_enabled"]) is True
+    assert engine.energy_boosts[-1] == pytest.approx(1.18)
     assert engine.agc_strengths[-1] == pytest.approx(0.63)
     assert engine.input_gains[-1] == pytest.approx(1.25)
     assert engine._audio_worker.audio_block_size == 256

@@ -1,6 +1,6 @@
 # SRPSS Specification
 
-Last updated: 2026-08-29
+Last updated: 2026-08-30
 
 Canonical durable architecture and product-behavior contracts. `Current_Plan.md` owns sequence; independent closure
 narrative belongs under `Docs/audits/` or historical evidence.
@@ -35,8 +35,9 @@ remains inline in the one Quick scene; no permanent old/software presenter fallb
 
 ## Migration epoch
 
-The legacy `DisplayWidget` / QRhiWidget / `GLCompositorWidget` path may still exist in source until H removes the final
-physical-host routing. It is scaffolding, not rollback architecture.
+The legacy `DisplayWidget` / QRhiWidget / `GLCompositorWidget` physical path was removed by H after caller proof established
+the Quick destination as sole production authority. It is not rollback architecture and must not be restored as a facade or
+fallback.
 
 **Pre-H product continuity is not a migration requirement.** The old path must not be preserved, rebuilt or expanded
 merely to keep a half-migrated screensaver functional. Caller-dead old pixels/helpers should retire as soon as their

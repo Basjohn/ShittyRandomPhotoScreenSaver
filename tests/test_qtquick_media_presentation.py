@@ -1035,29 +1035,9 @@ def test_media_qml_and_registry_keep_actions_static_and_python_owned() -> None:
 
 
 def test_retired_qwidget_media_core_pixels_have_no_surviving_presenter() -> None:
-    widget = (ROOT / "widgets" / "media_widget.py").read_text(encoding="utf-8")
-
-    for retired in (
-        "paint_header_frame",
-        "paint_header_logo",
-        "paint_metadata_text",
-        "paint_artwork",
-        "_scaled_header_logo",
-        "_artwork_pixmap",
-        "_pending_artwork",
-        "_metadata_paint",
-        "PreparedMediaArtwork",
-        "QPixmap",
-        "set_rounded_artwork_border",
-        "set_show_header_frame",
-        "resolve_control_hit",
-        "paint_controls_row",
-        "paint_playback_progress",
-        "_controls_feedback",
-        "_playback_progress_paint_key",
-    ):
-        assert retired not in widget
     for retired_path in (
+        ROOT / "widgets" / "media_widget.py",
+        ROOT / "widgets" / "media_layout.py",
         ROOT / "widgets" / "media" / "artwork_layout.py",
         ROOT / "widgets" / "media" / "painting.py",
         ROOT / "widgets" / "media" / "feedback.py",
@@ -1065,4 +1045,3 @@ def test_retired_qwidget_media_core_pixels_have_no_surviving_presenter() -> None
         ROOT / "widgets" / "mute_button_widget.py",
     ):
         assert not retired_path.exists()
-    assert "Intentionally paint nothing" in widget

@@ -124,7 +124,12 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
     from widgets.spotify_visualizer.presentation_geometry import (
         resolve_visualizer_presentation,
     )
-    from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+    from widgets.spotify_visualizer.logical_tick_state import (
+        install_default_logical_tick_state,
+    )
+    from widgets.spotify_visualizer.runtime_controller import (
+        VisualizerRuntimeController,
+    )
 
     fixture = _load_temporal_json(_TEMPORAL_FIXTURE)
     golden = _load_temporal_json(_TEMPORAL_GOLDEN)
@@ -202,12 +207,16 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
         def get_perf_diagnostics(self):
             return {}
 
-    widget = SpotifyVisualizerWidget(parent=None, bar_count=4, initial_mode="bubble")
-    widget._runtime_generation = 0
-    widget._enabled = True
-    widget._spotify_playing = True
-    widget._engine = _Engine()
-    controller = widget.runtime_controller
+    controller = VisualizerRuntimeController(
+        runtime_generation=0,
+        bar_count=4,
+        initial_mode="bubble",
+    )
+    widget = controller.logical_tick_state
+    install_default_logical_tick_state(widget, bar_count=4)
+    controller.enabled = True
+    controller.playing = True
+    controller.engine = _Engine()
     bubble_runtime = BubbleFrameRuntime(simulation_factory=_EdgeSimulation)
     assert controller.resolve_logical_mode_state(
         "bubble",
@@ -235,10 +244,6 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
     monkeypatch.setattr(tick_pipeline, "process_heartbeat", lambda owner, now: None)
     monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda owner, now: None)
     monkeypatch.setattr(tick_pipeline, "dispatch_devcurve_field", lambda owner, now: None)
-    monkeypatch.setattr(widget, "_get_transition_context", lambda parent: {"running": False})
-    monkeypatch.setattr(widget, "_pause_timer_during_transition", lambda active: None)
-    monkeypatch.setattr(widget, "_resolve_max_fps", lambda context: 100.0)
-    monkeypatch.setattr(widget, "_update_timer_interval", lambda fps: None)
     monkeypatch.setattr(widget, "_check_mode_teardown_ready", lambda engine, now: None)
 
     tick_count = int(fixture["tick_count"])
@@ -312,7 +317,6 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
     assert cadence["integration_failures"] == 0
     assert consumed_revisions == sorted(set(consumed_revisions))
     assert bubble_runtime.latest.protected_edges == ()
-    widget.deleteLater()
 
 
 def test_bubble_temporal_golden_rejects_terminal_batching_and_persistent_lane():
