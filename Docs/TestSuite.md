@@ -7,7 +7,8 @@ Reviewed authority:
 ```text
 G: independently audited and accepted; no active G implementation gate.
 H pre-cutover visualizer destination edge: CLOSED, including the stronger True-F technical/retained-consumer proof.
-CURRENT H: caller-proven legacy physical-host source deletion audit; maintained destination profile 60/60 GREEN after deletion.
+H production cutover/deletion: CLOSED at 9dcb02be; maintained destination profile 60/60 GREEN after deletion.
+CURRENT I: source-driven legacy test/tool/adapter residue reconciliation and broad-suite restoration.
 Settings GUI/theme: large 2026 overhaul reconciled against current ui/ source in this test-maintenance pass.
 ```
 
@@ -60,7 +61,7 @@ Targeted tests are the normal per-slice gate:
 pytest path\to\test_file.py -q --tb=short
 ```
 
-The **current H destination gate** is the maintained profile:
+The closed H destination topology remains protected by the maintained profile:
 
 ```powershell
 python tests/run_chunked.py --profile h-destination --chunks 4 --timeout-seconds 900 --log
@@ -218,12 +219,12 @@ The H pre-cutover visualizer correction gate is also closed. The standing destin
 - **True-F** canonical technical cache -> shared BeatEngine/logical state -> bar-count coherence -> exact retained Quick item
   consumption without `SpotifyVisualizerWidget`.
 
-### H — CURRENT: physical-host deletion audit
+### H — CLOSED: production authority and physical-host deletion
 
 The coordinated `DisplayManager` + engine authority cutover onto Quick display units is complete at the production source
-boundary, and the caller-proven old physical host is deleted in the current checkpoint. "Coordinated/atomic" describes the
-**finished authority topology**, not one uninterrupted coding session or one giant commit. The final H audit must not restore
-a second legitimate production presenter or a fake `DisplayWidget` compatibility facade to satisfy obsolete tests.
+boundary, and the caller-proven old physical host is deleted at `9dcb02be`. "Coordinated/atomic" describes the **finished
+authority topology**, not one uninterrupted coding session or one giant commit. I must not restore a second legitimate
+production presenter or a fake `DisplayWidget` compatibility facade to satisfy obsolete tests.
 
 Use the `h-destination` runner profile as the bounded regression bar while this conversion proceeds. It contains the current
 Quick display/unit/family/geometry/input/CUSTOM owners, all retained family presentations, the corrected visualizer edge and
@@ -233,7 +234,7 @@ add old physical-host tests merely to make the profile look broad.
 H runtime-shaped proof must ultimately cover one/multiple selected displays, image/transition routing, ordinary families,
 the one admitted visualizer, generation/topology replacement, clean retirement and caller-proven old-host deletion.
 
-### I
+### I — CURRENT
 
 Residue-only source **and test** reconciliation after the authority flip. Delete/rehome legacy `DisplayWidget`, GLCompositor,
 QWidget edit-shell/auxiliary and old visualizer-presenter tests only after caller/source proof establishes that their owner is
@@ -255,12 +256,12 @@ The Settings-overhaul drift found during the pre-cutover caution run is reconcil
 | `tests/test_sine_line4_ui_simulation.py` | **RECONCILED** | Tests the central `ColorSwatchButton` + `bind_color_button` contract, including programmatic-load no-save behavior. |
 | `tests/test_sine_line4_builder_integration.py` | **RECONCILED** | Uses the real lazy `WidgetsTab` visualizer hydration/save owner and round-trips Line 4 colour/glow/shift. |
 | `tests/test_sine_line4_persistence.py` | **RECONCILED** | Removes retired `_sine_line4_horizontal_shift` assumptions; locks current normalized `sine_line4_shift` binder semantics. |
-| `tests/test_visualizer_settings_plumbing.py` | **PARTIALLY RECONCILED / H-I MIXED** | Known unknown-mode assertion now follows the canonical registry fallback. Surviving settings contracts remain; legacy presenter/overlay portions retire or rehome with their owners in H/I. |
+| `tests/test_visualizer_settings_plumbing.py` | **PARTIALLY RECONCILED / I MIXED** | Known unknown-mode assertion now follows the canonical registry fallback. Surviving settings contracts remain; legacy presenter/overlay portions retire or rehome with their owners in I. |
 | `tests/test_settings_theme_system.py` | **ADDED — PERMANENT** | Locks the centralized Settings ThemeSpec runtime transaction, catalog/default-mirror rules, persisted fallback semantics and temporary path-resolution precedence. |
 | `tests/run_chunked.py` | **RECONCILED** | Adds one collection preflight and a maintained, **target-isolated** `h-destination` profile so QQuick teardown cannot poison unrelated targets; whole-tree mode remains available for reconciliation. |
 | `tests/test_qtquick_custom_layout_owner.py` | **ADDED — H DESTINATION** | Proves one manager-generation CUSTOM owner, same-item Cancel, exact committed geometry/size/enabled Save, routed ordinary same-item A-to-B transfer/Cancel/Save without a target duplicate, retained menu/Enter/Escape routes, and visualizer transfer retargeting without duplicate logical/presentation ownership. |
 
-Remaining non-blocking ledger debt belongs to the owner named by each row, not to the current H admission decision:
+Current I ledger debt belongs to the owner named by each row:
 
 - `tests/test_settings_sync.py` is a tombstone-only file and can be deleted in residue cleanup;
 - `tests/test_phase_e_effect_corruption.py` remains obsolete historical investigation scaffolding;

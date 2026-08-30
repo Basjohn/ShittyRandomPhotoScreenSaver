@@ -94,7 +94,8 @@ For geometry/CUSTOM work read these together:
 
 For historical H visualizer-edge reasoning only, use the closed
 `H_Pre_Cutover_Visualizer_Edge_Corrections.md` + `H_True_F_Technical_Closure.md` pair. They are evidence, not active work
-admission; current H execution routes through `Remaining_H_Production_Cutover_Decomposition.md`.
+admission. `Remaining_H_Production_Cutover_Decomposition.md` is the durable closed cutover record; current I admission lives
+only in `Current_Plan.md`.
 
 The all-five-mode capability policy is landed. Do not reintroduce a Bubble false gate to avoid correcting viewport
 ownership or spatial-domain defects.

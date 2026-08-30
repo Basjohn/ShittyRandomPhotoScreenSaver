@@ -104,13 +104,13 @@ regression evidence.
    admission/services (including canonical per-instance effective monitor routing), CUSTOM/context/auxiliary state, the
    single admitted visualizer, readiness and topology/generation replacement.
 5. **Prove readiness/lifecycle/generation replacement** with deterministic/runtime-shaped one- and multi-display tests owned by
-   the current H destination profile.
+   the maintained H destination profile.
 6. **Delete old physical-host callers and source** once caller proof shows the Quick destination is the only production route.
 
-Step 6 is satisfied in the current H deletion checkpoint: production imports contain no deleted presenter/backend/setup
-module, and the maintained destination profile passes all 60 isolated targets after deletion. Obsolete tests/tools/comments
-that refer only to the removed owner are source-derived I residue under `Current_Plan.md`; they are not a reason to restore
-production compatibility modules.
+Step 6 is satisfied at pushed `9dcb02be`: production imports contain no deleted presenter/backend/setup module, and the
+maintained destination profile passes all 60 isolated targets after deletion. Obsolete tests/tools/comments that refer only
+to the removed owner are source-derived I residue under `Current_Plan.md`; they are not a reason to restore production
+compatibility modules.
 
 `DisplayManager` now satisfies step 3 at its boundary: construction, semantic collection operations, retirement-root
 enumeration and cleanup contain no legacy presenter import/branch. Engine settings/CUSTOM/monitor replacement input suppression
