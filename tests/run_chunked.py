@@ -101,6 +101,17 @@ H_DESTINATION_PROFILE = (
     "test_qtquick_transition_state.py",
     "test_qtquick_transition_state_fence.py",
     "test_qtquick_transition_uniform_wiring.py",
+    # H3/H3b product actions + Clock variant geometry, startup reveal/lifecycle,
+    # and the permanent always-on Qt/QML capture baseline. Each runs in its own
+    # isolated pytest process (per-target isolation), so their PySide/QML engine
+    # setup cannot cross-contaminate the rest of the profile.
+    "test_qtquick_family_product_actions.py",
+    "test_qtquick_clock_custom_variant_geometry.py",
+    "test_qtquick_postcutover_wiring.py",
+    "test_qtquick_startup_reveal.py",
+    "test_lifecycle_display_ownership_logging.py",
+    "test_qt_message_capture_contract.py",
+    "test_qt_message_capture_qml_runtime.py",
 )
 
 PROFILES = {

@@ -12,8 +12,8 @@ H1 is now closed and H2 is now closed:
 H1a  repeated dual-display Settings/CUSTOM recreation hang     CLOSED
 H1b  terminal Quick retirement / Clock model lifetime          CLOSED
 H2   Media artwork provider identity                            CLOSED
-H3   Reddit retained URL opener                                 IMPLEMENTED / AWAITING TEST VALIDATION
-H3b  Clock runtime mode-toggle persistence                      IMPLEMENTED / AWAITING TEST VALIDATION
+H3   Reddit retained URL opener                                 IMPLEMENTED / DETERMINISTIC TESTS GREEN — PHYSICAL GATE PENDING
+H3b  Clock runtime mode-toggle persistence                      IMPLEMENTED / DETERMINISTIC TESTS GREEN — PHYSICAL GATE PENDING
 H4   Media Play/Pause + seek command semantics                  PENDING
 H5a  CUSTOM Visualizer independent display admission            PENDING
 H5b  Spectrum data saturation + wrong topology                  PENDING
@@ -115,9 +115,11 @@ Historical artwork fade/presentation quality is **not H2**. Artwork currently ap
 
 ### H3 — retained Reddit URL opener
 
-**Status: implementation prepared in the current replacement pack; AWAITING TEST VALIDATION.**
+**Status: implemented; deterministic tests GREEN in this environment; physical MC/SCR gate pending.**
 
 The source-proven composition hole was real: `RetainedRedditPresentation` already owned URL admission and the `on_open_requested` seam, but production `RedditFamilyAdapter` omitted the callback.
+
+Audit reconciliation (source at HEAD): the production opener is wired end-to-end — `DisplayManager._open_reddit` (weak, generation-fenced) → `default_ordinary_family_adapters(reddit_open_requested=…)` → `RedditFamilyAdapter` → `RetainedRedditPresentation` → `reddit.py` `admit_url`/`_on_open_requested`. `tests/test_qtquick_postcutover_wiring.py` was RED because it built a bare `RedditFamilyAdapter()`, a seam production never uses (the adapter must not self-synthesize a URL launcher); it now exercises the real `default_ordinary_family_adapters` composition. `tests/test_qtquick_family_product_actions.py` covers the saver-handoff/interactive routing behavior.
 
 The prepared repair keeps product consequences outside QML/model/presentation:
 
@@ -154,7 +156,7 @@ It proves saver handoff opens exactly once then requests normal exit exactly onc
 If those are GREEN, mark H3 CLOSED and continue without redesigning the helper/opening authority.
 ### H3b — Clock runtime mode + per-variant CUSTOM geometry
 
-**Status: expanded source-proven repair prepared; AWAITING TEST VALIDATION.**
+**Status: expanded source-proven repair implemented; deterministic tests GREEN in this environment; physical dual-display gate pending.**
 
 The latest physical run narrowed the symptom: Clock can retain the requested analogue/digital state yet recreate at the wrong geometry. The migration had split the old R-45/R-48 contract across several seams:
 
@@ -189,7 +191,7 @@ tests/test_qtquick_family_product_actions.py
 tests/test_qtquick_clock_custom_variant_geometry.py
 ```
 
-The first is GREEN in this environment. The Clock geometry file requires PySide and is **AWAITING TEST VALIDATION** here.
+Both are now GREEN in this environment. The Clock mode-toggle contract expanded to `(mode, geometry, size_payload)` for per-variant CUSTOM persistence; `tests/test_qtquick_clock_presentation.py` fakes were reconciled to that arity. The remaining dual-display geometry/scale behavior is the physical gate.
 
 **Validation gate before H3b closes:**
 
