@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import QPointF
+from PySide6.QtCore import QObject, QPointF
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlContext
 from PySide6.QtQuick import QQuickItem
@@ -291,6 +291,28 @@ class OrdinaryWidgetPresentationHost:
         if object_name is not None:
             initial["objectName"] = str(object_name)
         item = creator(str(family_id), initial, context)
+        # Bind any *parentless* QObject model passed as an initial property
+        # (e.g. clockModel) to the item's lifetime. The item is retired with
+        # deleteLater() — its real destruction is deferred to a later event-loop
+        # turn — while a Python-owned parentless model is deleted synchronously
+        # the moment its Python owner drops. That left the still-live item's
+        # bindings to re-evaluate against a now-null model during retirement (the
+        # Clock `Cannot read property '...' of null` storm). Parenting the model
+        # to the item makes it outlive the item's binding teardown and die with
+        # the item, after those bindings are gone. Models that already have a
+        # parent (e.g. a generation-scoped window that also carries the runtime
+        # generation their neutral service reads) are left untouched.
+        if isinstance(item, QQuickItem):
+            for value in initial.values():
+                if (
+                    isinstance(value, QObject)
+                    and value is not item
+                    and value.parent() is None
+                ):
+                    try:
+                        value.setParent(item)
+                    except (RuntimeError, TypeError):
+                        pass
         return self._adopt_item(
             item,
             host_item=host_item,

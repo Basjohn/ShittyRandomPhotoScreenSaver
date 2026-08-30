@@ -85,6 +85,7 @@ H_DESTINATION_PROFILE = (
     "test_media_generation_recreation.py",
     "test_settings_eventfilter_teardown_guards.py",
     "test_terminal_runtime_destruction.py",
+    "test_qtquick_retained_model_lifetime.py",
     "test_visualizer_runtime_controller.py",
     "test_s_hotkey_workflow.py",
     "test_bubble_btf_coalescing.py",
