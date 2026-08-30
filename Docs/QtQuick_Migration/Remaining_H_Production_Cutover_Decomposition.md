@@ -108,8 +108,10 @@ regression evidence.
 6. **Delete old physical-host callers and source** once caller proof shows the Quick destination is the only production route.
 
 `DisplayManager` now satisfies step 3 at its boundary: construction, semantic collection operations, retirement-root
-enumeration and cleanup contain no legacy presenter import/branch. Remaining caller proof is outside the manager (engine input
-suppression and then caller-dead physical-host module/test retirement).
+enumeration and cleanup contain no legacy presenter import/branch. Engine settings/CUSTOM/monitor replacement input suppression
+now uses the presentation-neutral input policy consumed by `QuickInputController`, and settings-open CUSTOM cancellation uses
+the manager-generation Quick owner. Remaining caller proof is non-engine diagnostics/UI residue followed by caller-dead
+physical-host module/test retirement.
 
 "Coordinated" or "atomic" cutover describes the **finished authority topology**, not the size of one coding session or commit.
 The conversion may span as many explicit checkpoints as needed, including intentionally non-runnable intermediate migration

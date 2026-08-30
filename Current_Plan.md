@@ -13,7 +13,8 @@ d1523bd5 (one manager-admitted production Quick visualizer owner + existing fram
 b7c5c2d2 (one manager-generation Quick CUSTOM owner + committed startup hydration landed on pushed main)
 81b8518b (ordinary-family per-instance effective monitor-route admission landed on pushed main)
 ff4aff3c (routed ordinary CUSTOM same-item cross-display transfer landed on pushed main)
-current bounded checkpoint: remove DisplayManager legacy physical-host compatibility branches
+b49c122c (Quick-only DisplayManager collection/cleanup surface landed on pushed main)
+current bounded checkpoint: move engine replacement-input/CUSTOM cancellation callers to semantic owners
 True-F focused gate: 7/7 GREEN
 Settings-overhaul focused reconciliation: 154/154 GREEN
 H destination profile: 60/60 target-isolated GREEN
@@ -300,6 +301,9 @@ The family/runtime destination integration already landed and test-gated include
 - `DisplayManager` now imports and accepts only the Quick production presenter topology. Its image/error, dimming, processing,
   diagnostics, retirement-root, transition-pending, synchronized-publication and cleanup APIs have no `DisplayWidget`, private
   compositor or legacy CUSTOM branch; a source gate prevents those compatibility paths from returning.
+- Settings, CUSTOM and monitor-topology replacement now arm the existing presentation-neutral runtime input guard consumed by
+  `QuickInputController`; engine callers no longer import `DisplayWidget`. Settings-open cancellation routes through the one
+  manager-generation `QuickCustomLayoutOwner`, not the retired global `CustomLayoutManager`.
 - Quick input transport/app-volume/system-volume/mute signals now route through each unit's already-owned retained Media
   presentation, preserving its configuration/runtime-availability admission and the existing neutral service owners. Layout
   slot save/load moved to `DisplayManager` + `SettingsManager`; a successful load emits the existing runtime-generation and
@@ -432,8 +436,9 @@ caller-proven deletion — are therefore the remaining H work and are **CURRENT 
    visualizer-region double-click cycle. Exact-once destination CUSTOM ownership and committed startup hydration are now
    attached without a legacy fallback. Ordinary-family admission also filters every enabled instance through its canonical
    effective monitor route for that destination. The manager collection surface and cleanup are now Quick-only with no
-   physical-host compatibility import. Remaining work is engine/input caller cleanup, runtime-shaped proof, and deletion of
-   the caller-dead physical-host source tree.
+   physical-host compatibility import. Runtime replacement input suppression and settings-open CUSTOM cancellation are also
+   routed through the neutral input policy and manager-generation Quick owner with source gates against legacy imports.
+   Remaining work is non-engine caller cleanup, runtime-shaped proof, and deletion of the caller-dead physical-host source tree.
 9. **Runtime-shaped production proof and caller-proven deletion.** Prove one/multiple selected displays, image/transition
    routing, ordinary families, the single admitted visualizer, corrected-G owners, readiness, generation/topology replacement
    and clean retirement; then delete `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, legacy visualizer host/compositor glue,

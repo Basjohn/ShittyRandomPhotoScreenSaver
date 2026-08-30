@@ -97,9 +97,9 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
         lambda _engine, *, event, stage: events.append(("snapshot", event, stage)),
     )
     monkeypatch.setattr(
-        engine_handlers.DisplayWidget,
-        "suppress_pointer_input_globally",
-        staticmethod(lambda *_args, **_kwargs: events.append(("suppress_pointer", None))),
+        engine_handlers,
+        "suppress_runtime_pointer_input",
+        lambda *_args, **_kwargs: events.append(("suppress_pointer", None)),
     )
     monkeypatch.setattr(
         "rendering.multi_monitor_coordinator.get_coordinator",
@@ -369,9 +369,9 @@ def test_custom_edit_reload_returns_then_admits_exactly_one_replacement(
         lambda _engine, *, event, stage: events.append(("snapshot", event, stage)),
     )
     monkeypatch.setattr(
-        engine_handlers.DisplayWidget,
-        "suppress_pointer_input_globally",
-        staticmethod(lambda *_args, **_kwargs: events.append(("suppress_pointer", None))),
+        engine_handlers,
+        "suppress_runtime_pointer_input",
+        lambda *_args, **_kwargs: events.append(("suppress_pointer", None)),
     )
     monkeypatch.setattr(
         "rendering.multi_monitor_coordinator.get_coordinator",

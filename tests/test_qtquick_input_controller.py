@@ -14,7 +14,11 @@ from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.window import QuickDisplayWindow
 from rendering.quick.widgets.host import OverlayWidgetGeometry
-from rendering.runtime_input import RuntimeInputOwner
+from rendering.runtime_input import (
+    RuntimeInputOwner,
+    clear_runtime_pointer_input_suppression,
+    suppress_runtime_pointer_input,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -254,6 +258,22 @@ def test_closed_quick_input_consumes_stale_events_without_emitting():
     assert controller.handle_key_press(_key_press(Qt.Key.Key_X, "x")) is True
     assert routed == []
     assert controller.close_input() is False
+
+
+def test_replacement_pointer_guard_suppresses_quick_double_click_route():
+    controller = QuickInputController(
+        screen_index=2,
+        runtime_generation=1,
+    )
+    routed: list[str] = []
+    controller.next_image_requested.connect(lambda: routed.append("next"))
+
+    try:
+        suppress_runtime_pointer_input(500, reason="test_replacement")
+        assert controller.handle_mouse_double_click(object()) is True
+        assert routed == []
+    finally:
+        clear_runtime_pointer_input_suppression()
 
 
 def test_ctrl_state_is_not_stuck_when_global_clears_after_focus_moves():

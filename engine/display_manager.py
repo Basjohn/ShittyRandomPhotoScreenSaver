@@ -879,7 +879,7 @@ class DisplayManager(QObject):
             self._save_quick_custom_layout
         )
         runtime.custom_layout_cancel_requested.connect(
-            self._cancel_quick_custom_layout
+            self.cancel_custom_layout_session
         )
         runtime.transition_finalized.connect(
             lambda completion, display=unit: self._on_quick_transition_finalized(
@@ -921,7 +921,9 @@ class DisplayManager(QObject):
             self._refresh_all_quick_context_menus()
         return saved
 
-    def _cancel_quick_custom_layout(self) -> bool:
+    def cancel_custom_layout_session(self) -> bool:
+        """Cancel the one manager-generation CUSTOM session, if active."""
+
         cancelled = self._quick_custom_layout_owner.cancel()
         if cancelled:
             self._refresh_all_quick_context_menus()

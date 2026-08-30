@@ -49,6 +49,7 @@ from sources.folder_source import FolderSource
 from sources.rss.coordinator import RSSCoordinator
 from sources.base_provider import ImageMetadata
 from rendering.display_modes import DisplayMode
+from rendering.runtime_input import suppress_runtime_pointer_input
 from rendering.transition_registry import (
     canonicalize_transition_name,
     get_cycle_transition_names,
@@ -1644,7 +1645,6 @@ class ScreensaverEngine(QObject):
     def _on_monitors_changed(self, new_count: int) -> None:
         """Handle monitor configuration change."""
         from PySide6.QtWidgets import QApplication
-        from rendering.display_widget import DisplayWidget
 
         logger.info(f"Monitor configuration changed: {new_count} monitors")
 
@@ -1678,7 +1678,7 @@ class ScreensaverEngine(QObject):
             if not qt_replacement_may_run(self):
                 return
             self._runtime_lifecycle_event = "monitor_topology"
-            DisplayWidget.suppress_pointer_input_globally(
+            suppress_runtime_pointer_input(
                 700,
                 reason="monitor_topology_runtime_reload",
             )
