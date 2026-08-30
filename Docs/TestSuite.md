@@ -363,7 +363,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_window.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 
 | `tests/test_qtquick_ctrl_coordinator.py` | **KEEP — MIGRATION PERMANENT / H** | One authoritative cross-display Ctrl truth and retired-contribution cleanup. |
-| `tests/test_qtquick_display_image_route.py` | **KEEP — MIGRATION PERMANENT / H** | GUI pixmap -> immutable Quick presentation-image routing and target-size contract. |
+| `tests/test_qtquick_display_image_route.py` | **KEEP — MIGRATION PERMANENT / H** | GUI pixmap -> immutable Quick presentation-image routing, detached image-accounting aggregation and target-size contract. |
 | `tests/test_qtquick_display_presenter.py` | **KEEP — MIGRATION PERMANENT / H** | Thin per-display destination presenter; no provider/window/persistence authority. |
 | `tests/test_qtquick_display_unit.py` | **KEEP — MIGRATION PERMANENT / H** | Per-display Quick destination-chain assembly and semantic display operations. |
 | `tests/test_qtquick_family_binder.py` | **KEEP — MIGRATION PERMANENT / H** | Single-manager family admission/runtime service ownership, canonical per-instance monitor routing across logical displays, and retained host binding. |
@@ -502,7 +502,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_widget_manager.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_manager_refresh.py` | **MIGRATION-CRITICAL — F** | Current E2/E2.7 lifecycle/admission regression owner; six stale tests were corrected at 5b3cbaef. Update with E1/F ownership. |
 | `tests/test_widget_import_dormancy.py` | **KEEP — MIGRATION PERMANENT** | Fresh-process legacy/common-Quick host/package and deactivated-family implementation/runtime/backend loading oracle; preserve after cutover. |
-| `tests/test_widget_runtime_manager.py` | **KEEP — MIGRATION PERMANENT** | Neutral owner admission/service/fail-closed/reuse/lifecycle contract; permanent destination ownership bar. |
+| `tests/test_widget_runtime_manager.py` | **KEEP — MIGRATION PERMANENT** | Neutral owner admission/service/fail-closed/reuse/lifecycle contract; source proof rejects dormant old widget-setup/coordinator bridges. |
 | `tests/test_widget_runtime_owner_hoist.py` | **MIGRATION-CRITICAL — H/I** | Current `DisplayWidget -> WidgetRuntimeManager <- WidgetManager` identity/order proof; rehome host identity to `QuickDisplayRuntime` at cutover while preserving one-owner/cleanup-order semantics. |
 | `tests/test_widget_performance.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_positioner.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |

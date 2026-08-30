@@ -1,31 +1,36 @@
-"""Phase E1 — WidgetRuntimeManager owner regression bar.
+"""WidgetRuntimeManager owner regression bar.
 
-Covers the responsibility extracted out of the WidgetManager god-object:
+Covers the presentation-neutral runtime owner:
 
 - capability *admission* authority (dependency-aware; activation + required-family
   satisfaction, not shared-provider consumer counting), including compatibility
   defaults for missing keys;
-- capability-*deactivation* reaction dispatch delegating to the E2.7 canonical
-  Visualizer failover retirement (retire on ineffective, no-op while effective);
 - presentation-neutral runtime *lifecycle routing* over the host registry,
   preserving the E2.7 confirmed-retirement contract (explicit ``cleanup_widget``
   bool) and failing closed once the host edge is released.
 
-These cross the real production seam: ``WidgetRuntimeManager`` is the owner the
-display runtime injects into ``WidgetManager`` and ``_create_factory_widgets``
-admits through.
+These cross the real production seam: one ``WidgetRuntimeManager`` is owned by
+each Quick display runtime generation.
 """
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
+from rendering import widget_runtime_manager
 from rendering.widget_runtime_manager import WidgetRuntimeManager
-from rendering.multi_monitor_coordinator import get_coordinator
 
 
 ACTIVE = {"family_activation": {"media": True, "visualizers": True}}
 VIS_OFF = {"family_activation": {"media": True, "visualizers": False}}
 MEDIA_OFF = {"family_activation": {"media": False, "visualizers": True}}
+
+
+def test_runtime_owner_has_no_legacy_widget_setup_bridge() -> None:
+    source = inspect.getsource(widget_runtime_manager)
+    assert "widget_setup_all" not in source
+    assert "multi_monitor_coordinator" not in source
 
 
 class _Host:
@@ -36,14 +41,6 @@ class _Host:
 
     def get_runtime_widget_registry(self):
         return self._widgets
-
-
-class _Settings:
-    def __init__(self, widgets):
-        self._widgets = widgets
-
-    def get(self, key, default=None):
-        return self._widgets if key == "widgets" else default
 
 
 class _LifecycleWidget:
@@ -106,52 +103,6 @@ def test_admits_widget_family_gate():
     # admitted-at-creation even with media off; the dependency cascade is enforced
     # by canonical normalization + the special visualizer subsystem, not this gate.
     assert owner.admits_widget_family("spotify_visualizer", MEDIA_OFF) is True
-
-
-# --------------------------------------------------------------------------- #
-# Capability-deactivation reaction dispatch                                   #
-# --------------------------------------------------------------------------- #
-@pytest.fixture
-def _isolate_failover():
-    get_coordinator().clear_visualizer_failover()
-    yield
-    get_coordinator().clear_visualizer_failover()
-
-
-def test_handle_capability_change_retires_pending_grace_when_off(_isolate_failover):
-    coord = get_coordinator()
-    gen = coord.arm_visualizer_grace(intended_index=1, origin_manager=None)
-    assert gen != 0
-    assert coord.get_visualizer_failover() is not None
-
-    owner = WidgetRuntimeManager(_Host())
-    owner.handle_capability_change(_Settings(VIS_OFF))
-
-    # Pending grace retired; generation invalidated so stale callbacks are fenced.
-    assert coord.get_visualizer_failover() is None
-    assert coord.is_visualizer_failover_generation_current(gen) is False
-
-
-def test_handle_capability_change_noop_while_effective(_isolate_failover):
-    coord = get_coordinator()
-    coord.arm_visualizer_grace(intended_index=1, origin_manager=None)
-    assert coord.get_visualizer_failover() is not None
-
-    owner = WidgetRuntimeManager(_Host())
-    owner.handle_capability_change(_Settings(ACTIVE))
-
-    # Still effective -> not a deactivation -> failover left intact.
-    assert coord.get_visualizer_failover() is not None
-
-
-def test_handle_capability_change_retires_on_media_off(_isolate_failover):
-    coord = get_coordinator()
-    coord.arm_visualizer_grace(intended_index=1, origin_manager=None)
-
-    owner = WidgetRuntimeManager(_Host())
-    owner.handle_capability_change(_Settings(MEDIA_OFF))
-
-    assert coord.get_visualizer_failover() is None
 
 
 # --------------------------------------------------------------------------- #

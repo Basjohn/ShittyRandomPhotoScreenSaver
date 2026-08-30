@@ -199,11 +199,11 @@ class DisplayManager(QObject):
     def _publish_display_image_accounting(self) -> None:
         """Publish one immutable, display-deduplicated GUI capture."""
 
-        from rendering.image_resource_accounting import (
-            aggregate_display_image_accounting,
+        from rendering.quick.image_accounting import (
+            aggregate_presentation_image_accounting,
         )
 
-        self._display_image_accounting_snapshot = aggregate_display_image_accounting(
+        self._display_image_accounting_snapshot = aggregate_presentation_image_accounting(
             self._display_image_accounting_by_id.values(),
             generation=self._runtime_generation,
         )
