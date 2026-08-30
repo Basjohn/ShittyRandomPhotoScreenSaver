@@ -31,6 +31,7 @@ Live phase/checkpoint status is intentionally not duplicated here; read `Current
 | `Remaining_J_Final_Installed_Acceptance_Decomposition.md` | J compiled/installed/physical acceptance and closure matrix |
 | `J_Visual_Parity_Runtime_Acceptance_Addendum_2026-08-30.md` | current J physical/parity acceptance cells |
 | `J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md` | historical quality floor + Parity+ outcome rules |
+| `J_Black_Flash_Surface_Continuity_Decomposition_2026-08-30.md` | source-proven proof-frame leak + bounded black/focus/context surface classification |
 | `Post_Cutover_Operator_Observation_Ledger_2026-08-30.md` | mandatory unresolved/closed physical observation ledger |
 
 ## Qt/QML observability rule

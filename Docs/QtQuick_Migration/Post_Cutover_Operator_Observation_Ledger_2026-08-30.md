@@ -35,12 +35,12 @@ Legend:
 | State | ID | Phase | Observation | Durable handling / close condition |
 |---|---|---|---|---|
 | [x] | O-007 | preservation | Context menu now opens/stays open/functions. | Preserve `747e3140`. |
-| [ ] | O-008 | J / H conditional | Context-menu open causes black flash. | J unless semantic image/reveal reset is proved. |
+| [ ] | O-008 | **J high priority / H conditional** | First context-menu open on each display can cause two rapid black/stale-frame flashes; second open on the same display is clean. | Trace keeps the same retained image identity and initialized scene graph; old wallpaper was glimpsed without an image-publication event. Current bounded repair reasserts the retained background once on menu visible/hidden. **AWAITING PHYSICAL VALIDATION**; if first-open-only flash remains, inspect retained menu first-visible QSG resources/prewarm path. |
 | [ ] | O-009 | J/perf / H conditional | Exit previously felt slow. Current clean run accepts/quiesces immediately, terminal Quick barrier completes in ~250 ms, then script-only pycache cleanup consumes about a second. | Remeasure visible window dismissal. If prompt, classify remaining tail as J/perf/developer housekeeping rather than lifecycle H. |
-| [ ] | O-010 | J / H conditional | Clicking/focusing a display can flicker whole scene. | Semantic reset => H; pure presentation flash => J. |
-| [ ] | O-011 | **J high priority** | Black flashes/flicker at startup/focus/context menu/transition edges. | J cannot close with recurring black/stale handoffs. |
+| [ ] | O-010 | **J high priority / H conditional** | Clicking/focusing A -> B -> A can black-flash the whole scene on every activation swap. | `[QUICK_SURFACE]` proves active image, visibility/exposure and scene graph remain stable. Current bounded repair requests one retained background redraw on `window_active_changed`. **AWAITING PHYSICAL VALIDATION**; persistent flash after that points to native QQuickWindow/Windows activation-buffer continuity. |
+| [ ] | O-011 | **J high priority / H conditional** | Black flashes/flicker at startup/focus/context menu/transition edges. | Trace has split owners: startup can expose a native surface before real image publication; focus/menu keep stable semantic scene/image. Startup show is now gated on first real retained image; focus/menu get one event-driven background reassertion. **AWAITING PHYSICAL VALIDATION** before escalating to native window policy or menu prewarming. |
 | [ ] | O-039 | J | Context submenus remain open indefinitely after pointer leaves. | Same-scene hover-path dismissal/switching with bounded crossing grace; preserve opening-click fix. |
-| [ ] | O-040 | J / H conditional | Startup can flash what looks like diagnostic/test colour bands. | Trace first-frame identity; real test frame admitted => deterministic owner fix, otherwise J presentation. |
+| [ ] | O-040 | H/J validation | Startup formerly flashed diagnostic/test colour bands and still showed a black clear afterward. | Proof palette leak is repaired. Trace then proved native show could precede first real image. Current repair arms geometry/visible intent while hidden and commits show only after a real `PresentationImage` exists. **AWAITING PHYSICAL VALIDATION**; close when neither proof bands nor black first-show clear remains. |
 
 ## Visualizer
 

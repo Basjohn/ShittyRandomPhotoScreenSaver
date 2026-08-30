@@ -22,7 +22,7 @@ H8   Visualizer middle-click preset hotswap                     PENDING / SOURCE
 H7   Exit visible-response/perf classification                  PENDING / likely J after measurement
 ```
 
-The maintained H destination profile must remain GREEN after each bounded source change. H is not closed by unit tests alone: every H/H-J row in the operator ledger must be reconciled and the final dual-display source-mode smoke must remain physically clean.
+The maintained H destination profile is 76/76 GREEN at agent audit `1c2f4d75` and must remain GREEN after each bounded source change. H is not closed by unit tests alone: every H/H-J row in the operator ledger must be reconciled and the final dual-display source-mode smoke must remain physically clean.
 
 Detailed evidence: `Docs/QtQuick_Migration/H_Post_Cutover_Runtime_Reality_Corrections.md`  
 Operator backlog: `Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md`
@@ -115,11 +115,11 @@ Historical artwork fade/presentation quality is **not H2**. Artwork currently ap
 
 ### H3 — retained Reddit URL opener
 
-**Status: implemented; deterministic tests GREEN in this environment; physical MC/SCR gate pending.**
+**Status: implemented; deterministic tests GREEN in the real development environment; physical MC/SCR gate pending.**
 
 The source-proven composition hole was real: `RetainedRedditPresentation` already owned URL admission and the `on_open_requested` seam, but production `RedditFamilyAdapter` omitted the callback.
 
-Audit reconciliation (source at HEAD): the production opener is wired end-to-end — `DisplayManager._open_reddit` (weak, generation-fenced) → `default_ordinary_family_adapters(reddit_open_requested=…)` → `RedditFamilyAdapter` → `RetainedRedditPresentation` → `reddit.py` `admit_url`/`_on_open_requested`. `tests/test_qtquick_postcutover_wiring.py` was RED because it built a bare `RedditFamilyAdapter()`, a seam production never uses (the adapter must not self-synthesize a URL launcher); it now exercises the real `default_ordinary_family_adapters` composition. `tests/test_qtquick_family_product_actions.py` covers the saver-handoff/interactive routing behavior.
+Agent audit at `1c2f4d75` verified the repaired production route end-to-end: `DisplayManager._open_reddit` (weak, generation-fenced) -> `default_ordinary_family_adapters(reddit_open_requested=...)` -> `RedditFamilyAdapter` -> `RetainedRedditPresentation` -> URL admission/action. The earlier RED bare-adapter test was corrected to exercise this real composition seam.
 
 The prepared repair keeps product consequences outside QML/model/presentation:
 
@@ -156,7 +156,7 @@ It proves saver handoff opens exactly once then requests normal exit exactly onc
 If those are GREEN, mark H3 CLOSED and continue without redesigning the helper/opening authority.
 ### H3b — Clock runtime mode + per-variant CUSTOM geometry
 
-**Status: expanded source-proven repair implemented; deterministic tests GREEN in this environment; physical dual-display gate pending.**
+**Status: expanded source-proven repair implemented; deterministic tests GREEN in the real development environment; physical dual-display gate pending.**
 
 The latest physical run narrowed the symptom: Clock can retain the requested analogue/digital state yet recreate at the wrong geometry. The migration had split the old R-45/R-48 contract across several seams:
 
@@ -191,7 +191,7 @@ tests/test_qtquick_family_product_actions.py
 tests/test_qtquick_clock_custom_variant_geometry.py
 ```
 
-Both are now GREEN in this environment. The Clock mode-toggle contract expanded to `(mode, geometry, size_payload)` for per-variant CUSTOM persistence; `tests/test_qtquick_clock_presentation.py` fakes were reconciled to that arity. The remaining dual-display geometry/scale behavior is the physical gate.
+Both are GREEN in the real development environment. The H3b callback arity and maintained Clock presentation fakes were reconciled there; the remaining proof is the operator-only dual-display geometry/scale gate.
 
 **Validation gate before H3b closes:**
 
@@ -321,6 +321,48 @@ The current clean run routes Exit immediately and completes the terminal Quick b
 
 Remeasure **visible window dismissal** separately from legal retirement and developer housekeeping. If visible dismissal is prompt, carry remaining tail/pycache policy into J/performance or cleanup rather than reopening lifecycle ownership.
 
+## Interleaved black-flash / first-visible-frame reality slice
+
+**Status: proof-frame leak repaired; physical trace localized startup ordering and native/same-scene continuity; second bounded repair IMPLEMENTED / AWAITING TEST VALIDATION.**
+
+This operator-approved No Quota interleave still does **not** reorder H4-H8. It is now evidence-driven rather than generic J polish.
+
+Physical `[QUICK_SURFACE]` evidence after the first repair split the symptom:
+
+```text
+startup:
+window can become visible with no real PresentationImage -> native black clear exposed
+
+A -> B -> A focus:
+window_active_changed coincides with flash while visible/exposed/scene graph/image identity stay stable
+
+first context-menu open on each display:
+two rapid flashes possible; retained image + scene graph stay stable; later same-display open is clean
+```
+
+An old wallpaper/image was physically glimpsed during a first-menu flash, but there was no matching image-publication event. Treat this as stale/native/back-buffer exposure, not image-selection state.
+
+Current bounded repair:
+
+- `QuickDisplayWindow` now separates exact-screen/geometry preparation from native show commit;
+- `QuickDisplayRuntime.show_on_screen()` arms visible intent but keeps an image-less scene hidden;
+- first real `PresentationImage` publication commits that prepared show; an already-primed retained scene re-shows immediately;
+- activation changes and context-menu visible/hidden boundaries request exactly one `BackgroundRenderItem` refresh plus one `QQuickWindow.update()`, reasserting the same retained image without changing semantic state or adding a cadence owner;
+- `[QUICK_SURFACE] background_surface_refresh_requested` records those bounded redraw requests.
+
+Focused regression:
+
+```text
+tests/test_qtquick_black_flash_contract.py
+```
+
+It now pins proof opt-in, real-image first-frame readiness, first-show image gating, first-image show commit and single event-driven background continuity refresh. It is **AWAITING TEST VALIDATION** under real PySide6.
+
+Technical route:
+`Docs/QtQuick_Migration/J_Black_Flash_Surface_Continuity_Decomposition_2026-08-30.md`.
+
+Next physical decision: if startup clears and focus/menu flashes improve, preserve these contracts. If focus still flashes while `background_surface_refresh_requested` is present and image/scene remain stable, investigate native `QQuickWindow` activation/composition policy next. If only first-menu flash remains, inspect/prewarm the retained menu's first-visible QSG resources rather than altering the base image.
+
 ## H observations intentionally carried to J unless a deterministic seam appears
 
 ### Bubble response
@@ -331,7 +373,7 @@ Preserve the currently good Bubble partial/CUSTOM resizing.
 
 ### Black/test-frame/focus/context flashes
 
-Black flashes, apparent startup diagnostic/test colour bands, focus flicker and context-menu flash remain high-priority J physical presentation defects unless tracing proves an actual semantic reset/test frame is admitted.
+Black flashes remain high-priority J/H-conditional work. Trace now proves startup had an early-exposure seam, while focus and first-menu flashes occur with stable image identity and scene graph. Preserve the current bounded repairs and classify the next physical result before changing native window policy or menu resource lifetime.
 
 ## H re-closure gate
 

@@ -45,6 +45,7 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | closed True-F technical/retained-consumer evidence | `Docs/QtQuick_Migration/H_True_F_Technical_Closure.md` |
 | J final installed/physical acceptance route | `Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md` |
 | J Parity+ historical visual/interaction floor | `Docs/QtQuick_Migration/J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md` |
+| J black-flash / first-visible-frame surface continuity | `Docs/QtQuick_Migration/J_Black_Flash_Surface_Continuity_Decomposition_2026-08-30.md` |
 
 Reorientation/handoff files are conversation/operator artifacts, not repository architecture. Do not add a current
 reorientation file under `Docs/` unless the operator explicitly asks for a repository handoff artifact.

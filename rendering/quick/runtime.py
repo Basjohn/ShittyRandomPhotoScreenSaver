@@ -316,7 +316,15 @@ class QuickDisplayRuntime(QObject):
             raise RuntimeError("cannot show a topology-displaced Quick display runtime")
         self.auxiliary_controller.resume()
         self.input_controller.reset_initial_position()
-        self.window.show_on_screen()
+        window = self.window
+        window.prepare_on_screen()
+        # Do not expose the native Quick surface until this retained scene owns
+        # an actual base image.  The display-manager startup-ready signal exists
+        # specifically so the engine can submit/replay that image while the
+        # window is still hidden.  Re-shows after Settings/dialogs remain
+        # immediate because the retained image is already present.
+        if self.scene_controller.presentation_image is not None:
+            window.commit_prepared_show()
 
     def hide(self) -> None:
         if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
@@ -408,6 +416,13 @@ class QuickDisplayRuntime(QObject):
         if self.transition_controller.is_active:
             raise RuntimeError("cannot replace the base image during a transition run")
         self.scene_controller.set_presentation_image(image)
+        # Startup/replacement may have armed physical visibility before image
+        # processing finished.  Publishing the first real image is the only
+        # event allowed to commit that deferred native show.
+        if image is not None:
+            window = self.window
+            if window.desired_visible and not window.isVisible():
+                window.commit_prepared_show()
 
     def clear(self) -> None:
         """Clear the base image while keeping the window/scene generation live.

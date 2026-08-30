@@ -50,6 +50,9 @@ class BackgroundRenderItem(QQuickItem):
         super().__init__(parent)
         self.setFlag(QQuickItem.Flag.ItemHasContents, True)
         self._proof_state = SlideProofState()
+        # The colour-band Slide proof is a diagnostic scaffold only. Production
+        # must not render it merely because a real image has not arrived yet.
+        self._proof_enabled = False
         self._presentation_image: PresentationImage | None = None
         self._transition_run: TransitionRun | None = None
         self._telemetry = telemetry or RenderNodeTelemetry(
@@ -65,7 +68,13 @@ class BackgroundRenderItem(QQuickItem):
 
     def setProofProgress(self, value: float) -> None:
         state = SlideProofState(progress=value).normalized()
+        proof_was_enabled = self._proof_enabled
+        self._proof_enabled = True
         if state == self._proof_state:
+            if not proof_was_enabled:
+                # An explicit call opts the harness into proof rendering even
+                # when it requests the default progress value.
+                self.update()
             return
         self._proof_state = state
         self.proofProgressChanged.emit()
@@ -120,6 +129,21 @@ class BackgroundRenderItem(QQuickItem):
         self._transition_run = run
         self.update()
 
+    def request_surface_refresh(self) -> bool:
+        """Request one retained background sync without changing semantic state.
+
+        Native activation and first-visible context-menu composition can ask Qt
+        for a new window frame even while the image identity is unchanged.  Mark
+        this existing full-scene item dirty so that frame re-synchronizes and
+        redraws the same retained ``PresentationImage`` instead of depending on
+        stale/native back-buffer contents.  This owns no timer or repaint loop.
+        """
+
+        if self._presentation_image is None and self._transition_run is None:
+            return False
+        self.update()
+        return True
+
     def _bind_window_invalidation(self, window) -> None:
         if window is self._bound_window:
             return
@@ -141,7 +165,19 @@ class BackgroundRenderItem(QQuickItem):
         self,
         old_node: QSGNode | None,
         _update_data: QQuickItem.UpdatePaintNodeData,
-    ) -> QSGNode:
+    ) -> QSGNode | None:
+        # Phase-A colour bands were useful as a deterministic migration proof,
+        # but allowing the no-image production state to instantiate that node
+        # leaked the proof palette onto real displays during startup/recreation.
+        # Keep the scaffold available only when a harness explicitly calls
+        # setProofProgress(). A real image/transition always remains renderable.
+        if (
+            self._presentation_image is None
+            and self._transition_run is None
+            and not self._proof_enabled
+        ):
+            return None
+
         node = (
             old_node
             if isinstance(old_node, BackgroundRenderNode)

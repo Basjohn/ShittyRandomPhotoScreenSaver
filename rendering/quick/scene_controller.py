@@ -13,6 +13,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlComponent, QQmlContext, QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
+from core.logging.logger import get_logger
 from core.settings.visualizer_mode_registry import VisualizerShellPolicy
 from rendering.custom_layout_session import (
     CustomLayoutSession,
@@ -50,6 +51,19 @@ from .widgets.registry import (
     ordinary_widget_family_component,
 )
 from .window import QuickDisplayWindow
+
+
+logger = get_logger(__name__)
+
+
+def _render_snapshot_has_intentional_base_frame(snapshot: object) -> bool:
+    """Return whether one swapped frame contains a real product background."""
+
+    return bool(
+        int(getattr(snapshot, "render_count", 0) or 0) > 0
+        and getattr(snapshot, "active_image_identity", None) is not None
+        and getattr(snapshot, "error", None) is None
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,6 +283,12 @@ class QuickSceneController(QObject):
         self._visualizer_double_click_admission: Any | None = None
         self._visualizer_telemetry = VisualizerRenderNodeTelemetry()
         self._last_transition_run_id = 0
+        # Bounded whole-surface diagnostics for black/test-frame/focus flashes.
+        # These are event-driven only: no recurring timer and no per-frame log
+        # outside the few frames immediately following a meaningful surface event.
+        self._surface_event_sequence = 0
+        self._surface_probe_frames_remaining = 0
+        self._context_menu_trace_model: QuickContextMenuModel | None = None
         self._readiness = QuickSceneReadiness(
             screen_index=window.screen_index,
             runtime_generation=window.runtime_generation,
@@ -323,6 +343,8 @@ class QuickSceneController(QObject):
         content.heightChanged.connect(self._sync_root_height)
         root.widthChanged.connect(self._sync_background_width)
         root.heightChanged.connect(self._sync_background_height)
+        window.activeChanged.connect(self._on_window_active_changed)
+        window.visibleChanged.connect(self._on_window_visible_changed)
         window.sceneGraphInitialized.connect(
             self._on_scene_graph_initialized,
             Qt.ConnectionType.QueuedConnection,
@@ -416,6 +438,17 @@ class QuickSceneController(QObject):
         ):
             return False
         root.setProperty("contextMenuModel", model)
+        if self._context_menu_trace_model is not model:
+            previous = self._context_menu_trace_model
+            if previous is not None:
+                try:
+                    previous.visibilityChanged.disconnect(
+                        self._on_context_menu_visibility_changed
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+            self._context_menu_trace_model = model
+            model.visibilityChanged.connect(self._on_context_menu_visibility_changed)
         return True
 
     def bind_custom_layout_session(
@@ -683,7 +716,16 @@ class QuickSceneController(QObject):
 
         if not self._readiness.admission_open:
             raise RuntimeError("Quick scene admission is closed")
+        prior = self.background_item.presentation_image
+        prior_identity = None if prior is None else prior.identity
+        next_identity = None if image is None else image.identity
         self.background_item.set_presentation_image(image)
+        if prior_identity != next_identity:
+            self._trace_surface_event(
+                "presentation_image_published",
+                probe_frames=3,
+                detail=f"prior={prior_identity!r} next={next_identity!r}",
+            )
 
     @property
     def presentation_image(self) -> PresentationImage | None:
@@ -1096,23 +1138,105 @@ class QuickSceneController(QObject):
         if self._scene_root is not None and self._background_item is not None:
             self._background_item.setHeight(self._scene_root.height())
 
+    def _trace_surface_event(
+        self,
+        event: str,
+        *,
+        probe_frames: int = 0,
+        detail: str = "",
+    ) -> None:
+        """Emit bounded state around events that can plausibly expose a flash."""
+
+        self._surface_event_sequence += 1
+        self._surface_probe_frames_remaining = max(
+            self._surface_probe_frames_remaining,
+            max(0, int(probe_frames)),
+        )
+        snapshot = self._telemetry.snapshot()
+        window = self._window
+        background = self._background_item
+        transition = None if background is None else background.transition_run
+        logger.info(
+            "[QUICK_SURFACE] seq=%d event=%s screen=%s generation=%s "
+            "visible=%s active=%s exposed=%s sg_initialized=%s "
+            "renderer_init=%d renders=%d active_image=%s transition=%s %s",
+            self._surface_event_sequence,
+            str(event),
+            window.screen_index,
+            self._readiness.runtime_generation,
+            bool(window.isVisible()),
+            bool(window.isActive()),
+            bool(window.isExposed()),
+            bool(self._readiness.scene_graph_initialized),
+            int(snapshot.initialize_count),
+            int(snapshot.render_count),
+            snapshot.active_image_identity,
+            getattr(transition, "run_id", None),
+            str(detail or ""),
+        )
+
+    def _request_background_surface_continuity(self, reason: str) -> bool:
+        """Reassert the retained background for one native/same-scene boundary.
+
+        Surface telemetry proved focus swaps and first context-menu opens occur
+        with a stable image identity and no scene-graph invalidation.  They can
+        nevertheless trigger a fresh native composition frame.  Request exactly
+        one background sync plus one window update so that frame redraws current
+        retained content; never create another surface, image owner, or cadence.
+        """
+
+        background = self._background_item
+        if background is None or not self._readiness.admission_open:
+            return False
+        if not background.request_surface_refresh():
+            return False
+        self._window.update()
+        self._trace_surface_event(
+            "background_surface_refresh_requested",
+            probe_frames=2,
+            detail=f"reason={str(reason)}",
+        )
+        return True
+
+    def _on_window_active_changed(self) -> None:
+        self._trace_surface_event("window_active_changed", probe_frames=3)
+        self._request_background_surface_continuity("window_active_changed")
+
+    def _on_window_visible_changed(self) -> None:
+        self._trace_surface_event("window_visible_changed", probe_frames=3)
+
+    def _on_context_menu_visibility_changed(self, visible: bool) -> None:
+        event = "context_menu_visible" if visible else "context_menu_hidden"
+        self._trace_surface_event(event, probe_frames=3)
+        self._request_background_surface_continuity(event)
+
     def _on_scene_graph_initialized(self) -> None:
         self._publish_readiness(
             scene_graph_initialized=True,
             scene_graph_invalidated=False,
         )
+        self._trace_surface_event("scene_graph_initialized", probe_frames=3)
 
     def _on_frame_swapped(self) -> None:
         snapshot = self._telemetry.snapshot()
+        # A rendered migration proof/empty clear is not an intentional product
+        # base frame. Reveal readiness requires an actually uploaded image.
+        intentional_image_ready = _render_snapshot_has_intentional_base_frame(
+            snapshot
+        )
         self._publish_readiness(
             background_renderer_ready=(
                 snapshot.initialize_count > 0 and snapshot.error is None
             ),
-            intentional_base_frame_ready=(
-                snapshot.render_count > 0 and snapshot.error is None
-            ),
+            intentional_base_frame_ready=intentional_image_ready,
             error=snapshot.error,
         )
+        if self._surface_probe_frames_remaining > 0:
+            self._surface_probe_frames_remaining -= 1
+            self._trace_surface_event(
+                "frame_swapped_probe",
+                detail=f"remaining={self._surface_probe_frames_remaining}",
+            )
 
     def _on_scene_graph_invalidated(self) -> None:
         snapshot = self._telemetry.snapshot()
@@ -1123,6 +1247,7 @@ class QuickSceneController(QObject):
             scene_graph_invalidated=True,
             error=snapshot.error,
         )
+        self._trace_surface_event("scene_graph_invalidated", probe_frames=3)
         if not self._readiness.admission_open:
             self._retire_qml_objects()
 
@@ -1136,6 +1261,14 @@ class QuickSceneController(QObject):
             self._ordinary_widget_host.retire_all()
         if self._custom_layout_overlay is not None:
             self._custom_layout_overlay.retire()
+        if self._context_menu_trace_model is not None:
+            try:
+                self._context_menu_trace_model.visibilityChanged.disconnect(
+                    self._on_context_menu_visibility_changed
+                )
+            except (RuntimeError, TypeError):
+                pass
+            self._context_menu_trace_model = None
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
         self._custom_layout_session = None
