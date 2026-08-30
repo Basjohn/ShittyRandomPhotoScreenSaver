@@ -32,6 +32,8 @@ Current migration implementation sequencing is **not** owned by this folder. Rea
 
 ## R Records
 
+- [R-63 — Display-1 Black Flash From Fullscreen-Flip PresentMode Transitions](R-63_Display1_Black_Flash_Fullscreen_Flip_Promotion.md)
+- [R-62 — Transition-Scoped Presentation Deferral Degraded Bubble](R-62_Transition_Scoped_Presentation_Deferral_Bubble_Regression.md)
 - [R-61 — Settings Glass Used The Wrong Composition Family For A Layered QWidget](R-61_Settings_Glass_Layered_HWND_Backdrop_Mismatch.md)
 - [R-60 — ImagePresenter DPR Split Rekeyed The Retained Current Texture](R-60_ImagePresenter_DPR_Texture_Identity.md)
 - [R-59 — Frozen Settings/Edit Recreation Retained Compiled Bound Methods](R-59_Runtime_Settings_Request_Input_Stack_Teardown.md)

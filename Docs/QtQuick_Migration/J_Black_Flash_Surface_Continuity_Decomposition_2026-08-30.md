@@ -2,6 +2,17 @@
 
 Date: 2026-08-30 (superseded in part 2026-08-31)
 
+> **STATUS 2026-08-31 (2) — RECURRING FLASH SOLVED.** PresentMon proved the
+> root cause: the exact-cover borderless window is non-deterministically promoted
+> to hardware fullscreen-flip, and the composition <-> `Hardware: Legacy Flip`
+> PresentMode transitions present the black/stale frames on the LG/Display-1
+> output. Fix: `QuickDisplayWindow._fullscreen_compat_geometry` applies a 1px
+> coverage-preserving overscan so the window is non-exact-cover and stays in
+> stable `Composed: Copy with GPU GDI` (6/6 launches black=0, operator-confirmed).
+> The tearing/flip language below is a superseded hypothesis; the measured seam is
+> the *mode transition*, not composed-vs-flip per se. A minor startup-only flash
+> may remain (separate seam). See Current_Plan.md.
+>
 > **STATUS 2026-08-31 — two repairs in §4 FAILED and were REMOVED.**
 > The §4.1 deferred first-show (`prepare_on_screen`/`commit_prepared_show`) made
 > startup visibly worse (image -> black -> image); reverted to immediate

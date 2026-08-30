@@ -182,6 +182,46 @@ Permanent coverage should prove:
 
 The fake-handler contract tests are GREEN in the handoff environment. The real-QML probe requires PySide6 and is **AWAITING TEST VALIDATION** in the Windows/runtime environment. Physical/frozen acceptance still matters because even a real local `QQmlEngine` probe cannot prove every scene-graph/driver path.
 
+## Native presentation-mode diagnosis (PresentMon / ETW) — ephemeral only
+
+Some defects live *below* the retained Quick scene: the scene, image identity,
+scene-graph state and frame swaps stay healthy while the native/DWM presentation
+misbehaves (e.g. R-63, the Display-1 black flash from fullscreen-flip PresentMode
+transitions). `[QUICK_SURFACE]` telemetry proves the scene is exonerated but
+cannot see the present path. Diagnose that with PresentMon **ephemerally, outside
+the repository** — do not add a presentation-mode logger, tool, or env var to the
+product.
+
+Reusable method (installed at `C:\tools\PresentMon\PresentMon.exe`):
+
+```text
+capture-all (works unelevated):
+  PresentMon.exe --timed N --qpc_time --output_file f.csv --stop_existing_session --no_console_stats
+  -> per present: Application, ProcessID, PresentMode, AllowsTearing, TimeInQPC
+  -> unelevated caveat: SwapChainAddress reports 0x0 (cannot split multiple windows apart)
+
+correlate with a composed-desktop detector:
+  dxcam (DXGI Desktop Duplication) captures the actual composed output of one monitor;
+  classify near-black and stale (old-frame-resurface) frames; timestamp each via
+  QueryPerformanceCounter (same QPC clock as PresentMon --qpc_time).
+  For each detected frame, inspect PresentMode within +/-250 ms: did it transition
+  (e.g. "Composed: Copy with GPU GDI" <-> "Hardware: Legacy Flip"), or stay stable?
+
+drive interaction without exiting the screensaver:
+  Win32 SetForegroundWindow (+ AttachThreadInput) changes activation with NO cursor
+  motion, so the mouse-move exit gesture never fires. Never automate real mouse moves.
+
+interpretation:
+  run >=3 launches per condition — launch-to-launch present behavior is variable.
+  flash AT a PresentMode transition -> the transition/promotion is the seam (fix by
+    keeping the window in a stable mode, e.g. the 1px overscan of R-63);
+  flash while PresentMode stays stable -> the transition is NOT the cause; look elsewhere.
+```
+
+Do not treat tearing as proof of presentation mode; prove it from the PresentMon
+`PresentMode` column. Independent/hardware flip is an optimization, not a
+correctness requirement — the product must stay correct under ordinary composition.
+
 ## Guardrails
 
 - always-on does not mean high-volume;
