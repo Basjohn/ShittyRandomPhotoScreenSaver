@@ -1,6 +1,6 @@
 # Future Cleanup — Migration Deletion Ledger
 
-Last updated: 2026-08-29
+Last updated: 2026-08-30
 
 This tracks deferred/caller-proven deletion work and does not admit work ahead of `Current_Plan.md`.
 
@@ -19,10 +19,9 @@ A working legacy product during migration is not a retention reason.
 
 G is closed. Do not reopen G4/G7/G8 as cleanup work.
 
-During H, deletion follows the production authority conversion: once exact caller proof shows a legacy physical-host edge has
-no surviving destination-independent responsibility, remove it in the H boundary rather than carrying a second presenter
-forward. Preserve Python semantic command/settings authority and neutral configuration/runtime logic; delete only superseded
-pixel/presentation ownership.
+H is closed at `9dcb02be`: exact caller proof established the Quick destination as sole production authority and the legacy
+physical-host presenter/backend source was deleted. Preserve Python semantic command/settings authority and neutral
+configuration/runtime logic; do not restore superseded pixel/presentation ownership.
 
 After the authority flip, I is source-driven residue only: expired aliases/adapters/tools/tests/comments that no longer own a
 surviving contract.
@@ -70,14 +69,14 @@ G is closed at the accepted deterministic destination boundary. Its surviving ne
 regressions, not deletion candidates. Any old G-era presenter code that survives after H must be classified from exact
 post-cutover callers during I rather than preserved because this ledger once named a G task.
 
-## Phase H
+## Closed Phase H
 
-H wires final Quick production orchestration and removes the remaining physical presentation: `DisplayWidget`,
+H wired final Quick production orchestration and removed the remaining physical presentation: `DisplayWidget`,
 QRhiWidget/`GLCompositorWidget`, old compositor scheduling/presentation glue, software/backend-demotion fallback,
 render-backend selection used only by that fallback, obsolete `hw_accel`/fallback-overlay policy, remaining
 physical-host transition/visualizer debris, temporary legacy anchors and obsolete presentation compatibility settings.
 
-No production switch back. H does not preserve a functional old app for handoff aesthetics.
+No production switch back. I must not recreate a functional old app for residue-test convenience.
 
 ## Phase I
 
