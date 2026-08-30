@@ -199,6 +199,20 @@ class WindowsGlobalMediaController(BaseMediaController):
             self._PlaybackStatus = PlaybackStatus
             self._available = True
             logger.info("[MEDIA] Windows GSMTC controller initialized")
+            # H1 diagnostic: record the thread/generation that initializes the
+            # GSMTC controller. This is the exact evidence marker that precedes
+            # the dual-display replacement-generation native termination.
+            try:
+                from core.media.media_native_trace import trace_media_native_stage
+
+                trace_media_native_stage(
+                    component="media_controller",
+                    stage="winrt_init",
+                    generation=getattr(self, "_runtime_generation", None),
+                    once=False,
+                )
+            except Exception:
+                pass
         except Exception as _:
             logger.info("[MEDIA] Windows media controls not available: %s", _)
             self._available = False

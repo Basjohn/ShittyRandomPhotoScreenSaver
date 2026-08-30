@@ -431,6 +431,13 @@ class _SharedMediaRuntimeOwner:
             logger.error("[MEDIA_RUNTIME] Cannot start without ThreadManager")
             self._active_leases.discard(lease)
             return False
+        from core.media.media_native_trace import trace_media_native_stage
+
+        trace_media_native_stage(
+            component="media",
+            stage="owner_activate_begin",
+            generation=self._runtime_generation,
+        )
         try:
             self._ensure_controller()
             self._running = True
@@ -439,6 +446,11 @@ class _SharedMediaRuntimeOwner:
             self._ensure_timer()
             if self._update_timer_handle is None or self._update_timer is None:
                 raise RuntimeError("Media poll timer was not created")
+            trace_media_native_stage(
+                component="media",
+                stage="owner_activate_complete",
+                generation=self._runtime_generation,
+            )
             if not self._snapshot_requires_refresh:
                 snapshot = self.current_snapshot()
                 if snapshot is not None:

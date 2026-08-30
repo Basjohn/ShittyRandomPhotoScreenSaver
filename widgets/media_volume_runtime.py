@@ -228,9 +228,21 @@ class _SharedMediaVolumeRuntimeOwner:
         self._active_leases.add(lease)
         started_owner = False
         if not self._running:
+            from core.media.media_native_trace import trace_media_native_stage
+
+            trace_media_native_stage(
+                component="spotify_volume",
+                stage="owner_activate_begin",
+                generation=self._runtime_generation,
+            )
             self._running = True
             self._owner_generation += 1
             started_owner = True
+            trace_media_native_stage(
+                component="spotify_volume",
+                stage="owner_activate_complete",
+                generation=self._runtime_generation,
+            )
         lease._deliver_snapshot(self.current_snapshot())
         if started_owner:
             self.request_sync(force=True)
@@ -442,6 +454,16 @@ class _SharedMediaVolumeRuntimeOwner:
                     or target_generation != self._target_generation
                 ):
                     return None
+                # H1 diagnostic: the pycaw/Core Audio enumeration runs on an IO
+                # worker; record that thread once per owner because the evidence
+                # ends on "comtypes/Core Audio release" during replacement.
+                from core.media.media_native_trace import trace_media_native_stage
+
+                trace_media_native_stage(
+                    component="spotify_volume",
+                    stage="core_audio_enumerate",
+                    generation=self._runtime_generation,
+                )
                 return controller.get_volume()
         except Exception:
             logger.debug("[MEDIA_VOLUME_RUNTIME] Volume read failed", exc_info=True)
