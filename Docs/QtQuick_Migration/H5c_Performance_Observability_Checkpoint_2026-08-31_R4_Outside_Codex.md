@@ -4,6 +4,8 @@ Outside of Codex Work Began @ `61decb33f6ebb107b2997928077e9d56d5faa8a1`
 
 This checkpoint supersedes the R3 outside-Codex working tree for active work. R3 remains historical evidence for the viewport-scaling slice. This document records the first physical run after R3 plus the bounded source changes made before the next logs checkpoint. It does **not** claim the maintained PySide6 `h-destination` profile has been rerun.
 
+> **SUPERSEDED CHECKPOINT / PROVENANCE ONLY.** Do not use this file as live repair or status authority. `Current_Plan.md` owns sequence; R6 native-`QCursor` Halo and R7 image/prefetch/seam work supersede the pointer/image-pipeline portions. Preserve only findings explicitly carried forward by current living docs.
+
 ## Physical evidence accepted from the post-R3 run
 
 - [x] Bubble outline thickness is now physically good at normal, low and very large tested scales. Preserve the R3 radius-proportional outline transfer.

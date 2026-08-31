@@ -1,6 +1,6 @@
 # Future Cleanup — Migration Deletion Ledger
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 This tracks deferred/caller-proven deletion work and does not admit work ahead of `Current_Plan.md`.
 
@@ -54,11 +54,15 @@ surviving contract.
 F1–F8 family pixel retirement is closed. Do not retain or reconstruct old QWidget/QPainter family presenters for H/I.
 Keep neutral provider/model/business/settings/runtime code still used by the Quick destination.
 
+## Media post-event-migration residue
+
+After `2e7a9242`, the retired idle-poll process-probe path is no longer production-owned: `WindowsGlobalMediaController.is_app_process_running`, `_win_*_process_exists`, and `get_provider_process_exe_names` were used by the old idle polling stages and are now cleanup candidates. Remove only in I/a bounded cleanup after exact caller proof. **Do not reinterpret their existence as permission to restore process polling or a fast Media fallback.**
+
 ## Transition legacy
 
-Canonical transitions are Quick-owned. Delete caller-proven old transition-only presentation as soon as safe. Preserve
-canonical registry/settings, request/run lifecycle, authored math/shaders used by Quick and deterministic recovery. Only
-an edge inseparable from the old physical host waits for H.
+Canonical transitions are Quick-owned. The old physical-host edge left with the accepted H cutover. Preserve canonical
+registry/settings, request/run lifecycle, authored math/shaders used by Quick and deterministic recovery. Any surviving
+old transition-only source/test/tool reference is I residue; never restore the deleted host to satisfy it.
 
 ## Visualizer legacy
 
@@ -77,22 +81,25 @@ Current I residue discovered during H5c focused validation:
   other audio settings reaching the shared BeatEngine are pinned by the Quick reactivity/config and True-F gates.
 
 Do not restore either retired presenter/replay module to satisfy these files. Reconcile the stale harnesses against surviving
-Quick/logical owners only after H admits I; maintained Bubble BTF/cadence/Quick tests remain the H gate.
+Quick/logical owners only after H re-closes and admits I; maintained Bubble BTF/cadence/Quick tests remain the H gate.
 
 ## Closed Phase G
 
 G is closed at the accepted deterministic destination boundary. Its surviving neutral/retained contracts are permanent
-regressions, not deletion candidates. Any old G-era presenter code that survives after H must be classified from exact
-post-cutover callers during I rather than preserved because this ledger once named a G task.
+regressions, not deletion candidates. Any old G-era presenter code that still survives is post-cutover I residue and must be classified from exact current
+callers rather than preserved because this ledger once named a G task.
 
-## Closed Phase H
+## Completed H production cutover / H post-cutover gates still open
 
-H wired final Quick production orchestration and removed the remaining physical presentation: `DisplayWidget`,
-QRhiWidget/`GLCompositorWidget`, old compositor scheduling/presentation glue, software/backend-demotion fallback,
-render-backend selection used only by that fallback, obsolete `hw_accel`/fallback-overlay policy, remaining
-physical-host transition/visualizer debris, temporary legacy anchors and obsolete presentation compatibility settings.
+The H production-authority cutover wired final Quick orchestration and removed the remaining physical presentation:
+`DisplayWidget`, QRhiWidget/`GLCompositorWidget`, old compositor scheduling/presentation glue,
+software/backend-demotion fallback, render-backend selection used only by that fallback, obsolete
+`hw_accel`/fallback-overlay policy, remaining physical-host transition/visualizer debris, temporary legacy anchors and
+obsolete presentation compatibility settings. **This cutover is accepted; H itself remains open only for the named
+post-cutover functional/runtime/performance gates in `Current_Plan.md`.**
 
-No production switch back. I must not recreate a functional old app for residue-test convenience.
+No production switch back. I must not recreate a functional old app for residue-test convenience, and I is not admitted
+until those remaining H gates close.
 
 ## Phase I
 

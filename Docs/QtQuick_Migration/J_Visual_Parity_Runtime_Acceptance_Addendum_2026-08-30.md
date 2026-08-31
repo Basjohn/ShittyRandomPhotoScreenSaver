@@ -5,7 +5,7 @@ Applies to: `Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decom
 
 This addendum records concrete eyes-on/runtime acceptance observations from the first corrected Quick production smokes so they do not disappear into vague “visual parity” wording.
 
-It does **not** move deterministic H failures into J. H1 reconstruction/terminal ownership and H2 Media artwork provider identity are now closed. Reddit URL opening and Clock runtime mode persistence now have prepared H repairs but remain H until real validation closes them. Media Play/Pause/seek, Spectrum data/topology, CUSTOM Visualizer cross-display admission and CUSTOM Settings over-locking also remain H.
+It does **not** move deterministic H failures into J. H1 reconstruction/terminal ownership, H2 Media artwork provider identity, H3 Reddit opening, H3b Clock mode/CUSTOM persistence and H4 Media Play/Pause/seek are closed and must not be reopened by stale prose. Remaining H work is only what `Current_Plan.md` still names (including current Visualizer/settings/resize gates and R7 physical validation); this addendum owns visual/interaction acceptance after those functional contracts exist.
 
 ## 1. Parity+ baseline rule
 
@@ -56,7 +56,7 @@ If instrumentation proves a click/focus action resets semantic image/reveal stat
 
 Preserve:
 
-- the new transport/control strip styling, which is an improvement;
+- the current post-migration transport/control strip styling. **This is the only current Media visual treatment presently judged superior to the old implementation; do not generalize that exception to the rest of the current Media card.**
 - the established app-volume outcome is an adjustable slim slider **next to the Media card**. The current integrated-in-card form must not silently replace that contract; retain it only if it becomes a deliberately selectable optional variant.
 
 Correct:
@@ -66,7 +66,7 @@ Correct:
 - artwork changes should recover the historically nicer fade/transition treatment without delaying provider truth or recreating the card;
 - artwork border should not dominate the image;
 - artwork and text block alignment should resemble the tighter pre-Quick hierarchy;
-- provider logo/text inside the header frame should align consistently with Gmail/Reddit;
+- provider logo/text inside the header frame should align consistently with Gmail/Reddit **and scale with the card as one authored header relationship; current logo+name headers are effectively not scaling with widget size**;
 - Spotify header border thickness should match the shared header language unless a deliberate setting says otherwise;
 - optional `Junk`/album and `Paused` state lines should be configurable rather than permanently consuming vertical space;
 - controls, progress and optional volume must not force excessive empty outer-card height;
@@ -77,12 +77,12 @@ Correct:
 - no message row may draw outside the card/content clip;
 - long sender/subject text must elide/clip inside its owned columns;
 - refresh indicator appearance/placement should use the preferred Reddit treatment for consistency;
-- Gmail logo/header baseline should align with the other branded cards;
+- Gmail logo/header baseline should align with the other branded cards and the logo+name header should scale coherently with the card;
 - header frame border/radius should match the shared visual language.
 
 ## 5. Reddit cards
 
-- header logo/text alignment should be consistent with Gmail/Media;
+- header logo/text alignment should be consistent with Gmail/Media and scale coherently with the card;
 - current refresh indicator is the preferred comparison point for Gmail;
 - row density/spacing should remain close to the visually successful pre-Quick treatment;
 - visual fixes must not regress the H URL action wiring or interaction-mode admission.

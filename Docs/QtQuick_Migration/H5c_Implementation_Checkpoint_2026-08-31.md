@@ -6,6 +6,8 @@ Execution authority: `Current_Plan.md`
 Detailed audit authority: `H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`  
 Evidence matrix: `Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`
 
+> **SUPERSEDED CHECKPOINT / PROVENANCE ONLY.** Do not use this file as live repair or status authority. `Current_Plan.md` owns sequence; R6 native-`QCursor` Halo and R7 image/prefetch/seam work supersede the pointer/image-pipeline portions. Preserve only findings explicitly carried forward by current living docs.
+
 ## Purpose of this checkpoint
 
 This file marks the first source-changing safety point in the historical-vs-Qt-Quick visualizer reactivity audit. It intentionally freezes the implementation before physical remeasurement changes the next hypothesis.

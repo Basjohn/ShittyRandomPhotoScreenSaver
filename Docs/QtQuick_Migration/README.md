@@ -1,6 +1,6 @@
 # Qt Quick Production Migration — Technical Index
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 Sequence/work admission comes only from `Current_Plan.md`.
 
@@ -29,7 +29,9 @@ Live phase/checkpoint status is intentionally not duplicated here; read `Current
 | `H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md` | live H decomposition for historical-vs-Quick reactivity parity, known config losses, readiness/timing, Bubble/Sine and bounded repair sequence |
 | `H5c_Performance_Cursor_Halo_Checkpoint_2026-08-31_R6_Outside_Codex.md` | current R6 native-QCursor Cursor Halo ownership, event-cached interaction/Ctrl semantics and mandatory physical performance gate |
 | `H_Image_Transition_Prefetch_Seam_Checkpoint_2026-08-31_R7_Outside_Codex.md` | R7 transactional image-change admission, generation/token prefetch resume and exterior-edge R-63 seam refinement; physical/log gates remain mandatory |
-| `H5c_Implementation_Checkpoint_2026-08-31_R2.md` | current H5c physical-evidence checkpoint plus post-R2 continuation: Bubble transport exoneration/B6-B8 gate, resume handoff evidence, Sine idle +20%, and DevCurve historical ghost/AA restoration |
+| `H_Media_Event_Observation_Physical_Smoke_2026-09-01.md` | short installed validation of the event-driven GSMTC Media runtime: observation re-established across recreations, real events delivered, stale/missed/degraded counters clean; broader frozen/provider-switch gate remains |
+| `R7_Claude_Media_Integration_Manifest_2026-09-01.md` | integration boundary for Claude Media commit `2e7a9242` against the R7 checkpoint; use as provenance, not sequence authority |
+| `H5c_Implementation_Checkpoint_2026-08-31_R2.md` | earlier H5c physical-evidence checkpoint; retain for provenance, but later R6/R7/current-plan evidence supersedes its live pointer/perf/image-pipeline status |
 | `Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md` | exact source-comparison evidence, proven deviations, field audit and next source paths |
 | `H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md` | H restoration of the omitted retained middle-click current-mode preset hotswap contract |
 | `H_Pre_Cutover_Visualizer_Edge_Corrections.md` | **closed audit record** for the pre-cutover visualizer edge findings |
@@ -40,9 +42,13 @@ Live phase/checkpoint status is intentionally not duplicated here; read `Current
 | `J_Black_Flash_Surface_Continuity_Decomposition_2026-08-30.md` | source-proven proof-frame leak + bounded black/focus/context surface classification |
 | `Post_Cutover_Operator_Observation_Ledger_2026-08-30.md` | mandatory unresolved/closed physical observation ledger |
 
+## Documentation reconciliation
+
+`Documentation_Reconciliation_2026-09-01.md` records the post-R7/Media authority/test-suite sweep: current J oracle exceptions, superseded H5c checkpoint fencing, exact maintained-profile drift and the three runner additions required before the next aggregate claim. `Current_Plan.md` still owns live sequence/status.
+
 ## J visual oracle rule
 
-For covered ordinary families, the paired repository images under `images/migration/Ideal (PreMigration)/` and `images/migration/Current (PostMigration)/` are the highest J authority for visible parity details. Inspect the relevant pair before changing J geometry/density/alignment/chrome. `J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md` owns the hierarchy and explicit-exception rule.
+For covered ordinary families, the paired repository images under `images/migration/Ideal (PreMigration)/` and `images/migration/Current (PostMigration)/` are the highest J authority for visible parity details. Inspect the relevant pair before changing J geometry/density/alignment/chrome. `J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md` owns the hierarchy and explicit-exception rule. **Current explicit exception is narrow: preserve the post-migration Media transport/control bar; it is the only current Media visual treatment presently preferred over the old one.** Cross-family logo+name headers must also recover coherent alignment **and scale with their cards/widgets**.
 
 ## Qt/QML observability rule
 
