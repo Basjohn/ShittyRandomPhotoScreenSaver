@@ -620,6 +620,10 @@ persistence; QML/Quick owns only retained hit reporting. Persist only `widgets.s
 refresh that can disturb Media state. Same-mode preset activation uses the existing visualizer controller/BeatEngine/logical
 runtime/presentation owners and may not create a second source, runtime, pacer or presentation owner.
 
+The normalized preset/Custom state is strictly mode-owned. It excludes widget admission, `position`, `monitor`, and outer
+CUSTOM geometry. Those live route/layout fields survive curated and Custom restoration byte-for-byte so recreation hydrates
+the same selected display bucket.
+
 ## 14. Lifecycle
 
 Retirement conceptually remains:

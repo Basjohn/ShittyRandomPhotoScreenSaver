@@ -46,7 +46,7 @@ class SettingsManager(QObject):
     settings_changed = Signal(str, object)  # key, new_value
     _STRUCTURED_ROOTS = STRUCTURED_SETTINGS_ROOTS
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
-    _VISUALIZER_SCHEMA_VERSION = 4
+    _VISUALIZER_SCHEMA_VERSION = 5
     _LEGACY_GLOBAL_PRESET_KEYS = frozenset({"preset", "custom_preset_backup"})
     _RETIRED_WIDGET_SHADOW_KEYS = frozenset({
         "intense_shadow",
@@ -468,7 +468,7 @@ class SettingsManager(QObject):
                         widgets_dict['spotify_visualizer'] = normalized_vis
                         self._store_widgets_root_locked(widgets_dict)
 
-            if schema_version < 4:
+            if schema_version < 5:
                 from core.settings.visualizer_presets import (
                     normalize_visualizer_custom_snapshot_cache,
                 )

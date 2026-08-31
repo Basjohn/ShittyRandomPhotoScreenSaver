@@ -110,7 +110,7 @@ settings mutation/persistence
 
 The Custom cache is a required companion authority, not a broad widget refresh. Do not emit or refresh the whole `widgets` mapping. `SettingsManager.replace_visualizer_runtime_preset_state()` preserves every widget sibling and submits both visualizer mappings together; historical U-10 evidence already shows why a broad live refresh is unsafe for Media metadata.
 
-Schema v4 makes `visualizer_custom_presets` a structured JSON/SST root and migrates the shipped flat `bubble.<key>` form to `cache["bubble"][key]`. Valid nested snapshots win over flat duplicate material. If a mode has no snapshot yet, H8 seeds it from that mode's persisted raw section before the first curated replacement; malformed cache entries fail loudly before activation.
+Schema v4 made `visualizer_custom_presets` a structured JSON/SST root and migrated the shipped flat `bubble.<key>` form to `cache["bubble"][key]`. Schema v5 closes the later route-ownership regression: a Custom snapshot is strictly the active mode-owned payload and cannot carry `enabled`, `visualizers_enabled`, `position`, `monitor`, or outer CUSTOM geometry. Existing leaked cache fields are stripped on migration and again at restore, so preset cycling cannot reroute the widget and make recreation hydrate another display's geometry bucket. Valid nested snapshots win over flat duplicate material. If a mode has no snapshot yet, H8 seeds it from that mode's persisted raw section before the first curated replacement; malformed cache roots fail loudly before activation.
 
 If persistence is deferred/coalesced, it must remain non-blocking and generation-safe. The visible activation must not be declared successful merely because a settings write was queued.
 
@@ -148,6 +148,7 @@ The focused H8 route passes `122/122` across the new resolver/admission bars plu
 10. selected preset/cache survives structured JSON/SST restart/reload; physical Settings and CUSTOM recreation remain below;
 11. all five active visualizer modes can cycle their own preset table;
 12. the global visualizer double-click mode-cycle contract remains unchanged.
+13. preset/Custom round-trips preserve live widget admission and display route; schema v5 removes shipped `monitor` leakage from cached mode payloads.
 
 Do not restore tests whose only purpose is the deleted QWidget presenter. Test current semantic and retained Quick owners.
 

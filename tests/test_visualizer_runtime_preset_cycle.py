@@ -47,6 +47,56 @@ def test_flat_shipped_custom_cache_migrates_and_nested_snapshot_wins() -> None:
 
 
 @pytest.mark.parametrize("mode", VISUALIZER_MODE_IDS)
+def test_custom_snapshot_excludes_widget_route_and_geometry(mode: str) -> None:
+    config = _default_visualizer_config()
+    config.update(
+        {
+            "mode": mode,
+            "enabled": True,
+            "visualizers_enabled": True,
+            "position": "Custom",
+            "monitor": "2",
+            "custom_x": 123,
+            "custom_y": 456,
+            "custom_width": 789,
+            "custom_height": 321,
+        }
+    )
+
+    snapshot = build_normalized_custom_snapshot(mode, config)
+
+    assert snapshot["mode"] == mode
+    assert not {
+        "enabled",
+        "visualizers_enabled",
+        "position",
+        "monitor",
+        "custom_x",
+        "custom_y",
+        "custom_width",
+        "custom_height",
+    }.intersection(snapshot)
+
+
+def test_shipped_custom_cache_route_leak_is_stripped_on_normalization() -> None:
+    normalized = normalize_visualizer_custom_snapshot_cache(
+        {
+            "bubble": {
+                "mode": "bubble",
+                "bubble_growth": 7.5,
+                "monitor": "ALL",
+                "position": "Top Left",
+                "enabled": False,
+            }
+        }
+    )
+
+    assert normalized == {
+        "bubble": {"mode": "bubble", "bubble_growth": 7.5}
+    }
+
+
+@pytest.mark.parametrize("mode", VISUALIZER_MODE_IDS)
 def test_every_active_mode_wraps_from_custom_without_changing_mode(mode: str) -> None:
     config = _default_visualizer_config()
     custom_index = get_custom_preset_index(mode)
@@ -101,6 +151,54 @@ def test_custom_roundtrip_is_lossless_and_curated_target_replaces_values() -> No
         mode,
         target.visualizer_config,
     ) == original_custom
+
+
+def test_custom_roundtrip_preserves_live_widget_admission_and_route() -> None:
+    mode = "bubble"
+    config = _default_visualizer_config()
+    custom_index = get_custom_preset_index(mode)
+    config.update(
+        {
+            "mode": mode,
+            get_preset_key(mode): 0,
+            "enabled": True,
+            "visualizers_enabled": True,
+            "position": "Custom",
+            "monitor": "2",
+        }
+    )
+    leaked_cache = {
+        mode: {
+            "mode": mode,
+            "bubble_growth": 8.25,
+            "monitor": "ALL",
+            "position": "Top Left",
+            "enabled": False,
+            "visualizers_enabled": False,
+        }
+    }
+
+    target = config
+    cache = leaked_cache
+    for _ in range(get_preset_count(mode) - 1):
+        resolved = resolve_next_visualizer_runtime_preset(
+            target,
+            cache,
+            mode=mode,
+        )
+        target = resolved.visualizer_config
+        cache = resolved.custom_presets
+
+    assert resolved.target_index == custom_index
+    assert target["bubble_growth"] == pytest.approx(8.25)
+    assert target["position"] == "Custom"
+    assert target["monitor"] == "2"
+    assert target["enabled"] is True
+    assert target["visualizers_enabled"] is True
+    assert "monitor" not in cache[mode]
+    assert "position" not in cache[mode]
+    assert "enabled" not in cache[mode]
+    assert "visualizers_enabled" not in cache[mode]
 
 
 def test_missing_mode_cache_seeds_from_raw_section_before_first_mutation() -> None:

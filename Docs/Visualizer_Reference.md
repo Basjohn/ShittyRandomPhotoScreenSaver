@@ -350,6 +350,9 @@ ordinary preset payload: leaving it snapshots the exact current Custom state and
 cycling persists only the visualizer settings subtree and must not refresh unrelated Media/widget state. Quick/QML may report
 the retained hit; Python owns preset resolution, activation and persistence.
 
+"Exact current Custom state" means the mode-owned authored payload only. Widget admission, `position`, `monitor`, and outer
+CUSTOM geometry are separate live authorities and must remain unchanged while a preset or Custom snapshot is applied.
+
 ## 14B. Retirement
 
 Visualizer generation retirement requires successful stop/join of the sole authored logical runtime. Failed join is a hard

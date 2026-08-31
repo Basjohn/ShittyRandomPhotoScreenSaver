@@ -271,7 +271,7 @@ H4 Media Play/Pause + seek provider-result semantics: IMPLEMENTED / deterministi
 H5a CUSTOM Visualizer independent display admission: route/owner/draw exonerated; cross-display Media-model binding repair + focused two-live-unit gate GREEN / physical confirmation pending
 H5b Spectrum source/configuration/renderer-transfer parity: focused `10/10` + primary physical reactivity GREEN; topology/recreation/preset gate pending
 H6 CUSTOM Settings size-lock scope: source/runtime-shaped GREEN; physical revalidation pending
-H8 Visualizer middle-click preset hotswap: IMPLEMENTED / deterministic GREEN; physical cycling, Custom round-trip and recreation acceptance pending
+H8 Visualizer middle-click preset hotswap: IMPLEMENTED / deterministic GREEN, including schema-v5 route-leak migration; physical cycling, Custom round-trip and recreation acceptance pending
 H7 exit visible-response/perf classification: pending / likely J if windows dismiss promptly
 ```
 
@@ -310,7 +310,7 @@ Current post-cutover focused additions:
 | `tests/test_qtquick_family_product_actions.py` | **ADDED — H3/H3b + PERMANENT PRODUCT SEMANTICS** | Pins Reddit saver-vs-interactive consequences and per-display Clock mode override persistence. Pure subset GREEN in handoff environment; production PySide composition still needs physical/runtime validation. |
 | `tests/test_settings_eventfilter_teardown_guards.py` | **CLOSED H1b / KEEP** | Late Settings helper events cannot dereference retired targets. |
 | `tests/test_visualizer_custom_route_contract.py` | **ADDED — PERMANENT H5a ROUTING/BINDING PIN** | Real manager admission over two live unit shells proves CUSTOM Visualizer owns its intentionally different monitor, non-CUSTOM follows Media, one bounded generation trace reports the exact route/outcome, and the sole owner can bind playback from the existing Media model on the other display without creating a Media copy. |
-| `tests/test_qtquick_visualizer_middle_click.py` + `tests/test_visualizer_runtime_preset_cycle.py` + affected H/Settings suites | **ADDED — PERMANENT H8 CONTRACT / DETERMINISTIC GREEN** | Pins middle-click preemption, one-step/wraparound, unchanged mode, Custom round-trip, curated replace semantics, atomic narrow persistence with no Media mutation, one same-mode activation, overlap/stale-owner rejection, structured restart persistence and all-five-mode coverage. Physical interaction/recreation acceptance remains open. |
+| `tests/test_qtquick_visualizer_middle_click.py` + `tests/test_visualizer_runtime_preset_cycle.py` + affected H/Settings suites | **ADDED — PERMANENT H8 CONTRACT / DETERMINISTIC GREEN** | Pins middle-click preemption, one-step/wraparound, unchanged mode, Custom round-trip, curated replace semantics, atomic narrow persistence with no Media mutation, schema-v5 removal of leaked route/admission fields, live monitor/position preservation, one same-mode activation, overlap/stale-owner rejection, structured restart persistence and all-five-mode coverage. Physical interaction/recreation acceptance remains open. |
 | Media app-volume child presentation tests (to add with J implementation) | **PENDING J PARITY+ CONTRACT** | Pin separate retained child/item as the existing and unspecified default, integrated only by explicit option, Media-effective/provider-capability dependency, shared Media display route/lifecycle, own CUSTOM rect/size in Media's display bucket, and the existing Media presentation model plus one `MediaVolumeRuntimeService` lease/action seam across both variants. |
 | `tests/test_widget_descriptors.py` + `tests/test_widgets_tab.py` | **PERMANENT SETTINGS PIN / H6** | Media CUSTOM lock metadata and real Settings state: only font/artwork lock; progress/glow/volume/mute retain normal dependency truth. |
 
@@ -501,7 +501,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_visualizer_playback_gating.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_visualizer_presentation_contract.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_visualizer_presentation_negative_controls.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
-| `tests/test_visualizer_preset_cycling_runtime.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
+| `tests/test_visualizer_preset_cycling_runtime.py` | **STALE I RESIDUE — DO NOT RESTORE DELETED HOSTS** | Imports retired QWidget `InputHandler`/`WidgetManager`/visualizer host and cannot collect. The input handler covered mouse-button routing, not audio. Current H8 resolver/Custom tests and Quick reactivity/True-F gates own the surviving preset and mode-owned `input_gain` contracts. |
 | `tests/test_visualizer_preset_manifest.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_visualizer_preset_transfer.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_visualizer_presets.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
