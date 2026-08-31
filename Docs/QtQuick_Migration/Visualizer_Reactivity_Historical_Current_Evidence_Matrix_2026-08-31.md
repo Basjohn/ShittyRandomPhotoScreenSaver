@@ -2,7 +2,8 @@
 
 Date: 2026-08-31  
 Historical tree: `3fe5df687387b6b6a121142372c43a7719442386`  
-Current tree: user-supplied current worktree, 2026-08-31  
+Baseline current tree: user-supplied current worktree, 2026-08-31  
+Implementation status: first bounded H5b/H5c repair applied in the superseding worktree; this matrix preserves **baseline deviation evidence** and separately records the repaired destination.
 Execution/decomposition: `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`
 
 ## 0. Purpose
@@ -40,7 +41,7 @@ Evidence labels:
 ### Initial conclusion
 
 - [x] No source basis for a first move that globally retunes FFT normalization, input gain, AGC, floor math, bar math or transient extraction.
-- [x] Configuration **reaching** the unchanged engine is still in scope and has already produced one Spectrum defect.
+- [x] Configuration **reaching** the unchanged engine is still in scope and produced a source-proven shared-input defect: the historical full-model Spectrum notch/shaping block stopped reaching the one BeatEngine under Quick ownership.
 
 ## 3. Current owner split — the critical migration boundary
 
@@ -61,9 +62,9 @@ resolve_visualizer_activation_payload(section)
    )
 ```
 
-### Application
+### Application — baseline vs repaired destination
 
-`widgets/spotify_visualizer/quick_display_visualizer_owner.py::_apply_configuration()` currently calls:
+The baseline Quick owner called:
 
 ```text
 apply_logical_vis_mode_kwargs(logical_tick_state, logical_kwargs)
@@ -71,25 +72,38 @@ apply_presentation_vis_mode_kwargs(presentation_state, presentation_kwargs)
 apply_controller_technical_config(controller, resolved_technical)
 ```
 
-It intentionally does **not** call the old mixed `apply_vis_mode_kwargs()`.
+and intentionally did **not** call the old mixed `apply_vis_mode_kwargs()`. That architecture is correct, but the source-owned preset block had no new owner.
+
+The repaired destination now adds exactly one configuration-time source owner:
+
+```text
+apply_logical_vis_mode_kwargs(...)
+apply_presentation_vis_mode_kwargs(...)
+apply_engine_vis_mode_kwargs(one_existing_BeatEngine, canonical_full_model)
+apply_controller_technical_config(...)
+```
+
+`apply_engine_vis_mode_kwargs()` owns no timer, cadence, polling loop, renderer or duplicate engine.
 
 ### Audit implication
 
-- [x] This split is architecturally desirable.
-- [x] Every historical key with a live current consumer now requires an explicit destination mapping.
-- [x] Spectrum and Bubble already prove that the split is incomplete.
-- [ ] Complete mechanical field coverage before declaring the split finished.
+- [x] The split is architecturally desirable; do not revive the mixed QWidget façade.
+- [x] Every historical key with a live current consumer requires an explicit logical/presentation/source/technical destination.
+- [x] Mechanical live-consumer coverage audit completed.
+- [x] Direct stranded set repaired: three Bubble logical controls, two historical Spectrum creator translations, and the Spectrum/shared-source shaping block.
+- [x] Oscillo/Sine/DevCurve generated line/style/layer mappings and the shared technical family already have explicit owners.
+- [x] Retired `*_growth` sizing controls remain excluded.
 
 ## 4. Spectrum evidence matrix
 
 ### 4.1 Topology identity
 
-| Layer | Historical | Current | Result |
-|---|---|---|---|
-| canonical model | `spectrum_render_mode` | `spectrum_render_mode` | same semantic input |
-| creator/config adaptation | creator derives `spectrum_single_piece = render_mode != "segment"` | preset layer removes legacy boolean; Quick logical applier ignores canonical render mode | **PROVEN DEVIATION** |
-| logical default | historical creator explicitly sends selected value | `_spectrum_single_piece = False` | current falls to segmented when canonical key ignored |
-| visible consequence | `bars` can select continuous columns | `bars` can still resolve segmented | matches physical wrong topology |
+| Layer | Historical | Baseline Quick | Repaired destination | Result |
+|---|---|---|---|---|
+| canonical model | `spectrum_render_mode` | `spectrum_render_mode` | same canonical key | semantic input preserved |
+| creator/config adaptation | creator derives `spectrum_single_piece = render_mode != "segment"` | preset layer removes legacy boolean; logical applier ignored canonical render mode | logical owner derives `_spectrum_single_piece` directly from canonical mode; legacy boolean fallback-only | **PROVEN DEVIATION -> REPAIRED** |
+| color topology translation | creator derives `spectrum_rainbow_per_bar = spectrum_unique_colors` | presentation applier listened only for legacy alias | presentation owner consumes canonical `spectrum_unique_colors` | **PROVEN DEVIATION -> REPAIRED** |
+| visible consequence | `bars` selects continuous columns | canonical `bars` could fall to segmented default | source now selects historical topology family | physical proof pending |
 
 Exact source seams:
 
@@ -103,19 +117,35 @@ Exact source seams:
 
 Historical/current legacy catch-all `apply_vis_mode_kwargs()` contains live BeatEngine setters for:
 
-| Canonical input | Current consumer | Quick owner currently applies? | Result |
-|---|---|---:|---|
-| `spectrum_mirrored` | `BeatEngine.set_spectrum_mirrored` | no | **PROVEN DEVIATION** |
-| `spectrum_shape_nodes` | `BeatEngine.set_spectrum_shape_nodes` | no | **PROVEN DEVIATION** |
-| `spectrum_notch_positions_mirrored` | selected -> `BeatEngine.set_notch_positions` | no | **PROVEN DEVIATION** |
-| `spectrum_notch_positions_linear` | selected -> `BeatEngine.set_notch_positions` | no | **PROVEN DEVIATION** |
-| `spectrum_wave_amplitude` | `SpectrumShapeConfig` -> BeatEngine | no | **PROVEN DEVIATION** |
-| `spectrum_profile_floor` | `SpectrumShapeConfig` -> BeatEngine | no | **PROVEN DEVIATION** |
-| `spectrum_lane_strengths_mirrored` | `SpectrumShapeConfig` -> BeatEngine | no | **PROVEN DEVIATION** |
-| `spectrum_lane_strengths_linear` | `SpectrumShapeConfig` -> BeatEngine | no | **PROVEN DEVIATION** |
-| `spectrum_drop_speed` | `BeatEngine.set_drop_speed` | no | **PROVEN DEVIATION** |
+| Canonical input | Existing consumer | Baseline Quick | Repaired destination |
+|---|---|---|---|
+| `spectrum_mirrored` | `BeatEngine.set_spectrum_mirrored` | missing | `source_config_applier` -> existing setter |
+| `spectrum_shape_nodes` | `BeatEngine.set_spectrum_shape_nodes` | missing | `source_config_applier` -> existing setter |
+| `spectrum_notch_positions_mirrored` | selected -> `BeatEngine.set_notch_positions` | missing | selected active notch family -> existing setter |
+| `spectrum_notch_positions_linear` | selected -> `BeatEngine.set_notch_positions` | missing | selected active notch family -> existing setter |
+| `spectrum_wave_amplitude` | `SpectrumShapeConfig` -> BeatEngine | missing | one `SpectrumShapeConfig` transaction |
+| `spectrum_profile_floor` | `SpectrumShapeConfig` -> BeatEngine | missing | one `SpectrumShapeConfig` transaction |
+| `spectrum_lane_strengths_mirrored` | `SpectrumShapeConfig` -> BeatEngine | missing | one `SpectrumShapeConfig` transaction |
+| `spectrum_lane_strengths_linear` | `SpectrumShapeConfig` -> BeatEngine | missing | one `SpectrumShapeConfig` transaction |
+| `spectrum_drop_speed` | `BeatEngine.set_drop_speed` | missing | `source_config_applier` -> existing setter |
 
-Current `build_technical_cache()` and `quick_technical_config.apply_controller_technical_config()` cover shared technical values but not this Spectrum shape family.
+Result for every row: **PROVEN DEVIATION -> REPAIRED IN SOURCE; PHYSICAL EFFECT PENDING**.
+
+`build_technical_cache()` / `quick_technical_config` remain the authority for the separate shared technical family; the full-model source-shaping block now has its own narrow owner rather than being misclassified as renderer state.
+
+#### Why this block is shared-reactivity relevant
+
+The historical full-model activation applied these Spectrum-named source settings regardless of which visualizer mode was visible. That matters because unchanged `bar_computation.py` reads `_spectrum_notch_positions` **before mode-specific state** to select raw bass/mid/treble boundaries. If the source block is absent it falls back to fixed split indices `4` and `10`. With the default mirrored preset notches (`0.30`, `0.65`) the intended approximate splits are:
+
+| Mode / bar domain | Baseline missing-config fallback | Configured preset split (approx.) |
+|---|---:|---:|
+| Spectrum / 33 | `4 / 10` | `9 / 21` |
+| Bubble / 48 | `4 / 10` | `14 / 31` |
+| Oscilloscope / 32 | `4 / 10` | `9 / 20` |
+| Sine / 40 | `4 / 10` | `12 / 26` |
+| DevCurve / 32 | `4 / 10` | `9 / 20` |
+
+Those raw lanes then feed noise-floor/expansion, transient state, AGC zones and the mode feeds. The omission is therefore a **source-proven common migration deviation capable of affecting every mode**, not merely a Spectrum appearance bug. The repair restores historical source ownership; physical remeasurement will quantify how much of each symptom it explains.
 
 ### 4.3 Final renderer transfer
 
@@ -126,17 +156,15 @@ bar upload  = bar * 0.55
 peak upload = peak * 0.55
 ```
 
-Current `rendering/quick/visualizer/implementations/spectrum.py` uploads raw bar/peak values.
+Baseline `rendering/quick/visualizer/implementations/spectrum.py` uploaded raw bar/peak values.
 
-Current `widgets/spotify_visualizer/spectrum_solid_hysteresis.py` still owns `_SPECTRUM_UPLOAD_SCALE = 0.55` and uses it in its bar-domain conversion.
+The repair exports `SPECTRUM_SHADER_INPUT_SCALE = 0.55` from `spectrum_solid_hysteresis.py` and applies it exactly once in `prepare_spectrum_shader_levels()` at the Quick shader-input boundary, including peak fallback/padding. Logical/snapshot bars remain canonical.
 
-Result: **PROVEN DEVIATION** at final renderer input.
+Result: **PROVEN DEVIATION -> REPAIRED IN SOURCE; PHYSICAL S6/S7 PROOF PENDING**.
 
 ### 4.4 Spectrum next-source path after known fixes
 
-Do not continue speculative saturation work until the three known deviations are repaired and retested.
-
-Then inspect, in order:
+The known topology/source/transfer deviations are repaired in source. Do not continue speculative tuning; remeasure the exact S0-S7 path in order:
 
 ```text
 S0 selected preset/model values
@@ -157,11 +185,11 @@ S7 shader/topology result
 
 ### 5.1 Configuration ownership
 
-| Input | Historical/legacy applier | Current Bubble consumer | New Quick logical applier | Result |
+| Input | Historical/legacy applier | Current Bubble consumer | Baseline Quick | Repaired destination |
 |---|---|---|---|---|
-| `bubble_group_drift` | applies to `_bubble_group_drift` | `tick_pipeline.py` | missing | **PROVEN DEVIATION** |
-| `bubble_collision_pop_mode` | applies to `_bubble_collision_pop_mode` | `tick_pipeline.py` | missing | **PROVEN DEVIATION** |
-| `bubble_big_visual_smoothing` | applies to `_bubble_big_visual_smoothing` | `tick_pipeline.py` | missing | **PROVEN DEVIATION** |
+| `bubble_group_drift` | applies to `_bubble_group_drift` | `tick_pipeline.py` | missing | logical owner; **repaired** |
+| `bubble_collision_pop_mode` | applies to `_bubble_collision_pop_mode` | `tick_pipeline.py` | missing | logical owner; **repaired** |
+| `bubble_big_visual_smoothing` | applies to `_bubble_big_visual_smoothing` | `tick_pipeline.py` | missing | logical owner; **repaired** |
 
 Current fallbacks:
 
@@ -224,14 +252,17 @@ For every layer record a compact numeric summary, not large arrays.
 
 ### Required evidence before modifying the gate
 
-- [ ] current runtime generation;
-- [ ] current engine generation;
-- [ ] current engine activation;
-- [ ] source generation;
-- [ ] source activation;
-- [ ] source age;
-- [ ] readiness transition timestamp;
-- [ ] whether upstream freshness fence already admitted the frame.
+Instrumentation is now implemented at each actual mode admission boundary:
+
+- [x] current runtime generation;
+- [x] current engine generation;
+- [x] current engine activation;
+- [x] source generation;
+- [x] source activation;
+- [x] source age;
+- [x] readiness state/transition with compact raw -> resolved magnitude;
+- [x] playback-edge correlation through T0-T7.
+- [ ] collect the physical traces and prove whether the gate actually rejects/delays a valid current frame.
 
 Do not remove stale-source safety merely to increase movement.
 
@@ -253,6 +284,7 @@ Therefore:
 
 - [x] no evidence of a deliberate new Quick debounce;
 - [x] historical cold-start ramp is not itself a migration defect;
+- [x] bounded T0-T7 markers are implemented across the existing Media -> owner -> source -> authored -> bridge -> retained-item chain; no workaround timer was added;
 - [ ] physical delay still needs warm/cold edge classification;
 - [ ] H4 Media canonical-truth timing must be distinguished from visualizer timing.
 
@@ -313,73 +345,85 @@ Still open:
 
 ## 10. Configuration completeness audit — field worklist
 
-The next source comparison should be systematic rather than symptom-led.
+The historical-live-consumer configuration audit is complete. This checklist distinguishes **ownership coverage** from still-open renderer/behavior comparison.
 
-### Shared/technical
+### Shared/technical ownership
 
-- [ ] `bar_count`
-- [ ] dynamic/manual floor
-- [ ] adaptive/manual sensitivity
-- [ ] audio block size
-- [ ] dynamic-range/energy boost
-- [ ] AGC
-- [ ] input gain
-- [ ] kick lane gain
-- [ ] transient pulse gain / clamp
-- [ ] mode transient mixes
+- [x] bar count
+- [x] dynamic/manual floor
+- [x] adaptive/manual sensitivity
+- [x] audio block size
+- [x] dynamic-range/energy boost
+- [x] AGC
+- [x] input gain
+- [x] kick lane gain
+- [x] transient pulse gain / clamp
+- [x] mode transient mixes
 
-### Spectrum
+These remain in the existing technical owner; no duplicate source applier was added for them. Direct historical/current comparison also verified the behaviorally sharp values rather than merely key presence:
 
-- [x] `spectrum_render_mode` gap found
-- [x] mirror/shape/notch/wave/profile/lane/drop engine gap found
-- [ ] visual smoothing fields
-- [ ] ghosting/decay
-- [ ] peak behavior
-- [ ] colors/border/rainbow presentation
-- [ ] segment count/topology parameters
+- [x] `agc_strength=0.0` survives resolution/clamping as exact zero and the unchanged worker exits AGC before normalization (`< 0.01`), so zero still means **no AGC**;
+- [x] `dynamic_floor=False` remains false and preserves manual-floor operation;
+- [x] explicit `audio_block_size` reaches `set_audio_block_size(...)`;
+- [x] per-mode `bar_count` reconfigures the existing BeatEngine/controller bar domain;
+- [x] `dynamic_range_enabled` retains historical `1.18`/`0.85` energy-boost semantics;
+- [x] adaptive-sensitivity false, manual sensitivity and input gain retain their resolved values.
 
-### Bubble
+A focused parity test now locks the zero/false case because these controls can change preset response dramatically. This technical subset was already correct in baseline Quick; the H5c source-config repair is intentionally adjacent rather than duplicative.
 
-- [x] group drift gap found
-- [x] collision-pop mode gap found
-- [x] big visual smoothing gap found
-- [ ] all bounce/frequency/size/speed ranges
-- [ ] transient mix inputs
-- [ ] ghost/trail behavior
-- [ ] specular/alpha/color presentation
-- [ ] protected visible event path
+### Spectrum ownership
 
-### Oscilloscope
+- [x] canonical `spectrum_render_mode` translation restored
+- [x] canonical `spectrum_unique_colors` translation restored
+- [x] mirror/shape/notch/wave/profile/lane/drop shared-source block restored
+- [x] visual smoothing fields already owned by logical state
+- [x] ghosting/decay already owned
+- [x] colors/border/rainbow presentation already owned (with unique-colors translation repaired)
+- [x] historical `0.55` final transfer restored
+- [ ] physical peak behavior and S3-S7 response after repair
 
-- [ ] speed
-- [ ] line amplitude
-- [ ] waveform smoothing
-- [ ] line count/ghost lines
-- [ ] ghost decay/intensity
-- [ ] glow + reactive glow
-- [ ] transient width mix
-- [ ] final line width/amplitude transfer
+### Bubble ownership
 
-### Sine
+- [x] group drift repaired
+- [x] collision-pop mode repaired
+- [x] big visual smoothing repaired
+- [x] bounce/frequency/size/speed ranges already owned
+- [x] transient mix inputs already owned
+- [x] ghost/trail behavior already owned
+- [x] specular/alpha/color presentation already owned
+- [ ] protected visible event path / B0-B9 physical magnitude comparison
 
-- [ ] speed
-- [ ] line count
-- [ ] travel per line
-- [ ] phase/shift per line
-- [ ] reactivity parameters
-- [ ] ghosting
-- [ ] heartbeat/transient assistance
-- [ ] final uniform transfer
+### Oscilloscope ownership
 
-### DevCurve
+- [x] speed
+- [x] line amplitude
+- [x] waveform smoothing
+- [x] line count/ghost lines
+- [x] ghost decay/intensity
+- [x] glow + reactive glow
+- [x] transient width mix
+- [ ] final line width/amplitude renderer comparison
 
-- [ ] layer enabled/order
-- [ ] energy/transient mapping
-- [ ] alpha/outline
-- [ ] offsets/domain
-- [ ] tuning/specular parameters
-- [ ] ghosting
-- [ ] final geometry/intensity transfer
+### Sine ownership
+
+- [x] speed
+- [x] line count
+- [x] travel per line
+- [x] phase/shift per line
+- [x] reactivity parameters
+- [x] ghosting
+- [x] heartbeat/transient assistance
+- [ ] final uniform transfer + paused-idle physical transport
+
+### DevCurve ownership
+
+- [x] layer enabled/order
+- [x] energy/transient mapping
+- [x] alpha/outline
+- [x] offsets/domain
+- [x] tuning/specular parameters
+- [x] ghosting
+- [ ] final geometry/intensity renderer comparison
 
 ### Explicitly retired
 
@@ -394,7 +438,36 @@ The next source comparison should be systematic rather than symptom-led.
 - [ ] scan any per-mode Custom snapshot restoration.
 - [ ] scan settings refresh for engine setter calls omitted by new owner split.
 
-## 12. Evidence rules for the continuation
+### 11.1 Golden coverage boundary — why GREEN did not prove live preset reachability
+
+Historical deterministic replay accepts `FeatureFrame` records that already contain energy lanes, raw bars and waveform state, then executes the real logical tick path. The presentation goldens sample downstream completed state. This gives strong protection for mode evolution, cadence independence and presentation sampling **after feature state exists**, but it bypasses the production seam that H5c found broken:
+
+```text
+preset/settings model -> Quick owner split -> BeatEngine/audio-worker setters -> live FFT shaping
+```
+
+Consequently a migration can keep goldens GREEN while production audio is shaped with fallback notches/default engine state. The correct response is targeted reachability/configuration tests, not golden regeneration.
+
+- [x] no golden baseline was regenerated for this repair;
+- [x] focused owner/source routing test added;
+- [x] focused technical `0.0`/`False`/explicit block-size/bar-count test added;
+- [ ] future H8 same-mode preset hotswap must prove the same existing engine receives new source config without recreation.
+
+## 12. Implementation / validation status — 2026-08-31
+
+- [x] `source_config_applier.py` added as the sole new source-settings routing seam.
+- [x] Quick owner applies source config only at existing configuration/mode-activation edges.
+- [x] Bubble stranded logical controls repaired.
+- [x] Spectrum render-mode + unique-colors translations repaired.
+- [x] Spectrum historical shader-input transfer repaired exactly once.
+- [x] `[VIS_SOURCE_CONFIG]`, `[VIS_TECH_CONFIG]`, `[VIS_REACTIVITY]` and T0-T7 playback diagnostics added at existing boundaries with compact/rate-limited data only.
+- [x] One new focused test file added: `tests/test_qtquick_visualizer_reactivity_config_parity.py`; it now covers shared-source routing, Bubble controls, Spectrum translations/transfer, plus the already-correct technical zero/false contract (`bar_count`, explicit block size, manual floor, `AGC=0.0`, etc.).
+- [x] Changed Python sources and the new test syntax-compile successfully in the audit container.
+- [x] Existing replay/presentation goldens intentionally left unchanged; their downstream boundary does not prove live preset -> source configuration reachability.
+- [ ] Pytest execution pending because this Linux audit container does not provide PySide6; do not report GREEN until run in the normal project environment.
+- [ ] Physical all-mode reactivity + warm/cold Play/Pause traces pending.
+
+## 13. Evidence rules for the continuation
 
 - [ ] A historical/current source diff outranks a stale test expectation.
 - [ ] A live consumer with no current configuration route is a defect even if its fallback looks plausible.

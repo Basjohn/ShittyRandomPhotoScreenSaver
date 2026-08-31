@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import threading
+import time
 
 from PySide6.QtCore import Slot, Qt
 from PySide6.QtQuick import QQuickItem, QQuickWindow, QSGNode
 
+from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from widgets.spotify_visualizer.render_bridge import (
     VisualizerRenderIdentity,
     VisualizerSnapshotBridge,
@@ -15,6 +17,8 @@ from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentati
 
 from .node import VisualizerRenderNode
 from .telemetry import VisualizerRenderNodeTelemetry
+
+logger = get_logger(__name__)
 
 
 class _RenderNodeRetirement:
@@ -58,6 +62,7 @@ class VisualizerRenderItem(QQuickItem):
         self._identity: VisualizerRenderIdentity | None = None
         self._presentation: ResolvedVisualizerPresentation | None = None
         self._bound_window: QQuickWindow | None = None
+        self._diag_last_render_playing: bool | None = None
         super().__init__(parent)
         self.setFlag(QQuickItem.Flag.ItemHasContents, True)
         self.windowChanged.connect(self._bind_window_invalidation)
@@ -166,6 +171,28 @@ class VisualizerRenderItem(QQuickItem):
                 )
                 snapshot = None
                 clear_snapshot = True
+
+        if snapshot is not None and is_viz_diagnostics_enabled():
+            playing = bool(snapshot.logical.playing)
+            previous = self._diag_last_render_playing
+            if previous is not None and previous != playing:
+                source_age_ms = -1.0
+                if snapshot.logical.source_timestamp is not None:
+                    source_age_ms = max(
+                        0.0,
+                        (time.time() - snapshot.logical.source_timestamp) * 1000.0,
+                    )
+                logger.debug(
+                    "[VIS_PLAYBACK_EDGE] stage=T7 mode=%s playing=%s revision=%d "
+                    "source=%d/%d source_age_ms=%.1f",
+                    snapshot.logical.mode_id,
+                    playing,
+                    snapshot.logical_revision,
+                    snapshot.logical.source_generation,
+                    snapshot.logical.source_activation_id,
+                    source_age_ms,
+                )
+            self._diag_last_render_playing = playing
 
         logical_size = (
             (0.0, 0.0)

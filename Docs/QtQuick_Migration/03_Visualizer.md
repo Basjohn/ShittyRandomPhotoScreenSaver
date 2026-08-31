@@ -561,6 +561,7 @@ Binding rules:
 
 - [ ] Every canonical setting/preset value with a live current consumer has exactly one explicit current route to that consumer.
 - [ ] BeatEngine/audio-worker inputs are applied at the one engine boundary.
+- [ ] The reactivity-critical technical subset preserves explicit values rather than truthy/default substitution: mode bar count, capture block size, dynamic/manual floor, adaptive/manual sensitivity, dynamic-range boost, input gain and `AGC=0.0` (= no AGC).
 - [ ] authored mode/runtime inputs are applied to controller-owned logical state.
 - [ ] renderer/style inputs are presentation-owned.
 - [ ] defaults/fallbacks do not count as parity when the selected preset carries a different value.

@@ -11,6 +11,7 @@ from rendering.quick.render.gl_resources import compile_program
 from widgets.spotify_visualizer.render_state import SpectrumFrame
 from widgets.spotify_visualizer.shaders import load_fragment_shader
 from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
+    SPECTRUM_SHADER_INPUT_SCALE,
     compute_spectrum_height_scale,
 )
 
@@ -22,6 +23,37 @@ from ..implementation_values import parameter, rgba, safe_hue
 
 
 _MAX_BARS = 64
+
+
+def prepare_spectrum_shader_levels(
+    bars: Sequence[object],
+    peaks: Sequence[object],
+    *,
+    bar_count: int,
+) -> tuple[list[float], list[float]]:
+    """Return fixed-width shader arrays with the historical final transfer.
+
+    Authored Spectrum bars stay in their canonical logical domain.  The old GL
+    renderer applied ``0.55`` only at upload time; retained Quick presentation
+    must do the same rather than weakening the BeatEngine or frame runtime.
+    """
+
+    count = min(_MAX_BARS, max(0, int(bar_count)))
+    resolved_bars = [float(value) for value in bars[:count]]
+    if len(resolved_bars) < count:
+        resolved_bars.extend([0.0] * (count - len(resolved_bars)))
+
+    resolved_peaks = [float(value) for value in peaks[:count]]
+    if len(resolved_peaks) < count:
+        resolved_peaks.extend(resolved_bars[len(resolved_peaks):count])
+
+    for index in range(count):
+        resolved_bars[index] *= SPECTRUM_SHADER_INPUT_SCALE
+        resolved_peaks[index] *= SPECTRUM_SHADER_INPUT_SCALE
+
+    resolved_bars.extend([0.0] * (_MAX_BARS - len(resolved_bars)))
+    resolved_peaks.extend([0.0] * (_MAX_BARS - len(resolved_peaks)))
+    return resolved_bars, resolved_peaks
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,14 +133,11 @@ class QuickSpectrumRenderer:
         count = min(_MAX_BARS, int(logical.common.bar_count))
         if count <= 0:
             return
-        bars = list(logical.common.bars[:count])
-        if len(bars) < count:
-            bars.extend([0.0] * (count - len(bars)))
-        peaks = list(mode_state.peaks[:count])
-        if len(peaks) < count:
-            peaks.extend(bars[len(peaks):count])
-        bars.extend([0.0] * (_MAX_BARS - len(bars)))
-        peaks.extend([0.0] * (_MAX_BARS - len(peaks)))
+        bars, peaks = prepare_spectrum_shader_levels(
+            logical.common.bars,
+            mode_state.peaks,
+            bar_count=count,
+        )
 
         presentation = snapshot.presentation
         outer_x, outer_y, _outer_width, _outer_height = presentation.outer_rect

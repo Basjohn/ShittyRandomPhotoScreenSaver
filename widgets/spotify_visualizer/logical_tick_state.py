@@ -433,6 +433,20 @@ def install_default_logical_tick_state(state: Any, *, bar_count: int) -> None:
     state._latency_warn_ms = 80.0
     state._latency_error_ms = 150.0
 
+    # H5c bounded reactivity/playback diagnostics. These fields are inert unless
+    # --viz diagnostics are enabled and own no cadence/timer/source behavior.
+    state._reactivity_diag_last_signature = None
+    state._reactivity_diag_last_playing = None
+    state._reactivity_diag_last_ready = None
+    state._reactivity_diag_last_ts = 0.0
+    state._reactivity_diag_edge_seq = 0
+    state._reactivity_diag_edge_playing = False
+    state._reactivity_diag_edge_started_ts = 0.0
+    state._reactivity_diag_edge_t3_logged = False
+    state._reactivity_diag_edge_t4_logged = False
+    state._reactivity_diag_edge_t5_logged = False
+    state._reactivity_diag_edge_t6_logged = False
+
 
 __all__ = [
     "VisualizerLogicalTickState",

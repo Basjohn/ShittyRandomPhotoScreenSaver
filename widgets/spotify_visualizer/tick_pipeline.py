@@ -26,6 +26,10 @@ from core.logging.logger import (
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.spotify_visualizer import mode_capabilities, mode_transition
 from widgets.spotify_visualizer.logical_runtime import coerce_identity
+from widgets.spotify_visualizer.reactivity_diagnostics import (
+    maybe_log_logical_publication,
+    maybe_log_reactivity_boundary,
+)
 from widgets.spotify_visualizer.render_state import (
     VisualizerEnergyState,
     VisualizerLogicalFrame,
@@ -414,6 +418,8 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
         except Exception:
             source_timestamp = 0.0
 
+    resolved_input_energy = _devcurve_energy(energy_input)
+    resolved_input_transient = _devcurve_transient(transient_input)
     parameters = _devcurve_parameter_snapshot(widget)
     layer_shape_nodes = {
         name: list(
@@ -437,8 +443,8 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
             source_activation_id=source_activation,
             source_timestamp=source_timestamp,
             playing=bool(widget._spotify_playing),
-            energy=_devcurve_energy(energy_input),
-            transient=_devcurve_transient(transient_input),
+            energy=resolved_input_energy,
+            transient=resolved_input_transient,
             layer_shape_nodes=layer_shape_nodes,
             parameters=parameters,
         )
@@ -449,6 +455,28 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
         return
     if controller.mode_id != "devcurve" or widget._vis_mode_str != "devcurve":
         return
+    if is_viz_diagnostics_enabled():
+        maybe_log_reactivity_boundary(
+            widget,
+            logger,
+            now_ts=now_ts,
+            mode="devcurve",
+            playing=bool(widget._spotify_playing),
+            source_ready=resolved.reactive_source_ready,
+            runtime_generation=coerce_identity(
+                getattr(widget, "_runtime_generation", None)
+            ),
+            engine_generation=engine_generation,
+            engine_activation=engine_activation,
+            source_generation=source_generation,
+            source_activation=source_activation,
+            source_timestamp=source_timestamp,
+            input_energy=resolved_input_energy,
+            resolved_energy=resolved.energy,
+            event_summary=(
+                f"transient={max(resolved_input_transient.bass, resolved_input_transient.mid, resolved_input_transient.high):.3f}"
+            ),
+        )
 
     # Temporary old-presenter mirror. The controller-owned immutable result is
     # authoritative; the Quick renderer never reads these widget fields.
@@ -823,6 +851,34 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         # A concurrent mode retirement remains authoritative. The completed
         # old-mode result is never mirrored or admitted into the new mode.
         return
+    if is_viz_diagnostics_enabled():
+        resolved_energy = (
+            energy_payload
+            if source_ready
+            else {"overall": 0.0, "bass": 0.0, "mid": 0.0, "high": 0.0}
+        )
+        maybe_log_reactivity_boundary(
+            widget,
+            logger,
+            now_ts=now_ts,
+            mode="bubble",
+            playing=bool(widget._spotify_playing),
+            source_ready=source_ready,
+            runtime_generation=coerce_identity(
+                getattr(widget, "_runtime_generation", None)
+            ),
+            engine_generation=engine_generation,
+            engine_activation=engine_activation,
+            source_generation=source_generation,
+            source_activation=source_activation,
+            source_timestamp=source_ts,
+            input_energy=energy_payload,
+            resolved_energy=resolved_energy,
+            event_summary=(
+                f"bass_pulse={pulse_payload.get('bass', 0.0):.3f},"
+                f"mid_high={pulse_payload.get('mid_high', 0.0):.3f}"
+            ),
+        )
 
     # Temporary old-presenter mirror. The immutable controller-owned result is
     # authoritative; no Quick renderer reads these QWidget adapter fields.
@@ -1659,12 +1715,20 @@ def _publish_logical_state(
     if payload is None:
         return None
     mailbox = widget._logical_mailbox
-    mailbox.publish(
+    revision = mailbox.publish(
         payload,
         generation=payload.runtime_generation,
         activation_id=payload.activation_id,
         now_ts=payload.logical_timestamp,
     )
+    if is_viz_diagnostics_enabled():
+        maybe_log_logical_publication(
+            widget,
+            logger,
+            now_ts=now_ts,
+            logical=payload,
+            revision=revision,
+        )
     if getattr(widget, "_logical_runtime", None) is not None:
         # Only a thread-owned cadence needs marshalling; the GUI-driven path
         # presents synchronously in `on_tick()`.
