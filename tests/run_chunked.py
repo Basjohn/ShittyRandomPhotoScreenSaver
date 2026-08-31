@@ -90,6 +90,7 @@ H_DESTINATION_PROFILE = (
     "test_qtquick_visualizer_fade_authority.py",
     "test_qtquick_runtime_reality.py",
     "test_media_generation_recreation.py",
+    "test_media_event_observation.py",
     "test_widgets_tab.py::TestWidgetsTab::test_widgets_tab_disables_media_size_controls_when_custom_is_active",
     "test_settings_eventfilter_teardown_guards.py",
     "test_terminal_runtime_destruction.py",

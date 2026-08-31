@@ -222,6 +222,41 @@ Do not treat tearing as proof of presentation mode; prove it from the PresentMon
 `PresentMode` column. Independent/hardware flip is an optimization, not a
 correctness requirement — the product must stay correct under ordinary composition.
 
+## Native Media event observation (GSMTC / WinRT) — durable facts
+
+The shared Media runtime (`_SharedMediaRuntimeOwner` + `WindowsGlobalMediaController`)
+is event-driven rather than polled: native GSMTC dirty edges feed the existing
+accepted-snapshot pipeline, with one ~30s reconcile/liveness watchdog. Facts
+proven on the installed projection (re-verify with an ephemeral harness — never
+commit a polling harness, and never add a Media diagnostic env var to the
+product):
+
+```text
+package: pywinrt `winrt` (snake_case projection); event token = EventRegistrationToken
+Manager (GlobalSystemMediaTransportControlsSessionManager, retained after request_async):
+  add/remove_current_session_changed, add/remove_sessions_changed
+Session (GlobalSystemMediaTransportControlsSession, the observed session retained):
+  add/remove_playback_info_changed, add/remove_media_properties_changed,
+  add/remove_timeline_properties_changed
+remove_*(token) cleanly stops delivery.
+callbacks arrive on a NON-main WinRT thread-pool thread ("Dummy-N") -> hop to the UI
+  thread (ThreadManager.run_on_ui_thread) and coalesce; never query/await/decode or
+  touch Qt from the callback.
+the manager AND the observed session must be RETAINED or their subscriptions die
+  (the retired poll path requested a fresh manager per query and discarded it).
+steady Spotify playback: timeline_properties_changed ~0.24 Hz; zero playback/
+  media-properties events while unchanged; zero events when paused/idle.
+```
+
+Coalescing contract: at most one refresh in flight + one pending dirty edge
+(unified with command confirmation; command wins). A timeline coalescing floor
+bounds a chatty provider without a recurring cadence. Observation failure logs a
+loud `[MEDIA_EVENT][DEGRADED]` and relies on the watchdog — the old 1–2.5s active
+poll is never reactivated. The watchdog logs `[MEDIA_EVENT][MISSED_EVENT]` when it
+finds a non-position change no native event delivered. Progress position is not
+interpolated locally, so timeline edges (~4s for Spotify) are the progress-bar
+freshness source — acceptable and comparable to the retired ~2.5s poll.
+
 ## Guardrails
 
 - always-on does not mean high-volume;

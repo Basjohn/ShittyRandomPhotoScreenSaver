@@ -93,6 +93,7 @@ class _MediaQueryResult:
     probed_failover: bool
     worker_started: float
     worker_finished: float
+    reason: str = "event"
 
 
 ControllerFactory = Callable[..., BaseMediaController]
@@ -262,6 +263,15 @@ class _SharedMediaRuntimeOwner:
 
     _PLAYBACK_CONFIRMATION_REFRESH_DELAY_MS = 300
     _PLAYBACK_CONFIRMATION_TIMEOUT_SEC = 3.0
+    # Reconciliation / liveness watchdog interval (deep-idle scale, NOT a truth
+    # cadence). Native GSMTC events are the normal truth path; this only catches
+    # dropped events / provider liveness and logs [MEDIA_EVENT][MISSED_EVENT].
+    _RECONCILE_INTERVAL_MS = 30000
+    # Minimum spacing between timeline-only dirty refreshes. Timeline events are
+    # the one class that can be chatty (position ticks); this coalescing floor
+    # bounds a chatty provider while leaving seeks/track/play-pause prompt. It is
+    # event-armed and single-shot (never a recurring cadence).
+    _TIMELINE_COALESCE_MS = 1000
 
     def __init__(
         self,
@@ -291,21 +301,32 @@ class _SharedMediaRuntimeOwner:
         self._refresh_in_flight = False
         self._refresh_in_flight_request = 0
         self._command_refresh_pending = False
+        self._event_refresh_pending = False
 
-        self._update_timer = None
-        self._update_timer_handle: OverlayTimerHandle | None = None
-        self._update_timer_interval_ms: int | None = None
-        self._poll_intervals = [1000, 2000, 2500]
-        self._current_poll_stage = 0
-        self._polls_at_current_stage = 0
+        # Reconciliation / liveness watchdog timer (deep-idle scale). Replaces the
+        # retired 1000/2000/2500 ms active poll cadence: normal truth arrives via
+        # native GSMTC events, so this single timer only reconciles/detects dropped
+        # events. There is no per-display fan-out and no second cadence owner.
+        self._reconcile_timer = None
+        self._reconcile_timer_handle: OverlayTimerHandle | None = None
+
+        # Native event observation state.
+        self._event_observation_active = False
+        self._event_observation_degraded = False
+        self._last_timeline_refresh_monotonic = 0.0
+        self._timeline_flush_scheduled = False
+        self._timeline_flush_token = 0
+
         self._consecutive_none_count = 0
-        self._idle_threshold = 12
-        self._is_idle = False
-        self._idle_poll_interval = 5000
-        self._deep_idle_poll_interval = 30000
-        self._app_process_running = False
         self._activation_time = 0.0
         self._post_activation_grace_sec = 5.0
+
+        # Bounded [MEDIA_EVENT] telemetry (never per-callback verbose).
+        self._event_counts: dict[str, int] = {}
+        self._dirty_coalesced = 0
+        self._refresh_source_counts: dict[str, int] = {}
+        self._stale_event_rejections = 0
+        self._missed_event_count = 0
 
         self._runtime_state = MediaWidgetRuntimeState()
         self._current_info: MediaTrackInfo | None = None
@@ -365,12 +386,33 @@ class _SharedMediaRuntimeOwner:
         return self._playback_confirmation_deadline_monotonic
 
     @property
-    def update_timer_handle(self) -> OverlayTimerHandle | None:
-        return self._update_timer_handle
+    def reconcile_timer_handle(self) -> OverlayTimerHandle | None:
+        return self._reconcile_timer_handle
 
     @property
     def refresh_in_flight(self) -> bool:
         return self._refresh_in_flight
+
+    @property
+    def event_observation_active(self) -> bool:
+        return self._event_observation_active
+
+    @property
+    def event_observation_degraded(self) -> bool:
+        return self._event_observation_degraded
+
+    def event_telemetry(self) -> dict[str, Any]:
+        """Bounded [MEDIA_EVENT] counters for tests and diagnostics."""
+
+        return {
+            "observation_active": self._event_observation_active,
+            "observation_degraded": self._event_observation_degraded,
+            "event_counts": dict(self._event_counts),
+            "dirty_coalesced": self._dirty_coalesced,
+            "refresh_sources": dict(self._refresh_source_counts),
+            "stale_event_rejections": self._stale_event_rejections,
+            "missed_events": self._missed_event_count,
+        }
 
     def active_consumer_count(self) -> int:
         return sum(1 for lease in list(self._active_leases) if lease._consumer_alive())
@@ -447,10 +489,10 @@ class _SharedMediaRuntimeOwner:
             self._ensure_controller()
             self._running = True
             self._activation_time = time.monotonic()
-            self._reset_poll_stage(retune=False)
-            self._ensure_timer()
-            if self._update_timer_handle is None or self._update_timer is None:
-                raise RuntimeError("Media poll timer was not created")
+            self._ensure_reconcile_timer()
+            if self._reconcile_timer_handle is None or self._reconcile_timer is None:
+                raise RuntimeError("Media reconcile heartbeat was not created")
+            self._start_event_observation()
             trace_media_native_stage(
                 component="media",
                 stage="owner_activate_complete",
@@ -460,7 +502,7 @@ class _SharedMediaRuntimeOwner:
                 snapshot = self.current_snapshot()
                 if snapshot is not None:
                     self._broadcast_snapshot(snapshot)
-            self.refresh(bust_cache=True)
+            self.refresh(bust_cache=True, reason="activation")
             return True
         except Exception:
             # BaseOverlayWidget treats a false start as activation failure. Keep
@@ -574,6 +616,9 @@ class _SharedMediaRuntimeOwner:
         self._controller = None
         if self._running:
             self._ensure_controller()
+            # The retired old controller detached its subscriptions; the new
+            # provider's controller must observe from scratch.
+            self._start_event_observation()
         self._broadcast_provider_changed(
             old_provider,
             normalized,
@@ -643,82 +688,244 @@ class _SharedMediaRuntimeOwner:
             lease._deliver_volume_target(provider, source_id)
 
     # ------------------------------------------------------------------
-    # Poll cadence/query ownership
+    # Event observation / reconcile / query ownership
     # ------------------------------------------------------------------
-    def _poll_interval(self) -> int:
-        if self._is_idle:
-            return (
-                self._idle_poll_interval
-                if self._app_process_running
-                else self._deep_idle_poll_interval
-            )
-        return self._poll_intervals[self._current_poll_stage]
+    def _ensure_reconcile_timer(self) -> None:
+        """Arm the single deep-idle-scale reconcile/liveness heartbeat."""
 
-    def _ensure_timer(self, *, force: bool = False) -> None:
         if self._retired or not self._running:
             return
-        interval = self._poll_interval()
-        timer = self._update_timer
-        if self._update_timer_handle is not None and timer is not None:
+        handle = self._reconcile_timer_handle
+        timer = self._reconcile_timer
+        if handle is not None and timer is not None:
             try:
                 if timer.isActive():
-                    if not force and self._update_timer_interval_ms == interval:
-                        return
-                    timer.setInterval(max(1, int(interval)))
-                    timer.start()
-                    self._update_timer_interval_ms = interval
                     return
             except Exception:
-                timer = None
-        if force:
-            self._stop_timer()
+                pass
         handle = create_overlay_timer(
             self,
-            interval,
-            self.refresh,
-            description="Media shared runtime poll",
+            self._RECONCILE_INTERVAL_MS,
+            self._reconcile,
+            description="Media reconcile heartbeat",
         )
-        self._update_timer_handle = handle
-        self._update_timer = getattr(handle, "_timer", None)
-        self._update_timer_interval_ms = interval
+        self._reconcile_timer_handle = handle
+        self._reconcile_timer = getattr(handle, "_timer", None)
 
-    def _stop_timer(self) -> None:
+    def _stop_reconcile_timer(self) -> None:
         stop_overlay_timer_pair(
             self,
-            handle_attr="_update_timer_handle",
-            qtimer_attr="_update_timer",
+            handle_attr="_reconcile_timer_handle",
+            qtimer_attr="_reconcile_timer",
             delete_qtimers=True,
         )
-        self._update_timer_interval_ms = None
 
-    def _reset_poll_stage(self, *, retune: bool = True) -> None:
-        changed = self._current_poll_stage != 0
-        self._current_poll_stage = 0
-        self._polls_at_current_stage = 0
-        if changed and retune and self._running:
-            self._ensure_timer(force=True)
+    def _start_event_observation(self) -> None:
+        """Best-effort: subscribe native dirty edges; loud/degraded on failure."""
 
-    def _advance_poll_stage(self) -> None:
-        if self._current_poll_stage >= len(self._poll_intervals) - 1:
+        controller = self._controller
+        if controller is None:
             return
-        self._current_poll_stage += 1
-        self._polls_at_current_stage = 0
-        if self._running:
-            self._ensure_timer(force=True)
+        try:
+            supported = bool(controller.supports_event_observation())
+        except Exception:
+            supported = False
+        if not supported:
+            self._event_observation_active = False
+            self._event_observation_degraded = True
+            logger.warning(
+                "[MEDIA_EVENT][DEGRADED] controller cannot observe native events; "
+                "relying on the %ds reconcile watchdog (provider=%s). The retired "
+                "1-2.5s active poll is NOT reactivated.",
+                self._RECONCILE_INTERVAL_MS // 1000,
+                self._provider,
+            )
+            return
+        owner_ref = weakref.ref(self)
+        owner_generation = self._owner_generation
+        runtime_generation = self._runtime_generation
 
-    def wake_from_idle(self) -> None:
+        def _on_dirty(reason: str) -> None:
+            # Native WinRT thread -> hop to the UI thread + fence by generation.
+            def _deliver() -> None:
+                owner = owner_ref()
+                if owner is not None:
+                    owner._handle_dirty_edge(str(reason), owner_generation)
+
+            _deliver._srpss_runtime_generation = runtime_generation
+            ThreadManager.run_on_ui_thread(_deliver)
+
+        def _on_established(ok: bool, detail: str) -> None:
+            def _deliver() -> None:
+                owner = owner_ref()
+                if owner is not None:
+                    owner._on_observation_established(
+                        bool(ok), str(detail), owner_generation
+                    )
+
+            _deliver._srpss_runtime_generation = runtime_generation
+            ThreadManager.run_on_ui_thread(_deliver)
+
+        try:
+            started = bool(
+                controller.start_event_observation(_on_dirty, _on_established)
+            )
+        except Exception:
+            started = False
+            logger.debug("[MEDIA_EVENT] start_event_observation raised", exc_info=True)
+        if not started:
+            self._event_observation_active = False
+            self._event_observation_degraded = True
+            logger.warning(
+                "[MEDIA_EVENT][DEGRADED] native observation could not start "
+                "(provider=%s); relying on the reconcile watchdog.",
+                self._provider,
+            )
+
+    def _stop_event_observation(self) -> None:
+        controller = self._controller
+        if controller is not None:
+            try:
+                controller.stop_event_observation()
+            except Exception:
+                logger.debug(
+                    "[MEDIA_EVENT] controller stop_event_observation failed",
+                    exc_info=True,
+                )
+        if self._event_observation_active or self._event_counts:
+            self._log_event_summary()
+        self._event_observation_active = False
+
+    def _on_observation_established(
+        self, ok: bool, detail: str, owner_generation: int
+    ) -> None:
+        if self._retired or not self._running or owner_generation != self._owner_generation:
+            return
+        self._event_observation_active = bool(ok)
+        self._event_observation_degraded = not bool(ok)
+        if ok:
+            logger.info(
+                "[MEDIA_EVENT] observation active provider=%s detail=%s",
+                self._provider,
+                detail,
+            )
+        else:
+            logger.warning(
+                "[MEDIA_EVENT][DEGRADED] observation failed provider=%s detail=%s",
+                self._provider,
+                detail,
+            )
+
+    def _handle_dirty_edge(self, reason: str, owner_generation: int) -> None:
+        """Coalesce one native dirty edge into the single shared refresh path."""
+
         if self._retired or not self._running:
             return
-        self._is_idle = False
+        if owner_generation != self._owner_generation:
+            self._stale_event_rejections += 1
+            return
+        self._event_counts[reason] = self._event_counts.get(reason, 0) + 1
+        if not self._event_observation_active:
+            # A real edge proves observation is live even before the establishment
+            # callback lands.
+            self._event_observation_active = True
+            self._event_observation_degraded = False
+        if reason == "timeline":
+            now = time.monotonic()
+            elapsed_ms = (now - self._last_timeline_refresh_monotonic) * 1000.0
+            if elapsed_ms < self._TIMELINE_COALESCE_MS:
+                self._schedule_timeline_flush(self._TIMELINE_COALESCE_MS - elapsed_ms)
+                return
+            self._last_timeline_refresh_monotonic = now
+        self._launch_dirty_refresh()
+
+    def _launch_dirty_refresh(self) -> None:
+        if self._refresh_in_flight:
+            if self._event_refresh_pending:
+                # Already one pending edge: collapse this one into it.
+                self._dirty_coalesced += 1
+            else:
+                self._event_refresh_pending = True
+            return
+        self.refresh(bust_cache=True, reason="event")
+
+    def _schedule_timeline_flush(self, delay_ms: float) -> None:
+        if self._timeline_flush_scheduled:
+            self._dirty_coalesced += 1
+            return
+        self._timeline_flush_scheduled = True
+        self._timeline_flush_token += 1
+        token = self._timeline_flush_token
+        runtime_generation = self._runtime_generation
+        owner_ref = weakref.ref(self)
+
+        def _flush() -> None:
+            owner = owner_ref()
+            if owner is None:
+                return
+            if (
+                owner._retired
+                or not owner._running
+                or token != owner._timeline_flush_token
+            ):
+                return
+            owner._timeline_flush_scheduled = False
+            owner._last_timeline_refresh_monotonic = time.monotonic()
+            owner._launch_dirty_refresh()
+
+        _flush._srpss_runtime_generation = runtime_generation
+        ThreadManager.single_shot(max(1, int(delay_ms)), _flush)
+
+    def _reconcile(self) -> None:
+        """Deep-idle-scale watchdog: reconcile and detect dropped native events."""
+
+        if self._retired or not self._running:
+            return
+        self.refresh(bust_cache=True, reason="reconcile")
+
+    def wake_from_idle(self) -> None:
+        """Force one prompt reconcile refresh (external wake / interaction)."""
+
+        if self._retired or not self._running:
+            return
         self._consecutive_none_count = 0
-        self._reset_poll_stage()
-        self.refresh(bust_cache=True)
+        self.refresh(bust_cache=True, reason="wake")
+
+    def _log_event_summary(self) -> None:
+        logger.info(
+            "[MEDIA_EVENT] summary provider=%s events=%s coalesced=%d refreshes=%s "
+            "stale_rejected=%d missed=%d degraded=%s",
+            self._provider,
+            dict(self._event_counts),
+            self._dirty_coalesced,
+            dict(self._refresh_source_counts),
+            self._stale_event_rejections,
+            self._missed_event_count,
+            self._event_observation_degraded,
+        )
+
+    @staticmethod
+    def _state_fingerprint(
+        info: MediaTrackInfo | None,
+        artwork_key: tuple[int, str],
+    ) -> tuple[Any, ...]:
+        """Non-position identity used to spot a reconcile-discovered missed event."""
+
+        if info is None:
+            return (None, None, None, None, artwork_key)
+        return (
+            _normalize_metadata(info.title),
+            _normalize_metadata(info.artist),
+            _normalize_metadata(info.album),
+            info.state,
+            artwork_key,
+        )
 
     def _clear_query_cache(self) -> None:
         self._query_cache_info = None
         self._query_cache_ts = 0.0
 
-    def refresh(self, *, bust_cache: bool = False) -> bool:
+    def refresh(self, *, bust_cache: bool = False, reason: str = "event") -> bool:
         if self._retired or not self._running or not self._active_leases:
             return False
         if bust_cache:
@@ -795,6 +1002,7 @@ class _SharedMediaRuntimeOwner:
                 probed_failover=allow_failover,
                 worker_started=worker_started,
                 worker_finished=time.monotonic(),
+                reason=reason,
             )
 
         _do_query._srpss_runtime_generation = runtime_generation
@@ -815,14 +1023,23 @@ class _SharedMediaRuntimeOwner:
                 finally:
                     if owner._refresh_in_flight_request == request_id:
                         owner._refresh_in_flight = False
+                        # One pending dirty edge may launch one further refresh.
+                        # Command confirmations take precedence over event edges.
                         if owner._command_refresh_pending:
                             owner._command_refresh_pending = False
-                            owner.refresh(bust_cache=True)
+                            owner._event_refresh_pending = False
+                            owner.refresh(bust_cache=True, reason="command")
+                        elif owner._event_refresh_pending:
+                            owner._event_refresh_pending = False
+                            owner.refresh(bust_cache=True, reason="event")
 
             _deliver._srpss_runtime_generation = runtime_generation
             ThreadManager.run_on_ui_thread(_deliver)
 
         _on_result._srpss_runtime_generation = runtime_generation
+        self._refresh_source_counts[reason] = (
+            self._refresh_source_counts.get(reason, 0) + 1
+        )
         try:
             tm.submit_io_task(
                 _do_query,
@@ -856,6 +1073,7 @@ class _SharedMediaRuntimeOwner:
     def _commit_query(self, result: Any) -> None:
         if not isinstance(result, _MediaQueryResult) or not self._query_is_current(result):
             return
+        prior_fingerprint = self._state_fingerprint(self._current_info, self._artwork.key)
         info = self._reconcile_playback_epoch(result.info, result.playback_epoch)
         info = _coalesce_partial_metadata(info, self._current_info)
         if result.probed_failover:
@@ -892,6 +1110,17 @@ class _SharedMediaRuntimeOwner:
             else "",
         )
         self._publish(display_info)
+        if result.reason == "reconcile":
+            new_fingerprint = self._state_fingerprint(display_info, self._artwork.key)
+            if new_fingerprint != prior_fingerprint:
+                self._missed_event_count += 1
+                logger.warning(
+                    "[MEDIA_EVENT][MISSED_EVENT] reconcile watchdog found a "
+                    "non-position change no native event delivered provider=%s "
+                    "missed_total=%d",
+                    self._provider,
+                    self._missed_event_count,
+                )
         if is_perf_metrics_enabled():
             worker_ms = max(
                 0.0,
@@ -917,20 +1146,13 @@ class _SharedMediaRuntimeOwner:
 
     def _accept_info(self, info: MediaTrackInfo | None) -> MediaTrackInfo | None:
         if info is not None:
-            had_missing_session = self._consecutive_none_count > 0 or self._is_idle
+            had_missing_session = self._consecutive_none_count > 0
             cache_retained_display_info(self._runtime_state, info)
             self._consecutive_none_count = 0
-            was_idle = self._is_idle
-            self._is_idle = False
             if had_missing_session:
-                # Preserve the legacy grace contract: activation/recovery opens
-                # a grace window; every routine successful poll does not.
+                # Recovery from a missing-session gap reopens the activation grace
+                # window; a routine successful event does not.
                 self._activation_time = time.monotonic()
-            if was_idle:
-                self._reset_poll_stage()
-            self._polls_at_current_stage += 1
-            if self._polls_at_current_stage >= 2:
-                self._advance_poll_stage()
             return info
 
         if (
@@ -939,27 +1161,13 @@ class _SharedMediaRuntimeOwner:
         ):
             return build_retained_display_info(self._runtime_state)
 
+        # Missing session: retain the last accepted snapshot. Event-driven
+        # observation means there is no idle poll cadence to slow down - the
+        # absence of native events is itself the idle state, and the reconcile
+        # watchdog remains the only (deep-idle-scale) query.
         self._consecutive_none_count += 1
         note_missing_session(self._runtime_state)
-        if self._consecutive_none_count >= self._idle_threshold and not self._is_idle:
-            self._is_idle = True
-            self._update_app_process_state()
-            self._ensure_timer(force=True)
-        elif self._is_idle and self._consecutive_none_count % 6 == 0:
-            previous = self._app_process_running
-            self._update_app_process_state()
-            if previous != self._app_process_running:
-                self._ensure_timer(force=True)
         return build_retained_display_info(self._runtime_state)
-
-    def _update_app_process_state(self) -> None:
-        controller = self._controller
-        try:
-            self._app_process_running = bool(
-                controller is not None and controller.is_app_process_running()
-            )
-        except Exception:
-            self._app_process_running = False
 
     def _accept_artwork(
         self,
@@ -1028,7 +1236,7 @@ class _SharedMediaRuntimeOwner:
         if self._refresh_in_flight:
             self._command_refresh_pending = True
         else:
-            self.refresh(bust_cache=True)
+            self.refresh(bust_cache=True, reason="command")
 
     def _begin_playback_confirmation(self, state: MediaPlaybackState) -> None:
         self._reset_playback_confirmation()
@@ -1178,7 +1386,10 @@ class _SharedMediaRuntimeOwner:
     def stop(self) -> None:
         if self._retired:
             return
+        # Teardown order: close event admission, detach native subscriptions,
+        # fence queued deliveries, then stop the reconcile heartbeat.
         self._running = False
+        self._stop_event_observation()
         # Retain accepted data for the first fresh post-restart reconciliation,
         # but never replay it merely because a new activation began. This
         # preserves the legacy stop/start cache-retirement contract.
@@ -1188,7 +1399,10 @@ class _SharedMediaRuntimeOwner:
         self._refresh_in_flight = False
         self._refresh_in_flight_request = self._request_id
         self._command_refresh_pending = False
-        self._stop_timer()
+        self._event_refresh_pending = False
+        self._timeline_flush_scheduled = False
+        self._timeline_flush_token += 1
+        self._stop_reconcile_timer()
         self._reset_playback_confirmation()
         self._clear_query_cache()
 
