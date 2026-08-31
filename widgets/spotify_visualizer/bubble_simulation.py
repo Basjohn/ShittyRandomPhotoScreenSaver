@@ -1404,8 +1404,13 @@ class BubbleSimulation:
                 # Swirl: spawn near the logical-world centre so bubbles spiral out
                 _angle = random.uniform(0.0, math.tau)
                 _spawn_r = random.uniform(0.02, 0.10)
-                base_x = self._domain_w / 2.0 + math.cos(_angle) * _spawn_r
-                base_y = self._domain_h / 2.0 + math.sin(_angle) * _spawn_r
+                _spawn_dx = math.cos(_angle) * _spawn_r
+                _spawn_dy = math.sin(_angle) * _spawn_r
+                if not baseline_motion_domain:
+                    _spawn_dx *= self._domain_w
+                    _spawn_dy *= self._domain_h
+                base_x = self._domain_w / 2.0 + _spawn_dx
+                base_y = self._domain_h / 2.0 + _spawn_dy
             else:
                 base_x, base_y = _directional_entry_position(
                     stream_dir,
@@ -1445,8 +1450,13 @@ class BubbleSimulation:
             # Swirl: spawn near the logical-world centre so bubbles spiral out.
             angle = random.uniform(0.0, math.tau)
             spawn_r = random.uniform(0.02, 0.10)
-            x = self._domain_w / 2.0 + math.cos(angle) * spawn_r
-            y = self._domain_h / 2.0 + math.sin(angle) * spawn_r
+            spawn_dx = math.cos(angle) * spawn_r
+            spawn_dy = math.sin(angle) * spawn_r
+            if not self._is_baseline_domain():
+                spawn_dx *= self._domain_w
+                spawn_dy *= self._domain_h
+            x = self._domain_w / 2.0 + spawn_dx
+            y = self._domain_h / 2.0 + spawn_dy
         else:
             x, y = _directional_entry_position(
                 stream_dir,
@@ -2505,8 +2515,17 @@ class BubbleSimulation:
         radial push so the Stream Reactivity slider works in swirl mode.
         """
         # Vector from the logical-world centre in screen space (0,0 = top-left).
-        sx = bubble.x - self._domain_w / 2.0
-        sy = bubble.y - self._domain_h / 2.0
+        # Swirl direction and force are authored in renderer-content space; if
+        # the expanded world vector is normalized directly, a wide/tall domain
+        # changes its tangent and radial geometry before the outer movement
+        # projection even runs. Preserve the exact canonical arithmetic and
+        # remove independent domain axes only on the nonbaseline path.
+        if self._is_baseline_domain():
+            sx = bubble.x - 0.5
+            sy = bubble.y - 0.5
+        else:
+            sx = bubble.x / self._domain_w - 0.5
+            sy = bubble.y / self._domain_h - 0.5
 
         # Flip to math-Y-up for rotation math.
         mx =  sx
