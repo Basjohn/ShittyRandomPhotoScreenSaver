@@ -36,6 +36,8 @@ class QuickBubbleLayout:
     visual_scale: float
     trail_axis_scale: tuple[float, float]
     trail_radial_scale: float
+    head_radial_scale: float
+    large_viewport_stroke_bonus_px: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,12 +81,31 @@ def compute_quick_bubble_layout(
     # fields on a tall edge-resized viewport.  Uniform whole-card scale is
     # intentionally independent and continues to scale the finished effect.
     trail_radial_scale = min(1.0, baseline[1] / extent[1])
+
+    # Head radius remains height-normalized through ordinary CUSTOM sizes, but
+    # a very tall viewport can otherwise turn a full-expansion Bubble into a
+    # physically enormous disk. Preserve the accepted normal/medium behavior
+    # and only compress the extreme tail: above 1.75x authored height, cap the
+    # head's physical growth at that footprint. This is presentation-only and
+    # adds no simulation work or extra render pass.
+    vertical_scale = extent[1] / baseline[1]
+    head_radial_scale = min(1.0, 1.75 / max(1.0, vertical_scale))
+
+    # The same extreme-size presentation benefits from a slightly firmer edge.
+    # Ramp to one authored pixel rather than branching the simulation or adding
+    # geometry. At normal sizes this is exactly zero.
+    large_viewport_stroke_bonus_px = max(
+        0.0,
+        min(1.0, (vertical_scale - 1.75) / 0.75),
+    )
     return QuickBubbleLayout(
         content_rect=content,  # type: ignore[arg-type]
         aspect_ratio=content[2] / content[3],
         visual_scale=scale,
         trail_axis_scale=trail_axis_scale,
         trail_radial_scale=trail_radial_scale,
+        head_radial_scale=head_radial_scale,
+        large_viewport_stroke_bonus_px=large_viewport_stroke_bonus_px,
     )
 
 
@@ -234,6 +255,11 @@ class QuickBubbleRenderer:
         gl.glUniform1f(uniforms["u_tail_opacity"], tail_opacity)
         gl.glUniform2f(uniforms["u_trail_axis_scale"], *layout.trail_axis_scale)
         gl.glUniform1f(uniforms["u_trail_radial_scale"], layout.trail_radial_scale)
+        gl.glUniform1f(uniforms["u_head_radial_scale"], layout.head_radial_scale)
+        gl.glUniform1f(
+            uniforms["u_large_viewport_stroke_bonus_px"],
+            layout.large_viewport_stroke_bonus_px,
+        )
 
         specular_direction = get_bubble_specular_shader_vector(
             str(parameter(parameters, "bubble_specular_direction", "top_left"))
@@ -343,6 +369,8 @@ class QuickBubbleRenderer:
                 "u_tail_opacity",
                 "u_trail_axis_scale",
                 "u_trail_radial_scale",
+                "u_head_radial_scale",
+                "u_large_viewport_stroke_bonus_px",
                 "u_specular_dir",
                 "u_gradient_dir",
                 "u_gradient_mode",

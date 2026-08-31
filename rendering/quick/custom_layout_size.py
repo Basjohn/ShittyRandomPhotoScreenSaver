@@ -18,10 +18,23 @@ from rendering.widget_descriptors import WidgetRuntimeDescriptor
 # baseline-preferred ratio - so they carry NO per-value size payload. Font and
 # other authored sizes stay Settings-owned; nothing Settings-like is mutated or
 # persisted by a temporary CUSTOM resize. Families that still project a handful
-# of family values (clock/weather/gmail/steam) are deliberately left on their
-# existing payload path and audited to remain unaffected by this shared change.
+# of family values (clock/weather/steam) remain on their existing payload path;
+# Gmail joins Reddit/Media because fixed header/row minima must scale with the
+# whole retained card rather than diverge from the outer geometry.
+CUSTOM_LAYOUT_MIN_RESIZE_SCALE = 0.40
+CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY = "_custom_resize_scale"
+_PAYLOAD_MINIMUMS: dict[str, int] = {
+    "font_size": 8,
+    "icon_size": 12,
+    "detail_icon_size": 8,
+    "artwork_size": 48,
+    "square_artwork_size": 48,
+    "capsule_font_size": 8,
+}
+
+
 UNIFORM_TRANSFORM_RESIZE_MODES: frozenset[str] = frozenset(
-    {"reddit_font", "media_scale"}
+    {"reddit_font", "media_scale", "gmail_font"}
 )
 
 
@@ -49,8 +62,6 @@ def capture_quick_size_payload(
             "icon_size": int(getattr(config, "icon_size", 32)),
             "detail_icon_size": int(getattr(config, "detail_icon_size", 16)),
         }
-    if mode == "gmail_font":
-        return {"font_size": int(getattr(config, "font_size", 14))}
     if mode == "steam_card_scale":
         payload = {"font_size": int(getattr(config, "font_size", 14))}
         if hasattr(config, "square_artwork_size"):
@@ -76,14 +87,6 @@ def scale_quick_size_payload(
         # The whole-widget scale lives in the geometry (outer rect / baseline
         # preferred), not in any per-value payload; keep the payload geometric.
         return dict(baseline)
-    minimums = {
-        "font_size": 8,
-        "icon_size": 12,
-        "detail_icon_size": 8,
-        "artwork_size": 48,
-        "square_artwork_size": 48,
-        "capsule_font_size": 8,
-    }
     if mode == "visualizer_rect":
         payload = dict(baseline)
         payload["width"] = max(
@@ -94,10 +97,37 @@ def scale_quick_size_payload(
         )
         return payload
     return {
-        key: max(minimums.get(key, 1), int(round(float(value) * scale)))
+        key: max(_PAYLOAD_MINIMUMS.get(key, 1), int(round(float(value) * scale)))
         for key, value in baseline.items()
         if isinstance(value, (int, float))
     }
+
+
+def quick_custom_payload_minimum_scale(
+    descriptor: WidgetRuntimeDescriptor,
+    baseline: Mapping[str, Any],
+) -> float:
+    """Return the safe relative floor for legacy per-value resize payloads.
+
+    The shared ordinary-widget floor is 40%, but a legacy family must stop
+    earlier when one of its authored values would hit an existing hard minimum.
+    Continuing to shrink the shell after that point is exactly how fixed content
+    can escape or visually distort. Uniform-transform families do not need this
+    because their whole retained presentation scales together.
+    """
+    mode = descriptor.custom_layout_resize_mode
+    if is_uniform_transform_resize_mode(mode) or mode == "visualizer_rect":
+        return 0.0
+    floor = 0.0
+    for key, value in baseline.items():
+        minimum = _PAYLOAD_MINIMUMS.get(key)
+        if minimum is None or isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        numeric = float(value)
+        if numeric <= 0.0:
+            continue
+        floor = max(floor, float(minimum) / numeric)
+    return max(0.0, floor)
 
 
 def quick_custom_minimum_size(item: CustomLayoutSessionItem) -> QSize:
@@ -107,9 +137,12 @@ def quick_custom_minimum_size(item: CustomLayoutSessionItem) -> QSize:
 
 
 __all__ = [
+    "CUSTOM_LAYOUT_MIN_RESIZE_SCALE",
+    "CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY",
     "UNIFORM_TRANSFORM_RESIZE_MODES",
     "capture_quick_size_payload",
     "is_uniform_transform_resize_mode",
     "quick_custom_minimum_size",
+    "quick_custom_payload_minimum_scale",
     "scale_quick_size_payload",
 ]

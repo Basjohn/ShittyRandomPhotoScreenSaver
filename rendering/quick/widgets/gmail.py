@@ -820,8 +820,10 @@ class RetainedGmailPresentation:
         self,
         payload: Mapping[str, object],
     ) -> None:
-        font_size = int(payload.get("font_size", self._model.config.font_size))
-        self._model.apply_config(replace(self._model.config, font_size=font_size))
+        # Gmail now uses one retained whole-card CUSTOM transform.  Ignore stale
+        # pre-migration ``font_size`` payloads so authored Settings remain the
+        # baseline and saved geometry alone determines visible scale.
+        del payload
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

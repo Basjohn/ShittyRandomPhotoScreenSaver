@@ -83,6 +83,11 @@ class CustomLayoutSessionItem:
     current_enabled: bool
     is_duplicate: bool = False
     resize_capable: bool = False
+    # Absolute CUSTOM resize scale at admission.  Unlike the mutable working
+    # scale below, this survives Save -> recreation -> re-entry via persisted
+    # layout metadata, so the shared minimum cannot compound on an already
+    # shrunken rectangle.
+    baseline_resize_scale: float = 1.0
     resize_scale: float = 1.0
     removed: bool = False
     current_display_identity: str = ""
@@ -107,7 +112,12 @@ class CustomLayoutSessionItem:
         self.current_enabled = bool(self.current_enabled)
         self.is_duplicate = bool(self.is_duplicate)
         self.resize_capable = bool(self.resize_capable)
+        self.baseline_resize_scale = float(self.baseline_resize_scale)
+        if not self.baseline_resize_scale > 0.0:
+            self.baseline_resize_scale = 1.0
         self.resize_scale = float(self.resize_scale)
+        if not self.resize_scale > 0.0:
+            self.resize_scale = self.baseline_resize_scale
         self.removed = bool(self.removed)
         self.viewport_resize_capable = bool(self.viewport_resize_capable)
         self.baseline_viewport_extent = normalize_viewport_extent(
@@ -188,7 +198,7 @@ class CustomLayoutSessionItem:
         self.current_global_rect = QRect(self.baseline_global_rect)
         self.current_size_payload = dict(self.baseline_size_payload)
         self.current_enabled = self.baseline_enabled
-        self.resize_scale = 1.0
+        self.resize_scale = self.baseline_resize_scale
         self.current_viewport_extent = self.baseline_viewport_extent
         self.removed = False
 
