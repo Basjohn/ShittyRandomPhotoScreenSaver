@@ -1,8 +1,10 @@
 # H5c Performance / Pointer / Wake / Readiness Checkpoint — R5 (Outside Codex)
 
 Date: 2026-08-31  
-Status: **IMPLEMENTED / SOURCE-ONLY GREEN / AWAITING PHYSICAL VALIDATION**  
+Status: **SUPERSEDED. R5 HALO PERFORMANCE PHYSICALLY REJECTED; selected Bubble/prefetch findings carried forward by later checkpoints.**  
 Authority: `Current_Plan.md` owns sequence. This document records the bounded R5 repair slice and its falsifiers.
+
+> **SUPERSEDED CHECKPOINT / PROVENANCE ONLY.** Do not use this file as live repair or status authority. `Current_Plan.md` owns sequence; R6 native-`QCursor` Halo and R7 image/prefetch/seam work supersede the pointer/image-pipeline portions. Preserve only findings explicitly carried forward by current living docs.
 
 ## 1. Evidence admitted from the post-R4 run
 

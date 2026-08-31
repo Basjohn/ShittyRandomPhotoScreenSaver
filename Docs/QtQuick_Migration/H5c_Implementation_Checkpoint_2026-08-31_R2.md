@@ -5,6 +5,8 @@ Behavioral oracle: `3fe5df687387b6b6a121142372c43a7719442386`
 Input physical trace: post-R1 source-mode logs supplied 2026-08-31  
 Execution authority: `Current_Plan.md`
 
+> **SUPERSEDED CHECKPOINT / PROVENANCE ONLY.** Do not use this file as live repair or status authority. `Current_Plan.md` owns sequence; R6 native-`QCursor` Halo and R7 image/prefetch/seam work supersede the pointer/image-pipeline portions. Preserve only findings explicitly carried forward by current living docs.
+
 ## 1. Purpose
 
 This checkpoint follows the first preset/source ownership repair and is deliberately a new safety point before another physical run. It does **not** declare H5c complete. It contains only repairs justified by historical source comparison plus the first post-repair physical trace, and bounded diagnostics needed to classify the remaining seams.

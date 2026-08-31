@@ -5,6 +5,11 @@ Historical behavioral oracle: `3fe5df687387b6b6a121142372c43a7719442386`
 Current evidence tree: user-supplied current worktree ZIP, 2026-08-31  
 Execution authority: `Current_Plan.md`
 
+**Checkpoint-count note:** any `84/84`, `116/116`, `122/122` or similar suite counts in this file are evidence for the named historical checkpoint only. They are not the current maintained-profile total; `Docs/TestSuite.md` owns current test inventory/drift.
+
+**Live-status warning:** this decomposition contains staged R1-R5 evidence and old "next action" labels. Do not execute those labels as current sequence. R6 physically accepted the native-cursor performance boundary, R7 owns the current image/prefetch/seam repair, and `Current_Plan.md` names the still-open H5c/GC/transition items. Historical rows remain useful for source trails only.
+
+
 ## 0. Purpose and non-negotiable premise
 
 This audit exists because the visualizer was already behaviorally correct before the Qt Quick migration. The migration target was **performance and presentation architecture**, not a redesign of audio response, mode shaping, beat semantics, idle motion, or preset behavior.

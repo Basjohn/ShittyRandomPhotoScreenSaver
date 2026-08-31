@@ -48,7 +48,7 @@ For a vision-capable agent this paired-image reconciliation is an **early mandat
 | Reddit | `Ideal (PreMigration)/Reddit.png` | `Current (PostMigration)/RedLogoAlignmentRefreshwrongUglyGapBetweenTimeAndPost.png` |
 | Weather | `Ideal (PreMigration)/Weather.png` | `Current (PostMigration)/Weatherpoorpaddingandspacing.png` |
 
-Explicit operator decisions may preserve a newer treatment that is preferred even when it differs from the old image (for example the current Media transport/control strip). That exception must be explicit; an implementation agent must not replace the pictured target with its own aesthetic judgement.
+Explicit operator decisions may preserve a newer treatment that is preferred even when it differs from the old image. **Current explicit Media exception: the post-migration transport/control bar is the only current Media visual treatment presently judged superior to the old implementation. Preserve that strip; default the rest of Media back to the Ideal image unless a later operator decision names another exception.** Exceptions must be explicit; an implementation agent must not infer them from the Current screenshot or replace the pictured target with its own aesthetic judgement.
 
 ### 2.2 Current explicit operator observations
 
@@ -143,6 +143,7 @@ Examples:
 - artwork size and chrome balance;
 - clipping/elision;
 - border/radius/header alignment;
+- logo + header-name scaling with the card/widget (current ordinary-family headers are effectively fixed-size while cards scale);
 - black flash/flicker;
 - gentle reveal;
 - submenu feel;
@@ -247,7 +248,7 @@ Floor:
 
 Plus:
 
-- choose the cleaner current treatment where one family demonstrably improved.
+- preserve a current treatment over the Ideal oracle only when the operator explicitly identifies it as better. At present the named Media exception is the transport/control bar only.
 
 ### Steam cards / Achievement Pulse
 
@@ -299,13 +300,14 @@ Parity+ is not pixel-only. A physically good-looking run with unexplained Qt/QML
 
 When a J cell is unclear:
 
-1. inspect the release screenshot first;
-2. inspect `15099d3` for the old behavior/value/layout rule if needed;
-3. for visualizer reactivity, compare directly against the known-good `3fe5df6` tree; for unrelated UI archaeology, use whichever historical source best exposes the successful behavior;
-4. write down the **user-visible invariant** in neutral language;
-5. implement that invariant through current Quick owners;
-6. compare physical output against the reference;
-7. preserve any current treatment explicitly accepted as better.
+1. for a covered ordinary family, inspect the paired `Ideal (PreMigration)` / `Current (PostMigration)` image first;
+2. use release screenshots only for broader composition/relationships the paired crop does not show;
+3. inspect `15099d3` for the old behavior/value/layout rule if needed;
+4. for visualizer reactivity, compare directly against the known-good `3fe5df6` tree; for unrelated UI archaeology, use whichever historical source best exposes the successful behavior;
+5. write down the **user-visible invariant** in neutral language;
+6. implement that invariant through current Quick owners;
+7. compare physical output against the reference;
+8. preserve any current treatment explicitly accepted as better.
 
 Do not copy old classes wholesale and “port them later.”
 

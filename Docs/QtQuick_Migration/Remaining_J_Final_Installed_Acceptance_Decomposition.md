@@ -1,6 +1,6 @@
 # Remaining J — Final Installed / Physical Acceptance Decomposition
 
-Status: **future acceptance phase; execute only after H production cutover and I caller-proven residue cleanup are GREEN**  
+Status: **future acceptance phase; the H production cutover is already complete. Execute final J closure after the remaining post-cutover H gates re-close and I caller-proven residue cleanup is GREEN. Vision-capable agents may prepare/front-load the mandatory image-oracle parity tranche, but may not use J to hide an H correctness failure.**  
 Work admission: `Current_Plan.md`  
 Validation shape: `Docs/QtQuick_Migration/06_Build_Tooling_Validation.md`  
 Test ownership/retirement: `Docs/TestSuite.md`
@@ -50,9 +50,11 @@ When the acting model/agent has reliable image inspection, front-load the family
 
 A model with weak/unreliable vision may **briefly defer** the eyes-on implementation to a vision-capable pass, but may not replace the oracle with prose, tests or aesthetic invention and may not close J without it. The same early parity tranche includes restoring the **missing CUSTOM/Edit alignment/snap guide lines** (centre/peer/edge/safe-gutter relationships) through the existing Python snap/layout authority.
 
+**Current explicit Media exception:** preserve the post-migration transport/control bar; it is the only current Media visual treatment presently judged superior to the old implementation. Do not infer other exceptions from the Current Media screenshot. **Cross-family header parity is also mandatory:** logo + family/provider name must align and scale with the card/widget as one authored relationship; the current effectively fixed-size headers are a J regression.
+
 ### Why I has no standing prewritten decomposition
 
-Phase I is intentionally source-driven residue cleanup. Its exact deletion list cannot be known safely until H has changed
+Phase I is intentionally source-driven residue cleanup. Its exact deletion list must be derived from the exact source after H re-closes; it is not safely predeclared here even though the production cutover has already changed
 the production caller graph. At I entry:
 
 1. inspect exact post-H source/callers;

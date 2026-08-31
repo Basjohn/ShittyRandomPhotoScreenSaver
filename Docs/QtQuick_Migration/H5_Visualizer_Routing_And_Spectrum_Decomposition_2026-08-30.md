@@ -5,6 +5,8 @@ Starting source: `af8896b52fbee153fe1cd0b627a55455c14625d1`
 
 This decomposition covers two independent functional Visualizer regressions. Keep them separate in implementation and testing.
 
+**Status authority:** `Current_Plan.md` owns live H5a/H5b closure. The source repairs and historical test counts in this file are evidence, not permission to rerun old repair sequences or retune already-accepted Spectrum behavior. In particular, do not use stale count claims as the current maintained-profile result.
+
 ## Part A — CUSTOM cross-display admission
 
 ### Product contract

@@ -4,6 +4,8 @@ Outside of Codex Work Began @ `61decb33f6ebb107b2997928077e9d56d5faa8a1`
 
 This checkpoint continues from the operator-supplied real-tree ZIP after Codex Sol Ultra quota exhaustion. The ZIP contains source and tools but no `.git`, no complete maintained `tests/` tree, and this execution environment has no PySide6. Treat the focused source-only tests below as supplemental; the normal project test profile and physical Windows/Qt Quick run remain required.
 
+> **SUPERSEDED CHECKPOINT / PROVENANCE ONLY.** Do not use this file as live repair or status authority. `Current_Plan.md` owns sequence; R6 native-`QCursor` Halo and R7 image/prefetch/seam work supersede the pointer/image-pipeline portions. Preserve only findings explicitly carried forward by current living docs.
+
 ## Applied / deterministic GREEN
 
 - [x] Bubble rebound impulse: canonical/wide/tall falsifier proved `1 / domain_axis` visible loss; impulse application now projects once into the expanded logical axis.
