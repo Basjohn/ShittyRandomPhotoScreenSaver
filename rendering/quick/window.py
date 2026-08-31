@@ -58,6 +58,7 @@ class QuickDisplayWindow(QQuickWindow):
         self._binding_loss: QuickDisplayBindingLoss | None = None
         self._input_controller: QuickInputController | None = None
         self._semantic_double_click_hit_test: Callable[[QPointF], bool] | None = None
+        self._semantic_middle_click_hit_test: Callable[[QPointF], bool] | None = None
         self._desired_visible = False
         self._close_queued = False
 
@@ -130,6 +131,12 @@ class QuickDisplayWindow(QQuickWindow):
         hit_test: Callable[[QPointF], bool] | None,
     ) -> None:
         self._semantic_double_click_hit_test = hit_test
+
+    def bind_semantic_middle_click_hit_test(
+        self,
+        hit_test: Callable[[QPointF], bool] | None,
+    ) -> None:
+        self._semantic_middle_click_hit_test = hit_test
 
     def show_on_screen(self) -> None:
         """Commit exact physical-screen placement before making the window visible."""
@@ -220,6 +227,11 @@ class QuickDisplayWindow(QQuickWindow):
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         self.pointer_position_changed.emit(event.position())
+        if event.button() == Qt.MouseButton.MiddleButton:
+            hit_test = self._semantic_middle_click_hit_test
+            if hit_test is not None and hit_test(event.position()):
+                event.accept()
+                return
         controller = self._input_controller
         if controller is not None and controller.handle_mouse_press(event):
             event.accept()

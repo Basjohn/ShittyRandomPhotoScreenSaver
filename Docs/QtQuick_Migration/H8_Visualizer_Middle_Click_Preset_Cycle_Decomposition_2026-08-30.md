@@ -1,6 +1,6 @@
 # H8 — Visualizer Middle-Click Preset Hotswap Decomposition — 2026-08-30
 
-Status: **PENDING H implementation. Source-proven product contract omission.**
+Status: **IMPLEMENTED / DETERMINISTIC GREEN. Physical H acceptance pending.**
 
 Sequence authority remains `Current_Plan.md`. This file owns only the bounded H8 technical route.
 
@@ -14,7 +14,7 @@ Historical evidence is unusually strong:
 - `Docs/Historical_Bugs/U-10_Oscilloscope_Strobe_Waveform_Ghost_Contract.md` records successful runtime validation during **middle-click preset cycling** and the sibling fix that narrowed persistence to `widgets.spotify_visualizer` so Media metadata was not erased.
 - `Docs/Historical_Bugs/A-04_MC_Keyboard_Focus_Ctrl_Halo_Archive.md` records display-root mouse forwarding as load-bearing for preset cycling.
 
-The current Quick migration contracts retained visualizer **double-click = cycle mode** but omitted the separate middle-click preset gesture. Current source likewise has no middle-button visualizer semantic admission. This specific feature is therefore a migration-contract omission as well as an implementation omission. Do not generalize that finding to every post-cutover defect without evidence.
+The Quick migration contracts retained visualizer **double-click = cycle mode** but originally omitted the separate middle-click preset gesture. H8 restores that interaction through the retained destination owners; this specific feature was a migration-contract omission. Do not generalize that finding to every post-cutover defect without evidence.
 
 Historical QWidget/`WidgetManager` code is an outcome oracle only. It must not return to production architecture.
 
@@ -47,23 +47,25 @@ return to Custom
 
 Curated preset application uses **replace semantics** for the mode payload so stale fields from the prior preset cannot leak into the target.
 
-## 3. Current source seam
+## 3. Landed source seam
 
-The missing route is bounded:
+The landed route is bounded:
 
 ```text
 Quick window mouse press
--> RuntimeInputController.handle_mouse_press()
-   currently has RightButton / LeftButton product handling only
-
-retained visualizer semantic admission
--> current dedicated path is double-click mode-cycle only
+-> QuickDisplayWindow middle-button semantic hit
+-> QuickSceneController retained Visualizer admission
+-> QuickVisualizerMiddleClickAdmission
 
 QuickDisplayVisualizerOwner.request_mode_change()
 -> intentionally rejects target == current mode
+
+QuickDisplayVisualizerOwner.request_preset_change()
+-> requires target == current mode
+-> drops requests while another activation is active
 ```
 
-Therefore preset hotswap must not be disguised as a mode switch.
+The generic runtime input owner remains presentation-neutral. Preset hotswap is not disguised as a mode switch.
 
 ## 4. Destination route
 
@@ -77,7 +79,7 @@ Quick window middle-button press
 -> same-mode retained visualizer activation transaction
 -> existing controller + one BeatEngine + one logical runtime + one retained presentation
 -> fresh target snapshot admitted
--> persist visualizer subtree
+-> atomically persist visualizer child + canonical Custom cache
 ```
 
 QML/Quick may identify the retained hit region. Python remains semantic/settings/activation authority. Do not add a second global mouse router.
@@ -101,16 +103,20 @@ VISUALIZER_CUSTOM_STORAGE_KEY
 Required write scope:
 
 ```text
-settings mutation/persistence -> widgets.spotify_visualizer only
+settings mutation/persistence
+-> widgets.spotify_visualizer child
+-> visualizer_custom_presets root
 ```
 
-Do not refresh/persist the whole `widgets` mapping. Historical U-10 evidence already shows why that broad write is unsafe for live Media metadata.
+The Custom cache is a required companion authority, not a broad widget refresh. Do not emit or refresh the whole `widgets` mapping. `SettingsManager.replace_visualizer_runtime_preset_state()` preserves every widget sibling and submits both visualizer mappings together; historical U-10 evidence already shows why a broad live refresh is unsafe for Media metadata.
+
+Schema v4 makes `visualizer_custom_presets` a structured JSON/SST root and migrates the shipped flat `bubble.<key>` form to `cache["bubble"][key]`. Valid nested snapshots win over flat duplicate material. If a mode has no snapshot yet, H8 seeds it from that mode's persisted raw section before the first curated replacement; malformed cache entries fail loudly before activation.
 
 If persistence is deferred/coalesced, it must remain non-blocking and generation-safe. The visible activation must not be declared successful merely because a settings write was queued.
 
 ## 6. Same-mode activation transaction
 
-The current cross-mode `request_mode_change()` correctly rejects same-mode targets. H8 needs a distinct bounded API such as `request_preset_change(...)` or a generalized retained activation transaction with an explicit same-mode/preset reason.
+The cross-mode `request_mode_change()` still rejects same-mode targets. H8's distinct `request_preset_change(...)` shares the already-fenced hidden activation transaction with an explicit preset reason and never calls `set_mode()`.
 
 The transaction must preserve:
 
@@ -124,11 +130,11 @@ The transaction must preserve:
 - existing retained fade/reveal semantics;
 - Bubble Temporal Fidelity and unrelated mode behavior.
 
-A preset request while another visualizer transition/activation is already active must be bounded: reject/drop/coalesce according to one explicit policy. It may not create overlapping activations.
+A preset request while another visualizer transition/activation is active is consumed at the semantic hit and dropped by the owner. It cannot create an overlapping activation.
 
-## 7. Deterministic tests required
+## 7. Deterministic evidence
 
-Add focused bars for:
+The focused H8 route passes `122/122` across the new resolver/admission bars plus affected Quick, Settings, transfer and SST suites. The maintained `h-destination` profile passes `84/84`. Together they prove:
 
 1. middle click inside the active retained visualizer is consumed and advances **one** preset;
 2. middle click outside the visualizer does nothing to preset/image/exit state;
@@ -136,10 +142,10 @@ Add focused bars for:
 4. last preset wraps to first;
 5. `Custom -> curated -> ... -> Custom` restores a semantically equivalent normalized Custom snapshot;
 6. curated target uses replace semantics and does not inherit stale prior-preset keys;
-7. only `widgets.spotify_visualizer` is mutated/persisted; Media metadata/config remains untouched;
+7. only the visualizer child and canonical Custom cache are mutated/persisted; Media metadata/config remains untouched;
 8. exactly one same-mode activation transaction occurs and no second owner/logical runtime/pacer is created;
-9. a request during active transition cannot overlap another activation;
-10. selected preset survives Settings recreation, CUSTOM Save/Continue recreation and restart/reload;
+9. a request during active transition cannot overlap another activation, and a replaced or retired owner cannot persist a stale completion;
+10. selected preset/cache survives structured JSON/SST restart/reload; physical Settings and CUSTOM recreation remain below;
 11. all five active visualizer modes can cycle their own preset table;
 12. the global visualizer double-click mode-cycle contract remains unchanged.
 
@@ -176,4 +182,4 @@ Do not:
 
 ## 10. Close condition
 
-H8 closes when deterministic tests and physical runtime prove the middle-click current-mode preset hotswap, Custom round-trip, narrow persistence and single-owner/single-activation invariants, while double-click mode cycling and unrelated input behavior remain intact.
+Deterministic implementation is complete. H8 closes only after the physical runtime gate proves visible one-step current-mode hotswap, Custom round-trip and Settings/CUSTOM/restart recreation while logs remain clean. Double-click mode cycling and unrelated input behavior are already deterministic GREEN.

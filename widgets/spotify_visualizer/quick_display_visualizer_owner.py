@@ -489,6 +489,55 @@ class QuickDisplayVisualizerOwner:
     ) -> bool:
         """Begin one retained crossfade into one canonical target activation."""
 
+        return self._request_visualizer_activation(
+            kind="mode",
+            target_mode=target_mode,
+            settings_model=settings_model,
+            resolved_activation=resolved_activation,
+            technical_cache=technical_cache,
+            logical_kwargs=logical_kwargs,
+            presentation_kwargs=presentation_kwargs,
+            on_complete=on_complete,
+        )
+
+    def request_preset_change(
+        self,
+        target_mode: str,
+        *,
+        settings_model: Any,
+        resolved_activation: Any,
+        technical_cache: Mapping[str, Mapping[str, Any]],
+        logical_kwargs: Mapping[str, Any],
+        presentation_kwargs: Mapping[str, Any],
+        on_complete: Callable[[str], None] | None = None,
+    ) -> bool:
+        """Begin one retained same-mode preset activation transaction."""
+
+        return self._request_visualizer_activation(
+            kind="preset",
+            target_mode=target_mode,
+            settings_model=settings_model,
+            resolved_activation=resolved_activation,
+            technical_cache=technical_cache,
+            logical_kwargs=logical_kwargs,
+            presentation_kwargs=presentation_kwargs,
+            on_complete=on_complete,
+        )
+
+    def _request_visualizer_activation(
+        self,
+        *,
+        kind: str,
+        target_mode: str,
+        settings_model: Any,
+        resolved_activation: Any,
+        technical_cache: Mapping[str, Mapping[str, Any]],
+        logical_kwargs: Mapping[str, Any],
+        presentation_kwargs: Mapping[str, Any],
+        on_complete: Callable[[str], None] | None,
+    ) -> bool:
+        """Admit one mode or preset activation into the shared transaction."""
+
         if self._retired or not self._started:
             return False
         from core.settings.visualizer_mode_registry import (
@@ -500,9 +549,17 @@ class QuickDisplayVisualizerOwner:
         target = coerce_visualizer_mode_id(requested)
         if target != requested or not is_mode_active(target):
             return False
-        if target == self._controller.mode_id or self._mode_transition_phase != "idle":
+        current = self._controller.mode_id
+        if kind == "mode":
+            target_is_valid = target != current
+        elif kind == "preset":
+            target_is_valid = target == current
+        else:
+            raise ValueError(f"unknown visualizer activation kind: {kind}")
+        if not target_is_valid or self._mode_transition_phase != "idle":
             return False
         self._pending_mode_activation = {
+            "kind": kind,
             "mode": target,
             "settings_model": settings_model,
             "resolved_activation": resolved_activation,
@@ -515,8 +572,9 @@ class QuickDisplayVisualizerOwner:
         self._mode_transition_started_at = float(self._transition_clock())
         self._mode_transition_fade = 1.0
         logger.info(
-            "[SPOTIFY_VIS] Quick mode switch requested %s -> %s",
-            self._controller.mode_id,
+            "[SPOTIFY_VIS] Quick %s activation requested %s -> %s",
+            kind,
+            current,
             target,
         )
         return True
@@ -531,7 +589,7 @@ class QuickDisplayVisualizerOwner:
         engine = controller.ensure_engine()
         if not controller.stop_logical_runtime():
             self._mode_transition_phase = "failed"
-            raise RuntimeError("visualizer logical runtime did not join for mode change")
+            raise RuntimeError("visualizer logical runtime did not join for activation")
 
         begin = getattr(engine, "begin_activation_transaction", None)
         end = getattr(engine, "end_activation_transaction", None)
@@ -540,13 +598,17 @@ class QuickDisplayVisualizerOwner:
             raise RuntimeError("visualizer BeatEngine has no activation transaction")
 
         target = str(pending["mode"])
+        kind = str(pending.get("kind") or "mode")
         try:
             begin()
         except Exception:
             self._mode_transition_phase = "failed"
             raise
         try:
-            controller.set_mode(target)
+            if kind == "mode":
+                controller.set_mode(target)
+            elif target != controller.mode_id:
+                raise RuntimeError("preset activation attempted to change visualizer mode")
             controller.settings_model = pending["settings_model"]
             controller.record_resolved_activation(pending["resolved_activation"])
             controller.technical_config_cache = dict(pending["technical_cache"])
@@ -557,7 +619,7 @@ class QuickDisplayVisualizerOwner:
                 thread_manager=controller.thread_manager,
                 process_supervisor=controller.process_supervisor,
                 playing=controller.playing,
-                reason="quick_owner_mode_change",
+                reason=f"quick_owner_{kind}_change",
             )
             cancel = getattr(engine, "cancel_pending_compute_tasks", None)
             reset_smoothing = getattr(engine, "reset_smoothing_state", None)
@@ -571,7 +633,7 @@ class QuickDisplayVisualizerOwner:
             self._mode_transition_phase = "failed"
             raise
         finally:
-            end(reason=f"quick_mode_change:{target}")
+            end(reason=f"quick_{kind}_change:{target}")
 
         try:
             generation = int(engine.get_generation_id())
@@ -594,7 +656,8 @@ class QuickDisplayVisualizerOwner:
         self._mode_transition_started_at = 0.0
         self._mode_transition_fade = 0.0
         logger.info(
-            "[SPOTIFY_VIS] Quick mode activation committed mode=%s generation=%s activation=%s",
+            "[SPOTIFY_VIS] Quick %s activation committed mode=%s generation=%s activation=%s",
+            kind,
             target,
             generation,
             activation_id,
@@ -659,6 +722,7 @@ class QuickDisplayVisualizerOwner:
             pacer.set_visualizer_active(False)
             pacer.set_visualizer_sync(None)
             self._runtime.scene_controller.set_visualizer_double_click_admission(None)
+            self._runtime.scene_controller.set_visualizer_middle_click_admission(None)
         joined = bool(self._controller.stop_logical_runtime())
         if not joined:
             return False

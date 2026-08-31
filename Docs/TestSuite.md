@@ -14,7 +14,7 @@ H3 Reddit production opener: implementation prepared; AWAITING TEST VALIDATION.
 H3b Clock runtime mode-toggle persistence: implementation prepared; AWAITING TEST VALIDATION.
 H4 Media command-result semantics: implemented / deterministic focused gates GREEN; physical Spotify gate pending.
 H5a route/owner/draw localization + cross-display Media-model binding repair: focused two-live-unit gate GREEN / physical confirmation pending. H6 exact-state Media CUSTOM lock source/runtime gate is GREEN (`126/126` Settings + descriptor suite); physical revalidation remains per Current_Plan.
-H8 Visualizer middle-click preset hotswap: pending; source-proven historical contract omitted from the current Quick interaction contract.
+H8 Visualizer middle-click preset hotswap: implemented / deterministic focused + maintained gates GREEN; physical cycling/recreation acceptance pending.
 Qt/QML observability: permanent always-on direct `screensaver_qml.log`; physical Quick gates inspect it alongside the Python log.
 I residue reconciliation: BLOCKED until H re-closes.
 ```
@@ -271,7 +271,7 @@ H4 Media Play/Pause + seek provider-result semantics: IMPLEMENTED / deterministi
 H5a CUSTOM Visualizer independent display admission: route/owner/draw exonerated; cross-display Media-model binding repair + focused two-live-unit gate GREEN / physical confirmation pending
 H5b Spectrum source/configuration/renderer-transfer parity: focused `10/10` + primary physical reactivity GREEN; topology/recreation/preset gate pending
 H6 CUSTOM Settings size-lock scope: source/runtime-shaped GREEN; physical revalidation pending
-H8 Visualizer middle-click preset hotswap: pending; requires retained middle-button admission + same-mode activation coverage
+H8 Visualizer middle-click preset hotswap: IMPLEMENTED / deterministic GREEN; physical cycling, Custom round-trip and recreation acceptance pending
 H7 exit visible-response/perf classification: pending / likely J if windows dismiss promptly
 ```
 
@@ -310,7 +310,7 @@ Current post-cutover focused additions:
 | `tests/test_qtquick_family_product_actions.py` | **ADDED — H3/H3b + PERMANENT PRODUCT SEMANTICS** | Pins Reddit saver-vs-interactive consequences and per-display Clock mode override persistence. Pure subset GREEN in handoff environment; production PySide composition still needs physical/runtime validation. |
 | `tests/test_settings_eventfilter_teardown_guards.py` | **CLOSED H1b / KEEP** | Late Settings helper events cannot dereference retired targets. |
 | `tests/test_visualizer_custom_route_contract.py` | **ADDED — PERMANENT H5a ROUTING/BINDING PIN** | Real manager admission over two live unit shells proves CUSTOM Visualizer owns its intentionally different monitor, non-CUSTOM follows Media, one bounded generation trace reports the exact route/outcome, and the sole owner can bind playback from the existing Media model on the other display without creating a Media copy. |
-| H8 focused runtime tests (to add with implementation) | **PENDING H CONTRACT** | Must pin middle-click hit consumption, one-step/wraparound, unchanged mode, Custom -> curated -> Custom exact restoration, subtree-only persistence, no Media mutation, one same-mode activation transaction, active-transition rejection, recreation/restart persistence, and all-five-mode coverage. |
+| `tests/test_qtquick_visualizer_middle_click.py` + `tests/test_visualizer_runtime_preset_cycle.py` + affected H/Settings suites | **ADDED — PERMANENT H8 CONTRACT / DETERMINISTIC GREEN** | Pins middle-click preemption, one-step/wraparound, unchanged mode, Custom round-trip, curated replace semantics, atomic narrow persistence with no Media mutation, one same-mode activation, overlap/stale-owner rejection, structured restart persistence and all-five-mode coverage. Physical interaction/recreation acceptance remains open. |
 | Media app-volume child presentation tests (to add with J implementation) | **PENDING J PARITY+ CONTRACT** | Pin separate retained child/item as the existing and unspecified default, integrated only by explicit option, Media-effective/provider-capability dependency, shared Media display route/lifecycle, own CUSTOM rect/size in Media's display bucket, and the existing Media presentation model plus one `MediaVolumeRuntimeService` lease/action seam across both variants. |
 | `tests/test_widget_descriptors.py` + `tests/test_widgets_tab.py` | **PERMANENT SETTINGS PIN / H6** | Media CUSTOM lock metadata and real Settings state: only font/artwork lock; progress/glow/volume/mute retain normal dependency truth. |
 
@@ -440,11 +440,12 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_family_binder.py` | **KEEP — MIGRATION PERMANENT / H** | Single-manager family admission/runtime service ownership, canonical per-instance monitor routing across logical displays, and retained host binding. |
 | `tests/test_qtquick_family_size_policy.py` | **KEEP — MIGRATION PERMANENT / H** | Historical deterministic family preferred-size policies under Option-A geometry. |
 | `tests/test_qtquick_geometry_resolver.py` | **KEEP — MIGRATION PERMANENT / H** | Python outer-rect/anchor/clamp authority; no QML outer-position feedback loop. |
-| `tests/test_qtquick_h_cutover.py` | **KEEP — MIGRATION PERMANENT / H** | H authority-cutover/cardinality/deletion bars, including Quick-only DisplayManager and engine caller source surfaces with no legacy presenter/CUSTOM compatibility branch, one canonical manager-admitted visualizer owner, retained menu/double-click mode actions, hidden-boundary hard join, exact-once engine activation transaction, fresh-target reveal and engine-retirement lifecycle. |
+| `tests/test_qtquick_h_cutover.py` | **KEEP — MIGRATION PERMANENT / H** | H authority-cutover/cardinality/deletion bars, including one canonical manager-admitted visualizer owner, retained menu/double-click mode actions, H8 middle-click same-mode preset transaction, overlap rejection, delayed narrow persistence, hidden-boundary hard join, fresh-target reveal and engine-retirement lifecycle. |
 | `tests/test_qtquick_overlay_preferred_size.py` | **KEEP — MIGRATION PERMANENT / H** | Size-only preferred-content signal contract used by Python geometry ownership, including terminal disconnection before retained-item retirement. |
 | `tests/test_qtquick_visualizer_admission.py` | **KEEP — MIGRATION PERMANENT / H** | Exactly one admitted Quick visualizer display owner with requested/hold/fallback policy. |
 | `tests/test_qtquick_visualizer_all_five_owner_chain.py` | **KEEP — MIGRATION PERMANENT / H** | Owner-shaped all-five widget-free destination chain. |
 | `tests/test_qtquick_visualizer_double_click.py` | **KEEP — MIGRATION PERMANENT / H** | Retained visualizer mode-cycle semantic admission before global next-image fallback. |
+| `tests/test_qtquick_visualizer_middle_click.py` | **KEEP — MIGRATION PERMANENT / H8** | Actual Quick-window middle-button preemption plus active/inside retained Visualizer preset-cycle admission with no neutral-input side effect. |
 | `tests/test_qtquick_visualizer_logical_ownership.py` | **KEEP — MIGRATION PERMANENT / H** | Controller-owned authored logical state/runtime ownership without QWidget host. |
 | `tests/test_qtquick_visualizer_owner_edge.py` | **KEEP — MIGRATION PERMANENT / H** | Thin display/generation visualizer ownership edge, single shared-engine acquire/release, hard retirement, and terminal callback release semantics. |
 | `tests/test_qtquick_visualizer_pre_cutover_audit.py` | **KEEP — MIGRATION PERMANENT / H** | Standing source/behavior regression bars from the H pre-cutover audit. |
@@ -459,6 +460,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_bubble_viewport_config_route.py` | **KEEP — MIGRATION PERMANENT / G4** | Live/coalesced viewport configuration route into each authored Bubble step; extend for committed-vs-CUSTOM override lifecycle. |
 | `tests/test_bubble_viewport_reflow.py` | **KEEP — MIGRATION PERMANENT / G4** | Baseline exact no-op plus wide/tall/shrink domain projection, authored-count invariance and no geometry-created tick. |
 | `tests/test_bubble_cadence.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
+| `tests/test_visualizer_runtime_preset_cycle.py` | **KEEP — MIGRATION PERMANENT / H8** | All-five same-mode wrap, curated replace semantics, lossless Custom round-trip, first-use snapshot seeding and flat-cache migration. |
 | `tests/test_bubble_reactivity.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract, including same-body consume-once transient stream/drift displacement with exact pulse/radius isolation; retain through cutover. |
 | `tests/test_bubble_renderer_transport.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_bubble_shader_compile.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
@@ -598,7 +600,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_settings_defaults_parity.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_settings_dialog.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_settings_dialog_cache.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_settings_manager.py` | **KEEP** | Retain; no migration-specific retirement identified. |
+| `tests/test_settings_manager.py` | **KEEP — PERMANENT SETTINGS / H8** | Core Settings behavior plus H8 schema-v4 flat-to-nested Custom-cache migration and atomic visualizer-child/cache persistence that survives disk reload without mutating Media siblings. |
 | `tests/test_settings_no_sources_popup.py` | **KEEP — PERMANENT** | Current shared `StyledPopup` no-source recovery routing + curated RSS action contract. |
 | `tests/test_settings_persistence.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_settings_profile_separation.py` | **KEEP** | Retain; no migration-specific retirement identified. |

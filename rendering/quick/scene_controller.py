@@ -75,6 +75,7 @@ class VisualizerSceneTransfer:
     presentation: ResolvedVisualizerPresentation
     active: bool
     double_click_admission: Any | None
+    middle_click_admission: Any | None
 
 
 class QuickSceneFactory(QObject):
@@ -281,6 +282,7 @@ class QuickSceneController(QObject):
         self._visualizer_item: VisualizerRenderItem | None = None
         self._visualizer_bridge: VisualizerSnapshotBridge | None = None
         self._visualizer_double_click_admission: Any | None = None
+        self._visualizer_middle_click_admission: Any | None = None
         self._visualizer_telemetry = VisualizerRenderNodeTelemetry()
         self._last_transition_run_id = 0
         # Bounded whole-surface diagnostics for black/test-frame/focus flashes.
@@ -324,6 +326,9 @@ class QuickSceneController(QObject):
         )
         window.bind_semantic_double_click_hit_test(
             self._semantic_double_click_hit_test
+        )
+        window.bind_semantic_middle_click_hit_test(
+            self._semantic_middle_click_hit_test
         )
         custom_layout_overlay_item = root.findChild(
             QQuickItem,
@@ -789,6 +794,21 @@ class QuickSceneController(QObject):
 
         self._visualizer_double_click_admission = admission
 
+    def _semantic_middle_click_hit_test(self, scene_position: Any) -> bool:
+        """Admit the Visualizer-only middle-click preset gesture."""
+
+        admission = self._visualizer_middle_click_admission
+        if admission is None:
+            return False
+        return bool(
+            admission.handles_semantic_middle_click_at(scene_position)
+        )
+
+    def set_visualizer_middle_click_admission(self, admission: Any | None) -> None:
+        """Register or clear the retained Visualizer preset-cycle admission."""
+
+        self._visualizer_middle_click_admission = admission
+
     def visualizer_contains_scene_position(self, scene_position: Any) -> bool:
         """Return whether the live retained visualizer owns this scene point."""
 
@@ -840,6 +860,7 @@ class QuickSceneController(QObject):
             presentation=presentation,
             active=bool(root.property("presentationActive")),
             double_click_admission=self._visualizer_double_click_admission,
+            middle_click_admission=self._visualizer_middle_click_admission,
         )
         root.setProperty("customLayoutWorkingVisible", False)
         root.setProperty("presentationActive", False)
@@ -854,6 +875,7 @@ class QuickSceneController(QObject):
         self._visualizer_root = None
         self._visualizer_bridge = None
         self._visualizer_double_click_admission = None
+        self._visualizer_middle_click_admission = None
         self._custom_layout_visualizer_baseline = None
         return transfer
 
@@ -877,6 +899,9 @@ class QuickSceneController(QObject):
         )
         self.set_visualizer_double_click_admission(
             transfer.double_click_admission
+        )
+        self.set_visualizer_middle_click_admission(
+            transfer.middle_click_admission
         )
 
     def _display_device_pixel_ratio(self) -> float:
@@ -1006,6 +1031,9 @@ class QuickSceneController(QObject):
         if not self._readiness.admission_open:
             return
         self._window.bind_semantic_double_click_hit_test(None)
+        self._window.bind_semantic_middle_click_hit_test(None)
+        self._visualizer_double_click_admission = None
+        self._visualizer_middle_click_admission = None
         self._publish_readiness(admission_open=False)
         if self._visualizer_item is not None:
             self._visualizer_item.clear_render_source()

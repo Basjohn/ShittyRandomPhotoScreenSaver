@@ -42,7 +42,7 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | H production cutover implementation route | `Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md` |
 | H post-cutover runtime corrections, including Media command outcomes | `Docs/QtQuick_Migration/H_Post_Cutover_Runtime_Reality_Corrections.md` |
 | H5 Visualizer CUSTOM routing and Spectrum correction route | `Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md` |
-| H8 retained visualizer middle-click preset hotswap | `Docs/QtQuick_Migration/H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md` |
+| H8 retained visualizer middle-click preset hotswap implementation/acceptance | `Docs/QtQuick_Migration/H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md` |
 | closed H visualizer edge audit evidence | `Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md` |
 | closed True-F technical/retained-consumer evidence | `Docs/QtQuick_Migration/H_True_F_Technical_Closure.md` |
 | J final installed/physical acceptance route | `Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md` |

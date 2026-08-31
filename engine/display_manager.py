@@ -6,6 +6,7 @@ Owns one authoritative Quick display unit for each selected screen.
 import os
 import time
 import weakref
+from copy import deepcopy
 from dataclasses import asdict
 from types import MappingProxyType, SimpleNamespace
 from typing import Any, List, Dict, Optional, Set, Mapping
@@ -851,6 +852,77 @@ class DisplayManager(QObject):
             next_visualizer_mode_id(owner.controller.mode_id)
         )
 
+    def _request_quick_visualizer_preset_change(self) -> bool:
+        """Resolve one detached same-mode preset target on the admitted owner."""
+
+        owner = self._quick_visualizer_owner
+        settings = self.settings_manager
+        if owner is None or settings is None or owner.is_retired:
+            return False
+
+        from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.visualizer_presets import (
+            VISUALIZER_CUSTOM_STORAGE_KEY,
+            resolve_visualizer_activation_payload,
+        )
+        from core.settings.visualizer_runtime_preset_cycle import (
+            resolve_next_visualizer_runtime_preset,
+        )
+        from widgets.spotify_visualizer.technical_config import build_technical_cache
+
+        section = settings.get("widgets.spotify_visualizer", {})
+        custom_presets = settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
+        if not isinstance(section, Mapping) or not isinstance(custom_presets, Mapping):
+            logger.warning(
+                "[VIS_PRESETS] Quick preset cycle rejected malformed settings roots"
+            )
+            return False
+        try:
+            target = resolve_next_visualizer_runtime_preset(
+                section,
+                custom_presets,
+                mode=owner.controller.mode_id,
+            )
+            activation = resolve_visualizer_activation_payload(
+                target.visualizer_config,
+                mode=target.mode,
+            )
+            model = SpotifyVisualizerSettings.from_mapping(
+                activation.resolved_config,
+                apply_preset_overlay=False,
+                resolve_preset_indices=False,
+            )
+            technical_cache = build_technical_cache(None, model)
+        except (TypeError, ValueError):
+            logger.warning(
+                "[VIS_PRESETS] Quick preset cycle resolution failed mode=%s",
+                owner.controller.mode_id,
+                exc_info=True,
+            )
+            return False
+
+        return bool(
+            owner.request_preset_change(
+                target.mode,
+                settings_model=model,
+                resolved_activation=activation,
+                technical_cache=technical_cache,
+                logical_kwargs=asdict(model),
+                presentation_kwargs=asdict(model),
+                on_complete=(
+                    lambda completed_mode, expected_owner=owner, resolved=target:
+                    self._complete_quick_visualizer_preset_change(
+                        completed_mode,
+                        expected_owner=expected_owner,
+                        target=resolved,
+                    )
+                ),
+            )
+        )
+
+    def _cycle_quick_visualizer_preset(self) -> None:
+        self._request_quick_visualizer_preset_change()
+
     def _complete_quick_visualizer_mode_change(self, mode_id: str) -> None:
         """Persist one fully presented target activation and refresh menu truth."""
 
@@ -864,6 +936,54 @@ class DisplayManager(QObject):
             section["mode"] = str(mode_id)
         self._refresh_all_quick_context_menus()
         logger.info("[SPOTIFY_VIS] Persisted Quick visualizer mode=%s", mode_id)
+
+    def _complete_quick_visualizer_preset_change(
+        self,
+        mode_id: str,
+        *,
+        expected_owner: Any,
+        target: Any,
+    ) -> None:
+        """Persist only a fresh, fully visible same-owner preset activation."""
+
+        owner = self._quick_visualizer_owner
+        if (
+            owner is not expected_owner
+            or owner is None
+            or owner.is_retired
+            or str(mode_id) != str(target.mode)
+            or owner.controller.mode_id != str(target.mode)
+        ):
+            logger.warning(
+                "[VIS_PRESETS] Dropped stale Quick preset completion mode=%s target=%s",
+                mode_id,
+                getattr(target, "mode", None),
+            )
+            return
+        settings = self.settings_manager
+        if settings is None:
+            raise RuntimeError("visualizer preset completion has no Settings authority")
+        persist = getattr(
+            settings,
+            "replace_visualizer_runtime_preset_state",
+            None,
+        )
+        if not callable(persist):
+            raise RuntimeError(
+                "Settings authority has no atomic visualizer preset persistence"
+            )
+        persist(target.visualizer_config, target.custom_presets)
+        self._widgets_config_snapshot["spotify_visualizer"] = deepcopy(
+            target.visualizer_config
+        )
+        self._refresh_all_quick_context_menus()
+        logger.info(
+            "[VIS_PRESETS] Persisted Quick preset mode=%s source=%s target=%s custom_cache_changed=%s",
+            target.mode,
+            target.source_index,
+            target.target_index,
+            target.custom_presets_changed,
+        )
 
     def _connect_quick_runtime(
         self,
@@ -1656,16 +1776,35 @@ class DisplayManager(QObject):
             from rendering.quick.visualizer.double_click_admission import (
                 QuickVisualizerDoubleClickAdmission,
             )
+            from rendering.quick.visualizer.middle_click_admission import (
+                QuickVisualizerMiddleClickAdmission,
+            )
+
+            def _visualizer_region_contains(
+                scene_position: Any,
+                admitted: Any = owner,
+            ) -> bool:
+                return bool(
+                    admitted.presentation_runtime.scene_controller
+                    .visualizer_contains_scene_position(scene_position)
+                )
 
             chosen.runtime.scene_controller.set_visualizer_double_click_admission(
                 QuickVisualizerDoubleClickAdmission(
-                    region_contains=(
-                        chosen.runtime.scene_controller.visualizer_contains_scene_position
-                    ),
+                    region_contains=_visualizer_region_contains,
                     is_active=lambda admitted=owner: (
                         admitted.is_started and not admitted.is_retired
                     ),
                     cycle_mode=self._cycle_quick_visualizer_mode,
+                )
+            )
+            chosen.runtime.scene_controller.set_visualizer_middle_click_admission(
+                QuickVisualizerMiddleClickAdmission(
+                    region_contains=_visualizer_region_contains,
+                    is_active=lambda admitted=owner: (
+                        admitted.is_started and not admitted.is_retired
+                    ),
+                    cycle_preset=self._cycle_quick_visualizer_preset,
                 )
             )
             self._refresh_all_quick_context_menus()
@@ -1776,6 +1915,7 @@ class DisplayManager(QObject):
         chosen = self._quick_visualizer_unit
         if chosen is not None:
             chosen.runtime.scene_controller.set_visualizer_double_click_admission(None)
+            chosen.runtime.scene_controller.set_visualizer_middle_click_admission(None)
         self._quick_visualizer_owner = None
         self._quick_visualizer_unit = None
         return True
