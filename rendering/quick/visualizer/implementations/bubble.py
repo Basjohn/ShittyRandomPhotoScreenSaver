@@ -91,27 +91,17 @@ def _payload(
 def resolve_quick_bubble_payload(
     snapshot: VisualizerRenderSnapshot,
 ) -> QuickBubblePayload:
-    """Prefer one coalesced protected result, otherwise use current state."""
+    """Resolve Bubble geometry from the newest authored mode frame only.
+
+    Protected Bubble edges carry consume-once event metadata across latest-state
+    coalescing, but event consequences are already forward-carried by the
+    continuously integrated simulation.  They must never replace newer geometry
+    with an older full-frame payload at the retained Quick boundary.
+    """
 
     mode_state = snapshot.logical.mode_state
     if not isinstance(mode_state, BubbleFrame):
         raise TypeError("Bubble payload resolver received another mode frame")
-    for edge in reversed(snapshot.logical.protected_edges):
-        if edge.kind != "bubble_visible_result":
-            continue
-        result = edge.result
-        try:
-            protected = _payload(
-                result["positions"],
-                result["extras"],
-                result["trails"],
-                result["bubble_count"],
-                protected=True,
-            )
-        except (KeyError, TypeError, ValueError):
-            protected = None
-        if protected is not None:
-            return protected
     current = _payload(
         mode_state.positions,
         mode_state.extras,
@@ -122,6 +112,7 @@ def resolve_quick_bubble_payload(
     if current is None:
         raise ValueError("Bubble immutable arrays do not match bubble_count")
     return current
+
 
 
 class QuickBubbleRenderer:

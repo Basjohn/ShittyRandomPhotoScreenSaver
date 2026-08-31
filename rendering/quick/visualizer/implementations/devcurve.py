@@ -158,13 +158,6 @@ class QuickDevCurveRenderer:
             curves,
             parameter(parameters, "devcurve_sample_count", _MAX_SAMPLES),
         )
-        ghost_curves = _curve_mapping(mode_state.ghost_curves)
-        ghost_enabled = bool(
-            parameter(parameters, "devcurve_ghosting_enabled", False)
-            and float(parameter(parameters, "devcurve_ghost_alpha", 0.0))
-            > 0.001
-            and set(ghost_curves) == set(_LAYER_NAMES)
-        )
         order = _draw_order(mode_state.draw_order)
         uniforms = self._uniforms
 
@@ -185,22 +178,7 @@ class QuickDevCurveRenderer:
         gl.glUniform1f(uniforms["u_border_width"], presentation.border_width)
         gl.glUniform1f(uniforms["u_fade"], presentation.content_fade)
         gl.glUniform1i(uniforms["u_devcurve_sample_count"], sample_count)
-        gl.glUniform1i(
-            uniforms["u_devcurve_ghost_enabled"],
-            1 if ghost_enabled else 0,
-        )
-        gl.glUniform1f(
-            uniforms["u_ghost_alpha"],
-            max(
-                0.0,
-                min(
-                    1.0,
-                    float(parameter(parameters, "devcurve_ghost_alpha", 0.0)),
-                ),
-            )
-            if ghost_enabled
-            else 0.0,
-        )
+
 
         for name in _LAYER_NAMES:
             default_color, default_alpha = _LAYER_DEFAULTS[name]
@@ -271,12 +249,6 @@ class QuickDevCurveRenderer:
                 uniforms[f"u_devcurve_curve_{name}"],
                 _MAX_SAMPLES,
                 _padded_samples(curves[name], sample_count=sample_count),
-            )
-            ghost_values = ghost_curves.get(name, curves[name])
-            gl.glUniform1fv(
-                uniforms[f"u_devcurve_ghost_curve_{name}"],
-                _MAX_SAMPLES,
-                _padded_samples(ghost_values, sample_count=sample_count),
             )
 
         for index, name in enumerate(order):
@@ -472,10 +444,8 @@ class QuickDevCurveRenderer:
                 "u_visual_scale",
                 "u_border_width",
                 "u_fade",
-                "u_ghost_alpha",
                 "u_rainbow_hue_offset",
                 "u_devcurve_sample_count",
-                "u_devcurve_ghost_enabled",
                 "u_devcurve_order0",
                 "u_devcurve_order1",
                 "u_devcurve_order2",
@@ -503,7 +473,6 @@ class QuickDevCurveRenderer:
                         f"u_devcurve_layer_{name}_enabled",
                         f"u_devcurve_layer_{name}_alpha",
                         f"u_devcurve_curve_{name}",
-                        f"u_devcurve_ghost_curve_{name}",
                     )
                 )
             uniforms = {

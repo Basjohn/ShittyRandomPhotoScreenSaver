@@ -166,7 +166,11 @@ def test_bubble_frame_runtime_freezes_one_authored_step_and_visible_event() -> N
     edge = resolved.protected_edges[0]
     assert edge.token == 3
     assert edge.kind == "bubble_visible_result"
-    assert edge.result["positions"] == pytest.approx(resolved.positions)
+    # The protected edge carries consume-once metadata only.  Latest Bubble
+    # geometry remains authoritative in the ordinary immutable mode frame.
+    assert "positions" not in edge.result
+    assert "extras" not in edge.result
+    assert "trails" not in edge.result
     assert edge.result["event_kinds"] == ("kick",)
 
 
@@ -329,7 +333,7 @@ def test_bubble_retirement_waits_for_inflight_step_then_clears_state() -> None:
     assert simulation.reset_calls == 1
 
 
-def test_quick_bubble_payload_uses_protected_result_without_fifo_replay() -> None:
+def test_quick_bubble_payload_keeps_latest_geometry_when_protected_edge_survives() -> None:
     edge = VisualizerProtectedEdge(
         token=4,
         kind="bubble_visible_result",
@@ -337,18 +341,16 @@ def test_quick_bubble_payload_uses_protected_result_without_fifo_replay() -> Non
         result_timestamp=10.0,
         result=freeze_render_fields(
             {
-                "positions": (0.7, 0.4, 0.09, 1.0),
-                "extras": (1.0, 0.0, 0.0, 0.0),
-                "trails": (),
-                "bubble_count": 1,
+                "event_kinds": ("kick",),
+                "simulation_timestamp": 9.9,
             }
         ),
     )
     payload = resolve_quick_bubble_payload(_snapshot(protected_edges=(edge,)))
 
-    assert payload.protected is True
-    assert payload.positions[0] == pytest.approx(0.7)
-    assert payload.positions[2] == pytest.approx(0.09)
+    # Protected event metadata must never override the newest BubbleFrame arrays.
+    assert payload.protected is False
+    assert payload.positions[0] == pytest.approx(0.25)
 
     current = resolve_quick_bubble_payload(_snapshot())
     assert current.protected is False

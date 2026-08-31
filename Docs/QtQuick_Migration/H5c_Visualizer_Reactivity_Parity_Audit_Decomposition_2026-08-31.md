@@ -1067,3 +1067,41 @@ Immediate continuation after this source handoff:
 7. only after these source-proven/common seams are re-measured continue mode-specific Bubble B0-B9 or Oscillo/DevCurve renderer comparison.
 
 This sequencing keeps known wrong semantics out of the measurement path and uses one bounded trace plane to decide the next source repair.
+
+## 25. Physical checkpoint R2 — post-shared-source repair findings
+
+Detailed source/repair handoff: `H5c_Implementation_Checkpoint_2026-08-31_R2.md`.
+
+### R9 — Bubble downstream transport
+
+- [x] Physical logs prove strong current source energy reaches Bubble while authored integration remains ~90 Hz / one step per request.
+- [x] Stop treating source/FFT/gain/cadence as the leading Bubble suspect.
+- [x] Source audit found protected Bubble event edges carrying full geometry and overriding the newer ordinary latest-state frame.
+- [x] Keep protected event metadata only; newest `BubbleFrame` owns geometry.
+- [ ] Physical B6-B9 re-measure after repair.
+
+### R10 — resume edge
+
+- [x] Correct T3/T4 instrumentation so the 1.5 s periodic sampler cannot fabricate source latency.
+- [x] Restore historical `engine.wake()` on False->True before playback commit.
+- [x] Cold-only ramp 1.5 s -> 1.0 s; warm keepalive resume remains immediate.
+- [ ] Re-measure one long-idle resume with corrected T3-T7.
+
+### R11 — Sine
+
+- [x] Physical idle exists; missing-idle hypothesis closed.
+- [x] Apply requested paused-only +20% motion adjustment; no shared gain/timer change.
+
+### R12 — DevCurve
+
+- [x] Historical shader proves saved ghost controls were visually inert.
+- [x] Remove Quick-invented delayed ghost curves/fills/outlines and their 4x96-float render uploads.
+- [x] Preserve adjustable viewport scaling and real solver semantics.
+- [ ] Re-measure outline smoothness and bottom transient visibility.
+- [ ] If transient remains weak, classify via `[VIS_DEVCURVE_TRANSIENT]` before changing power/gain.
+
+### R13 — Spectrum pause handoff
+
+- [x] Physical steady idle hump is present and logical floor is correct.
+- [x] Add bounded retained-state magnitude samples around Pause.
+- [ ] Locate the brief zero before floor; do not raise the steady floor.

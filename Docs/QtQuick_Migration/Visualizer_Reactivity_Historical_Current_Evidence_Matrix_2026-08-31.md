@@ -377,7 +377,7 @@ A focused parity test now locks the zero/false case because these controls can c
 - [x] canonical `spectrum_unique_colors` translation restored
 - [x] mirror/shape/notch/wave/profile/lane/drop shared-source block restored
 - [x] visual smoothing fields already owned by logical state
-- [x] ghosting/decay already owned
+- [x] Spectrum ghosting/decay already owned
 - [x] colors/border/rainbow presentation already owned (with unique-colors translation repaired)
 - [x] historical `0.55` final transfer restored
 - [ ] physical peak behavior and S3-S7 response after repair
@@ -391,7 +391,8 @@ A focused parity test now locks the zero/false case because these controls can c
 - [x] transient mix inputs already owned
 - [x] ghost/trail behavior already owned
 - [x] specular/alpha/color presentation already owned
-- [ ] protected visible event path / B0-B9 physical magnitude comparison
+- [x] protected Bubble event path no longer carries/overrides full geometry; newest ordinary `BubbleFrame` is geometry authority
+- [ ] B6-B9 physical snapshot->Quick magnitude comparison after latest-geometry repair
 
 ### Oscilloscope ownership
 
@@ -413,7 +414,9 @@ A focused parity test now locks the zero/false case because these controls can c
 - [x] reactivity parameters
 - [x] ghosting
 - [x] heartbeat/transient assistance
-- [ ] final uniform transfer + paused-idle physical transport
+- [x] paused idle transport physically confirmed present
+- [x] paused-only shader motion increased 20% without changing live gain
+- [ ] final live uniform/intensity parity comparison
 
 ### DevCurve ownership
 
@@ -422,8 +425,10 @@ A focused parity test now locks the zero/false case because these controls can c
 - [x] alpha/outline
 - [x] offsets/domain
 - [x] tuning/specular parameters
-- [x] ghosting
-- [ ] final geometry/intensity renderer comparison
+- [x] ghost settings remain parseable/persisted, but historical rendering is now source-proven to have treated them as a visual no-op
+- [x] migration-invented delayed ghost-curve rendering removed from Quick; current-frame geometry remains authoritative
+- [ ] re-measure bottom transient-layer response after ghost removal
+- [ ] re-measure outline smoothness before changing adjustable-viewport scaling / AA math
 
 ### Explicitly retired
 
@@ -477,3 +482,114 @@ Consequently a migration can keep goldens GREEN while production audio is shaped
 - [ ] Spectrum's mode-specific failures cannot justify a global gain change.
 - [ ] A source-readiness fence is not removed until identity evidence proves it rejects valid current data.
 - [ ] Current sizing/viewport architecture remains authoritative; historical `*_growth` sizing does not return.
+
+
+## 14. R2 physical-log evidence and bounded continuation — 2026-08-31
+
+The first post-repair physical trace materially narrows the remaining defects.
+
+### 14.1 Bubble: source/cadence exonerated, retained payload seam repaired
+
+Observed under real music:
+
+- [x] `source_ready=True`;
+- [x] strong non-idle energy reaches Bubble (representative overall ~0.57-0.65, mid ~0.79-0.80, bass pulse ~0.55+);
+- [x] authored Bubble integration remains ~90 Hz with essentially 1:1 requested/integrated steps;
+- [x] a genuinely current post-Play Bubble source frame can arrive in tens of milliseconds, so a universal 1.5 s capture delay is disproved.
+
+Therefore the remaining nearly-dead visible Bubble response is downstream of source admission and authored cadence. Source inspection then found a migration-only contradiction with the intended latest-state Quick design:
+
+```text
+newest ordinary BubbleFrame geometry
+        +
+older protected consume-once event edge carrying a full geometry copy
+        -> renderer preferred protected full geometry
+        -> older event snapshot could override newer authored geometry
+```
+
+Repair:
+
+- [x] protected Bubble edge carries compact event identity/timestamp/kind metadata only;
+- [x] newest ordinary `BubbleFrame` owns positions/extras/trails/count at Quick;
+- [x] existing consume-once/coalescing metadata semantics remain;
+- [x] temporal harness now models the real Bubble invariant: event consequences are forward-carried in persistent simulation state into the next latest authored frame;
+- [x] no replay queue, duplicate cadence, per-frame configuration poll or extra presenter was introduced.
+
+Next physical gate:
+
+- [ ] verify Bubble now visibly expands/contracts/travels in proportion to the already-proven live magnitude;
+- [ ] if still weak, compare immutable `BubbleFrame` radius/position summaries to T7/renderer payload rather than changing BeatEngine gain.
+
+### 14.2 Play resume: historical wake restored; cold ramp bounded to 1.0 s
+
+The first T3 trace for some modes was misleading because the diagnostic checked the 1.5 s periodic sampler before checking edge milestones. Bubble happened to expose the error by logging a true fresh source around ~73 ms.
+
+Source comparison also found a real lifecycle omission:
+
+- historical pause->play called `engine.wake()` before playback-state commit;
+- migrated Quick pause->play had omitted that wake.
+
+R2 repair:
+
+- [x] restore existing `engine.wake()` on a real False->True edge only;
+- [x] preserve one BeatEngine and its existing stale-capture test/restart semantics;
+- [x] shorten **cold** reactivity ramp from 1.5 s to **1.0 s**;
+- [x] warm resumes remain unramped;
+- [x] generation/activation freshness fencing remains unchanged;
+- [x] T3/T4 edge milestones are checked independently of periodic diagnostic sampling;
+- [x] T5 Play publication requires a post-edge source timestamp;
+- [x] T7 records actual bars/energy/waveform magnitude consumed by retained Quick.
+
+The 1.0 s change is a bounded parity/usability adjustment, not a workaround for stale data: current-generation fencing still decides whether data is admissible, while `wake()` handles stale capture ownership.
+
+### 14.3 Spectrum: steady pause floor is correct; only the handoff gap is open
+
+Physical clarification:
+
+- [x] Spectrum is again visually recognizable and strongly reactive after R1 repairs;
+- [x] steady paused state reaches the intended authored idle hump (~0.24 max in the observed trace);
+- [ ] immediately after Pause there is a brief **zero-bars gap before the correct floor appears**.
+
+Do **not** raise the idle floor. R2 adds bounded post-Pause retained-consumption markers so the next trace can classify:
+
+```text
+last live frame -> canonical Pause edge -> first paused logical floor frame -> bridge -> T7 retained draw
+```
+
+- [x] `[VIS_SPECTRUM_HANDOFF]` emits only a few post-edge retained samples;
+- [ ] fix the discontinuity at the source-proven failing seam after that trace.
+
+### 14.4 Sine: idle exists; paused-only motion raised 20%
+
+The physical run disproves the earlier "missing idle" report. Idle transport works, but is slightly too weak.
+
+- [x] preserve live/music reactivity coefficients;
+- [x] increase only paused idle gate/phase motion by 20%;
+- [ ] operator re-measure.
+
+### 14.5 DevCurve: migration invented rendered ghost curves
+
+Historical source comparison found a stronger explanation for the new jagged/doubled-looking outlines than adjustable viewport scaling:
+
+- the historical preset exposed DevCurve ghost settings;
+- the historical fragment shader declared `u_ghost_alpha` but did not use it and rendered **no ghost curves**;
+- Quick introduced four stale ghost-curve layers, including outlines/fills and four additional curve-array uploads.
+
+This was a migration-era visual redesign, not historical parity. It can both roughen outlines and visually bury the short bottom/transient layer.
+
+R2 repair:
+
+- [x] remove Quick-only ghost curve history/draws/uniform uploads;
+- [x] retain ghost settings in model/persistence compatibility;
+- [x] leave current adjustable viewport scaling intact;
+- [x] leave the historical/current-near-identical DevCurve solver intact;
+- [x] add bounded transient-layer diagnostics when a real transient is present;
+- [ ] re-measure bottom heavy-hit line and outline smoothness before touching AA scaling.
+
+### 14.6 Next log package should answer, not rediscover
+
+- [ ] Bubble latest geometry: visible response versus strong `[VIS_REACTIVITY]` input.
+- [ ] Play: corrected T0-T7 cold/warm edge timing after wake + 1.0 s cold ramp.
+- [ ] Spectrum: `[VIS_SPECTRUM_HANDOFF]` around the zero-before-floor gap.
+- [ ] DevCurve: `[VIS_DEVCURVE_TRANSIENT]` plus physical bottom-line and outline result after ghost removal.
+- [ ] Sine: paused idle strength after +20%.

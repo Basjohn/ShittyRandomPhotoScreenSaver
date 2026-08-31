@@ -194,11 +194,23 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
 
         def __init__(self) -> None:
             self.visible_edge = 0.0
+            self._forward_carry_steps = 0
 
         def tick(self, dt, energy, settings) -> None:
             del dt, energy
             event = settings["_event_scheduler"].consume_next("kick", max_age_s=0.3)
-            self.visible_edge = 1.0 if event is not None else 0.0
+            if event is not None:
+                # Real Bubble events mutate persistent simulation state (promotion,
+                # envelopes and velocities).  Model the minimum required latest-state
+                # invariant here: the consequence survives into the next authored
+                # frame even when the event frame itself is coalesced.
+                self.visible_edge = 1.0
+                self._forward_carry_steps = 1
+            elif self._forward_carry_steps > 0:
+                self.visible_edge = 1.0
+                self._forward_carry_steps -= 1
+            else:
+                self.visible_edge = 0.0
 
         def snapshot(self, **pulse):
             del pulse
@@ -280,9 +292,12 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
         assert snapshot is not None
         consumed_revisions.append(snapshot.logical_revision)
         positions = snapshot.logical.mode_state.positions
-        if snapshot.logical.protected_edges:
-            positions = snapshot.logical.protected_edges[-1].result["positions"]
         visible_edges[tick_index] = float(positions[2]) if positions else 0.0
+        if snapshot.logical.protected_edges:
+            edge_result = snapshot.logical.protected_edges[-1].result
+            assert "positions" not in edge_result
+            assert "extras" not in edge_result
+            assert "trails" not in edge_result
 
     cadence = widget._bubble_cadence_state.diagnostic_snapshot()
     visible_tick_indices = [

@@ -32,7 +32,6 @@ uniform float u_devcurve_layer_bass_outline_width;
 uniform int u_devcurve_layer_bass_enabled;
 uniform float u_devcurve_layer_bass_alpha;
 uniform float u_devcurve_curve_bass[96];
-uniform float u_devcurve_ghost_curve_bass[96];
 
 uniform vec4 u_devcurve_layer_vocals_color;
 uniform vec4 u_devcurve_layer_vocals_outline_color;
@@ -40,7 +39,6 @@ uniform float u_devcurve_layer_vocals_outline_width;
 uniform int u_devcurve_layer_vocals_enabled;
 uniform float u_devcurve_layer_vocals_alpha;
 uniform float u_devcurve_curve_vocals[96];
-uniform float u_devcurve_ghost_curve_vocals[96];
 
 uniform vec4 u_devcurve_layer_mids_color;
 uniform vec4 u_devcurve_layer_mids_outline_color;
@@ -48,7 +46,6 @@ uniform float u_devcurve_layer_mids_outline_width;
 uniform int u_devcurve_layer_mids_enabled;
 uniform float u_devcurve_layer_mids_alpha;
 uniform float u_devcurve_curve_mids[96];
-uniform float u_devcurve_ghost_curve_mids[96];
 
 uniform vec4 u_devcurve_layer_transients_color;
 uniform vec4 u_devcurve_layer_transients_outline_color;
@@ -56,8 +53,6 @@ uniform float u_devcurve_layer_transients_outline_width;
 uniform int u_devcurve_layer_transients_enabled;
 uniform float u_devcurve_layer_transients_alpha;
 uniform float u_devcurve_curve_transients[96];
-uniform float u_devcurve_ghost_curve_transients[96];
-uniform int u_devcurve_ghost_enabled;
 uniform int u_devcurve_order0;
 uniform int u_devcurve_order1;
 uniform int u_devcurve_order2;
@@ -138,15 +133,6 @@ float _sample_curve_by_id(int layerId, float x, int sampleCount) {
     else y = _sample_curve(u_devcurve_curve_transients, x, sampleCount);
     // Curves are authored in bottom-origin space (0=bottom, 1=top).
     // Shader UV.y is top-origin, so invert once here.
-    return clamp(1.0 - y, 0.0, 1.0);
-}
-
-float _sample_ghost_curve_by_id(int layerId, float x, int sampleCount) {
-    float y = 0.5;
-    if (layerId == 0) y = _sample_curve(u_devcurve_ghost_curve_bass, x, sampleCount);
-    else if (layerId == 1) y = _sample_curve(u_devcurve_ghost_curve_vocals, x, sampleCount);
-    else if (layerId == 2) y = _sample_curve(u_devcurve_ghost_curve_mids, x, sampleCount);
-    else y = _sample_curve(u_devcurve_ghost_curve_transients, x, sampleCount);
     return clamp(1.0 - y, 0.0, 1.0);
 }
 
@@ -306,20 +292,6 @@ void main() {
     float ow1 = clamp(_layer_outline_width_by_id(layer1), 0.0004, 0.015);
     float ow2 = clamp(_layer_outline_width_by_id(layer2), 0.0004, 0.015);
     float ow3 = clamp(_layer_outline_width_by_id(layer3), 0.0004, 0.015);
-    if (u_devcurve_ghost_enabled != 0 && u_ghost_alpha > 0.001) {
-        vec4 ghostOutline0 = _layer_outline_color_by_id(layer0);
-        vec4 ghostOutline1 = _layer_outline_color_by_id(layer1);
-        vec4 ghostOutline2 = _layer_outline_color_by_id(layer2);
-        vec4 ghostOutline3 = _layer_outline_color_by_id(layer3);
-        ghostOutline0.a *= u_ghost_alpha;
-        ghostOutline1.a *= u_ghost_alpha;
-        ghostOutline2.a *= u_ghost_alpha;
-        ghostOutline3.a *= u_ghost_alpha;
-        col = _blend_over(col, _draw_layer(_sample_ghost_curve_by_id(layer0, uv.x, sampleCount), _layer_color_by_id(layer0), ghostOutline0, _layer_enabled_by_id(layer0), _layer_alpha_by_id(layer0) * u_ghost_alpha, uv.x, uv.y, aa, ow0));
-        col = _blend_over(col, _draw_layer(_sample_ghost_curve_by_id(layer1, uv.x, sampleCount), _layer_color_by_id(layer1), ghostOutline1, _layer_enabled_by_id(layer1), _layer_alpha_by_id(layer1) * u_ghost_alpha, uv.x, uv.y, aa, ow1));
-        col = _blend_over(col, _draw_layer(_sample_ghost_curve_by_id(layer2, uv.x, sampleCount), _layer_color_by_id(layer2), ghostOutline2, _layer_enabled_by_id(layer2), _layer_alpha_by_id(layer2) * u_ghost_alpha, uv.x, uv.y, aa, ow2));
-        col = _blend_over(col, _draw_layer(_sample_ghost_curve_by_id(layer3, uv.x, sampleCount), _layer_color_by_id(layer3), ghostOutline3, _layer_enabled_by_id(layer3), _layer_alpha_by_id(layer3) * u_ghost_alpha, uv.x, uv.y, aa, ow3));
-    }
     col = _blend_over(col, _draw_layer(y0, _layer_color_by_id(layer0), _layer_outline_color_by_id(layer0), _layer_enabled_by_id(layer0), _layer_alpha_by_id(layer0), uv.x, uv.y, aa, ow0));
     col = _blend_over(col, _draw_layer(y1, _layer_color_by_id(layer1), _layer_outline_color_by_id(layer1), _layer_enabled_by_id(layer1), _layer_alpha_by_id(layer1), uv.x, uv.y, aa, ow1));
     col = _blend_over(col, _draw_layer(y2, _layer_color_by_id(layer2), _layer_outline_color_by_id(layer2), _layer_enabled_by_id(layer2), _layer_alpha_by_id(layer2), uv.x, uv.y, aa, ow2));

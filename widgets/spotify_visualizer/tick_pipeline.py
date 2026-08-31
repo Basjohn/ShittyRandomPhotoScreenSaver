@@ -477,6 +477,33 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
                 f"transient={max(resolved_input_transient.bass, resolved_input_transient.mid, resolved_input_transient.high):.3f}"
             ),
         )
+        raw_transient = max(
+            resolved_input_transient.bass,
+            resolved_input_transient.mid,
+            resolved_input_transient.high,
+        )
+        last_transient_diag = float(
+            getattr(widget, "_devcurve_transient_diag_last_ts", 0.0) or 0.0
+        )
+        if raw_transient >= 0.025 and now_ts - last_transient_diag >= 0.12:
+            energies = resolved.diagnostics.get("energies", {})
+            transient_curve = dict(resolved.curves).get("transients", ())
+            curve_span = (
+                max(transient_curve) - min(transient_curve)
+                if transient_curve
+                else 0.0
+            )
+            logger.debug(
+                "[VIS_DEVCURVE_TRANSIENT] raw_b=%.3f raw_m=%.3f raw_h=%.3f "
+                "smooth_t=%.3f curve_span=%.4f ready=%s",
+                resolved_input_transient.bass,
+                resolved_input_transient.mid,
+                resolved_input_transient.high,
+                float(energies.get("transients", 0.0)),
+                float(curve_span),
+                resolved.reactive_source_ready,
+            )
+            widget._devcurve_transient_diag_last_ts = now_ts
 
     # Temporary old-presenter mirror. The controller-owned immutable result is
     # authoritative; the Quick renderer never reads these widget fields.

@@ -24,6 +24,7 @@ from widgets.spotify_visualizer.runtime_controller import (
     VisualizerRuntimeController,
 )
 from widgets.spotify_visualizer.sine_frame_runtime import SineFrameRuntime
+from widgets.spotify_visualizer.shaders import load_fragment_shader
 
 
 _IDENTITY = {
@@ -110,6 +111,15 @@ def test_paused_sine_keeps_authored_idle_motion_without_a_source() -> None:
     assert second.animation_time == pytest.approx(0.05)
     assert second.line_shifts[0] < first.line_shifts[0]
 
+
+
+def test_paused_sine_shader_idle_motion_is_twenty_percent_stronger_only_when_paused() -> None:
+    source = load_fragment_shader("sine_wave")
+    assert source is not None
+    assert "? 1.0 : 0.168" in source
+    assert "u_time * 0.264 * max(0.6, speed)" in source
+    # Live path remains a 1.0 gate; this is not a shared/music gain change.
+    assert "float effective_speed = speed * idle_motion_gate" in source
 
 def test_sine_source_fence_reactivity_and_time_advance_once_per_logical_tick() -> None:
     runtime = SineFrameRuntime()
