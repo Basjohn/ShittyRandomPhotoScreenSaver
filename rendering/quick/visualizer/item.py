@@ -274,7 +274,10 @@ class VisualizerRenderItem(QQuickItem):
                         "sim_ts=%.6f playing=%s final_big_max_r=%.5f "
                         "frozen_big_max_r=%.5f radius_logical_px=%.2f "
                         "radius_device_px=%.2f dpr=%.3f alpha=%.3f "
-                        "domain_h=%.3f",
+                        "domain_h=%.3f "
+                        "track(token=%.0f index=%.0f target=%.5f "
+                        "display=%.5f delta=%.5f step=%.5f "
+                        "rate_hz=%.3f mix=%.3f)",
                         snapshot.logical_revision,
                         mode_state.simulation_timestamp,
                         playing,
@@ -285,6 +288,14 @@ class VisualizerRenderItem(QQuickItem):
                         presentation.dpr,
                         frozen_max_alpha,
                         geometry.get("domain_h", 1.0),
+                        geometry.get("tracked_big_token", 0.0),
+                        geometry.get("tracked_big_index", -1.0),
+                        geometry.get("tracked_big_target_radius", 0.0),
+                        geometry.get("tracked_big_display_radius", 0.0),
+                        geometry.get("tracked_big_target_delta", 0.0),
+                        geometry.get("tracked_big_smoothing_step", 0.0),
+                        geometry.get("tracked_big_smoothing_rate_hz", 0.0),
+                        geometry.get("tracked_big_smoothing_mix", 0.0),
                     )
                     self._diag_bubble_geometry_last_ts = now_mono
                     if self._diag_bubble_geometry_burst_remaining > 0:

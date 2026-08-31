@@ -207,6 +207,110 @@ def test_big_visual_smoothing_continuously_settles_inside_high_smoothing_band(
     assert min(0.080, target_radius) < outputs[-1] < max(0.080, target_radius)
 
 
+@pytest.mark.parametrize("direction", (-1.0, 1.0))
+def test_big_visual_smoothing_blends_rate_across_settle_transition(direction):
+    """One retained hero must not alternate between micro and macro rates."""
+    sim = BubbleSimulation()
+    dt = 1.0 / 90.0
+    sim._last_tick_dt = dt
+    bubble = BubbleState(
+        radius=0.037,
+        is_big=True,
+        display_radius=0.080,
+    )
+    effective_rates = []
+
+    for error_ratio in (0.92, 1.08, 0.93, 1.07, 0.94, 1.06):
+        previous = bubble.display_radius
+        settle_band = max(0.00340, max(bubble.radius, previous) * 0.160)
+        target = previous + direction * settle_band * error_ratio
+        output = sim._apply_big_display_radius_smoothing(
+            bubble,
+            target,
+            1.0,
+            track_diagnostics=True,
+        )
+        effective_rates.append(
+            abs(output - previous) / abs(target - previous) / dt
+        )
+
+    adjacent_jumps = [
+        abs(current - previous)
+        for previous, current in zip(effective_rates, effective_rates[1:])
+    ]
+    assert max(adjacent_jumps) < 4.0, effective_rates
+    assert all(rate > 0.0 for rate in effective_rates)
+
+
+@pytest.mark.parametrize(
+    ("start_radius", "target_radius", "expected_rate_hz"),
+    ((0.040, 0.120, 40.0), (0.120, 0.030, 22.0)),
+)
+def test_big_visual_smoothing_preserves_macro_play_pause_endpoints(
+    start_radius,
+    target_radius,
+    expected_rate_hz,
+):
+    """Continuous settling must not weaken the newly-good large edge path."""
+    sim = BubbleSimulation()
+    dt = 1.0 / 90.0
+    sim._last_tick_dt = dt
+    bubble = BubbleState(
+        radius=0.037,
+        is_big=True,
+        display_radius=start_radius,
+    )
+
+    output = sim._apply_big_display_radius_smoothing(
+        bubble,
+        target_radius,
+        1.0,
+        track_diagnostics=True,
+    )
+    effective_rate_hz = (
+        abs(output - start_radius) / abs(target_radius - start_radius) / dt
+    )
+
+    assert effective_rate_hz == pytest.approx(expected_rate_hz)
+    assert sim._tracked_big_smoothing_rate_hz == pytest.approx(expected_rate_hz)
+
+
+def test_big_render_diagnostics_follow_one_stable_bubble_until_retirement():
+    sim = BubbleSimulation()
+    first = BubbleState(
+        radius=0.037,
+        is_big=True,
+        display_radius=0.080,
+    )
+    second = BubbleState(
+        radius=0.033,
+        is_big=True,
+        display_radius=0.070,
+    )
+    sim._bubbles = [first, second]
+
+    sim.snapshot(big_visual_smoothing=1.0)
+    initial = sim.get_big_render_diagnostics()
+    sim.snapshot(big_visual_smoothing=1.0)
+    repeated = sim.get_big_render_diagnostics()
+
+    assert initial["tracked_big_token"] == pytest.approx(1.0)
+    assert repeated["tracked_big_token"] == pytest.approx(1.0)
+    assert initial["tracked_big_index"] == pytest.approx(0.0)
+    assert repeated["tracked_big_index"] == pytest.approx(0.0)
+    assert initial["tracked_big_target_radius"] > 0.0
+    assert initial["tracked_big_display_radius"] > 0.0
+    assert initial["tracked_big_smoothing_step"] > 0.0
+    assert initial["tracked_big_smoothing_rate_hz"] > 0.0
+
+    sim._bubbles.pop(0)
+    sim.snapshot(big_visual_smoothing=1.0)
+    replacement = sim.get_big_render_diagnostics()
+
+    assert replacement["tracked_big_token"] == pytest.approx(2.0)
+    assert replacement["tracked_big_index"] == pytest.approx(0.0)
+
+
 def _big_lane_metrics(
     sim,
     *,

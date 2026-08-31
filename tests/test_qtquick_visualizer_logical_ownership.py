@@ -140,6 +140,9 @@ def test_fresh_controller_configured_started_advanced_without_widget(
     assert "target_big_max_r=" in bubble_geometry
     assert "smooth_lag_max_r=" in bubble_geometry
     assert "frozen_big_max_r=" in bubble_geometry
+    assert "track(token=" in bubble_geometry
+    assert "rate_hz=" in bubble_geometry
+    assert "mix=" in bubble_geometry
 
 
 def test_devcurve_diagnostics_do_not_cross_into_bubble_geometry(monkeypatch) -> None:

@@ -199,6 +199,7 @@ Preserve:
 - all five modes;
 - source freshness separate from presentation;
 - protected Bubble renderer-visible consequences and BTF;
+- continuous visual-only hero-radius rate selection plus stable bounded same-bubble B6-B8 evidence;
 - Pause/Play identity;
 - clean worker join;
 - one authored fade authority;

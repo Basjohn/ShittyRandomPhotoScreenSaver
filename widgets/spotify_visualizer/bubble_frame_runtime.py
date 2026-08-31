@@ -289,6 +289,36 @@ class BubbleFrameRuntime:
                 "max_big_smoothing_lag",
                 0.0,
             ),
+            "tracked_big_token": render_diag.get("tracked_big_token", 0.0),
+            "tracked_big_index": render_diag.get("tracked_big_index", -1.0),
+            "tracked_big_base_radius": render_diag.get(
+                "tracked_big_base_radius",
+                0.0,
+            ),
+            "tracked_big_target_radius": render_diag.get(
+                "tracked_big_target_radius",
+                0.0,
+            ),
+            "tracked_big_display_radius": render_diag.get(
+                "tracked_big_display_radius",
+                0.0,
+            ),
+            "tracked_big_target_delta": render_diag.get(
+                "tracked_big_target_delta",
+                0.0,
+            ),
+            "tracked_big_smoothing_step": render_diag.get(
+                "tracked_big_smoothing_step",
+                0.0,
+            ),
+            "tracked_big_smoothing_rate_hz": render_diag.get(
+                "tracked_big_smoothing_rate_hz",
+                0.0,
+            ),
+            "tracked_big_smoothing_mix": render_diag.get(
+                "tracked_big_smoothing_mix",
+                0.0,
+            ),
             "big_clamp_hits": render_diag.get("big_clamp_hits", 0.0),
             "big_render_count": render_diag.get("big_render_count", 0.0),
             "configured_big_bass_pulse": float(
