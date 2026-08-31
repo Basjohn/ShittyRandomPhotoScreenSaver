@@ -1,6 +1,6 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-31 — H5c post-R2 physical continuation. Bubble's source-proven 2.72-2.76x nonbaseline radius attenuation is removed; magnitude and Play/Pause response are now dramatically better. The latest run still rejects hero-radius elasticity as rapid flicker instead of breathing contraction, and reports imperceptible stream/drift transient influence. Continuous hero-rate interpolation plus stable B6-B8 tracked-bubble evidence is ready for physical validation. A separate bounded transient-motion correction now forward-carries consume-once kick/snare/vocal strength through the existing stream-burst state, adds a capped drift lift, and proves extra short-window motion-stage displacement without changing radius or pulse. DevCurve's source-proven double-scaled AA width and misleading non-bass transient diagnostic are corrected; all three visual results remain open for operator re-measurement.
+Last updated: 2026-08-31 — H8's retained middle-click preset hotswap, lossless Custom cache and same-mode activation path are deterministic GREEN and await physical acceptance. Bubble magnitude and Play/Pause response are dramatically better; hero-radius elasticity still flickers instead of breathing, and stream/drift transient influence still needs re-measurement on the latest bounded motion correction. DevCurve AA remains ready for the same visual recheck.
 
 ## Current checkpoint
 
@@ -23,7 +23,7 @@ Move a row between groups only when its state genuinely changes; do not keep a s
 - [ ] H5b — Spectrum topology + shaping + renderer-transfer repair (**implementation + focused parity GREEN; primary live reactivity GREEN; topology/recreation/preset gate pending**)
 - [ ] H5c — end-to-end visualizer reactivity parity audit (**first shared-source/config repair + diagnostics implemented; physical classification continues**): Bubble weak response, Play/Pause edge delay, Sine idle, readiness/final-render audit
 - [ ] H6 — CUSTOM Settings size-lock scope
-- [ ] H8 — Visualizer middle-click preset hotswap (source-proven contract omission)
+- [ ] H8 — Visualizer middle-click preset hotswap (**implementation + deterministic gates GREEN; physical cycling/recreation acceptance pending**)
 - [ ] H7 — Exit visible-response/perf classification (likely J after measurement)
 
 **New observations / J carry**
@@ -32,7 +32,7 @@ Move a row between groups only when its state genuinely changes; do not keep a s
 - [ ] Context-menu theme colours do not follow the active theme; the menu remains stuck on one palette despite being a themed element. Treat as J presentation/theme parity unless source inspection exposes a functional settings-authority defect.
 - [ ] Aspiration: desktop -> application crossfade reveal, widgets fading in afterwards — J Parity+.
 
-The maintained `h-destination` profile is GREEN (80/80 revalidated on 2026-08-31 after promoting the H5b source-parity and H6 exact-Settings gates; prior black-flash baseline `b4e8ce40`) and must remain GREEN after each bounded source change. H is not closed by unit tests alone: every H/H-J row in the operator ledger must be reconciled and the final dual-display source-mode smoke must remain physically clean.
+The maintained `h-destination` profile is GREEN (84/84 revalidated on 2026-08-31 after adding the H8 admission/resolver/persistence bars; prior black-flash baseline `b4e8ce40`) and must remain GREEN after each bounded source change. H is not closed by unit tests alone: every H/H-J row in the operator ledger must be reconciled and the final dual-display source-mode smoke must remain physically clean.
 
 Detailed evidence: `Docs/QtQuick_Migration/H_Post_Cutover_Runtime_Reality_Corrections.md`  
 Operator backlog: `Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md`
@@ -253,9 +253,9 @@ Technical route: `Docs/QtQuick_Migration/H6_Custom_Settings_Lock_Scope_Decomposi
 
 ### H8 — Visualizer middle-click preset hotswap
 
-**Status: deterministic missing product interaction; historical contract exists, current Quick migration contract omitted it.**
+**Status: implementation and deterministic gates GREEN; physical cycling/recreation acceptance pending.**
 
-Historical runtime behavior and bug records prove that middle-click on the live Visualizer stepped to the next preset in the **current mode**, including the special user-owned Custom slot. The current Quick input/visualizer contract carried double-click mode cycling but not this separate middle-click preset action. Current `RuntimeInputController.handle_mouse_press()` has only right/left-button product handling, and the retained Quick visualizer admission path has a double-click mode-cycle seam only.
+Historical runtime behavior and bug records prove that middle-click on the live Visualizer stepped to the next preset in the **current mode**, including the special user-owned Custom slot. H8 now admits the gesture at `QuickDisplayWindow` before neutral input fallback, through a dedicated retained Visualizer middle-click admission. Generic `RuntimeInputController` remains presentation-neutral and keeps its established right/left semantics.
 
 Required product contract:
 
@@ -268,19 +268,20 @@ middle-click inside active retained Visualizer
 -> no next-image / exit / context-menu side effect
 ```
 
-Do not fake this through `request_mode_change()`: the current Quick owner correctly rejects a target equal to the current mode. Add a distinct bounded same-mode preset activation transaction through the existing visualizer owner/controller/BeatEngine and retained presentation path. It must preserve one source/logical runtime/pacer, stale-generation fencing, fresh-frame admission and the existing transition/reveal semantics.
+`request_mode_change()` still rejects a target equal to the current mode. The distinct `request_preset_change()` transaction reuses the existing owner/controller/BeatEngine hidden boundary, hard-joins the outgoing logical runtime, admits one fresh target identity and reveals it through the existing fade. A second request while any visualizer transition is active is consumed but dropped before another activation can begin.
 
-Preset persistence must remain narrow: mutate/persist `widgets.spotify_visualizer` only. Do not trigger a whole-`widgets` refresh; historical evidence already records that broad runtime preset writes could blank Media metadata. Curated preset application uses replace semantics so stale keys from the prior preset cannot bleed into the target.
+Preset persistence is one narrow Settings transaction: replace the `widgets.spotify_visualizer` child and its canonical root `visualizer_custom_presets` companion cache only. It never emits or refreshes the whole `widgets` mapping, so Media siblings remain untouched. Schema v4 migrates the shipped flat Bubble cache to the nested per-mode shape and preserves that cache as a structured JSON/SST root across reload. A missing mode snapshot is seeded from its persisted raw mode payload before the first runtime mutation. Curated application uses replace semantics.
 
 Work this after H5/H6 source changes to avoid overlapping visualizer-activation churn, but close it before H re-closes.
 
 Closure checklist:
 
-- [ ] Add middle-button handling to `RuntimeInputController.handle_mouse_press()` scoped to inside the active retained Visualizer.
-- [ ] Same-mode preset activation transaction through the existing visualizer owner/controller/BeatEngine (NOT `request_mode_change()`), wraparound, mode identity unchanged.
-- [ ] Custom slot round-trips losslessly (snapshot on leave, restore on return).
-- [ ] Persist `widgets.spotify_visualizer` only, replace-semantics; no whole-`widgets` refresh (would blank Media metadata).
-- [ ] No next-image/exit/context-menu side effect; one source/pacer, stale-generation fencing, fresh-frame admission preserved.
+- [x] Add a middle-button retained semantic admission at `QuickDisplayWindow`; inside active Visualizer is consumed before neutral input, outside remains inert.
+- [x] Same-mode preset activation transaction through the existing visualizer owner/controller/BeatEngine (NOT `request_mode_change()`), wraparound, mode identity unchanged.
+- [x] Custom slot round-trips losslessly; shipped flat cache migrates once and missing-mode first use snapshots pre-mutation raw state.
+- [x] Atomic visualizer-child + canonical Custom-cache persistence uses replace semantics; no whole-`widgets` refresh and Media remains unchanged.
+- [x] No next-image/exit/context-menu side effect; one source/pacer, stale-generation fencing, fresh-frame admission and overlap rejection preserved.
+- [ ] Operator middle-click through several presets in Bubble and Spectrum, round-trip Custom, then recheck Settings recreation, CUSTOM Save/Continue and restart/reload with clean logs.
 
 Technical route: `Docs/QtQuick_Migration/H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md`.
 
@@ -401,10 +402,10 @@ H closes only when (live checklist):
 - [ ] Spectrum has non-degenerate data + canonical topology + restored engine-shaping/render-transfer parity after switch/recreation (H5b)
 - [ ] historical-vs-current visualizer reactivity audit closes the live-consumer config gaps, Bubble weak response, Play/Pause edge delay and Sine idle transport without adding clocks/owners/global tuning (H5c)
 - [ ] CUSTOM Settings locks only size-authoring controls (H6)
-- [ ] middle-click hotswaps exactly one preset in-place, lossless Custom round-trip, no mode change / no Media disturbance (H8)
+- [ ] middle-click hotswaps exactly one preset in-place, lossless Custom round-trip, no mode change / no Media disturbance (**deterministic GREEN; physical H8 acceptance pending**)
 - [ ] Exit visible response measured/understood with clean natural termination (H7)
 - [ ] unexpected `screensaver_qml.log` warnings/errors on these paths reconciled
-- [ ] maintained `h-destination` GREEN after the bounded fixes
+- [x] maintained `h-destination` GREEN after the bounded fixes (`84/84`, 2026-08-31)
 - [ ] every unresolved ledger row whose phase includes H is closed or explicitly carried to J with evidence
 - [ ] a short dual-display source-mode smoke is GREEN
 

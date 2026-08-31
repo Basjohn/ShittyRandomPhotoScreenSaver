@@ -361,7 +361,11 @@ def test_visualizer_custom_transfer_retargets_same_owner_publication(qt_app) -> 
         first = owner._resolve_current_presentation()
         owner._apply_resolved_presentation(first)
         admission = object()
+        middle_admission = object()
         source.scene_controller.set_visualizer_double_click_admission(admission)
+        source.scene_controller.set_visualizer_middle_click_admission(
+            middle_admission
+        )
 
         source.scene_controller.transfer_visualizer_to(target.scene_controller)
         assert owner.set_presentation_runtime(target) is True
@@ -377,6 +381,10 @@ def test_visualizer_custom_transfer_retargets_same_owner_publication(qt_app) -> 
         assert target.scene_controller.visualizer_item is not None
         assert target.scene_controller.visualizer_item.presentation is second
         assert target.scene_controller._visualizer_double_click_admission is admission
+        assert (
+            target.scene_controller._visualizer_middle_click_admission
+            is middle_admission
+        )
         assert owner.controller.committed_viewport_extent == (630.0, 280.0)
     finally:
         owner.retire()

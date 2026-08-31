@@ -106,7 +106,7 @@ class _ManagerVisualizerEngine:
         self.transaction_depth += 1
 
     def end_activation_transaction(self, *, reason: str) -> int:
-        assert reason.startswith("quick_mode_change:")
+        assert reason.startswith(("quick_mode_change:", "quick_preset_change:"))
         self.end_count += 1
         self.transaction_depth -= 1
         if self.transaction_depth == 0 and self.transaction_pending:
@@ -317,6 +317,7 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
                     "bubble_small_count": 19,
                 },
             }
+            self.custom_presets = {}
             self.save_calls = 0
 
         def get_widgets_map(self):
@@ -325,6 +326,8 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         def get(self, key: str, default=None):
             if key == "widgets":
                 return deepcopy(self.widgets)
+            if key == "visualizer_custom_presets":
+                return deepcopy(self.custom_presets)
             value = {"widgets": self.widgets}
             for part in key.split("."):
                 if not isinstance(value, dict) or part not in value:
@@ -333,6 +336,9 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
             return value
 
         def set(self, key: str, value) -> None:
+            if key == "visualizer_custom_presets":
+                self.custom_presets = deepcopy(value)
+                return
             target = {"widgets": self.widgets}
             parts = key.split(".")
             for part in parts[:-1]:
@@ -340,6 +346,15 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
             target[parts[-1]] = value
 
         def save(self) -> None:
+            self.save_calls += 1
+
+        def replace_visualizer_runtime_preset_state(
+            self,
+            visualizer_section,
+            custom_presets,
+        ) -> None:
+            self.widgets["spotify_visualizer"] = deepcopy(visualizer_section)
+            self.custom_presets = deepcopy(custom_presets)
             self.save_calls += 1
 
     engine = _ManagerVisualizerEngine()
@@ -421,9 +436,65 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         )
         assert engine.playback[-1] is True
 
-        # The retained menu and visualizer-region double-click both route into
-        # this exact owner. A zero-duration test clock preserves the real
-        # hidden-boundary transaction while avoiding wall-clock sleeps.
+        # Middle-click advances one preset through this exact same-mode owner.
+        # Persistence is withheld until a fresh target is fully visible, and a
+        # second request during the transition is consumed but cannot overlap.
+        media_before = deepcopy(settings.widgets["media"])
+        preset_admission = (
+            chosen.runtime.scene_controller._visualizer_middle_click_admission
+        )
+        assert preset_admission is not None
+        preset_admission._region_contains = lambda _position: True
+        transition_now = [0.0]
+        owner._transition_clock = lambda: transition_now[0]
+        owner._transition_half_duration_s = 0.25
+        owner._sync = SimpleNamespace(sync_latest=lambda: True)
+        assert preset_admission.handles_semantic_middle_click_at(object()) is True
+        assert preset_admission.handles_semantic_middle_click_at(object()) is True
+        assert owner._mode_transition_phase == "fading_out"
+        assert engine.begin_count == 0
+        assert settings.get("widgets.spotify_visualizer.preset_bubble") == 3
+        assert settings.save_calls == 0
+
+        preset_outgoing_runtime = owner_runtime
+        transition_now[0] = 0.125
+        assert owner.sync_present() is True
+        assert owner._mode_transition_fade == pytest.approx(0.5)
+        assert preset_outgoing_runtime.is_running() is True
+        transition_now[0] = 0.25
+        assert owner.sync_present() is True
+        assert preset_outgoing_runtime.is_running() is False
+        assert owner.controller.mode_id == "bubble"
+        assert owner.render_identity.engine_generation == 18
+        assert owner.render_identity.activation_id == 24
+        assert engine.begin_count == engine.end_count == 1
+        assert engine.acquire_count == 1
+        assert engine.release_count == 0
+        assert settings.save_calls == 0
+        assert owner.controller.logical_runtime is not preset_outgoing_runtime
+        assert owner.controller.logical_runtime.is_running() is True
+
+        owner.controller.logical_tick_state._waiting_for_fresh_engine_frame = False
+        assert owner.sync_present() is True
+        assert owner._mode_transition_phase == "fading_in"
+        transition_now[0] = 0.375
+        assert owner.sync_present() is True
+        assert owner._mode_transition_fade == pytest.approx(0.5)
+        transition_now[0] = 0.5
+        assert owner.sync_present() is True
+        assert owner._mode_transition_phase == "idle"
+        assert owner.controller.mode_id == "bubble"
+        assert settings.get("widgets.spotify_visualizer.preset_bubble") == 4
+        assert settings.custom_presets["bubble"]["bubble_big_count"] == 7
+        assert settings.widgets["media"] == media_before
+        assert settings.save_calls == 1
+        assert chosen.runtime.frame_pacer._visualizer_sync.__self__ is owner
+        assert [
+            unit._visualizer_owner is not None for unit in manager.displays
+        ].count(True) == 1
+
+        # The retained menu and visualizer-region double-click still route into
+        # this exact owner after the same-mode transaction.
         menu = chosen.runtime.context_menu_model
         visualizer_menu = next(
             entry for entry in menu.entries if entry["label"] == "⟳  Change Visualizer"
@@ -434,27 +505,24 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         admission = chosen.runtime.scene_controller._visualizer_double_click_admission
         assert admission is not None
         admission._region_contains = lambda _position: True
-        transition_now = [0.0]
-        owner._transition_clock = lambda: transition_now[0]
-        owner._transition_half_duration_s = 0.25
-        owner._sync = SimpleNamespace(sync_latest=lambda: True)
+        transition_now[0] = 1.0
         assert admission.handles_semantic_double_click_at(object()) is True
         assert owner._mode_transition_phase == "fading_out"
 
-        outgoing_runtime = owner_runtime
-        transition_now[0] = 0.125
+        outgoing_runtime = owner.controller.logical_runtime
+        transition_now[0] = 1.125
         assert owner.sync_present() is True
         assert owner._mode_transition_fade == pytest.approx(0.5)
         assert outgoing_runtime.is_running() is True
-        transition_now[0] = 0.25
+        transition_now[0] = 1.25
         assert owner.sync_present() is True
         assert outgoing_runtime.is_running() is False
         assert owner.controller.mode_id == "devcurve"
-        assert owner.render_identity.engine_generation == 18
-        assert owner.render_identity.activation_id == 24
-        assert engine.begin_count == engine.end_count == 1
-        assert engine.reset_count == 1
-        assert engine.floor_reset_count == 1
+        assert owner.render_identity.engine_generation == 19
+        assert owner.render_identity.activation_id == 25
+        assert engine.begin_count == engine.end_count == 2
+        assert engine.reset_count == 2
+        assert engine.floor_reset_count == 2
         assert owner.controller.logical_runtime is not outgoing_runtime
         assert owner.controller.logical_runtime.is_running() is True
         assert engine.acquire_count == 1
@@ -463,15 +531,15 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         owner.controller.logical_tick_state._waiting_for_fresh_engine_frame = False
         assert owner.sync_present() is True
         assert owner._mode_transition_phase == "fading_in"
-        transition_now[0] = 0.375
+        transition_now[0] = 1.375
         assert owner.sync_present() is True
         assert owner._mode_transition_fade == pytest.approx(0.5)
         assert owner._mode_transition_phase == "fading_in"
-        transition_now[0] = 0.5
+        transition_now[0] = 1.5
         assert owner.sync_present() is True
         assert owner._mode_transition_phase == "idle"
         assert settings.get("widgets.spotify_visualizer.mode") == "devcurve"
-        assert settings.save_calls == 1
+        assert settings.save_calls == 2
         visualizer_menu = next(
             entry for entry in menu.entries if entry["label"] == "⟳  Change Visualizer"
         )
@@ -491,8 +559,8 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         assert owner.sync_present() is True
         assert owner.controller.mode_id == "spectrum"
         assert settings.get("widgets.spotify_visualizer.mode") == "spectrum"
-        assert settings.save_calls == 2
-        assert engine.begin_count == engine.end_count == 2
+        assert settings.save_calls == 3
+        assert engine.begin_count == engine.end_count == 3
         assert engine.acquire_count == 1
         assert [unit._visualizer_owner is not None for unit in manager.displays].count(True) == 1
 
@@ -514,6 +582,61 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
                     timeout=3000,
                 )
             manager.retire_runtime()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_preset_completion_drops_replaced_and_retired_visualizer_owners(
+    qt_app,
+) -> None:
+    """A stale transition callback cannot persist into another owner generation."""
+
+    class _Settings:
+        def __init__(self) -> None:
+            self.persisted: list[tuple[object, object]] = []
+
+        def replace_visualizer_runtime_preset_state(
+            self,
+            visualizer_section,
+            custom_presets,
+        ) -> None:
+            self.persisted.append((visualizer_section, custom_presets))
+
+    settings = _Settings()
+    manager = DisplayManager(settings_manager=settings, runtime_generation=703)
+    target = SimpleNamespace(
+        mode="bubble",
+        visualizer_config={"mode": "bubble", "preset_bubble": 4},
+        custom_presets={"bubble": {"mode": "bubble"}},
+    )
+    expected_owner = SimpleNamespace(
+        is_retired=False,
+        controller=SimpleNamespace(mode_id="bubble"),
+    )
+    replacement_owner = SimpleNamespace(
+        is_retired=False,
+        controller=SimpleNamespace(mode_id="bubble"),
+    )
+    try:
+        manager._quick_visualizer_owner = replacement_owner
+        manager._complete_quick_visualizer_preset_change(
+            "bubble",
+            expected_owner=expected_owner,
+            target=target,
+        )
+
+        expected_owner.is_retired = True
+        manager._quick_visualizer_owner = expected_owner
+        manager._complete_quick_visualizer_preset_change(
+            "bubble",
+            expected_owner=expected_owner,
+            target=target,
+        )
+
+        assert settings.persisted == []
+    finally:
+        manager._quick_visualizer_owner = None
+        manager.retire_runtime()
         qt_app.processEvents()
 
 

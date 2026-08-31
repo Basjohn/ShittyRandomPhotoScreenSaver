@@ -52,6 +52,7 @@ def _live_unit(
     scene_controller = SimpleNamespace(
         visualizer_contains_scene_position=lambda _position: True,
         set_visualizer_double_click_admission=lambda _admission: None,
+        set_visualizer_middle_click_admission=lambda _admission: None,
     )
     return QuickDisplayUnit(
         runtime=SimpleNamespace(
