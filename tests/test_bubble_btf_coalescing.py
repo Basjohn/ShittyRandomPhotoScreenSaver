@@ -14,9 +14,9 @@ That holds for current Bubble because the simulation integrates one authored
 step per advance (no skipping) and the authored event consequences
 (kick spawn/promotion, vocal/snare persistent stream-burst envelope and the
 velocities/positions it drives) persist in the continuously evolving state that
-the newer renderer-visible result snapshot captures. The renderer reads only
-``positions``/``extras``/``trails`` from that result (``event_kinds`` is
-diagnostic).
+the newer renderer-visible ordinary frame captures.  The protected edge itself
+contains only compact event metadata; the renderer always reads geometry from
+the newest ``BubbleFrame``.
 
 These bars would fail if:
 
@@ -161,16 +161,19 @@ def test_newer_bubble_result_incorporates_the_older_authored_consequence():
     assert runtime.simulation.tick_calls == 2  # one integration per authored step
     assert len(frame_a.protected_edges) == 1
     assert len(frame_b.protected_edges) == 1
-    # A's authored input (0.3) is carried forward into B's geometry (0.3 + 0.5).
-    assert frame_a.protected_edges[0].result["positions"][0] == pytest.approx(0.3)
-    assert frame_b.protected_edges[0].result["positions"][0] == pytest.approx(0.8)
+    # A's authored input (0.3) is carried forward into B's ordinary/latest
+    # geometry (0.3 + 0.5).  Protected edges intentionally contain no arrays.
+    assert frame_a.positions[0] == pytest.approx(0.3)
+    assert frame_b.positions[0] == pytest.approx(0.8)
+    assert "positions" not in frame_a.protected_edges[0].result
+    assert "positions" not in frame_b.protected_edges[0].result
 
     # Control: B alone (A never integrated) would only reflect 0.5, proving the
-    # 0.8 above genuinely contains A's consequence rather than B in isolation.
+    # latest 0.8 frame genuinely contains A's consequence rather than B alone.
     control = BubbleFrameRuntime(simulation_factory=_AccumulatingSimulation)
     frame_b_only = _advance(control, bass=0.5, authored_ts=5.0, edge_token=1)
-    assert frame_b_only.protected_edges[0].result["positions"][0] == pytest.approx(0.5)
-    assert frame_b.protected_edges[0].result["positions"][0] != pytest.approx(0.5)
+    assert frame_b_only.positions[0] == pytest.approx(0.5)
+    assert frame_b.positions[0] != pytest.approx(0.5)
 
 
 def test_two_protected_results_before_one_sync_coalesce_to_the_carrying_result():
@@ -212,12 +215,13 @@ def test_two_protected_results_before_one_sync_coalesce_to_the_carrying_result()
     )
     assert taken is not None
     edges = taken.logical.protected_edges
-    # Exactly one coalesced bubble edge, the newer token, whose geometry already
-    # incorporates A's authored consequence (0.8, not 0.5).
+    # Exactly one compact coalesced event edge survives, while the ordinary
+    # newest mode frame is the sole geometry authority and carries A into B.
     bubble_edges = [e for e in edges if e.kind == "bubble_visible_result"]
     assert len(bubble_edges) == 1
     assert bubble_edges[0].token == 2
-    assert bubble_edges[0].result["positions"][0] == pytest.approx(0.8)
+    assert "positions" not in bubble_edges[0].result
+    assert taken.logical.mode_state.positions[0] == pytest.approx(0.8)
 
     # The slot is empty after the single synchronization consume (no FIFO replay).
     assert bridge.peek() is None

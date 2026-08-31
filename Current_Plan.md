@@ -1,6 +1,6 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-31 — first bounded H5b/H5c source repair implemented from the historical-vs-current audit. Quick now restores the historical shared BeatEngine/source preset block, Bubble's three stranded logical controls, Spectrum's two creator-derived preset translations and the historical `0.55` renderer transfer. The source audit also proves that the missing Spectrum notch/shaping block can alter bass/mid/treble lanes consumed by every mode. Bounded `[VIS_REACTIVITY]` + T0-T7 Play/Pause diagnostics are implemented; physical re-measurement, PySide test execution, source-readiness classification and Sine idle transport remain open. Black-flash PresentMode fix and maintained h-destination GREEN remain preserved.
+Last updated: 2026-08-31 — second H5c repair checkpoint after physical re-measurement. Spectrum is physically recognizable/reactive again after source/topology/transfer restoration. Live logs exonerate Bubble source admission/cadence and relocate its dead appearance downstream; Quick protected-edge Bubble geometry override is removed so latest authored geometry is authoritative. Historical resume `wake()` is restored, cold reactivity ramp is 1.0 s, edge diagnostics are corrected, Sine paused motion is +20%, and Quick-invented DevCurve ghost layers are removed for historical visual parity.
 
 ## Current checkpoint
 
@@ -17,12 +17,6 @@ Move a row between groups only when its state genuinely changes; do not keep a s
 - [x] H2 — Media artwork provider identity
 - [x] Black flash (recurring/activation) — fullscreen-flip PresentMode transitions; fixed by the 1px overscan (`R-63`). See the black-flash slice.
 
-**Implemented — deterministic tests GREEN, physical gate pending**
-
-- [ ] H3 — retained Reddit URL opener
-- [ ] H3b — Clock runtime mode + per-variant CUSTOM geometry
-- [ ] H4 — Media Play/Pause + seek command semantics
-
 **Pending**
 
 - [ ] H5a — CUSTOM Visualizer independent display admission
@@ -32,10 +26,11 @@ Move a row between groups only when its state genuinely changes; do not keep a s
 - [ ] H8 — Visualizer middle-click preset hotswap (source-proven contract omission)
 - [ ] H7 — Exit visible-response/perf classification (likely J after measurement)
 
-**New observations (decomposed under "Reveal / startup composition" below)**
+**New observations / J carry**
 
-- [ ] Visualizer does not fade in on startup while ordinary widgets do — reveal-consistency bug
-- [ ] Aspiration: desktop -> application crossfade reveal, widgets fading in afterwards — J Parity+
+- [ ] Visualizer does not fade in on startup while ordinary widgets do — reveal-consistency bug (decomposed under "Reveal / startup composition" below).
+- [ ] Context-menu theme colours do not follow the active theme; the menu remains stuck on one palette despite being a themed element. Treat as J presentation/theme parity unless source inspection exposes a functional settings-authority defect.
+- [ ] Aspiration: desktop -> application crossfade reveal, widgets fading in afterwards — J Parity+.
 
 The maintained `h-destination` profile is GREEN (77/77 at the black-flash fix `b4e8ce40`) and must remain GREEN after each bounded source change. H is not closed by unit tests alone: every H/H-J row in the operator ledger must be reconciled and the final dual-display source-mode smoke must remain physically clean.
 
@@ -128,133 +123,6 @@ Historical artwork fade/presentation quality is **not H2**. Artwork currently ap
 
 ## Active H work — execute in order
 
-### H3 — retained Reddit URL opener
-
-**Status: implemented; deterministic tests GREEN in the real development environment; physical MC/SCR gate pending.**
-
-The source-proven composition hole was real: `RetainedRedditPresentation` already owned URL admission and the `on_open_requested` seam, but production `RedditFamilyAdapter` omitted the callback.
-
-Agent audit at `1c2f4d75` verified the repaired production route end-to-end: `DisplayManager._open_reddit` (weak, generation-fenced) -> `default_ordinary_family_adapters(reddit_open_requested=...)` -> `RedditFamilyAdapter` -> `RetainedRedditPresentation` -> URL admission/action. The earlier RED bare-adapter test was corrected to exercise this real composition seam.
-
-The prepared repair keeps product consequences outside QML/model/presentation:
-
-```text
-Retained Reddit semantic URL action
--> RedditFamilyAdapter injected callback
--> weak generation-fenced DisplayManager route
--> existing core.windows.secure_url_launcher authority
--> MC / diagnostic: interactive/direct route
--> ordinary saver: secure handoff, then normal saver exit only after successful handoff
-```
-
-The adapter callback does not strongly retain `DisplayManager`, does not create another helper/poller/owner, and helper readiness does not gate teardown.
-
-Prepared deterministic coverage:
-
-```text
-tests/test_qtquick_family_product_actions.py
-```
-
-It proves saver handoff opens exactly once then requests normal exit exactly once, interactive builds do not exit, and failed/empty opens do not trigger exit. The pure product-action subset is GREEN in this environment; the real PySide production-family composition and Windows MC/SCR physical behavior remain operator/agent validation.
-
-**Validation gate before H3 closes (live checklist):**
-
-- [x] `tests/test_qtquick_family_product_actions.py` GREEN
-- [x] relevant retained Reddit / h-destination tests GREEN
-- [x] MC: admitted Reddit click opens the URL and keeps MC alive
-- [x] SCR/source-saver path: admitted click hands off once and exits normally
-- [x] rejected/untrusted/interaction-disabled URL still does not open
-- [x] inspect `screensaver.log` + `screensaver_qml.log` for unexplained action/QML errors
-
-When all are checked, mark H3 CLOSED and continue without redesigning the helper/opening authority.
-### H3b — Clock runtime mode + per-variant CUSTOM geometry
-
-**Status: expanded source-proven repair implemented; deterministic tests GREEN in the real development environment; physical dual-display gate pending.**
-
-The latest physical run narrowed the symptom: Clock can retain the requested analogue/digital state yet recreate at the wrong geometry. The migration had split the old R-45/R-48 contract across several seams:
-
-```text
-mode persistence:
-retained Clock action -> production callback -> per-display override
-
-recreation geometry:
-effective per-display mode -> matching CUSTOM geometry variant
-
-live toggle geometry:
-mode-specific rect + font scale -> same display-owned OverlayGeometryBinding
-
-CUSTOM persistence:
-custom_layout[screen][clock][analog|digital] -> rect + font_size only
-```
-
-Prepared repair:
-
-- production Clock callback persists only the target instance's `display_mode_overrides[screen_signature]`;
-- pre-bind hydration uses that same identity-aware effective mode rather than the shared baseline;
-- both committed analogue/digital variant states are seeded into the retained Clock (rect **and** variant-specific CUSTOM `font_size`);
-- live CUSTOM mode switching replaces the display-owned geometry binding's committed rect, preventing later preferred-size publication from replaying the stale prior-mode rect;
-- when an explicit target variant is absent but the opposite CUSTOM variant exists, replay derives a centered/clamped target shape using the saved font scale rather than falling to unrelated authored placement;
-- outside an active edit transaction, a runtime mode toggle canonicalizes the target CUSTOM variant through Python Settings/custom-layout authority; active CUSTOM Save/Cancel is never bypassed;
-- geometry payloads never regain `display_mode` behavior authority.
-
-Prepared deterministic coverage:
-
-```text
-tests/test_qtquick_family_product_actions.py
-tests/test_qtquick_clock_custom_variant_geometry.py
-```
-
-Both are GREEN in the real development environment. The H3b callback arity and maintained Clock presentation fakes were reconciled there; the remaining proof is the operator-only dual-display geometry/scale gate.
-
-**Validation gate before H3b closes (live checklist):**
-
-- [x] focused Clock/product-action tests + relevant retained Clock / h-destination tests GREEN
-- [x] dual display: put Clock in CUSTOM at an unmistakable non-default position/scale
-- [x] give analogue and digital visibly different saved rect/scale variants
-- [x] double-click only one display and verify the other display/Clock is unchanged
-- [x] toggle analog -> digital -> analog; each mode restores its own rect + scale
-- [x] Settings recreation preserves effective mode and matching geometry
-- [x] CUSTOM Save/Continue recreation preserves effective mode and matching geometry
-- [x] restart/reload preserves the same result
-- [x] inspect `custom_layout`: variants contain rect/font_size, never `display_mode`
-- [x] inspect `screensaver.log` + `screensaver_qml.log` for unexplained Clock/QML errors
-
-When all are checked, mark H3b CLOSED and continue to H4.
-
-### H4 — Media Play/Pause and seek do not execute; Previous/Next do
-
-**Status: IMPLEMENTED / deterministic focused gates GREEN; physical Spotify validation pending.**
-
-Trace the real command boundary:
-
-```text
-semantic request
--> worker submission
--> real WinRT method result / bool / exception
--> state reconciliation refresh
-```
-
-Do not treat queue submission as success. Do not block the GUI waiting for WinRT. Preserve Previous/Next, which already work through the same card.
-
-Verify Spotify's actual toggle behavior and the seek units/result of `try_change_playback_position_async()`.
-
-Live closure checklist:
-
-- [x] Project canonical GSMTC `is_play_enabled`, `is_pause_enabled`, and
-  `is_play_pause_toggle_enabled`; the retired/nonexistent `is_play_pause_enabled`
-  spelling no longer greys the retained glyph.
-- [x] Choose state-specific Play/Pause when supported and Toggle only when that
-  is the provider capability; preserve working Previous/Next.
-- [x] Keep GUI submission non-blocking while separately carrying the real WinRT
-  Boolean/exception outcome to the one shared Media runtime owner.
-- [x] Reconcile only after command completion; if a poll is already in flight,
-  coalesce exactly one completion-driven follow-up refresh.
-- [x] Preserve seek as absolute GSMTC 100 ns ticks and treat `False` as provider
-  rejection rather than queue success.
-- [ ] Physical current-source Spotify gate: with Ctrl held, glyph is enabled;
-  Play -> Pause -> Play changes Spotify; seek near 25% and 75% lands correctly;
-  Previous/Next remain working; inspect both runtime logs for command outcome.
-
 ### H5a — CUSTOM Visualizer must remain independent of Media's display route
 
 **Status: operator-reproducible functional regression against an existing contract.**
@@ -288,7 +156,7 @@ Technical route: `Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Deco
 
 ### H5b — Spectrum saturation + wrong functional presentation topology
 
-**Status: source repair implemented; focused PySide test execution + physical S0-S7 gate pending.**
+**Status: major source repair physically validated; Spectrum is recognizable/reactive again. Pause handoff briefly reaches zero before the correct idle floor and remains open under H5c diagnostics.**
 
 The direct comparison against known-good `3fe5df687387b6b6a121142372c43a7719442386` found four concrete ownership/presentation losses, including the second historical creator translation discovered during implementation:
 
@@ -332,9 +200,14 @@ What is already established / implemented:
 - [ ] Physically re-measure all five modes under real music after the shared source repair.
 - [ ] Capture warm + cold Play/Pause T0-T7 traces, distinguishing historical 1.5 s cold ramp from migration delay.
 - [ ] Prove whether current per-mode `source_ready` gates reject/delay valid live audio before changing them.
-- [ ] Trace Sine paused idle from `SineFrameRuntime` changing animation/shift state through snapshot/uniform/present; never add a QML timer to fake it.
-- [ ] Complete Bubble B0-B9 magnitude trace after shared source restoration; no global sensitivity/physics retune.
-- [ ] Complete Oscilloscope/DevCurve final renderer-input comparison as controls for shared vs mode-specific deviations.
+- [x] Sine paused idle is physically present; apply a paused-only +20% motion parity adjustment (`0.14 -> 0.168`, `0.22 -> 0.264`) without changing live/music gain or adding a timer.
+- [x] Bubble B0-B5 physical trace: fresh current source, strong real-music energy and ~90 Hz one-step-per-tick integration are healthy. Remaining dead appearance is downstream. Remove the protected-edge full-geometry override so Quick always renders the newest authored Bubble frame; protected edges retain consume-once metadata only.
+- [x] Play edge audit: restore historical `engine.wake()` before playback commit; reduce cold-only reactivity ramp from 1.5 s to 1.0 s while preserving warm-resume no-ramp and generation/activation freshness fencing. Correct T3/T5 sampling so diagnostics measure real edge timing.
+- [x] DevCurve source comparison: Quick had invented delayed ghost fills/outlines even though the historical shader never consumed its ghost setting. Remove that presentation/runtime work; keep saved ghost settings inert for historical parity. This is also a performance reduction.
+- [ ] Re-measure Bubble after latest-geometry repair; if still weak, continue snapshot-radius/alpha/position -> Quick uniform/geometry B6-B9 rather than touching source gain.
+- [ ] Re-measure DevCurve basic preset after historical ghost no-op restoration; if the bottom transient layer still misses heavy hits, use existing + event-triggered transient diagnostics to compare raw bass transient -> solver smoothed transient -> curve excursion.
+- [ ] Spectrum pause handoff: steady idle floor is already authored correctly (~0.24 max). Use corrected T7 + `[VIS_SPECTRUM_HANDOFF]` samples to locate the brief pre-floor zero; do not raise the floor.
+- [ ] Complete Oscilloscope final renderer-input comparison as a control.
 - [x] Preserve current scale/viewport sizing contracts; retired `*_growth` controls are not parity targets.
 
 Detailed live checklist and repair sequence: `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`.  
@@ -407,7 +280,7 @@ Remeasure **visible window dismissal** separately from legal retirement and deve
 
 **Status: SOLVED (recurring flash). Root cause MEASURED with PresentMon: the exact-cover borderless window is non-deterministically promoted to a hardware fullscreen-flip presentation, and the composition <-> `Hardware: Legacy Flip` PresentMode transitions present the black/stale frames on the LG/Display-1 output (4K 60 Hz secondary TV). Fix: a 1px coverage-preserving overscan (`_fullscreen_compat_geometry`) keeps the window non-exact-cover, so it stays in stable `Composed: Copy with GPU GDI` and never transitions. 6/6 flashing-prone launches -> black=0, operator-confirmed no flashes. Two earlier repairs (deferred first-show, event-driven surface-refresh) physically FAILED and were removed.**
 
-This operator-approved No Quota interleave still does **not** reorder H4-H8. It is now evidence-driven rather than generic J polish.
+This operator-approved No Quota interleave keeps the remaining H5-H8 work evidence-driven rather than generic J polish.
 
 Physical `[QUICK_SURFACE]` evidence after the first repair split the symptom:
 
@@ -510,9 +383,6 @@ H closes only when (live checklist):
 - [x] H1 reconstruction + terminal-retirement regressions remain GREEN
 - [x] H2 artwork provider identity remains GREEN and real artwork remains visible
 - [x] recurring/activation black flash resolved and not reintroduced (`R-63` overscan)
-- [ ] Reddit URL actions reach the correct product opener (H3 physical gate)
-- [ ] Clock runtime mode toggle + matching per-mode CUSTOM rect/scale survive Settings/Edit recreation (H3b physical gate)
-- [ ] Media Play/Pause + seek work on the real provider while Previous/Next remain working (H4 physical gate)
 - [ ] CUSTOM Visualizer can own a different selected display from Media while non-CUSTOM still follows Media (H5a)
 - [ ] Spectrum has non-degenerate data + canonical topology + restored engine-shaping/render-transfer parity after switch/recreation (H5b)
 - [ ] historical-vs-current visualizer reactivity audit closes the live-consumer config gaps, Bubble weak response, Play/Pause edge delay and Sine idle transport without adding clocks/owners/global tuning (H5c)
@@ -559,6 +429,7 @@ Named J cells include:
 - ordinary non-CUSTOM free-space composition, especially Media + Visualizer, without dog-piling;
 - CUSTOM overlap/cross-display authority untouched by ordinary collision avoidance;
 - coherent context-submenu hover-leave lifetime;
+- context-menu colours must resolve from the active theme rather than remaining stuck on a single palette; preserve one theme authority and avoid a menu-specific duplicate palette owner;
 - all-five visualizer eyes-on fidelity after H restores Spectrum data/topology;
 - after H5c restores functional historical reactivity/timing, any remaining Bubble fine visual feel/parity without sacrificing BTF or its currently good partial resizing;
 - mixed refresh/DPR, off/wake, A->B->A focus/topology, installed performance tails and clean exit;

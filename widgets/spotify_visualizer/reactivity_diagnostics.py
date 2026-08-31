@@ -96,7 +96,12 @@ def maybe_log_reactivity_boundary(
     resolved_values: object | None = None,
     event_summary: str = "",
 ) -> None:
-    """Log a compact source->resolved snapshot on edges or a bounded interval."""
+    """Log one compact source->resolved sample plus unthrottled edge milestones.
+
+    T3/T4 are evaluated before the periodic sample throttle.  The first version
+    checked them only when the 1.5 s VIS_REACTIVITY sampler happened to fire,
+    which made a healthy ~70 ms fresh source look like a 1.5 s source delay.
+    """
 
     if not (
         is_viz_diagnostics_enabled()
@@ -108,69 +113,13 @@ def maybe_log_reactivity_boundary(
     canonical_mode = str(mode or "unknown")
     ready = bool(source_ready)
     active = bool(playing)
-    signature = (
-        canonical_mode,
-        active,
-        ready,
-        int(runtime_generation),
-        int(engine_generation),
-        int(engine_activation),
-        int(source_generation),
-        int(source_activation),
-    )
-    previous_signature = getattr(host, "_reactivity_diag_last_signature", None)
-    last_log_ts = float(getattr(host, "_reactivity_diag_last_ts", 0.0) or 0.0)
-    identity_or_state_changed = signature != previous_signature
-    repeat_interval = _NOT_READY_REPEAT_S if active and not ready else _DIAG_SAMPLE_INTERVAL_S
-    if not identity_or_state_changed and timestamp - last_log_ts < repeat_interval:
-        return
-
-    previous_playing = getattr(host, "_reactivity_diag_last_playing", None)
-    previous_ready = getattr(host, "_reactivity_diag_last_ready", None)
-    if previous_playing is None or bool(previous_playing) != active:
-        reason = "playback_edge"
-    elif previous_ready is None or bool(previous_ready) != ready:
-        reason = "source_ready_change"
-    elif previous_signature is not None and signature[3:] != previous_signature[3:]:
-        reason = "identity_change"
-    elif active and not ready:
-        reason = "not_ready_persisted"
-    else:
-        reason = "sample"
-
     source_age_ms = -1.0
     if source_timestamp is not None and _coerce_float(source_timestamp) > 0.0:
         source_age_ms = max(0.0, (timestamp - float(source_timestamp)) * 1000.0)
 
-    raw_energy = _format_energy(input_energy) if input_energy is not None else "n/a"
-    out_energy = _format_energy(resolved_energy) if resolved_energy is not None else "n/a"
-    raw_level = _sequence_level(input_values) if input_values is not None else -1.0
-    out_level = _sequence_level(resolved_values) if resolved_values is not None else -1.0
+    # Play/Pause edge milestones must not be delayed by the ordinary bounded
+    # sampler.  They observe existing authored ticks only; no new cadence exists.
     edge_seq = int(getattr(host, "_reactivity_diag_edge_seq", 0) or 0)
-    event_suffix = f" events={event_summary}" if event_summary else ""
-
-    logger.debug(
-        "[VIS_REACTIVITY] mode=%s reason=%s edge=%d playing=%s ready=%s "
-        "runtime=%d engine=%d/%d source=%d/%d source_age_ms=%.1f "
-        "raw_energy=(%s) resolved_energy=(%s) raw_level=%.3f resolved_level=%.3f%s",
-        canonical_mode,
-        reason,
-        edge_seq,
-        active,
-        ready,
-        int(runtime_generation),
-        int(engine_generation),
-        int(engine_activation),
-        int(source_generation),
-        int(source_activation),
-        source_age_ms,
-        raw_energy,
-        out_energy,
-        raw_level,
-        out_level,
-        event_suffix,
-    )
-
     edge_started = float(getattr(host, "_reactivity_diag_edge_started_ts", 0.0) or 0.0)
     edge_playing = bool(getattr(host, "_reactivity_diag_edge_playing", active))
     if edge_seq > 0 and edge_playing == active and edge_started > 0.0:
@@ -180,7 +129,9 @@ def maybe_log_reactivity_boundary(
             and int(source_generation) == int(engine_generation)
             and int(source_activation) == int(engine_activation)
         )
-        if fresh_after_edge and not bool(getattr(host, "_reactivity_diag_edge_t3_logged", False)):
+        if fresh_after_edge and not bool(
+            getattr(host, "_reactivity_diag_edge_t3_logged", False)
+        ):
             host._reactivity_diag_edge_t3_logged = True
             logger.debug(
                 "[VIS_PLAYBACK_EDGE] stage=T3 edge=%d mode=%s playing=%s dt_ms=%.1f "
@@ -206,6 +157,66 @@ def maybe_log_reactivity_boundary(
                 int(source_generation),
                 int(source_activation),
             )
+
+    signature = (
+        canonical_mode,
+        active,
+        ready,
+        int(runtime_generation),
+        int(engine_generation),
+        int(engine_activation),
+        int(source_generation),
+        int(source_activation),
+    )
+    previous_signature = getattr(host, "_reactivity_diag_last_signature", None)
+    last_log_ts = float(getattr(host, "_reactivity_diag_last_ts", 0.0) or 0.0)
+    identity_or_state_changed = signature != previous_signature
+    repeat_interval = (
+        _NOT_READY_REPEAT_S if active and not ready else _DIAG_SAMPLE_INTERVAL_S
+    )
+    if not identity_or_state_changed and timestamp - last_log_ts < repeat_interval:
+        return
+
+    previous_playing = getattr(host, "_reactivity_diag_last_playing", None)
+    previous_ready = getattr(host, "_reactivity_diag_last_ready", None)
+    if previous_playing is None or bool(previous_playing) != active:
+        reason = "playback_edge"
+    elif previous_ready is None or bool(previous_ready) != ready:
+        reason = "source_ready_change"
+    elif previous_signature is not None and signature[3:] != previous_signature[3:]:
+        reason = "identity_change"
+    elif active and not ready:
+        reason = "not_ready_persisted"
+    else:
+        reason = "sample"
+
+    raw_energy = _format_energy(input_energy) if input_energy is not None else "n/a"
+    out_energy = _format_energy(resolved_energy) if resolved_energy is not None else "n/a"
+    raw_level = _sequence_level(input_values) if input_values is not None else -1.0
+    out_level = _sequence_level(resolved_values) if resolved_values is not None else -1.0
+    event_suffix = f" events={event_summary}" if event_summary else ""
+
+    logger.debug(
+        "[VIS_REACTIVITY] mode=%s reason=%s edge=%d playing=%s ready=%s "
+        "runtime=%d engine=%d/%d source=%d/%d source_age_ms=%.1f "
+        "raw_energy=(%s) resolved_energy=(%s) raw_level=%.3f resolved_level=%.3f%s",
+        canonical_mode,
+        reason,
+        edge_seq,
+        active,
+        ready,
+        int(runtime_generation),
+        int(engine_generation),
+        int(engine_activation),
+        int(source_generation),
+        int(source_activation),
+        source_age_ms,
+        raw_energy,
+        out_energy,
+        raw_level,
+        out_level,
+        event_suffix,
+    )
 
     host._reactivity_diag_last_signature = signature
     host._reactivity_diag_last_playing = active
@@ -241,6 +252,13 @@ def maybe_log_logical_publication(
     activation_id = int(getattr(logical, "activation_id", -1))
     if source_generation != engine_generation or source_activation != activation_id:
         return
+    edge_started = float(getattr(host, "_reactivity_diag_edge_started_ts", 0.0) or 0.0)
+    source_timestamp = getattr(logical, "source_timestamp", None)
+    if edge_playing and (
+        source_timestamp is None
+        or float(source_timestamp) < edge_started - 0.050
+    ):
+        return
 
     common = getattr(logical, "common", None)
     energy = getattr(common, "energy", None)
@@ -252,7 +270,6 @@ def maybe_log_logical_publication(
         return
 
     host._reactivity_diag_edge_t5_logged = True
-    edge_started = float(getattr(host, "_reactivity_diag_edge_started_ts", 0.0) or 0.0)
     logger.debug(
         "[VIS_PLAYBACK_EDGE] stage=T5 edge=%d mode=%s playing=%s dt_ms=%.1f "
         "revision=%d energy_level=%.3f bars_level=%.3f waveform_level=%.3f",

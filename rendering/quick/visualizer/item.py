@@ -63,6 +63,7 @@ class VisualizerRenderItem(QQuickItem):
         self._presentation: ResolvedVisualizerPresentation | None = None
         self._bound_window: QQuickWindow | None = None
         self._diag_last_render_playing: bool | None = None
+        self._diag_spectrum_handoff_remaining = 0
         super().__init__(parent)
         self.setFlag(QQuickItem.Flag.ItemHasContents, True)
         self.windowChanged.connect(self._bind_window_invalidation)
@@ -173,25 +174,63 @@ class VisualizerRenderItem(QQuickItem):
                 clear_snapshot = True
 
         if snapshot is not None and is_viz_diagnostics_enabled():
-            playing = bool(snapshot.logical.playing)
+            logical = snapshot.logical
+            common = logical.common
+            playing = bool(logical.playing)
             previous = self._diag_last_render_playing
+            bars_level = max((float(value) for value in common.bars), default=0.0)
+            energy = common.energy
+            energy_level = max(
+                float(energy.overall),
+                float(energy.bass),
+                float(energy.mid),
+                float(energy.high),
+            )
+            waveform_level = max(
+                (abs(float(value)) for value in common.waveform),
+                default=0.0,
+            )
             if previous is not None and previous != playing:
                 source_age_ms = -1.0
-                if snapshot.logical.source_timestamp is not None:
+                if logical.source_timestamp is not None:
                     source_age_ms = max(
                         0.0,
-                        (time.time() - snapshot.logical.source_timestamp) * 1000.0,
+                        (time.time() - logical.source_timestamp) * 1000.0,
                     )
                 logger.debug(
                     "[VIS_PLAYBACK_EDGE] stage=T7 mode=%s playing=%s revision=%d "
-                    "source=%d/%d source_age_ms=%.1f",
-                    snapshot.logical.mode_id,
+                    "source=%d/%d source_age_ms=%.1f energy_level=%.3f "
+                    "bars_level=%.3f waveform_level=%.3f",
+                    logical.mode_id,
                     playing,
                     snapshot.logical_revision,
-                    snapshot.logical.source_generation,
-                    snapshot.logical.source_activation_id,
+                    logical.source_generation,
+                    logical.source_activation_id,
                     source_age_ms,
+                    energy_level,
+                    bars_level,
+                    waveform_level,
                 )
+                if logical.mode_id == "spectrum" and not playing:
+                    # Capture only the first few retained states after pause so
+                    # a physical zero->idle-floor handoff is attributable to
+                    # authored/bridge state without adding a diagnostic timer.
+                    self._diag_spectrum_handoff_remaining = 4
+            if (
+                logical.mode_id == "spectrum"
+                and not playing
+                and self._diag_spectrum_handoff_remaining > 0
+            ):
+                logger.debug(
+                    "[VIS_SPECTRUM_HANDOFF] revision=%d bars_level=%.3f "
+                    "energy_level=%.3f source=%d/%d",
+                    snapshot.logical_revision,
+                    bars_level,
+                    energy_level,
+                    logical.source_generation,
+                    logical.source_activation_id,
+                )
+                self._diag_spectrum_handoff_remaining -= 1
             self._diag_last_render_playing = playing
 
         logical_size = (

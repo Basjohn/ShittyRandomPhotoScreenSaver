@@ -262,12 +262,13 @@ class BubbleFrameRuntime:
                         default=authored_ts,
                     ),
                     result_timestamp=authored_ts,
+                    # Protect only the consume-once authored event semantic.
+                    # Bubble geometry is continuously forward-carried by the
+                    # simulation and MUST remain latest-state authoritative at
+                    # the Quick boundary; copying full arrays here let an older
+                    # event result override a newer authored Bubble frame.
                     result=freeze_render_fields(
                         {
-                            "positions": frozen_positions,
-                            "extras": frozen_extras,
-                            "trails": frozen_trails,
-                            "bubble_count": bubble_count,
                             "source_timestamp": source_ts,
                             "simulation_timestamp": authored_ts,
                             "source_generation": int(source_generation),

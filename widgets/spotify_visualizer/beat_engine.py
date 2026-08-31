@@ -93,6 +93,9 @@ def _smooth_analysis_bars(
     return smoothed, False, extract_energy_bands(smoothed)
 
 
+_PLAY_RAMP_DURATION_S = 1.0
+
+
 class _SpotifyBeatEngine(QObject):
     """Shared beat engine with integrated smoothing.
     
@@ -166,7 +169,7 @@ class _SpotifyBeatEngine(QObject):
         # Reactivity ramp-up: gentle fade-in after play detection to mask
         # AGC warmup (envelopes converging to actual audio levels).
         self._play_ramp_start_ts: float = 0.0
-        self._play_ramp_duration: float = 1.5  # seconds
+        self._play_ramp_duration: float = _PLAY_RAMP_DURATION_S  # fresh-source fencing owns staleness safety
         self._idle_wave_phase: float = 0.0
 
     def set_thread_manager(self, thread_manager: Optional[ThreadManager]) -> None:

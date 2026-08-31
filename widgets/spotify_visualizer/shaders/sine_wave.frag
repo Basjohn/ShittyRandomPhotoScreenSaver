@@ -392,10 +392,10 @@ void main() {
     // Speed slider: controls travel rate.
     float speed = clamp(u_sine_speed, 0.0, 3.0);
     float play_gate = (u_playing == 1) ? 1.0 : 0.0;
-    float idle_motion_gate = (u_playing == 1) ? 1.0 : 0.14;
+    float idle_motion_gate = (u_playing == 1) ? 1.0 : 0.168;
     float effective_speed = speed * idle_motion_gate;
     // Keep paused sine visibly alive even when travel sliders are NONE.
-    float idle_phase = (u_playing == 1) ? 0.0 : (u_time * 0.22 * max(0.6, speed));
+    float idle_phase = (u_playing == 1) ? 0.0 : (u_time * 0.264 * max(0.6, speed));
 
     // Displacement: smooth bass-reactive positional offset for all lines.
     // On bass hits lines shift smoothly in Y (bounce) and X (phase nudge),

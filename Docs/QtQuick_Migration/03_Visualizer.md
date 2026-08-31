@@ -164,7 +164,7 @@ mode-specific renderer-visible state:
     Oscilloscope waveform / ghosts
     Sine layers / ghosts
     Bubble positions / radii / extras / trails / pop/transient consequences
-    DevCurve layer curves / order / ghosts / specular/tuning state
+    DevCurve layer curves / order / persisted ghost settings / specular-tuning state
 ```
 
 The exact records are source-owned. The durable rules are:

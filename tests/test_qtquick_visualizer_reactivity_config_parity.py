@@ -9,6 +9,10 @@ from rendering.quick.visualizer.implementations.spectrum import (
     prepare_spectrum_shader_levels,
 )
 from widgets.spotify_visualizer.bar_computation import _apply_adaptive_normalization
+from widgets.spotify_visualizer.beat_engine import (
+    _PLAY_RAMP_DURATION_S,
+    _SpotifyBeatEngine,
+)
 from widgets.spotify_visualizer.quick_display_visualizer_owner import (
     QuickDisplayVisualizerOwner,
 )
@@ -316,3 +320,76 @@ def test_quick_technical_config_preserves_reactivity_critical_zero_and_false_val
     assert state._bubble_transient_mix_bass == pytest.approx(0.20)
     assert state._bubble_transient_mix_vocal == pytest.approx(0.15)
 
+
+
+class _PlaybackEngine(_SpectrumConfigEngine):
+    def __init__(self) -> None:
+        super().__init__()
+        self.events: list[object] = []
+        self.playing = False
+        self._play_ramp_start_ts = 0.0
+
+    def wake(self) -> None:
+        self.events.append("wake")
+
+    def set_playback_state(self, active: bool) -> None:
+        self.playing = bool(active)
+        self.events.append(("playing", self.playing))
+
+    def get_generation_id(self) -> int:
+        return 1
+
+    def get_activation_id(self) -> int:
+        return 1
+
+
+def test_quick_play_edge_restores_historical_wake_before_playback_commit() -> None:
+    engine = _PlaybackEngine()
+    owner = _owner(engine, mode="bubble")
+
+    owner.set_playing(True)
+    assert engine.events[:2] == ["wake", ("playing", True)]
+
+    # Re-applying the same truth must not wake/restart capture.
+    owner.set_playing(True)
+    assert engine.events == ["wake", ("playing", True), ("playing", True)]
+
+    owner.set_playing(False)
+    owner.set_playing(True)
+    assert engine.events[-2:] == ["wake", ("playing", True)]
+
+
+def test_cold_play_ramp_is_one_second_but_warm_resume_stays_unramped(monkeypatch) -> None:
+    assert _PLAY_RAMP_DURATION_S == pytest.approx(1.0)
+
+    engine = _SpotifyBeatEngine.__new__(_SpotifyBeatEngine)
+    engine._is_spotify_playing = False
+    engine._last_playback_state_ts = 0.0
+    engine._capture_keepalive_deadline = 0.0
+    engine._ref_count = 0
+    engine._play_ramp_start_ts = 0.0
+    engine._play_ramp_duration = _PLAY_RAMP_DURATION_S
+    engine.ensure_started = lambda: None
+    engine._schedule_worker_stop_after_grace = lambda: None
+
+    now = {"value": 100.0}
+    monkeypatch.setattr(
+        "widgets.spotify_visualizer.beat_engine.time.time",
+        lambda: now["value"],
+    )
+
+    engine.set_playback_state(True)
+    assert engine._play_ramp_start_ts == pytest.approx(100.0)
+    now["value"] = 100.5
+    assert engine._get_play_ramp_factor() == pytest.approx(0.25)
+    now["value"] = 101.0
+    assert engine._get_play_ramp_factor() == pytest.approx(1.0)
+
+    # A warm capture resume remains immediate; shortening the cold ramp must not
+    # accidentally create a new fade where the old keepalive contract avoided one.
+    engine._is_spotify_playing = False
+    engine._capture_keepalive_deadline = 107.0
+    engine._play_ramp_start_ts = 0.0
+    engine.set_playback_state(True)
+    assert engine._play_ramp_start_ts == 0.0
+    assert engine._get_play_ramp_factor() == pytest.approx(1.0)

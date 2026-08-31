@@ -40,6 +40,7 @@ Legend:
 | [ ] | O-010 | **J high priority / H conditional** | Clicking/focusing A -> B -> A can black-flash the whole scene on every activation swap. | `[QUICK_SURFACE]` proves active image, visibility/exposure and scene graph remain stable. Current bounded repair requests one retained background redraw on `window_active_changed`. **AWAITING PHYSICAL VALIDATION**; persistent flash after that points to native QQuickWindow/Windows activation-buffer continuity. |
 | [ ] | O-011 | **J high priority / H conditional** | Black flashes/flicker at startup/focus/context menu/transition edges. | Trace has split owners: startup can expose a native surface before real image publication; focus/menu keep stable semantic scene/image. Startup show is now gated on first real retained image; focus/menu get one event-driven background reassertion. **AWAITING PHYSICAL VALIDATION** before escalating to native window policy or menu prewarming. |
 | [ ] | O-039 | J | Context submenus remain open indefinitely after pointer leaves. | Same-scene hover-path dismissal/switching with bounded crossing grace; preserve opening-click fix. |
+| [ ] | O-053 | J | Context-menu theme colours do not follow the active theme; the menu remains stuck on one palette despite being a themed element. | Trace the menu palette/style binding back to the canonical theme authority. Repair through the existing theme pipeline; do not create a menu-only palette owner or hard-code another colour set. **AWAITING VALIDATION** after implementation. |
 | [ ] | O-040 | H/J validation | Startup formerly flashed diagnostic/test colour bands and still showed a black clear afterward. | Proof palette leak is repaired. Trace then proved native show could precede first real image. Current repair arms geometry/visible intent while hidden and commits show only after a real `PresentationImage` exists. **AWAITING PHYSICAL VALIDATION**; close when neither proof bands nor black first-show clear remains. |
 
 ## Visualizer
@@ -47,21 +48,21 @@ Legend:
 | State | ID | Phase | Observation | Durable handling / close condition |
 |---|---|---|---|---|
 | [x] | O-012 | H preservation | Visualizer retained delivery now visibly evolves. | Preserve `adcfd96d`. |
-| [ ] | O-013 | **H** | Spectrum/Organ is both visually and reactively broken: dense segmented topology, full-height/saturated response, and selected preset semantics do not survive the migration. | H5b source repair now restores canonical render-mode topology, canonical unique-colour translation, the shared BeatEngine mirror/shape/notch/lane/profile/drop block, and the historical bar+peak `0.55` final transfer. Focused test execution + physical S0-S7 re-measure remain open. No global gain. |
-| [ ] | O-014 | **H/J audit** | Earlier smoke said Oscilloscope/Sine/DevCurve broadly looked good, but Sine is now physically reported to have lost its historical paused idle motion. That invalidates the blanket closed row. | H5c compares all three against `3fe5df6`. Sine runtime still advances paused time/travel/shift, so trace snapshot/uniform/present before changing formulas. Oscilloscope/DevCurve remain comparative controls; close only after exact reactivity/idle transport is proven. |
-| [ ] | O-015 | **H active (H5c)** | Bubble is barely reactive under real music: delayed visible start/stop and little contraction/expansion despite healthy ~90 Hz authored cadence/integration. Intentional idle-energy motion can therefore mask loss of live-source reactivity. | H5c source repair now restores Bubble's three stranded logical settings **and** the historical shared BeatEngine notch/shaping preset block. The latter is cross-mode: missing notches forced fixed `4/10` source splits instead of preset-normalized boundaries (about `14/31` for Bubble's 48-bar domain). Existing Quick bar-count/block-size/floor/sensitivity/dynamic-range/AGC/input-gain mapping was separately verified correct, including `AGC=0.0` = no AGC. Re-measure B0-B9, then use bounded `source_ready` diagnostics before any sensitivity/physics tuning. Preserve current good resizing. |
+| [ ] | O-013 | **H** | Spectrum/Organ migration regression. | R1 physical re-measure: Spectrum is again recognizable and strongly reactive after topology/source-shaping/0.55-transfer repairs. Remaining H5c defect is narrowly the brief zero-bars gap immediately after Pause before the already-correct idle floor appears. No global gain. |
+| [ ] | O-014 | **H/J audit** | Line-mode parity follow-up. | R1 physical re-measure confirms Sine idle transport exists but is a little weak; R2 raises paused-only motion 20%. DevCurve is broadly good but has jagged/doubled outlines and weak bottom heavy-hit visibility; source audit found Quick-only rendered ghost curves that were a historical no-op, now removed before any viewport/AA retune. Oscilloscope remains comparative control. |
+| [ ] | O-015 | **H active (H5c)** | Bubble remains visually barely reactive under music. | R1 logs now exonerate source admission and authored cadence: `ready=True`, strong live energy/pulses and ~90 Hz 1:1 integration are present. R2 removes a Quick-only stale geometry override: protected consume-once edges no longer carry/replace full Bubble arrays; newest ordinary `BubbleFrame` is the sole geometry authority. Next physical run decides whether any simulation->snapshot->renderer magnitude defect remains. Preserve current resizing and do not global-gain tune. |
 | [x] | O-016 | J preservation | Bubble partial/CUSTOM resize works quite well. | Preserve. |
 | [ ] | O-044 | **H** | In CUSTOM, Visualizer does not activate when its committed display differs from Media's display. | H5a. Existing source contract already grants Visualizer own monitor in CUSTOM; repair persistence/admission/failover seam without creating another owner. |
-| [ ] | O-052 | **H active (H5c / H4 boundary)** | Visualizer has a visible startup/stop response delay on Play/Pause. | Current route is direct Media model -> Quick visualizer owner -> unchanged BeatEngine, whose historical cold ramp is 1.5 s with 6 s capture keepalive. Capture one T0-T7 edge trace to distinguish late Media truth, cold-vs-warm source, source-readiness delay, authored publication delay and retained draw delay. Do not tune the historical ramp as a workaround. |
+| [ ] | O-052 | **H active (H5c)** | Visualizer has a visible reactivity startup delay after long idle Pause; app startup and hotswap fade-in do not show the same problem. | R1 diagnostics proved the original 1.5 s T3 reading could be sampler-induced and Bubble can receive a fresh frame in ~tens of ms. Historical pause->play `engine.wake()` was missing in Quick and is restored. Cold reactivity ramp is now 1.0 s; warm resume remains unramped; freshness fencing is unchanged. Corrected T0-T7 trace remains the closure gate. |
 
 ## Media — functional/settings
 
 | State | ID | Phase | Observation | Durable handling / close condition |
 |---|---|---|---|---|
 | [x] | O-017 | H closed | Media artwork previously decoded but never displayed. | Closed: production model now uses the exact engine-registered provider and latest physical run visibly shows artwork. Preserve cross-layer provider identity. |
-| [ ] | O-018 | **H** | Play/Pause does nothing. | H4 real GSMTC result telemetry/fix. |
+| [x] | O-018 | **H — CLOSED** | Play/Pause transport semantics. | Operator validated H4 physically; archived from active execution. |
 | [x] | O-019 | preservation | Previous/Next work. | Preserve. |
-| [ ] | O-020 | **H** | Seek/progress click does nothing. | H4 verify can-seek, units, real result. |
+| [x] | O-020 | **H — CLOSED** | Seek/progress transport semantics. | Operator validated H4 physically; archived from active execution. |
 | [ ] | O-045 | **H** | CUSTOM greys Media feature controls that do not author size, including progress/seek/glow-related controls. | H6. CUSTOM Media lock is font size + artwork size only; preserve ordinary dependency gates. |
 
 ## Media — J visual/design parity
@@ -85,9 +86,9 @@ Legend:
 | [ ] | O-029 | J | Gmail refresh treatment inconsistent; Reddit preferred. | Shared treatment where semantics match. |
 | [ ] | O-030 | J | Gmail/Media/Reddit logos slightly misaligned. | Cross-family header baseline. |
 | [ ] | O-031 | J | Header borders/radii inconsistent. | Explain setting-driven differences or remove. |
-| [ ] | O-032 | **H — awaiting validation** | Reddit URLs did not open even in MC. | H3 production opener wiring is prepared in the replacement pack. Validate MC direct-open/no-exit and saver secure-handoff/normal-exit, plus `screensaver_qml.log`, before closing. |
+| [x] | O-032 | **H — CLOSED** | Reddit URL opener. | Operator validated H3 physically; archived from active execution. |
 | [x] | O-033 | preservation | Gmail URL opening works. | Preserve. |
-| [ ] | O-048 | **H — awaiting validation** | Clock can preserve analogue/digital state yet recreate at the wrong geometry/scale after Settings/Edit. | H3b now aligns per-display mode selection with the matching CUSTOM variant, seeds independent analogue/digital rect+font states, keeps the display-owned geometry binding coherent during live toggles, and canonicalizes target variants outside active edit transactions. Validate analog↔digital variant restoration + Settings/CUSTOM recreation + restart before closing. |
+| [x] | O-048 | **H — CLOSED** | Clock analogue/digital state + CUSTOM geometry recreation. | Operator validated H3b physically; archived from active execution. |
 
 ## Achievement Pulse
 

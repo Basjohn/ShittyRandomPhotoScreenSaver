@@ -190,7 +190,14 @@ def test_devcurve_stale_playing_source_is_zeroed_but_paused_idle_stays_alive() -
     assert any(len(curve) == 96 for _name, curve in idle.curves)
 
 
-def test_devcurve_ghost_is_delayed_authored_state_and_disables_cleanly() -> None:
+def test_devcurve_shader_does_not_render_migration_invented_ghost_layers() -> None:
+    source = load_fragment_shader("devcurve")
+    assert source is not None
+    assert "u_devcurve_ghost_curve_" not in source
+    assert "u_devcurve_ghost_enabled" not in source
+
+
+def test_devcurve_ghost_settings_remain_visual_noop_for_historical_parity() -> None:
     runtime = DevCurveFrameRuntime()
     first = _advance(runtime, now_ts=5.0)
     second = _advance(
@@ -200,16 +207,14 @@ def test_devcurve_ghost_is_delayed_authored_state_and_disables_cleanly() -> None
     )
 
     assert first is not None and second is not None
-    assert second.ghost_curves == first.curves
     assert second.curves != first.curves
-
-    disabled = _advance(
-        runtime,
-        now_ts=5.10,
-        parameters=_parameters(ghosting=False),
-    )
-    assert disabled is not None
-    assert disabled.ghost_curves == ()
+    # The pre-migration shader accepted the persisted ghost controls but never
+    # sampled a ghost curve. Quick must not invent duplicate filled/outlined
+    # layers merely because the saved preset has ghosting=true.
+    assert first.parameters["devcurve_ghosting_enabled"] is True
+    assert first.parameters["devcurve_ghost_alpha"] == pytest.approx(0.65)
+    assert first.ghost_curves == ()
+    assert second.ghost_curves == ()
 
 
 def test_devcurve_runtime_retirement_is_authoritative() -> None:
@@ -332,3 +337,5 @@ def test_quick_devcurve_renderer_has_no_legacy_presentation_dependency() -> None
     assert "renderers.devcurve" not in source
     assert "devcurve_growth" not in source
     assert "gl_FragCoord" not in source
+from widgets.spotify_visualizer.shaders import load_fragment_shader
+

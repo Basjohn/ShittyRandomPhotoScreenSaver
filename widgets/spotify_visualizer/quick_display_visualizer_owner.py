@@ -283,6 +283,13 @@ class QuickDisplayVisualizerOwner:
 
         controller.playing = active
         engine = controller.ensure_engine()
+        if active and not previous:
+            wake = getattr(engine, "wake", None)
+            if callable(wake):
+                # Historical pause->play contract: wake the sole shared capture
+                # owner before committing playback truth.  wake() itself only
+                # restarts stale capture and otherwise remains a cheap no-op.
+                wake()
         set_playback_state = getattr(engine, "set_playback_state", None)
         if not callable(set_playback_state):
             raise RuntimeError("visualizer BeatEngine has no playback-state authority")

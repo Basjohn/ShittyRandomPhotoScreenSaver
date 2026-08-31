@@ -104,9 +104,6 @@ class DevCurveFrameRuntime:
         self._last_timestamp = 0.0
         self._last_playing: bool | None = None
         self._specular_activity_alpha = 0.0
-        self._ghost_ring: list[
-            tuple[tuple[str, tuple[float, ...]], ...]
-        ] = []
         self._latest = DevCurveResolvedFrame()
         self._retired = False
 
@@ -139,7 +136,6 @@ class DevCurveFrameRuntime:
         self._last_timestamp = 0.0
         self._last_playing = None
         self._specular_activity_alpha = 0.0
-        self._ghost_ring.clear()
         self._latest = DevCurveResolvedFrame()
 
     def advance(
@@ -331,53 +327,13 @@ class DevCurveFrameRuntime:
             layer_map = {}
         current_curves = _curves(layer_map)
 
-        ghosting_enabled = bool(
-            _parameter(
-                parameter_values,
-                "devcurve_ghosting_enabled",
-                False,
-            )
-        )
-        ghost_alpha = _bounded(
-            _parameter(parameter_values, "devcurve_ghost_alpha", 0.0),
-            0.0,
-            1.0,
-        )
+        # Historical DevCurve accepted ghost settings but never rendered a
+        # ghost curve: the old fragment shader declared u_ghost_alpha without
+        # consuming it and had no ghost-curve uniforms.  Quick briefly invented
+        # delayed duplicate filled layers here, which changed outline quality
+        # and could mask short transient motion.  Keep the persisted settings in
+        # parameters, but author no additional visual layer for parity.
         ghost_curves: tuple[tuple[str, tuple[float, ...]], ...] = ()
-        if ghosting_enabled and ghost_alpha > 0.001:
-            previous_curves = self._latest.curves
-            if previous_curves:
-                self._ghost_ring.append(previous_curves)
-            delay_frames = max(
-                2,
-                min(
-                    18,
-                    int(
-                        round(
-                            2.0
-                            + _bounded(
-                                _parameter(
-                                    parameter_values,
-                                    "devcurve_ghost_decay",
-                                    0.4,
-                                ),
-                                0.1,
-                                1.0,
-                            )
-                            * 16.0
-                        )
-                    ),
-                ),
-            )
-            while len(self._ghost_ring) > delay_frames:
-                self._ghost_ring.pop(0)
-            ghost_curves = (
-                self._ghost_ring[0]
-                if self._ghost_ring
-                else current_curves
-            )
-        else:
-            self._ghost_ring.clear()
 
         if self._last_playing is None:
             self._specular_activity_alpha = 1.0 if is_playing else 0.0
