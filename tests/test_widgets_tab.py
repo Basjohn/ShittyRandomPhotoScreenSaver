@@ -586,7 +586,17 @@ class TestWidgetsTab:
 
     def test_widgets_tab_disables_media_size_controls_when_custom_is_active(self, qt_app, settings_manager):
         settings_manager.set("widgets", {
-            "media": {"enabled": True, "position": "Custom", "monitor": "1"},
+            "media": {
+                "enabled": True,
+                "provider": "spotify",
+                "position": "Custom",
+                "monitor": "1",
+                "show_controls": True,
+                "playback_progress_enabled": True,
+                "playback_progress_glow_enabled": True,
+                "spotify_volume_enabled": True,
+                "mute_button_enabled": True,
+            },
             "custom_layout": {
                 "version": 2,
                 "displays": {
@@ -609,6 +619,14 @@ class TestWidgetsTab:
             assert notice.isHidden() is False
             assert "Disable Custom Mode" in notice.text()
             assert tab.media_font_combo.isEnabled() is True
+            assert tab.media_show_controls.isEnabled() is True
+            assert tab.media_playback_progress_enabled.isEnabled() is True
+            assert tab.media_playback_progress_height.isEnabled() is True
+            assert tab.media_playback_progress_shadow_enabled.isEnabled() is True
+            assert tab.media_playback_progress_glow_enabled.isEnabled() is True
+            assert tab.media_playback_progress_glow_color_btn.isEnabled() is True
+            assert tab.media_spotify_volume_enabled.isEnabled() is True
+            assert tab.media_mute_button_enabled.isEnabled() is True
         finally:
             tab.deleteLater()
 

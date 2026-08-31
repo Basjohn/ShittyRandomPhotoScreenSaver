@@ -13,7 +13,7 @@ H2 Media artwork provider identity: CLOSED; exact engine-registered provider is 
 H3 Reddit production opener: implementation prepared; AWAITING TEST VALIDATION.
 H3b Clock runtime mode-toggle persistence: implementation prepared; AWAITING TEST VALIDATION.
 H4 Media command-result semantics: implemented / deterministic focused gates GREEN; physical Spotify gate pending.
-H5a route/owner/draw localization + cross-display Media-model binding repair: focused two-live-unit gate GREEN / physical confirmation pending; remaining H5-H6 per Current_Plan.
+H5a route/owner/draw localization + cross-display Media-model binding repair: focused two-live-unit gate GREEN / physical confirmation pending. H6 exact-state Media CUSTOM lock source/runtime gate is GREEN (`126/126` Settings + descriptor suite); physical revalidation remains per Current_Plan.
 H8 Visualizer middle-click preset hotswap: pending; source-proven historical contract omitted from the current Quick interaction contract.
 Qt/QML observability: permanent always-on direct `screensaver_qml.log`; physical Quick gates inspect it alongside the Python log.
 I residue reconciliation: BLOCKED until H re-closes.
@@ -270,7 +270,7 @@ H3b Clock runtime mode-toggle persistence: IMPLEMENTED / AWAITING TEST VALIDATIO
 H4 Media Play/Pause + seek provider-result semantics: IMPLEMENTED / deterministic focused gates GREEN / physical Spotify gate pending
 H5a CUSTOM Visualizer independent display admission: route/owner/draw exonerated; cross-display Media-model binding repair + focused two-live-unit gate GREEN / physical confirmation pending
 H5b Spectrum upstream saturation + wrong topology: pending
-H6 CUSTOM Settings size-lock scope: pending
+H6 CUSTOM Settings size-lock scope: source/runtime-shaped GREEN; physical revalidation pending
 H8 Visualizer middle-click preset hotswap: pending; requires retained middle-button admission + same-mode activation coverage
 H7 exit visible-response/perf classification: pending / likely J if windows dismiss promptly
 ```
@@ -312,7 +312,7 @@ Current post-cutover focused additions:
 | `tests/test_visualizer_custom_route_contract.py` | **ADDED — PERMANENT H5a ROUTING/BINDING PIN** | Real manager admission over two live unit shells proves CUSTOM Visualizer owns its intentionally different monitor, non-CUSTOM follows Media, one bounded generation trace reports the exact route/outcome, and the sole owner can bind playback from the existing Media model on the other display without creating a Media copy. |
 | H8 focused runtime tests (to add with implementation) | **PENDING H CONTRACT** | Must pin middle-click hit consumption, one-step/wraparound, unchanged mode, Custom -> curated -> Custom exact restoration, subtree-only persistence, no Media mutation, one same-mode activation transaction, active-transition rejection, recreation/restart persistence, and all-five-mode coverage. |
 | Media app-volume child presentation tests (to add with J implementation) | **PENDING J PARITY+ CONTRACT** | Pin separate retained child/item as the existing and unspecified default, integrated only by explicit option, Media-effective/provider-capability dependency, shared Media display route/lifecycle, own CUSTOM rect/size in Media's display bucket, and the existing Media presentation model plus one `MediaVolumeRuntimeService` lease/action seam across both variants. |
-| `tests/test_custom_resize_lock_scope.py` | **PERMANENT SETTINGS PIN** | Media CUSTOM lock metadata contains size-authoring controls only. |
+| `tests/test_widget_descriptors.py` + `tests/test_widgets_tab.py` | **PERMANENT SETTINGS PIN / H6** | Media CUSTOM lock metadata and real Settings state: only font/artwork lock; progress/glow/volume/mute retain normal dependency truth. |
 
 Qt/QML capture tests are not a substitute for real QML runtime evidence; physical gates must inspect `screensaver_qml.log`.
 

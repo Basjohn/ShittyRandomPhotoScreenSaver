@@ -227,7 +227,7 @@ Safety checkpoint / applied-vs-pending handoff: `Docs/QtQuick_Migration/H5c_Impl
 
 ### H6 — CUSTOM Settings may lock only size-authoring controls
 
-**Status: operator-reproducible Settings ownership defect.**
+**Status: exact current source and runtime-shaped Settings contract are GREEN; operator revalidation remains open.**
 
 For Media, canonical CUSTOM size-lock metadata is only:
 
@@ -236,15 +236,17 @@ media_font_size
 media_artwork_size
 ```
 
-CUSTOM itself must not disable progress/seek/glow/volume/mute feature controls. Normal feature/provider dependency gates still apply.
+CUSTOM itself must not disable progress/seek/glow/volume/mute feature controls. Normal feature/provider dependency gates still apply. A complete current-source setter audit finds no secondary CUSTOM disable owner: `_refresh_custom_resize_lock_state()` touches only descriptor-owned controls, while progress/glow and provider-volume state are owned by their normal dependency refreshes. The normal profile currently persists the reported combination (`Custom`, Spotify, transport/progress/glow/volume/mute enabled), and a real `WidgetsTab` built from that exact state reports only font/artwork disabled.
 
-Find the secondary disable owner (parent container, stale second lock path, dependency refresh ordering, etc.) and remove only the CUSTOM-derived over-lock. Do not force-enable controls that are legitimately disabled by their own semantics.
+Do not invent a force-enable repair while the current source/runtime contract is GREEN. Re-open Settings from the current build; if controls still look disabled, capture the exact control/parent enabled tuple and style state before changing ownership.
 
 Closure checklist:
 
-- [ ] Locate the secondary disable owner over-locking progress/seek/glow/volume/mute in CUSTOM.
-- [ ] CUSTOM locks only `media_font_size` + `media_artwork_size`; feature controls stay enabled unless their own feature/provider gate disables them.
-- [ ] No control legitimately disabled by its own semantics is force-enabled.
+- [x] Audit every current Media/lock `setEnabled()` owner: no secondary CUSTOM path exists; progress/glow and provider-volume gates are independent semantic owners.
+- [x] Runtime-shaped exact-state test proves CUSTOM locks only `media_font_size` + `media_artwork_size`; progress toggle/height/shadow/glow/colour and volume/mute remain effectively enabled under their true dependencies.
+- [x] Existing dependency-off tests prove transport-off and unsupported-provider states remain disabled; no force-enable behavior was added.
+- [x] Full `test_widgets_tab.py` + descriptor suite passes `126/126`.
+- [ ] Operator re-open the Media Settings page on the current build and confirm only the two size-authoring controls are grey. If not, record the control plus parent/grandparent enabled tuple.
 
 Technical route: `Docs/QtQuick_Migration/H6_Custom_Settings_Lock_Scope_Decomposition_2026-08-30.md`.
 
