@@ -10,25 +10,9 @@ Item {
     property real dimmingOpacity: 0.0
     property real pixelShiftX: 0.0
     property real pixelShiftY: 0.0
-    property bool haloEnabled: false
-    property bool nativeCursorVisible: false
-    property string haloShape: "cursor_light"
     property var contextMenuModel: null
     property bool perfHudEnabled: false
     property string perfHudText: ""
-
-    // High-rate pointer position is presentation-local.  Do not route mouse
-    // polling through Python auxiliary state: this passive handler keeps the
-    // retained Halo on the scene/input path and does not take click ownership.
-    HoverHandler {
-        id: scenePointerHover
-        enabled: displayScene.haloEnabled || displayScene.nativeCursorVisible
-        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-        target: null
-        cursorShape: displayScene.haloEnabled
-            ? Qt.BlankCursor
-            : Qt.ArrowCursor
-    }
 
     Rectangle {
         id: backgroundDimming
@@ -78,16 +62,6 @@ Item {
         id: customLayoutOverlay
         anchors.fill: parent
         z: 100
-    }
-
-    CursorHalo {
-        id: cursorHalo
-        haloEnabled: displayScene.haloEnabled
-        pointerActive: scenePointerHover.hovered
-        pointerX: scenePointerHover.point.position.x
-        pointerY: scenePointerHover.point.position.y
-        haloShape: displayScene.haloShape
-        z: 200
     }
 
     ContextMenu {

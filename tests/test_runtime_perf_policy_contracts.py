@@ -154,47 +154,121 @@ def test_image_change_perf_parser_separates_timer_and_manual_sources():
     assert "prefetch_protected_samples=1 min=2 max=2" in text
 
 
-def test_cursor_halo_pointer_motion_stays_inside_retained_qml_scene():
+def test_shared_ctrl_coordinator_pushes_global_truth_without_polling():
+    module = _load_module(
+        "_srpss_test_ctrl_coordinator",
+        ROOT / "rendering" / "quick" / "ctrl_coordinator.py",
+    )
+    coordinator = module.SharedCtrlCoordinator()
+    seen_a: list[bool] = []
+    seen_b: list[bool] = []
+    key_a = (7, 0)
+    key_b = (7, 1)
+    coordinator.subscribe(key_a, seen_a.append)
+    coordinator.subscribe(key_b, seen_b.append)
+    assert seen_a == [False]
+    assert seen_b == [False]
+
+    publish_a = coordinator.publisher_for(key_a)
+    publish_b = coordinator.publisher_for(key_b)
+    publish_a(True)
+    assert seen_a[-1] is True and seen_b[-1] is True
+    publish_b(True)
+    # Global truth did not change; do not republish unchanged semantic state.
+    assert seen_a == [False, True]
+    assert seen_b == [False, True]
+    publish_a(False)
+    assert seen_a == [False, True]  # B still holds Ctrl.
+    publish_b(False)
+    assert seen_a[-1] is False and seen_b[-1] is False
+
+    coordinator.forget(key_a)
+    assert coordinator.listener_count == 1
+    assert coordinator.contributing_display_count == 1
+
+    # A replacement generation on the same physical screen owns a distinct
+    # key. Retiring the old generation must not clear the replacement listener
+    # or contribution.
+    replacement_key = (8, 1)
+    seen_replacement: list[bool] = []
+    coordinator.subscribe(replacement_key, seen_replacement.append)
+    publish_replacement = coordinator.publisher_for(replacement_key)
+    publish_replacement(True)
+    assert seen_replacement[-1] is True
+    coordinator.forget(key_b)
+    assert coordinator.listener_count == 1
+    assert coordinator.is_display_held(replacement_key) is True
+    assert coordinator.is_held() is True
+
+
+def test_cursor_halo_uses_native_cursor_and_cached_semantic_input():
     window = (ROOT / "rendering/quick/window.py").read_text()
     runtime = (ROOT / "rendering/quick/runtime.py").read_text()
     auxiliary = (ROOT / "rendering/quick/auxiliary.py").read_text()
+    input_controller = (ROOT / "rendering/quick/input_controller.py").read_text()
+    cursor_controller = (ROOT / "rendering/quick/cursor_controller.py").read_text()
     scene_controller = (ROOT / "rendering/quick/scene_controller.py").read_text()
     display_scene = (ROOT / "rendering/quick/qml/DisplayScene.qml").read_text()
-    cursor_halo = (ROOT / "rendering/quick/qml/CursorHalo.qml").read_text()
+    display_manager = (ROOT / "engine/display_manager.py").read_text()
+    ctrl_coordinator = (ROOT / "rendering/quick/ctrl_coordinator.py").read_text()
 
-    # High-rate pointer coordinates must never cross the Python auxiliary-state
-    # bridge. Python owns semantic admission/suppression/shape only.
-    assert "pointer_position_changed" not in window
-    assert "pointer_position_changed" not in runtime
-    assert "update_halo_pointer" not in auxiliary
-    assert "update_halo_pointer" not in runtime
-    assert "halo_x" not in auxiliary
-    assert "halo_y" not in auxiliary
-    assert "halo_inactivity_timer" not in auxiliary
+    # The pointer visual itself must not be a moving retained-QML item. Native
+    # QCursor motion is owned by Qt/the window system and cannot dirty the
+    # wallpaper/Visualizer scene simply because pointer coordinates changed.
+    assert "CursorHalo" not in display_scene
+    assert "scenePointerHover" not in display_scene
+    assert "HoverHandler" not in display_scene
+    assert "haloEnabled" not in display_scene
+    assert 'setProperty("haloEnabled"' not in scene_controller
+    assert 'setProperty("nativeCursorVisible"' not in scene_controller
+    assert 'setProperty("haloShape"' not in scene_controller
+    assert "QCursor" in cursor_controller
+    assert "self._window.setCursor(cursor)" in cursor_controller
+    assert '"pointer_owner": "native_qcursor"' in cursor_controller
+    assert '"scene_position_binding": False' in cursor_controller
+    assert "QQuickItem" not in cursor_controller
+    assert "requestUpdate" not in cursor_controller
+
+    # The two-second inactivity contract is deadline-based. Mouse polling only
+    # updates last_motion_ns; it does not restart a Python/QML timer per event.
+    assert "self._last_motion_ns = now" in cursor_controller
+    assert "if not self._timer.isActive():" in cursor_controller
+    assert "self._timer.start(_CURSOR_INACTIVITY_MS)" in cursor_controller
+    assert ".restart()" not in cursor_controller
+    assert "_CURSOR_INACTIVITY_MS: Final[int] = 2000" in cursor_controller
+
+    # Halo motion bypasses RuntimeInputOwner entirely. The remaining mouse-move
+    # route exists only for the classic non-interaction >10px exit gesture.
+    assert "cursor.tracks_pointer_motion" in window
+    assert "controller.passive_mouse_move_requires_routing" in window
+    assert "interaction_mode_provider=interaction_mode_provider" not in input_controller
+    assert "global_ctrl_held_provider=global_ctrl_held_provider" not in input_controller
+    assert "interaction_mode_provider=None" in input_controller
+    assert "global_ctrl_held_provider=None" in input_controller
+    assert "return bool(self._state.interaction_mode_enabled)" in input_controller
+    assert "return bool(self._state.ctrl_held)" in input_controller
+    assert '"interaction_owner"] = "event_cached"' in input_controller
+    assert '"ctrl_owner"] = "event_cached_shared"' in input_controller
+
+    # Settings and cross-display Ctrl are pushed on semantic changes, not read
+    # from providers at mouse polling frequency.
+    assert "interaction_mode_enabled=self._interaction_mode_enabled()" in display_manager
+    assert "self._set_quick_interaction_mode_enabled(persisted)" in display_manager
+    assert "ctrl_coordinator.subscribe(" in (
+        ROOT / "rendering/quick/display_unit.py"
+    ).read_text()
+    assert "def subscribe(" in ctrl_coordinator
+    assert "self._broadcast_if_changed()" in ctrl_coordinator
+    assert "held_provider" not in ctrl_coordinator
+
+    # Auxiliary state still owns low-rate semantic admission/shape only and
+    # explicitly identifies the native cursor as pointer presentation owner.
     assert "halo_enabled" in auxiliary
     assert "native_cursor_visible" in auxiliary
-
-    assert 'setProperty("haloEnabled"' in scene_controller
-    assert 'setProperty("nativeCursorVisible"' in scene_controller
-    assert 'setProperty("haloX"' not in scene_controller
-    assert 'setProperty("haloY"' not in scene_controller
-
-    # The retained scene passively tracks the real pointer and owns the
-    # inactivity clock. Halo admission explicitly hides the native cursor;
-    # context-menu admission explicitly exposes one native arrow instead.
-    assert "HoverHandler" in display_scene
-    assert "scenePointerHover.point.position.x" in display_scene
-    assert "scenePointerHover.point.position.y" in display_scene
-    assert "Qt.BlankCursor" in display_scene
-    assert "Qt.ArrowCursor" in display_scene
-    assert "pointerActive: scenePointerHover.hovered" in display_scene
-    assert "interval: 2000" in cursor_halo
-    assert "enabled: haloRoot.haloEnabled" in cursor_halo
-    assert "onPointerXChanged" in cursor_halo
-    assert "onPointerYChanged" in cursor_halo
-    assert "onHaloShapeChanged: haloCanvas.requestPaint()" in cursor_halo
-    assert "onPointerXChanged: haloCanvas.requestPaint()" not in cursor_halo
-    assert "onPointerYChanged: haloCanvas.requestPaint()" not in cursor_halo
+    assert '"halo_pointer_owner": "native_qcursor"' in auxiliary
+    assert "pointer_position_changed" not in runtime
+    assert "halo_x" not in auxiliary
+    assert "halo_y" not in auxiliary
 
 
 def test_replacement_runtime_first_frames_reseed_existing_prefetch_owner():

@@ -200,7 +200,7 @@ class QuickAuxiliaryController(QObject):
             "halo_enabled": state.halo_enabled,
             "native_cursor_visible": state.native_cursor_visible,
             "halo_shape": state.halo_shape,
-            "halo_pointer_owner": "qml_retained_scene",
+            "halo_pointer_owner": "native_qcursor",
         }
 
     def _advance_pixel_shift(self) -> None:

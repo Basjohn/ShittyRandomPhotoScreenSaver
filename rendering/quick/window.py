@@ -15,6 +15,7 @@ from .state import (
     QuickWindowPolicy,
     capture_display_identity,
 )
+from .cursor_controller import QuickCursorController
 from .input_controller import QuickInputController
 
 
@@ -56,6 +57,7 @@ class QuickDisplayWindow(QQuickWindow):
         self._display_identity: QuickDisplayIdentity | None = None
         self._binding_loss: QuickDisplayBindingLoss | None = None
         self._input_controller: QuickInputController | None = None
+        self._cursor_controller: QuickCursorController | None = None
         self._semantic_double_click_hit_test: Callable[[QPointF], bool] | None = None
         self._semantic_middle_click_hit_test: Callable[[QPointF], bool] | None = None
         self._desired_visible = False
@@ -124,6 +126,13 @@ class QuickDisplayWindow(QQuickWindow):
         ):
             raise ValueError("Quick input identity does not match its display window")
         self._input_controller = controller
+
+    def bind_cursor_controller(self, controller: QuickCursorController) -> None:
+        """Bind the native cursor owner; it never participates in scene geometry."""
+
+        if self._cursor_controller is not None:
+            raise RuntimeError("Quick display cursor controller is already bound")
+        self._cursor_controller = controller
 
     def bind_semantic_double_click_hit_test(
         self,
@@ -206,6 +215,7 @@ class QuickDisplayWindow(QQuickWindow):
                 None if self._binding_loss is None else self._binding_loss.as_dict()
             ),
             "input_controller_bound": self._input_controller is not None,
+            "cursor_controller_bound": self._cursor_controller is not None,
             "geometry": [rect.x(), rect.y(), rect.width(), rect.height()],
             "display_identity": self.display_identity.as_dict(),
         }
@@ -237,8 +247,19 @@ class QuickDisplayWindow(QQuickWindow):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        # Halo motion is a native-cursor timestamp only.  In interaction/Ctrl
+        # mode the input controller is deliberately bypassed, so passive mouse
+        # movement does not query Settings/providers or publish semantic state.
+        cursor = self._cursor_controller
+        if cursor is not None and cursor.tracks_pointer_motion:
+            cursor.note_pointer_motion()
+
         controller = self._input_controller
-        if controller is not None and controller.handle_mouse_move(event):
+        if (
+            controller is not None
+            and controller.passive_mouse_move_requires_routing
+            and controller.handle_mouse_move(event)
+        ):
             event.accept()
             return
         super().mouseMoveEvent(event)

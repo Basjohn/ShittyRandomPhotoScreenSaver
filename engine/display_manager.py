@@ -525,6 +525,21 @@ class DisplayManager(QObject):
             False,
         )
 
+    def _set_quick_interaction_mode_enabled(self, enabled: bool) -> None:
+        """Push one Settings/context-menu interaction change to live Quick inputs."""
+
+        normalized = bool(enabled)
+        for display in tuple(self.displays):
+            if not isinstance(display, QuickDisplayUnit) or display.is_retired:
+                continue
+            try:
+                display.runtime.input_controller.set_interaction_mode_enabled(
+                    normalized
+                )
+            except RuntimeError:
+                # A replacement generation can retire between snapshot and push.
+                continue
+
     def _quick_custom_layout_active(self) -> bool:
         return bool(self._quick_custom_layout_owner.is_active)
 
@@ -783,6 +798,7 @@ class DisplayManager(QObject):
                 persisted = True if is_mc_build() else enabled
                 settings.set("input.interaction_mode", persisted)
                 settings.save()
+                self._set_quick_interaction_mode_enabled(persisted)
                 self._refresh_all_quick_context_menus()
                 return True
         except Exception:
@@ -2257,7 +2273,7 @@ class DisplayManager(QObject):
                 scene_factory=factory,
                 window_policy=self._quick_window_policy(),
                 ctrl_coordinator=self._quick_ctrl_coordinator,
-                interaction_mode_provider=self._interaction_mode_enabled,
+                interaction_mode_enabled=self._interaction_mode_enabled(),
                 custom_layout_active_provider=self._quick_custom_layout_active,
                 adapters=self._quick_ordinary_family_adapters(),
             )

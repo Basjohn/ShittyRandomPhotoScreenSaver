@@ -27,6 +27,7 @@ Live phase/checkpoint status is intentionally not duplicated here; read `Current
 | `H_Post_Cutover_Runtime_Reality_Corrections.md` | bounded H correction/evidence for live retained delivery, transition replacement and visible context-menu reality gate |
 | `H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md` | H5a CUSTOM visualizer routing plus H5b Spectrum topology/shaping/renderer-transfer repair |
 | `H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md` | live H decomposition for historical-vs-Quick reactivity parity, known config losses, readiness/timing, Bubble/Sine and bounded repair sequence |
+| `H5c_Performance_Cursor_Halo_Checkpoint_2026-08-31_R6_Outside_Codex.md` | current R6 native-QCursor Cursor Halo ownership, event-cached interaction/Ctrl semantics and mandatory physical performance gate |
 | `H5c_Implementation_Checkpoint_2026-08-31_R2.md` | current H5c physical-evidence checkpoint plus post-R2 continuation: Bubble transport exoneration/B6-B8 gate, resume handoff evidence, Sine idle +20%, and DevCurve historical ghost/AA restoration |
 | `Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md` | exact source-comparison evidence, proven deviations, field audit and next source paths |
 | `H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md` | H restoration of the omitted retained middle-click current-mode preset hotswap contract |
