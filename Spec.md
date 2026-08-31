@@ -192,6 +192,14 @@ Committed viewport extent is ordinary runtime truth. While CUSTOM is active, its
 that committed value. Ending CUSTOM removes the temporary override: Save leaves the newly committed extent authoritative;
 Cancel restores the pre-edit committed extent. "No active CUSTOM session" is not synonymous with canonical `(420,280)`.
 
+## Visualizer display routing
+
+Outside CUSTOM, the Visualizer follows Media's effective position/monitor route. In committed CUSTOM, the Visualizer's
+own persisted position, monitor and geometry are authoritative and may place it on a different selected display from
+Media. A live `QuickDisplayUnit` participates when it is not retired and has no display-binding loss; Media presence on
+that unit is not an admission condition. `DisplayManager` still admits exactly one Visualizer owner, with the existing
+generation-fenced CUSTOM grace/fallback/reclaim lifecycle when the requested display is unavailable.
+
 ## Transitions
 
 Transitions resolve canonical settings/admission into immutable request/run state and lazy Quick rendering. Old

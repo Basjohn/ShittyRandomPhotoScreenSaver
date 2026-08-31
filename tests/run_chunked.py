@@ -66,6 +66,7 @@ H_DESTINATION_PROFILE = (
     "test_qtquick_visualizer_all_five_owner_chain.py",
     "test_qtquick_visualizer_admission.py",
     "test_qtquick_visualizer_monitor_routing.py",
+    "test_visualizer_custom_route_contract.py",
     "test_visualizer_failover_reclaim.py",
     "test_remote_visualizer_capability_admission.py",
     "test_qtquick_visualizer_double_click.py",

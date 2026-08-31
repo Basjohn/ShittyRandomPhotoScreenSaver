@@ -32,7 +32,7 @@ Move a row between groups only when its state genuinely changes; do not keep a s
 - [ ] Context-menu theme colours do not follow the active theme; the menu remains stuck on one palette despite being a themed element. Treat as J presentation/theme parity unless source inspection exposes a functional settings-authority defect.
 - [ ] Aspiration: desktop -> application crossfade reveal, widgets fading in afterwards — J Parity+.
 
-The maintained `h-destination` profile is GREEN (77/77 revalidated on 2026-08-31 after refreshing the cutover fake for the production source-config interface; prior black-flash baseline `b4e8ce40`) and must remain GREEN after each bounded source change. H is not closed by unit tests alone: every H/H-J row in the operator ledger must be reconciled and the final dual-display source-mode smoke must remain physically clean.
+The maintained `h-destination` profile is GREEN (78/78 revalidated on 2026-08-31 after adding the H5a production-routing pin; prior black-flash baseline `b4e8ce40`) and must remain GREEN after each bounded source change. H is not closed by unit tests alone: every H/H-J row in the operator ledger must be reconciled and the final dual-display source-mode smoke must remain physically clean.
 
 Detailed evidence: `Docs/QtQuick_Migration/H_Post_Cutover_Runtime_Reality_Corrections.md`  
 Operator backlog: `Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md`
@@ -125,7 +125,7 @@ Historical artwork fade/presentation quality is **not H2**. Artwork currently ap
 
 ### H5a — CUSTOM Visualizer must remain independent of Media's display route
 
-**Status: operator-reproducible functional regression against an existing contract.**
+**Status: generation-level source trace and integrated two-live-unit routing contract are GREEN; physical operator reproduction remains open.**
 
 Non-CUSTOM Visualizer follows Media's effective monitor. CUSTOM Visualizer owns its own persisted monitor/geometry and may live on another selected display. `QuickDisplayUnit.is_visualizer_participant()` does not require Media on that display.
 
@@ -147,10 +147,12 @@ Do not redesign routing or re-couple Visualizer ownership to a same-screen Media
 
 Closure checklist:
 
-- [ ] Emit the per-generation routing trace above and read it on a CUSTOM-Visualizer-on-a-different-display config.
-- [ ] Confirm `QuickDisplayUnit.is_visualizer_participant()` admits the CUSTOM Visualizer's persisted display without Media there.
-- [ ] Non-CUSTOM Visualizer still follows Media's effective monitor (no regression).
-- [ ] h-destination GREEN; dual-display source smoke shows the CUSTOM Visualizer on its own display.
+- [x] Emit one bounded `[VIS_ROUTING]` record for the generation's initial admission decision; correlate later grace/fallback/reclaim outcomes through `[VIS_FAILOVER]`.
+- [ ] Read that record on a CUSTOM-Visualizer-on-a-different-display operator config and localize the first wrong field, if any.
+- [x] Confirm `QuickDisplayUnit.is_visualizer_participant()` admits the CUSTOM Visualizer's persisted display without Media there.
+- [x] Non-CUSTOM Visualizer still follows Media's effective monitor (no regression).
+- [x] Maintained `h-destination` profile GREEN (78/78).
+- [ ] Dual-display source smoke shows the CUSTOM Visualizer on its own display.
 
 Technical route: `Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md`.
 

@@ -267,6 +267,12 @@ The operator reports the committed CUSTOM Visualizer does not activate when its 
 
 Trace persisted route -> custom decision -> effective monitor -> participant set -> failover state -> chosen unit -> construct result. Do not re-couple Visualizer ownership to same-screen Media.
 
+Source preparation is now GREEN: one bounded `[VIS_ROUTING]` record covers the initial
+generation-level route/admission decision, and `tests/test_visualizer_custom_route_contract.py` exercises the
+real manager admission/failover seam with two live units. CUSTOM selects the Visualizer's
+own intentionally different monitor; non-CUSTOM selects Media's. Physical reproduction and
+trace interpretation remain the next gate; no routing behavior was changed speculatively.
+
 ## 10. H5b — Spectrum has two distinct functional failures
 
 ### Data branch
