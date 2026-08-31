@@ -207,6 +207,7 @@ Spatial rules:
 - radius units remain coherent;
 - stream/drift deltas project once onto each expanded domain axis so their normalized content-space travel remains stable;
 - diagnostics and nonbaseline trail smear use renderer-content coordinates, avoiding the old `1 / domain_axis` visible-motion loss and wide/tall trail anisotropy;
+- nonbaseline swirl tangent/radial geometry and center birth offsets use the same content-space contract, while canonical arithmetic remains exact;
 - collision response remains separate from that stream/drift projection and is not retuned as a viewport workaround;
 - widening/tallening expands available logical domain rather than stretching finished pixels;
 - authored big/small counts and `MAX_BUBBLES` do not scale with viewport area;
@@ -304,6 +305,7 @@ Keep/extend destination tests rather than creating a parallel framework:
   - overlap-retry extended-domain bounds;
   - non-surface contraction retirement;
   - canonical/wide/tall consume-once transient head/trail motion projection with identical radius sequence;
+  - swirl orbit/birth and diagonal/random group-drift content-space invariance;
   - trail/radius projection;
   - specular coordinate contract if applicable.
 - existing Bubble BTF/cadence/replay/reactivity/transport goldens

@@ -133,15 +133,24 @@ class _OneShotSnareScheduler:
         return None
 
 
-def _run_viewport_transient_motion(extent, *, stream_direction, drift_direction, diag_key):
+def _run_viewport_transient_motion(
+    extent,
+    *,
+    stream_direction,
+    drift_direction,
+    diag_key,
+    start=(0.5, 0.5),
+    group_drift=False,
+):
+    random.seed(20260831)
     domain_w = float(extent[0]) / 420.0
     domain_h = float(extent[1]) / 280.0
     sim = BubbleSimulation()
     sim._apply_viewport_domain(extent)
     sim._bubbles = [
         BubbleState(
-            x=0.5 * domain_w,
-            y=0.5 * domain_h,
+            x=start[0] * domain_w,
+            y=start[1] * domain_h,
             radius=0.03,
             is_big=True,
             reaches_surface=False,
@@ -149,8 +158,8 @@ def _run_viewport_transient_motion(extent, *, stream_direction, drift_direction,
             drift_bias=0.35,
             speed_mult=1.0,
             display_radius=0.03,
-            trail_tail_x=0.5 * domain_w,
-            trail_tail_y=0.5 * domain_h,
+            trail_tail_x=start[0] * domain_w,
+            trail_tail_y=start[1] * domain_h,
         )
     ]
     scheduler = _OneShotSnareScheduler()
@@ -167,7 +176,7 @@ def _run_viewport_transient_motion(extent, *, stream_direction, drift_direction,
         "bubble_drift_amount": 0.65,
         "bubble_drift_speed": 0.65,
         "bubble_drift_frequency": 0.45,
-        "bubble_group_drift": False,
+        "bubble_group_drift": group_drift,
         "bubble_trail_strength": 1.0,
         "bubble_bounce_big_pct": 0.0,
         "bubble_bounce_small_pct": 0.0,
@@ -181,7 +190,7 @@ def _run_viewport_transient_motion(extent, *, stream_direction, drift_direction,
         "smooth_high": 0.09,
         "crest": 0.0,
     }
-    previous = (0.5, 0.5)
+    previous = start
     path = 0.0
     radii = []
     diag_steps = []
@@ -261,6 +270,80 @@ def test_transient_stream_and_drift_preserve_content_space_motion_across_viewpor
     )
     assert expanded["trail_length"] == pytest.approx(
         canonical["trail_length"], abs=1e-12
+    )
+    assert expanded["diag_steps"] == pytest.approx(
+        canonical["diag_steps"], abs=1e-12
+    )
+    assert expanded["radii"] == pytest.approx(canonical["radii"], abs=1e-12)
+
+
+@pytest.mark.parametrize("expanded_extent", ((840.0, 280.0), (420.0, 560.0)))
+def test_swirl_orbit_uses_content_space_geometry_across_viewports(
+    expanded_extent,
+) -> None:
+    """Swirl tangent/radial geometry must not change with domain aspect."""
+
+    kwargs = {
+        "stream_direction": "none",
+        "drift_direction": "swirl_cw",
+        "diag_key": "drift_step_mean",
+        "start": (0.6, 0.6),
+    }
+    canonical = _run_viewport_transient_motion((420.0, 280.0), **kwargs)
+    expanded = _run_viewport_transient_motion(expanded_extent, **kwargs)
+
+    assert canonical["delivery_count"] == expanded["delivery_count"] == 1
+    assert expanded["positions"] == pytest.approx(canonical["positions"], abs=1e-12)
+    assert expanded["path"] == pytest.approx(canonical["path"], abs=1e-12)
+    assert expanded["trail_vector"] == pytest.approx(
+        canonical["trail_vector"], abs=1e-12
+    )
+    assert expanded["diag_steps"] == pytest.approx(
+        canonical["diag_steps"], abs=1e-12
+    )
+    assert expanded["radii"] == pytest.approx(canonical["radii"], abs=1e-12)
+
+
+@pytest.mark.parametrize("expanded_extent", ((840.0, 280.0), (420.0, 560.0)))
+def test_swirl_spawn_radius_is_content_relative(expanded_extent) -> None:
+    def _spawn(extent):
+        random.seed(20260831)
+        sim = BubbleSimulation()
+        sim._apply_viewport_domain(extent)
+        sim._spawn_bubble(False, "none", 0.6, "swirl_cw")
+        bubble = sim._bubbles[0]
+        return (
+            bubble.x / sim._domain_w - 0.5,
+            bubble.y / sim._domain_h - 0.5,
+        )
+
+    canonical_offset = _spawn((420.0, 280.0))
+    expanded_offset = _spawn(expanded_extent)
+
+    assert math.hypot(*canonical_offset) > 0.0
+    assert expanded_offset == pytest.approx(canonical_offset, abs=1e-12)
+
+
+@pytest.mark.parametrize("drift_direction", ("diagonal", "random"))
+@pytest.mark.parametrize("expanded_extent", ((840.0, 280.0), (420.0, 560.0)))
+def test_group_drift_inherits_content_space_projection(
+    drift_direction,
+    expanded_extent,
+) -> None:
+    kwargs = {
+        "stream_direction": "none",
+        "drift_direction": drift_direction,
+        "diag_key": "drift_step_mean",
+        "group_drift": True,
+    }
+    canonical = _run_viewport_transient_motion((420.0, 280.0), **kwargs)
+    expanded = _run_viewport_transient_motion(expanded_extent, **kwargs)
+
+    assert canonical["delivery_count"] == expanded["delivery_count"] == 1
+    assert expanded["positions"] == pytest.approx(canonical["positions"], abs=1e-12)
+    assert expanded["path"] == pytest.approx(canonical["path"], abs=1e-12)
+    assert expanded["trail_vector"] == pytest.approx(
+        canonical["trail_vector"], abs=1e-12
     )
     assert expanded["diag_steps"] == pytest.approx(
         canonical["diag_steps"], abs=1e-12

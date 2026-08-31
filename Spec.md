@@ -194,7 +194,9 @@ must not create another clock. Bubble position/trail coordinates normalize from 
 are renderer-content-relative: each nonbaseline movement axis projects once onto the corresponding expanded domain axis,
 and nonbaseline trail length/strength are solved in content coordinates before world storage. This preserves the same
 visible fraction-of-viewport motion at canonical, wide and tall extents rather than losing `1 / domain_axis`; canonical
-`1x1` takes the exact pre-projection path. Authored render radius remains a fraction of actual card height as in the
+`1x1` takes the exact pre-projection path. Nonbaseline swirl tangent/radial geometry is likewise solved in content space and
+its birth offset projects once per axis, so viewport aspect does not distort the authored orbit. Authored render radius
+remains a fraction of actual card height as in the
 historical renderer; it is not divided by viewport-domain height. Collision/spawn radius and collision-only gap/correction
 distances use the inverse domain-height mapping in simulation coordinates, preserving visible contact and exact canonical
 behavior.
