@@ -24,7 +24,6 @@ class QuickDisplayWindow(QQuickWindow):
     display_identity_changed = Signal(object)
     binding_lost = Signal(object)
     close_queued = Signal()
-    pointer_position_changed = Signal(QPointF)
 
     _SCREEN_SIGNAL_NAMES = (
         "geometryChanged",
@@ -226,7 +225,6 @@ class QuickDisplayWindow(QQuickWindow):
         super().keyReleaseEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        self.pointer_position_changed.emit(event.position())
         if event.button() == Qt.MouseButton.MiddleButton:
             hit_test = self._semantic_middle_click_hit_test
             if hit_test is not None and hit_test(event.position()):
@@ -239,7 +237,6 @@ class QuickDisplayWindow(QQuickWindow):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        self.pointer_position_changed.emit(event.position())
         controller = self._input_controller
         if controller is not None and controller.handle_mouse_move(event):
             event.accept()

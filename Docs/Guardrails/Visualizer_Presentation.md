@@ -344,6 +344,12 @@ Bubble stream/drift movement remains renderer-content-relative across viewport e
 into the expanded logical world and solve trail smear in content coordinates. Do not compensate viewport loss with input
 gain, authored speed/control retuning, a new timer, or a second motion state.
 
+Bubble wake history and Bubble-head magnitude are separate contracts. Stored trail history remains content-space invariant and
+head radius/reactivity may legitimately follow actual card height, but the Quick wake is an authored presentation effect: each
+trail source's **complete** visible footprint (source separation, ripple radius/cap and ring spacing) must remain baseline-pixel
+authoritative under edge-resized wide/tall viewports. Correcting only the three trail-source centres is insufficient. This rule
+does not define the separate Bubble Ghost/Decay product contract.
+
 ## 14A. Product display admission and semantic input
 
 Current product semantics admit one visualizer instance. Resolve its requested monitor against participating Quick displays

@@ -14,7 +14,7 @@ Last updated: 2026-08-29
 | ordinary widget presentation | per-display `OrdinaryWidgetPresentationHost` |
 | CUSTOM edit scene | neutral `CustomLayoutSession` + retained Quick overlay/model |
 | context menu | retained Quick context-menu model/QML; Python semantic action authority |
-| dimming / pixel shift / cursor halo | generation-scoped retained Quick auxiliary controller/state + same display scene |
+| dimming / pixel shift / cursor halo | generation-scoped retained Quick auxiliary semantic state + same display scene; Halo pointer position/inactivity are QML-local high-rate presentation facts |
 | custom transition pixels | inline display `QSGRenderNode` |
 | custom visualizer pixels | inline visualizer `QSGRenderNode` |
 | Settings UI | existing QWidget/settings owners |

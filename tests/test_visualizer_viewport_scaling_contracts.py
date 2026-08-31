@@ -279,44 +279,73 @@ class BubbleViewportScalingTests(unittest.TestCase):
         self.assertIn("float stroke = clamp(r * 0.0375, 0.35 * px, 1.8 * px);", shader)
         self.assertNotIn("float base_stroke_px = 1.2;", shader)
 
-    def test_motion_tail_presentation_footprint_stays_authored_pixel_scaled(self):
-        # Stored trail history remains normalized/content-space invariant, while
-        # the renderer compresses only the historical offset by baseline/current
-        # viewport axis so its three samples do not separate into three apparent
-        # ghost bubbles on a tall/wide CUSTOM card.
+    def test_motion_tail_complete_presentation_footprint_stays_authored_pixel_scaled(self):
+        # Stored trail history remains normalized/content-space invariant. R4
+        # corrected only the three source-centre offsets; the physically failed
+        # tall run proved that each source's ripple radius/ring spacing must use
+        # the same authored-pixel authority as well.
         baseline = (420.0, 280.0)
         head = (0.62, 0.44)
         sample = (0.52, 0.50)
-        expected_px = (
+        expected_source_px = (
             (sample[0] - head[0]) * baseline[0],
             (sample[1] - head[1]) * baseline[1],
         )
+        expected_cap_px = 0.12 * baseline[1]
+        expected_ring_spacing_px = (2.0 * math.pi / 220.0) * baseline[1]
+        brad = 0.04
+        age = 1.0
+        trail_strength = 1.0
+        expected_ripple_px = min(
+            brad * (2.0 + age * 6.0) * trail_strength,
+            0.12,
+        ) * baseline[1]
+
         for extent in (
             baseline,
             (840.0, 280.0),
             (420.0, 560.0),
+            (840.0, 560.0),
             (724.0, 816.0),
         ):
             axis = (
                 min(1.0, baseline[0] / extent[0]),
                 min(1.0, baseline[1] / extent[1]),
             )
+            radial = min(1.0, baseline[1] / extent[1])
             rendered = (
                 head[0] + (sample[0] - head[0]) * axis[0],
                 head[1] + (sample[1] - head[1]) * axis[1],
             )
-            actual_px = (
+            actual_source_px = (
                 (rendered[0] - head[0]) * extent[0],
                 (rendered[1] - head[1]) * extent[1],
             )
-            self.assertAlmostEqual(actual_px[0], expected_px[0], places=12)
-            self.assertAlmostEqual(actual_px[1], expected_px[1], places=12)
+            self.assertAlmostEqual(actual_source_px[0], expected_source_px[0], places=12)
+            self.assertAlmostEqual(actual_source_px[1], expected_source_px[1], places=12)
+
+            cap_px = (0.12 * radial) * extent[1]
+            ring_spacing_px = (2.0 * math.pi / (220.0 / radial)) * extent[1]
+            ripple_px = min(
+                (brad * radial) * (2.0 + age * 6.0) * trail_strength,
+                0.12 * radial,
+            ) * extent[1]
+            self.assertAlmostEqual(cap_px, expected_cap_px, places=12)
+            self.assertAlmostEqual(ring_spacing_px, expected_ring_spacing_px, places=12)
+            self.assertAlmostEqual(ripple_px, expected_ripple_px, places=12)
 
         quick = (ROOT / "rendering/quick/visualizer/implementations/bubble.py").read_text()
         shader = (ROOT / "widgets/spotify_visualizer/shaders/bubble.frag").read_text()
         self.assertIn("trail_axis_scale", quick)
+        self.assertIn("trail_radial_scale", quick)
         self.assertIn("u_trail_axis_scale", shader)
+        self.assertIn("u_trail_radial_scale", shader)
+        self.assertIn("vec2 trail_axis_scale = (u_quick_item_coords == 1)", shader)
+        self.assertIn("float trail_radial_scale = (u_quick_item_coords == 1)", shader)
         self.assertIn("sample_data.xy - bpos.xy", shader)
+        self.assertIn("float ring_freq = 220.0 / trail_radial_scale;", shader)
+        self.assertIn("float wake_brad = brad * trail_radial_scale;", shader)
+        self.assertIn("float max_ripple_radius = 0.12 * trail_radial_scale;", shader)
         self.assertIn("ripple_bound", shader)
 
     def test_spawn_overlap_policy_is_content_space_invariant(self):

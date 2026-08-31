@@ -904,6 +904,16 @@ class ScreensaverEngine(QObject):
             event=self._runtime_lifecycle_event,
             stage="authoritative_first_frame_ready",
         )
+        if self._runtime_lifecycle_event != "cold_start":
+            # Replacement generations can publish their first images across
+            # staggered displays.  The normal image-completion prefetch attempt
+            # may happen before the final destination closes its batch, and a
+            # direct first-frame publish has no transition-complete event to
+            # rescue that lost attempt.  Reseed through the existing prefetch
+            # owner's generation-fenced idle retry once all first frames exist.
+            from engine.image_pipeline import schedule_prefetch_after_runtime_ready
+
+            schedule_prefetch_after_runtime_ready(self)
 
     def _on_startup_reveal_completed(
         self,

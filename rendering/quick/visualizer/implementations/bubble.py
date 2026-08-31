@@ -35,6 +35,7 @@ class QuickBubbleLayout:
     aspect_ratio: float
     visual_scale: float
     trail_axis_scale: tuple[float, float]
+    trail_radial_scale: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,11 +73,18 @@ def compute_quick_bubble_layout(
         min(1.0, baseline[0] / extent[0]),
         min(1.0, baseline[1] / extent[1]),
     )
+    # Ripple distance is aspect-corrected in units of content height.  Its
+    # radius/ring spacing therefore need the vertical baseline/current ratio
+    # as well; otherwise R4's compact source centres still emit enormous wake
+    # fields on a tall edge-resized viewport.  Uniform whole-card scale is
+    # intentionally independent and continues to scale the finished effect.
+    trail_radial_scale = min(1.0, baseline[1] / extent[1])
     return QuickBubbleLayout(
         content_rect=content,  # type: ignore[arg-type]
         aspect_ratio=content[2] / content[3],
         visual_scale=scale,
         trail_axis_scale=trail_axis_scale,
+        trail_radial_scale=trail_radial_scale,
     )
 
 
@@ -225,6 +233,7 @@ class QuickBubbleRenderer:
         gl.glUniform1f(uniforms["u_trail_strength"], trail_strength)
         gl.glUniform1f(uniforms["u_tail_opacity"], tail_opacity)
         gl.glUniform2f(uniforms["u_trail_axis_scale"], *layout.trail_axis_scale)
+        gl.glUniform1f(uniforms["u_trail_radial_scale"], layout.trail_radial_scale)
 
         specular_direction = get_bubble_specular_shader_vector(
             str(parameter(parameters, "bubble_specular_direction", "top_left"))
@@ -333,6 +342,7 @@ class QuickBubbleRenderer:
                 "u_trail_strength",
                 "u_tail_opacity",
                 "u_trail_axis_scale",
+                "u_trail_radial_scale",
                 "u_specular_dir",
                 "u_gradient_dir",
                 "u_gradient_mode",

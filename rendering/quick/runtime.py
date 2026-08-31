@@ -169,9 +169,6 @@ class QuickDisplayRuntime(QObject):
         self._scene.apply_auxiliary_state(self._auxiliary.state)
         self._input.input_state_changed.connect(self._auxiliary.apply_input_state)
         self._auxiliary.apply_input_state(self._input.input_state)
-        self._window.pointer_position_changed.connect(
-            self._auxiliary.update_halo_pointer
-        )
         self._context_menu.visibilityChanged.connect(
             self._input.set_context_menu_active
         )

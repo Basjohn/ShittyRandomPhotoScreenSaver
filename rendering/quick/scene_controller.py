@@ -442,9 +442,8 @@ class QuickSceneController(QObject):
         root.setProperty("dimmingOpacity", state.dimming_opacity)
         root.setProperty("pixelShiftX", float(state.pixel_shift_x))
         root.setProperty("pixelShiftY", float(state.pixel_shift_y))
-        root.setProperty("haloVisible", state.halo_visible)
-        root.setProperty("haloX", state.halo_x)
-        root.setProperty("haloY", state.halo_y)
+        root.setProperty("haloEnabled", state.halo_enabled)
+        root.setProperty("nativeCursorVisible", state.native_cursor_visible)
         root.setProperty("haloShape", state.halo_shape)
         return True
 
