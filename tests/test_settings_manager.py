@@ -673,6 +673,86 @@ class TestSettingsManagerDefaults:
             == SettingsManager._VISUALIZER_SCHEMA_VERSION
         )
 
+    def test_visualizer_schema_migration_nests_flat_custom_cache(self, tmp_path: Path) -> None:
+        storage_root = tmp_path / "flat_visualizer_custom_cache"
+        app_name = f"TestApp_{uuid.uuid4().hex}"
+        manager = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+        manager._settings.setValue(
+            "visualizer_custom_presets",
+            {
+                "bubble.mode": "bubble",
+                "bubble.bubble_growth": 4.75,
+                "bubble.bubble_manual_floor": 0.23,
+            },
+        )
+        manager._settings.update_metadata(visualizer_schema_version=3)
+        manager._settings.sync()
+        assert manager.flush(timeout=5.0) is True
+        manager._settings.load()
+
+        reloaded = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+
+        assert reloaded.get("visualizer_custom_presets") == {
+            "bubble": {
+                "mode": "bubble",
+                "bubble_growth": 4.75,
+                "bubble_manual_floor": 0.23,
+            }
+        }
+        assert (
+            reloaded._settings.metadata().get("visualizer_schema_version")
+            == SettingsManager._VISUALIZER_SCHEMA_VERSION
+        )
+
+    def test_runtime_preset_state_write_preserves_media_and_reloads_custom_cache(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        manager = _make_manager(tmp_path)
+        widgets_before = manager.get("widgets", {})
+        media_before = json.loads(json.dumps(widgets_before["media"]))
+        visualizer = dict(widgets_before["spotify_visualizer"])
+        visualizer["mode"] = "bubble"
+        visualizer["preset_bubble"] = 1
+        custom_cache = {
+            "bubble": {
+                "mode": "bubble",
+                "bubble_growth": 6.25,
+                "bubble_manual_floor": 0.27,
+            }
+        }
+        changed: list[str] = []
+        manager.settings_changed.connect(lambda key, _value: changed.append(key))
+
+        manager.replace_visualizer_runtime_preset_state(
+            visualizer,
+            custom_cache,
+        )
+
+        assert manager.get("widgets", {})["media"] == media_before
+        assert manager.get("widgets.spotify_visualizer.preset_bubble") == 1
+        assert manager.get("visualizer_custom_presets") == custom_cache
+        assert "widgets" not in changed
+        assert changed == [
+            "widgets.spotify_visualizer",
+            "visualizer_custom_presets",
+        ]
+        assert manager.flush(timeout=5.0) is True
+
+        payload = json.loads(Path(manager.get_storage_path()).read_text(encoding="utf-8"))
+        assert payload["snapshot"]["visualizer_custom_presets"] == custom_cache
+        manager._settings.load()
+        assert manager.get("visualizer_custom_presets") == custom_cache
+        assert manager.get("widgets", {})["media"] == media_before
+
     def test_visualizer_schema_migration_skips_when_metadata_current(self, tmp_path: Path, monkeypatch) -> None:
         manager = _make_manager(tmp_path)
         manager._settings.setValue(

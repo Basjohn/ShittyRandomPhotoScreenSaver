@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional
 
+from core.settings.structured_roots import STRUCTURED_SETTINGS_ROOTS
+
 
 _CompletionCallback = Callable[[int, int, bool, Optional[str]], None]
 
@@ -384,9 +386,8 @@ class OrderedSettingsPersistence:
 
 def _write_snapshot(request: _WriteRequest) -> None:
     snapshot: Dict[str, Any] = {}
-    structured_keys = {"widgets", "transitions", "ui"}
     for key, value in request.data.items():
-        if key in structured_keys and isinstance(value, Mapping):
+        if key in STRUCTURED_SETTINGS_ROOTS and isinstance(value, Mapping):
             snapshot[key] = value
             continue
         if "." in key:

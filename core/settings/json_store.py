@@ -22,12 +22,13 @@ from core.settings.persistence import (
     flush_settings_path,
     get_settings_persistence,
 )
+from core.settings.structured_roots import STRUCTURED_SETTINGS_ROOTS
 
 logger = get_logger(__name__)
 
 
 SNAPSHOT_VERSION = 2
-_STRUCTURED_KEYS = {"widgets", "transitions", "ui"}
+_STRUCTURED_KEYS = STRUCTURED_SETTINGS_ROOTS
 _OWNER_KEY_COUNTER = itertools.count(1)
 _OWNER_KEY_LOCK = threading.Lock()
 

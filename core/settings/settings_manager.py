@@ -15,6 +15,7 @@ from core.settings.json_store import (
     get_json_settings_store,
 )
 from core.settings.models import SpotifyVisualizerSettings
+from core.settings.structured_roots import STRUCTURED_SETTINGS_ROOTS
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_settings_contract import (
@@ -43,9 +44,9 @@ class SettingsManager(QObject):
     
     # Signal emitted when settings change
     settings_changed = Signal(str, object)  # key, new_value
-    _STRUCTURED_ROOTS = frozenset({"widgets", "transitions", "ui"})
+    _STRUCTURED_ROOTS = STRUCTURED_SETTINGS_ROOTS
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
-    _VISUALIZER_SCHEMA_VERSION = 3
+    _VISUALIZER_SCHEMA_VERSION = 4
     _LEGACY_GLOBAL_PRESET_KEYS = frozenset({"preset", "custom_preset_backup"})
     _RETIRED_WIDGET_SHADOW_KEYS = frozenset({
         "intense_shadow",
@@ -351,6 +352,10 @@ class SettingsManager(QObject):
         canonical_widgets = canonical.get('widgets')
         if isinstance(canonical_widgets, Mapping):
             defaults['widgets'] = dict(canonical_widgets)
+
+        canonical_custom_presets = canonical.get('visualizer_custom_presets')
+        if isinstance(canonical_custom_presets, Mapping):
+            defaults['visualizer_custom_presets'] = dict(canonical_custom_presets)
         
         for key, value in defaults.items():
             if key in self._LEGACY_GLOBAL_PRESET_KEYS:
@@ -384,7 +389,6 @@ class SettingsManager(QObject):
         normalized = self._normalize_widgets_mapping(value)
         widgets_dict = dict(normalized) if isinstance(normalized, Mapping) else {}
         self._settings.setValue('widgets', widgets_dict)
-        self._mark_visualizer_schema_current_locked()
         return widgets_dict
 
     def _store_transitions_root_locked(self, value: Any) -> Dict[str, Any]:
@@ -447,14 +451,15 @@ class SettingsManager(QObject):
     def _run_persisted_visualizer_schema_migrations(self) -> None:
         """Normalize persisted visualizer settings only when schema advances."""
         with self._lock:
-            if self._visualizer_schema_version() >= self._VISUALIZER_SCHEMA_VERSION:
+            schema_version = self._visualizer_schema_version()
+            if schema_version >= self._VISUALIZER_SCHEMA_VERSION:
                 return
 
             widgets = self._settings.value('widgets', {})
             if isinstance(widgets, Mapping):
                 widgets_dict = dict(widgets)
                 vis_section = widgets_dict.get('spotify_visualizer')
-                if isinstance(vis_section, Mapping) and self._visualizer_schema_version() < self._VISUALIZER_SCHEMA_VERSION:
+                if isinstance(vis_section, Mapping):
                     normalized_vis = normalize_visualizer_section_mapping(
                         vis_section,
                         apply_preset_overlay=False,
@@ -462,6 +467,29 @@ class SettingsManager(QObject):
                     if dict(vis_section) != normalized_vis:
                         widgets_dict['spotify_visualizer'] = normalized_vis
                         self._store_widgets_root_locked(widgets_dict)
+
+            if schema_version < 4:
+                from core.settings.visualizer_presets import (
+                    normalize_visualizer_custom_snapshot_cache,
+                )
+
+                raw_cache = self._settings.value('visualizer_custom_presets', None)
+                if raw_cache is not None:
+                    try:
+                        normalized_cache = normalize_visualizer_custom_snapshot_cache(
+                            raw_cache
+                        )
+                    except (TypeError, ValueError):
+                        logger.warning(
+                            "[VIS_PRESETS] Refusing malformed Custom-cache migration",
+                            exc_info=True,
+                        )
+                        raise
+                    if dict(raw_cache) != normalized_cache:
+                        self._settings.setValue(
+                            'visualizer_custom_presets',
+                            normalized_cache,
+                        )
 
             self._mark_visualizer_schema_current_locked()
             self._settings.sync()
@@ -544,7 +572,6 @@ class SettingsManager(QObject):
                             apply_preset_overlay=False,
                             resolve_preset_indices=False,
                         )
-                        self._mark_visualizer_schema_current_locked()
                     widgets[section_name] = section_dict
                     changed = True
 
@@ -813,6 +840,7 @@ class SettingsManager(QObject):
                 if key == "widgets" and isinstance(value, Mapping):
                     old_value = self._settings.value(key)
                     value = self._store_widgets_root_locked(dict(value))
+                    self._mark_visualizer_schema_current_locked()
                 elif key == "transitions" and isinstance(value, Mapping):
                     old_value = self._settings.value(key)
                     value = self._store_transitions_root_locked(dict(value))
@@ -837,6 +865,68 @@ class SettingsManager(QObject):
             logger.debug("Setting changed: %s: %r -> %r", key, old_value, value)
         else:
             logger.debug("Setting changed: %s", key)
+
+    def replace_visualizer_runtime_preset_state(
+        self,
+        visualizer_section: Mapping[str, Any],
+        custom_presets: Mapping[str, Any],
+    ) -> None:
+        """Atomically persist one runtime preset result and its Custom cache.
+
+        H8 must replace only the ``spotify_visualizer`` child while preserving
+        Media and every other widget sibling.  The dedicated Custom-cache root
+        is the sole companion write.  Both mappings enter the ordered writer in
+        one store revision so a restart cannot observe half of the preset move.
+        """
+
+        if not isinstance(visualizer_section, Mapping):
+            raise TypeError("visualizer_section must be a mapping")
+        if not isinstance(custom_presets, Mapping):
+            raise TypeError("custom_presets must be a mapping")
+
+        from core.settings.visualizer_presets import (
+            normalize_visualizer_custom_snapshot_cache,
+        )
+
+        normalized_section = normalize_visualizer_section_mapping(
+            dict(visualizer_section),
+            apply_preset_overlay=False,
+            resolve_preset_indices=False,
+        )
+        normalized_cache = normalize_visualizer_custom_snapshot_cache(
+            custom_presets
+        )
+
+        with self._lock:
+            raw_widgets = self._settings.value('widgets', {})
+            widgets = dict(raw_widgets) if isinstance(raw_widgets, Mapping) else {}
+            old_section = deepcopy(widgets.get('spotify_visualizer'))
+            old_cache = self._settings.value('visualizer_custom_presets', {})
+            widgets['spotify_visualizer'] = deepcopy(normalized_section)
+            self._store_widgets_root_locked(widgets)
+            self._settings.setValue(
+                'visualizer_custom_presets',
+                deepcopy(normalized_cache),
+            )
+            self._mark_visualizer_schema_current_locked()
+            self._invalidate_cache_for_key_locked('widgets.spotify_visualizer')
+            self._invalidate_cache_for_key_locked('visualizer_custom_presets')
+            self._settings.sync()
+
+        self._publish_store_change(
+            'widgets.spotify_visualizer',
+            deepcopy(normalized_section),
+            old_section,
+        )
+        if old_cache != normalized_cache:
+            self._publish_store_change(
+                'visualizer_custom_presets',
+                deepcopy(normalized_cache),
+                old_cache,
+            )
+        logger.info(
+            "[VIS_PRESETS] Persisted runtime visualizer child and Custom cache"
+        )
 
     def _invalidate_cache_for_key_locked(self, key: str) -> None:
         """Invalidate cached values tied to *key* (and descendants)."""
@@ -1287,7 +1377,11 @@ class SettingsManager(QObject):
             defaults = get_default_settings(self._application)
             
             # Sections that should be stored as nested dicts (not flattened)
-            nested_sections = {'widgets', 'transitions'}
+            nested_sections = {
+                'widgets',
+                'transitions',
+                'visualizer_custom_presets',
+            }
             
             def flatten_dict(d: dict, parent_key: str = '') -> dict:
                 """Flatten nested dict to dot-notation keys."""
@@ -1336,7 +1430,7 @@ class SettingsManager(QObject):
                         apply_preset_overlay=False,
                     )
                     self._store_widgets_root_locked(widgets_dict)
-            
+            self._mark_visualizer_schema_current_locked()
             self._settings.sync()
             self._clear_cache_locked()
 
