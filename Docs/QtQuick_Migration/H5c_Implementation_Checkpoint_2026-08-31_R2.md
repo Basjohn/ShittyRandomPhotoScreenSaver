@@ -374,3 +374,37 @@ Capture at least one long-idle Pause -> Play. Corrected T3/T4/T5/T6/T7 now disti
 - [ ] Oscilloscope final presentation parity control.
 - [ ] H5a/H6/H8/H7 according to `Current_Plan.md`.
 
+## 15. Post-R2 physical continuation
+
+### 15.1 Bubble remains visibly compressed; source and edge transport are prompt
+
+The next two operator runs still report wildly weak Bubble response that never approaches the expected maximum size. Stop decay improved slightly, while the most recent Pause -> Play ramp looked worse. The new trace does **not** support retuning the shared source or inserting an edge timer:
+
+- [x] sustained live samples remain strong (`bass` commonly about `0.60-0.77`, `mid` up to about `0.97`);
+- [x] Bubble remains fresh/ready and authored integration remains near 90 Hz / one step per request;
+- [x] cold Play reaches fresh ready input and its first current logical publication at `93.8 ms`;
+- [x] warm Play reaches a current logical publication at `20.0 ms`;
+- [x] the retained item initially observes the already-published pre-Play idle snapshot: on the warm edge T7 reported about `2527 ms` source age, followed by the current logical frame at `20.0 ms`.
+
+That immediate retained-old observation is a real handoff detail, but its tens-of-milliseconds lifetime cannot explain the full perceived slow radius ramp. Existing logs still stop before authored radius/alpha and Quick-projected size, so the next repair is evidence-only B6-B8 geometry telemetry around steady music and both playback edges. Do not change Bubble gain, contraction, smoothing, or add a timer until those values identify the first compressed/discontinuous seam.
+
+### 15.2 DevCurve AA and transient-diagnostic corrections
+
+The second physical report says DevCurve edges remain jagged after removal of migration-invented ghost layers. Source comparison now disproves the remaining AA mapping:
+
+```text
+historical / logical-pixel width: 1.15 / inner_h
+Quick before correction:          1.15 * visual_scale / inner_h
+observed CUSTOM visual_scale:     0.75
+```
+
+Quick coordinates are already logical pixels, so multiplying coverage width by the independent content scale narrowed the edge a second time. R2 continuation restores the historical logical-pixel AA width while preserving current content-rect/viewport sizing.
+
+The supplied `[VIS_DEVCURVE_TRANSIENT]` samples were also misleading: they were triggered by `max(bass, mid, high)` even though the historical/current solver intentionally feeds the bottom transient layer from **bass transient only**. In the observed package all 51 diagnostic samples had zero raw bass, so `smooth_t=0` was correct. The trigger and event summary now use the bass lane; no DevCurve energy/gain formula changed.
+
+- [x] remove the second AA scale factor and its now-unused uniform;
+- [x] pin historical logical-pixel AA width in a shader contract test;
+- [x] pin bass-only transient-layer behavior;
+- [x] correct the real-Quick ghost test to require pixel identity for an historically inert control;
+- [x] focused logical/shader and shown-Quick DevCurve gates pass;
+- [ ] operator re-measure edge smoothness and capture a genuine bass-transient event if bottom-layer response is still suspect.

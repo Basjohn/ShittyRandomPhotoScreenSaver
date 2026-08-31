@@ -474,14 +474,14 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
             input_energy=resolved_input_energy,
             resolved_energy=resolved.energy,
             event_summary=(
-                f"transient={max(resolved_input_transient.bass, resolved_input_transient.mid, resolved_input_transient.high):.3f}"
+                f"bass_transient={resolved_input_transient.bass:.3f}"
             ),
         )
-        raw_transient = max(
-            resolved_input_transient.bass,
-            resolved_input_transient.mid,
-            resolved_input_transient.high,
-        )
+        # Historical DevCurve intentionally maps its transient layer from the
+        # bass-transient lane only.  Mid/high activity is useful source context,
+        # but must not trigger a diagnostic that claims the authored transient
+        # layer failed when its actual input was zero.
+        raw_transient = resolved_input_transient.bass
         last_transient_diag = float(
             getattr(widget, "_devcurve_transient_diag_last_ts", 0.0) or 0.0
         )

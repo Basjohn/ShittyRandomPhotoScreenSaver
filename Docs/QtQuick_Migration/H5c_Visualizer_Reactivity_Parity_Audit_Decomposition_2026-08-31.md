@@ -1097,11 +1097,21 @@ Detailed source/repair handoff: `H5c_Implementation_Checkpoint_2026-08-31_R2.md`
 - [x] Historical shader proves saved ghost controls were visually inert.
 - [x] Remove Quick-invented delayed ghost curves/fills/outlines and their 4x96-float render uploads.
 - [x] Preserve adjustable viewport scaling and real solver semantics.
-- [ ] Re-measure outline smoothness and bottom transient visibility.
-- [ ] If transient remains weak, classify via `[VIS_DEVCURVE_TRANSIENT]` before changing power/gain.
+- [x] Post-R2 report confirms outline jaggedness remains; source comparison proves Quick double-scaled logical-pixel AA width by independent CUSTOM `visual_scale` (0.75 in the observed profile). Restore historical `1.15 / inner_h` coverage without changing viewport geometry.
+- [x] Correct `[VIS_DEVCURVE_TRANSIENT]` to trigger on the historically consumed bass-transient lane. The prior 51 mid/high-only triggers with zero bass and `smooth_t=0` were diagnostic false positives, not solver loss.
+- [ ] Re-measure outline smoothness and bottom transient visibility after AA restoration.
 
 ### R13 — Spectrum pause handoff
 
 - [x] Physical steady idle hump is present and logical floor is correct.
 - [x] Add bounded retained-state magnitude samples around Pause.
 - [ ] Locate the brief zero before floor; do not raise the steady floor.
+
+### R14 — second Bubble physical trace
+
+- [x] Bubble is still severely under-reactive and never reaches the expected maximum size after latest-geometry repair.
+- [x] Cold T3/T4/T5 reaches a fresh current frame in `93.8 ms`; warm T3/T5 reaches one in `20.0 ms`. Source/capture delay is not the multi-second visible ramp.
+- [x] T7 initially observes the retained pre-edge idle snapshot (warm source age about `2527 ms`) before the fresh frame. Preserve this as a handoff fact, not a justification for a delay workaround.
+- [x] Sustained real music remains strong and current; no shared or Bubble gain retune is admitted.
+- [ ] Add bounded B6/B7 authored/frozen radius-alpha summaries and B8 retained Quick projected-radius summaries, with extra samples around Play/Pause but no new clock.
+- [ ] Use that trace to classify both the weak maximum and slow-then-abrupt edge shape before changing Bubble response math.
