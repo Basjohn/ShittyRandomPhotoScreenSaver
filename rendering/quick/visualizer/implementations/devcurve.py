@@ -174,7 +174,6 @@ class QuickDevCurveRenderer:
         gl.glUniform2f(uniforms["u_viewport_origin_px"], 0.0, 0.0)
         gl.glUniform1i(uniforms["u_quick_item_coords"], 1)
         gl.glUniform4f(uniforms["u_content_rect"], *layout.content_rect)
-        gl.glUniform1f(uniforms["u_visual_scale"], layout.visual_scale)
         gl.glUniform1f(uniforms["u_border_width"], presentation.border_width)
         gl.glUniform1f(uniforms["u_fade"], presentation.content_fade)
         gl.glUniform1i(uniforms["u_devcurve_sample_count"], sample_count)
@@ -441,7 +440,6 @@ class QuickDevCurveRenderer:
                 "u_viewport_origin_px",
                 "u_quick_item_coords",
                 "u_content_rect",
-                "u_visual_scale",
                 "u_border_width",
                 "u_fade",
                 "u_rainbow_hue_offset",

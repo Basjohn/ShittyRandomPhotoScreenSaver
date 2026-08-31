@@ -24,6 +24,7 @@ from widgets.spotify_visualizer.render_state import (
 from widgets.spotify_visualizer.runtime_controller import (
     VisualizerRuntimeController,
 )
+from widgets.spotify_visualizer.shaders import load_fragment_shader
 
 
 _LAYERS = ("bass", "vocals", "mids", "transients")
@@ -197,6 +198,33 @@ def test_devcurve_shader_does_not_render_migration_invented_ghost_layers() -> No
     assert "u_devcurve_ghost_enabled" not in source
 
 
+def test_devcurve_quick_aa_keeps_historical_logical_pixel_width() -> None:
+    source = load_fragment_shader("devcurve")
+    assert source is not None
+    assert "float aa = max(1.15 / max(inner_h, 1.0), 0.0010);" in source
+    assert "1.15 * authoredScale" not in source
+    assert "uniform float u_visual_scale" not in source
+
+
+def test_devcurve_transient_layer_preserves_historical_bass_only_input() -> None:
+    mid_high_only = _advance(
+        DevCurveFrameRuntime(),
+        now_ts=4.5,
+        transient=VisualizerTransientState(bass=0.0, mid=1.2, high=1.4),
+    )
+    bass_hit = _advance(
+        DevCurveFrameRuntime(),
+        now_ts=4.5,
+        transient=VisualizerTransientState(bass=0.8, mid=0.0, high=0.0),
+    )
+
+    assert mid_high_only is not None and bass_hit is not None
+    assert mid_high_only.diagnostics["energies"]["transients"] == pytest.approx(
+        0.0
+    )
+    assert bass_hit.diagnostics["energies"]["transients"] > 0.0
+
+
 def test_devcurve_ghost_settings_remain_visual_noop_for_historical_parity() -> None:
     runtime = DevCurveFrameRuntime()
     first = _advance(runtime, now_ts=5.0)
@@ -337,5 +365,3 @@ def test_quick_devcurve_renderer_has_no_legacy_presentation_dependency() -> None
     assert "renderers.devcurve" not in source
     assert "devcurve_growth" not in source
     assert "gl_FragCoord" not in source
-from widgets.spotify_visualizer.shaders import load_fragment_shader
-

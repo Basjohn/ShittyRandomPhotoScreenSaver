@@ -16,7 +16,6 @@ uniform vec2 u_viewport_origin_px;
 // the framebuffer-coordinate/card-clip branch until Phase-I deletion.
 uniform int u_quick_item_coords;
 uniform vec4 u_content_rect;  // item-local x, y, width, height
-uniform float u_visual_scale;
 uniform float u_border_width;
 uniform float u_fade;
 uniform int u_playing;
@@ -273,9 +272,12 @@ void main() {
     }
 
     vec2 uv = vec2((fc.x - inner_x) / inner_w, (fc.y - inner_y) / inner_h);
-    float authoredScale = (u_quick_item_coords == 1)
-        ? max(u_visual_scale, 0.01) : 1.0;
-    float aa = max(1.15 * authoredScale / max(inner_h, 1.0), 0.0010);
+    // fc/inner_h are already in logical pixels in both branches (the legacy
+    // branch divides framebuffer coordinates by DPR).  Multiplying this
+    // one-pixel coverage width by the independent CUSTOM visual scale would
+    // scale it twice and narrow edges at scale < 1.  Preserve the historical
+    // pixel-derived AA width after the Quick coordinate transfer.
+    float aa = max(1.15 / max(inner_h, 1.0), 0.0010);
     int sampleCount = clamp(u_devcurve_sample_count, 2, 96);
 
     vec4 col = vec4(0.0);

@@ -427,8 +427,10 @@ A focused parity test now locks the zero/false case because these controls can c
 - [x] tuning/specular parameters
 - [x] ghost settings remain parseable/persisted, but historical rendering is now source-proven to have treated them as a visual no-op
 - [x] migration-invented delayed ghost-curve rendering removed from Quick; current-frame geometry remains authoritative
+- [x] logical-pixel AA coverage restored to historical `1.15 / inner_h`; the Quick-only `* visual_scale` term narrowed edges a second time at nonbaseline scale
+- [x] transient diagnostic/solver contract pinned to the historical bass-transient lane; mid/high-only activity must not be classified as a failed bottom transient
 - [ ] re-measure bottom transient-layer response after ghost removal
-- [ ] re-measure outline smoothness before changing adjustable-viewport scaling / AA math
+- [ ] re-measure outline smoothness after AA restoration; adjustable-viewport geometry remains unchanged
 
 ### Explicitly retired
 
@@ -593,3 +595,26 @@ R2 repair:
 - [ ] Spectrum: `[VIS_SPECTRUM_HANDOFF]` around the zero-before-floor gap.
 - [ ] DevCurve: `[VIS_DEVCURVE_TRANSIENT]` plus physical bottom-line and outline result after ghost removal.
 - [ ] Sine: paused idle strength after +20%.
+
+## 15. Post-R2 evidence update — second Bubble run and DevCurve edge source proof
+
+### 15.1 Bubble edge timing versus visible ramp
+
+- [x] latest run still looks severely under-reactive and never reaches expected maximum radius;
+- [x] stop decay is slightly improved, but operator reports the next Play ramp looks worse;
+- [x] cold Play current source/ready/logical publication arrives in `93.8 ms`;
+- [x] warm Play current logical publication arrives in `20.0 ms`;
+- [x] retained Quick first observes the pre-edge idle snapshot (warm source age about `2527 ms`) before the current frame;
+- [x] sustained current source remains strong (`bass` about `0.60-0.77`, `mid` up to about `0.97`) and Bubble cadence remains healthy;
+- [ ] authored radius/alpha, frozen payload radius, and retained Quick projected pixels are not present in this package and are the next B6-B8 evidence boundary.
+
+Classification: source/config/cadence and long Play transport delay are exonerated. The retained-old first observation is real but too brief to explain the full physical ramp. No Bubble gain/smoothing/contraction change is justified until B6-B8 shows whether compression exists in simulation output, normalization, retained payload, or physical projection.
+
+### 15.2 DevCurve source-proven continuation
+
+- [x] post-ghost-removal physical report still identifies jagged edges;
+- [x] historical and current coordinate paths both operate in logical pixels at the AA calculation;
+- [x] Quick alone multiplied the one-pixel coverage width by independent `visual_scale`, producing 25% narrower AA at the observed `0.75` scale;
+- [x] restore `1.15 / inner_h` and remove the unused scale uniform without changing content geometry;
+- [x] all 51 prior transient diagnostics had zero raw bass and were triggered only by mid/high activity; correct the diagnostic to match the historically bass-only solver input;
+- [ ] operator re-measure decides whether any further DevCurve presentation work remains.

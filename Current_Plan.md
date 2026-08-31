@@ -1,6 +1,6 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-31 — second H5c repair checkpoint after physical re-measurement. Spectrum is physically recognizable/reactive again after source/topology/transfer restoration. Live logs exonerate Bubble source admission/cadence and relocate its dead appearance downstream; Quick protected-edge Bubble geometry override is removed so latest authored geometry is authoritative. Historical resume `wake()` is restored, cold reactivity ramp is 1.0 s, edge diagnostics are corrected, Sine paused motion is +20%, and Quick-invented DevCurve ghost layers are removed for historical visual parity.
+Last updated: 2026-08-31 — H5c post-R2 physical continuation. Spectrum remains physically recognizable/reactive after source/topology/transfer restoration. Two Bubble runs exonerate source admission/cadence but still show severely compressed visible response; warm/cold T0-T7 transport is prompt, while retained Quick initially observes the pre-edge idle snapshot. Bubble now proceeds through radius/alpha B6-B8 rather than gain tuning. DevCurve's source-proven double-scaled AA width and misleading non-bass transient diagnostic are corrected; physical re-measurement remains open.
 
 ## Current checkpoint
 
@@ -182,7 +182,7 @@ Reactivity evidence/decomposition: `Docs/QtQuick_Migration/H5c_Visualizer_Reacti
 
 ### H5c — historical-vs-Quick visualizer reactivity parity audit
 
-**Status: ACTIVE H audit. First source/configuration repair and bounded diagnostics are implemented; physical magnitude/timing classification continues.**
+**Status: ACTIVE H audit. Source/configuration repairs are implemented; post-R2 physical logs narrow the remaining Bubble and DevCurve presentation seams.**
 
 What is already established / implemented:
 
@@ -196,23 +196,23 @@ What is already established / implemented:
 - [x] Add one focused new parity test file covering source routing, Bubble controls, Spectrum translations/`0.55` transfer, and the reactivity-critical technical zero/false contract.
 - [x] Verify the existing Quick technical owner already preserves per-mode bar count, explicit audio block size, `dynamic_floor=False` + manual floor, adaptive/manual sensitivity, dynamic-range boost, input gain and **`agc_strength=0.0` as no AGC**. These were already correct and are not duplicated by the new source applier.
 - [x] Record the golden coverage gap: replay/presentation goldens largely begin after authored feature state exists, so GREEN goldens do not prove live preset -> BeatEngine/audio-worker configuration reachability. Do not regenerate goldens for this repair.
-- [ ] Execute that focused test in the normal PySide6 environment; syntax/static validation is complete here but this container lacks PySide6.
+- [x] Execute focused parity and shown-Quick tests in the normal PySide6 environment; the current DevCurve logical/shader tests and targeted real-Quick captures are GREEN.
 - [ ] Physically re-measure all five modes under real music after the shared source repair.
-- [ ] Capture warm + cold Play/Pause T0-T7 traces, distinguishing historical 1.5 s cold ramp from migration delay.
-- [ ] Prove whether current per-mode `source_ready` gates reject/delay valid live audio before changing them.
+- [x] Capture warm + cold Play/Pause T0-T7 traces. Cold Bubble reaches fresh ready input/publication in ~93.8 ms; warm resume reaches fresh publication in ~20.0 ms. This disproves source/capture latency as the reported multi-second visual ramp.
+- [x] Prove Bubble `source_ready` admits valid current audio promptly; do not weaken generation/activation freshness fencing.
 - [x] Sine paused idle is physically present; apply a paused-only +20% motion parity adjustment (`0.14 -> 0.168`, `0.22 -> 0.264`) without changing live/music gain or adding a timer.
 - [x] Bubble B0-B5 physical trace: fresh current source, strong real-music energy and ~90 Hz one-step-per-tick integration are healthy. Remaining dead appearance is downstream. Remove the protected-edge full-geometry override so Quick always renders the newest authored Bubble frame; protected edges retain consume-once metadata only.
 - [x] Play edge audit: restore historical `engine.wake()` before playback commit; reduce cold-only reactivity ramp from 1.5 s to 1.0 s while preserving warm-resume no-ramp and generation/activation freshness fencing. Correct T3/T5 sampling so diagnostics measure real edge timing.
-- [x] DevCurve source comparison: Quick had invented delayed ghost fills/outlines even though the historical shader never consumed its ghost setting. Remove that presentation/runtime work; keep saved ghost settings inert for historical parity. This is also a performance reduction.
-- [ ] Re-measure Bubble after latest-geometry repair; if still weak, continue snapshot-radius/alpha/position -> Quick uniform/geometry B6-B9 rather than touching source gain.
-- [ ] Re-measure DevCurve basic preset after historical ghost no-op restoration; if the bottom transient layer still misses heavy hits, use existing + event-triggered transient diagnostics to compare raw bass transient -> solver smoothed transient -> curve excursion.
+- [x] DevCurve source comparison: Quick had invented delayed ghost fills/outlines even though the historical shader never consumed its ghost setting. Remove that presentation/runtime work; keep saved ghost settings inert for historical parity. The remaining jagged edge had a second source-proven migration delta: logical-pixel AA width was multiplied by independent CUSTOM visual scale (`0.75` in the observed profile), narrowing coverage. Restore the historical `1.15 / inner_h` mapping.
+- [ ] Bubble remains severely under-reactive after latest-geometry repair. Current authored synthetic output is at least as strong as the historical oracle, so add compact snapshot-radius/alpha -> retained Quick B6-B8 evidence and classify the Play/Pause radius trajectory before changing response math.
+- [ ] Re-measure DevCurve basic preset after historical ghost no-op and logical-pixel AA restoration. `[VIS_DEVCURVE_TRANSIENT]` must trigger from the historically consumed bass lane only; the prior package's 51 mid/high-only samples were not evidence of a failed transient layer.
 - [ ] Spectrum pause handoff: steady idle floor is already authored correctly (~0.24 max). Use corrected T7 + `[VIS_SPECTRUM_HANDOFF]` samples to locate the brief pre-floor zero; do not raise the floor.
 - [ ] Complete Oscilloscope final renderer-input comparison as a control.
 - [x] Preserve current scale/viewport sizing contracts; retired `*_growth` controls are not parity targets.
 
 Detailed live checklist and repair sequence: `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`.  
 Exact historical/current evidence matrix and next source paths: `Docs/QtQuick_Migration/Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`.  
-Safety checkpoint / applied-vs-pending handoff: `Docs/QtQuick_Migration/H5c_Implementation_Checkpoint_2026-08-31.md`.
+Safety checkpoint / applied-vs-pending handoff: `Docs/QtQuick_Migration/H5c_Implementation_Checkpoint_2026-08-31_R2.md`.
 
 ### H6 — CUSTOM Settings may lock only size-authoring controls
 
