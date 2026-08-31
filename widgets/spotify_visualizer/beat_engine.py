@@ -9,7 +9,8 @@ This module contains the _SpotifyBeatEngine class which handles:
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence
+from dataclasses import dataclass
+from typing import Any, List, Optional, Sequence
 import time
 import math
 
@@ -36,6 +37,32 @@ from widgets.spotify_visualizer.transient_bus import TransientEnergyBands, Trans
 
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class _AnalysisRequest:
+    samples: object
+    capture_ts: float
+    gate_token: int
+    activation_id: int
+    previous_bars: tuple[float, ...]
+    last_smooth_ts: float
+    smoothing_tau: float
+    bar_count: int
+    segment_hysteresis: float
+    min_change_threshold: float
+
+
+@dataclass(frozen=True, slots=True)
+class _AnalysisResult:
+    raw_bars: List[float]
+    smoothed_bars: List[float]
+    timestamp: float
+    reset: bool
+    energy: EnergyBands
+    worker_state: object
+    activation_id: int
+    capture_ts: float
 
 
 def _smooth_analysis_bars(
@@ -124,6 +151,8 @@ class _SpotifyBeatEngine(QObject):
         self._pending_analysis_activation: int = -1
         self._pending_analysis_capture_ts: float = 0.0
         self._thread_manager: Optional[ThreadManager] = None
+        self._analysis_lane: Any = None
+        self._analysis_lane_last_diag_log_ts: float = 0.0
         self._ref_count: int = 0
         self._latest_bars: Optional[List[float]] = None
         self._last_audio_ts: float = 0.0
@@ -173,7 +202,71 @@ class _SpotifyBeatEngine(QObject):
         self._idle_wave_phase: float = 0.0
 
     def set_thread_manager(self, thread_manager: Optional[ThreadManager]) -> None:
-        self._thread_manager = thread_manager
+        if thread_manager is not self._thread_manager:
+            self._stop_analysis_lane()
+            self._thread_manager = thread_manager
+        if thread_manager is not None:
+            self._ensure_analysis_lane()
+
+    def _ensure_analysis_lane(self):
+        lane = self._analysis_lane
+        if lane is not None and not bool(getattr(lane, "is_stopped", False)):
+            return lane
+        tm = self._thread_manager
+        if tm is None:
+            return None
+        try:
+            lane = tm.create_compute_lane(
+                self._run_analysis_request,
+                self._accept_analysis_lane_result,
+                lane_id=f"spotify_visualizer.audio_analysis:{id(self)}",
+                category="visualizer.audio_analysis",
+            )
+        except Exception:
+            # This is a required runtime seam, not a compatibility fallback.
+            logger.error(
+                "[SPOTIFY_VIS] Required audio-analysis compute lane creation failed",
+                exc_info=True,
+            )
+            raise
+        self._analysis_lane = lane
+        return lane
+
+    def _stop_analysis_lane(self) -> None:
+        lane = self._analysis_lane
+        self._analysis_lane = None
+        if lane is None:
+            return
+        try:
+            lane.stop()
+        except Exception:
+            logger.error(
+                "[SPOTIFY_VIS] Audio-analysis compute lane stop failed",
+                exc_info=True,
+            )
+
+    def take_analysis_lane_diagnostics_for_log(
+        self, *, min_interval_seconds: float = 2.0
+    ) -> dict[str, Any]:
+        lane = self._analysis_lane
+        if lane is None:
+            return {}
+        now = time.monotonic()
+        if (
+            self._analysis_lane_last_diag_log_ts > 0.0
+            and now - self._analysis_lane_last_diag_log_ts
+            < max(0.0, float(min_interval_seconds))
+        ):
+            return {}
+        self._analysis_lane_last_diag_log_ts = now
+        try:
+            return dict(lane.diagnostic_snapshot())
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Audio-analysis lane diagnostics failed",
+                exc_info=True,
+            )
+            return {}
     
     def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
         """Set the ProcessSupervisor for worker integration."""
@@ -306,7 +399,22 @@ class _SpotifyBeatEngine(QObject):
     def cancel_pending_compute_tasks(self) -> None:
         """Invalidate outstanding compute callbacks before restarting."""
         self._compute_gate_token += 1
-        self._compute_task_active = False
+        lane = self._analysis_lane
+        cancelled_pending = 0
+        if lane is not None:
+            try:
+                cancelled_pending = int(lane.cancel_pending())
+            except Exception:
+                logger.debug(
+                    "[SPOTIFY_VIS] Failed to cancel pending audio-analysis lane work",
+                    exc_info=True,
+                )
+        # If a packet is already executing/publishing, keep the serial slot
+        # asserted until its fenced callback runs. New-generation audio then
+        # replaces the engine's one pending source instead of racing a second
+        # submission into the lane during the cancellation boundary.
+        if lane is None or cancelled_pending > 0:
+            self._compute_task_active = False
         # A pending source frame belongs to the activation that consumed it.
         self._discard_pending_analysis_frame()
 
@@ -482,6 +590,7 @@ class _SpotifyBeatEngine(QObject):
         self._ref_count = 0
         self._capture_keepalive_deadline = 0.0
         self._stop_worker()
+        self._stop_analysis_lane()
 
     def _stop_worker(self) -> None:
         try:
@@ -532,7 +641,9 @@ class _SpotifyBeatEngine(QObject):
     def has_pending_analysis_frame(self) -> bool:
         return self._pending_analysis_samples is not None
 
-    def _launch_pending_analysis_frame(self) -> None:
+    def _launch_pending_analysis_frame(
+        self, *, releasing_active_slot: bool = False
+    ) -> None:
         """Start the single newest still-valid pending frame, if any.
 
         Called once a compute result has finished committing its DSP/worker
@@ -545,6 +656,8 @@ class _SpotifyBeatEngine(QObject):
         """
         samples = self._pending_analysis_samples
         if samples is None:
+            if releasing_active_slot:
+                self._compute_task_active = False
             return
         activation = self._pending_analysis_activation
         capture_ts = self._pending_analysis_capture_ts
@@ -555,111 +668,144 @@ class _SpotifyBeatEngine(QObject):
                 activation,
                 self._activation_id,
             )
+            if releasing_active_slot:
+                self._compute_task_active = False
             return
-        if self._compute_task_active:
+        if self._compute_task_active and not releasing_active_slot:
             # Something already claimed the single in-flight slot; put the
             # frame back rather than running two computes.
             self._replace_pending_analysis_frame(samples, capture_ts=capture_ts)
             return
         if self._thread_manager is None:
+            if releasing_active_slot:
+                self._compute_task_active = False
             return
         self._schedule_compute_bars_task(samples, capture_ts=capture_ts)
+
+    def _run_analysis_request(self, request: _AnalysisRequest) -> _AnalysisResult | None:
+        """FFT + smoothing on the long-lived serial analysis lane."""
+        if (
+            request.gate_token != self._compute_gate_token
+            or request.activation_id != self._activation_id
+        ):
+            return None
+        try:
+            worker_state = self._audio_worker.make_compute_snapshot()
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Failed to snapshot audio worker for compute",
+                exc_info=True,
+            )
+            return None
+
+        from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
+
+        raw_bars = compute_bars_from_samples(worker_state, request.samples)
+        if not isinstance(raw_bars, list):
+            return None
+
+        now_ts = time.time()
+        smoothed, reset, energy = _smooth_analysis_bars(
+            raw_bars,
+            request.previous_bars,
+            request.last_smooth_ts,
+            now_ts,
+            bar_count=request.bar_count,
+            smoothing_tau=request.smoothing_tau,
+            segment_hysteresis=request.segment_hysteresis,
+            min_change_threshold=request.min_change_threshold,
+        )
+        return _AnalysisResult(
+            raw_bars=raw_bars,
+            smoothed_bars=smoothed,
+            timestamp=now_ts,
+            reset=reset,
+            energy=energy,
+            worker_state=worker_state,
+            activation_id=request.activation_id,
+            capture_ts=request.capture_ts,
+        )
+
+    def _accept_analysis_lane_result(
+        self, result: object, *, payload: _AnalysisRequest
+    ) -> bool:
+        """Commit one lane result, then immediately launch the newest source."""
+        published = False
+        same_generation = (
+            payload.gate_token == self._compute_gate_token
+            and payload.activation_id == self._activation_id
+        )
+        try:
+            if not same_generation:
+                return False
+            success = bool(getattr(result, "success", True))
+            data = getattr(result, "result", None)
+            if not success or not isinstance(data, _AnalysisResult):
+                return False
+            if data.activation_id != self._activation_id:
+                return False
+            published = self._commit_analysis_frame(
+                raw_bars=data.raw_bars,
+                smoothed_bars=data.smoothed_bars,
+                timestamp=data.timestamp,
+                activation_id=data.activation_id,
+                worker_state=data.worker_state,
+                energy=data.energy,
+            )
+            return published
+        finally:
+            # Keep the in-flight flag asserted through publication. A logical
+            # tick arriving during the callback replaces the engine's one
+            # pending source instead of submitting a second lane packet. The
+            # handoff below atomically transfers that logical slot to the next
+            # newest source (or releases it when none exists).
+            self._launch_pending_analysis_frame(releasing_active_slot=True)
 
     def _schedule_compute_bars_task(
         self, samples: object, *, capture_ts: float = 0.0
     ) -> None:
-        tm = self._thread_manager
-        if tm is None:
+        if self._thread_manager is None:
+            return
+        lane = self._ensure_analysis_lane()
+        if lane is None:
             return
 
+        request = _AnalysisRequest(
+            samples=samples,
+            capture_ts=float(capture_ts or 0.0),
+            gate_token=self._compute_gate_token,
+            activation_id=self._activation_id,
+            previous_bars=tuple(self._smoothed_bars),
+            last_smooth_ts=self._last_smooth_ts,
+            smoothing_tau=self._smoothing_tau,
+            bar_count=self._bar_count,
+            segment_hysteresis=self._segment_hysteresis,
+            min_change_threshold=self._min_change_threshold,
+        )
         self._compute_task_active = True
-        token = self._compute_gate_token
-        activation_id = self._activation_id
-        source_capture_ts = float(capture_ts or 0.0)
-        
-        smoothed_copy = list(self._smoothed_bars)
-        last_smooth_ts = self._last_smooth_ts
-        smoothing_tau = self._smoothing_tau
-        bar_count = self._bar_count
-        hysteresis = self._segment_hysteresis
-        min_change = self._min_change_threshold
-
-        def _job(local_samples=samples):
-            """FFT + smoothing on COMPUTE pool - keeps UI thread free."""
-            try:
-                worker_state = self._audio_worker.make_compute_snapshot()
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to snapshot audio worker for compute", exc_info=True)
-                return None
-            from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
-
-            raw_bars = compute_bars_from_samples(worker_state, local_samples)
-            if not isinstance(raw_bars, list):
-                return None
-            
-            now_ts = time.time()
-            smoothed, reset, energy = _smooth_analysis_bars(
-                raw_bars,
-                smoothed_copy,
-                last_smooth_ts,
-                now_ts,
-                bar_count=bar_count,
-                smoothing_tau=smoothing_tau,
-                segment_hysteresis=hysteresis,
-                min_change_threshold=min_change,
-            )
-            return {
-                'raw': raw_bars,
-                'smoothed': smoothed,
-                'ts': now_ts,
-                'reset': reset,
-                'energy': energy,
-                'worker_state': worker_state,
-                'activation_id': activation_id,
-                'capture_ts': source_capture_ts,
-            }
-
-        def _on_result(result) -> None:
-            try:
-                if token != self._compute_gate_token or activation_id != self._activation_id:
-                    # Superseded generation/activation: the in-flight slot and
-                    # any pending source belong to the current owner now.
-                    return
-                self._compute_task_active = False
-                try:
-                    success = getattr(result, "success", True)
-                    data = getattr(result, "result", None)
-                    if not success or data is None:
-                        return
-                    if data.get('activation_id') != self._activation_id:
-                        return
-                    self._commit_analysis_frame(
-                        raw_bars=data.get('raw'),
-                        smoothed_bars=data.get('smoothed'),
-                        timestamp=data.get('ts', time.time()),
-                        activation_id=data.get('activation_id'),
-                        worker_state=data.get('worker_state'),
-                        energy=data.get('energy'),
-                    )
-                finally:
-                    # The required DSP/worker state has committed (or this
-                    # result failed and committed nothing). Either way the
-                    # slot is free, so the newest pending source frame starts
-                    # immediately instead of waiting for the next tick.
-                    self._launch_pending_analysis_frame()
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
-
         try:
-            tm.submit_compute_task(
-                _job,
-                callback=_on_result,
-                category="visualizer.audio_analysis",
+            accepted = bool(lane.submit(request))
+        except Exception:
+            self._compute_task_active = False
+            logger.error(
+                "[SPOTIFY_VIS] Audio-analysis compute lane submission failed",
+                exc_info=True,
             )
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            if token == self._compute_gate_token:
-                self._compute_task_active = False
+            raise
+        if accepted:
+            return
+
+        # A cancellation boundary can leave the previous generation executing
+        # for a moment. Keep only this newest current-generation source and let
+        # that old callback release the serial lane; never fall back to the
+        # Future/task path or run two FFTs concurrently.
+        if bool(getattr(lane, "is_stopped", False)):
+            self._compute_task_active = False
+            logger.error("[SPOTIFY_VIS] Audio-analysis compute lane is stopped")
+            return
+        self._replace_pending_analysis_frame(
+            samples, capture_ts=float(capture_ts or 0.0)
+        )
 
     def _commit_analysis_frame(
         self,

@@ -7,6 +7,10 @@ OverlayWidget {
 
     required property var gmailModel
     semanticDoubleClickEnabled: gmailModel.interactionEnabled
+    // CUSTOM resize uses the same retained whole-card scale as Reddit/Media.
+    // Fixed row/header minima are authored at baseline and therefore shrink
+    // with the presentation instead of escaping a smaller outer rectangle.
+    uniformScaleTransform: true
     property string activeActionIdentity: ""
     property string activeActionMessageId: ""
     property bool activeActionUnread: false

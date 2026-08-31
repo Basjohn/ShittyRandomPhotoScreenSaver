@@ -38,11 +38,18 @@ from rendering.custom_layout_session import (
     CustomLayoutSessionItem,
     normalize_viewport_extent,
 )
-from rendering.quick.custom_layout_hydration import geometry_variant_for_presentation
+from rendering.quick.custom_layout_hydration import (
+    geometry_variant_for_presentation,
+    resolve_quick_custom_entry,
+)
 from rendering.quick.custom_layout_scene import QuickCustomLayoutSceneCoordinator
 from rendering.quick.custom_layout_size import (
+    CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
+    CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY,
     capture_quick_size_payload,
+    is_uniform_transform_resize_mode,
     quick_custom_minimum_size,
+    quick_custom_payload_minimum_scale,
     scale_quick_size_payload,
 )
 from rendering.widget_descriptors import (
@@ -380,7 +387,10 @@ class QuickCustomLayoutOwner:
             steps = 1 if angle_delta_y > 0 else -1
         return self._apply_uniform_scale(
             item,
-            max(0.5, float(item.resize_scale) + 0.05 * steps),
+            max(
+                CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
+                float(item.resize_scale) + 0.05 * steps,
+            ),
             QRect(item.current_global_rect),
         )
 
@@ -426,11 +436,65 @@ class QuickCustomLayoutOwner:
             payload = capture_quick_size_payload(descriptor, presentation, global_rect)
             section = widgets.get(widget_id, {})
             enabled = bool(section.get("enabled", True)) if isinstance(section, Mapping) else True
+            geometry_variant = geometry_variant_for_presentation(
+                widget_id, presentation, widgets
+            )
             key = CustomLayoutKey(
                 widget_id,
                 binding.identity,
-                geometry_variant_for_presentation(widget_id, presentation, widgets),
+                geometry_variant,
             )
+
+            # CUSTOM resize scale is absolute against the authored/reference
+            # presentation, not relative to whichever shrunken rectangle was
+            # saved last time.  Persisting the scalar prevents 40% -> 16% ->
+            # 6.4% compounding across Save/recreation cycles.
+            baseline_resize_scale = 1.0
+            committed_entry = resolve_quick_custom_entry(
+                widgets,
+                binding.screen,
+                widget_id,
+                geometry_variant=geometry_variant,
+            )
+            if committed_entry is not None:
+                raw_scale = committed_entry.size_payload.get(
+                    CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY
+                )
+                try:
+                    parsed_scale = float(raw_scale)
+                except (TypeError, ValueError):
+                    parsed_scale = 0.0
+                if math.isfinite(parsed_scale) and parsed_scale > 0.0:
+                    baseline_resize_scale = parsed_scale
+
+            # For retained uniform-transform families, the QML preferred size
+            # is the exact authored reference on every admission. Derive the
+            # current absolute scale from committed geometry even when metadata
+            # exists so a display/layout change cannot leave stale scalar truth.
+            # This also migrates H9 geometry-only entries and Gmail cleanly.
+            if is_uniform_transform_resize_mode(
+                descriptor.custom_layout_resize_mode
+            ):
+                qml_item = getattr(presentation, "item", None)
+                if qml_item is not None:
+                    try:
+                        preferred_width = float(
+                            qml_item.property("preferredContentWidth") or 0.0
+                        )
+                        preferred_height = float(
+                            qml_item.property("preferredContentHeight") or 0.0
+                        )
+                    except (TypeError, ValueError, RuntimeError):
+                        preferred_width = 0.0
+                        preferred_height = 0.0
+                    if preferred_width > 0.0 and preferred_height > 0.0:
+                        inferred_scale = min(
+                            float(global_rect.width()) / preferred_width,
+                            float(global_rect.height()) / preferred_height,
+                        )
+                        if math.isfinite(inferred_scale) and inferred_scale > 0.0:
+                            baseline_resize_scale = inferred_scale
+
             item = CustomLayoutSessionItem(
                 source_key=key,
                 model_identity=widget_id,
@@ -441,6 +505,8 @@ class QuickCustomLayoutOwner:
                 baseline_enabled=enabled,
                 current_enabled=enabled,
                 resize_capable=descriptor.supports_layout_resize_edit,
+                baseline_resize_scale=baseline_resize_scale,
+                resize_scale=baseline_resize_scale,
                 source_monitor_route=get_effective_monitor_value_for_widget(
                     widget_id, widgets
                 ),
@@ -512,16 +578,34 @@ class QuickCustomLayoutOwner:
         descriptor = self._descriptors[item.source_key]
         binding = self._bindings[item.current_display_identity]
         baseline = item.baseline_global_rect
+        admitted_scale = max(1.0e-6, float(item.baseline_resize_scale))
+        reference_width = max(1.0, float(baseline.width()) / admitted_scale)
+        reference_height = max(1.0, float(baseline.height()) / admitted_scale)
         max_scale = min(
-            float(binding.geometry.width()) / max(1.0, float(baseline.width())),
-            float(binding.geometry.height()) / max(1.0, float(baseline.height())),
+            float(binding.geometry.width()) / reference_width,
+            float(binding.geometry.height()) / reference_height,
         )
-        scale = max(0.5, min(max_scale, float(requested_scale)))
+        minimum = quick_custom_minimum_size(item)
+        minimum_scale = max(
+            float(minimum.width()) / reference_width,
+            float(minimum.height()) / reference_height,
+        )
+        legacy_payload_floor = (
+            admitted_scale
+            * quick_custom_payload_minimum_scale(
+                descriptor, item.baseline_size_payload
+            )
+        )
+        floor_scale = max(
+            CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
+            minimum_scale,
+            legacy_payload_floor,
+        )
+        scale = min(max_scale, max(floor_scale, float(requested_scale)))
         if abs(scale - item.resize_scale) < 1e-6:
             return False
-        minimum = quick_custom_minimum_size(item)
-        width = max(minimum.width(), int(round(baseline.width() * scale)))
-        height = max(minimum.height(), int(round(baseline.height() * scale)))
+        width = max(1, int(round(reference_width * scale)))
+        height = max(1, int(round(reference_height * scale)))
         center_x = float(anchor_rect.x()) + float(anchor_rect.width()) / 2.0
         local = QRect(
             int(round(center_x - width / 2.0)) - binding.geometry.x(),
@@ -534,10 +618,14 @@ class QuickCustomLayoutOwner:
             binding.geometry.size(),
             min_size=minimum,
         )
+        # Legacy payload-based families scale from their admitted payload by
+        # the *delta* from the persisted absolute scale. Uniform-transform
+        # families carry no authored size payload, but use the same arithmetic.
+        payload_scale = scale / admitted_scale
         payload = scale_quick_size_payload(
             descriptor,
             item.baseline_size_payload,
-            scale,
+            payload_scale,
         )
         item.set_geometry(
             QRect(
@@ -699,6 +787,10 @@ class QuickCustomLayoutOwner:
             min_size=quick_custom_minimum_size(item),
         )
         payload = dict(item.current_size_payload)
+        if descriptor.custom_layout_resize_mode != "visualizer_rect":
+            payload[CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY] = float(
+                item.resize_scale
+            )
         if descriptor.custom_layout_resize_mode == "clock_font":
             payload.pop("display_mode", None)
         if descriptor.custom_layout_resize_mode == "visualizer_rect":

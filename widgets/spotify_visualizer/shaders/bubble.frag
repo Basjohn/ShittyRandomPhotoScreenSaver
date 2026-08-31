@@ -40,6 +40,8 @@ uniform float u_trail_strength;     // 0.0 = off, 1.0 = full
 uniform float u_tail_opacity;       // max opacity ceiling for tail gradient (0.0-0.85)
 uniform vec2 u_trail_axis_scale;    // authored-pixel history-source footprint on CUSTOM axes
 uniform float u_trail_radial_scale;  // authored-pixel ripple radius/ring footprint on CUSTOM height
+uniform float u_head_radial_scale;   // extreme-tall CUSTOM head footprint correction (Quick only)
+uniform float u_large_viewport_stroke_bonus_px; // up to +1 authored px at extreme height (Quick only)
 
 // --- Styling ---
 uniform vec2 u_specular_dir;       // normalised direction to light source
@@ -187,6 +189,12 @@ void main() {
     pop_col.rgb = apply_rainbow(pop_col.rgb, u_rainbow_hue_offset);
     
     int count = min(u_bubble_count, 110);
+    float head_radial_scale = (u_quick_item_coords == 1)
+        ? clamp(u_head_radial_scale, 0.01, 1.0)
+        : 1.0;
+    float large_viewport_stroke_bonus_px = (u_quick_item_coords == 1)
+        ? clamp(u_large_viewport_stroke_bonus_px, 0.0, 1.0)
+        : 0.0;
     // --- Water ripple wake trail behind each moving bubble ---
     // Each bubble's 3 trail samples become ripple source points at
     // different ages. At each source we draw concentric expanding rings
@@ -297,7 +305,7 @@ void main() {
         for (int i = 0; i < count; i++) {
             vec4 bpos = u_bubbles_pos[i];
             vec2 bxy = bpos.xy;
-            float brad = bpos.z;
+            float brad = bpos.z * head_radial_scale;
             float balpha = bpos.w;
             if (balpha < 0.01 || brad < 2.0 * px) continue;
 
@@ -336,7 +344,7 @@ void main() {
         float dist = length(delta);
         
         // Radius in aspect-corrected space
-        float r = brad;
+        float r = brad * head_radial_scale;
         
         // Keep outline weight proportional to rendered bubble radius rather
         // than pinning it to an authored-pixel width. Physical CUSTOM testing
@@ -346,6 +354,7 @@ void main() {
         // naturally thinning canonical bubbles; tiny/huge safety bounds remain
         // authored pixels so AA never collapses or blooms without limit.
         float stroke = clamp(r * 0.0375, 0.35 * px, 1.8 * px);
+        stroke = min(2.8 * px, stroke + large_viewport_stroke_bonus_px * px);
         
         // --- Tiny bubble shortcut (< ~4px radius) ---
         float tiny_threshold = 4.0 * px;

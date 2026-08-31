@@ -9,6 +9,10 @@ from __future__ import annotations
 import math
 from typing import Any, Sequence
 
+from widgets.spotify_visualizer.render_state import (
+    CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
+)
+
 
 _MIN_TIME_CONSTANT_SECONDS = 0.002
 _MAX_TIME_CONSTANT_SECONDS = 0.014
@@ -71,6 +75,29 @@ def _clamp_strength(value: Any) -> float:
         return max(0.0, min(1.0, float(value)))
     except (TypeError, ValueError):
         return 0.5
+
+
+
+
+def _vertical_viewport_smoothing_multiplier(widget: Any) -> float:
+    """Increase only Spectrum presentation smoothing on very tall viewports.
+
+    A bar value traverses many more physical pixels when CUSTOM stretches the
+    visualizer vertically, so the same authored one-pole constant becomes
+    visibly steppy even though logical cadence is unchanged. Scale the existing
+    filter by vertical extent only; this adds no timer, interpolation pass, or
+    paint authority and is exactly 1.0 at/below canonical height.
+    """
+    controller = getattr(widget, "runtime_controller", None)
+    extent = getattr(controller, "presentation_viewport_extent", None)
+    try:
+        height = float(extent[1])
+        baseline_height = float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1])
+    except (TypeError, ValueError, IndexError):
+        return 1.0
+    if height <= 0.0 or baseline_height <= 0.0:
+        return 1.0
+    return max(1.0, min(4.0, height / baseline_height))
 
 
 def _presentation_identity(widget: Any, strength: float) -> tuple[Any, ...]:
@@ -166,9 +193,10 @@ def resolve_widget_spectrum_presentation(
         widget._spectrum_presentation_pending = False
         return values, changed
 
-    time_constant = _MIN_TIME_CONSTANT_SECONDS + (
-        _MAX_TIME_CONSTANT_SECONDS - _MIN_TIME_CONSTANT_SECONDS
-    ) * strength
+    time_constant = (
+        _MIN_TIME_CONSTANT_SECONDS
+        + (_MAX_TIME_CONSTANT_SECONDS - _MIN_TIME_CONSTANT_SECONDS) * strength
+    ) * _vertical_viewport_smoothing_multiplier(widget)
     alpha = 1.0 - math.exp(-dt / max(time_constant, 1.0e-6))
 
     resolved: list[float] = []
