@@ -44,6 +44,12 @@ then J
 
 Do not use J as a parking lot for known deterministic H/I defects.
 
+### Early mandatory visual-parity tranche
+
+When the acting model/agent has reliable image inspection, front-load the family-by-family paired oracle under `images/migration/Ideal (PreMigration)/` versus `images/migration/Current (PostMigration)/`. For visible details the matching Ideal image is J's highest parity authority; the Current image is the explicit regression baseline. This pass is mandatory for Abandonment Issues, Achievement Pulse, Gmail, Media, Reddit and Weather. Clock is intentionally absent because its current Quick presentation is acceptable.
+
+A model with weak/unreliable vision may **briefly defer** the eyes-on implementation to a vision-capable pass, but may not replace the oracle with prose, tests or aesthetic invention and may not close J without it. The same early parity tranche includes restoring the **missing CUSTOM/Edit alignment/snap guide lines** (centre/peer/edge/safe-gutter relationships) through the existing Python snap/layout authority.
+
 ### Why I has no standing prewritten decomposition
 
 Phase I is intentionally source-driven residue cleanup. Its exact deletion list cannot be known safely until H has changed

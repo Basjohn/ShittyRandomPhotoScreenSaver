@@ -2485,6 +2485,27 @@ class DisplayManager(QObject):
             self._quick_transition_spec_resolved = True
         return self._quick_transition_batch_spec
 
+    def has_admissible_transition_for_open_batch(self) -> bool:
+        """Validate transition availability before producer queue mutation.
+
+        The initial base frame legitimately has no source and therefore needs no
+        transition.  Once any selected display owns image state, the already-open
+        image batch must resolve one concrete transition spec before the engine is
+        allowed to advance queue/history truth.
+        """
+
+        if not self._transition_work_pending:
+            return False
+        if not self.has_presented_image():
+            return True
+        try:
+            return self._resolve_quick_transition_batch_spec() is not None
+        except Exception:
+            logger.exception(
+                "[TRANSITION] Open image batch failed transition preflight"
+            )
+            return False
+
     def _present_quick_image(
         self,
         display: object,
@@ -2492,7 +2513,7 @@ class DisplayManager(QObject):
         image_path: str,
         *,
         implicit_expected_screens: Set[int] | None = None,
-    ) -> None:
+    ) -> str:
         """Publish or transition one processed image through a destination unit."""
 
         screen_index = int(getattr(display, "screen_index"))
@@ -2507,22 +2528,16 @@ class DisplayManager(QObject):
         ):
             raise TypeError("display unit has no Quick image/transition contract")
 
-        # Interruption/replacement (surviving product contract): a valid new image
-        # arriving during an active run cancels that run to its authored
-        # destination exactly once, so the resolved destination becomes the
-        # coherent source for the replacement run. Never a black clear and never a
-        # bare reject; the transition controller fences the superseded run's stale
-        # completion by run id / generation, so it cannot overwrite the
-        # replacement. The cancel is performed before the batch is (re)opened so a
-        # single-screen batch that finalizes on cancel reopens cleanly while a
-        # still-active multi-screen batch simply absorbs the replacement.
+        # Image-change admission is transactional at the engine/manager seam.
+        # Reaching publication while this display still owns an active transition
+        # is therefore an invariant failure: never cancel/snap that run merely to
+        # make room for a newer image.  The active destination must finish intact;
+        # the newer request is rejected before queue mutation by the batch owner.
         if bool(getattr(display, "has_running_transition")()):
-            cancel = getattr(display, "cancel_transition", None)
-            if not callable(cancel) or not cancel(reason="image-replacement"):
-                raise RuntimeError(
-                    f"screen {screen_index} could not cancel its active Quick "
-                    "transition for a replacement image"
-                )
+            raise RuntimeError(
+                f"screen {screen_index} still owns an active Quick transition "
+                "during admitted image publication"
+            )
 
         if not self._transition_work_pending:
             self._begin_quick_transition_batch(
@@ -2534,21 +2549,30 @@ class DisplayManager(QObject):
         if source is None:
             publish(destination)
             self._quick_batch_published_screens.add(screen_index)
-            self._on_image_displayed(screen_index, image_path)
+            # Close the final first-frame batch before publishing authoritative
+            # readiness.  Replacement-runtime reseeding runs synchronously from
+            # that readiness signal and must observe genuinely idle batch state;
+            # otherwise a direct first frame would wait forever for a transition
+            # completion event that cannot exist.
             self._finish_quick_transition_batch_if_complete()
-            return
+            self._on_image_displayed(screen_index, image_path)
+            return "base_published"
 
         spec = self._resolve_quick_transition_batch_spec()
         if spec is None:
-            logger.warning(
-                "[TRANSITION] No transition admitted for image batch; "
-                "publishing destination directly without broadening Random pool"
+            # Once a source image exists, a missing/invalid transition is not
+            # permission to flash the destination directly.  Keep the current
+            # image authoritative and fail the batch loudly; startup with no
+            # source remains the only legitimate direct-publication path above.
+            logger.error(
+                "[TRANSITION] Image batch has no admissible transition; "
+                "destination withheld screen=%s image=%s",
+                screen_index,
+                image_path,
             )
-            publish(destination)
-            self._quick_batch_published_screens.add(screen_index)
-            self._on_image_displayed(screen_index, image_path)
-            self._finish_quick_transition_batch_if_complete()
-            return
+            raise RuntimeError(
+                f"screen {screen_index} image batch has no admissible transition"
+            )
 
         request = spec.build_request(
             runtime_generation=int(self._runtime_generation or 0),
@@ -2558,6 +2582,7 @@ class DisplayManager(QObject):
         start_transition(request)
         self._quick_transition_paths[screen_index] = str(image_path or "")
         self._quick_batch_published_screens.add(screen_index)
+        return "transition_started"
 
     def _on_quick_transition_finalized(
         self,
@@ -2586,8 +2611,12 @@ class DisplayManager(QObject):
                 destination_identity,
                 getattr(current, "identity", None),
             )
-        self.transition_completed.emit(screen_index)
+        # Reconcile whole-batch ownership before notifying downstream readiness
+        # consumers.  The final display completion is the event that makes
+        # transition work genuinely idle, allowing prefetch to resume without a
+        # 100 ms polling loop.
         self._finish_quick_transition_batch_if_complete()
+        self.transition_completed.emit(screen_index)
     
     def _on_image_displayed(self, screen_index: int, image_path: str) -> None:
         """Handle image displayed event."""
@@ -2794,13 +2823,13 @@ class DisplayManager(QObject):
         processed_pixmap: QPixmap,
         original_pixmap: QPixmap,
         image_path: str,
-    ) -> None:
+    ) -> str:
         """Publish one GUI-materialized image through the selected display unit."""
 
         display = self._display_for_screen_index(screen_index)
         if display is None:
             raise IndexError(f"no selected display for screen index {screen_index}")
-        self._present_quick_image(display, processed_pixmap, image_path)
+        return self._present_quick_image(display, processed_pixmap, image_path)
     
     def show_error(self, message: str, screen_index: Optional[int] = None) -> None:
         """

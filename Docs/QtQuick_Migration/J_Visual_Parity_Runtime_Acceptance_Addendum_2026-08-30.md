@@ -19,11 +19,16 @@ Use the dedicated durable reference:
 
 Reference hierarchy for user-visible outcomes:
 
-1. current explicit operator observations/comparison screenshots;
-2. 4.7.2 release screenshot — strongest broad visual baseline and explicitly the last Raw PySide6 architecture release;
-3. 4.7.0 release screenshot;
-4. `15099d3` — cleaner historical behavior-code reference;
-5. `3fe5df6` — **known-good pre-Qt-Quick behavioral oracle for visualizer reactivity**; for unrelated broad UI archaeology it is simply a later reference than `15099d3`.
+1. **Binding family screenshot oracle:** compare the matching files under `images/migration/Ideal (PreMigration)/` and `images/migration/Current (PostMigration)/`. For every pixel/detail actually visible in the family-specific Ideal image, that image is the highest visual parity authority; Current is the explicit post-migration regression baseline. This currently covers Abandonment Issues, Achievement Pulse, Gmail, Media, Reddit and Weather. Clock is intentionally absent because its current Quick presentation is acceptable.
+2. current explicit operator observations that intentionally preserve or improve a newer treatment (for example the current Media transport strip);
+3. 4.7.2 release screenshot — secondary broad-composition baseline;
+4. 4.7.0 release screenshot;
+5. `15099d3` — cleaner historical behavior-code reference;
+6. `3fe5df6` — **known-good pre-Qt-Quick behavioral oracle for visualizer reactivity**; for unrelated broad UI archaeology it is simply a later reference than `15099d3`.
+
+Agents must inspect the relevant paired repository images before changing a covered family. Prose is explanatory; it does not overrule the pictured target for visible details unless the operator explicitly chooses a newer treatment.
+
+**Sequencing:** when the acting agent/model has reliable image inspection, do the paired-oracle family pass near the **front of J**, not as leftover polish after easier text-only tasks. A weak-vision agent may briefly defer the implementation to a vision-capable pass, but the oracle cells remain mandatory and cannot be closed from prose, tests, or historical code alone.
 
 For implementation, current accepted Quick architecture always wins.
 
@@ -42,7 +47,7 @@ Required eyes-on cells:
 - click/focus current display: no whole-scene flicker;
 - A -> B -> A focus across physical displays: no scene clear, reveal restart, stale frame or opacity jump;
 - ordinary image transition boundaries: no black/stale handoff;
-- interrupted transition: still visually coherent after the deterministic cancel-to-destination contract fires;
+- competing image request during an active transition: current transition remains visually coherent and completes normally; the newer request is deferred/rejected before image truth moves, with no cancel-to-destination snap or bare image flash;
 - Settings/CUSTOM replacement after H fix: no replacement-generation black frame beyond intentional readiness policy.
 
 If instrumentation proves a click/focus action resets semantic image/reveal state, classify the smallest owner as H rather than accepting it as cosmetic.
@@ -133,6 +138,15 @@ shadow direction/blur/spread
 
 Differences need to be either setting-driven/family-intentional or removed.
 
+
+### Weather resize binding-loop gate
+
+A pre-R7/H9 physical resize experiment emitted repeated Qt/QML warnings:
+
+`WeatherPresentation.qml: Binding loop detected for property preferredContentHeight` (binding at line 24 in the observed build).
+
+Treat this as **J geometry/parity correctness debt by default**, not harmless log cosmetics. It does not block escape from H unless later evidence shows it corrupts functional/committed geometry or lifecycle before H closes. The current preferred-height expression reads `readyColumn.childrenRect.height + shellInset` while the content column is centred inside the Python-assigned outer rect; during resize/reflow the preferred-size notification can participate in the QML -> Python outer-rect -> QML layout feedback edge. Before Weather J parity is accepted, source-localize the smallest cycle and prove repeated wheel/corner resize plus Save/recreation yields stable preferred geometry with **zero binding-loop warnings** in `screensaver_qml.log`. Do not paper it over by suppressing Qt messages or by adding a second geometry owner.
+
 ## 8. Visualizer
 
 After H Spectrum repair and H CUSTOM cross-display admission repair, physically inspect all five modes again.
@@ -190,17 +204,15 @@ The sidecar itself must exist even on a zero-message clean run and contain sessi
 
 See `Docs/Qt_QML_Observability.md`.
 
-## 13. Low-priority retained operator affordances
+## 13. Retained operator affordances
 
-These are explicitly preserved so they are not forgotten, but they do **not** reorder the active H blockers.
+### CUSTOM/Edit alignment guides — mandatory J parity
 
-### CUSTOM/Edit alignment guides
+The operator currently sees **none of the useful visible alignment/snap guide lines that existed before migration**. Current Quick source already contains grid/safe-gutter/vertical/horizontal guide presentation and a Python `set_guides(...)` seam, but no production caller currently publishes guide sets into that seam. This is a visible interaction-parity regression and should be worked early in J alongside the family screenshot oracle when the acting agent can inspect the result reliably. Reuse the existing Python snap/layout authority; do not add QML geometry truth or a second layout owner.
 
-The operator currently sees no useful alignment/snap guidelines in Edit mode. Current Quick source already contains grid/safe-gutter/vertical/horizontal guide presentation and a Python `set_guides(...)` seam, but no production caller currently publishes guide sets into that seam. Treat this as low-priority J interaction parity unless later evidence shows snapping itself is semantically wrong. Reuse the existing Python snap/layout authority; do not add QML geometry truth or a second layout owner.
+Acceptance: while moving/resizing an item, useful centre/peer/edge/safe-gutter relationships visibly appear and clear with the same transaction, without changing Save/Cancel semantics or ordinary non-CUSTOM layout. A weak-vision agent may defer the eyes-on tuning to a vision-capable pass, but may not close or downgrade this cell.
 
-Acceptance: while moving/resizing an item, useful centre/peer/edge snap relationships visibly appear and clear with the same transaction, without changing Save/Cancel semantics or ordinary non-CUSTOM layout.
-
-### Performance/debug overlay
+### Performance/debug overlay — low priority
 
 The operator also reports that the prior performance/debug overlay affordance is absent. Preserve this as low-priority J/diagnostic work. A future overlay may consume bounded read-only metrics already owned by current performance/runtime instrumentation, but must be a retained Quick presentation under the accepted scene and must not resurrect the legacy `gl_profiler.py` rendering path, QWidget/QRhi/GL presenter ownership, another accelerated window, or a new cadence owner.
 

@@ -287,8 +287,83 @@ def test_replacement_runtime_first_frames_reseed_existing_prefetch_owner():
     assert "def _schedule_prefetch_resume" in pipeline
     assert "_has_transition_work_pending(engine)" in pipeline
     assert "_schedule_engine_delay(" in pipeline
-    assert "_prefetch_resume_scheduled" in pipeline
+    assert "_prefetch_resume_claim" in pipeline
+    assert "_prefetch_resume_scheduled" not in pipeline
+    assert "waiting on transition event" in pipeline
+    assert "prefetch_resume_{reason}_transition_pending" not in pipeline
     assert "schedule_prefetch(engine)" in pipeline
     assert "def notify_transition_complete" in pipeline
     assert 'reason="transition_complete"' in pipeline
     assert "from PySide6.QtCore import QTimer" not in pipeline
+
+
+
+def test_image_change_admission_is_transactional_and_never_snaps_active_transition():
+    engine = (ROOT / "engine/screensaver_engine.py").read_text()
+    manager = (ROOT / "engine/display_manager.py").read_text()
+
+    show_start = engine.index("    def _show_next_image")
+    show_end = engine.index("    def _schedule_startup_first_image_retry", show_start)
+    show = engine[show_start:show_end]
+    assert "if not self._try_begin_image_change_work():" in show
+    assert show.index("_try_begin_image_change_work") < show.index("self.image_queue.next()")
+    assert show.index("_prepare_random_transition_if_needed") < show.index("self.image_queue.next()")
+    assert show.index("has_admissible_transition_for_open_batch") < show.index("self.image_queue.next()")
+
+    claim_start = engine.index("    def _try_begin_image_change_work")
+    claim_end = engine.index("    def _clear_unaccepted_image_change_work", claim_start)
+    claim = engine[claim_start:claim_end]
+    assert "has_transition_work_pending" in claim
+    assert claim.index("has_transition_work_pending") < claim.index("self._loading_in_progress = True")
+    assert "Image-change admission rejected while opening" in claim
+
+    assert "def has_admissible_transition_for_open_batch" in manager
+    assert "if not self.has_presented_image():" in manager
+    assert "return self._resolve_quick_transition_batch_spec() is not None" in manager
+
+    present_start = manager.index("    def _present_quick_image")
+    present_end = manager.index("    def _on_quick_transition_finalized", present_start)
+    present = manager[present_start:present_end]
+    assert 'cancel(reason="image-replacement")' not in present
+    assert "still owns an active Quick transition" in present
+    source_none_start = present.index("if source is None:")
+    source_none_end = present.index("spec = self._resolve_quick_transition_batch_spec()", source_none_start)
+    source_none = present[source_none_start:source_none_end]
+    assert source_none.index("_finish_quick_transition_batch_if_complete()") < source_none.index(
+        "_on_image_displayed(screen_index, image_path)"
+    )
+
+    spec_start = present.index("spec = self._resolve_quick_transition_batch_spec()")
+    spec_end = present.index("request = spec.build_request", spec_start)
+    spec_block = present[spec_start:spec_end]
+    assert "destination withheld" in spec_block
+    assert "publish(destination)" not in spec_block
+    assert 'return "base_published"' in present
+    assert 'return "transition_started"' in present
+
+    pipeline = (ROOT / "engine/image_pipeline.py").read_text()
+    assert '"base_image_published"' in pipeline
+    assert '"transition_started"' in pipeline
+
+    finalized_start = manager.index("    def _on_quick_transition_finalized")
+    finalized_end = manager.index("    def _on_image_displayed", finalized_start)
+    finalized = manager[finalized_start:finalized_end]
+    assert finalized.index("_finish_quick_transition_batch_if_complete()") < finalized.index(
+        "self.transition_completed.emit(screen_index)"
+    )
+
+
+def test_fullscreen_compat_overscan_preserves_shared_edges_and_logs_device_sizes():
+    window = (ROOT / "rendering/quick/window.py").read_text()
+    start = window.index("    def _fullscreen_compat_geometry")
+    end = window.index("    def _queue_meta_call", start)
+    block = window[start:end]
+
+    assert "virtual_geometry" in block
+    assert "geometry.top() == virtual.top()" in block
+    assert "geometry.bottom() == virtual.bottom()" in block
+    assert "geometry.left() == virtual.left()" in block
+    assert "geometry.right() == virtual.right()" in block
+    assert "adjust(-1, -1, 1, 1)" not in block
+    assert "screen_device_size=%dx%d window_device_size=%dx%d" in block
+    assert "screen.virtualGeometry()" in block
