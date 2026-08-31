@@ -19,7 +19,7 @@ Examples:
 
 - the newer Media transport strip may be kept because the operator prefers it;
 - the old 4.7.2 seek bar is useful as a visual/interaction reference even though the release notes explicitly say clicking it did not seek yet — H4 should make seeking actually work rather than reproducing that limitation;
-- the historical adjacent app-volume accessory remains the canonical outcome for the existing toggle, while an integrated in-card variant may survive only as an explicit additional option;
+- the app-volume control remains a Media-dependent child widget; the historical separate adjacent accessory is the default outcome for the existing toggle, while an integrated in-card variant may survive only as an explicit additional option;
 - old Spectrum/Organ presentation is a topology/design oracle, but current H must also provide correct dynamic data before J tunes glow/spacing/colour.
 
 ## 2. Reference hierarchy
@@ -201,7 +201,7 @@ Floor:
 - large useful artwork;
 - coherent provider/header alignment;
 - optional metadata;
-- adjacent/outside adjustable app-volume accessory;
+- a separate adjacent/outside adjustable app-volume child item with its own geometry, dependent on Media and following Media's display route/lifecycle;
 - feature controls remain usable;
 - artwork fades where historically supported; the current visible artwork without the nicer transition is a J Parity+ gap, not an H provider failure.
 
@@ -209,7 +209,9 @@ Plus:
 
 - retain the newer transport strip if it remains the better treatment;
 - make seek actually work;
-- allow an integrated volume form only as an explicit extra option rather than replacing the established toggle outcome.
+- default existing/unspecified volume presentation to the separate child item;
+- allow an integrated volume form only as an explicit extra option rather than replacing the established toggle outcome;
+- reuse the existing Media presentation model plus its one `MediaVolumeRuntimeService` lease/action seam in both forms; the retained child presentation may hide/retire with Media but must not own or duplicate that shared runtime, and must not recreate the historical QWidget.
 
 ### Gmail / Reddit
 

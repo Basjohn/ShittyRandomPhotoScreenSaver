@@ -427,7 +427,7 @@ Named J cells include:
 - actual gentle reveal/fade — including the visualizer-does-not-fade-in bug and the desktop -> application crossfade aspiration (see "Reveal / startup composition");
 - Media Parity+: proportions, artwork sizing/chrome, **artwork change fade**, header/control-strip balance, optional metadata;
 - preserve the newer transport strip where it is better;
-- adjacent/outside adjustable Media app-volume accessory as the canonical established toggle outcome;
+- Media-dependent app-volume child widget: its established/default presentation is a separate adjustable adjacent/outside item with its own geometry; an integrated form is optional only when explicitly selected;
 - Gmail clipping/refresh/header alignment;
 - Achievement Pulse packing/icon/count allocation;
 - one coherent visible pointer treatment (no OS cursor + halo duplication);
@@ -441,3 +441,18 @@ Named J cells include:
 - low-priority CUSTOM/Edit guide visibility: existing grid/guide presentation must actually publish useful snap/alignment guides during editing; do not invent a second layout owner;
 - low-priority Quick-native performance/debug overlay parity if the product affordance is still desired; it must consume read-only current metrics and must not resurrect legacy GL presenter/profiler ownership;
 - **Qt/QML sidecar review as part of physical acceptance**, not console-only inspection.
+
+### J-Media app-volume child widget — separate by default
+
+**Status: actionable J Parity+ restoration; current Quick presentation is incorrectly folded into the Media card.**
+
+The app-volume control is a child/accessory of Media, not an independent widget-family capability. It depends on an effective Media presentation and provider app-volume capability, follows Media's effective display route and lifecycle, and reuses the existing Media presentation model plus its one `MediaVolumeRuntimeService` lease/action seam. The established toggle outcome and migration default are a separate retained Quick item beside the Media card. An in-card form may remain only as an explicit optional presentation variant.
+
+Closure checklist:
+
+- [ ] Restore a distinct retained app-volume child item with its own bounds, hit target and adjustable geometry; do not implement the default by reserving width inside `MediaPresentation.qml`.
+- [ ] Existing settings and missing-variant migration resolve to **separate**; integrated resolves only from an explicit user-selected option.
+- [ ] Ordinary layout places the child adjacent/outside Media. CUSTOM persists an own child rect/size payload in Media's effective display bucket; it does not gain an independent monitor setting or route.
+- [ ] The child presentation is admitted/visible only while Media and app-volume capability are effective, and its retained item hides/retires with Media. Shared service lifecycle remains Media-owned/setting-gated, never child-owned.
+- [ ] Both presentation variants use the existing Media presentation model plus its one `MediaVolumeRuntimeService` lease/action seam; no QWidget resurrection, second Media card, duplicate model, controller, poller or service.
+- [ ] Focused retained-item, default-selection, dependency/lifecycle, CUSTOM round-trip and no-duplicate-runtime tests are GREEN; release-screenshot comparison confirms the default adjacent/outside outcome physically.
