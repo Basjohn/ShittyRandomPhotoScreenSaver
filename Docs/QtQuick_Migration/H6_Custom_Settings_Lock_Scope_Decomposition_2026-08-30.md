@@ -3,6 +3,8 @@
 Date: 2026-08-30  
 Starting source: `af8896b52fbee153fe1cd0b627a55455c14625d1`
 
+Current status (2026-08-31): **source/runtime-shaped GREEN; physical revalidation pending.**
+
 ## Contract
 
 CUSTOM commits layout geometry. Settings controls whose values directly author that committed size may be locked so two owners do not fight.
@@ -31,11 +33,23 @@ media_mute_button_enabled
 
 Some of those controls can still be disabled by their own normal dependencies. Example: glow colour may be disabled when glow itself is off. That is legitimate and must remain.
 
-## Current symptom
+## Reported symptom
 
 Physical Settings shows seek/progress/glow-related features greyed merely because Media is in CUSTOM.
 
-Because `_refresh_custom_resize_lock_state()` only iterates descriptor `control_attrs`, this suggests the observed lock is outside the canonical Custom resize descriptor.
+Because `_refresh_custom_resize_lock_state()` only iterates descriptor `control_attrs`, this suggested the observed lock was outside the canonical Custom resize descriptor.
+
+## Current-source result
+
+The bounded audit found no second CUSTOM disable owner:
+
+- `_refresh_custom_resize_lock_state()` iterates only the canonical descriptor controls;
+- Media progress/glow state is owned only by the ordinary transport/progress dependency refresh;
+- Media app-volume state is owned only by provider capability refresh;
+- the normal profile persists the reported state: `Custom`, Spotify, and transport/progress/glow/volume/mute all enabled;
+- a real `WidgetsTab` loaded with that exact state reports only `media_font_size` and `media_artwork_size` disabled. Every listed feature control and its relevant parent remain effectively enabled.
+
+No production force-enable change is justified by current evidence. The former physical observation remains an operator revalidation gate; if it recurs, capture control, parent/grandparent enabled state and style state before changing ownership.
 
 ## Investigation order
 
@@ -76,15 +90,14 @@ or an equivalent owner-specific solution.
 
 ## Regression
 
-Supplied:
+Permanent deterministic coverage:
 
 ```text
-tests/test_custom_resize_lock_scope.py
+tests/test_widget_descriptors.py
+tests/test_widgets_tab.py
 ```
 
-It pins descriptor intent and should be GREEN even before the physical bug is fixed.
-
-Add a Settings-level test for the actual regression once the secondary owner is found:
+The descriptor test pins the two-control metadata. The real Settings-level regression now loads:
 
 ```text
 Media position = Custom
@@ -102,4 +115,4 @@ glow colour enabled (subject to glow=True)
 volume/mute toggles enabled subject to provider capability
 ```
 
-Also test a legitimate dependency-off case so the repair cannot become “force-enable everything.”
+It requires font/artwork disabled while progress toggle/height/shadow/glow/colour and volume/mute remain enabled. Existing transport-off and unsupported-provider tests pin legitimate dependency-off behavior so this cannot become “force-enable everything.” The full pair passes `126/126`.

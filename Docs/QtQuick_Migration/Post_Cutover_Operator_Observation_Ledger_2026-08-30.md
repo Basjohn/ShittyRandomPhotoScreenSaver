@@ -63,7 +63,7 @@ Legend:
 | [x] | O-018 | **H — CLOSED** | Play/Pause transport semantics. | Operator validated H4 physically; archived from active execution. |
 | [x] | O-019 | preservation | Previous/Next work. | Preserve. |
 | [x] | O-020 | **H — CLOSED** | Seek/progress transport semantics. | Operator validated H4 physically; archived from active execution. |
-| [ ] | O-045 | **H** | CUSTOM greys Media feature controls that do not author size, including progress/seek/glow-related controls. | H6. CUSTOM Media lock is font size + artwork size only; preserve ordinary dependency gates. |
+| [ ] | O-045 | **H validation** | CUSTOM was reported to grey Media feature controls that do not author size, including progress/seek/glow-related controls. | H6 current-source audit finds no second CUSTOM setter. The normal profile's exact `Custom` + all-feature-on state passes a real `WidgetsTab` gate: only font/artwork are disabled; progress/glow/volume/mute follow their normal dependencies. Full Settings/descriptor suite is `126/126`. Re-open current Settings physically; if still grey, capture control and parent enabled/style state rather than force-enabling. |
 
 ## Media — J visual/design parity
 
