@@ -612,9 +612,10 @@ R2 repair:
 - [x] inverse-map that radius plus collision-only gap/correction distances by `domain_h` for collision/spawn coherence, preserving canonical 1x1 behavior;
 - [x] add B6/B7 final-simulation/frozen-big radius-alpha plus B8 retained logical/device-pixel diagnostics around steady music and Play/Pause;
 - [x] first corrected B9 run reports dramatically better / almost close-worthy magnitude; B6/B7/B8 agree, the source is current by `105.7 ms`, cadence remains ~89 Hz / 1.000 integration, and B8 reaches about `75.95` logical px / `113.92` device px radius at DPR `1.5`;
-- [ ] final B9 gate is now the display-only smoothing/elasticity shape at the active `1.0` setting.
+- [x] remove the display-only hard hold band at smoothing `1.0`, preserve existing micro rise/drop and attack paths, pin continuous same-bubble 90 Hz settling, and add target/lag scalars to B6/B7;
+- [ ] final B9 gate is physical Play/Pause validation of that continuous visual-only settling.
 
-Classification: source/config/cadence and long Play transport delay are exonerated. The retained-old first observation is real but too brief to explain the full physical ramp. Final nonbaseline radius normalization was the magnitude defect and is physically validated as dramatically better. The remaining source-visible mechanism is the display-only filter's hard hold band: at authored smoothing `1.0` it can retain an unchanged hero radius through roughly 13-19% target error before releasing into a faster correction. The next bounded repair is continuous visual settling only, with no gain/cadence/timer change.
+Classification: source/config/cadence and long Play transport delay are exonerated. The retained-old first observation is real but too brief to explain the full physical ramp. Final nonbaseline radius normalization was the magnitude defect and is physically validated as dramatically better. The remaining source-visible display-only hard hold band is now removed: materially nonzero target error converges continuously through the existing micro rates. No gain, cadence, timer, pulse, contraction or latest-state contract changed; physical Play/Pause validation remains.
 
 ### 15.2 DevCurve source-proven continuation
 

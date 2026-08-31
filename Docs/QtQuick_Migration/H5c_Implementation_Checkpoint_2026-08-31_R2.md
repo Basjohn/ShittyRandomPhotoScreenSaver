@@ -419,7 +419,9 @@ The first operator run with the corrected radius projection reports Bubble as **
 - [x] the operator physically confirms the magnitude correction;
 - [ ] the remaining visual complaint is limited to size smoothing/elasticity shape.
 
-The active preset authors `bubble_big_visual_smoothing=1.0`. At that setting, the display-only filter's hard hold band can retain an unchanged radius until target error reaches roughly 13-19% of the current hero radius, then switch to a much faster correction rate. That mechanism can make Play/Pause settling look held-then-released even though source, cadence, publication and retained magnitude are current. The admitted next repair is therefore limited to continuous visual-only settling: no source gain, pulse, contraction, cadence, timer or latest-state change.
+The active preset authors `bubble_big_visual_smoothing=1.0`. At that setting, the display-only filter's hard hold band could retain an unchanged radius until target error reached roughly 13-19% of the current hero radius, then switch to a much faster correction rate. That mechanism made Play/Pause settling look held-then-released even though source, cadence, publication and retained magnitude were current.
+
+The bounded correction removes only that hard early-return band. The existing micro rise/drop rates now converge continuously for sub-settle changes; large-delta attack, hot-energy smoothing blend, pulse/contraction/clamp authority and the authored cadence are unchanged. A same-bubble 90 Hz rise/drop oracle pins nonzero monotonic settling at smoothing `1.0`, and B6/B7 now reports target maximum plus maximum display lag for the next physical run. Final Play/Pause visual validation remains open because the confirming short trace contained Play but no new Play -> Pause edge.
 
 ### 15.2 DevCurve AA and transient-diagnostic corrections
 

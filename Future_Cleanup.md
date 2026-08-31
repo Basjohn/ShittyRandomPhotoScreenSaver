@@ -63,6 +63,14 @@ ownership, immutable render state, snapshot bridge/adapters and shaders/math use
 compositor/card/overlay pixels. The G4 viewport-edge ownership/spatial correction work is closed; do not mistake its retained contracts/tests for legacy
 cleanup.
 
+Current I residue discovered during H5c focused validation:
+
+- `tests/test_spotify_visualizer_widget.py` still imports deleted `widgets.spotify_bars_gl_overlay` and cannot collect;
+- `tests/test_visualizer_replay.py` / `tools/visualizer_replay.py` still import deleted `widgets.spotify_visualizer.replay_runtime` and cannot collect.
+
+Do not restore either retired presenter/replay module to satisfy these files. Reconcile the stale harnesses against surviving
+Quick/logical owners only after H admits I; maintained Bubble BTF/cadence/Quick tests remain the H gate.
+
 ## Closed Phase G
 
 G is closed at the accepted deterministic destination boundary. Its surviving neutral/retained contracts are permanent

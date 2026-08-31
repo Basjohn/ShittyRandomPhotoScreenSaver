@@ -137,6 +137,8 @@ def test_fresh_controller_configured_started_advanced_without_widget(
         if "stage=B6_B7" in message
     )
     assert "final_big_max_r=" in bubble_geometry
+    assert "target_big_max_r=" in bubble_geometry
+    assert "smooth_lag_max_r=" in bubble_geometry
     assert "frozen_big_max_r=" in bubble_geometry
 
 

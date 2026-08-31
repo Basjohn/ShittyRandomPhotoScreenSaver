@@ -1120,4 +1120,5 @@ Detailed source/repair handoff: `H5c_Implementation_Checkpoint_2026-08-31_R2.md`
 - [x] Add bounded B6/B7 final-simulation/frozen-big radius-alpha summaries and B8 retained Quick logical/device-pixel radius summaries, with extra samples around Play/Pause but no new clock.
 - [x] First corrected B9 run reports magnitude dramatically better / almost close-worthy; B6/B7/B8 agree while source is fresh, cadence is ~89 Hz and integration is 1.000.
 - [x] The trace reaches about `75.95` logical px / `113.92` device px radius at DPR `1.5`, physically validating the projection correction.
-- [ ] Remove the remaining display-only held-then-released size shape at authored smoothing `1.0`; the current hard hold band tolerates roughly 13-19% target error before moving. Preserve prompt attack and hot-passage variation, then repeat physical Play/Pause validation.
+- [x] Remove the display-only held-then-released size mechanism at authored smoothing `1.0`: replace the hard 13-19% hold band with continuous existing micro-rate convergence, pin same-bubble 90 Hz rise/drop motion, and expose target/lag scalars in B6/B7.
+- [ ] Repeat physical Play/Pause validation; the corrected magnitude trace did not contain a new Play -> Pause edge.

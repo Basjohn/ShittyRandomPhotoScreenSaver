@@ -281,6 +281,14 @@ class BubbleFrameRuntime:
                 "max_big_render_radius",
                 0.0,
             ),
+            "final_big_target_radius": render_diag.get(
+                "max_big_target_radius",
+                0.0,
+            ),
+            "final_big_smoothing_lag": render_diag.get(
+                "max_big_smoothing_lag",
+                0.0,
+            ),
             "big_clamp_hits": render_diag.get("big_clamp_hits", 0.0),
             "big_render_count": render_diag.get("big_render_count", 0.0),
             "configured_big_bass_pulse": float(

@@ -933,7 +933,8 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
             logger.debug(
                 "[VIS_BUBBLE_GEOMETRY] stage=B6_B7 sim_ts=%.6f playing=%s "
                 "ready=%s final_big_max_r=%.5f final_big_avg_r=%.5f "
-                "final_big_delta=%.5f frozen_big_max_r=%.5f "
+                "final_big_delta=%.5f target_big_max_r=%.5f "
+                "smooth_lag_max_r=%.5f frozen_big_max_r=%.5f "
                 "frozen_any_max_r=%.5f alpha=%.3f "
                 "domain=%.3fx%.3f raw=%.3f gated=%.3f pulse=%.3f "
                 "clamp_hits=%.0f active=%.0f size=%.3f pulse_gain=%.3f "
@@ -944,6 +945,8 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
                 geometry.get("final_big_max_radius", 0.0),
                 geometry.get("final_big_avg_radius", 0.0),
                 geometry.get("final_big_max_delta", 0.0),
+                geometry.get("final_big_target_radius", 0.0),
+                geometry.get("final_big_smoothing_lag", 0.0),
                 geometry.get("frozen_big_max_radius", 0.0),
                 geometry.get("frozen_any_max_radius", 0.0),
                 geometry.get("frozen_max_alpha", 0.0),

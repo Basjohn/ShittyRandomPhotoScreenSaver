@@ -139,6 +139,8 @@ def test_bubble_frame_runtime_freezes_one_authored_step_and_visible_event() -> N
                 "max_big_render_delta": 0.03,
                 "avg_big_render_radius": 0.07,
                 "max_big_payload_radius": 0.07,
+                "max_big_target_radius": 0.072,
+                "max_big_smoothing_lag": 0.002,
             }
 
         @staticmethod
@@ -179,6 +181,8 @@ def test_bubble_frame_runtime_freezes_one_authored_step_and_visible_event() -> N
     assert perf["result_count"] == 1.0
     geometry = dict(resolved.geometry_diagnostics)
     assert geometry["final_big_max_radius"] == pytest.approx(0.07)
+    assert geometry["final_big_target_radius"] == pytest.approx(0.072)
+    assert geometry["final_big_smoothing_lag"] == pytest.approx(0.002)
     assert geometry["frozen_big_max_radius"] == pytest.approx(0.07)
     assert geometry["frozen_any_max_radius"] == pytest.approx(0.07)
     assert geometry["frozen_max_alpha"] == pytest.approx(1.0)
