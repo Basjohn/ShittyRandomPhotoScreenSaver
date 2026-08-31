@@ -1960,10 +1960,14 @@ class BubbleSimulation:
         delta = target_radius - current
         delta_abs = abs(delta)
         settle_band = max(settle_band_abs, max(bubble.radius, current) * settle_band_ratio)
-        hold_band = settle_band * (0.82 + amount * 0.38)
 
-        if delta_abs <= hold_band:
-            bubble.display_radius = max(0.001, current)
+        # Smoothing must remain continuous. The former percentage-sized hard
+        # hold band froze a hero radius through roughly 13-19% target error at
+        # the high-smoothing presets, then released it as a visible jump. Keep
+        # only a numerical epsilon; the existing micro rates own gentle visual
+        # settling without delaying or latching the underlying audio response.
+        if delta_abs <= 1e-7:
+            bubble.display_radius = max(0.001, target_radius)
             return bubble.display_radius
 
         if delta >= 0.0:
@@ -2499,6 +2503,8 @@ class BubbleSimulation:
             "max_big_render_delta": 0.0,
             "avg_big_render_radius": 0.0,
             "max_big_payload_radius": 0.0,
+            "max_big_target_radius": 0.0,
+            "max_big_smoothing_lag": 0.0,
         }
 
         # Render-result projection: positions/trails belong to the expanded
@@ -2550,14 +2556,23 @@ class BubbleSimulation:
                     big_render_diag["big_clamp_hits"] += 1.0
                 target_radius = min(target_radius, clamp_limit)
 
+            resolved_target_radius = max(0.001, target_radius)
             r = self._apply_big_display_radius_smoothing(
                 b,
-                max(0.001, target_radius),
+                resolved_target_radius,
                 big_visual_smoothing,
             )
 
             if b.is_big:
                 big_render_diag["big_render_count"] += 1.0
+                big_render_diag["max_big_target_radius"] = max(
+                    big_render_diag["max_big_target_radius"],
+                    resolved_target_radius,
+                )
+                big_render_diag["max_big_smoothing_lag"] = max(
+                    big_render_diag["max_big_smoothing_lag"],
+                    abs(resolved_target_radius - r),
+                )
                 big_render_diag["max_big_render_radius"] = max(big_render_diag["max_big_render_radius"], r)
                 big_render_diag["max_big_render_delta"] = max(
                     big_render_diag["max_big_render_delta"],

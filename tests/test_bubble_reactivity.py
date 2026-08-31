@@ -25,6 +25,7 @@ import pytest
 
 from widgets.spotify_visualizer.bubble_simulation import (
     BubbleSimulation,
+    BubbleState,
     _shape_authored_bubble_control,
 )
 
@@ -169,6 +170,41 @@ def test_authored_bubble_drift_controls_keep_lower_lows():
     assert _shape_authored_bubble_control(0.20, low_power=3.20, high_power=0.70) < 0.03
     assert _shape_authored_bubble_control(0.20, low_power=2.05, high_power=0.76) < 0.08
     assert _shape_authored_bubble_control(0.20, low_power=1.95, high_power=0.78) < 0.09
+
+
+@pytest.mark.parametrize(
+    ("target_radius", "direction"),
+    ((0.072, -1.0), (0.088, 1.0)),
+)
+def test_big_visual_smoothing_continuously_settles_inside_high_smoothing_band(
+    target_radius,
+    direction,
+):
+    """The observed 100% visual-smoothing path must not freeze then jump."""
+    sim = BubbleSimulation()
+    sim._last_tick_dt = 1.0 / 90.0
+    bubble = BubbleState(
+        radius=0.037,
+        is_big=True,
+        display_radius=0.080,
+    )
+
+    outputs = [
+        sim._apply_big_display_radius_smoothing(
+            bubble,
+            target_radius,
+            1.0,
+        )
+        for _ in range(8)
+    ]
+
+    path = [0.080, *outputs]
+    assert all(
+        direction * (current - previous) > 1e-9
+        for previous, current in zip(path, path[1:])
+    )
+    assert abs(outputs[0] - 0.080) < abs(target_radius - 0.080) * 0.20
+    assert min(0.080, target_radius) < outputs[-1] < max(0.080, target_radius)
 
 
 def _big_lane_metrics(

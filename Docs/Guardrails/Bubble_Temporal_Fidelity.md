@@ -1,6 +1,6 @@
 # Bubble Temporal Fidelity Contract
 
-Last updated: 2026-08-19
+Last updated: 2026-08-31
 
 Status: **durable focused guardrail / behavioural contract**
 
@@ -111,6 +111,9 @@ That means:
 - overshoot and settling remain visible where authored;
 - visual smoothing may make motion continuous, but must not smear or delay the underlying audio
   reaction;
+- visual-only radius smoothing must keep converging while target error is materially nonzero; a
+  percentage-sized hard dead/hold band that freezes size and later releases it as a jump is not
+  continuous settling;
 - no architecture may obtain smooth-looking motion by reducing source/logical cadence, hiding
   transients, averaging away edges, or reducing authored reactivity.
 
