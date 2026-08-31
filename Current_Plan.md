@@ -162,9 +162,9 @@ It proves saver handoff opens exactly once then requests normal exit exactly onc
 - [x] `tests/test_qtquick_family_product_actions.py` GREEN
 - [x] relevant retained Reddit / h-destination tests GREEN
 - [x] MC: admitted Reddit click opens the URL and keeps MC alive
-- [ ] SCR/source-saver path: admitted click hands off once and exits normally
-- [ ] rejected/untrusted/interaction-disabled URL still does not open
-- [ ] inspect `screensaver.log` + `screensaver_qml.log` for unexplained action/QML errors
+- [x] SCR/source-saver path: admitted click hands off once and exits normally
+- [x] rejected/untrusted/interaction-disabled URL still does not open
+- [x] inspect `screensaver.log` + `screensaver_qml.log` for unexplained action/QML errors
 
 When all are checked, mark H3 CLOSED and continue without redesigning the helper/opening authority.
 ### H3b — Clock runtime mode + per-variant CUSTOM geometry
@@ -209,15 +209,15 @@ Both are GREEN in the real development environment. The H3b callback arity and m
 **Validation gate before H3b closes (live checklist):**
 
 - [x] focused Clock/product-action tests + relevant retained Clock / h-destination tests GREEN
-- [ ] dual display: put Clock in CUSTOM at an unmistakable non-default position/scale
-- [ ] give analogue and digital visibly different saved rect/scale variants
-- [ ] double-click only one display and verify the other display/Clock is unchanged
-- [ ] toggle analog -> digital -> analog; each mode restores its own rect + scale
-- [ ] Settings recreation preserves effective mode and matching geometry
-- [ ] CUSTOM Save/Continue recreation preserves effective mode and matching geometry
-- [ ] restart/reload preserves the same result
-- [ ] inspect `custom_layout`: variants contain rect/font_size, never `display_mode`
-- [ ] inspect `screensaver.log` + `screensaver_qml.log` for unexplained Clock/QML errors
+- [x] dual display: put Clock in CUSTOM at an unmistakable non-default position/scale
+- [x] give analogue and digital visibly different saved rect/scale variants
+- [x] double-click only one display and verify the other display/Clock is unchanged
+- [x] toggle analog -> digital -> analog; each mode restores its own rect + scale
+- [x] Settings recreation preserves effective mode and matching geometry
+- [x] CUSTOM Save/Continue recreation preserves effective mode and matching geometry
+- [x] restart/reload preserves the same result
+- [x] inspect `custom_layout`: variants contain rect/font_size, never `display_mode`
+- [x] inspect `screensaver.log` + `screensaver_qml.log` for unexplained Clock/QML errors
 
 When all are checked, mark H3b CLOSED and continue to H4.
 
