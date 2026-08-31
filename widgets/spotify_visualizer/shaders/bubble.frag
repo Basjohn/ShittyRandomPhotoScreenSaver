@@ -38,6 +38,7 @@ uniform vec4 u_bubbles_extra[110];
 uniform vec3 u_bubbles_trail[330];  // 110 * 3
 uniform float u_trail_strength;     // 0.0 = off, 1.0 = full
 uniform float u_tail_opacity;       // max opacity ceiling for tail gradient (0.0-0.85)
+uniform vec2 u_trail_axis_scale;    // authored-pixel history footprint on CUSTOM axes
 
 // --- Styling ---
 uniform vec2 u_specular_dir;       // normalised direction to light source
@@ -214,9 +215,14 @@ void main() {
                 float strength = sample_data.z;
                 if (strength < 0.001) continue;
 
-                vec2 src = vec2(sample_data.x * aspect, sample_data.y);
+                // Keep the simulation/history geometry unchanged, but render
+                // its presentation footprint with baseline-pixel authority.
+                // At a 3x-tall viewport, for example, three normalized history
+                // samples otherwise separate by ~3x in pixels and read as three
+                // extra ghost bubbles instead of one compact wake.
+                vec2 sample_uv = bpos.xy + (sample_data.xy - bpos.xy) * u_trail_axis_scale;
+                vec2 src = vec2(sample_uv.x * aspect, sample_uv.y);
                 vec2 delta = uv_aspect - src;
-                float dist = length(delta);
 
                 // Age determines how far the ripples have expanded:
                 // oldest sample (s=0) → age 1.0, newest (s=2) → age 0.15
@@ -226,8 +232,14 @@ void main() {
                 float ripple_r = brad * (2.0 + age * 6.0) * trail_strength;
                 ripple_r = min(ripple_r, max_ripple_radius);
 
-                // Skip fragments outside the ripple radius (+ soft edge margin)
-                if (dist > ripple_r + 2.0 * px) continue;
+                // Output-preserving cheap square reject before length/sin/exp.
+                // Bubble's wake is O(fragments * bubbles * samples); CUSTOM
+                // viewport area can multiply fragments substantially, so avoid
+                // paying the expensive radial path for obviously distant pixels.
+                float ripple_bound = ripple_r + 2.0 * px;
+                if (abs(delta.x) > ripple_bound || abs(delta.y) > ripple_bound) continue;
+                float dist = length(delta);
+                if (dist > ripple_bound) continue;
 
                 // Concentric ring pattern: sin wave creates rings
                 float wave = sin(dist * ring_freq - age * 12.0);

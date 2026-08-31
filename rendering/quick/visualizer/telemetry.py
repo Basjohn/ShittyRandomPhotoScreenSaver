@@ -21,6 +21,8 @@ class VisualizerRenderNodeSnapshot:
     stencil_enabled: bool = False
     stencil_value: int | None = None
     drawn_mode_id: str | None = None
+    last_logical_revision: int = 0
+    last_logical_timestamp: float = 0.0
     error: str | None = None
 
 
@@ -69,12 +71,20 @@ class VisualizerRenderNodeTelemetry:
                 release_thread_id=threading.get_ident(),
             )
 
-    def note_draw(self, mode_id: object) -> None:
+    def note_draw(
+        self,
+        mode_id: object,
+        *,
+        logical_revision: int = 0,
+        logical_timestamp: float = 0.0,
+    ) -> None:
         with self._lock:
             self._snapshot = replace(
                 self._snapshot,
                 draw_count=self._snapshot.draw_count + 1,
                 drawn_mode_id=str(mode_id),
+                last_logical_revision=max(0, int(logical_revision)),
+                last_logical_timestamp=max(0.0, float(logical_timestamp)),
             )
 
     def note_admission_rejected(self) -> None:

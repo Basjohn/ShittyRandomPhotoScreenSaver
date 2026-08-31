@@ -6,13 +6,13 @@ to prevent starvation and ensure smooth frame pacing.
 """
 from __future__ import annotations
 
-import gc
 import time
 import threading
 from dataclasses import dataclass
 from typing import Dict, Optional
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.performance.gc_policy import RuntimeGCPolicy
 
 logger = get_logger(__name__)
 
@@ -277,82 +277,32 @@ class FrameBudget:
         )
 
 
-class GCController:
+class GCController(RuntimeGCPolicy):
+    """Deprecated compatibility surface for the pre-Qt-Quick GC controller.
+
+    The old implementation disabled/enabled global GC around a Python-owned
+    frame and forced generation-0 collections during guessed idle windows.
+    Qt Quick no longer has such a Python frame boundary.  Construction is now
+    side-effect free; the RUN lifetime explicitly starts ``RuntimeGCPolicy``.
     """
-    Garbage collection controller for frame-aware GC.
-    
-    Disables GC during frame rendering and runs it during idle periods.
-    """
-    
+
     def __init__(self, idle_threshold_ms: float = 100.0):
-        self._idle_threshold_ms = idle_threshold_ms
-        self._gc_disabled = False
-        self._last_gc_time: float = 0.0
-        self._gc_interval_s: float = 5.0  # Run GC at most every 5 seconds
-        self._lock = threading.Lock()
-        
-        # Store original thresholds
-        self._original_thresholds = gc.get_threshold()
-        
-        # Set higher thresholds to reduce GC frequency
-        # Default is (700, 10, 10) - we increase to reduce frequency
-        gc.set_threshold(10000, 50, 50)
-        
-        logger.debug("GCController initialized with thresholds: %s", gc.get_threshold())
-    
+        del idle_threshold_ms
+        super().__init__()
+
     def disable_gc(self) -> None:
-        """Disable GC for frame rendering."""
-        with self._lock:
-            if not self._gc_disabled:
-                gc.disable()
-                self._gc_disabled = True
-    
+        logger.debug("[GC_POLICY] legacy disable_gc ignored under Qt Quick")
+
     def enable_gc(self) -> None:
-        """Re-enable GC after frame rendering."""
-        with self._lock:
-            if self._gc_disabled:
-                gc.enable()
-                self._gc_disabled = False
-    
+        logger.debug("[GC_POLICY] legacy enable_gc ignored under Qt Quick")
+
     def run_idle_gc(self, idle_time_ms: float) -> bool:
-        """
-        Run GC if idle time is sufficient.
-        
-        Args:
-            idle_time_ms: Available idle time
-            
-        Returns:
-            True if GC was run
-        """
-        if idle_time_ms < self._idle_threshold_ms:
-            return False
-        
-        now = time.time()
-        with self._lock:
-            if now - self._last_gc_time < self._gc_interval_s:
-                return False
-            
-            # Run only gen-0 collection (fast)
-            self.enable_gc()
-            start = time.perf_counter()
-            collected = gc.collect(generation=0)
-            elapsed_ms = (time.perf_counter() - start) * 1000.0
-            
-            self._last_gc_time = now
-            
-            if is_perf_metrics_enabled() and collected > 0:
-                logger.debug(
-                    "[PERF] [GC] Idle collection: %d objects in %.1fms",
-                    collected, elapsed_ms
-                )
-            
-            return True
-    
+        del idle_time_ms
+        # Manual collection is intentionally not part of the retained policy.
+        return False
+
     def restore_defaults(self) -> None:
-        """Restore default GC settings."""
-        with self._lock:
-            gc.set_threshold(*self._original_thresholds)
-            self.enable_gc()
+        self.stop()
 
 
 # Global instances

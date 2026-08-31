@@ -45,6 +45,7 @@ from core.process.workers import (
 
 from engine.display_manager import DisplayManager
 from engine.image_queue import ImageQueue
+from engine.image_change_trace import ImageChangePerfTrace
 from sources.folder_source import FolderSource
 from sources.rss.coordinator import RSSCoordinator
 from sources.base_provider import ImageMetadata
@@ -1086,7 +1087,7 @@ class ScreensaverEngine(QObject):
             # Show first image immediately unless a topology rebuild already
             # submitted replay of the current image into this generation.
             if show_first_image:
-                if not self._show_next_image():
+                if not self._show_next_image(origin="startup"):
                     logger.warning("[FALLBACK] Failed to show first image")
                     self._schedule_startup_first_image_retry()
             else:
@@ -1136,18 +1137,21 @@ class ScreensaverEngine(QObject):
         from engine.engine_lifecycle import cleanup
         cleanup(self)
 
-    def _show_next_image(self) -> bool:
-        """Load and display next image from queue."""
+    def _show_next_image(self, *, origin: str = "unspecified") -> bool:
+        """Load and display next image from queue with passive admission tracing."""
+        perf_trace = ImageChangePerfTrace(origin=origin)
         if not self.image_queue or not self.display_manager:
+            perf_trace.finish("unavailable", reason="queue_or_display_missing")
             logger.warning("[FALLBACK] Queue or display not initialized")
             return False
-        
-        # FIX: Atomic check-and-set for loading flag to prevent race condition
+
+        # Atomic check-and-set for loading ownership.  The trace deliberately
+        # begins before this boundary so timer/manual contention is visible.
         with self._loading_lock:
             if self._loading_in_progress:
+                perf_trace.finish("rejected", reason="load_in_progress")
                 logger.debug("Image load already in progress, skipping")
                 return False
-            # Set flag inside lock to make check-and-set atomic
             self._loading_in_progress = True
             try:
                 mark_pending = getattr(self.display_manager, "set_transition_work_pending", None)
@@ -1155,11 +1159,21 @@ class ScreensaverEngine(QObject):
                     mark_pending(True)
             except Exception as e:
                 logger.debug("[TRANSITION] Failed to mark transition work pending: %s", e)
-        
+        perf_trace.mark("owner_claimed")
+
         try:
-            # Get next image from queue
+            # Queue selection is deliberately measured on the caller/UI thread.
+            # Natural rotations have shown visible disturbance before worker
+            # admission, so this boundary must not be hidden inside one broad
+            # transition measurement.
             image_meta = self.image_queue.next()
-            
+            image_identity = ""
+            if image_meta is not None:
+                image_identity = str(
+                    image_meta.local_path or image_meta.url or "unknown"
+                )
+            perf_trace.mark("queue_selected", image=image_identity)
+
             if not image_meta:
                 logger.warning("[FALLBACK] No image from queue")
                 self.display_manager.show_error("No images available")
@@ -1171,29 +1185,41 @@ class ScreensaverEngine(QObject):
                         mark_pending(False)
                 except Exception as e:
                     logger.debug("[TRANSITION] Failed to clear transition work pending: %s", e)
+                perf_trace.finish("no_image")
                 return False
-            
+
             self._current_image = image_meta
 
             # Random transition selection belongs to accepted image batches, not
             # startup/display probes that may never reach display handoff.
+            transition_choice = None
             try:
-                self._prepare_random_transition_if_needed()
+                transition_choice = self._prepare_random_transition_if_needed()
             except Exception as e:
                 logger.debug("[TRANSITION] Failed to prepare random transition: %s", e)
-            
-            # ARCHITECTURAL FIX: Use async image processing to avoid UI thread blocking
-            # This moves heavy image scaling/cropping to background threads
+            perf_trace.mark("transition_resolved", transition=transition_choice)
+
+            # Heavy decode/scale work stays off the UI thread.
             if self.thread_manager:
-                accepted = bool(self._load_and_display_image_async(image_meta))
+                accepted = bool(
+                    self._load_and_display_image_async(
+                        image_meta,
+                        perf_trace=perf_trace,
+                    )
+                )
                 if not accepted:
                     self._clear_unaccepted_image_change_work()
-                return accepted  # Async submission or synchronous fallback accepted
-            
-            # Fallback to sync path if no thread manager
-            return self._load_and_display_image(image_meta)
-        
+                    perf_trace.finish("submission_rejected")
+                return accepted
+
+            # Fallback path is retained and traced explicitly.
+            return self._load_and_display_image(
+                image_meta,
+                perf_trace=perf_trace,
+            )
+
         except Exception as e:
+            perf_trace.finish("exception", error=type(e).__name__)
             logger.exception(f"Show next image failed: {e}")
             self._loading_in_progress = False
             try:
@@ -1227,7 +1253,7 @@ class ScreensaverEngine(QObject):
                 return
             if display_manager.has_presented_image():
                 return
-            if self._show_next_image():
+            if self._show_next_image(origin="startup_retry"):
                 logger.warning(
                     "[LIFECYCLE][FALLBACK] Startup first-image retry succeeded (attempt %s/%s)",
                     attempt,
@@ -1264,15 +1290,39 @@ class ScreensaverEngine(QObject):
         from engine.image_pipeline import load_image_task
         return load_image_task(self, image_meta, preferred_size=preferred_size)
 
-    def _load_and_display_image_async(self, image_meta: ImageMetadata, retry_count: int = 0) -> bool:
+    def _load_and_display_image_async(
+        self,
+        image_meta: ImageMetadata,
+        retry_count: int = 0,
+        *,
+        perf_trace: ImageChangePerfTrace | None = None,
+    ) -> bool:
         """Delegates to engine.image_pipeline."""
         from engine.image_pipeline import load_and_display_image_async
-        return bool(load_and_display_image_async(self, image_meta, retry_count))
+        return bool(
+            load_and_display_image_async(
+                self,
+                image_meta,
+                retry_count,
+                perf_trace=perf_trace,
+            )
+        )
 
 
-    def _load_and_display_image(self, image_meta: ImageMetadata, retry_count: int = 0) -> bool:
+    def _load_and_display_image(
+        self,
+        image_meta: ImageMetadata,
+        retry_count: int = 0,
+        *,
+        perf_trace: ImageChangePerfTrace | None = None,
+    ) -> bool:
         from engine.image_pipeline import load_and_display_image
-        return load_and_display_image(self, image_meta, retry_count)
+        return load_and_display_image(
+            self,
+            image_meta,
+            retry_count,
+            perf_trace=perf_trace,
+        )
 
     def _on_rotation_timer(self) -> None:
         """Handle rotation timer timeout."""
@@ -1282,7 +1332,7 @@ class ScreensaverEngine(QObject):
                 "[TRANSITION][ROTATION] expiry_coalesced reason=active_image_change"
             )
             return
-        self._show_next_image()
+        self._show_next_image(origin="timer")
 
     def _has_active_image_change_work(self) -> bool:
         """Return whether a timer-driven rotation would overlap accepted work."""
@@ -1363,7 +1413,7 @@ class ScreensaverEngine(QObject):
         )
         return True
 
-    def _prepare_random_transition_if_needed(self) -> None:
+    def _prepare_random_transition_if_needed(self) -> str | None:
         try:
             transitions = self.settings_manager.get('transitions', {})
             if not isinstance(transitions, dict):
@@ -1380,7 +1430,10 @@ class ScreensaverEngine(QObject):
             raw_rnd = transitions.get('random_always', self.settings_manager.get('transitions.random_always', False))
             rnd = SettingsManager.to_bool(raw_rnd, False)
             if not rnd:
-                return
+                return canonicalize_transition_name(
+                    transitions.get("type", "Crossfade"),
+                    fallback="Crossfade",
+                )
             # Available transition types; include GL-only when HW is enabled and
             # restrict to those enabled in the per-transition pool map.
             cycle_types = get_transition_setting_names()
@@ -1425,7 +1478,7 @@ class ScreensaverEngine(QObject):
                     "Random transition selection failed closed: empty effective "
                     "pool (activated ∩ saved pool ∩ hardware)."
                 )
-                return
+                return None
             # Avoid immediate repeats of transition type. Legacy "Shuffle"
             # selections are treated as "Crossfade" so the engine no longer
             # reintroduces Shuffle into the pool.
@@ -1464,8 +1517,10 @@ class ScreensaverEngine(QObject):
             self.settings_manager.set('transitions.last_random_choice', choice)
             self.settings_manager.save()
             logger.info(f"Random transition choice for this rotation: {choice}")
+            return choice
         except Exception as e:
             logger.debug(f"Random transition selection failed: {e}")
+            return None
 
     def _get_primary_display_size(self):
         """Return primary display size (width, height) for pre-scaling, or None.
@@ -1558,7 +1613,7 @@ class ScreensaverEngine(QObject):
     def _on_next_requested(self) -> None:
         """Handle next image request (X key)."""
         logger.info("Next image requested")
-        if self._show_next_image():
+        if self._show_next_image(origin="manual_next"):
             self._rebase_rotation_timer(reason="manual_next")
     
     def _on_cycle_transition(self) -> None:

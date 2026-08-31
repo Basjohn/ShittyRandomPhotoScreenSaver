@@ -802,7 +802,13 @@ def capture_legacy_visualizer_logical_frame(
     if captured is None:
         return None
     mode_state, extra = captured
-    playing = bool(getattr(widget, "_spotify_playing", False))
+    # Keep the complete frame identity on the same atomic capture snapshot.
+    # Re-reading the live playback flag here allowed a pause/play edge to land
+    # after mode resolution but before frame assembly, producing impossible
+    # mixed frames (for example Spectrum bars resolved as playing while the
+    # outer logical frame said paused).  Async-resolved modes may still replace
+    # the complete identity below via _quick_resolved_identity.
+    playing = context.playing
     logical_timestamp = float(now_ts)
     resolved_identity = extra.get("_quick_resolved_identity")
     if isinstance(resolved_identity, tuple) and len(resolved_identity) == 8:

@@ -170,13 +170,8 @@ class VisualizerRenderItem(QQuickItem):
                 engine_generation=identity.engine_generation,
                 activation_id=identity.activation_id,
                 mode_id=identity.mode_id,
+                required_presentation=presentation,
             )
-            if snapshot is not None and snapshot.presentation != presentation:
-                self._telemetry.note_error(
-                    "visualizer snapshot presentation does not match committed item geometry"
-                )
-                snapshot = None
-                clear_snapshot = True
 
         if snapshot is not None and is_viz_diagnostics_enabled():
             logical = snapshot.logical

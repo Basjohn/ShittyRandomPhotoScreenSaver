@@ -77,6 +77,10 @@ class ImageCache:
         self._tracked_bytes_by_key: dict[str, int] = {}
         self._resource_metadata_by_key: dict[str, MappingProxyType] = {}
         self._current_tracked_bytes = 0
+        # A tiny set of near-future display-ready keys may be protected by the
+        # prefetch planner. Protection affects eviction order only; hard item/
+        # memory caps still win if every retained entry is protected.
+        self._protected_keys: set[str] = set()
         self._owner = str(owner)
         self._generation = generation
         # Lightweight telemetry counters for cache profiling.
@@ -179,6 +183,30 @@ class ImageCache:
         with self._lock:
             return key in self._cache
     
+    def set_protected_keys(self, keys) -> None:
+        """Protect near-future keys from ordinary LRU eviction.
+
+        Protection is intentionally advisory rather than a memory-cap bypass.
+        If every retained entry is protected and the hard cache budget is still
+        exceeded, the oldest protected key is evicted as a last resort.
+        """
+        normalized = {str(key) for key in keys if str(key)}
+        with self._lock:
+            self._protected_keys = normalized
+            while self._should_evict_locked():
+                self._evict_oldest_locked()
+            retained = sum(1 for key in normalized if key in self._cache)
+        _cache_trace(
+            "Protected near-future cache keys requested=%d retained=%d",
+            len(normalized),
+            retained,
+        )
+
+    def protected_keys_snapshot(self) -> tuple[str, ...]:
+        """Return a detached diagnostic snapshot of protected keys."""
+        with self._lock:
+            return tuple(sorted(self._protected_keys))
+
     def remove(self, key: str) -> bool:
         """
         Remove an entry from cache.
@@ -195,6 +223,7 @@ class ImageCache:
                 self._current_memory -= self._tracked_size(pixmap)
                 self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
                 self._resource_metadata_by_key.pop(key, None)
+                self._protected_keys.discard(key)
                 _cache_trace("Removed from cache: %s", key)
                 return True
             return False
@@ -207,6 +236,7 @@ class ImageCache:
             self._current_memory = 0
             self._tracked_bytes_by_key.clear()
             self._resource_metadata_by_key.clear()
+            self._protected_keys.clear()
             self._current_tracked_bytes = 0
             logger.info(f"Cache cleared: {count} images removed")
     
@@ -286,6 +316,10 @@ class ImageCache:
                 'scaled_evicted_bytes': self._evicted_bytes_by_kind["scaled"],
                 'replacements': self._replacement_count,
                 'idempotent_puts_avoided': self._idempotent_put_count,
+                'protected_keys': len(self._protected_keys),
+                'protected_items': sum(
+                    1 for key in self._protected_keys if key in self._cache
+                ),
             }
     
     def _should_evict_locked(self) -> bool:
@@ -294,10 +328,21 @@ class ImageCache:
                 self._current_tracked_bytes > self.max_memory_bytes)
     
     def _evict_oldest_locked(self) -> None:
-        """Evict the least recently used entry (caller holds lock)."""
+        """Evict the oldest unprotected entry, preserving hard caps."""
         if not self._cache:
             return
-        key, img = self._cache.popitem(last=False)
+
+        key = next(
+            (candidate for candidate in self._cache if candidate not in self._protected_keys),
+            None,
+        )
+        forced_protected = key is None
+        if key is None:
+            # Hard cache bounds remain authoritative even if a pathological
+            # display configuration protects more bytes than the configured
+            # budget can hold.
+            key = next(iter(self._cache))
+        img = self._cache.pop(key)
         tracked_bytes = self._tracked_bytes_by_key.pop(key, 0)
         self._current_memory -= self._tracked_size(img)
         self._current_tracked_bytes -= tracked_bytes
@@ -306,7 +351,10 @@ class ImageCache:
         kind = self._key_kind(key)
         self._evict_count_by_kind[kind] += 1
         self._evicted_bytes_by_kind[kind] += tracked_bytes
-        _cache_trace("Evicted from cache: %s", key)
+        if forced_protected:
+            _cache_trace("Hard-cap eviction overrode protection: %s", key)
+        else:
+            _cache_trace("Evicted from cache: %s", key)
 
     @staticmethod
     def _key_kind(key: str) -> str:

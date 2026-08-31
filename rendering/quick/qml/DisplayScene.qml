@@ -15,6 +15,8 @@ Item {
     property real haloY: 0.0
     property string haloShape: "cursor_light"
     property var contextMenuModel: null
+    property bool perfHudEnabled: false
+    property string perfHudText: ""
 
     Rectangle {
         id: backgroundDimming
@@ -79,5 +81,32 @@ Item {
         id: retainedContextMenu
         contextMenuModel: displayScene.contextMenuModel
         z: 300
+    }
+
+    Rectangle {
+        id: perfHud
+        objectName: "perfHud"
+        visible: displayScene.perfHudEnabled && displayScene.perfHudText.length > 0
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.margins: 8
+        width: perfHudLabel.implicitWidth + 12
+        height: perfHudLabel.implicitHeight + 8
+        radius: 3
+        color: "#b8000000"
+        border.color: "#80ffffff"
+        border.width: 1
+        z: 1000
+        enabled: false
+
+        Text {
+            id: perfHudLabel
+            anchors.centerIn: parent
+            text: displayScene.perfHudText
+            color: "white"
+            font.family: "Consolas"
+            font.pixelSize: 11
+            renderType: Text.NativeRendering
+        }
     }
 }

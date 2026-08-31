@@ -182,7 +182,11 @@ class VisualizerRenderNode(QSGRenderNode):
                 )
             finally:
                 self._clip_host.end(clip_run)
-            self._telemetry.note_draw(mode_id)
+            self._telemetry.note_draw(
+                mode_id,
+                logical_revision=snapshot.logical_revision,
+                logical_timestamp=snapshot.logical.logical_timestamp,
+            )
         except Exception as exc:
             self._telemetry.note_error(f"{type(exc).__name__}: {exc}")
             logger.exception("[QUICK] Visualizer render node failed: %s", exc)

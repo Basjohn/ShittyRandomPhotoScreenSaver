@@ -5,7 +5,6 @@ Windows screensaver application that displays photos with transitions.
 """
 import sys
 import os
-import gc
 import shutil
 import ctypes
 import time
@@ -520,9 +519,23 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
 
         logger.info("Screensaver engine started - entering event loop")
         _schedule_runtime_reddit_helper_session(engine)
+
+        # Qt Quick owns the actual scene/render cadence, so the RUN GC policy
+        # deliberately owns only CPython thresholds + observation.  It does not
+        # disable collection around notional Python frames and never adds a
+        # recurring timer.
+        from core.performance.gc_policy import RuntimeGCPolicy
+
+        gc_policy = RuntimeGCPolicy()
+        gc_policy.start()
+        engine._gc_policy = gc_policy
         try:
             return app.exec()
         finally:
+            try:
+                gc_policy.stop()
+            except Exception:
+                logger.debug("[GC_POLICY] restore failed", exc_info=True)
             if event_loop_recorder is not None:
                 try:
                     event_loop_recorder.stop()
@@ -652,20 +665,6 @@ def main(*, entrypoint: str = "main"):
             fresh_deleted,
             fresh_log_dir,
         )
-    
-    # GC tracking for performance debugging
-    if perf_mode:
-        _gc_start_time = [0.0]
-        def _gc_callback(phase: str, info: dict) -> None:
-            if phase == 'start':
-                _gc_start_time[0] = time.time()
-            elif phase == 'stop':
-                elapsed_ms = (time.time() - _gc_start_time[0]) * 1000.0
-                if elapsed_ms > 10.0:
-                    logger.warning("[PERF] [GC] Collection took %.2fms (gen=%s, collected=%s)",
-                                   elapsed_ms, info.get('generation', '?'), info.get('collected', '?'))
-        gc.callbacks.append(_gc_callback)
-        logger.info("[PERF] GC tracking enabled")
     
     logger.info("=" * 60)
     logger.info("ShittyRandomPhotoScreenSaver Starting")

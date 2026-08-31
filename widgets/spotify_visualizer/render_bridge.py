@@ -51,6 +51,7 @@ class VisualizerSnapshotBridge:
         self._last_revision = 0
         self._superseded_count = 0
         self._rejected_count = 0
+        self._presentation_mismatch_count = 0
 
     @property
     def identity(self) -> VisualizerRenderIdentity | None:
@@ -71,6 +72,11 @@ class VisualizerSnapshotBridge:
     def rejected_count(self) -> int:
         with self._lock:
             return self._rejected_count
+
+    @property
+    def presentation_mismatch_count(self) -> int:
+        with self._lock:
+            return self._presentation_mismatch_count
 
     def begin_activation(
         self,
@@ -179,6 +185,7 @@ class VisualizerSnapshotBridge:
         engine_generation: int,
         activation_id: int,
         mode_id: str,
+        required_presentation: object | None = None,
     ) -> VisualizerRenderSnapshot | None:
         """Consume the slot at the Quick synchronization boundary.
 
@@ -199,6 +206,17 @@ class VisualizerSnapshotBridge:
             if self._identity != requested:
                 return None
             snapshot = self._snapshot
+            if (
+                snapshot is not None
+                and required_presentation is not None
+                and snapshot.presentation != required_presentation
+            ):
+                # A CUSTOM geometry commit can beat the next authored snapshot.
+                # Do not consume the stale-geometry slot and, critically, do not
+                # force the retained node blank. The next coherent publication
+                # supersedes this slot while the last admitted pixels remain.
+                self._presentation_mismatch_count += 1
+                return None
             self._snapshot = None
             self._protected_edges.clear()
             return snapshot

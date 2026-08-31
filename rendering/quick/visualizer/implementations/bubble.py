@@ -34,6 +34,7 @@ class QuickBubbleLayout:
     content_rect: tuple[float, float, float, float]
     aspect_ratio: float
     visual_scale: float
+    trail_axis_scale: tuple[float, float]
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,17 +50,33 @@ def compute_quick_bubble_layout(
     *,
     local_content_rect: Sequence[object],
     visual_scale: float,
+    viewport_extent: Sequence[object],
+    baseline_viewport_size: Sequence[object],
 ) -> QuickBubbleLayout:
     if len(local_content_rect) != 4:
         raise ValueError("Bubble content geometry is incomplete")
     content = tuple(float(value) for value in local_content_rect)
     scale = float(visual_scale)
-    if min(content[2], content[3], scale) <= 0.0:
+    if len(viewport_extent) != 2 or len(baseline_viewport_size) != 2:
+        raise ValueError("Bubble viewport geometry is incomplete")
+    extent = tuple(float(value) for value in viewport_extent)
+    baseline = tuple(float(value) for value in baseline_viewport_size)
+    if min(content[2], content[3], scale, *extent, *baseline) <= 0.0:
         raise ValueError("Bubble content geometry must be positive")
+    # Bubble history remains renderer-normalized content geometry.  The wake is
+    # an authored presentation effect, however: allowing the same normalized
+    # history separation to expand with a CUSTOM axis made its three samples
+    # read as three extra bubbles at tall/wide extents.  Compress only the
+    # rendered sample offset back to baseline-pixel authority.
+    trail_axis_scale = (
+        min(1.0, baseline[0] / extent[0]),
+        min(1.0, baseline[1] / extent[1]),
+    )
     return QuickBubbleLayout(
         content_rect=content,  # type: ignore[arg-type]
         aspect_ratio=content[2] / content[3],
         visual_scale=scale,
+        trail_axis_scale=trail_axis_scale,
     )
 
 
@@ -144,6 +161,8 @@ class QuickBubbleRenderer:
                 content_height,
             ),
             visual_scale=presentation.uniform_visual_scale,
+            viewport_extent=presentation.viewport_extent,
+            baseline_viewport_size=presentation.baseline_viewport_size,
         )
         payload = resolve_quick_bubble_payload(snapshot)
         if not self._program:
@@ -205,6 +224,7 @@ class QuickBubbleRenderer:
             tail_opacity = 0.0
         gl.glUniform1f(uniforms["u_trail_strength"], trail_strength)
         gl.glUniform1f(uniforms["u_tail_opacity"], tail_opacity)
+        gl.glUniform2f(uniforms["u_trail_axis_scale"], *layout.trail_axis_scale)
 
         specular_direction = get_bubble_specular_shader_vector(
             str(parameter(parameters, "bubble_specular_direction", "top_left"))
@@ -312,6 +332,7 @@ class QuickBubbleRenderer:
                 "u_bubbles_trail",
                 "u_trail_strength",
                 "u_tail_opacity",
+                "u_trail_axis_scale",
                 "u_specular_dir",
                 "u_gradient_dir",
                 "u_gradient_mode",

@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, replace
 from typing import Any
 import math
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QPoint, QUrl, Signal, Qt
@@ -13,7 +14,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlComponent, QQmlContext, QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.visualizer_mode_registry import VisualizerShellPolicy
 from rendering.custom_layout_session import (
     CustomLayoutSession,
@@ -285,6 +286,21 @@ class QuickSceneController(QObject):
         self._visualizer_middle_click_admission: Any | None = None
         self._visualizer_telemetry = VisualizerRenderNodeTelemetry()
         self._last_transition_run_id = 0
+        # --perf HUD is deliberately passive: frameSwapped is already emitted
+        # by Qt and the display pacer already owns cadence.  We only aggregate
+        # counters here and update two tiny text labels twice per second.
+        self._perf_hud_enabled = bool(is_perf_metrics_enabled())
+        self._perf_pacer_state_provider: Callable[[], Mapping[str, object]] | None = None
+        perf_now_ns = time.perf_counter_ns()
+        self._perf_window_started_ns = perf_now_ns
+        self._perf_last_swap_ns = 0
+        self._perf_window_swaps = 0
+        self._perf_window_dt_max_ms = 0.0
+        self._perf_last_pacer_requested = 0
+        self._perf_last_pacer_skipped = 0
+        self._perf_last_visualizer_draw_count = 0
+        self._perf_last_visualizer_revision = 0
+        self._perf_last_transition_duration_ms = 0.0
         # Bounded whole-surface diagnostics for black/test-frame/focus flashes.
         # These are event-driven only: no recurring timer and no per-frame log
         # outside the few frames immediately following a meaningful surface event.
@@ -365,6 +381,7 @@ class QuickSceneController(QObject):
 
         self._sync_root_width()
         self._sync_root_height()
+        root.setProperty("perfHudEnabled", self._perf_hud_enabled)
         self._publish_readiness(qml_root_created=True)
 
     @property
@@ -736,6 +753,16 @@ class QuickSceneController(QObject):
     def presentation_image(self) -> PresentationImage | None:
         return self.background_item.presentation_image
 
+    def bind_perf_pacer_state_provider(
+        self,
+        provider: Callable[[], Mapping[str, object]] | None,
+    ) -> None:
+        """Bind read-only --perf pacing counters without adding a clock."""
+
+        if provider is not None and not callable(provider):
+            raise TypeError("perf pacer state provider must be callable")
+        self._perf_pacer_state_provider = provider
+
     def set_transition_run(self, run: TransitionRun | None) -> bool:
         """Publish the current generation-fenced run into the Quick sync path."""
 
@@ -753,6 +780,11 @@ class QuickSceneController(QObject):
             if run.run_id == self._last_transition_run_id and current != run:
                 return False
             self._last_transition_run_id = run.run_id
+        elif current is not None:
+            self._perf_last_transition_duration_ms = max(
+                0.0,
+                (time.monotonic_ns() - current.start_ns) / 1_000_000.0,
+            )
         self.background_item.set_transition_run(run)
         return True
 
@@ -1136,6 +1168,7 @@ class QuickSceneController(QObject):
         self._visualizer_root = root
         self._visualizer_content_host = content_host
         self._visualizer_item = item
+        root.setProperty("perfHudEnabled", self._perf_hud_enabled)
         self._sync_custom_layout_visualizer()
         return item
 
@@ -1224,7 +1257,117 @@ class QuickSceneController(QObject):
         )
         self._trace_surface_event("scene_graph_initialized", probe_frames=3)
 
+    def _update_perf_hud_on_swap(self) -> None:
+        if not self._perf_hud_enabled:
+            return
+        now_ns = time.perf_counter_ns()
+        if self._perf_last_swap_ns > 0:
+            dt_ms = (now_ns - self._perf_last_swap_ns) / 1_000_000.0
+            self._perf_window_dt_max_ms = max(self._perf_window_dt_max_ms, dt_ms)
+        self._perf_last_swap_ns = now_ns
+        self._perf_window_swaps += 1
+        elapsed_ns = now_ns - self._perf_window_started_ns
+        if elapsed_ns < 1_000_000_000:
+            return
+        elapsed_s = max(1.0e-6, elapsed_ns / 1_000_000_000.0)
+        scene_fps = self._perf_window_swaps / elapsed_s
+
+        pacer = {}
+        provider = self._perf_pacer_state_provider
+        if provider is not None:
+            try:
+                pacer = dict(provider())
+            except Exception:
+                logger.debug("[PERF_HUD] pacer state unavailable", exc_info=True)
+        requested = int(pacer.get("requested_opportunities", 0) or 0)
+        skipped = int(pacer.get("skipped_deadlines", 0) or 0)
+        requested_delta = max(0, requested - self._perf_last_pacer_requested)
+        skipped_delta = max(0, skipped - self._perf_last_pacer_skipped)
+        skip_pct = (100.0 * skipped_delta / requested_delta) if requested_delta else 0.0
+        self._perf_last_pacer_requested = requested
+        self._perf_last_pacer_skipped = skipped
+        target_hz = float(pacer.get("target_hz", 0.0) or 0.0)
+
+        transition = None if self._background_item is None else self._background_item.transition_run
+        if transition is None:
+            transition_text = (
+                f"T idle last={self._perf_last_transition_duration_ms:.0f}ms"
+                if self._perf_last_transition_duration_ms > 0.0
+                else "T idle"
+            )
+        else:
+            elapsed_transition_ms = max(
+                0.0,
+                (time.monotonic_ns() - transition.start_ns) / 1_000_000.0,
+            )
+            target_transition_ms = max(
+                0.0,
+                (transition.end_ns - transition.start_ns) / 1_000_000.0,
+            )
+            transition_text = (
+                f"T {transition.request.transition_id} "
+                f"{elapsed_transition_ms:.0f}/{target_transition_ms:.0f}ms"
+            )
+
+        root = self._scene_root
+        if root is not None:
+            root.setProperty(
+                "perfHudText",
+                f"D{self._window.screen_index} scene {scene_fps:5.1f} fps "
+                f"dtmax {self._perf_window_dt_max_ms:5.1f}ms\n"
+                f"pacer {target_hz:5.1f}Hz skip {skip_pct:4.1f}% | {transition_text}",
+            )
+
+        visualizer = self._visualizer_telemetry.snapshot()
+        draw_delta = max(0, visualizer.draw_count - self._perf_last_visualizer_draw_count)
+        revision_delta = max(
+            0, visualizer.last_logical_revision - self._perf_last_visualizer_revision
+        )
+        draw_fps = draw_delta / elapsed_s
+        revision_rate = revision_delta / elapsed_s
+        self._perf_last_visualizer_draw_count = visualizer.draw_count
+        self._perf_last_visualizer_revision = visualizer.last_logical_revision
+        age_ms = -1.0
+        if visualizer.last_logical_timestamp > 0.0:
+            age_ms = max(0.0, (time.time() - visualizer.last_logical_timestamp) * 1000.0)
+        visualizer_root = self._visualizer_root
+        mismatch_count = (
+            0
+            if self._visualizer_bridge is None
+            else self._visualizer_bridge.presentation_mismatch_count
+        )
+        if visualizer_root is not None:
+            age_text = "n/a" if age_ms < 0.0 else f"{age_ms:.0f}ms"
+            visualizer_root.setProperty(
+                "perfHudText",
+                f"{visualizer.drawn_mode_id or '-'} draw {draw_fps:5.1f} fps\n"
+                f"rev {revision_rate:5.1f}/s age {age_text} geom! {mismatch_count}",
+            )
+
+        logger.info(
+            "[PERF] [PERF_HUD] screen=%d scene_fps=%.2f dt_max_ms=%.2f "
+            "pacer_target_hz=%.3f pacer_skip_pct=%.2f transition=%s "
+            "viz_mode=%s viz_draw_fps=%.2f viz_revision_hz=%.2f "
+            "viz_age_ms=%.2f viz_geometry_mismatches=%d",
+            self._window.screen_index,
+            scene_fps,
+            self._perf_window_dt_max_ms,
+            target_hz,
+            skip_pct,
+            transition_text.replace(" ", "_"),
+            visualizer.drawn_mode_id or "none",
+            draw_fps,
+            revision_rate,
+            age_ms,
+            mismatch_count,
+        )
+
+        self._perf_window_started_ns = now_ns
+        self._perf_window_swaps = 0
+        self._perf_window_dt_max_ms = 0.0
+
     def _on_frame_swapped(self) -> None:
+        self._update_perf_hud_on_swap()
         snapshot = self._telemetry.snapshot()
         # A rendered migration proof/empty clear is not an intentional product
         # base frame. Reveal readiness requires an actually uploaded image.
