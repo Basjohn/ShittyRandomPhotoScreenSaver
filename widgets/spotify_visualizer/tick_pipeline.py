@@ -921,10 +921,16 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         last_geometry_log_ts = float(
             getattr(widget, "_bubble_geometry_diag_last_log_ts", 0.0) or 0.0
         )
+        motion_event_strength = geometry.get("motion_event_strength", 0.0)
+        motion_event_sample_due = (
+            motion_event_strength > 0.0
+            and now_ts - last_geometry_log_ts >= 0.25
+        )
         interval_s = 0.12 if burst_remaining > 0 else 0.8
         if (
             last_geometry_log_ts <= 0.0
             or now_ts - last_geometry_log_ts >= interval_s
+            or motion_event_sample_due
             or (
                 previous_playing is not None
                 and bool(previous_playing) != playing
@@ -939,6 +945,8 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
                 "domain=%.3fx%.3f raw=%.3f gated=%.3f pulse=%.3f "
                 "clamp_hits=%.0f active=%.0f size=%.3f pulse_gain=%.3f "
                 "smoothing=%.3f clamp=%.3f "
+                "motion(event=%.3f envelope=%.3f burst=%.3f drift=%.3f "
+                "stream_step=%.6f drift_step=%.6f) "
                 "track(token=%.0f index=%.0f base=%.5f target=%.5f "
                 "display=%.5f delta=%.5f step=%.5f rate_hz=%.3f mix=%.3f)",
                 resolved.simulation_timestamp,
@@ -963,6 +971,12 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
                 geometry.get("configured_big_bass_pulse", 0.0),
                 geometry.get("configured_big_visual_smoothing", 0.0),
                 geometry.get("configured_big_size_clamp", 0.0),
+                motion_event_strength,
+                geometry.get("motion_transient_envelope", 0.0),
+                geometry.get("stream_burst_speed", 0.0),
+                geometry.get("transient_drift_drive", 0.0),
+                geometry.get("stream_step_mean", 0.0),
+                geometry.get("drift_step_mean", 0.0),
                 geometry.get("tracked_big_token", 0.0),
                 geometry.get("tracked_big_index", -1.0),
                 geometry.get("tracked_big_base_radius", 0.0),

@@ -195,6 +195,11 @@ radius remains a fraction of actual card height as in the historical renderer; i
 Collision/spawn radius and collision-only gap/correction distances use the inverse domain-height mapping in simulation
 coordinates, preserving visible contact and the exact canonical 1x1 behavior.
 
+Bubble consume-once kick/snare/vocal events may accent stream and drift motion only through the existing decaying
+stream-burst state. They must not add a clock, mutate authored motion settings, replay an event, or leak into pulse/radius
+authority. Motion diagnostics report pre-collision stream/drift contributions; final trajectory can still be changed by
+the existing impulse and collision stages.
+
 The all-five-mode viewport capability policy is part of the destination contract and the core Bubble reflow path has landed.
 Do not reintroduce a Bubble false capability gate to conceal a viewport ownership or spatial-domain defect.
 

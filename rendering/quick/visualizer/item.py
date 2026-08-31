@@ -248,9 +248,20 @@ class VisualizerRenderItem(QQuickItem):
                     if self._diag_bubble_geometry_burst_remaining > 0
                     else 0.8
                 )
+                motion_event_strength = float(
+                    logical.mode_state.geometry_diagnostics.get(
+                        "motion_event_strength",
+                        0.0,
+                    )
+                )
+                motion_event_sample_due = (
+                    motion_event_strength > 0.0
+                    and now_mono - self._diag_bubble_geometry_last_ts >= 0.25
+                )
                 if (
                     self._diag_bubble_geometry_last_ts <= 0.0
                     or now_mono - self._diag_bubble_geometry_last_ts >= interval_s
+                    or motion_event_sample_due
                     or (
                         previous is not None
                         and previous != playing
@@ -275,6 +286,8 @@ class VisualizerRenderItem(QQuickItem):
                         "frozen_big_max_r=%.5f radius_logical_px=%.2f "
                         "radius_device_px=%.2f dpr=%.3f alpha=%.3f "
                         "domain_h=%.3f "
+                        "motion(event=%.3f envelope=%.3f burst=%.3f "
+                        "drift=%.3f stream_step=%.6f drift_step=%.6f) "
                         "track(token=%.0f index=%.0f target=%.5f "
                         "display=%.5f delta=%.5f step=%.5f "
                         "rate_hz=%.3f mix=%.3f)",
@@ -288,6 +301,12 @@ class VisualizerRenderItem(QQuickItem):
                         presentation.dpr,
                         frozen_max_alpha,
                         geometry.get("domain_h", 1.0),
+                        motion_event_strength,
+                        geometry.get("motion_transient_envelope", 0.0),
+                        geometry.get("stream_burst_speed", 0.0),
+                        geometry.get("transient_drift_drive", 0.0),
+                        geometry.get("stream_step_mean", 0.0),
+                        geometry.get("drift_step_mean", 0.0),
                         geometry.get("tracked_big_token", 0.0),
                         geometry.get("tracked_big_index", -1.0),
                         geometry.get("tracked_big_target_radius", 0.0),

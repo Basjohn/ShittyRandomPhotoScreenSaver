@@ -128,6 +128,12 @@ def test_bubble_frame_runtime_freezes_one_authored_step_and_visible_event() -> N
                 "max_big_raw_src": 0.8,
                 "max_big_gated_energy": 0.7,
                 "max_big_pulse_after": 0.6,
+                "motion_event_strength": 0.9,
+                "motion_transient_envelope": 0.72,
+                "stream_burst_speed": 0.70,
+                "transient_drift_drive": 0.14,
+                "stream_step_mean": 0.004,
+                "drift_step_mean": 0.002,
             }
 
         @staticmethod
@@ -201,6 +207,12 @@ def test_bubble_frame_runtime_freezes_one_authored_step_and_visible_event() -> N
     assert geometry["frozen_any_max_radius"] == pytest.approx(0.07)
     assert geometry["frozen_max_alpha"] == pytest.approx(1.0)
     assert geometry["max_big_raw_src"] == pytest.approx(0.8)
+    assert geometry["motion_event_strength"] == pytest.approx(0.9)
+    assert geometry["motion_transient_envelope"] == pytest.approx(0.72)
+    assert geometry["stream_burst_speed"] == pytest.approx(0.70)
+    assert geometry["transient_drift_drive"] == pytest.approx(0.14)
+    assert geometry["stream_step_mean"] == pytest.approx(0.004)
+    assert geometry["drift_step_mean"] == pytest.approx(0.002)
     assert resolved.runtime_generation == 2
     assert resolved.engine_generation == 5
     assert resolved.activation_id == 7

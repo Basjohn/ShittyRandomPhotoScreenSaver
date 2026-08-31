@@ -143,6 +143,9 @@ def test_fresh_controller_configured_started_advanced_without_widget(
     assert "track(token=" in bubble_geometry
     assert "rate_hz=" in bubble_geometry
     assert "mix=" in bubble_geometry
+    assert "motion(event=" in bubble_geometry
+    assert "stream_step=" in bubble_geometry
+    assert "drift_step=" in bubble_geometry
 
 
 def test_devcurve_diagnostics_do_not_cross_into_bubble_geometry(monkeypatch) -> None:
