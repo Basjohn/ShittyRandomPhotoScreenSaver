@@ -1116,7 +1116,7 @@ Detailed source/repair handoff: `H5c_Implementation_Checkpoint_2026-08-31_R2.md`
 - [x] Operator quantifies the physical magnitude gap as at least ~3x versus the genuine old architecture; flawed historical goldens are clues, not closure.
 - [x] Historical/current final projection proves the exact 3x-class loss: nonbaseline Quick-era snapshot divided radius by `domain_h`; active `772.831/280` domain attenuated radius `2.760x`, while the old shader consumed radius directly against actual card height.
 - [x] Restore historical card-height-normalized radius while retaining expanded-world position/trail normalization and shader roundness.
-- [x] Map rendered radius plus collision-only gap/correction distances back into expanded collision/spawn coordinates by `domain_h`; retain exact canonical 1x1 physics rather than introducing a new aspect-aware solver.
+- [x] ~~Map rendered radius plus collision-only gap/correction distances back into expanded collision/spawn coordinates by `domain_h`.~~ This first radius repair restored visible magnitude, but the later dedicated pair/overlap falsifier proved height-owned collision geometry anisotropic on wide/tall viewports; superseded by R15 content-space collision/spawn policy. Canonical `1x1` remains exact.
 - [x] Add bounded B6/B7 final-simulation/frozen-big radius-alpha summaries and B8 retained Quick logical/device-pixel radius summaries, with extra samples around Play/Pause but no new clock.
 - [x] First corrected B9 run reports magnitude dramatically better / almost close-worthy; B6/B7/B8 agree while source is fresh, cadence is ~89 Hz and integration is 1.000.
 - [x] The trace reaches about `75.95` logical px / `113.92` device px radius at DPR `1.5`, physically validating the projection correction.
@@ -1133,5 +1133,42 @@ Detailed source/repair handoff: `H5c_Implementation_Checkpoint_2026-08-31_R2.md`
 - [x] A follow-up remaining-options audit identifies swirl orbit/birth, entry/exit spatial literals and rebound impulse as separate viewport seams. Add failing A/Bs rather than broad multipliers.
 - [x] Canonical/wide/tall swirl A/B fails the old expanded-world tangent/radial and spawn-radius math; solve nonbaseline swirl geometry in content coordinates and project birth offsets once. Diagonal/random group drift already inherits the ordinary movement projection and is now pinned.
 - [x] A 19-cell lifecycle falsifier proves directional entry, cluster spread, exit/retirement grace, retry bounds and pre-entry prediction shrink on expanded axes. Route those existing literals through one baseline-exact content-axis projection without changing random-draw order.
-- [ ] Isolate impulse application next; collision detection/correction retains its existing height-domain contract until a dedicated two-bubble A/B proves otherwise.
+- [x] Isolate impulse application: canonical/wide/tall preloaded-impulse A/B failed by `1 / domain_axis`; project rebound application once onto each expanded axis.
+- [x] Dedicated two-bubble + spawn-overlap A/B then disproved the remaining height-domain collision assumption; evaluate pair/overlap geometry in renderer-content space and project corrections back to world axes. See R15.
 - [ ] Physically validate perceptible transient stream/drift response without overdrive; motion-step diagnostics precede impulse/collision correction and must not be read as final trajectory distance.
+
+## 26. R15 — outside-Codex viewport-scaling continuation checkpoint
+
+**Outside of Codex Work Began @ `61decb33f6ebb107b2997928077e9d56d5faa8a1`.** This section records source-only continuation from the operator-supplied real-tree ZIP. The ZIP does not contain `.git`, the maintained full `tests/` tree, or a runnable PySide6 environment, so the focused profile below is supplemental and physical/PySide gates remain explicit.
+
+### Bubble
+
+- [x] Preloaded rebound impulse falsifier: doubled X/Y domain previously halved renderer-visible rebound. Project impulse application by the corresponding logical domain axis; canonical arithmetic remains untouched.
+- [x] Two-bubble collision falsifier: wide/tall expanded storage distorted Euclidean pair distance and the old `domain_h` radius/gap mapping made geometry height-owned. Evaluate radii/gaps/deltas in canonical renderer-content space and project only correction vectors back into world storage.
+- [x] Spawn-overlap + pre-entry future-overlap falsifier: use the same renderer-content policy as live collision.
+- [x] Hot-path audit: precompute reciprocal domain axes and in-view margins once per collision call; noncanonical pairs use scalar multiplies rather than per-pair division/helper calls. No new pass or asymptotic work.
+- [x] Re-falsify swirl and motion-tail geometry at canonical/wide/tall/2x2 and approximately `1.724x2.914`: existing Codex swirl projection and tail content-space smear remain GREEN; do not stack another multiplier.
+- [x] Bubble outline source explanation matches operator observation: fixed authored-pixel stroke is too heavy at normal/small sizes while rendered radius grows with viewport height. Replace `1.2 px @ r=.04` with a radius-proportional ~3.75% stroke plus 0.35..1.8 authored-pixel safety bounds. This preserves about 1.2 px around the operator-approved ~2.9x-tall viewport and yields about 0.4 px at canonical `r=.04`.
+- [ ] **AWAITING VALIDATION:** normal/small/very-tall Bubble outline weight; rebound/collision feel; transient stream/drift; wake/tail appearance.
+- [ ] Bubble Ghost remains a separate semantic defect: UI promises a fading afterimage and exposes `bubble_ghost_decay`, but retained Quick uploads alpha only and the shared Bubble shader draws a static `1.18x` halo. Do not counterfeit closure by wiring decay into that halo. **AWAITING HISTORICAL ORACLE / PHYSICAL CONTRACT DECISION.**
+
+### Spectrum / Oscilloscope / Sine
+
+- [x] Spectrum duplicate height transfer removed: Python resolves `compute_spectrum_height_scale()` once; both presenters use it; shader consumes the resolved boost once. Historical `0.55` bar/peak upload transfer remains independent.
+- [x] Oscilloscope/Sine `Vertical Shift` falsifier: fixed `20..80 px` placement clamp weakened with tall viewport extent. Scale only that placement range by viewport-height extent; line width/glow stay uniform-visual-scale-owned.
+- [ ] **AWAITING VALIDATION:** Spectrum continuous + segmented canonical/tall; Osc/Sine canonical/tall Vertical Shift and general preset motion.
+
+### DevCurve
+
+- [x] Authored outline/specular values were correctly projected by baseline/current axes in Quick, then shader canonical floors/bounds overrode that projection. Apply authored bounds before projection and project Quick safety floors/bounds through the same normalized-axis transfer. Legacy shader branch retains canonical constants.
+- [x] Cross-axis specular falsifier: X-normalized lobe width fed a Y radius directly, stretching sparkle height on anisotropic viewports. Upload one CPU-resolved X->Y normalized ratio and multiply once in the shader; no per-fragment division. Scale the AA safety floor on Y as well.
+- [ ] **AWAITING VALIDATION:** basic DevCurve at canonical, tall and wide viewport, with outline AA + specular enabled.
+
+### Regression + performance architecture
+
+- [x] Focused source-only viewport profile GREEN `12/12`: Bubble impulse, swirl, birth, trail, collision, spawn overlap, outline transfer; Osc/Sine Vertical Shift; Spectrum one-time transfer; DevCurve authored pixel/bounds/cross-axis geometry.
+- [x] Python syntax compile GREEN for changed Python modules.
+- [x] No scaling repair adds a timer, cadence owner, render pass, large-array owner or per-frame allocation. New renderer cost is bounded scalar uniform upload + scalar shader arithmetic. Bubble collision keeps the same pair complexity and uses precomputed reciprocal axes.
+- [ ] Last Codex-run maintained `h-destination` was `84/84` at the outside-work anchor; rerun it in the normal PySide6 project environment after applying this checkpoint.
+- [ ] Runtime logs already show authored Visualizer cadence near 90 Hz while presentation skips and tens-of-ms GC stalls remain measurable. Preserve this as J/performance debt; promote earlier only if it prevents H physical validation.
+- [ ] **CHECKPOINT / AWAITING LOGS:** all five modes, canonical plus aggressive wide/tall resize, including DevCurve (missing from the supplied run). Capture normal/preset cycling and the Bubble-specific checks above.

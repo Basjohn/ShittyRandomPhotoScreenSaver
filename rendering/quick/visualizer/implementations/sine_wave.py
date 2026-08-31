@@ -25,12 +25,14 @@ class QuickSineLayout:
     line_width: float
     glow_sigma: float
     vertical_spacing_range: tuple[float, float]
+    viewport_height_scale: float
 
 
 def compute_quick_sine_layout(
     *,
     local_content_rect: Sequence[object],
     visual_scale: float,
+    viewport_height_scale: float = 1.0,
 ) -> QuickSineLayout:
     if len(local_content_rect) != 4:
         raise ValueError("Sine content geometry is incomplete")
@@ -38,7 +40,8 @@ def compute_quick_sine_layout(
         float(value) for value in local_content_rect
     )
     scale = float(visual_scale)
-    if min(content_width, content_height, scale) <= 0.0:
+    height_scale = float(viewport_height_scale)
+    if min(content_width, content_height, scale, height_scale) <= 0.0:
         raise ValueError("Sine content geometry must be positive")
     margin_x = 5.0 * scale
     margin_y = 2.0 * scale
@@ -56,7 +59,11 @@ def compute_quick_sine_layout(
         ),
         line_width=2.0 * scale,
         glow_sigma=8.0 * scale,
-        vertical_spacing_range=(20.0 * scale, 80.0 * scale),
+        vertical_spacing_range=(
+            20.0 * scale * height_scale,
+            80.0 * scale * height_scale,
+        ),
+        viewport_height_scale=height_scale,
     )
 
 
@@ -91,6 +98,10 @@ class QuickSineRenderer:
                 content_height,
             ),
             visual_scale=presentation.uniform_visual_scale,
+            viewport_height_scale=(
+                presentation.viewport_extent[1]
+                / presentation.baseline_viewport_size[1]
+            ),
         )
         if not self._program:
             self._initialize()
@@ -128,6 +139,7 @@ class QuickSineRenderer:
         _set1i("u_quick_item_coords", 1)
         gl.glUniform4f(uniforms["u_content_rect"], *layout.content_rect)
         _set1f("u_visual_scale", presentation.uniform_visual_scale)
+        _set1f("u_viewport_height_scale", layout.viewport_height_scale)
         _set1f("u_fade", presentation.content_fade)
         _set1f("u_time", mode_state.animation_time)
 
@@ -338,6 +350,7 @@ class QuickSineRenderer:
                 "u_quick_item_coords",
                 "u_content_rect",
                 "u_visual_scale",
+                "u_viewport_height_scale",
                 "u_fade",
                 "u_time",
                 "u_bass_energy",

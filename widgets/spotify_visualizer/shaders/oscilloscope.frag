@@ -15,6 +15,7 @@ uniform vec2 u_viewport_origin_px;
 uniform int u_quick_item_coords;
 uniform vec4 u_content_rect;  // item-local x, y, width, height
 uniform float u_visual_scale;
+uniform float u_viewport_height_scale;  // viewport extent height / canonical height
 uniform float u_fade;
 uniform float u_time;
 
@@ -335,6 +336,12 @@ void main() {
     }
 
     float px_scale = authored_visual_scale();
+    // Vertical Shift is an authored content-space placement control.
+    // Keep its 20..80 baseline-pixel spread range proportional to the logical
+    // viewport height while leaving line/glow stroke scale owned only by the
+    // independent uniform visual scale. Legacy presenter keeps factor 1.0.
+    float spacing_scale = px_scale * ((u_quick_item_coords == 1)
+        ? max(u_viewport_height_scale, 0.01) : 1.0);
     vec4 content_rect = (u_quick_item_coords == 1)
         ? u_content_rect : vec4(0.0, 0.0, width, height);
 
@@ -421,7 +428,7 @@ void main() {
             float gny2;
             float gv_shift_pct2 = float(u_osc_vertical_shift) / 100.0;
             if (abs(gv_shift_pct2) > 0.001) {
-                float gbase_sp2 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
+                float gbase_sp2 = clamp(inner_height * 0.25, 20.0 * spacing_scale, 80.0 * spacing_scale);
                 float gshift2 = (gbase_sp2 * gv_shift_pct2) / inner_height;
                 gny2 = ny + gshift2;
                 gamp2 = amplitude * (0.7 + e2_band * 0.15);
@@ -444,7 +451,7 @@ void main() {
             float gny3;
             float gv_shift_pct3 = float(u_osc_vertical_shift) / 100.0;
             if (abs(gv_shift_pct3) > 0.001) {
-                float gbase_sp3 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
+                float gbase_sp3 = clamp(inner_height * 0.25, 20.0 * spacing_scale, 80.0 * spacing_scale);
                 float gshift3 = (gbase_sp3 * gv_shift_pct3) / inner_height;
                 gny3 = ny - gshift3;
                 gamp3 = amplitude * (0.6 + e3_band * 0.18);
@@ -467,7 +474,7 @@ void main() {
             float gny4;
             float gv_shift_pct4 = float(u_osc_vertical_shift) / 100.0;
             if (abs(gv_shift_pct4) > 0.001) {
-                float gbase_sp4 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
+                float gbase_sp4 = clamp(inner_height * 0.25, 20.0 * spacing_scale, 80.0 * spacing_scale);
                 float gshift4 = (gbase_sp4 * gv_shift_pct4 * 1.4) / inner_height;
                 gny4 = ny + gshift4;
                 gamp4 = amplitude * (0.55 + e4_band * 0.12);
@@ -490,7 +497,7 @@ void main() {
             float gny5;
             float gv_shift_pct5 = float(u_osc_vertical_shift) / 100.0;
             if (abs(gv_shift_pct5) > 0.001) {
-                float gbase_sp5 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
+                float gbase_sp5 = clamp(inner_height * 0.25, 20.0 * spacing_scale, 80.0 * spacing_scale);
                 float gshift5 = (gbase_sp5 * gv_shift_pct5 * 1.8) / inner_height;
                 gny5 = ny - gshift5;
                 gamp5 = amplitude * (0.50 + e5_band * 0.10);
@@ -513,7 +520,7 @@ void main() {
             float gny6;
             float gv_shift_pct6 = float(u_osc_vertical_shift) / 100.0;
             if (abs(gv_shift_pct6) > 0.001) {
-                float gbase_sp6 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
+                float gbase_sp6 = clamp(inner_height * 0.25, 20.0 * spacing_scale, 80.0 * spacing_scale);
                 float gshift6 = (gbase_sp6 * gv_shift_pct6 * 2.2) / inner_height;
                 gny6 = ny + gshift6;
                 gamp6 = amplitude * (0.45 + e6_band * 0.08);
@@ -557,7 +564,7 @@ void main() {
         float ny2;
         float v_shift_pct = float(u_osc_vertical_shift) / 100.0;
         if (abs(v_shift_pct) > 0.001) {
-            float base_sp = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
+            float base_sp = clamp(inner_height * 0.25, 20.0 * spacing_scale, 80.0 * spacing_scale);
             float shift = (base_sp * v_shift_pct) / inner_height;
             ny2 = ny + shift;
             amp2 = amplitude * (0.7 + e2_band * 0.15);
@@ -587,7 +594,7 @@ void main() {
         float ny3;
         float v_shift_pct3 = float(u_osc_vertical_shift) / 100.0;
         if (abs(v_shift_pct3) > 0.001) {
-            float base_sp3 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
+            float base_sp3 = clamp(inner_height * 0.25, 20.0 * spacing_scale, 80.0 * spacing_scale);
             float shift3 = (base_sp3 * v_shift_pct3) / inner_height;
             ny3 = ny - shift3;
             amp3 = amplitude * (0.6 + e3_band * 0.18);
@@ -616,7 +623,7 @@ void main() {
         float ny4;
         float v_shift_pct4 = float(u_osc_vertical_shift) / 100.0;
         if (abs(v_shift_pct4) > 0.001) {
-            float base_sp4 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
+            float base_sp4 = clamp(inner_height * 0.25, 20.0 * spacing_scale, 80.0 * spacing_scale);
             float shift4 = (base_sp4 * v_shift_pct4 * 1.4) / inner_height;
             ny4 = ny + shift4;
             amp4 = amplitude * (0.55 + e4_band * 0.12);
@@ -645,7 +652,7 @@ void main() {
         float ny5;
         float v_shift_pct5 = float(u_osc_vertical_shift) / 100.0;
         if (abs(v_shift_pct5) > 0.001) {
-            float base_sp5 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
+            float base_sp5 = clamp(inner_height * 0.25, 20.0 * spacing_scale, 80.0 * spacing_scale);
             float shift5 = (base_sp5 * v_shift_pct5 * 1.8) / inner_height;
             ny5 = ny - shift5;
             amp5 = amplitude * (0.50 + e5_band * 0.10);
@@ -674,7 +681,7 @@ void main() {
         float ny6;
         float v_shift_pct6 = float(u_osc_vertical_shift) / 100.0;
         if (abs(v_shift_pct6) > 0.001) {
-            float base_sp6 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
+            float base_sp6 = clamp(inner_height * 0.25, 20.0 * spacing_scale, 80.0 * spacing_scale);
             float shift6 = (base_sp6 * v_shift_pct6 * 2.2) / inner_height;
             ny6 = ny + shift6;
             amp6 = amplitude * (0.45 + e6_band * 0.08);

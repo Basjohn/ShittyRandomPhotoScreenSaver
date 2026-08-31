@@ -15,6 +15,7 @@ uniform vec2 u_viewport_origin_px;
 uniform int u_quick_item_coords;
 uniform vec4 u_content_rect;  // item-local x, y, width, height
 uniform float u_visual_scale;
+uniform float u_viewport_height_scale;  // viewport extent height / canonical height
 uniform float u_fade;
 uniform float u_time;
 
@@ -305,6 +306,12 @@ void main() {
     }
 
     float px_scale = authored_visual_scale();
+    // Vertical Shift is an authored content-space placement control.
+    // Keep its 20..80 baseline-pixel spread range proportional to the logical
+    // viewport height while leaving line/glow stroke scale owned only by the
+    // independent uniform visual scale. Legacy presenter keeps factor 1.0.
+    float spacing_scale = px_scale * ((u_quick_item_coords == 1)
+        ? max(u_viewport_height_scale, 0.01) : 1.0);
     vec4 content_rect = (u_quick_item_coords == 1)
         ? u_content_rect : vec4(0.0, 0.0, width, height);
 
@@ -480,8 +487,8 @@ void main() {
     if (abs(v_shift_pct) > 0.001 && lines >= 2) {
         float base_spacing_px = clamp(
             inner_height * 0.25,
-            20.0 * px_scale,
-            80.0 * px_scale
+            20.0 * spacing_scale,
+            80.0 * spacing_scale
         );
         float raw_spacing = (base_spacing_px * v_shift_pct) / inner_height;
         // Clamp so lines stay within card bounds (max ±0.35 normalized)

@@ -28,12 +28,14 @@ class QuickOscilloscopeLayout:
     line_width: float
     glow_sigma: float
     vertical_spacing_range: tuple[float, float]
+    viewport_height_scale: float
 
 
 def compute_quick_oscilloscope_layout(
     *,
     local_content_rect: Sequence[object],
     visual_scale: float,
+    viewport_height_scale: float = 1.0,
 ) -> QuickOscilloscopeLayout:
     if len(local_content_rect) != 4:
         raise ValueError("Oscilloscope content geometry is incomplete")
@@ -41,7 +43,8 @@ def compute_quick_oscilloscope_layout(
         float(value) for value in local_content_rect
     )
     scale = float(visual_scale)
-    if min(content_width, content_height, scale) <= 0.0:
+    height_scale = float(viewport_height_scale)
+    if min(content_width, content_height, scale, height_scale) <= 0.0:
         raise ValueError("Oscilloscope content geometry must be positive")
     margin_x = 5.0 * scale
     margin_y = 1.0 * scale
@@ -59,7 +62,11 @@ def compute_quick_oscilloscope_layout(
         ),
         line_width=2.0 * scale,
         glow_sigma=8.0 * scale,
-        vertical_spacing_range=(20.0 * scale, 80.0 * scale),
+        vertical_spacing_range=(
+            20.0 * scale * height_scale,
+            80.0 * scale * height_scale,
+        ),
+        viewport_height_scale=height_scale,
     )
 
 
@@ -101,6 +108,10 @@ class QuickOscilloscopeRenderer:
         layout = compute_quick_oscilloscope_layout(
             local_content_rect=local_content_rect,
             visual_scale=presentation.uniform_visual_scale,
+            viewport_height_scale=(
+                presentation.viewport_extent[1]
+                / presentation.baseline_viewport_size[1]
+            ),
         )
         if not self._program:
             self._initialize()
@@ -153,6 +164,10 @@ class QuickOscilloscopeRenderer:
         gl.glUniform1f(
             uniforms["u_visual_scale"],
             presentation.uniform_visual_scale,
+        )
+        gl.glUniform1f(
+            uniforms["u_viewport_height_scale"],
+            layout.viewport_height_scale,
         )
         gl.glUniform1f(uniforms["u_fade"], presentation.content_fade)
         gl.glUniform1i(uniforms["u_waveform_count"], max(waveform_count, 2))
@@ -314,6 +329,7 @@ class QuickOscilloscopeRenderer:
                 "u_quick_item_coords",
                 "u_content_rect",
                 "u_visual_scale",
+                "u_viewport_height_scale",
                 "u_fade",
                 "u_waveform_count",
                 "u_waveform",

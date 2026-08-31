@@ -5,6 +5,7 @@ from PySide6.QtGui import QColor
 
 from core.logging.logger import get_logger
 from widgets.spotify_visualizer.renderers.gl_helpers import set1f as _set1f, set1i as _set1i, set_color4 as _set_color4
+from widgets.spotify_visualizer.spectrum_solid_hysteresis import compute_spectrum_height_scale
 
 logger = get_logger(__name__)
 
@@ -110,11 +111,13 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_bar_gap_px", float(layout["gap_px"]))
     _set1f(gl, u, "u_bar_span_px", float(layout["span_px"]))
 
-    # Height scale
+    # Height transfer is resolved in Python for both presenters; the shared
+    # shader consumes it exactly once. This preserves the historical legacy
+    # result while avoiding Quick's former second square-root curve.
     loc = u.get("u_bar_height_scale", -1)
     if loc >= 0:
         cur_h = max(1.0, float(s._render_rect.height()) if hasattr(s, '_render_rect') else 80.0)
-        gl.glUniform1f(loc, float(max(1.0, cur_h / _SPECTRUM_BASE_HEIGHT)))
+        gl.glUniform1f(loc, float(compute_spectrum_height_scale(cur_h)))
 
     _set1i(gl, u, "u_single_piece", 1 if s._single_piece else 0)
     _set1i(gl, u, "u_slanted", 1 if getattr(s, '_slanted', False) else 0)

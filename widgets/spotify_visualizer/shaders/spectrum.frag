@@ -213,12 +213,11 @@ void main() {
     float curved = pow(value, 1.15);
     float curved_peak = pow(peak, 1.15);
 
-    // height_scale compensates so bars fill taller cards without pinning.
-    // At 80px (default): scale=1.0  → bar 1.0 → 0.55 curved → ~0.72 boosted
-    // At 277px card:     scale=1.75 → bar 1.0 → 0.55 curved → ~0.96 boosted
-    float raw_hs = max(1.0, u_bar_height_scale);
-    float height_scale = 1.0 + (sqrt(raw_hs) - 1.0) * 1.0;
-    if (height_scale > 1.85) height_scale = 1.85;
+    // u_bar_height_scale is already the capped presentation transfer computed
+    // by Python (compute_spectrum_height_scale). Consume it exactly once here.
+    // Quick previously square-rooted that resolved boost a second time, making
+    // tall viewports react less strongly than the authored transfer specifies.
+    float height_scale = clamp(max(1.0, u_bar_height_scale), 1.0, 1.85);
     float boosted = curved * height_scale;
     if (boosted > 0.95) {
         boosted = 0.95;

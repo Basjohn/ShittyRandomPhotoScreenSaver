@@ -309,13 +309,14 @@ void main() {
         // Radius in aspect-corrected space
         float r = brad;
         
-        // Stroke width scales proportionally to bubble radius
-        // Reference: 1.2px at radius 0.04 (mid-range big bubble)
-        float ref_radius = 0.04;
-        float base_stroke_px = 1.2;
-        float stroke_px = base_stroke_px * (r / ref_radius);
-        stroke_px = clamp(stroke_px, 0.5, 1.8);
-        float stroke = stroke_px * px;
+        // Keep outline weight proportional to rendered bubble radius rather
+        // than pinning it to an authored-pixel width. Physical CUSTOM testing
+        // found the old 1.2px-at-r=.04 rule much too heavy at canonical/small
+        // viewports but appropriately weighted around the ~2.9x-tall viewport.
+        // A ~3.75% radius ratio preserves that large-card appearance while
+        // naturally thinning canonical bubbles; tiny/huge safety bounds remain
+        // authored pixels so AA never collapses or blooms without limit.
+        float stroke = clamp(r * 0.0375, 0.35 * px, 1.8 * px);
         
         // --- Tiny bubble shortcut (< ~4px radius) ---
         float tiny_threshold = 4.0 * px;

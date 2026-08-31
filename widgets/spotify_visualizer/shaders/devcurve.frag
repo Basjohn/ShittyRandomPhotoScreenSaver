@@ -16,6 +16,11 @@ uniform vec2 u_viewport_origin_px;
 // the framebuffer-coordinate/card-clip branch until Phase-I deletion.
 uniform int u_quick_item_coords;
 uniform vec4 u_content_rect;  // item-local x, y, width, height
+// Baseline/current normalized-axis transfer for authored pixel-like DevCurve
+// controls in the Quick branch. Legacy compositor leaves this unset and keeps
+// the historical canonical normalized clamps below.
+uniform vec2 u_devcurve_normalized_scale;
+uniform float u_devcurve_x_to_y_scale;
 uniform float u_border_width;
 uniform float u_fade;
 uniform int u_playing;
@@ -195,6 +200,16 @@ float _hash11(float n) {
     return fract(sin(n) * 43758.5453123);
 }
 
+float _quick_norm_x(float canonicalValue) {
+    if (u_quick_item_coords != 1) return canonicalValue;
+    return canonicalValue * max(u_devcurve_normalized_scale.x, 1e-6);
+}
+
+float _quick_norm_y(float canonicalValue) {
+    if (u_quick_item_coords != 1) return canonicalValue;
+    return canonicalValue * max(u_devcurve_normalized_scale.y, 1e-6);
+}
+
 float _specular_lobe(vec2 uv, vec4 slot, int layerId, int sampleCount, float width, float yOffset, float crestBias, float aa) {
     float amp = clamp(slot.z, 0.0, 1.0);
     if (amp <= 1e-4) return 0.0;
@@ -208,12 +223,14 @@ float _specular_lobe(vec2 uv, vec4 slot, int layerId, int sampleCount, float wid
     float slope = _sample_curve_slope(layerId, xCurve, sampleCount);
     float curvature = _sample_curve_curvature(layerId, xCurve, sampleCount);
     float widthScale = mix(0.92, 1.58, r1) * mix(0.92, 1.18, amp);
-    float rx = max(0.009, width * widthScale);
+    float rx = max(_quick_norm_x(0.009), width * widthScale);
     float u = (uv.x - x) / max(rx, 1e-4);
     float absU = abs(u);
-    float ry = max(0.0042, rx * mix(0.26, 0.40, r2));
+    float xToY = (u_quick_item_coords == 1)
+        ? max(u_devcurve_x_to_y_scale, 1e-6) : 1.0;
+    float ry = max(_quick_norm_y(0.0042), rx * xToY * mix(0.26, 0.40, r2));
     float crest = clamp(abs(curvature) * max(crestBias, 0.1) * 0.08, 0.0, 1.0);
-    float offset = max(0.010, yOffset) * mix(0.82, 1.18, r3);
+    float offset = max(_quick_norm_y(0.010), yOffset) * mix(0.82, 1.18, r3);
     float centerBend = ry * (
         0.034 * sin((u + variant * 0.73) * 3.14159)
         + 0.018 * sin((u * 2.0 + variant) * 3.14159)
@@ -226,7 +243,7 @@ float _specular_lobe(vec2 uv, vec4 slot, int layerId, int sampleCount, float wid
     float dy = (uv.y - (yCurve + offset + centerBend)) * curveNormalScale;
     float v = dy / max(ry * clamp(yScale, 0.94, 1.07), 1e-4);
     float shape = pow(absU, 2.85) + pow(abs(v), 2.35) - 1.0;
-    float edge = max(fwidth(shape) * 0.45, 0.0008);
+    float edge = max(fwidth(shape) * 0.45, _quick_norm_y(0.0008));
     float mask = 1.0 - smoothstep(-edge, edge, shape);
     float vis = _specular_visibility(x);
     return clamp(mask * vis * smoothstep(0.05, 0.22, amp), 0.0, 1.0);
@@ -277,7 +294,7 @@ void main() {
     // one-pixel coverage width by the independent CUSTOM visual scale would
     // scale it twice and narrow edges at scale < 1.  Preserve the historical
     // pixel-derived AA width after the Quick coordinate transfer.
-    float aa = max(1.15 / max(inner_h, 1.0), 0.0010);
+    float aa = max(1.15 / max(inner_h, 1.0), _quick_norm_y(0.0010));
     int sampleCount = clamp(u_devcurve_sample_count, 2, 96);
 
     vec4 col = vec4(0.0);
@@ -290,10 +307,12 @@ void main() {
     float y1 = _sample_curve_by_id(layer1, uv.x, sampleCount);
     float y2 = _sample_curve_by_id(layer2, uv.x, sampleCount);
     float y3 = _sample_curve_by_id(layer3, uv.x, sampleCount);
-    float ow0 = clamp(_layer_outline_width_by_id(layer0), 0.0004, 0.015);
-    float ow1 = clamp(_layer_outline_width_by_id(layer1), 0.0004, 0.015);
-    float ow2 = clamp(_layer_outline_width_by_id(layer2), 0.0004, 0.015);
-    float ow3 = clamp(_layer_outline_width_by_id(layer3), 0.0004, 0.015);
+    float outlineMin = _quick_norm_y(0.0004);
+    float outlineMax = _quick_norm_y(0.015);
+    float ow0 = clamp(_layer_outline_width_by_id(layer0), outlineMin, outlineMax);
+    float ow1 = clamp(_layer_outline_width_by_id(layer1), outlineMin, outlineMax);
+    float ow2 = clamp(_layer_outline_width_by_id(layer2), outlineMin, outlineMax);
+    float ow3 = clamp(_layer_outline_width_by_id(layer3), outlineMin, outlineMax);
     col = _blend_over(col, _draw_layer(y0, _layer_color_by_id(layer0), _layer_outline_color_by_id(layer0), _layer_enabled_by_id(layer0), _layer_alpha_by_id(layer0), uv.x, uv.y, aa, ow0));
     col = _blend_over(col, _draw_layer(y1, _layer_color_by_id(layer1), _layer_outline_color_by_id(layer1), _layer_enabled_by_id(layer1), _layer_alpha_by_id(layer1), uv.x, uv.y, aa, ow1));
     col = _blend_over(col, _draw_layer(y2, _layer_color_by_id(layer2), _layer_outline_color_by_id(layer2), _layer_enabled_by_id(layer2), _layer_alpha_by_id(layer2), uv.x, uv.y, aa, ow2));
@@ -307,7 +326,7 @@ void main() {
         float fgAlpha = clamp(_layer_alpha_by_id(fgId), 0.0, 1.0) * clamp(fgColor.a, 0.0, 1.0);
 
         if (u_devcurve_foreground_shadow_enabled != 0) {
-            float shadowY = yFg + clamp(u_devcurve_foreground_shadow_offset, 0.0, 0.45);
+            float shadowY = yFg + clamp(u_devcurve_foreground_shadow_offset, 0.0, _quick_norm_y(0.45));
             float shadowInside = smoothstep(-aa, aa, uv.y - shadowY);
             float shadowA = shadowInside * clamp(u_devcurve_foreground_shadow_alpha, 0.0, 1.0) * fgAlpha;
             vec3 shadowRgb = fgColor.rgb * (1.0 - clamp(u_devcurve_foreground_shadow_darken, 0.0, 1.0));
@@ -315,14 +334,14 @@ void main() {
         }
 
         if (u_devcurve_foreground_specular_enabled != 0) {
-            float specW = clamp(u_devcurve_foreground_specular_width, 0.002, 0.120);
-            float yOffset = max(0.010, clamp(u_devcurve_foreground_specular_offset, -0.20, 0.20));
+            float specW = clamp(u_devcurve_foreground_specular_width, _quick_norm_x(0.002), _quick_norm_x(0.120));
+            float yOffset = max(_quick_norm_y(0.010), clamp(u_devcurve_foreground_specular_offset, _quick_norm_y(-0.20), _quick_norm_y(0.20)));
             float crestBias = clamp(u_devcurve_foreground_specular_crest_bias, 0.0, 2.0);
             float slot0 = _specular_lobe(uv, u_devcurve_specular_slot0, fgId, sampleCount, specW, yOffset, crestBias, aa);
             float slot1 = _specular_lobe(uv, u_devcurve_specular_slot1, fgId, sampleCount, specW, yOffset, crestBias, aa);
             float slot2 = _specular_lobe(uv, u_devcurve_specular_slot2, fgId, sampleCount, specW, yOffset, crestBias, aa);
             float sparkleMask = max(max(slot0, slot1), slot2) * fgInside;
-            float clearAt = max(0.006, yOffset * 0.42);
+            float clearAt = max(_quick_norm_y(0.006), yOffset * 0.42);
             float clearanceMask = smoothstep(clearAt, clearAt + aa * 0.65, uv.y - yFg);
             float specA = sparkleMask * clearanceMask * clamp(u_devcurve_foreground_specular_alpha, 0.0, 1.0);
             col = _blend_over(col, vec4(vec3(1.0), specA));
