@@ -13,6 +13,10 @@ from typing import TYPE_CHECKING, Any, Dict
 
 from core.logging.logger import get_logger
 from core.steam.credentials import strip_secret_fields as strip_steam_secret_fields
+from core.settings.structured_roots import STRUCTURED_SETTINGS_ROOTS
+from core.settings.visualizer_presets import (
+    normalize_visualizer_custom_snapshot_cache,
+)
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
 
 if TYPE_CHECKING:
@@ -66,11 +70,17 @@ def export_to_sst(mgr: "SettingsManager", path: str) -> bool:
                     else:
                         snapshot['widgets'] = value
                     continue
-                if key == 'transitions':
+                if key == 'visualizer_custom_presets':
                     if isinstance(value, Mapping):
-                        snapshot['transitions'] = dict(value)
+                        snapshot[key] = normalize_visualizer_custom_snapshot_cache(value)
                     else:
-                        snapshot['transitions'] = value
+                        snapshot[key] = value
+                    continue
+                if key in STRUCTURED_SETTINGS_ROOTS:
+                    if isinstance(value, Mapping):
+                        snapshot[key] = dict(value)
+                    else:
+                        snapshot[key] = value
                     continue
                 if '.' in key:
                     section, subkey = key.split('.', 1)
@@ -199,6 +209,31 @@ def import_from_sst(mgr: "SettingsManager", path: str, merge: bool = True) -> bo
                     mgr._store_transitions_root_locked(transitions_dict)
                     continue
 
+                if section_key == 'visualizer_custom_presets':
+                    if not isinstance(section_value, Mapping):
+                        raise TypeError(
+                            "visualizer_custom_presets SST section must be a mapping"
+                        )
+                    imported_cache = normalize_visualizer_custom_snapshot_cache(
+                        section_value
+                    )
+                    if merge:
+                        existing_cache = mgr._settings.value(
+                            'visualizer_custom_presets',
+                            {},
+                        )
+                        if isinstance(existing_cache, Mapping):
+                            merged_cache = normalize_visualizer_custom_snapshot_cache(
+                                existing_cache
+                            )
+                            merged_cache.update(imported_cache)
+                            imported_cache = merged_cache
+                    mgr._settings.setValue(
+                        'visualizer_custom_presets',
+                        imported_cache,
+                    )
+                    continue
+
                 if section_key in {'display', 'timing', 'input', 'sources', 'cache'} and not isinstance(section_value, Mapping):
                     logger.warning(
                         "Skipping SST section '%s': expected mapping, got %s",
@@ -224,6 +259,7 @@ def import_from_sst(mgr: "SettingsManager", path: str, merge: bool = True) -> bo
                     coerced = mgr._coerce_import_value(section_key, section_value)
                     mgr._settings.setValue(section_key, coerced)
 
+            mgr._mark_visualizer_schema_current_locked()
             mgr._settings.sync()
             mgr._clear_cache_locked()
 
@@ -313,6 +349,27 @@ def preview_import_from_sst(mgr: "SettingsManager", path: str, merge: bool = Tru
                         diffs['transitions'] = (old_transitions, new_transitions)
                     continue
 
+                if section_key == 'visualizer_custom_presets':
+                    if not isinstance(section_value, Mapping):
+                        continue
+                    new_cache = normalize_visualizer_custom_snapshot_cache(section_value)
+                    existing_cache = mgr._settings.value(
+                        'visualizer_custom_presets',
+                        {},
+                    )
+                    old_cache = (
+                        normalize_visualizer_custom_snapshot_cache(existing_cache)
+                        if isinstance(existing_cache, Mapping)
+                        else {}
+                    )
+                    if merge:
+                        merged_cache = dict(old_cache)
+                        merged_cache.update(new_cache)
+                        new_cache = merged_cache
+                    if old_cache != new_cache:
+                        diffs['visualizer_custom_presets'] = (old_cache, new_cache)
+                    continue
+
                 if section_key in {'display', 'timing', 'input', 'sources', 'cache'} and not isinstance(section_value, Mapping):
                     logger.warning(
                         "Skipping SST section '%s' in preview: expected mapping, got %s",
@@ -352,9 +409,13 @@ def normalize_sst_snapshot(snapshot: Mapping[str, Any]) -> Dict[str, Any]:
         container[subkey] = value
 
     for key, value in snapshot.items():
-        if key in {'widgets', 'transitions'}:
+        if key in STRUCTURED_SETTINGS_ROOTS:
             if isinstance(value, Mapping):
-                normalized[key] = dict(value)
+                normalized[key] = (
+                    normalize_visualizer_custom_snapshot_cache(value)
+                    if key == 'visualizer_custom_presets'
+                    else dict(value)
+                )
             else:
                 normalized[key] = value
             continue

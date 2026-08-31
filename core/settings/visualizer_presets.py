@@ -126,6 +126,56 @@ def build_normalized_custom_snapshot(mode_key: str, spotify_vis_config: Mapping[
     return normalize_visualizer_mode_payload(mode_key, snapshot)
 
 
+def normalize_visualizer_custom_snapshot_cache(
+    cache: Mapping[str, Any],
+) -> Dict[str, Dict[str, Any]]:
+    """Return the canonical ``mode -> snapshot`` Custom-cache mapping.
+
+    Early JSON snapshots flattened this structured root into keys such as
+    ``bubble.bubble_growth``.  That shipped shape is migrated once by
+    ``SettingsManager``.  Valid nested mode mappings are authoritative; flat
+    material for the same mode is discarded rather than merged into a user
+    snapshot.
+
+    Unknown or malformed entries fail loudly.  Silently keeping an unreadable
+    cache would make the user-owned Custom slot look valid until restoration.
+    """
+
+    if not isinstance(cache, Mapping):
+        raise TypeError("visualizer Custom cache must be a mapping")
+
+    nested: Dict[str, Dict[str, Any]] = {}
+    flat: Dict[str, Dict[str, Any]] = {}
+    invalid: list[str] = []
+    known_modes = set(MODES)
+
+    for raw_key, value in cache.items():
+        key = str(raw_key)
+        if key in known_modes:
+            if not isinstance(value, Mapping):
+                invalid.append(key)
+                continue
+            nested[key] = deepcopy(dict(value))
+            continue
+
+        mode_key, separator, payload_key = key.partition(".")
+        if separator and mode_key in known_modes and payload_key:
+            flat.setdefault(mode_key, {})[payload_key] = deepcopy(value)
+            continue
+        invalid.append(key)
+
+    if invalid:
+        raise ValueError(
+            "visualizer Custom cache contains invalid entries: "
+            + ", ".join(sorted(invalid))
+        )
+
+    for mode_key, payload in flat.items():
+        if mode_key not in nested:
+            nested[mode_key] = payload
+    return nested
+
+
 @dataclass(frozen=True)
 class VisualizerActivationPayload:
     mode: str
