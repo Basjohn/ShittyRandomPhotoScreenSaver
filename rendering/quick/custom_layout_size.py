@@ -12,6 +12,25 @@ from rendering.custom_layout_session import CustomLayoutSessionItem
 from rendering.widget_descriptors import WidgetRuntimeDescriptor
 
 
+# H9: resize modes that obey the single uniform retained-presentation scale
+# (``OverlayWidget.uniformScaleTransform``). Their CUSTOM resize is purely
+# geometric - the QML derives one whole-widget scale from the outer-rect /
+# baseline-preferred ratio - so they carry NO per-value size payload. Font and
+# other authored sizes stay Settings-owned; nothing Settings-like is mutated or
+# persisted by a temporary CUSTOM resize. Families that still project a handful
+# of family values (clock/weather/gmail/steam) are deliberately left on their
+# existing payload path and audited to remain unaffected by this shared change.
+UNIFORM_TRANSFORM_RESIZE_MODES: frozenset[str] = frozenset(
+    {"reddit_font", "media_scale"}
+)
+
+
+def is_uniform_transform_resize_mode(mode: object) -> bool:
+    """Return whether ``mode`` scales via the single uniform presentation transform."""
+
+    return str(mode or "") in UNIFORM_TRANSFORM_RESIZE_MODES
+
+
 def capture_quick_size_payload(
     descriptor: WidgetRuntimeDescriptor,
     presentation: Any,
@@ -19,6 +38,9 @@ def capture_quick_size_payload(
 ) -> dict[str, Any]:
     config = getattr(getattr(presentation, "model", None), "config", None)
     mode = descriptor.custom_layout_resize_mode
+    if is_uniform_transform_resize_mode(mode):
+        # Geometry-only: the uniform transform carries the whole scale.
+        return {}
     if mode == "clock_font":
         return {"font_size": int(getattr(config, "font_size", 48))}
     if mode == "weather_scale":
@@ -27,12 +49,7 @@ def capture_quick_size_payload(
             "icon_size": int(getattr(config, "icon_size", 32)),
             "detail_icon_size": int(getattr(config, "detail_icon_size", 16)),
         }
-    if mode == "media_scale":
-        return {
-            "font_size": int(getattr(config, "font_size", 14)),
-            "artwork_size": int(getattr(config, "artwork_size", 80)),
-        }
-    if mode in {"reddit_font", "gmail_font"}:
+    if mode == "gmail_font":
         return {"font_size": int(getattr(config, "font_size", 14))}
     if mode == "steam_card_scale":
         payload = {"font_size": int(getattr(config, "font_size", 14))}
@@ -55,6 +72,10 @@ def scale_quick_size_payload(
     scale: float,
 ) -> dict[str, Any]:
     mode = descriptor.custom_layout_resize_mode
+    if is_uniform_transform_resize_mode(mode):
+        # The whole-widget scale lives in the geometry (outer rect / baseline
+        # preferred), not in any per-value payload; keep the payload geometric.
+        return dict(baseline)
     minimums = {
         "font_size": 8,
         "icon_size": 12,
@@ -86,7 +107,9 @@ def quick_custom_minimum_size(item: CustomLayoutSessionItem) -> QSize:
 
 
 __all__ = [
+    "UNIFORM_TRANSFORM_RESIZE_MODES",
     "capture_quick_size_payload",
+    "is_uniform_transform_resize_mode",
     "quick_custom_minimum_size",
     "scale_quick_size_payload",
 ]

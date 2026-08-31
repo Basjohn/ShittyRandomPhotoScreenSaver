@@ -5,6 +5,13 @@ OverlayWidget {
     id: mediaRoot
     objectName: "mediaPresentation"
 
+    // H9: CUSTOM wheel/corner resize is one uniform retained-presentation scale.
+    // Header, metadata, artwork, progress and controls scale together from the
+    // outer-rect / baseline-preferred ratio, so a resize no longer recentres or
+    // respaces individual bands. CUSTOM resize is purely geometric here; font and
+    // artwork sizes stay Settings-owned (no per-value payload scaling).
+    uniformScaleTransform: true
+
     required property var mediaModel
     semanticDoubleClickEnabled: true
     signal refreshRequested()
