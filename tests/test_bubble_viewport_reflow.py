@@ -351,6 +351,140 @@ def test_group_drift_inherits_content_space_projection(
     assert expanded["radii"] == pytest.approx(canonical["radii"], abs=1e-12)
 
 
+@pytest.mark.parametrize("stream_direction", ("up", "left", "top_right"))
+@pytest.mark.parametrize("expanded_extent", ((840.0, 280.0), (420.0, 560.0)))
+def test_directional_refill_entry_is_content_relative(
+    stream_direction,
+    expanded_extent,
+) -> None:
+    def _spawn(extent):
+        random.seed(20260831)
+        sim = BubbleSimulation()
+        sim._apply_viewport_domain(extent)
+        sim._spawn_bubble(False, stream_direction, 0.6, "none")
+        bubble = sim._bubbles[0]
+        return (bubble.x / sim._domain_w, bubble.y / sim._domain_h)
+
+    canonical_position = _spawn((420.0, 280.0))
+    expanded_position = _spawn(expanded_extent)
+
+    assert expanded_position == pytest.approx(canonical_position, abs=1e-12)
+
+
+@pytest.mark.parametrize("expanded_extent", ((840.0, 280.0), (420.0, 560.0)))
+def test_refill_cluster_spread_is_content_relative(expanded_extent) -> None:
+    def _record_spawn_positions(extent):
+        random.seed(1)  # first refill chooses the authored cluster branch
+        sim = BubbleSimulation()
+        sim._apply_viewport_domain(extent)
+        sim._time = 1.0
+        recorded = []
+
+        def _record(_is_big, x, y, *_args, **_kwargs):
+            recorded.append((x / sim._domain_w, y / sim._domain_h))
+
+        sim._spawn_bubble_at = _record  # type: ignore[method-assign]
+        sim.tick(
+            1.0 / 90.0,
+            dict(_ZERO_ENERGY),
+            {
+                "_bubble_viewport_extent": extent,
+                "bubble_big_count": 0,
+                "bubble_small_count": 3,
+                "bubble_stream_direction": "none",
+                "bubble_drift_direction": "none",
+                "bubble_drift_amount": 0.0,
+                "bubble_bounce_big_pct": 0.0,
+                "bubble_bounce_small_pct": 0.0,
+            },
+        )
+        return recorded
+
+    canonical_positions = _record_spawn_positions((420.0, 280.0))
+    expanded_positions = _record_spawn_positions(expanded_extent)
+
+    assert len(canonical_positions) == len(expanded_positions) == 3
+    assert expanded_positions == pytest.approx(canonical_positions, abs=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("axis", "expanded_extent"),
+    (("x", (840.0, 280.0)), ("y", (420.0, 560.0))),
+)
+@pytest.mark.parametrize(
+    ("normalized_position", "expected_exiting"),
+    ((1.075, False), (1.125, True)),
+)
+def test_surface_exit_margin_is_content_relative(
+    axis,
+    expanded_extent,
+    normalized_position,
+    expected_exiting,
+) -> None:
+    def _exit_state(extent):
+        sim = BubbleSimulation()
+        sim._apply_viewport_domain(extent)
+        x = normalized_position * sim._domain_w if axis == "x" else 0.5 * sim._domain_w
+        y = normalized_position * sim._domain_h if axis == "y" else 0.5 * sim._domain_h
+        bubble = BubbleState(
+            x=x,
+            y=y,
+            radius=0.03,
+            is_big=True,
+            reaches_surface=True,
+            max_age=999.0,
+            alpha=1.0,
+            trail_ready=True,
+            trail_tail_x=0.5 * sim._domain_w,
+            trail_tail_y=0.5 * sim._domain_h,
+            trail_strength=1.0,
+        )
+        sim._bubbles = [bubble]
+        sim.tick(
+            1.0 / 90.0,
+            dict(_ZERO_ENERGY),
+            {
+                "_bubble_viewport_extent": extent,
+                "bubble_big_count": 0,
+                "bubble_small_count": 0,
+                "bubble_stream_direction": "none",
+                "bubble_drift_direction": "none",
+                "bubble_drift_amount": 0.0,
+                "bubble_trail_strength": 1.0,
+                "bubble_bounce_big_pct": 0.0,
+                "bubble_bounce_small_pct": 0.0,
+            },
+        )
+        return bubble.exiting
+
+    assert _exit_state((420.0, 280.0)) is expected_exiting
+    assert _exit_state(expanded_extent) is expected_exiting
+
+
+@pytest.mark.parametrize(
+    ("stream_direction", "expanded_extent"),
+    (("right", (840.0, 280.0)), ("up", (420.0, 560.0))),
+)
+def test_pre_entry_prediction_distance_is_content_relative(
+    stream_direction,
+    expanded_extent,
+) -> None:
+    def _prediction(extent):
+        sim = BubbleSimulation()
+        sim._apply_viewport_domain(extent)
+        x, y = sim._predict_stream_position(
+            0.5 * sim._domain_w,
+            0.5 * sim._domain_h,
+            stream_direction,
+        )
+        return (x / sim._domain_w, y / sim._domain_h)
+
+    canonical = _prediction((420.0, 280.0))
+    expanded = _prediction(expanded_extent)
+
+    assert expanded == pytest.approx(canonical, abs=1e-12)
+
+
 def test_geometry_change_creates_no_extra_tick() -> None:
     random.seed(7)
     sim = BubbleSimulation()
@@ -524,7 +658,8 @@ def test_overlap_retry_clamp_uses_actual_logical_domain() -> None:
     # The overlap-retry jitter clamp must bound to the actual logical world plus
     # the same off-world allowance, not the legacy unit box. Starting far past
     # the ceiling makes the clamp bind exactly, so baseline stays [-0.25,1.25]
-    # while wide/tall extend the corresponding axis only.
+    # while the off-world allowance preserves that same content fraction on an
+    # expanded axis.
     def _forced_overlap_spawn(domain_w, domain_h):
         random.seed(3)
         sim = BubbleSimulation()
@@ -545,12 +680,12 @@ def test_overlap_retry_clamp_uses_actual_logical_domain() -> None:
     assert baseline.y == pytest.approx(1.25)
 
     wide = _forced_overlap_spawn(1.5, 1.0)
-    assert wide.x == pytest.approx(1.75)  # domain_w + 0.25
+    assert wide.x == pytest.approx(1.875)  # domain_w + 0.25 * domain_w
     assert wide.y == pytest.approx(1.25)  # y untouched
 
     tall = _forced_overlap_spawn(1.0, 1.5)
     assert tall.x == pytest.approx(1.25)  # x untouched
-    assert tall.y == pytest.approx(1.75)  # domain_h + 0.25
+    assert tall.y == pytest.approx(1.875)  # domain_h + 0.25 * domain_h
 
 
 _ZERO_ENERGY = {"bass": 0.0, "mid": 0.0, "high": 0.0, "overall": 0.0}
@@ -633,6 +768,39 @@ def test_contraction_retire_pops_only_non_surface_off_domain_bubbles() -> None:
     assert surf_outside.popping is False
     # An already-popping bubble is not restarted.
     assert already_popping.pop_timer == pytest.approx(0.3)
+
+
+@pytest.mark.parametrize(
+    ("axis", "domain_w", "domain_h"),
+    (("x", 2.0, 1.0), ("y", 1.0, 2.0)),
+)
+@pytest.mark.parametrize(
+    ("normalized_position", "expected_popping"),
+    ((1.075, False), (1.125, True)),
+)
+def test_contraction_retire_margin_is_content_relative(
+    axis,
+    domain_w,
+    domain_h,
+    normalized_position,
+    expected_popping,
+) -> None:
+    sim = BubbleSimulation()
+    sim._domain_w = domain_w
+    sim._domain_h = domain_h
+    bubble = BubbleState(
+        x=normalized_position * domain_w if axis == "x" else 0.5 * domain_w,
+        y=normalized_position * domain_h if axis == "y" else 0.5 * domain_h,
+        radius=0.02,
+        reaches_surface=False,
+        max_age=999.0,
+        alpha=1.0,
+    )
+    sim._bubbles = [bubble]
+
+    sim._retire_non_surface_bubbles_outside_domain()
+
+    assert bubble.popping is expected_popping
 
 
 def test_contraction_via_tick_routes_surface_and_non_surface_correctly() -> None:
