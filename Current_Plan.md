@@ -32,7 +32,7 @@ Move a row between groups only when its state genuinely changes; do not keep a s
 - [ ] Context-menu theme colours do not follow the active theme; the menu remains stuck on one palette despite being a themed element. Treat as J presentation/theme parity unless source inspection exposes a functional settings-authority defect.
 - [ ] Aspiration: desktop -> application crossfade reveal, widgets fading in afterwards — J Parity+.
 
-The maintained `h-destination` profile is GREEN (77/77 at the black-flash fix `b4e8ce40`) and must remain GREEN after each bounded source change. H is not closed by unit tests alone: every H/H-J row in the operator ledger must be reconciled and the final dual-display source-mode smoke must remain physically clean.
+The maintained `h-destination` profile is GREEN (77/77 revalidated on 2026-08-31 after refreshing the cutover fake for the production source-config interface; prior black-flash baseline `b4e8ce40`) and must remain GREEN after each bounded source change. H is not closed by unit tests alone: every H/H-J row in the operator ledger must be reconciled and the final dual-display source-mode smoke must remain physically clean.
 
 Detailed evidence: `Docs/QtQuick_Migration/H_Post_Cutover_Runtime_Reality_Corrections.md`  
 Operator backlog: `Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md`
