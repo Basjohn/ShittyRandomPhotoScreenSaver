@@ -279,6 +279,7 @@ Expected adaptation at constant scale:
 
 - Spectrum reflows/redistributes bars across available width/height;
 - Bubble expands/reflows its position, trail and motion world without stretching circles; stream/drift deltas project once per expanded axis, nonbaseline trail smear is solved in renderer-content coordinates, and swirl orbit/birth geometry removes the independent domain axes so visible travel does not fall by `1 / domain_axis` or distort with aspect; its authored render radius remains the historical fraction of actual card height and is not divided by viewport-domain height, while collision/spawn radius and correction distances multiply by domain height when mapped into that expanded world;
+- Bubble lifecycle distances (entry depth/margin, cluster spread, exit/drain and contraction grace, overlap retry and pre-entry prediction) are likewise renderer-content values projected once per expanded axis; canonical literals and random draw order remain exact;
 - Oscilloscope/Sine/DevCurve adapt domain while keeping stroke scale;
 - a future 3D sphere uses aspect-correct projection and stays round.
 

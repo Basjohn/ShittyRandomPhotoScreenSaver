@@ -196,8 +196,11 @@ and nonbaseline trail length/strength are solved in content coordinates before w
 visible fraction-of-viewport motion at canonical, wide and tall extents rather than losing `1 / domain_axis`; canonical
 `1x1` takes the exact pre-projection path. Nonbaseline swirl tangent/radial geometry is likewise solved in content space and
 its birth offset projects once per axis, so viewport aspect does not distort the authored orbit. Authored render radius
-remains a fraction of actual card height as in the
-historical renderer; it is not divided by viewport-domain height. Collision/spawn radius and collision-only gap/correction
+remains a fraction of actual card height as in the historical renderer. Directional entry depth, refill-cluster spread,
+surface exit/drain grace, contraction retirement margin, overlap-retry allowance/jitter and pre-entry prediction distance
+are also renderer-content distances projected once per nonbaseline axis; otherwise lifecycle shape changes with viewport
+size. None of these spatial projections changes random-draw order or adds a tick. Radius is not divided by viewport-domain
+height. Collision/spawn radius and collision-only gap/correction
 distances use the inverse domain-height mapping in simulation coordinates, preserving visible contact and exact canonical
 behavior.
 

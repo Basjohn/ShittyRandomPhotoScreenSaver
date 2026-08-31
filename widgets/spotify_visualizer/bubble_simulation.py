@@ -114,6 +114,20 @@ def _smoothstep01(value: float) -> float:
     return x * x * (3.0 - 2.0 * x)
 
 
+def _content_axis_distance(value: float, domain_axis: float) -> float:
+    """Project one renderer-content distance into Bubble's logical axis.
+
+    The explicit baseline branch preserves historical arithmetic exactly. A
+    nonbaseline domain stores centers in expanded-world units, so margins,
+    offsets and prediction distances must use the same one-axis projection as
+    authored movement before snapshot normalizes them again.
+    """
+
+    if domain_axis == 1.0:
+        return value
+    return value * domain_axis
+
+
 def _shape_authored_bubble_control(
     value: float,
     *,
@@ -156,25 +170,27 @@ def _spawn_position(
     and the random draw sequence is byte-identical.
     """
     margin = 0.05 if is_big else 0.02
+    margin_x = _content_axis_distance(margin, domain_w)
+    margin_y = _content_axis_distance(margin, domain_h)
     if direction == "up":
-        return (random.uniform(margin, domain_w - margin), domain_h + margin)
+        return (random.uniform(margin_x, domain_w - margin_x), domain_h + margin_y)
     elif direction == "down":
-        return (random.uniform(margin, domain_w - margin), -margin)
+        return (random.uniform(margin_x, domain_w - margin_x), -margin_y)
     elif direction == "left":
-        return (domain_w + margin, random.uniform(margin, domain_h - margin))
+        return (domain_w + margin_x, random.uniform(margin_y, domain_h - margin_y))
     elif direction == "right":
-        return (-margin, random.uniform(margin, domain_h - margin))
+        return (-margin_x, random.uniform(margin_y, domain_h - margin_y))
     elif direction in {"top_left", "top_right", "bottom_left", "bottom_right", "diagonal"}:
         dx, dy = _get_stream_vector(direction)
         # Spawn on the edge opposite to the travel direction
         if random.random() < 0.5:
             # Spawn on the horizontal edge opposite to dy
-            edge_y = (domain_h + margin) if dy > 0 else -margin
-            return (random.uniform(margin, domain_w - margin), edge_y)
+            edge_y = (domain_h + margin_y) if dy > 0 else -margin_y
+            return (random.uniform(margin_x, domain_w - margin_x), edge_y)
         else:
             # Spawn on the vertical edge opposite to dx
-            edge_x = (-margin) if dx > 0 else (domain_w + margin)
-            return (edge_x, random.uniform(margin, domain_h - margin))
+            edge_x = (-margin_x) if dx > 0 else (domain_w + margin_x)
+            return (edge_x, random.uniform(margin_y, domain_h - margin_y))
     elif direction == "none":
         return (
             random.uniform(0.1 * domain_w, 0.9 * domain_w),
@@ -223,7 +239,10 @@ def _directional_entry_position(
         extra_depth = random.uniform(0.02, 0.10)
     else:
         extra_depth = random.uniform(0.01, 0.06)
-    return (x + dx * extra_depth, y - dy * extra_depth)
+    return (
+        x + dx * _content_axis_distance(extra_depth, domain_w),
+        y - dy * _content_axis_distance(extra_depth, domain_h),
+    )
 
 
 def _bubble_behaves_big(bubble: BubbleState) -> bool:
@@ -406,14 +425,16 @@ class BubbleSimulation:
         """
 
         margin = 0.1
+        margin_x = _content_axis_distance(margin, self._domain_w)
+        margin_y = _content_axis_distance(margin, self._domain_h)
         for bubble in self._bubbles:
             if bubble.reaches_surface or bubble.popping or bubble.exiting:
                 continue
             if (
-                bubble.x < -margin
-                or bubble.x > self._domain_w + margin
-                or bubble.y < -margin
-                or bubble.y > self._domain_h + margin
+                bubble.x < -margin_x
+                or bubble.x > self._domain_w + margin_x
+                or bubble.y < -margin_y
+                or bubble.y > self._domain_h + margin_y
             ):
                 bubble.popping = True
                 bubble.pop_timer = 0.0
@@ -1274,8 +1295,10 @@ class BubbleSimulation:
 
             # Check if bubble exited the card
             margin = 0.1
-            head_outside = (b.x < -margin or b.x > self._domain_w + margin or
-                            b.y < -margin or b.y > self._domain_h + margin)
+            margin_x = _content_axis_distance(margin, self._domain_w)
+            margin_y = _content_axis_distance(margin, self._domain_h)
+            head_outside = (b.x < -margin_x or b.x > self._domain_w + margin_x or
+                            b.y < -margin_y or b.y > self._domain_h + margin_y)
 
             if head_outside and b.reaches_surface and not b.exiting:
                 # Bubble head left the visible area — start exit phase.
@@ -1288,8 +1311,8 @@ class BubbleSimulation:
                 # Accelerate trail fade so it drains away smoothly
                 b.trail_strength = max(0.0, b.trail_strength - dt * 2.5)
                 # Check if trail tail is also outside the card (primary exit)
-                tail_outside = (b.trail_tail_x < -margin or b.trail_tail_x > self._domain_w + margin or
-                                b.trail_tail_y < -margin or b.trail_tail_y > self._domain_h + margin)
+                tail_outside = (b.trail_tail_x < -margin_x or b.trail_tail_x > self._domain_w + margin_x or
+                                b.trail_tail_y < -margin_y or b.trail_tail_y > self._domain_h + margin_y)
                 # Destroy when: trail tail is offscreen OR trail fully faded,
                 # OR grace period exceeded (safety net, ~0.8s)
                 if tail_outside or b.trail_strength <= 0.001 or b.exit_timer > 0.8:
@@ -1426,8 +1449,10 @@ class BubbleSimulation:
                     or small_spawn_budget <= 0
                 ):
                     break
-                cx = base_x + (random.uniform(-0.07, 0.07) if c > 0 else 0.0)
-                cy = base_y + (random.uniform(-0.07, 0.07) if c > 0 else 0.0)
+                cluster_dx = random.uniform(-0.07, 0.07) if c > 0 else 0.0
+                cluster_dy = random.uniform(-0.07, 0.07) if c > 0 else 0.0
+                cx = base_x + _content_axis_distance(cluster_dx, self._domain_w)
+                cy = base_y + _content_axis_distance(cluster_dy, self._domain_h)
                 self._spawn_bubble_at(False, cx, cy, stream_dir, surface_reach, drift_dir,
                                       initial_fill=is_initial)
                 small_count += 1
@@ -1482,7 +1507,10 @@ class BubbleSimulation:
             dx, dy = (vx, vy) if (vx != 0.0 or vy != 0.0) else _random_direction()
         else:
             dx, dy = _get_stream_vector(stream_dir)
-        return (x + dx * distance, y - dy * distance)
+        return (
+            x + dx * _content_axis_distance(distance, self._domain_w),
+            y - dy * _content_axis_distance(distance, self._domain_h),
+        )
 
     @staticmethod
     def _trigger_collision_pop(bubble: BubbleState) -> None:
@@ -2424,13 +2452,17 @@ class BubbleSimulation:
             ):
                 break
             spread = 0.08 + _attempt * 0.015
-            x = x + random.uniform(-spread, spread)
-            y = y + random.uniform(-spread, spread)
-            # Off-world retry allowance in the actual logical domain. The 0.25 is
-            # a baseline-world distance (not an aspect percentage); at the 1x1
-            # baseline these bounds are exactly [-0.25, 1.25], unchanged.
-            x = max(-0.25, min(self._domain_w + 0.25, x))
-            y = max(-0.25, min(self._domain_h + 0.25, y))
+            jitter_x = random.uniform(-spread, spread)
+            jitter_y = random.uniform(-spread, spread)
+            x = x + _content_axis_distance(jitter_x, self._domain_w)
+            y = y + _content_axis_distance(jitter_y, self._domain_h)
+            # Off-world retry allowance is a content-space fraction projected
+            # onto each logical axis. At baseline these bounds remain exactly
+            # [-0.25, 1.25].
+            allowance_x = _content_axis_distance(0.25, self._domain_w)
+            allowance_y = _content_axis_distance(0.25, self._domain_h)
+            x = max(-allowance_x, min(self._domain_w + allowance_x, x))
+            y = max(-allowance_y, min(self._domain_h + allowance_y, y))
         # If still overlapping after 15 attempts, skip spawn entirely
         else:
             return
