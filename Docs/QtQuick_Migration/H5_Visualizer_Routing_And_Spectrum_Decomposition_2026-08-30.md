@@ -139,7 +139,7 @@ Also preserve missing-monitor 30 s grace/fallback/reclaim behavior.
 
 ### Updated evidence status — 2026-08-31
 
-The direct line-by-line comparison against the user-supplied known-good `3fe5df687387b6b6a121142372c43a7719442386` tree converted the previous broad H5b hypotheses into **three major source-proven migration deviations**, plus a second lost historical creator translation (`spectrum_unique_colors -> spectrum_rainbow_per_bar`) found during implementation. The first bounded repair is now implemented; physical closure remains open.
+The direct line-by-line comparison against the user-supplied known-good `3fe5df687387b6b6a121142372c43a7719442386` tree converted the previous broad H5b hypotheses into **three major source-proven migration deviations**, plus a second lost historical creator translation (`spectrum_unique_colors -> spectrum_rainbow_per_bar`) found during implementation. The bounded repair is implemented, its focused parity suite is GREEN, and R1 physically confirms recognizable/strongly reactive live response. Exact topology across switch/recreation/in-place preset change remains open.
 
 The historical source is a behavioral oracle only. The accepted retained Quick architecture remains binding.
 
@@ -162,7 +162,7 @@ Repair checklist:
 - [x] Derive the runtime boolean there; keep the legacy boolean fallback narrow.
 - [x] Add focused `QuickDisplayVisualizerOwner` coverage proving canonical `bars` and legacy-conflict precedence.
 - [x] Restore the companion historical creator translation `spectrum_unique_colors -> spectrum_rainbow_per_bar` at the presentation owner.
-- [ ] Execute the focused test under the normal PySide6 test environment.
+- [x] Execute the focused test under the normal PySide6 test environment (`10/10` combined H5b-H5c parity suite; now maintained by `h-destination`).
 - [ ] Physically prove mode switch/recreation/preset-swap topology.
 
 Do not revive the historical widget creator.
@@ -195,7 +195,7 @@ Repair checklist:
 - [x] Add focused coverage proving the source block reaches the engine while Bubble is active.
 - [x] Add focused technical parity coverage proving `bar_count`, explicit block size, `dynamic_floor=False`, manual sensitivity/floor, dynamic-range boost, input gain and `agc_strength=0.0` keep their historical meanings; these controls were already correctly owned and remain outside the new source applier.
 - [x] Add bounded `[VIS_TECH_CONFIG]` configuration-edge logging so physical traces show the exact applied technical values without any per-frame settings work.
-- [ ] Execute focused tests under PySide6.
+- [x] Execute focused tests under PySide6 (`10/10` combined parity suite).
 - [ ] Add/execute the real in-place preset A -> B proof when H8 restores the production preset-hotswap route; do not invent a second runtime path solely for this test.
 
 This source defect is repaired in code and must now be physically re-measured before interpreting remaining all-`1.00` data as a new math problem. Existing replay/presentation goldens are intentionally not regenerated: their replay boundary accepts already-authored feature/bar state and therefore does not prove the production preset -> live source/FFT configuration path.
@@ -214,7 +214,8 @@ Repair checklist:
 - [x] Apply it exactly once to Quick live bars and peaks at renderer input.
 - [x] Keep logical/snapshot bar values canonical and untouched.
 - [x] Add focused bar+peak transfer coverage, including missing-peak fallback/padding.
-- [ ] Execute focused tests + physically validate both continuous/segmented topology.
+- [x] Execute focused transfer tests under PySide6 (`10/10` combined parity suite).
+- [ ] Physically validate both continuous/segmented topology across lifecycle edges.
 
 ### B4 — re-measure after the known source repairs
 
@@ -242,12 +243,12 @@ H5b is GREEN when:
 
 - [ ] canonical `bars` produces the intended continuous-column family;
 - [ ] canonical `segment` remains intentionally segmented;
-- [ ] selected Spectrum preset shape/mirror/notch/drop values reach the one BeatEngine;
-- [ ] historical `0.55` final transfer is present exactly once;
-- [ ] live input is materially/non-degenerately reactive after the known parity repairs;
+- [x] selected Spectrum preset shape/mirror/notch/drop values reach the one BeatEngine;
+- [x] historical `0.55` final transfer is present exactly once;
+- [x] live input is materially/non-degenerately reactive after the known parity repairs;
 - [ ] topology + shaping survive mode switch, generation recreation and preset change;
-- [ ] one retained Spectrum owner/draw path remains;
-- [ ] no shared/global gain/cadence/Bubble workaround is introduced.
+- [x] one retained Spectrum owner/draw path remains;
+- [x] no shared/global gain/cadence/Bubble workaround is introduced.
 
 J Parity+ still owns fine spacing/glow/gradient/outline/elegance after the functional family is correct.
 

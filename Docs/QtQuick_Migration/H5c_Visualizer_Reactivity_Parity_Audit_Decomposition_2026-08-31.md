@@ -770,28 +770,28 @@ Spectrum must be treated as **visually and reactively broken**, with at least th
 
 - [x] Root source seam found: canonical `spectrum_render_mode` lost before `_spectrum_single_piece`.
 - [x] Canonical mapping restored at the logical owner; stale legacy boolean is fallback-only.
-- [x] Focused source test covers canonical `bars` and canonical-over-legacy `segment` behavior; normal PySide execution remains pending.
+- [x] Focused source test covers canonical `bars` and canonical-over-legacy `segment` behavior; normal PySide execution is GREEN in the `10/10` combined parity suite.
 
 ### H5b-B — engine shaping / reactivity
 
 - [x] Root ownership gap found: preset/model Spectrum shape controls were not routed to BeatEngine in Quick owner path.
 - [x] Exact engine-consumed values now route through one narrow configuration-time source applier into the existing BeatEngine.
 - [x] Historical full-model behavior is preserved even with Bubble active, because this is shared pre-mode source shaping rather than Spectrum presentation state.
-- [ ] Re-measure D0-D6 after configuration parity is restored physically.
+- [x] R1 physical re-measure after configuration parity reports Spectrum recognizable and strongly reactive again.
 - [ ] If output still pins at the upper bound, locate the first remaining saturating transformation rather than changing global gain.
 
 ### H5b-C — final presentation transfer
 
 - [x] Historical bar/peak `* 0.55` transfer found missing in Quick.
 - [x] Existing canonical transfer now applies exactly once at Quick Spectrum renderer input.
-- [x] Focused source test covers live-bar and peak transfer/fallback; normal PySide execution remains pending.
+- [x] Focused source test covers live-bar and peak transfer/fallback; normal PySide execution is GREEN in the `10/10` combined parity suite.
 
 ### H5b-D — physical acceptance
 
-- [ ] Real music produces non-degenerate, visibly reactive Spectrum response.
+- [x] Real music produces non-degenerate, visibly reactive Spectrum response after the source/topology/transfer repair.
 - [ ] Organ/default continuous preset is continuous columns rather than dense segmented cells.
 - [ ] Segmented presets remain intentionally segmented.
-- [ ] Heights no longer pin visually because of missing historical transfer.
+- [x] Heights no longer present the prior saturated/unusable physical response after restoring the historical transfer and source shaping.
 - [ ] Mode switch/recreation/preset swap preserves topology + shaping.
 - [ ] No shared/global visualizer gain changed.
 - [ ] Bubble and other modes unchanged except separately justified H5c repairs.
@@ -904,7 +904,7 @@ Newly found contracts go into durable mode/interaction docs, not only `Current_P
 - [x] Technical-owner zero/false test added for `bar_count=48`, explicit `audio_block_size=128`, `dynamic_floor=False`, manual floor/sensitivity, `dynamic_range_enabled=False`, `agc_strength=0.0` and input gain.
 - [x] Direct DSP assertion added for the unchanged AGC implementation: `agc_strength=0.0` returns before envelope mutation/array scaling, proving zero remains the real raw-output/no-AGC contract rather than merely reaching a setter.
 - [x] `[VIS_TECH_CONFIG]` emits those resolved values only on existing configuration edges when visualizer diagnostics are enabled.
-- [ ] Execute these focused tests in the normal PySide6 project environment.
+- [x] Execute these focused tests in the normal PySide6 project environment (`10/10` GREEN; promoted into maintained `h-destination`).
 - [ ] Add a preset A -> B in-place reconfiguration test when the live preset-hotswap H8 route is implemented rather than fabricating a second configuration route now.
 
 ### Spectrum renderer transfer
@@ -912,7 +912,7 @@ Newly found contracts go into durable mode/interaction docs, not only `Current_P
 - [x] Quick renderer helper uses the canonical historical `0.55` transfer exactly once for bars.
 - [x] Same helper applies it to peaks, with historical missing-peak fallback semantics.
 - [x] Logical/snapshot values remain unmodified canonical values; scale is confined to the Quick shader-input seam.
-- [ ] Execute focused renderer-transfer test in the normal PySide6 project environment.
+- [x] Execute focused renderer-transfer test in the normal PySide6 project environment (`10/10` combined parity suite).
 
 ### Readiness/timing
 

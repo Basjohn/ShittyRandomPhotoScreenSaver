@@ -20,7 +20,7 @@ Move a row between groups only when its state genuinely changes; do not keep a s
 **Pending**
 
 - [ ] H5a — CUSTOM Visualizer independent display admission
-- [ ] H5b — Spectrum topology + shaping + renderer-transfer repair (**implementation complete; focused test + physical gate pending**)
+- [ ] H5b — Spectrum topology + shaping + renderer-transfer repair (**implementation + focused parity GREEN; primary live reactivity GREEN; topology/recreation/preset gate pending**)
 - [ ] H5c — end-to-end visualizer reactivity parity audit (**first shared-source/config repair + diagnostics implemented; physical classification continues**): Bubble weak response, Play/Pause edge delay, Sine idle, readiness/final-render audit
 - [ ] H6 — CUSTOM Settings size-lock scope
 - [ ] H8 — Visualizer middle-click preset hotswap (source-proven contract omission)
@@ -32,7 +32,7 @@ Move a row between groups only when its state genuinely changes; do not keep a s
 - [ ] Context-menu theme colours do not follow the active theme; the menu remains stuck on one palette despite being a themed element. Treat as J presentation/theme parity unless source inspection exposes a functional settings-authority defect.
 - [ ] Aspiration: desktop -> application crossfade reveal, widgets fading in afterwards — J Parity+.
 
-The maintained `h-destination` profile is GREEN (78/78 revalidated on 2026-08-31 after the Bubble transient-motion correction; prior black-flash baseline `b4e8ce40`) and must remain GREEN after each bounded source change. H is not closed by unit tests alone: every H/H-J row in the operator ledger must be reconciled and the final dual-display source-mode smoke must remain physically clean.
+The maintained `h-destination` profile is GREEN (80/80 revalidated on 2026-08-31 after promoting the H5b source-parity and H6 exact-Settings gates; prior black-flash baseline `b4e8ce40`) and must remain GREEN after each bounded source change. H is not closed by unit tests alone: every H/H-J row in the operator ledger must be reconciled and the final dual-display source-mode smoke must remain physically clean.
 
 Detailed evidence: `Docs/QtQuick_Migration/H_Post_Cutover_Runtime_Reality_Corrections.md`  
 Operator backlog: `Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md`
@@ -175,10 +175,11 @@ Live closure checklist:
 - [x] No old creator/catch-all QWidget configuration façade restored.
 - [x] No new BeatEngine/source/timer/cadence/poller added; source values apply only on existing configure/mode-activation edges.
 - [x] Add focused Quick-owner/configuration + renderer-transfer tests.
-- [ ] Execute the new focused test in the normal PySide6 project environment; this audit container lacks PySide6.
-- [ ] Re-measure Spectrum S0-S7 with real music after the known defects are removed.
-- [ ] If bars still saturate or remain weak, find the first remaining bad S-stage; do not apply global visualizer gain.
-- [ ] Physical: real music is non-degenerate/reactive; `bars` presets are continuous columns; segmented presets remain intentionally segmented; switch/recreation/preset swap preserve topology and shaping.
+- [x] Execute the focused source/configuration/renderer-transfer suite in the normal PySide6 project environment: `10/10` GREEN and promoted into the maintained H profile.
+- [x] R1 physical re-measure confirms real music is recognizable and strongly reactive after the known repairs; the prior saturated/unusable response is gone.
+- [ ] Physical topology/lifecycle gate: `bars` presets are continuous columns; segmented presets remain intentionally segmented; mode switch/recreation/preset swap preserve topology and shaping. The in-place preset leg depends on H8 rather than a fabricated test route.
+
+If Spectrum saturates or weakens again, find the first bad S-stage; do not apply global visualizer gain.
 
 H5b still must not change Bubble/shared cadence to make Spectrum look better.
 
