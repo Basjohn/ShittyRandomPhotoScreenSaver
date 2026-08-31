@@ -152,3 +152,69 @@ def test_image_change_perf_parser_separates_timer_and_manual_sources():
     assert "manual_image_worker=0" in text
     assert "gc_events=1" in text and "zero_collect=1" in text
     assert "prefetch_protected_samples=1 min=2 max=2" in text
+
+
+def test_cursor_halo_pointer_motion_stays_inside_retained_qml_scene():
+    window = (ROOT / "rendering/quick/window.py").read_text()
+    runtime = (ROOT / "rendering/quick/runtime.py").read_text()
+    auxiliary = (ROOT / "rendering/quick/auxiliary.py").read_text()
+    scene_controller = (ROOT / "rendering/quick/scene_controller.py").read_text()
+    display_scene = (ROOT / "rendering/quick/qml/DisplayScene.qml").read_text()
+    cursor_halo = (ROOT / "rendering/quick/qml/CursorHalo.qml").read_text()
+
+    # High-rate pointer coordinates must never cross the Python auxiliary-state
+    # bridge. Python owns semantic admission/suppression/shape only.
+    assert "pointer_position_changed" not in window
+    assert "pointer_position_changed" not in runtime
+    assert "update_halo_pointer" not in auxiliary
+    assert "update_halo_pointer" not in runtime
+    assert "halo_x" not in auxiliary
+    assert "halo_y" not in auxiliary
+    assert "halo_inactivity_timer" not in auxiliary
+    assert "halo_enabled" in auxiliary
+    assert "native_cursor_visible" in auxiliary
+
+    assert 'setProperty("haloEnabled"' in scene_controller
+    assert 'setProperty("nativeCursorVisible"' in scene_controller
+    assert 'setProperty("haloX"' not in scene_controller
+    assert 'setProperty("haloY"' not in scene_controller
+
+    # The retained scene passively tracks the real pointer and owns the
+    # inactivity clock. Halo admission explicitly hides the native cursor;
+    # context-menu admission explicitly exposes one native arrow instead.
+    assert "HoverHandler" in display_scene
+    assert "scenePointerHover.point.position.x" in display_scene
+    assert "scenePointerHover.point.position.y" in display_scene
+    assert "Qt.BlankCursor" in display_scene
+    assert "Qt.ArrowCursor" in display_scene
+    assert "pointerActive: scenePointerHover.hovered" in display_scene
+    assert "interval: 2000" in cursor_halo
+    assert "enabled: haloRoot.haloEnabled" in cursor_halo
+    assert "onPointerXChanged" in cursor_halo
+    assert "onPointerYChanged" in cursor_halo
+    assert "onHaloShapeChanged: haloCanvas.requestPaint()" in cursor_halo
+    assert "onPointerXChanged: haloCanvas.requestPaint()" not in cursor_halo
+    assert "onPointerYChanged: haloCanvas.requestPaint()" not in cursor_halo
+
+
+def test_replacement_runtime_first_frames_reseed_existing_prefetch_owner():
+    engine = (ROOT / "engine/screensaver_engine.py").read_text()
+    pipeline = (ROOT / "engine/image_pipeline.py").read_text()
+
+    # Replacement runtimes have a deterministic readiness seam. Do not add a
+    # second prefetch timer/owner: arm the existing generation-fenced retry only
+    # after authoritative first frames have arrived.
+    assert "def _on_authoritative_first_frames_ready" in engine
+    assert 'self._runtime_lifecycle_event != "cold_start"' in engine
+    assert "schedule_prefetch_after_runtime_ready(self)" in engine
+
+    assert "def schedule_prefetch_after_runtime_ready" in pipeline
+    assert 'reason="runtime_ready"' in pipeline
+    assert "def _schedule_prefetch_resume" in pipeline
+    assert "_has_transition_work_pending(engine)" in pipeline
+    assert "_schedule_engine_delay(" in pipeline
+    assert "_prefetch_resume_scheduled" in pipeline
+    assert "schedule_prefetch(engine)" in pipeline
+    assert "def notify_transition_complete" in pipeline
+    assert 'reason="transition_complete"' in pipeline
+    assert "from PySide6.QtCore import QTimer" not in pipeline

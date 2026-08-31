@@ -31,11 +31,12 @@ QuickDisplayWindow
     -> QuickInputController / RuntimeInputOwner
         -> generation-scoped QuickInputState
             -> QuickAuxiliaryController
-                -> halo visibility / auxiliary state
+                -> semantic halo admission / native-cursor treatment / auxiliary state
             -> QuickSceneController / ordinary-widget host
 
-QuickDisplayWindow.pointer_position_changed
-    -> QuickAuxiliaryController.update_halo_pointer
+DisplayScene retained passive HoverHandler
+    -> pointer position + 2 s motion inactivity stay inside QML
+    -> CursorHalo retained item
 
 QuickContextMenuModel.visibilityChanged
     -> QuickInputController.set_context_menu_active
@@ -113,10 +114,11 @@ historical compatibility with no destination caller
 ### Cursor halo
 
 - same retained scene, never a top-level translucent window;
-- pointer position comes from the owning `QuickDisplayWindow`;
-- visibility is derived from current generation input state + inactivity + suppression;
-- context-menu active, exiting, closed admission or inactive interaction/Ctrl state hides it;
-- a stale display/generation update is rejected rather than repainting a replacement runtime.
+- Python owns only generation-scoped semantic admission/suppression/shape; mouse-poll-rate pointer coordinates do **not** cross the Python auxiliary-state bridge;
+- one passive retained-QML pointer handler owns live position and the 2 s motion-inactivity presentation clock; it does not become a second semantic input/click owner;
+- while the cursor-shaped Halo is admitted the native cursor is explicitly blank; intentional Halo suppression such as the retained context menu exposes one normal native cursor, never both;
+- context-menu active, exiting, closed admission or inactive interaction/Ctrl state suppresses Halo admission coherently;
+- a stale display/generation semantic update is rejected rather than repainting a replacement runtime.
 
 ### Context menu
 

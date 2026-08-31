@@ -4,10 +4,24 @@ Item {
     id: haloRoot
     objectName: "cursorHalo"
 
-    required property bool haloVisible
+    required property bool haloEnabled
+    required property bool pointerActive
     required property real pointerX
     required property real pointerY
     required property string haloShape
+    property bool motionVisible: false
+
+    function notePointerMotion() {
+        if (!haloEnabled || !pointerActive)
+            return
+        motionVisible = true
+        inactivityTimer.restart()
+    }
+
+    function hideForInactivity() {
+        motionVisible = false
+        inactivityTimer.stop()
+    }
 
     readonly property bool pointerShape: haloShape === "cursor_light"
         || haloShape === "cursor_dark"
@@ -28,15 +42,39 @@ Item {
     height: 38
     x: pointerX - width / 2.0 - anchorOffsetX
     y: pointerY - height / 2.0 - anchorOffsetY
-    opacity: haloVisible ? 1.0 : 0.0
-    visible: haloVisible || opacity > 0.001
+    opacity: haloEnabled && pointerActive && motionVisible ? 1.0 : 0.0
+    visible: opacity > 0.001 || (haloEnabled && pointerActive && motionVisible)
     enabled: false
 
     Behavior on opacity {
+        // Semantic suppression (context menu / interaction exit) must not
+        // leave a fading second cursor beside the native pointer.  The long
+        // fade remains only for ordinary motion inactivity while admitted.
+        enabled: haloRoot.haloEnabled
         NumberAnimation {
-            duration: haloRoot.haloVisible ? 600 : 1200
+            duration: (haloRoot.haloEnabled && haloRoot.motionVisible) ? 600 : 1200
             easing.type: Easing.OutQuad
         }
+    }
+
+    Timer {
+        id: inactivityTimer
+        interval: 2000
+        repeat: false
+        onTriggered: haloRoot.motionVisible = false
+    }
+
+    onPointerXChanged: notePointerMotion()
+    onPointerYChanged: notePointerMotion()
+    onPointerActiveChanged: {
+        if (pointerActive)
+            notePointerMotion()
+        else
+            hideForInactivity()
+    }
+    onHaloEnabledChanged: {
+        if (!haloEnabled)
+            hideForInactivity()
     }
 
     Canvas {
