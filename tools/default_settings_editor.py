@@ -55,13 +55,23 @@ from core.settings.defaults import (  # noqa: E402
     PRESERVE_ON_RESET,
     merge_default_overrides,
 )
+from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping  # noqa: E402
+from tools.defaults_foundry_core import (  # noqa: E402
+    NON_EDITABLE_PREFIXES,
+    NON_IMPORTABLE_PREFIXES,
+    atomic_write_many,
+    filter_import_to_existing_schema,
+    path_is_under,
+    validate_model_schema_unchanged,
+    validate_no_absolute_machine_paths,
+    validate_no_private_fields,
+)
 from ui.settings_theme import load_theme  # noqa: E402
 from ui.styled_popup import ColorSwatchButton  # noqa: E402
 
 DEFAULT_SETTINGS_PATH = REPO_ROOT / "core" / "settings" / "default_settings.py"
 PROFILE_OVERRIDES_PATH = REPO_ROOT / "core" / "settings" / "default_profile_overrides.py"
-SNAPSHOT_REGEN_SCRIPT = REPO_ROOT / "tools" / "regenerate_defaults_snapshot_artifacts.py"
-SST_REGEN_SCRIPT = REPO_ROOT / "tools" / "regenerate_sst_defaults.py"
+UNIFIED_REGEN_SCRIPT = REPO_ROOT / "tools" / "regenerate_defaults_artifacts.py"
 PROFILE_LABELS = {
     NORMAL_PROFILE: "Normal / Screensaver",
     MC_PROFILE: "Media Center / MC",
@@ -187,10 +197,26 @@ def load_default_settings_source(path: Path = DEFAULT_SETTINGS_PATH) -> dict[str
 
 
 def editable_base_settings(source_settings: Mapping[str, Any]) -> dict[str, Any]:
-    """Return user-facing base defaults while preserving retired payloads off-screen."""
+    """Return the current-schema editable defaults view.
+
+    Compatibility-only global payloads stay off-screen.  The visualizer is
+    normalized through the same schema-v5 boundary used by runtime/default
+    snapshots so Foundry cannot preserve retired visualizer leaves merely
+    because they still exist in an old literal.
+    """
     editable = deepcopy(dict(source_settings))
     for key in _HIDDEN_BASE_KEYS:
         editable.pop(key, None)
+    widgets = editable.get("widgets")
+    if isinstance(widgets, dict):
+        visualizer = widgets.get("spotify_visualizer")
+        if isinstance(visualizer, Mapping):
+            widgets["spotify_visualizer"] = normalize_visualizer_section_mapping(
+                visualizer,
+                prefix="widgets.spotify_visualizer",
+                apply_preset_overlay=False,
+                resolve_preset_indices=False,
+            )
     return editable
 
 
@@ -613,25 +639,25 @@ def read_undo_record(path: Path | None = None) -> str | None:
     return sources[1] if sources is not None else None
 
 
-def regenerate_default_artifacts() -> str:
-    """Regenerate JSON plus Normal and MC SST snapshots in fresh processes."""
-
-    output: list[str] = []
-    for script in (SNAPSHOT_REGEN_SCRIPT, SST_REGEN_SCRIPT):
-        result = subprocess.run(
-            [sys.executable, str(script)],
-            cwd=str(REPO_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=180,
-            check=False,
-        )
-        combined = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
-        if combined:
-            output.append(combined)
-        if result.returncode != 0:
-            raise RuntimeError(combined or f"{script.name} exited with {result.returncode}")
-    return "\n".join(output)
+def regenerate_default_artifacts(*, check_only: bool = False, dry_run: bool = False) -> str:
+    """Validate/regenerate all derived defaults through one transactional owner."""
+    command = [sys.executable, str(UNIFIED_REGEN_SCRIPT)]
+    if check_only:
+        command.append("--check")
+    elif dry_run:
+        command.append("--dry-run")
+    result = subprocess.run(
+        command,
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    combined = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
+    if result.returncode != 0:
+        raise RuntimeError(combined or f"{UNIFIED_REGEN_SCRIPT.name} exited with {result.returncode}")
+    return combined
 
 
 def _is_color_setting(path: tuple[str, ...] | None, value: Any) -> bool:
@@ -730,6 +756,13 @@ class DefaultValueDelegate(QStyledItemDelegate):
             editor.addItem("true", True)
             editor.addItem("false", False)
             return editor
+        if isinstance(value, str) and isinstance(path, tuple):
+            options = _TEXT_OPTIONS_BY_PATH.get(path) or _TEXT_OPTIONS_BY_KEY.get(path[-1])
+            if options:
+                editor = QComboBox(parent)
+                for option_value in options:
+                    editor.addItem(option_value, option_value)
+                return editor
         if isinstance(value, int):
             editor = QSpinBox(parent)
             editor.setRange(-2_147_483_648, 2_147_483_647)
@@ -749,7 +782,13 @@ class DefaultValueDelegate(QStyledItemDelegate):
         elif isinstance(editor, QFontComboBox):
             editor.setCurrentFont(QFont(str(value)))
         elif isinstance(editor, QComboBox):
-            editor.setCurrentIndex(0 if bool(value) else 1)
+            if isinstance(value, bool):
+                editor.setCurrentIndex(0 if bool(value) else 1)
+            else:
+                index = editor.findData(str(value))
+                if index < 0:
+                    index = editor.findText(str(value))
+                editor.setCurrentIndex(max(0, index))
         elif isinstance(editor, QSpinBox):
             editor.setValue(int(value))
         elif isinstance(editor, QDoubleSpinBox):
@@ -769,7 +808,7 @@ class DefaultValueDelegate(QStyledItemDelegate):
             elif isinstance(editor, QFontComboBox):
                 value = editor.currentFont().family()
             elif isinstance(editor, QComboBox):
-                value = bool(editor.currentData())
+                value = bool(editor.currentData()) if isinstance(original, bool) else str(editor.currentData())
             elif isinstance(editor, QSpinBox):
                 value = int(editor.value())
             elif isinstance(editor, QDoubleSpinBox):
@@ -898,6 +937,12 @@ class DefaultSettingsEditor(QMainWindow):
         self.status_label = QLabel("Ready.")
         self.status_label.setObjectName("defaultsFoundryStatus")
         actions.addWidget(self.status_label, stretch=1)
+        self.validate_button = QPushButton("Validate / Dry Run")
+        self.validate_button.setToolTip(
+            "Validate current edits and build every derived artifact in memory without writing files."
+        )
+        self.validate_button.clicked.connect(self._validate_dry_run)
+        actions.addWidget(self.validate_button)
         self.discard_button = QPushButton("Discard Unsaved")
         self.discard_button.clicked.connect(self._discard_unsaved)
         actions.addWidget(self.discard_button)
@@ -973,6 +1018,8 @@ class DefaultSettingsEditor(QMainWindow):
         model = self._models[self._profile]
 
         def _add(parent: QTreeWidgetItem | None, key: str, value: Any, path: tuple[str, ...]) -> None:
+            if path_is_under(path, NON_EDITABLE_PREFIXES):
+                return
             container = self.tree if parent is None else parent
             if isinstance(value, Mapping) and value:
                 item = QTreeWidgetItem(container, [_pretty_name(key), "", "section", ""])
@@ -1061,6 +1108,7 @@ class DefaultSettingsEditor(QMainWindow):
 
     def _set_actions_enabled(self, enabled: bool) -> None:
         self.save_button.setEnabled(enabled)
+        self.validate_button.setEnabled(enabled)
         self.undo_button.setEnabled(enabled and read_undo_record(self._undo_path) is not None)
         self.discard_button.setEnabled(enabled)
         self.import_button.setEnabled(enabled)
@@ -1079,8 +1127,22 @@ class DefaultSettingsEditor(QMainWindow):
             return
         try:
             imported = load_importable_settings_snapshot(Path(selected_path))
-            if not imported.settings:
-                raise ValueError("The snapshot had no importable settings after privacy filtering")
+            schema_filtered = filter_import_to_existing_schema(
+                imported.settings,
+                self._models[self._profile],
+                blocked_prefixes=NON_IMPORTABLE_PREFIXES,
+            )
+            if not schema_filtered.settings:
+                raise ValueError(
+                    "The snapshot had no importable canonical settings after privacy/schema filtering"
+                )
+            imported = ImportedDefaults(
+                settings=schema_filtered.settings,
+                removed_secret_fields=imported.removed_secret_fields,
+                skipped_paths=tuple(
+                    sorted(set(imported.skipped_paths) | set(schema_filtered.skipped_paths))
+                ),
+            )
             self._models, self._mc_explicit_paths = merge_imported_profile(
                 self._models,
                 self._profile,
@@ -1096,11 +1158,56 @@ class DefaultSettingsEditor(QMainWindow):
         skipped_count = len(imported.skipped_paths)
         self._set_status(
             f"Imported {imported_count} settings into {PROFILE_LABELS[self._profile]} "
-            f"({imported.removed_secret_fields} secret and {skipped_count} private/profile fields excluded). "
+            f"({imported.removed_secret_fields} secret and {skipped_count} private/profile/schema fields excluded). "
             "Review, then Save and Regenerate Defaults."
         )
 
+    def _preflight_models(self) -> None:
+        validate_model_schema_unchanged(self._base, self._models[NORMAL_PROFILE])
+        validate_model_schema_unchanged(self._initial_models[MC_PROFILE], self._models[MC_PROFILE])
+        validate_no_private_fields(self._models[NORMAL_PROFILE], label="Normal defaults")
+        validate_no_private_fields(self._models[MC_PROFILE], label="MC defaults")
+        validate_no_absolute_machine_paths(self._base, self._models[NORMAL_PROFILE])
+        validate_no_absolute_machine_paths(self._initial_models[MC_PROFILE], self._models[MC_PROFILE])
+        for profile in (NORMAL_PROFILE, MC_PROFILE):
+            widgets = self._models[profile].get("widgets")
+            if not isinstance(widgets, Mapping):
+                continue
+            visualizer = widgets.get("spotify_visualizer")
+            if not isinstance(visualizer, Mapping):
+                continue
+            normalized = normalize_visualizer_section_mapping(
+                visualizer,
+                prefix="widgets.spotify_visualizer",
+                apply_preset_overlay=False,
+                resolve_preset_indices=False,
+            )
+            if dict(visualizer) != normalized:
+                raise ValueError(
+                    f"{PROFILE_LABELS[profile]} visualizer defaults are not schema-v5 canonical; "
+                    "Foundry refuses to save a payload runtime would rewrite."
+                )
+
+    def _validate_dry_run(self) -> None:
+        try:
+            self._preflight_models()
+            # Artifact dry-run validates the currently checked-in source.  It is
+            # intentionally read-only; candidate source is validated above and
+            # the post-source transaction performs the authoritative generator pass.
+            output = regenerate_default_artifacts(dry_run=True)
+        except Exception as exc:
+            QMessageBox.critical(self, "Defaults Validation Failed", str(exc))
+            self._set_status("Validation failed; nothing was written.")
+            return
+        self._set_status(output.splitlines()[-1] if output else "Validation GREEN; writes=0.")
+
     def _save_and_regenerate(self) -> None:
+        try:
+            self._preflight_models()
+        except Exception as exc:
+            QMessageBox.critical(self, "Defaults Validation Failed", str(exc))
+            self._set_status("Save blocked by schema/privacy validation; nothing was written.")
+            return
         base_source_before = self._base_path.read_text(encoding="utf-8")
         overrides_source_before = self._overrides_path.read_text(encoding="utf-8")
         undo_before = (
@@ -1127,12 +1234,16 @@ class DefaultSettingsEditor(QMainWindow):
                 self._undo_path,
                 base_source_text=base_source_before,
             )
-            atomic_write_text(self._base_path, base_source_after)
-            atomic_write_text(self._overrides_path, overrides_source_after)
+            atomic_write_many({
+                self._base_path: base_source_after.encode("utf-8"),
+                self._overrides_path: overrides_source_after.encode("utf-8"),
+            })
             output = self._regenerate()
         except Exception as exc:
-            atomic_write_text(self._base_path, base_source_before)
-            atomic_write_text(self._overrides_path, overrides_source_before)
+            atomic_write_many({
+                self._base_path: base_source_before.encode("utf-8"),
+                self._overrides_path: overrides_source_before.encode("utf-8"),
+            })
             rollback_error: Exception | None = None
             try:
                 self._regenerate()
@@ -1176,13 +1287,16 @@ class DefaultSettingsEditor(QMainWindow):
         self._set_actions_enabled(False)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
+            restore_payloads = {self._overrides_path: restored_overrides_source.encode("utf-8")}
             if restored_base_source is not None:
-                atomic_write_text(self._base_path, restored_base_source)
-            atomic_write_text(self._overrides_path, restored_overrides_source)
+                restore_payloads[self._base_path] = restored_base_source.encode("utf-8")
+            atomic_write_many(restore_payloads)
             output = self._regenerate()
         except Exception as exc:
-            atomic_write_text(self._base_path, current_base_source)
-            atomic_write_text(self._overrides_path, current_overrides_source)
+            atomic_write_many({
+                self._base_path: current_base_source.encode("utf-8"),
+                self._overrides_path: current_overrides_source.encode("utf-8"),
+            })
             rollback_error: Exception | None = None
             try:
                 self._regenerate()
