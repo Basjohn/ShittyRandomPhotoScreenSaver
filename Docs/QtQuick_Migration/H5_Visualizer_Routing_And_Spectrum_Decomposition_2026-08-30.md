@@ -1,6 +1,6 @@
 # H5 Technical Decomposition — Visualizer CUSTOM Routing and Spectrum Saturation
 
-Date: 2026-08-30; Spectrum evidence refreshed 2026-08-31  
+Date: 2026-08-30; Spectrum and cross-display evidence refreshed 2026-08-31
 Starting source: `af8896b52fbee153fe1cd0b627a55455c14625d1`
 
 This decomposition covers two independent functional Visualizer regressions. Keep them separate in implementation and testing.
@@ -116,8 +116,22 @@ same but Visualizer non-Custom
 - [x] Proved CUSTOM chooses Visualizer monitor 2 while non-CUSTOM chooses Media monitor 1,
   with exactly one construction/owner pair and no Media-presence requirement on the target.
 - [x] Added the permanent routing pin to the maintained `h-destination` profile.
-- [ ] Read `[VIS_ROUTING]` in the reported physical dual-display source config before changing
-  persistence, admission or failover behavior.
+- [x] Read `[VIS_ROUTING]` in the physical split-display config. Generations 1/2 resolve
+  Visualizer monitor 2, choose/admit screen 1, retain both participants and record no failover;
+  owner telemetry also advances/draws on screen 1. Persistence/admission/failover are exonerated.
+- [x] Correlate playback: after the split route every Bubble frame remains `playing=False`; the
+  only `playing=True` edge belongs to the earlier same-display generation.
+- [x] Localize the defect to construction/binding looking up `media` only from the chosen
+  Visualizer unit. With Media on screen 0 and Visualizer on screen 1, that lookup returns `None`,
+  skipping both initial playback state and the state-change connection.
+- [x] Resolve the already-admitted Media model across active manager units, preferring the chosen
+  unit when it already has Media so same-display/`ALL` identity is preserved. Bind that exact
+  model; do not create or mirror a Media card on the Visualizer unit.
+- [x] Extend the two-live-unit production-construction pin so a Media model on screen 0 drives the
+  sole CUSTOM Visualizer owner on screen 1 and a later playing edge reaches that owner.
+- [x] Focused route/construction/failover gates pass `54/54`; maintained `h-destination` passes
+  `78/78` after the repair.
+- [ ] Repeat the physical split-display run and confirm the admitted owner becomes visibly active.
 
 Also preserve missing-monitor 30 s grace/fallback/reclaim behavior.
 

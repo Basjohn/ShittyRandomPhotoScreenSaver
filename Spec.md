@@ -208,7 +208,9 @@ Outside CUSTOM, the Visualizer follows Media's effective position/monitor route.
 own persisted position, monitor and geometry are authoritative and may place it on a different selected display from
 Media. A live `QuickDisplayUnit` participates when it is not retired and has no display-binding loss; Media presence on
 that unit is not an admission condition. `DisplayManager` still admits exactly one Visualizer owner, with the existing
-generation-fenced CUSTOM grace/fallback/reclaim lifecycle when the requested display is unavailable.
+generation-fenced CUSTOM grace/fallback/reclaim lifecycle when the requested display is unavailable. Playback truth is
+bound from the already-admitted effective Media presentation model across the active display set; a CUSTOM Visualizer on
+another display must not require or construct a duplicate Media presentation on its own unit.
 
 ## Transitions
 

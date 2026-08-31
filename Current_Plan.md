@@ -125,9 +125,9 @@ Historical artwork fade/presentation quality is **not H2**. Artwork currently ap
 
 ### H5a — CUSTOM Visualizer must remain independent of Media's display route
 
-**Status: generation-level source trace and integrated two-live-unit routing contract are GREEN; physical operator reproduction remains open.**
+**Status: newest physical logs prove routing/construction on the requested display, then expose and source-localize a cross-display Media playback-model binding defect. The narrow binding repair and two-live-unit regression are implemented; physical confirmation remains open.**
 
-Non-CUSTOM Visualizer follows Media's effective monitor. CUSTOM Visualizer owns its own persisted monitor/geometry and may live on another selected display. `QuickDisplayUnit.is_visualizer_participant()` does not require Media on that display.
+Non-CUSTOM Visualizer follows Media's effective monitor. CUSTOM Visualizer owns its own persisted monitor/geometry and may live on another selected display. `QuickDisplayUnit.is_visualizer_participant()` does not require Media on that display. The sole Visualizer owner still consumes the existing effective Media presentation model for playback truth even when that model belongs to another active display unit; no Media copy is constructed on the Visualizer display.
 
 Trace once per generation:
 
@@ -148,10 +148,13 @@ Do not redesign routing or re-couple Visualizer ownership to a same-screen Media
 Closure checklist:
 
 - [x] Emit one bounded `[VIS_ROUTING]` record for the generation's initial admission decision; correlate later grace/fallback/reclaim outcomes through `[VIS_FAILOVER]`.
-- [ ] Read that record on a CUSTOM-Visualizer-on-a-different-display operator config and localize the first wrong field, if any.
+- [x] Read the newest record on a CUSTOM-Visualizer-on-a-different-display config: generations 1/2 correctly choose/admit screen 1 with Media on screen 0 and no failover, but every Bubble frame stays `playing=False`.
+- [x] Localize the first wrong source seam: owner construction and `_bind_quick_visualizer_media()` looked up `media` only through the chosen Visualizer unit, so a split route found no model and never initialized/connected playback.
+- [x] Resolve the already-admitted retained Media model across the active display set (same-display preferred), then use that exact model for initial playback and the sole `stateChanged` connection. Do not construct/mirror Media on the Visualizer display.
+- [x] Add a two-live-unit production-construction regression: Media model only on screen 0, CUSTOM Visualizer owner only on screen 1, one owner, cross-display state change reaches `set_playing(True)`.
 - [x] Confirm `QuickDisplayUnit.is_visualizer_participant()` admits the CUSTOM Visualizer's persisted display without Media there.
 - [x] Non-CUSTOM Visualizer still follows Media's effective monitor (no regression).
-- [x] Maintained `h-destination` profile GREEN (78/78).
+- [x] Maintained `h-destination` revalidated GREEN (78/78) after the cross-display playback-binding repair.
 - [ ] Dual-display source smoke shows the CUSTOM Visualizer on its own display.
 
 Technical route: `Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md`.

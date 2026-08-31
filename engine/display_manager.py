@@ -1641,11 +1641,8 @@ class DisplayManager(QObject):
                 engine_generation=generation,
                 activation_id=activation_id,
             )
-            presentation = chosen.presenter.presentation_for_widget_id("media")
-            if presentation is not None:
-                media_model = getattr(presentation, "model", None)
-                if media_model is None:
-                    raise RuntimeError("Quick Media presentation has no model authority")
+            media_model = self._resolve_quick_visualizer_media_model(chosen)
+            if media_model is not None:
                 owner.set_playing(
                     str(getattr(media_model, "playbackState", "unknown")).lower()
                     == "playing"
@@ -1653,8 +1650,8 @@ class DisplayManager(QObject):
             owner.start()
             self._quick_visualizer_owner = owner
             self._quick_visualizer_unit = chosen
-            if presentation is not None:
-                self._bind_quick_visualizer_media(chosen)
+            if media_model is not None:
+                self._bind_quick_visualizer_media(media_model)
             chosen.attach_visualizer_owner(owner)
             from rendering.quick.visualizer.double_click_admission import (
                 QuickVisualizerDoubleClickAdmission,
@@ -1693,15 +1690,36 @@ class DisplayManager(QObject):
         self._set_quick_visualizer_construct_outcome("admitted")
         return True
 
-    def _bind_quick_visualizer_media(self, unit: QuickDisplayUnit) -> None:
+    def _resolve_quick_visualizer_media_model(
+        self,
+        preferred_unit: QuickDisplayUnit,
+    ) -> Any | None:
+        """Resolve one retained Media model without requiring local presentation.
+
+        Same-display Media remains preferred so ordinary/non-CUSTOM and ``ALL``
+        routes retain their existing identity.  A CUSTOM Visualizer may live on
+        another display, so the remaining active units are then searched in
+        their stable manager order.  This only discovers an already-admitted
+        presentation; it never constructs or mirrors a Media card.
+        """
+
+        units = [preferred_unit]
+        units.extend(
+            unit for unit in self.displays if unit is not preferred_unit
+        )
+        for unit in units:
+            presentation = unit.presenter.presentation_for_widget_id("media")
+            if presentation is None:
+                continue
+            model = getattr(presentation, "model", None)
+            if model is None:
+                raise RuntimeError("Quick Media presentation has no model authority")
+            return model
+        return None
+
+    def _bind_quick_visualizer_media(self, model: Any) -> None:
         """Bind canonical retained Media playback state to the sole owner."""
 
-        presentation = unit.presenter.presentation_for_widget_id("media")
-        if presentation is None:
-            return
-        model = getattr(presentation, "model", None)
-        if model is None:
-            raise RuntimeError("Quick Media presentation has no model authority")
         changed = getattr(model, "stateChanged", None)
         if changed is None or not hasattr(changed, "connect"):
             raise RuntimeError("Quick Media model has no state-change authority")
