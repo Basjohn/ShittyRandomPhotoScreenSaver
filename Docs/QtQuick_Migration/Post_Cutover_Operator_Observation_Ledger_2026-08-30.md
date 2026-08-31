@@ -73,7 +73,7 @@ Legend:
 | [ ] | O-022 | J | Artwork region too small/mispositioned; chrome too thick. | H2 is now closed; tune geometry/chrome in J Parity+. |
 | [ ] | O-046 | **J Parity+** | Media artwork is visible again but no longer has the nicer historical artwork-change fade. | Restore a retained-scene artwork transition/fade without delaying or duplicating the closed H2 provider path. |
 | [x] | O-023 | J preservation | New transport strip looks better. | Preserve. |
-| [ ] | O-024 | J | App volume is folded inside Media instead of canonical slim adjustable adjacent/outside accessory. | Restore adjacent/outside toggle outcome; integrated form only as explicit optional variant. |
+| [ ] | O-024 | J | App volume is folded inside Media instead of being its own slim adjustable Media child widget. | Restore a separate retained adjacent/outside child item as the existing/unspecified default. Its own rect/size lives in Media's effective display bucket; visibility/lifecycle and display route remain Media-dependent, with no monitor choice. Integrated is an explicit optional variant only. Both reuse the existing Media presentation model plus one `MediaVolumeRuntimeService` lease/action seam; the child presentation does not own/duplicate the runtime or resurrect QWidget. |
 | [ ] | O-025 | J | `Junk`/album and `Paused` lines should be optional. | Preserve configurability/conditional density. |
 | [ ] | O-026 | J | Spotify header border too thin/inconsistent. | Shared header language. |
 | [ ] | O-027 | J | Media provider logo/header alignment off. | Cross-family baseline matrix. |

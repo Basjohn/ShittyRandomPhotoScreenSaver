@@ -105,6 +105,16 @@ Current proven patterns are deliberately heterogeneous:
 
 Do not create services/managers merely for naming symmetry.
 
+App volume is a Media-dependent child/accessory, not an independent widget-family capability. Its default presentation
+is a separate retained Quick item beside the Media card, with its own bounds, hit target and adjustable geometry. It
+exists only while Media and provider app-volume capability are effective, follows Media's effective display route and
+lifecycle, and may persist its own CUSTOM child rect/size payload in Media's effective display bucket without gaining an
+independent monitor. An integrated in-card presentation is allowed only as an explicit option; absent/legacy variant
+state resolves to separate. Both forms consume the existing Media presentation model plus its one
+`MediaVolumeRuntimeService` lease/action seam. The retained child item hides/retires with Media; the shared service
+lifecycle remains Media-owned/setting-gated, never child-owned. Neither form may create a second Media card, model,
+controller, poller or service, or restore the deleted QWidget presentation.
+
 ## State / actions
 
 Producers integrate work then publish coherent accepted current state. Presentation consumes bounded latest state with
