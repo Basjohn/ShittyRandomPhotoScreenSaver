@@ -278,7 +278,7 @@ top/bottom edge -> viewport height only
 Expected adaptation at constant scale:
 
 - Spectrum reflows/redistributes bars across available width/height;
-- Bubble expands/reflows its position, trail and motion world without stretching circles; its authored render radius remains the historical fraction of actual card height and is not divided by viewport-domain height, while collision/spawn radius and correction distances multiply by domain height when mapped into that expanded world;
+- Bubble expands/reflows its position, trail and motion world without stretching circles; stream/drift deltas project once per expanded axis and nonbaseline trail smear is solved in renderer-content coordinates so visible travel does not fall by `1 / domain_axis`; its authored render radius remains the historical fraction of actual card height and is not divided by viewport-domain height, while collision/spawn radius and correction distances multiply by domain height when mapped into that expanded world;
 - Oscilloscope/Sine/DevCurve adapt domain while keeping stroke scale;
 - a future 3D sphere uses aspect-correct projection and stays round.
 
@@ -298,6 +298,8 @@ Viewport geometry changes are spatial configuration, not logical cadence authori
 
 Consume-once kick/snare/vocal events forward-carry a bounded motion accent through Bubble's existing stream-burst state.
 This affects stream/drift displacement, not authored motion settings, pulse/radius authority, cadence, or clock ownership.
+Canonical/wide/tall runs of the same event must retain equal content-space head/trail travel, one event delivery and an
+identical radius sequence. Raw expanded-world displacement is not a valid cross-viewport reactivity comparison.
 
 ## 13. Playback
 

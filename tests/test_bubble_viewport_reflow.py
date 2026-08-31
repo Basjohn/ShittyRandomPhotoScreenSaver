@@ -7,14 +7,18 @@ authored population and Bubble personality stay unchanged (a larger world is
 naturally less dense). The render seam normalizes positions/trails back to
 [0,1], retains historical card-height-normalized radius, maps that radius back
 into expanded-world collision units, and lets the shader keep circles round.
+Stream/drift movement projects onto expanded domain axes once so its normalized
+content travel and trail remain stable at canonical, wide and tall extents.
 These bars prove that contract deterministically; H5c B9 remains the operator
 physical-acceptance gate.
 """
 
 from __future__ import annotations
 
+import math
 import random
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -113,6 +117,155 @@ def test_authored_counts_are_unchanged_by_viewport_extent() -> None:
     assert _counts(wide) == _counts(baseline)
     assert _counts(tall) == _counts(baseline)
     assert _counts(baseline) == (6, 20)
+
+
+class _OneShotSnareScheduler:
+    """Production-shaped consume-once scheduler with observable delivery."""
+
+    def __init__(self) -> None:
+        self.snare_delivery_count = 0
+
+    def consume_next(self, event_type, max_age_s=0.5):
+        del max_age_s
+        if event_type == "snare" and self.snare_delivery_count == 0:
+            self.snare_delivery_count += 1
+            return SimpleNamespace(strength=1.0)
+        return None
+
+
+def _run_viewport_transient_motion(extent, *, stream_direction, drift_direction, diag_key):
+    domain_w = float(extent[0]) / 420.0
+    domain_h = float(extent[1]) / 280.0
+    sim = BubbleSimulation()
+    sim._apply_viewport_domain(extent)
+    sim._bubbles = [
+        BubbleState(
+            x=0.5 * domain_w,
+            y=0.5 * domain_h,
+            radius=0.03,
+            is_big=True,
+            reaches_surface=False,
+            phase=0.55,
+            drift_bias=0.35,
+            speed_mult=1.0,
+            display_radius=0.03,
+            trail_tail_x=0.5 * domain_w,
+            trail_tail_y=0.5 * domain_h,
+        )
+    ]
+    scheduler = _OneShotSnareScheduler()
+    settings = {
+        "_bubble_viewport_extent": extent,
+        "_event_scheduler": scheduler,
+        "bubble_big_count": 0,
+        "bubble_small_count": 0,
+        "bubble_stream_direction": stream_direction,
+        "bubble_stream_constant_speed": 0.12,
+        "bubble_stream_speed_cap": 1.8,
+        "bubble_stream_reactivity": 1.0,
+        "bubble_drift_direction": drift_direction,
+        "bubble_drift_amount": 0.65,
+        "bubble_drift_speed": 0.65,
+        "bubble_drift_frequency": 0.45,
+        "bubble_group_drift": False,
+        "bubble_trail_strength": 1.0,
+        "bubble_bounce_big_pct": 0.0,
+        "bubble_bounce_small_pct": 0.0,
+    }
+    body = {
+        "bass": 0.26,
+        "mid": 0.22,
+        "high": 0.09,
+        "overall": 0.22,
+        "smooth_mid": 0.22,
+        "smooth_high": 0.09,
+        "crest": 0.0,
+    }
+    previous = (0.5, 0.5)
+    path = 0.0
+    radii = []
+    diag_steps = []
+    positions = []
+    trails = []
+    for _frame in range(10):
+        sim.tick(1.0 / 90.0, body, settings)
+        position_data, _extra_data, trail_data = sim.snapshot()
+        current = (position_data[0], position_data[1])
+        path += math.hypot(current[0] - previous[0], current[1] - previous[1])
+        previous = current
+        positions.append(current)
+        radii.append(position_data[2])
+        diag_steps.append(sim.get_big_lane_diagnostics()[diag_key])
+        trails.append(tuple(trail_data))
+
+    final_trail = trails[-1]
+    trail_vector = (
+        final_trail[6] - final_trail[0],
+        final_trail[7] - final_trail[1],
+    )
+    return {
+        "delivery_count": scheduler.snare_delivery_count,
+        "positions": positions,
+        "path": path,
+        "radii": radii,
+        "diag_steps": diag_steps,
+        "trail_vector": trail_vector,
+        "trail_length": math.hypot(*trail_vector),
+    }
+
+
+@pytest.mark.parametrize(
+    ("stream_direction", "drift_direction", "diag_key", "expanded_extent"),
+    (
+        ("right", "none", "stream_step_mean", (840.0, 280.0)),
+        ("up", "none", "stream_step_mean", (420.0, 560.0)),
+        ("none", "swish_horizontal", "drift_step_mean", (840.0, 280.0)),
+        ("none", "swish_vertical", "drift_step_mean", (420.0, 560.0)),
+    ),
+)
+def test_transient_stream_and_drift_preserve_content_space_motion_across_viewports(
+    stream_direction,
+    drift_direction,
+    diag_key,
+    expanded_extent,
+) -> None:
+    """The same edge must remain equally visible at every viewport extent.
+
+    Bubble's world expands with the committed viewport, but the renderer consumes
+    normalized head/trail coordinates. Stream and drift therefore need to cover
+    the same fraction of the chosen viewport per authored step; fixed raw-world
+    deltas silently halve visible motion in a doubled axis. Radius/BTF authority
+    stays independent from this spatial projection.
+    """
+
+    canonical = _run_viewport_transient_motion(
+        (420.0, 280.0),
+        stream_direction=stream_direction,
+        drift_direction=drift_direction,
+        diag_key=diag_key,
+    )
+    expanded = _run_viewport_transient_motion(
+        expanded_extent,
+        stream_direction=stream_direction,
+        drift_direction=drift_direction,
+        diag_key=diag_key,
+    )
+
+    assert canonical["delivery_count"] == expanded["delivery_count"] == 1
+    assert canonical["path"] > 0.0
+    assert canonical["trail_length"] > 0.0
+    assert expanded["positions"] == pytest.approx(canonical["positions"], abs=1e-12)
+    assert expanded["path"] == pytest.approx(canonical["path"], abs=1e-12)
+    assert expanded["trail_vector"] == pytest.approx(
+        canonical["trail_vector"], abs=1e-12
+    )
+    assert expanded["trail_length"] == pytest.approx(
+        canonical["trail_length"], abs=1e-12
+    )
+    assert expanded["diag_steps"] == pytest.approx(
+        canonical["diag_steps"], abs=1e-12
+    )
+    assert expanded["radii"] == pytest.approx(canonical["radii"], abs=1e-12)
 
 
 def test_geometry_change_creates_no_extra_tick() -> None:

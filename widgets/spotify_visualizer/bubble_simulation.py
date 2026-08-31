@@ -924,7 +924,7 @@ class BubbleSimulation:
                 if now - self._overdrive_last_log_ts >= 0.5:
                     self._log_overdrive_state("hold", reactivity_raw, overdrive_gate_signal)
                     self._overdrive_last_log_ts = now
-        base_vel = effective_speed * 0.35  # normalised units/sec
+        base_vel = effective_speed * 0.35  # renderer-normalised units/sec
 
         group_drift_dx, group_drift_dy = self._update_group_drift_carrier(
             drift_dir,
@@ -938,6 +938,7 @@ class BubbleSimulation:
         motion_sample_count = 0
         stream_step_total = 0.0
         drift_step_total = 0.0
+        baseline_motion_domain = self._is_baseline_domain()
         for i, b in enumerate(self._bubbles):
             b.age += dt
             if b.bounce_glide > 0.0:
@@ -1065,11 +1066,26 @@ class BubbleSimulation:
                     move_x += drift_offset * dt
 
             motion_sample_count += 1
+            # Diagnostics retain renderer-normalised displacement. On an
+            # expanded Bubble world these values are projected onto the domain
+            # axes immediately below, then divided by the same axes at the
+            # snapshot seam. Logging the pre-projection values therefore keeps
+            # canonical/wide/tall comparisons physically meaningful.
             stream_step_total += math.hypot(stream_move_x, stream_move_y)
             drift_step_total += math.hypot(
                 move_x - stream_move_x,
                 move_y - stream_move_y,
             )
+
+            if not baseline_motion_domain:
+                # Bubble centers live in a baseline-relative world that widens
+                # and heightens with viewport extent. Preserve the authored
+                # fraction-of-viewport stream/drift travel by projecting each
+                # movement axis into that world before the snapshot divides it
+                # back into renderer content coordinates. The canonical path is
+                # intentionally untouched for byte-exact BTF replay.
+                move_x *= self._domain_w
+                move_y *= self._domain_h
 
             b.x += move_x
             b.y -= move_y  # Y is inverted in UV space (0=top, 1=bottom)
@@ -2566,6 +2582,10 @@ class BubbleSimulation:
             self._bleed_trail_smear(b, dt)
             return
 
+        if not self._is_baseline_domain():
+            self._update_trail_smear_in_content_space(b, dt, move_dx, move_dy)
+            return
+
         if not b.trail_ready:
             init_len = min(TRAIL_SMEAR_MAX_LENGTH,
                            math.hypot(move_dx, move_dy) * 22.0)
@@ -2600,6 +2620,75 @@ class BubbleSimulation:
         dx = b.x - b.trail_tail_x
         dy = b.y - b.trail_tail_y
         dist = math.hypot(dx, dy)
+
+        target_strength = min(1.0, dist * TRAIL_SMEAR_STRENGTH_FROM_DISTANCE)
+        if target_strength > b.trail_strength:
+            attack = min(1.0, dt * 9.0)
+            b.trail_strength += (target_strength - b.trail_strength) * attack
+        else:
+            decay = TRAIL_SMEAR_DECAY_PER_SEC * dt
+            b.trail_strength = max(0.0, b.trail_strength - decay)
+
+    def _update_trail_smear_in_content_space(
+        self,
+        b: BubbleState,
+        dt: float,
+        move_dx: float,
+        move_dy: float,
+    ) -> None:
+        """Update a nonbaseline trail in renderer-normalised coordinates.
+
+        Head/tail storage remains in Bubble's expanded logical world. Trail
+        length, direction and strength are visual contracts, however, so their
+        Euclidean calculations must run after removing the independent domain
+        axes. Mapping the resulting tail back to world storage lets snapshot()
+        keep one projection seam and avoids wide/tall anisotropy.
+        """
+
+        inv_domain_w = 1.0 / self._domain_w
+        inv_domain_h = 1.0 / self._domain_h
+        head_x = b.x * inv_domain_w
+        head_y = b.y * inv_domain_h
+        tail_x = b.trail_tail_x * inv_domain_w
+        tail_y = b.trail_tail_y * inv_domain_h
+        content_move_dx = move_dx * inv_domain_w
+        content_move_dy = move_dy * inv_domain_h
+
+        if not b.trail_ready:
+            move_length = math.hypot(content_move_dx, content_move_dy)
+            init_len = min(TRAIL_SMEAR_MAX_LENGTH, move_length * 22.0)
+            if init_len > 1e-4:
+                inv_move = 1.0 / move_length if move_length > 1e-4 else 0.0
+                dir_x = content_move_dx * inv_move
+                dir_y = content_move_dy * inv_move
+                tail_x = head_x - dir_x * init_len
+                tail_y = head_y - dir_y * init_len
+            else:
+                tail_x = head_x
+                tail_y = head_y
+            b.trail_ready = True
+
+        dx = head_x - tail_x
+        dy = head_y - tail_y
+        dist = math.hypot(dx, dy)
+        if dist > TRAIL_SMEAR_MAX_LENGTH and dist > 1e-4:
+            excess = dist - TRAIL_SMEAR_MAX_LENGTH
+            shrink = excess / dist
+            tail_x += dx * shrink
+            tail_y += dy * shrink
+            dx = head_x - tail_x
+            dy = head_y - tail_y
+            dist = TRAIL_SMEAR_MAX_LENGTH
+
+        follow = min(TRAIL_SMEAR_FOLLOW_MAX, TRAIL_SMEAR_FOLLOW_RATE * dt)
+        tail_x += dx * follow
+        tail_y += dy * follow
+
+        dx = head_x - tail_x
+        dy = head_y - tail_y
+        dist = math.hypot(dx, dy)
+        b.trail_tail_x = tail_x * self._domain_w
+        b.trail_tail_y = tail_y * self._domain_h
 
         target_strength = min(1.0, dist * TRAIL_SMEAR_STRENGTH_FROM_DISTANCE)
         if target_strength > b.trail_strength:

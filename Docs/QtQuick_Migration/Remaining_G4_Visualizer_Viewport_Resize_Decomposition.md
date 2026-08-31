@@ -205,12 +205,14 @@ Spatial rules:
 
 - circles remain circles;
 - radius units remain coherent;
-- velocity/collision response are not multiplied independently by X/Y aspect ratios;
+- stream/drift deltas project once onto each expanded domain axis so their normalized content-space travel remains stable;
+- diagnostics and nonbaseline trail smear use renderer-content coordinates, avoiding the old `1 / domain_axis` visible-motion loss and wide/tall trail anisotropy;
+- collision response remains separate from that stream/drift projection and is not retuned as a viewport workaround;
 - widening/tallening expands available logical domain rather than stretching finished pixels;
 - authored big/small counts and `MAX_BUBBLES` do not scale with viewport area;
 - shrinking reconciles state through existing lifecycle semantics rather than percentage-rescaling positions;
 - trails and protected renderer-visible consequences remain BTF-bound;
-- Bubble speed/collision/elasticity/personality are not retuned for geometry.
+- Bubble speed controls, event envelopes, collision/elasticity personality, cadence and gain are not retuned for geometry.
 
 The phrase **“baseline density” is incorrect and must not be used**. At fixed authored counts, a larger viewport is naturally
 less dense.
@@ -301,6 +303,7 @@ Keep/extend destination tests rather than creating a parallel framework:
   - authored-count invariance;
   - overlap-retry extended-domain bounds;
   - non-surface contraction retirement;
+  - canonical/wide/tall consume-once transient head/trail motion projection with identical radius sequence;
   - trail/radius projection;
   - specular coordinate contract if applicable.
 - existing Bubble BTF/cadence/replay/reactivity/transport goldens
