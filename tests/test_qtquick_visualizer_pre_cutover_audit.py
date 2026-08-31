@@ -17,6 +17,7 @@ atomic DisplayManager cutover begins.
 from __future__ import annotations
 
 import ast
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -291,17 +292,20 @@ def _production_render_snapshot_callers() -> list[tuple[Path, int]]:
         ROOT / "widgets" / "spotify_visualizer",
     )
     for source_root in roots:
-        for path in source_root.rglob("*.py"):
-            if "__pycache__" in path.parts:
-                continue
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            for node in ast.walk(tree):
-                if (
-                    isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Attribute)
-                    and node.func.attr == "publish_render_snapshot"
-                ):
-                    callers.append((path.relative_to(ROOT), int(node.lineno)))
+        for directory, dirnames, filenames in os.walk(source_root, topdown=True):
+            dirnames[:] = [name for name in dirnames if name != "__pycache__"]
+            for filename in filenames:
+                if not filename.endswith(".py"):
+                    continue
+                path = Path(directory) / filename
+                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+                for node in ast.walk(tree):
+                    if (
+                        isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Attribute)
+                        and node.func.attr == "publish_render_snapshot"
+                    ):
+                        callers.append((path.relative_to(ROOT), int(node.lineno)))
     return callers
 
 
