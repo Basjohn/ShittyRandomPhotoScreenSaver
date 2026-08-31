@@ -296,6 +296,9 @@ presentation defects.
 
 Viewport geometry changes are spatial configuration, not logical cadence authority.
 
+Consume-once kick/snare/vocal events forward-carry a bounded motion accent through Bubble's existing stream-burst state.
+This affects stream/drift displacement, not authored motion settings, pulse/radius authority, cadence, or clock ownership.
+
 ## 13. Playback
 
 Pause/Play preserves:

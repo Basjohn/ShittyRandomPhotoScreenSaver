@@ -439,6 +439,20 @@ Source inspection finds a second discontinuity after removal of the hard hold: a
 
 The same operator run also reports that stream speed and drift speed/amount do not react perceptibly to transients. Existing source shows stream motion dominated by smoothed mid/high plus a weak vocal/snare envelope, while drift is dominated by sustained/body energy and authored static controls. That is the next separate bounded correction: add a decaying transient contribution to the existing motion drive and prove visible short-window displacement without changing authored settings, source gain, radius response, cadence or adding a clock.
 
+### 15.1.3 Bounded transient-motion continuation
+
+The separate motion correction is now implemented at the existing `BubbleSimulation` owner:
+
+- [x] kick, snare and vocal-swell events remain consume-once and combine into one bounded motion-event scalar;
+- [x] an event immediately lifts the existing stream-burst envelope, whose existing `7 Hz` release forward-carries the positional consequence without another state owner or clock;
+- [x] stream burst receives a bounded direct event contribution and drift receives an independently capped `0.18` transient lift;
+- [x] authored stream/drift amount, speed, frequency and direction remain unchanged;
+- [x] Bubble pulse, radius, smoothing, clamp, source gain and cadence paths are untouched;
+- [x] a manual-one-big-Bubble same-body A/B oracle proves greater short-window stream and drift path length after one snare while requiring identical pulse and rendered-radius sequences;
+- [x] B6/B7/B8 and `[SPOTIFY_VIS][BUBBLE][DRIFT]` expose event, envelope, burst, capped drift and mean stream/drift motion-stage steps at existing bounded cadence; these steps are measured before impulse/collision correction and are not final trajectory distance;
+- [x] focused Bubble/Quick gates pass `87/87`, BTF/cadence/renderer transport gates pass `15/15`, the maintained `h-destination` profile passes `78/78`, and an independent read-only audit is GREEN;
+- [ ] operator validation must confirm that transient stream/drift response is perceptible but not overdriven.
+
 ### 15.2 DevCurve AA and transient-diagnostic corrections
 
 The second physical report says DevCurve edges remain jagged after removal of migration-invented ghost layers. Source comparison now disproves the remaining AA mapping:

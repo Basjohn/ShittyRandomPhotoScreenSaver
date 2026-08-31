@@ -417,6 +417,10 @@ It holds for current Bubble because:
   spawn/promotion, and vocal/snare drive the persistent stream-burst envelope and the velocities /
   positions it produces — so an event consumed at step A still shapes the renderer-visible result at
   step B;
+- consume-once kick/snare/vocal motion strength may lift that existing stream-burst state immediately
+  and decay through it, but must not be replayed as an event, mutate authored stream/drift settings, or
+  leak into Bubble pulse/radius authority; an event/no-event oracle must prove additional short-window
+  renderer-facing displacement with identical size output;
 - therefore the latest result after B still contains the required consequence of A, consumed exactly
   once.
 

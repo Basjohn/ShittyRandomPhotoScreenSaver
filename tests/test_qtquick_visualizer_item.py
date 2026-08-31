@@ -171,6 +171,12 @@ def test_bubble_retained_sync_logs_logical_and_device_radius(
                     "tracked_big_smoothing_step": 0.002,
                     "tracked_big_smoothing_rate_hz": 14.0,
                     "tracked_big_smoothing_mix": 0.28,
+                    "motion_event_strength": 0.9,
+                    "motion_transient_envelope": 0.72,
+                    "stream_burst_speed": 0.70,
+                    "transient_drift_drive": 0.14,
+                    "stream_step_mean": 0.004,
+                    "drift_step_mean": 0.002,
                 }
             ),
         ),
@@ -209,6 +215,8 @@ def test_bubble_retained_sync_logs_logical_and_device_radius(
     assert "track(token=12 index=3" in geometry_message
     assert "target=0.11000 display=0.10000 delta=0.01000" in geometry_message
     assert "step=0.00200 rate_hz=14.000 mix=0.280" in geometry_message
+    assert "motion(event=0.900 envelope=0.720 burst=0.700" in geometry_message
+    assert "drift=0.140 stream_step=0.004000 drift_step=0.002000" in geometry_message
 
 
 def test_mismatched_snapshot_geometry_fails_closed() -> None:

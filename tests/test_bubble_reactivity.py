@@ -997,6 +997,143 @@ class TestInitialFillContract:
 # 6. Stream speed reactivity
 # ---------------------------------------------------------------------------
 
+
+@pytest.mark.parametrize(
+    ("stream_direction", "drift_direction", "diag_key", "minimum_ratio"),
+    (
+        ("up", "none", "stream_step_mean", 1.10),
+        ("none", "swish_horizontal", "drift_step_mean", 1.05),
+    ),
+)
+def test_one_shot_transient_adds_bounded_renderer_visible_motion_only(
+    stream_direction,
+    drift_direction,
+    diag_key,
+    minimum_ratio,
+):
+    """One event must travel farther without leaking into Bubble size."""
+
+    dt = 1.0 / 90.0
+    body = {
+        "bass": 0.26,
+        "mid": 0.22,
+        "high": 0.09,
+        "overall": 0.22,
+        "smooth_mid": 0.22,
+        "smooth_high": 0.09,
+        "crest": 0.0,
+    }
+    warm_settings = _default_settings(
+        bubble_big_count=0,
+        bubble_small_count=0,
+        bubble_stream_direction="none",
+        bubble_drift_direction="none",
+        _event_scheduler=_ConsumeOnlyScheduler(),
+    )
+    base = BubbleSimulation()
+    base._bubbles = [
+        BubbleState(
+            x=0.5,
+            y=0.5,
+            radius=0.03,
+            is_big=True,
+            reaches_surface=False,
+            phase=0.55,
+            drift_bias=0.35,
+            speed_mult=1.0,
+            display_radius=0.03,
+        )
+    ]
+    for _ in range(90):
+        base.tick(dt, body, warm_settings)
+    base._time = 0.0
+    base._bubbles[0].x = 0.5
+    base._bubbles[0].y = 0.5
+    base._bubbles[0].trail_tail_x = 0.5
+    base._bubbles[0].trail_tail_y = 0.5
+
+    control = copy.deepcopy(base)
+    event = copy.deepcopy(base)
+    common = _default_settings(
+        bubble_big_count=0,
+        bubble_small_count=0,
+        bubble_stream_direction=stream_direction,
+        bubble_stream_constant_speed=0.12,
+        bubble_stream_speed_cap=1.8,
+        bubble_stream_reactivity=1.0,
+        bubble_drift_direction=drift_direction,
+        bubble_drift_amount=0.65,
+        bubble_drift_speed=0.65,
+        bubble_drift_frequency=0.45,
+        bubble_group_drift=False,
+    )
+    control_settings = {
+        **common,
+        "_event_scheduler": _ConsumeOnlyScheduler(),
+    }
+    event_settings = {
+        **common,
+        "_event_scheduler": _ConsumeOnlyScheduler(snare_strength=1.0),
+    }
+
+    control_path = 0.0
+    event_path = 0.0
+    control_previous = (0.5, 0.5)
+    event_previous = (0.5, 0.5)
+    control_pulses = []
+    event_pulses = []
+    control_radii = []
+    event_radii = []
+    first_control_diag = None
+    first_event_diag = None
+    second_event_diag = None
+
+    for frame_index in range(10):
+        control.tick(dt, body, control_settings)
+        event.tick(dt, body, event_settings)
+        control_positions, _control_extra, _control_trail = control.snapshot()
+        event_positions, _event_extra, _event_trail = event.snapshot()
+        control_current = (control_positions[0], control_positions[1])
+        event_current = (event_positions[0], event_positions[1])
+        control_path += math.hypot(
+            control_current[0] - control_previous[0],
+            control_current[1] - control_previous[1],
+        )
+        event_path += math.hypot(
+            event_current[0] - event_previous[0],
+            event_current[1] - event_previous[1],
+        )
+        control_previous = control_current
+        event_previous = event_current
+        control_pulses.append(control._bubbles[0].pulse_energy)
+        event_pulses.append(event._bubbles[0].pulse_energy)
+        control_radii.append(control_positions[2])
+        event_radii.append(event_positions[2])
+        if frame_index == 0:
+            first_control_diag = control.get_big_lane_diagnostics()
+            first_event_diag = event.get_big_lane_diagnostics()
+        elif frame_index == 1:
+            second_event_diag = event.get_big_lane_diagnostics()
+
+    assert first_control_diag is not None
+    assert first_event_diag is not None and second_event_diag is not None
+    assert first_event_diag["motion_event_strength"] == pytest.approx(0.9)
+    assert 0.0 < first_event_diag["transient_drift_drive"] <= 0.18
+    assert first_event_diag[diag_key] > first_control_diag[diag_key]
+    assert second_event_diag["motion_event_strength"] == pytest.approx(0.0)
+    assert (
+        0.0
+        < second_event_diag["motion_transient_envelope"]
+        < first_event_diag["motion_transient_envelope"]
+    )
+    assert event_path > control_path * minimum_ratio, (
+        f"One-shot {diag_key} path {event_path:.6f} did not visibly exceed "
+        f"the same-body control {control_path:.6f}."
+    )
+    assert event_pulses == pytest.approx(control_pulses, abs=1e-12)
+    assert event_radii == pytest.approx(control_radii, abs=1e-12)
+
+
 class TestStreamSpeedReactivity:
     def test_reactivity_increases_bubble_displacement(self):
         seed = 1337

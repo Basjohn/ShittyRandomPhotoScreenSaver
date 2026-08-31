@@ -200,6 +200,8 @@ Preserve:
 - source freshness separate from presentation;
 - protected Bubble renderer-visible consequences and BTF;
 - continuous visual-only hero-radius rate selection plus stable bounded same-bubble B6-B8 evidence;
+- consume-once Bubble transient motion carried by the existing envelope, with same-body event/no-event displacement and
+  exact pulse/radius-isolation oracles;
 - Pause/Play identity;
 - clean worker join;
 - one authored fade authority;
@@ -456,7 +458,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_bubble_viewport_config_route.py` | **KEEP — MIGRATION PERMANENT / G4** | Live/coalesced viewport configuration route into each authored Bubble step; extend for committed-vs-CUSTOM override lifecycle. |
 | `tests/test_bubble_viewport_reflow.py` | **KEEP — MIGRATION PERMANENT / G4** | Baseline exact no-op plus wide/tall/shrink domain projection, authored-count invariance and no geometry-created tick. |
 | `tests/test_bubble_cadence.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
-| `tests/test_bubble_reactivity.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
+| `tests/test_bubble_reactivity.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract, including same-body consume-once transient stream/drift displacement with exact pulse/radius isolation; retain through cutover. |
 | `tests/test_bubble_renderer_transport.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_bubble_shader_compile.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_devcurve_builder_contract.py` | **KEEP** | Retain; no migration-specific retirement identified. |

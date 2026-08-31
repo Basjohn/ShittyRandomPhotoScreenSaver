@@ -341,6 +341,21 @@ class BubbleFrameRuntime:
             ),
             "max_big_pulse_after": lane_diag.get("max_big_pulse_after", 0.0),
             "max_big_raw_src": lane_diag.get("max_big_raw_src", 0.0),
+            "motion_event_strength": lane_diag.get(
+                "motion_event_strength",
+                0.0,
+            ),
+            "motion_transient_envelope": lane_diag.get(
+                "motion_transient_envelope",
+                0.0,
+            ),
+            "stream_burst_speed": lane_diag.get("stream_burst_speed", 0.0),
+            "transient_drift_drive": lane_diag.get(
+                "transient_drift_drive",
+                0.0,
+            ),
+            "stream_step_mean": lane_diag.get("stream_step_mean", 0.0),
+            "drift_step_mean": lane_diag.get("drift_step_mean", 0.0),
             "frozen_big_max_radius": render_diag.get(
                 "max_big_payload_radius",
                 0.0,

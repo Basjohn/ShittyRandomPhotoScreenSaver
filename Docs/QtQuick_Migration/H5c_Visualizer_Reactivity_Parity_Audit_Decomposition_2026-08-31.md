@@ -1124,4 +1124,7 @@ Detailed source/repair handoff: `H5c_Implementation_Checkpoint_2026-08-31_R2.md`
 - [x] Latest physical run reports much better Play/Pause and magnitude but still rapidly flickering contraction instead of breathing elasticity; fresh source, ~89.8 Hz cadence, 1.000 integration and no radius-clamp contact keep the defect at the visual filter.
 - [x] Replace residual micro/macro settle/drop threshold switching with continuous rate interpolation; preserve exact 40 Hz rise / 22 Hz large-drop endpoints and add stable tracked-bubble target/display/delta/step/rate/mix evidence to bounded B6-B8 logs.
 - [ ] Repeat physical elasticity validation and require breathing contraction without rapid flicker.
-- [ ] Add bounded decaying transient influence to existing stream/drift motion drive, with a same-body event/no-event displacement oracle; do not mutate authored drift settings, inflate radius or add a clock.
+- [x] Add bounded decaying transient influence to the existing stream/drift motion drive. Consume each event once, reuse the existing stream-burst state/release, cap the transient drift lift at `0.18`, and expose bounded motion-stage diagnostics without adding a clock.
+- [x] Prove a one-shot snare increases same-body short-window stream and drift displacement while pulse and rendered-radius sequences remain identical; authored motion settings remain unchanged.
+- [x] Focused Bubble/Quick gates pass `87/87`, BTF/cadence/renderer transport gates pass `15/15`, and the maintained `h-destination` profile passes `78/78`.
+- [ ] Physically validate perceptible transient stream/drift response without overdrive; motion-step diagnostics precede impulse/collision correction and must not be read as final trajectory distance.

@@ -544,6 +544,12 @@ class BubbleSimulation:
             "sustained_loud_energy": max(0.0, max(bass, overall)),
             "speed_energy": 0.0,
             "drift_drive": 0.0,
+            "motion_event_strength": 0.0,
+            "motion_transient_envelope": 0.0,
+            "stream_burst_speed": 0.0,
+            "transient_drift_drive": 0.0,
+            "stream_step_mean": 0.0,
+            "drift_step_mean": 0.0,
             "drift_phase_boost": 1.0,
             "drift_amplitude_boost": 1.0,
             "group_drift_configured": 0.0,
@@ -560,6 +566,7 @@ class BubbleSimulation:
         _scheduler = settings.get("_event_scheduler")
         beat_detected = False
         beat_strength = 0.0
+        _kick_evt = None
         if _scheduler is not None:
             _kick_evt = _scheduler.consume_next("kick", max_age_s=0.3)
             if _kick_evt is not None:
@@ -690,16 +697,44 @@ class BubbleSimulation:
                 float(getattr(snare_evt, "strength", 0.0) or 0.0) * 0.10,
             )
 
+        # Discrete events own a short-lived motion accent, separate from the
+        # sustained body signal used for Bubble size.  Reuse the existing
+        # stream envelope so there is still only one authored motion state:
+        # kicks are strongest, snares retain most of their edge, and vocal
+        # swells provide a gentler push.
+        snare_strength = _clamp01(
+            float(getattr(snare_evt, "strength", 0.0) or 0.0)
+        )
+        vocal_event_strength = _clamp01(
+            float(getattr(vocal_evt, "strength", 0.0) or 0.0)
+        )
+        motion_event_strength = max(
+            _clamp01(beat_strength),
+            snare_strength * 0.90,
+            vocal_event_strength * 0.65,
+        )
+        vocal_burst_target = max(
+            vocal_burst_target,
+            motion_event_strength * 0.80,
+        )
+
         # Smoother: extremely fast attack/decay so travel speed mirrors music timing.
         if vocal_speed > self._smoothed_speed_energy:
             self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 6.0)
         else:
             self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 9.0)
+        if motion_event_strength > 0.0:
+            # A consume-once transient must be prompt enough to remain visible;
+            # the existing 7 Hz release below supplies the bounded decay.
+            self._stream_burst_envelope = max(
+                self._stream_burst_envelope,
+                motion_event_strength * 0.80,
+            )
         if vocal_burst_target > self._stream_burst_envelope:
             self._stream_burst_envelope += (
                 vocal_burst_target - self._stream_burst_envelope
             ) * min(1.0, dt * 4.0)
-        else:
+        elif motion_event_strength <= 0.0:
             self._stream_burst_envelope += (
                 vocal_burst_target - self._stream_burst_envelope
             ) * min(1.0, dt * 7.0)
@@ -714,10 +749,17 @@ class BubbleSimulation:
         burst_speed = burst_authority(
             envelope=self._stream_burst_envelope,
             delta=vocal_delta,
-            event=float(getattr(snare_evt, "strength", 0.0) or 0.0) if _scheduler is not None else 0.0,
+            event=motion_event_strength,
             envelope_weight=0.70,
             delta_weight=1.05,
-            event_weight=0.16,
+            event_weight=0.22,
+        )
+        motion_transient_drive = burst_authority(
+            envelope=self._stream_burst_envelope,
+            event=motion_event_strength,
+            envelope_weight=0.86,
+            event_weight=0.18,
+            ceiling=0.95,
         )
         speed_energy = min(
             1.0,
@@ -736,6 +778,11 @@ class BubbleSimulation:
         bass_lane_speed *= speed_vocal_gap
         speed_energy = max(speed_energy, bass_lane_speed * 1.18)
         big_lane_diag["speed_energy"] = speed_energy
+        big_lane_diag["motion_event_strength"] = motion_event_strength
+        big_lane_diag["motion_transient_envelope"] = (
+            self._stream_burst_envelope
+        )
+        big_lane_diag["stream_burst_speed"] = burst_speed
         bass_drift_gate = soft_ceiling(
             max(0.0, bass - 0.30),
             knee=0.0,
@@ -757,11 +804,18 @@ class BubbleSimulation:
             max_input=0.58,
             curve=1.0,
         )
+        transient_drift_drive = min(
+            0.18,
+            motion_transient_drive * (0.14 + drift_amount * 0.06),
+        )
         loud_drift_drive = min(
             1.0,
-            base_drift_drive + body_drift_bonus * (0.44 + bass_drift_gate * 0.70),
+            base_drift_drive
+            + body_drift_bonus * (0.44 + bass_drift_gate * 0.70)
+            + transient_drift_drive,
         )
         big_lane_diag["drift_drive"] = loud_drift_drive
+        big_lane_diag["transient_drift_drive"] = transient_drift_drive
         big_lane_diag["drift_amount_authored"] = drift_amount_authored
         big_lane_diag["drift_amount_effective"] = drift_amount
         big_lane_diag["drift_speed_authored"] = drift_speed_authored
@@ -775,34 +829,25 @@ class BubbleSimulation:
         group_drift_active = group_drift and drift_dir not in _SWIRL_DIRECTIONS and drift_dir != "none"
         big_lane_diag["group_drift_configured"] = 1.0 if group_drift else 0.0
         big_lane_diag["group_drift_active"] = 1.0 if group_drift_active else 0.0
+        drift_diag_now = 0.0
+        drift_diag_due = False
         if is_viz_diagnostics_enabled():
-            now = time.time()
-            if (
+            drift_diag_now = time.time()
+            drift_diag_due = bool(
                 self._diag_tick_count <= 6
                 or (
                     loud_drift_drive >= 0.02
-                    and (now - self._last_drift_diag_log_ts) >= 1.0
+                    and (
+                        drift_diag_now - self._last_drift_diag_log_ts
+                    ) >= 1.0
                 )
-            ):
-                logger.info(
-                    "[SPOTIFY_VIS][BUBBLE][DRIFT] bass=%.3f overall=%.3f speed=%.3f drive=%.3f phase=%.3f amp=%.3f dir=%s group_cfg=%s group_active=%s authored(amount=%.3f speed=%.3f freq=%.3f) effective(amount=%.3f speed=%.3f freq=%.3f)",
-                    bass,
-                    overall,
-                    speed_energy,
-                    loud_drift_drive,
-                    drift_phase_boost,
-                    drift_amplitude_boost,
-                    drift_dir,
-                    group_drift,
-                    group_drift_active,
-                    drift_amount_authored,
-                    drift_speed_authored,
-                    drift_freq_authored,
-                    drift_amount,
-                    drift_speed,
-                    drift_freq,
+                or (
+                    motion_event_strength > 0.0
+                    and (
+                        drift_diag_now - self._last_drift_diag_log_ts
+                    ) >= 0.25
                 )
-                self._last_drift_diag_log_ts = now
+            )
         cap = max(0.1, stream_cap)
         baseline = max(0.05, min(cap, stream_const))
         reactivity_cap = 2.0
@@ -890,6 +935,9 @@ class BubbleSimulation:
 
         # --- Update existing bubbles ---
         to_remove: List[int] = []
+        motion_sample_count = 0
+        stream_step_total = 0.0
+        drift_step_total = 0.0
         for i, b in enumerate(self._bubbles):
             b.age += dt
             if b.bounce_glide > 0.0:
@@ -939,6 +987,8 @@ class BubbleSimulation:
             bubble_vel = base_vel * b.speed_mult
             move_x = sv[0] * bubble_vel * dt * stream_scale * stream_follow
             move_y = sv[1] * bubble_vel * dt * stream_scale * stream_follow
+            stream_move_x = move_x
+            stream_move_y = move_y
 
             # Drift (sinusoidal lateral wander)
             drift_phase = b.phase + self._time * drift_speed * drift_phase_boost * 2.0
@@ -1013,6 +1063,13 @@ class BubbleSimulation:
                     move_y += drift_offset * dt
                 else:
                     move_x += drift_offset * dt
+
+            motion_sample_count += 1
+            stream_step_total += math.hypot(stream_move_x, stream_move_y)
+            drift_step_total += math.hypot(
+                move_x - stream_move_x,
+                move_y - stream_move_y,
+            )
 
             b.x += move_x
             b.y -= move_y  # Y is inverted in UV space (0=top, 1=bottom)
@@ -1226,6 +1283,45 @@ class BubbleSimulation:
             0.0,
             big_lane_diag["big_count"] - big_lane_diag["active_big_count"],
         )
+        if motion_sample_count > 0:
+            big_lane_diag["stream_step_mean"] = (
+                stream_step_total / motion_sample_count
+            )
+            big_lane_diag["drift_step_mean"] = (
+                drift_step_total / motion_sample_count
+            )
+        if drift_diag_due:
+            logger.info(
+                "[SPOTIFY_VIS][BUBBLE][DRIFT] bass=%.3f overall=%.3f "
+                "speed=%.3f drive=%.3f phase=%.3f amp=%.3f "
+                "motion(event=%.3f envelope=%.3f burst=%.3f drift=%.3f "
+                "stream_step=%.6f drift_step=%.6f) "
+                "dir=%s group_cfg=%s group_active=%s "
+                "authored(amount=%.3f speed=%.3f freq=%.3f) "
+                "effective(amount=%.3f speed=%.3f freq=%.3f)",
+                bass,
+                overall,
+                speed_energy,
+                loud_drift_drive,
+                drift_phase_boost,
+                drift_amplitude_boost,
+                motion_event_strength,
+                self._stream_burst_envelope,
+                burst_speed,
+                transient_drift_drive,
+                big_lane_diag["stream_step_mean"],
+                big_lane_diag["drift_step_mean"],
+                drift_dir,
+                group_drift,
+                group_drift_active,
+                drift_amount_authored,
+                drift_speed_authored,
+                drift_freq_authored,
+                drift_amount,
+                drift_speed,
+                drift_freq,
+            )
+            self._last_drift_diag_log_ts = drift_diag_now
         self._last_big_lane_diag = big_lane_diag
 
         self._apply_bubble_collision_response(
