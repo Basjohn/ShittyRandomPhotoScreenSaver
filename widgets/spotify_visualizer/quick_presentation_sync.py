@@ -27,9 +27,16 @@ never calls the legacy ``present_tick``.
 
 from __future__ import annotations
 
+import time
 from typing import Any, Callable, Optional
 
+from core.logging.logger import get_logger, is_viz_diagnostics_enabled
+from widgets.spotify_visualizer.reactivity_diagnostics import (
+    maybe_log_snapshot_publication,
+)
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
+
+logger = get_logger(__name__)
 
 PresentationResolver = Callable[[], Optional[ResolvedVisualizerPresentation]]
 PresentationCommitter = Callable[[ResolvedVisualizerPresentation], None]
@@ -92,6 +99,14 @@ class QuickVisualizerPresentationSync:
         )
         if not published:
             return False
+        if is_viz_diagnostics_enabled():
+            maybe_log_snapshot_publication(
+                self._controller,
+                logger,
+                now_ts=time.time(),
+                logical=logical,
+                revision=publication.revision,
+            )
         if self._commit_presentation is not None:
             # Commit the SAME record embedded in the just-published snapshot.
             # Do not independently resolve presentation again.

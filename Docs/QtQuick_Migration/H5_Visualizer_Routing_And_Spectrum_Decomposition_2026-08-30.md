@@ -109,7 +109,7 @@ Also preserve missing-monitor 30 s grace/fallback/reclaim behavior.
 
 ### Updated evidence status — 2026-08-31
 
-The direct line-by-line comparison against the user-supplied known-good `3fe5df687387b6b6a121142372c43a7719442386` tree has converted the previous broad H5b hypotheses into **three independent source-proven migration deviations**.
+The direct line-by-line comparison against the user-supplied known-good `3fe5df687387b6b6a121142372c43a7719442386` tree converted the previous broad H5b hypotheses into **three major source-proven migration deviations**, plus a second lost historical creator translation (`spectrum_unique_colors -> spectrum_rainbow_per_bar`) found during implementation. The first bounded repair is now implemented; physical closure remains open.
 
 The historical source is a behavioral oracle only. The accepted retained Quick architecture remains binding.
 
@@ -128,10 +128,12 @@ Therefore a canonical `bars` preset can reach the Quick owner and still render t
 
 Repair checklist:
 
-- [ ] Normalize/consume canonical `spectrum_render_mode` in the current logical configuration seam.
-- [ ] Derive the runtime boolean there; keep any legacy boolean fallback narrow and tested.
-- [ ] Test `bars` and `segment` through `QuickDisplayVisualizerOwner`, not only the helper.
-- [ ] Preserve mode switch/recreation/preset-swap topology.
+- [x] Normalize/consume canonical `spectrum_render_mode` in the current logical configuration seam.
+- [x] Derive the runtime boolean there; keep the legacy boolean fallback narrow.
+- [x] Add focused `QuickDisplayVisualizerOwner` coverage proving canonical `bars` and legacy-conflict precedence.
+- [x] Restore the companion historical creator translation `spectrum_unique_colors -> spectrum_rainbow_per_bar` at the presentation owner.
+- [ ] Execute the focused test under the normal PySide6 test environment.
+- [ ] Physically prove mode switch/recreation/preset-swap topology.
 
 Do not revive the historical widget creator.
 
@@ -151,17 +153,22 @@ spectrum_drop_speed
 
 Those values reach existing `BeatEngine` setters / `SpectrumShapeConfig` in the historical path.
 
-The new Quick owner correctly avoids the broad catch-all applier, but neither `build_technical_cache()` nor `apply_controller_technical_config()` carries this Spectrum shaping family. The shared engine algorithms themselves are unchanged, yet the selected preset can therefore feed **different/default engine shaping**.
+The new Quick owner correctly avoids the broad catch-all applier. Its dedicated technical mapper **does** correctly preserve the separate bar-count/block-size/floor/sensitivity/dynamic-range/AGC/input-gain family (including exact `AGC=0.0` = no AGC), but it does not carry this Spectrum shaping family. The shared engine algorithms themselves are unchanged, yet the selected preset can therefore feed correct technical values alongside **different/default engine shaping**. That partial migration is why technical parity and GREEN downstream goldens did not exonerate the live preset -> source configuration seam.
 
 Repair checklist:
 
-- [ ] Route the exact engine-consumed Spectrum shape values through a narrow presentation-neutral controller configuration seam.
-- [ ] Apply them through the existing one BeatEngine and existing setters.
-- [ ] Apply only on configure/mode/preset/settings refresh; never on every authored/render frame.
-- [ ] Keep mirrored-state + active-notch selection coherent in one transaction.
-- [ ] Test in-place preset A -> B reconfiguration without engine/runtime recreation.
+- [x] Route the exact engine-consumed Spectrum shape values through `source_config_applier.py`, a narrow presentation-neutral configuration seam.
+- [x] Apply them through the existing one BeatEngine and existing setters.
+- [x] Apply only on existing configure/mode-activation edges; never on every authored/render frame.
+- [x] Keep mirrored-state + active-notch selection coherent in one configuration application.
+- [x] Preserve the historical full-model behavior that applies this source block even when another mode is visible. This matters because configured notches define the shared pre-mode bass/mid/treble split; omission can therefore weaken/change Bubble/Oscillo/Sine/DevCurve as well as Spectrum.
+- [x] Add focused coverage proving the source block reaches the engine while Bubble is active.
+- [x] Add focused technical parity coverage proving `bar_count`, explicit block size, `dynamic_floor=False`, manual sensitivity/floor, dynamic-range boost, input gain and `agc_strength=0.0` keep their historical meanings; these controls were already correctly owned and remain outside the new source applier.
+- [x] Add bounded `[VIS_TECH_CONFIG]` configuration-edge logging so physical traces show the exact applied technical values without any per-frame settings work.
+- [ ] Execute focused tests under PySide6.
+- [ ] Add/execute the real in-place preset A -> B proof when H8 restores the production preset-hotswap route; do not invent a second runtime path solely for this test.
 
-This must be repaired before interpreting remaining all-`1.00` data as a new math problem.
+This source defect is repaired in code and must now be physically re-measured before interpreting remaining all-`1.00` data as a new math problem. Existing replay/presentation goldens are intentionally not regenerated: their replay boundary accepts already-authored feature/bar state and therefore does not prove the production preset -> live source/FFT configuration path.
 
 ### B3 — historical final `0.55` renderer transfer is absent (**J-shaped numerical parity / required for H5b functional closure**)
 
@@ -173,14 +180,15 @@ Current `widgets/spotify_visualizer/spectrum_solid_hysteresis.py` still owns `_S
 
 Repair checklist:
 
-- [ ] Reuse/export one canonical transfer constant/helper; do not duplicate a new magic number.
-- [ ] Apply it exactly once to Quick live bars and peaks at renderer input.
-- [ ] Keep logical/snapshot bar values canonical and untouched.
-- [ ] Test bar + peak transfer and both continuous/segmented topology.
+- [x] Export/reuse one canonical `SPECTRUM_SHADER_INPUT_SCALE = 0.55`; no duplicate magic number.
+- [x] Apply it exactly once to Quick live bars and peaks at renderer input.
+- [x] Keep logical/snapshot bar values canonical and untouched.
+- [x] Add focused bar+peak transfer coverage, including missing-peak fallback/padding.
+- [ ] Execute focused tests + physically validate both continuous/segmented topology.
 
-### B4 — re-measure only after B1-B3
+### B4 — re-measure after the known source repairs
 
-After the three known deviations are removed, trace:
+B1-B3 and the lost unique-color translation are now repaired in source. Trace the remaining physical path:
 
 ```text
 S0 selected preset/model

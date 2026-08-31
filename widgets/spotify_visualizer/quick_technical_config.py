@@ -17,6 +17,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from core.logging.logger import get_logger, is_viz_diagnostics_enabled
+
+logger = get_logger(__name__)
+
 def _clamp(value: object, minimum: float, maximum: float, default: float) -> float:
     try:
         resolved = float(value)
@@ -150,6 +154,25 @@ def apply_controller_technical_config(
         kick_lane_gain=kick_lane_gain,
         spectrum_lane_transient_mix=spectrum_lane_transient_mix,
     )
+
+    if is_viz_diagnostics_enabled():
+        logger.debug(
+            "[VIS_TECH_CONFIG] mode=%s reason=%s bars=%d dynamic_floor=%s "
+            "manual_floor=%.3f adaptive=%s sensitivity=%.3f block=%d "
+            "dynamic_range=%s energy_boost=%.3f agc=%.3f input_gain=%.3f",
+            str(getattr(controller, "mode_id", "unknown")),
+            str(reason),
+            target_bars,
+            dynamic_floor,
+            manual_floor,
+            adaptive,
+            sensitivity,
+            audio_block_size,
+            dynamic_range_enabled,
+            _energy_boost(dynamic_range_enabled),
+            agc_strength,
+            input_gain,
+        )
 
     # These originated in the "technical" settings section, but authored logical
     # evolution consumes them.  Consumer ownership therefore wins over UI naming.

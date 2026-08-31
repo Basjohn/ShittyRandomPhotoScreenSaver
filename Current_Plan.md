@@ -1,6 +1,6 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-31 — visualizer historical-vs-current reactivity audit opened as H5c. Source-proven migration deviations now include Spectrum topology canonicalization loss, Spectrum BeatEngine shaping configuration loss, Spectrum historical renderer-input transfer loss, and three stranded Bubble logical settings. Shared source-readiness, Play/Pause edge latency and Sine idle transport remain instrument-first open work. Black-flash PresentMode fix and maintained h-destination GREEN remain preserved.
+Last updated: 2026-08-31 — first bounded H5b/H5c source repair implemented from the historical-vs-current audit. Quick now restores the historical shared BeatEngine/source preset block, Bubble's three stranded logical controls, Spectrum's two creator-derived preset translations and the historical `0.55` renderer transfer. The source audit also proves that the missing Spectrum notch/shaping block can alter bass/mid/treble lanes consumed by every mode. Bounded `[VIS_REACTIVITY]` + T0-T7 Play/Pause diagnostics are implemented; physical re-measurement, PySide test execution, source-readiness classification and Sine idle transport remain open. Black-flash PresentMode fix and maintained h-destination GREEN remain preserved.
 
 ## Current checkpoint
 
@@ -26,8 +26,8 @@ Move a row between groups only when its state genuinely changes; do not keep a s
 **Pending**
 
 - [ ] H5a — CUSTOM Visualizer independent display admission
-- [ ] H5b — Spectrum topology + shaping + renderer-transfer repair (three source-proven migration deviations)
-- [ ] H5c — end-to-end visualizer reactivity parity audit (interleaved: Bubble weak response, Play/Pause edge delay, Sine idle, shared field/readiness audit)
+- [ ] H5b — Spectrum topology + shaping + renderer-transfer repair (**implementation complete; focused test + physical gate pending**)
+- [ ] H5c — end-to-end visualizer reactivity parity audit (**first shared-source/config repair + diagnostics implemented; physical classification continues**): Bubble weak response, Play/Pause edge delay, Sine idle, readiness/final-render audit
 - [ ] H6 — CUSTOM Settings size-lock scope
 - [ ] H8 — Visualizer middle-click preset hotswap (source-proven contract omission)
 - [ ] H7 — Exit visible-response/perf classification (likely J after measurement)
@@ -288,23 +288,24 @@ Technical route: `Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Deco
 
 ### H5b — Spectrum saturation + wrong functional presentation topology
 
-**Status: three source-proven migration deviations; repair as bounded configuration/presentation parity work, then re-measure.**
+**Status: source repair implemented; focused PySide test execution + physical S0-S7 gate pending.**
 
-The direct comparison against known-good `3fe5df687387b6b6a121142372c43a7719442386` has replaced the earlier generic two-branch hypothesis with concrete seams:
+The direct comparison against known-good `3fe5df687387b6b6a121142372c43a7719442386` found four concrete ownership/presentation losses, including the second historical creator translation discovered during implementation:
 
-- [x] **Topology:** historical creator mapped canonical `spectrum_render_mode` to runtime `spectrum_single_piece`; current preset normalization removes the legacy boolean while the Quick logical applier ignores the canonical key, leaving the segmented default.
-- [x] **Engine shaping:** historical/live engine configuration for mirror/shape nodes/notches/wave/profile/lane strengths/drop speed remains in the old catch-all applier but is absent from the new Quick controller/technical path.
-- [x] **Renderer transfer:** historical Spectrum multiplied bars and peaks by `0.55` immediately before shader upload; Quick uploads raw values even though current Spectrum hysteresis still carries the same `0.55` transfer constant.
+- [x] **Topology translation:** historical `spectrum_render_mode -> spectrum_single_piece` restored at the logical owner; legacy boolean remains fallback-only.
+- [x] **Color-topology translation:** historical `spectrum_unique_colors -> spectrum_rainbow_per_bar` restored at the presentation owner.
+- [x] **Shared source/engine shaping:** mirror/shape nodes/notches/wave/profile/lane strengths/drop speed now route through one presentation-neutral configuration-time applier into the existing BeatEngine. Historical full-model semantics are preserved even while another mode is visible because the notch/shaping state feeds shared pre-mode audio lanes.
+- [x] **Renderer transfer:** historical bar+peak `0.55` transfer restored exactly at the Quick Spectrum shader-input boundary; logical bars remain canonical.
 
-Live repair checklist:
+Live closure checklist:
 
-- [ ] Restore canonical `bars`/`segment` mapping at the current logical configuration owner; do not revive the historical creator.
-- [ ] Route the Spectrum engine-shaping family through one narrow controller-owned configuration seam into the existing BeatEngine setters; no new engine, timer or per-frame settings reads.
-- [ ] Restore the historical `0.55` bar+peak transfer exactly once at the Quick Spectrum renderer input; keep logical bars canonical.
-- [ ] Add focused Quick-owner/configuration + renderer-transfer tests.
-- [ ] Re-measure Spectrum S0-S7 only after those known deviations are removed from the path.
-- [ ] If bars still saturate, find the first remaining saturating transformation; do not apply global visualizer gain.
-- [ ] Physical: real music is non-degenerate/reactive; `bars` presets are continuous columns; segmented presets remain intentionally segmented; switch/recreation/preset swap preserve both topology and shaping.
+- [x] No old creator/catch-all QWidget configuration façade restored.
+- [x] No new BeatEngine/source/timer/cadence/poller added; source values apply only on existing configure/mode-activation edges.
+- [x] Add focused Quick-owner/configuration + renderer-transfer tests.
+- [ ] Execute the new focused test in the normal PySide6 project environment; this audit container lacks PySide6.
+- [ ] Re-measure Spectrum S0-S7 with real music after the known defects are removed.
+- [ ] If bars still saturate or remain weak, find the first remaining bad S-stage; do not apply global visualizer gain.
+- [ ] Physical: real music is non-degenerate/reactive; `bars` presets are continuous columns; segmented presets remain intentionally segmented; switch/recreation/preset swap preserve topology and shaping.
 
 H5b still must not change Bubble/shared cadence to make Spectrum look better.
 
@@ -313,24 +314,32 @@ Reactivity evidence/decomposition: `Docs/QtQuick_Migration/H5c_Visualizer_Reacti
 
 ### H5c — historical-vs-Quick visualizer reactivity parity audit
 
-**Status: ACTIVE H audit, intentionally interleaved because it is a major user-visible migration regression. Do not tune around known ownership deviations.**
+**Status: ACTIVE H audit. First source/configuration repair and bounded diagnostics are implemented; physical magnitude/timing classification continues.**
 
-What is already established:
+What is already established / implemented:
 
 - [x] Core `audio_worker`, `BeatEngine`, energy-band, feature-frame, signal, oscilloscope-contract, technical-config and transient-bus source is byte-identical historical/current; bar computation is behaviorally identical apart from a type-only import path.
 - [x] Healthy ~90 Hz authored Bubble cadence does not prove live music energy is admitted; intentional idle-energy motion can continue at full authored cadence.
-- [x] Bubble's `bubble_group_drift`, `bubble_collision_pop_mode` and `bubble_big_visual_smoothing` are consumed by current authored simulation but are not populated by the Quick logical applier.
-- [x] Historical Bubble renderer energy uniforms are a dead end: they were not consumed by the historical shader and must not be restored.
-- [ ] Complete systematic current-consumer configuration audit for all five modes; fix every live field stranded by the old mixed-applier split.
-- [ ] Add bounded `[VIS_REACTIVITY]` readiness/identity telemetry and prove whether current per-mode `source_ready` gates reject/delay valid live audio before changing them.
-- [ ] Trace visible Play/Pause edge T0-T7 (Media truth -> owner -> BeatEngine -> first current source -> mode ready -> logical publication -> Quick snapshot -> retained draw), distinguishing historical 1.5 s cold ramp from warm-resume/migration delay.
+- [x] Mechanical historical-live-consumer audit completed: the split already owns Oscillo/Sine/DevCurve generated fields and technical controls; the actual stranded live set was three Bubble logical controls, two historical Spectrum creator translations, and the shared Spectrum source/engine block. Retired `*_growth` is excluded.
+- [x] Restore Bubble `bubble_group_drift`, `bubble_collision_pop_mode`, `bubble_big_visual_smoothing` at the authored logical owner.
+- [x] Restore the historical shared Spectrum notch/shaping source contract. **This is cross-mode relevant:** absent configured notches, unchanged `fft_to_bars()` falls back to fixed `4/10` bass/mid split indices instead of preset-normalized boundaries (for example about `14/31` at Bubble's 48-bar domain), changing source lanes before mode-specific logic.
+- [x] Historical Bubble renderer energy uniforms are a dead end and were not restored.
+- [x] Add bounded `[VIS_SOURCE_CONFIG]`, `[VIS_TECH_CONFIG]`, `[VIS_REACTIVITY]` and Play/Pause T0-T7 telemetry at existing boundaries only; no diagnostic timer/cadence/large-array logging.
+- [x] Add one focused new parity test file covering source routing, Bubble controls, Spectrum translations/`0.55` transfer, and the reactivity-critical technical zero/false contract.
+- [x] Verify the existing Quick technical owner already preserves per-mode bar count, explicit audio block size, `dynamic_floor=False` + manual floor, adaptive/manual sensitivity, dynamic-range boost, input gain and **`agc_strength=0.0` as no AGC**. These were already correct and are not duplicated by the new source applier.
+- [x] Record the golden coverage gap: replay/presentation goldens largely begin after authored feature state exists, so GREEN goldens do not prove live preset -> BeatEngine/audio-worker configuration reachability. Do not regenerate goldens for this repair.
+- [ ] Execute that focused test in the normal PySide6 environment; syntax/static validation is complete here but this container lacks PySide6.
+- [ ] Physically re-measure all five modes under real music after the shared source repair.
+- [ ] Capture warm + cold Play/Pause T0-T7 traces, distinguishing historical 1.5 s cold ramp from migration delay.
+- [ ] Prove whether current per-mode `source_ready` gates reject/delay valid live audio before changing them.
 - [ ] Trace Sine paused idle from `SineFrameRuntime` changing animation/shift state through snapshot/uniform/present; never add a QML timer to fake it.
-- [ ] Complete Bubble B0-B9 magnitude trace only after known config gaps are restored; no global sensitivity/physics retune.
+- [ ] Complete Bubble B0-B9 magnitude trace after shared source restoration; no global sensitivity/physics retune.
 - [ ] Complete Oscilloscope/DevCurve final renderer-input comparison as controls for shared vs mode-specific deviations.
-- [ ] Preserve current scale/viewport sizing contracts; retired `*_growth` controls are not parity targets.
+- [x] Preserve current scale/viewport sizing contracts; retired `*_growth` controls are not parity targets.
 
 Detailed live checklist and repair sequence: `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`.  
-Exact historical/current evidence matrix and next source paths: `Docs/QtQuick_Migration/Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`.
+Exact historical/current evidence matrix and next source paths: `Docs/QtQuick_Migration/Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`.  
+Safety checkpoint / applied-vs-pending handoff: `Docs/QtQuick_Migration/H5c_Implementation_Checkpoint_2026-08-31.md`.
 
 ### H6 — CUSTOM Settings may lock only size-authoring controls
 

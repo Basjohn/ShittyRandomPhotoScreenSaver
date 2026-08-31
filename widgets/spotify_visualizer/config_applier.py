@@ -16,6 +16,7 @@ from core.settings.bubble_gradient_semantics import (
     normalize_bubble_gradient_direction,
     normalize_bubble_specular_direction,
 )
+from core.settings.visualizer_settings_contract import normalize_spectrum_render_mode
 
 logger = get_logger(__name__)
 
@@ -136,6 +137,8 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._bubble_rotation_amount = max(0.0, min(1.0, float(kwargs['bubble_rotation_amount'])))
     if 'bubble_drift_amount' in kwargs:
         host._bubble_drift_amount = max(0.0, min(1.0, float(kwargs['bubble_drift_amount'])))
+    if 'bubble_group_drift' in kwargs:
+        host._bubble_group_drift = bool(kwargs['bubble_group_drift'])
     if 'bubble_drift_speed' in kwargs:
         host._bubble_drift_speed = max(0.0, min(1.0, float(kwargs['bubble_drift_speed'])))
     if 'bubble_drift_frequency' in kwargs:
@@ -166,10 +169,19 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._bubble_bounce_small_speed = max(0.0, min(2.0, float(kwargs['bubble_bounce_small_speed'])))
     if 'bubble_bounce_same_only' in kwargs:
         host._bubble_bounce_same_only = bool(kwargs['bubble_bounce_same_only'])
+    if 'bubble_collision_pop_mode' in kwargs:
+        mode = str(kwargs['bubble_collision_pop_mode']).strip().lower()
+        if mode not in {"off", "one", "all"}:
+            mode = "off"
+        host._bubble_collision_pop_mode = mode
     if 'bubble_big_size_max' in kwargs:
         host._bubble_big_size_max = max(0.010, min(0.060, float(kwargs['bubble_big_size_max'])))
     if 'bubble_small_size_max' in kwargs:
         host._bubble_small_size_max = max(0.004, min(0.030, float(kwargs['bubble_small_size_max'])))
+    if 'bubble_big_visual_smoothing' in kwargs:
+        host._bubble_big_visual_smoothing = max(
+            0.0, min(1.0, float(kwargs['bubble_big_visual_smoothing']))
+        )
     if 'bubble_big_contraction_bias' in kwargs:
         host._bubble_big_contraction_bias = max(0.0, min(2.0, float(kwargs['bubble_big_contraction_bias'])))
     if 'bubble_big_size_clamp' in kwargs:
@@ -180,7 +192,17 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._bubble_trail_strength = max(0.0, min(1.5, float(kwargs['bubble_trail_strength'])))
 
     # --- Spectrum authored logical inputs (SpectrumFrameRuntime.resolve) ---
-    if 'spectrum_single_piece' in kwargs:
+    # Canonical presets/settings store ``spectrum_render_mode``.  The historical
+    # creator translated that value to the boolean consumed by authored state;
+    # Quick has no creator façade, so the logical owner performs that tiny
+    # semantic translation directly.  Retain the legacy boolean only as a
+    # fallback for old focused callers.
+    if 'spectrum_render_mode' in kwargs:
+        host._spectrum_single_piece = (
+            normalize_spectrum_render_mode(kwargs['spectrum_render_mode'], 'bars')
+            == 'bars'
+        )
+    elif 'spectrum_single_piece' in kwargs:
         host._spectrum_single_piece = bool(kwargs['spectrum_single_piece'])
     if 'spectrum_visual_smoothing_enabled' in kwargs:
         host._spectrum_visual_smoothing_enabled = bool(
@@ -404,7 +426,12 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
             host._bar_border_color = color
 
     # --- Spectrum styling (glow / border / rainbow border) -----------
-    if 'spectrum_rainbow_per_bar' in kwargs:
+    # ``spectrum_unique_colors`` is the canonical settings/preset key.  The old
+    # QWidget creator translated it to ``spectrum_rainbow_per_bar`` before the
+    # mixed applier ran; Quick consumes the canonical model directly.
+    if 'spectrum_unique_colors' in kwargs:
+        host._rainbow_per_bar = bool(kwargs['spectrum_unique_colors'])
+    elif 'spectrum_rainbow_per_bar' in kwargs:
         host._rainbow_per_bar = bool(kwargs['spectrum_rainbow_per_bar'])
     if 'spectrum_rainbow_border' in kwargs:
         host._spectrum_rainbow_border = bool(kwargs['spectrum_rainbow_border'])

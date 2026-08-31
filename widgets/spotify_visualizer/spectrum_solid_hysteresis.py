@@ -12,7 +12,11 @@ import math
 from typing import Any, List, Sequence
 
 _SPECTRUM_BASE_HEIGHT = 80.0
-_SPECTRUM_UPLOAD_SCALE = 0.55
+# Historical GL presentation multiplied authored bars/peaks by this amount at
+# the final shader-upload seam.  Keep it public so retained Quick presentation
+# can preserve the same transfer without retuning authored/DSP state.
+SPECTRUM_SHADER_INPUT_SCALE = 0.55
+_SPECTRUM_UPLOAD_SCALE = SPECTRUM_SHADER_INPUT_SCALE
 _SPECTRUM_CURVE_POWER = 1.15
 _SPECTRUM_MAX_BOOST = 0.95
 _SPECTRUM_DEFAULT_DT_S = 1.0 / 60.0

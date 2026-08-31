@@ -12,12 +12,16 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from widgets.spotify_visualizer import config_applier, mode_capabilities
 from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
 from widgets.spotify_visualizer.devcurve_frame_runtime import DevCurveFrameRuntime
 from widgets.spotify_visualizer.logical_runtime import coerce_identity
 from widgets.spotify_visualizer.oscilloscope_frame_runtime import (
     OscilloscopeFrameRuntime,
+)
+from widgets.spotify_visualizer.reactivity_diagnostics import (
+    maybe_log_reactivity_boundary,
 )
 from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
@@ -40,6 +44,9 @@ from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
     compute_spectrum_height_scale,
 )
 from widgets.spotify_visualizer.sine_frame_runtime import SineFrameRuntime
+
+
+logger = get_logger(__name__)
 
 
 _SIGNAL_FIELDS = {
@@ -245,6 +252,7 @@ class _CaptureContext:
     activation_id: int
     source_generation: int
     source_activation_id: int
+    source_timestamp: float | None
     playing: bool
     first_frame: bool
 
@@ -296,8 +304,9 @@ def _capture_spectrum(
     _viewport_width, viewport_height = (
         controller.presentation_viewport_extent
     )
+    source_bars = tuple(getattr(widget, "_display_bars", ()) or ())
     resolved = runtime.resolve(
-        tuple(getattr(widget, "_display_bars", ()) or ()),
+        source_bars,
         bar_count=int(getattr(widget, "_bar_count", 0) or 0),
         now_ts=context.now_ts,
         runtime_generation=context.runtime_generation,
@@ -331,6 +340,23 @@ def _capture_spectrum(
         raise RuntimeError("Spectrum logical state retired during capture")
     if controller.peek_logical_mode_state("spectrum") is not runtime:
         return None
+    if is_viz_diagnostics_enabled():
+        maybe_log_reactivity_boundary(
+            widget,
+            logger,
+            now_ts=context.now_ts,
+            mode="spectrum",
+            playing=context.playing,
+            source_ready=resolved.reactive_source_ready,
+            runtime_generation=context.runtime_generation,
+            engine_generation=context.engine_generation,
+            engine_activation=context.activation_id,
+            source_generation=context.source_generation,
+            source_activation=context.source_activation_id,
+            source_timestamp=context.source_timestamp,
+            input_values=source_bars,
+            resolved_values=resolved.bars,
+        )
     extra["spectrum_height_scale"] = compute_spectrum_height_scale(
         viewport_height
     )
@@ -379,6 +405,9 @@ def _capture_oscilloscope(
         return None
     if not isinstance(runtime, OscilloscopeFrameRuntime):
         raise TypeError("Oscilloscope logical mode state has the wrong type")
+    raw_energy = _energy_state(extra.get("energy_bands"))
+    raw_kick = float(extra.get("line_kick_event_strength", 0.0) or 0.0)
+    raw_snare = float(extra.get("line_snare_event_strength", 0.0) or 0.0)
     resolved = runtime.resolve(
         tuple(extra.get("waveform", ()) or ()),
         waveform_count=int(extra.get("waveform_count", 0) or 0),
@@ -395,11 +424,9 @@ def _capture_oscilloscope(
             and float(extra.get("osc_ghost_intensity", 0.0) or 0.0) > 0.001
         ),
         ghost_decay=float(extra.get("osc_ghost_decay", 0.4) or 0.4),
-        energy=_energy_state(extra.get("energy_bands")),
-        kick_event=float(extra.get("line_kick_event_strength", 0.0) or 0.0),
-        snare_event=float(
-            extra.get("line_snare_event_strength", 0.0) or 0.0
-        ),
+        energy=raw_energy,
+        kick_event=raw_kick,
+        snare_event=raw_snare,
         transient_width_mix=float(
             extra.get("osc_transient_width_mix", 0.35)
         ),
@@ -412,6 +439,24 @@ def _capture_oscilloscope(
         raise RuntimeError("Oscilloscope logical state retired during capture")
     if controller.peek_logical_mode_state("oscilloscope") is not runtime:
         return None
+    if is_viz_diagnostics_enabled():
+        maybe_log_reactivity_boundary(
+            widget,
+            logger,
+            now_ts=context.now_ts,
+            mode="oscilloscope",
+            playing=context.playing,
+            source_ready=resolved.reactive_source_ready,
+            runtime_generation=context.runtime_generation,
+            engine_generation=context.engine_generation,
+            engine_activation=context.activation_id,
+            source_generation=context.source_generation,
+            source_activation=context.source_activation_id,
+            source_timestamp=context.source_timestamp,
+            input_energy=raw_energy,
+            resolved_energy=resolved.energy,
+            event_summary=f"kick={raw_kick:.3f},snare={raw_snare:.3f}",
+        )
     extra["_quick_resolved_waveform"] = resolved.waveform
     extra["_quick_resolved_waveform_count"] = resolved.waveform_count
     extra["_quick_resolved_energy"] = resolved.energy
@@ -461,6 +506,9 @@ def _capture_sine(
         return None
     if not isinstance(runtime, SineFrameRuntime):
         raise TypeError("Sine logical mode state has the wrong type")
+    raw_energy = _energy_state(extra.get("energy_bands"))
+    raw_kick = float(extra.get("line_kick_event_strength", 0.0) or 0.0)
+    raw_snare = float(extra.get("line_snare_event_strength", 0.0) or 0.0)
     resolved = runtime.resolve(
         now_ts=context.now_ts,
         runtime_generation=context.runtime_generation,
@@ -469,9 +517,9 @@ def _capture_sine(
         source_generation=context.source_generation,
         source_activation_id=context.source_activation_id,
         playing=context.playing,
-        energy=_energy_state(extra.get("energy_bands")),
-        kick_event=float(extra.get("line_kick_event_strength", 0.0) or 0.0),
-        snare_event=float(extra.get("line_snare_event_strength", 0.0) or 0.0),
+        energy=raw_energy,
+        kick_event=raw_kick,
+        snare_event=raw_snare,
         ghosting_enabled=bool(
             extra.get("sine_ghosting_enabled", False)
             and float(extra.get("sine_ghost_alpha", 0.0) or 0.0) > 0.001
@@ -508,6 +556,24 @@ def _capture_sine(
         raise RuntimeError("Sine logical state retired during capture")
     if controller.peek_logical_mode_state("sine_wave") is not runtime:
         return None
+    if is_viz_diagnostics_enabled():
+        maybe_log_reactivity_boundary(
+            widget,
+            logger,
+            now_ts=context.now_ts,
+            mode="sine_wave",
+            playing=context.playing,
+            source_ready=resolved.reactive_source_ready,
+            runtime_generation=context.runtime_generation,
+            engine_generation=context.engine_generation,
+            engine_activation=context.activation_id,
+            source_generation=context.source_generation,
+            source_activation=context.source_activation_id,
+            source_timestamp=context.source_timestamp,
+            input_energy=raw_energy,
+            resolved_energy=resolved.energy,
+            event_summary=f"kick={raw_kick:.3f},snare={raw_snare:.3f}",
+        )
     extra["_quick_resolved_energy"] = resolved.energy
     extra["_quick_mode_changed"] = resolved.changed
     parameter_values = {
@@ -725,6 +791,7 @@ def capture_legacy_visualizer_logical_frame(
         activation_id=activation_id,
         source_generation=source_generation,
         source_activation_id=source_activation,
+        source_timestamp=source_timestamp,
         playing=bool(getattr(widget, "_spotify_playing", False)),
         first_frame=not bool(getattr(widget, "_has_pushed_first_frame", False)),
     )

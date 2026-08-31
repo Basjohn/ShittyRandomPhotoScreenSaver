@@ -12,7 +12,11 @@ from typing import Any, List, Dict, Optional, Set, Mapping
 from PySide6.QtCore import QObject, Signal, QUrl
 from PySide6.QtGui import QGuiApplication, QScreen, QPixmap, QDesktopServices
 
-from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.logging.logger import (
+    get_logger,
+    is_perf_metrics_enabled,
+    is_viz_diagnostics_enabled,
+)
 from core.resources.manager import ResourceManager
 from core.settings.capability_activation import (
     apply_transition_menu_selection,
@@ -1496,10 +1500,22 @@ class DisplayManager(QObject):
         model = self._quick_visualizer_media_model
         if owner is None or model is None:
             return
-        owner.set_playing(
+        playing = (
             str(getattr(model, "playbackState", "unknown")).lower()
             == "playing"
         )
+        observed_ts = time.time()
+        if is_viz_diagnostics_enabled():
+            previous = getattr(self, "_quick_visualizer_diag_last_playing", None)
+            if previous is None or bool(previous) != playing:
+                logger.debug(
+                    "[VIS_PLAYBACK_EDGE] stage=T0 mode=%s playing=%s ts=%.6f",
+                    owner.controller.mode_id,
+                    playing,
+                    observed_ts,
+                )
+            self._quick_visualizer_diag_last_playing = playing
+        owner.set_playing(playing, observed_ts=observed_ts)
 
     def _disconnect_quick_visualizer_media_route(self) -> None:
         """Detach the sole retained Media -> visualizer playback action route."""

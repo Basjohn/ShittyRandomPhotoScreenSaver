@@ -14,7 +14,7 @@ import time
 from dataclasses import replace
 from typing import Any, Callable, Mapping
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 
 logger = get_logger(__name__)
 
@@ -162,7 +162,24 @@ class QuickDisplayVisualizerOwner:
             controller.thread_manager = thread_manager
         if process_supervisor is not None:
             controller.process_supervisor = process_supervisor
-        controller.ensure_engine()
+        engine = controller.ensure_engine()
+
+        # Source-owned preset semantics used to be side effects of the mixed
+        # QWidget config applier.  Quick has no widget presenter, so route those
+        # values explicitly to the one existing BeatEngine at configuration
+        # time.  ``logical_kwargs`` is the canonical settings payload in
+        # production; presentation is only a fallback for focused callers.
+        source_kwargs = (
+            logical_kwargs
+            if logical_kwargs is not None
+            else presentation_kwargs
+        )
+        if source_kwargs:
+            from widgets.spotify_visualizer.source_config_applier import (
+                apply_engine_vis_mode_kwargs,
+            )
+
+            apply_engine_vis_mode_kwargs(engine, source_kwargs)
 
         # Technical settings are already resolved by the canonical settings /
         # preset layer.  Prefer an explicit mapping from the display
@@ -231,19 +248,62 @@ class QuickDisplayVisualizerOwner:
             return
         self._presentation_runtime.scene_controller.request_visualizer_present()
 
-    def set_playing(self, playing: bool) -> None:
+    def set_playing(
+        self,
+        playing: bool,
+        *,
+        observed_ts: float | None = None,
+    ) -> None:
         """Apply canonical Media playback truth to logical + source owners."""
 
         if self._retired:
             return
         active = bool(playing)
         controller = self._controller
+        previous = bool(controller.playing)
+        edge_ts = float(observed_ts if observed_ts is not None else time.time())
+        edge_seq = 0
+        if active != previous and is_viz_diagnostics_enabled():
+            from widgets.spotify_visualizer.reactivity_diagnostics import (
+                begin_playback_edge,
+            )
+
+            edge_seq = begin_playback_edge(
+                controller.logical_tick_state,
+                now_ts=edge_ts,
+                playing=active,
+            )
+            logger.debug(
+                "[VIS_PLAYBACK_EDGE] stage=T1 edge=%d mode=%s playing=%s ts=%.6f",
+                edge_seq,
+                controller.mode_id,
+                active,
+                edge_ts,
+            )
+
         controller.playing = active
         engine = controller.ensure_engine()
         set_playback_state = getattr(engine, "set_playback_state", None)
         if not callable(set_playback_state):
             raise RuntimeError("visualizer BeatEngine has no playback-state authority")
         set_playback_state(active)
+        if edge_seq > 0:
+            committed_ts = time.time()
+            warm_resume = bool(
+                active
+                and float(getattr(engine, "_play_ramp_start_ts", 0.0) or 0.0) <= 0.0
+            )
+            logger.debug(
+                "[VIS_PLAYBACK_EDGE] stage=T2 edge=%d mode=%s playing=%s dt_ms=%.1f "
+                "engine=%s/%s warm_resume=%s",
+                edge_seq,
+                controller.mode_id,
+                active,
+                max(0.0, (committed_ts - edge_ts) * 1000.0),
+                getattr(engine, "get_generation_id", lambda: -1)(),
+                getattr(engine, "get_activation_id", lambda: -1)(),
+                warm_resume,
+            )
 
     def set_presentation_runtime(self, runtime: Any) -> bool:
         """Move retained presentation/config publication, not logical ownership."""
