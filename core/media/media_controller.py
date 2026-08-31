@@ -115,9 +115,49 @@ class BaseMediaController:
 
     def retire(self) -> None:
         """Close new command/query admission; in-flight WinRT work may finish fenced."""
+        try:
+            self.stop_event_observation()
+        except Exception:
+            logger.debug("[MEDIA_EVENT] stop_event_observation during retire failed", exc_info=True)
         self._retired = True
         self._thread_manager = None
         self._command_result_handler = None
+
+    # ------------------------------------------------------------------
+    # Event observation contract (presentation-neutral).
+    #
+    # An implementation that can observe native dirty edges overrides these. The
+    # owner (``_SharedMediaRuntimeOwner``) supplies ``on_dirty(reason)`` (invoked
+    # from a native/background thread — it may ONLY capture a tiny reason and hand
+    # a dirty edge back through the owner's threading infra; it must not query,
+    # await, decode, or touch presentation) and an optional ``on_established(ok,
+    # detail)`` completion. No query/read path lives here: the existing
+    # command/query APIs remain the only provider mutation/read path.
+    # ------------------------------------------------------------------
+    def supports_event_observation(self) -> bool:
+        """Whether this controller can observe native dirty edges."""
+
+        return False
+
+    def start_event_observation(
+        self,
+        on_dirty: Callable[[str], None],
+        on_established: Callable[[bool, str], None] | None = None,
+    ) -> bool:
+        """Begin native dirty-edge observation. Default: unsupported (no-op)."""
+
+        del on_dirty, on_established
+        return False
+
+    def stop_event_observation(self) -> None:
+        """Deterministically detach all native subscriptions. Default: no-op."""
+
+        return None
+
+    def is_event_observation_active(self) -> bool:
+        """Whether native observation is currently established."""
+
+        return False
 
     def get_current_track(self) -> Optional[MediaTrackInfo]:  # pragma: no cover - interface
         """Return a snapshot of the current track or None if unavailable."""
@@ -214,6 +254,20 @@ class WindowsGlobalMediaController(BaseMediaController):
         self._last_valid_info: Optional[MediaTrackInfo] = None
         self._last_valid_info_ts: float = 0.0
         self._timeout_cache_ttl: float = 30.0  # Use cached info for up to 30s on timeout
+        # Native GSMTC event observation. The manager and observed session must be
+        # RETAINED for their subscriptions to remain live, so they are owned here
+        # (not requested per-query as the poll path does). Tokens are detached
+        # deterministically on stop/retire; a generation integer fences any native
+        # callback that a swap/teardown has already superseded.
+        self._observation_lock = threading.Lock()
+        self._event_on_dirty: Callable[[str], None] | None = None
+        self._event_on_established: Callable[[bool, str], None] | None = None
+        self._event_manager = None
+        self._event_session = None
+        self._manager_tokens: list[tuple[Callable[[Any], None], Any]] = []
+        self._session_tokens: list[tuple[Callable[[Any], None], Any]] = []
+        self._observation_generation = 0
+        self._observation_active = False
         self._init_winrt()
 
     def _init_winrt(self) -> None:
@@ -254,6 +308,207 @@ class WindowsGlobalMediaController(BaseMediaController):
         except Exception as _:
             logger.info("[MEDIA] Windows media controls not available: %s", _)
             self._available = False
+
+    # ------------------------------------------------------------------
+    # Native GSMTC event observation
+    #
+    # The persistent manager and observed session are RETAINED here so their
+    # ``add_*_changed`` subscriptions stay live (the poll path requested a fresh
+    # manager per query and discarded it). Native callbacks arrive on a WinRT
+    # thread-pool thread; they only capture a coarse reason and hand a dirty edge
+    # to the owner's ``on_dirty`` (which performs the UI-thread hop + coalescing).
+    # They never query media state, await WinRT, decode artwork, or touch
+    # presentation. ``_observation_generation`` fences any callback that a
+    # session swap or teardown has already superseded.
+    # ------------------------------------------------------------------
+    def supports_event_observation(self) -> bool:
+        return bool(self._available and not self._retired and self._MediaManager is not None)
+
+    def is_event_observation_active(self) -> bool:
+        return bool(self._observation_active and not self._retired)
+
+    def start_event_observation(
+        self,
+        on_dirty: Callable[[str], None],
+        on_established: Callable[[bool, str], None] | None = None,
+    ) -> bool:
+        if self._retired or not self._available or self._MediaManager is None:
+            return False
+        tm = self._thread_manager
+        if tm is None:
+            return False
+        with self._observation_lock:
+            self._event_on_dirty = on_dirty
+            self._event_on_established = on_established
+            self._observation_generation += 1
+            generation = self._observation_generation
+
+        def _establish() -> None:
+            self._establish_observation(generation)
+
+        _establish._srpss_runtime_generation = getattr(self, "_runtime_generation", None)
+        try:
+            tm.submit_io_task(
+                _establish,
+                task_id=f"media_event_observe_{self._task_owner_id}_{generation}",
+            )
+        except TypeError:
+            tm.submit_io_task(_establish)
+        except Exception:
+            logger.debug("[MEDIA_EVENT] failed to submit observation setup", exc_info=True)
+            return False
+        return True
+
+    def stop_event_observation(self) -> None:
+        with self._observation_lock:
+            # Bump first so any in-flight native callback fences itself out.
+            self._observation_generation += 1
+            self._observation_active = False
+            self._detach_session_tokens_locked()
+            self._detach_manager_tokens_locked()
+            self._event_session = None
+            self._event_manager = None
+            self._event_on_dirty = None
+            self._event_on_established = None
+
+    def _establish_observation(self, generation: int) -> None:
+        if self._retired or generation != self._observation_generation:
+            return
+        on_established = self._event_on_established
+        try:
+            mgr = self._run_coro_in_isolated_loop(
+                lambda: self._MediaManager.request_async()
+            )
+        except Exception:
+            logger.debug("[MEDIA_EVENT] manager request failed", exc_info=True)
+            mgr = None
+        if mgr is None:
+            logger.warning(
+                "[MEDIA_EVENT][DEGRADED] GSMTC manager unavailable; native "
+                "observation not established (provider=%s)",
+                self._provider_id,
+            )
+            if callable(on_established):
+                on_established(False, "manager_unavailable")
+            return
+        with self._observation_lock:
+            if self._retired or generation != self._observation_generation:
+                # A stop/retire raced establishment: do not leak a subscription.
+                return
+            self._event_manager = mgr
+            for add_name, remove_name, reason in (
+                ("add_current_session_changed", "remove_current_session_changed", "session"),
+                ("add_sessions_changed", "remove_sessions_changed", "session"),
+            ):
+                sub = self._subscribe_event(
+                    mgr, add_name, remove_name,
+                    self._make_manager_handler(generation, reason),
+                )
+                if sub is not None:
+                    self._manager_tokens.append(sub)
+            self._bind_current_session_locked(generation)
+            self._observation_active = True
+            observed = self._event_session is not None
+        logger.info(
+            "[MEDIA_EVENT] Native GSMTC observation established provider=%s "
+            "manager_events=%d session_bound=%s",
+            self._provider_id,
+            len(self._manager_tokens),
+            observed,
+        )
+        if callable(on_established):
+            on_established(True, "session" if observed else "manager_only")
+
+    def _subscribe_event(self, obj, add_name, remove_name, handler):
+        add = getattr(obj, add_name, None)
+        remove = getattr(obj, remove_name, None)
+        if not callable(add) or not callable(remove):
+            logger.debug("[MEDIA_EVENT] event surface missing: %s", add_name)
+            return None
+        try:
+            token = add(handler)
+        except Exception:
+            logger.debug("[MEDIA_EVENT] subscribe %s failed", add_name, exc_info=True)
+            return None
+        return (remove, token)
+
+    def _detach_session_tokens_locked(self) -> None:
+        for remove, token in self._session_tokens:
+            try:
+                remove(token)
+            except Exception:
+                logger.debug("[MEDIA_EVENT] session token detach failed", exc_info=True)
+        self._session_tokens = []
+
+    def _detach_manager_tokens_locked(self) -> None:
+        for remove, token in self._manager_tokens:
+            try:
+                remove(token)
+            except Exception:
+                logger.debug("[MEDIA_EVENT] manager token detach failed", exc_info=True)
+        self._manager_tokens = []
+
+    def _bind_current_session_locked(self, generation: int) -> None:
+        """Transactionally adopt the provider-matched session's subscriptions.
+
+        Old-session tokens are detached before the new identity is adopted, so a
+        stale session can never revive or overwrite the replacement. Callers hold
+        ``_observation_lock``.
+        """
+
+        self._detach_session_tokens_locked()
+        self._event_session = None
+        mgr = self._event_manager
+        if mgr is None or self._retired or generation != self._observation_generation:
+            return
+        try:
+            session = self._select_media_session(mgr)
+        except Exception:
+            logger.debug("[MEDIA_EVENT] session selection failed", exc_info=True)
+            session = None
+        if session is None:
+            return
+        self._event_session = session
+        for add_name, remove_name, reason in (
+            ("add_playback_info_changed", "remove_playback_info_changed", "playback"),
+            ("add_media_properties_changed", "remove_media_properties_changed", "media_properties"),
+            ("add_timeline_properties_changed", "remove_timeline_properties_changed", "timeline"),
+        ):
+            sub = self._subscribe_event(
+                session, add_name, remove_name,
+                self._make_session_handler(generation, reason),
+            )
+            if sub is not None:
+                self._session_tokens.append(sub)
+
+    def _make_manager_handler(self, generation: int, reason: str):
+        def _handler(_sender, _args) -> None:
+            try:
+                if self._retired or generation != self._observation_generation:
+                    return
+                with self._observation_lock:
+                    if self._retired or generation != self._observation_generation:
+                        return
+                    self._bind_current_session_locked(generation)
+                self._emit_dirty(reason, generation)
+            except Exception:
+                logger.debug("[MEDIA_EVENT] manager handler failed", exc_info=True)
+        return _handler
+
+    def _make_session_handler(self, generation: int, reason: str):
+        def _handler(_sender, _args) -> None:
+            try:
+                self._emit_dirty(reason, generation)
+            except Exception:
+                logger.debug("[MEDIA_EVENT] session handler failed", exc_info=True)
+        return _handler
+
+    def _emit_dirty(self, reason: str, generation: int) -> None:
+        if self._retired or generation != self._observation_generation:
+            return
+        on_dirty = self._event_on_dirty
+        if callable(on_dirty):
+            on_dirty(str(reason))
 
     # ------------------------------------------------------------------
     # Helpers

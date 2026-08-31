@@ -122,6 +122,41 @@ class _Controller:
         self.seek_calls: list[float] = []
         self.retire_calls = 0
         self.command_result_handler = None
+        # Event observation surface.
+        self.event_on_dirty = None
+        self.event_on_established = None
+        self.observation_started = 0
+        self.observation_stopped = 0
+        self.observation_active = False
+        self.supports_observation = True
+
+    def supports_event_observation(self) -> bool:
+        return self.supports_observation
+
+    def start_event_observation(self, on_dirty, on_established=None) -> bool:
+        if not self.supports_observation:
+            return False
+        self.event_on_dirty = on_dirty
+        self.event_on_established = on_established
+        self.observation_started += 1
+        self.observation_active = True
+        if on_established is not None:
+            on_established(True, "session")
+        return True
+
+    def stop_event_observation(self) -> None:
+        self.observation_stopped += 1
+        self.observation_active = False
+        self.event_on_dirty = None
+        self.event_on_established = None
+
+    def is_event_observation_active(self) -> bool:
+        return self.observation_active
+
+    def fire_dirty(self, reason: str) -> None:
+        cb = self.event_on_dirty
+        assert cb is not None, "native observation is not started"
+        cb(reason)
 
     def set_thread_manager(self, thread_manager) -> None:
         self.thread_manager = thread_manager
@@ -315,7 +350,14 @@ def test_two_display_leases_share_one_controller_poll_and_query() -> None:
     assert [snapshot.info.title for snapshot in second_consumer.snapshots] == ["Track"]
 
 
-def test_shared_poll_cadence_retunes_one_timer_without_duplication() -> None:
+def test_healthy_event_runtime_arms_only_a_slow_reconcile_watchdog() -> None:
+    """The retired 1000/2000/2500 ms active poll cadence must not exist.
+
+    Under event-driven observation the only timer is the deep-idle-scale
+    reconcile/liveness watchdog, and it never retunes to a fast poll stage when
+    successful queries land (the pre-migration behaviour this replaces).
+    """
+
     tm = _ThreadManager()
     factory = _ControllerFactory({"spotify": _track()})
     consumer = _Consumer(tm)
@@ -323,18 +365,159 @@ def test_shared_poll_cadence_retunes_one_timer_without_duplication() -> None:
     service.start()
     owner = service.shared_owner
     assert owner is not None
-    assert len(tm.timers) == 1
-    assert tm.timers[0].interval == 1000
+    controller = factory.controllers[0][1]
 
+    # Exactly one timer, at the deep-idle reconcile interval — never 1000/2000.
+    assert len(tm.timers) == 1
+    assert tm.timers[0].interval == owner._RECONCILE_INTERVAL_MS
+    assert tm.timers[0].interval >= 30000
+    assert controller.observation_started == 1
+    assert owner.event_observation_active is True
+
+    # Repeated successful queries must not create or retune any fast poll timer.
     tm.complete()
     assert service.refresh(bust_cache=True) is True
     tm.complete()
+    assert len(tm.timers) == 1
+    assert tm.timers[0].interval == owner._RECONCILE_INTERVAL_MS
 
+
+def test_two_leases_start_event_observation_exactly_once() -> None:
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track()})
+    first_consumer = _Consumer(tm)
+    second_consumer = _Consumer(tm)
+    first = _lease(first_consumer, factory)
+    second = _lease(second_consumer, factory)
+
+    assert first.start() is True
+    assert second.start() is True
+    owner = first.shared_owner
+    assert owner is not None
+    assert len(factory.controllers) == 1
+    controller = factory.controllers[0][1]
+    # One shared owner => observation established once, not per lease.
+    assert controller.observation_started == 1
     assert len(tm.timers) == 1
-    assert tm.timers[0].interval == 2000
-    owner._reset_poll_stage()
-    assert len(tm.timers) == 1
-    assert tm.timers[0].interval == 1000
+
+
+def test_dirty_edge_triggers_one_shared_refresh_and_reason_is_counted() -> None:
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track(title="Live")})
+    first_consumer = _Consumer(tm)
+    second_consumer = _Consumer(tm)
+    first = _lease(first_consumer, factory)
+    second = _lease(second_consumer, factory)
+    first.start()
+    second.start()
+    owner = first.shared_owner
+    assert owner is not None
+    controller = factory.controllers[0][1]
+    tm.complete()  # activation refresh
+    first_consumer.snapshots.clear()
+    second_consumer.snapshots.clear()
+
+    controller.fire_dirty("playback")
+    # Exactly one shared refresh job — no per-display fan-out.
+    assert len(tm.jobs) == 1
+    tm.complete()
+    assert [s.info.title for s in first_consumer.snapshots] == ["Live"]
+    assert [s.info.title for s in second_consumer.snapshots] == ["Live"]
+    telemetry = owner.event_telemetry()
+    assert telemetry["event_counts"]["playback"] == 1
+    assert telemetry["refresh_sources"]["event"] >= 1
+
+
+def test_event_storm_coalesces_to_one_inflight_and_one_pending() -> None:
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track()})
+    consumer = _Consumer(tm)
+    service = _lease(consumer, factory)
+    service.start()
+    owner = service.shared_owner
+    assert owner is not None
+    controller = factory.controllers[0][1]
+    tm.complete()  # activation refresh settles
+
+    # First edge launches one refresh (now in flight).
+    controller.fire_dirty("playback")
+    assert owner.refresh_in_flight is True
+    assert len(tm.jobs) == 1
+
+    # A storm while one refresh is in flight collapses to a single pending edge.
+    for _ in range(10):
+        controller.fire_dirty("media_properties")
+    assert len(tm.jobs) == 1
+    assert owner._event_refresh_pending is True
+    assert owner.event_telemetry()["dirty_coalesced"] >= 9
+
+    # Completing the in-flight refresh launches exactly one more (the pending).
+    tm.complete()
+    assert len(tm.jobs) == 1
+    assert owner._event_refresh_pending is False
+    tm.complete()
+    assert len(tm.jobs) == 0
+
+
+def test_chatty_timeline_edges_are_bounded_by_the_coalescing_floor(
+    _isolated_shared_owner, monkeypatch
+) -> None:
+    confirmations = _isolated_shared_owner
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track()})
+    consumer = _Consumer(tm)
+    service = _lease(consumer, factory)
+    service.start()
+    owner = service.shared_owner
+    assert owner is not None
+    controller = factory.controllers[0][1]
+    tm.complete()  # activation settles; nothing in flight
+
+    clock = [1000.0]
+    monkeypatch.setattr(media_runtime.time, "monotonic", lambda: clock[0])
+
+    # First timeline edge refreshes promptly and stamps the timeline clock.
+    controller.fire_dirty("timeline")
+    assert len(tm.jobs) == 1
+    tm.complete()
+    assert len(tm.jobs) == 0
+
+    # A second timeline edge within the floor must NOT spin a second query; it
+    # is deferred to one event-armed single-shot flush (never a poll cadence).
+    clock[0] += 0.2  # 200 ms < the 1000 ms floor
+    before = len(confirmations)
+    controller.fire_dirty("timeline")
+    assert len(tm.jobs) == 0
+    assert len(confirmations) == before + 1
+    delay_ms, flush = confirmations[-1]
+    assert 0 < delay_ms <= owner._TIMELINE_COALESCE_MS
+
+    # Firing the flush at the boundary launches exactly one refresh.
+    clock[0] += delay_ms / 1000.0
+    flush()
+    assert len(tm.jobs) == 1
+
+
+def test_stale_generation_dirty_edge_is_rejected_after_stop() -> None:
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track()})
+    consumer = _Consumer(tm)
+    service = _lease(consumer, factory)
+    service.start()
+    owner = service.shared_owner
+    assert owner is not None
+    controller = factory.controllers[0][1]
+    captured_on_dirty = controller.event_on_dirty
+    tm.complete()
+
+    # A stop bumps the owner generation and detaches observation.
+    service.stop()
+    assert controller.observation_stopped >= 1
+    jobs_before = len(tm.jobs)
+    # A late native callback captured before stop must not publish or query.
+    if captured_on_dirty is not None:
+        captured_on_dirty("timeline")
+    assert len(tm.jobs) == jobs_before
 
 
 def test_routine_success_does_not_reopen_activation_grace(monkeypatch) -> None:
@@ -375,7 +558,7 @@ def test_activation_failure_rolls_back_owner_and_lease_for_retry() -> None:
     assert service.is_running() is False
     assert owner.is_running() is False
     assert owner.active_consumer_count() == 0
-    assert owner.update_timer_handle is None
+    assert owner.reconcile_timer_handle is None
 
     tm.fail_timer = False
     assert service.start() is True
@@ -491,6 +674,10 @@ def test_artwork_decode_runs_in_io_job_and_delivery_crosses_ui_boundary(
     )
 
     service.start()
+    # Activation also hops the (no-op here) observation-established callback to
+    # the UI thread; this test measures only the artwork snapshot delivery, so
+    # drain that unrelated hop first.
+    ui_callbacks.clear()
     worker, callback, _kwargs = tm.jobs.pop()
 
     def _run_worker() -> None:
@@ -553,7 +740,7 @@ def test_stop_restart_waits_for_fresh_snapshot_instead_of_replaying_old_state() 
     ]
 
 
-def test_missing_session_retains_accepted_snapshot_and_enters_idle_cadence() -> None:
+def test_missing_session_retains_accepted_snapshot_without_idle_poll() -> None:
     tm = _ThreadManager()
     factory = _ControllerFactory({"spotify": _track(title="Retained")})
     consumer = _Consumer(tm)
@@ -565,7 +752,6 @@ def test_missing_session_retains_accepted_snapshot_and_enters_idle_cadence() -> 
     controller = factory.controllers[0][1]
     controller.info = None
     owner._activation_time = time.monotonic() - 10.0
-    owner._idle_threshold = 1
     consumer.snapshots.clear()
 
     assert service.refresh(bust_cache=True) is True
@@ -575,9 +761,10 @@ def test_missing_session_retains_accepted_snapshot_and_enters_idle_cadence() -> 
     assert retained is not None
     assert retained.title == "Retained"
     assert retained.state is MediaPlaybackState.PAUSED
-    assert owner._is_idle is True
+    # A missing session must NOT spin up any idle poll cadence: the only timer
+    # remains the deep-idle reconcile watchdog at its fixed interval.
     assert len(tm.timers) == 1
-    assert tm.timers[0].interval == owner._idle_poll_interval
+    assert tm.timers[0].interval == owner._RECONCILE_INTERVAL_MS
 
 
 def test_provider_generation_rejects_old_result_and_retires_old_controller() -> None:
@@ -829,6 +1016,119 @@ def test_distinct_runtime_generations_own_and_retire_independent_media_families(
     assert shared_media_owner_count() == 1
     assert second.is_running() is True
     second.retire()
+    assert shared_media_owner_count() == 0
+
+
+def test_command_result_and_native_event_share_one_coalescing_owner() -> None:
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track(MediaPlaybackState.PLAYING)})
+    consumer = _Consumer(tm)
+    service = _lease(consumer, factory)
+    service.start()
+    owner = service.shared_owner
+    assert owner is not None
+    controller = factory.controllers[0][1]
+    tm.complete()
+
+    # A command result while a refresh is in flight sets the command-pending
+    # edge; a native event arriving in the same window collapses into the same
+    # single-in-flight coalescing owner rather than fanning out a second query.
+    assert service.refresh(bust_cache=True) is True
+    assert owner.refresh_in_flight is True
+    controller.complete_command("play_pause", succeeded=True, operation="toggle_play_pause")
+    controller.fire_dirty("playback")
+    assert owner._command_refresh_pending is True
+    assert len(tm.jobs) == 1  # still just the in-flight refresh
+
+    tm.complete()
+    # Exactly one follow-up refresh launches for the pending edge (command wins).
+    assert len(tm.jobs) == 1
+    sources = owner.event_telemetry()["refresh_sources"]
+    assert sources.get("command", 0) >= 1
+
+
+def test_reconcile_watchdog_flags_missed_event_on_untracked_change() -> None:
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track(title="First")})
+    consumer = _Consumer(tm)
+    service = _lease(consumer, factory)
+    service.start()
+    owner = service.shared_owner
+    assert owner is not None
+    controller = factory.controllers[0][1]
+    tm.complete()  # accept "First"
+    assert owner.event_telemetry()["missed_events"] == 0
+
+    # The track changed but (hypothetically) no native event delivered it: the
+    # reconcile heartbeat discovers the non-position change and flags it.
+    controller.info = _track(title="Second changed without event")
+    owner._reconcile()
+    tm.complete()
+    telemetry = owner.event_telemetry()
+    assert telemetry["missed_events"] == 1
+    assert telemetry["refresh_sources"].get("reconcile", 0) >= 1
+
+    # A pure position advance on the same track is NOT counted as a missed event.
+    controller.info = replace(
+        _track(title="Second changed without event"),
+        position_ms=5000,
+    )
+    owner._reconcile()
+    tm.complete()
+    assert owner.event_telemetry()["missed_events"] == 1
+
+
+def test_unsupported_observation_is_degraded_and_never_fast_polls() -> None:
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track()})
+    factory.selected_providers["spotify"] = "spotify"
+    consumer = _Consumer(tm)
+    service = MediaRuntimeService(
+        provider="spotify", shared=True, controller_factory=factory
+    )
+    service.set_thread_manager(tm)
+    service.attach_consumer(consumer)
+    owner = service.shared_owner
+    assert owner is not None
+    # Force the controller to report no native observation support.
+    service.start()
+    owner._stop_event_observation()
+    controller = factory.controllers[0][1]
+    controller.supports_observation = False
+    owner._start_event_observation()
+
+    assert owner.event_observation_active is False
+    assert owner.event_observation_degraded is True
+    # Degraded must NOT reactivate a fast poll: the only timer is the slow
+    # reconcile watchdog, still at its deep-idle interval.
+    assert len(tm.timers) == 1
+    assert tm.timers[0].interval == owner._RECONCILE_INTERVAL_MS
+
+
+def test_retire_stops_observation_exactly_once_and_blocks_late_publish() -> None:
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track()})
+    consumer = _Consumer(tm)
+    service = _lease(consumer, factory)
+    service.start()
+    owner = service.shared_owner
+    assert owner is not None
+    controller = factory.controllers[0][1]
+    late_dirty = controller.event_on_dirty
+    tm.complete()
+    consumer.snapshots.clear()
+
+    service.retire()
+    assert owner.is_retired() is True
+    # Observation detached (owner.stop + controller.retire both request it, but
+    # the fake counts each stop_event_observation call).
+    assert controller.observation_stopped >= 1
+    assert controller.retire_calls == 1
+
+    # A callback captured before retirement cannot publish afterwards.
+    if late_dirty is not None:
+        late_dirty("media_properties")
+    assert consumer.snapshots == []
     assert shared_media_owner_count() == 0
 
 

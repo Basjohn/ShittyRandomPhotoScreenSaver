@@ -260,22 +260,45 @@ Latest performance repair checkpoint: `Docs/QtQuick_Migration/H5c_Performance_Cu
 
 ### HIGH PRIORITY H/J bridge — event-driven Media runtime; retire active high-frequency polling
 
-**Status: architecture decision accepted / implementation pending. This remains high priority alongside the bounded R6 Halo physical gate and may be pulled forward if Media polling/contention obstructs later validation.**
+**Status: IMPLEMENTED; deterministic gates GREEN; production controller validated against real WinRT in the dev environment; multi-recreation/provider-switch physical run `AWAITING PHYSICAL VALIDATION`.** The `1000 -> 2000 -> 2500 ms` active poll (and the 5s/30s idle poll stages) are removed. The single `_SharedMediaRuntimeOwner` now drives its accepted-snapshot pipeline from native GSMTC dirty edges plus one deep-idle reconcile watchdog.
 
-The shared Media architecture is already correctly cardinalized: one `_SharedMediaRuntimeOwner` owns the configured controller/provider, accepted snapshot and query pipeline across display presenters. Keep that owner. The migration target is to replace its normal active `1000 -> 2000 -> 2500 ms` polling cadence with GSMTC/WinRT event-assisted dirty notifications feeding the **same** owner/query path. A slow reconciliation heartbeat remains allowed as correctness instrumentation; it is **not** a silent fallback state source.
+WinRT reality (proven on this environment, ephemeral harness outside the repo — do NOT commit a polling harness):
+
+```text
+installed projection: pywinrt `winrt` (snake_case), token type = EventRegistrationToken
+Manager: add/remove_current_session_changed, add/remove_sessions_changed  (all present)
+Session: add/remove_playback_info_changed, add/remove_media_properties_changed,
+         add/remove_timeline_properties_changed  (all present)
+remove_*(token) cleanly stops delivery (0 callbacks after unsubscribe)
+callbacks arrive on a NON-main WinRT pool thread ("Dummy-N") -> must hop to UI thread; never touch Qt from the callback
+manager + observed session must be RETAINED for subscriptions to stay live (poll path requested/discarded a manager per query)
+steady Spotify playback: timeline ~0.24 Hz (~every 4s); zero playback/media-properties events while unchanged; zero when paused
+```
+
+Implementation:
+
+- `BaseMediaController` gained a presentation-neutral observation contract (`supports_event_observation` / `start_event_observation(on_dirty, on_established)` / `stop_event_observation` / `is_event_observation_active`); `retire()` stops observation. No QObject/QML/display ownership entered the controller; command/query APIs remain the only read/mutate path.
+- `WindowsGlobalMediaController` owns a retained manager + provider-matched session subscription. Native callbacks (WinRT thread) only capture a coarse reason and call `on_dirty`; they never query/await/decode/log-flood/mutate presentation. Session replacement is transactional under a lock (detach old tokens before adopting new) and every callback is fenced by an `_observation_generation`.
+- `_SharedMediaRuntimeOwner` stays the sole query/snapshot authority. `on_dirty` hops to the UI thread and coalesces into the existing refresh path: at most one refresh in flight + at most one pending dirty edge (unified with the command-confirmation pending edge; command wins). No per-display fan-out, no second query owner. A timeline coalescing floor (`_TIMELINE_COALESCE_MS`, event-armed single-shot) bounds a chatty timeline provider without a recurring cadence.
+- One **reconcile/liveness watchdog** (`_RECONCILE_INTERVAL_MS = 30000`) is the only timer; it reconciles and, when it finds a non-position change no native event delivered, logs `[MEDIA_EVENT][MISSED_EVENT]` and counts it. It is not a truth cadence and does not run while deactivated.
+- **No silent poll fallback:** if observation cannot be established the owner logs `[MEDIA_EVENT][DEGRADED]` and relies on the slow watchdog only — the old 1–2.5s loop is never reactivated.
+- Bounded `[MEDIA_EVENT]` telemetry: observation active/degraded, event counts by coarse reason, dirty-coalesced, refreshes by source (event/command/reconcile/activation/wake), stale-event rejections, missed-event discoveries. No per-callback verbose logging; a summary line is emitted at stop/retire.
+
+Files: `core/media/media_controller.py`, `widgets/media_runtime.py`. Tests: `tests/test_media_event_observation.py` (controller contract + real-WinRT round-trip, env-skipped) added to the `h-destination` profile; `tests/test_media_runtime.py` rewrote the poll-cadence falsifiers into event-driven ones (coalescing, stale-generation fencing, command/event convergence, degraded, missed-event, timeline floor).
 
 Closure / safety checklist:
 
-- [ ] First build a Windows reality harness against the exact installed `winrt.windows.media.control` package and prove which manager/session change events are reliable for: session list/current-session churn, playback state, metadata/artwork and timeline changes. Record add/remove token semantics and callback thread/apartment behavior before production wiring. Do not code against guessed event names/lifetimes.
-- [ ] Extend `BaseMediaController` with one narrow presentation-neutral observation contract (start/stop event observation + dirty callback/capability). No QObject/QML/display ownership enters the controller. Existing command/query APIs remain the only provider mutation/read path.
-- [ ] `WindowsGlobalMediaController` owns native manager/session subscriptions on one explicitly controlled WinRT lifetime. Native callbacks do **no media query, image decode, logging flood, UI mutation or presenter access**; they only generation-fence and enqueue/coalesce a tiny dirty reason toward the shared owner.
-- [ ] `_SharedMediaRuntimeOwner` remains the sole refresh/query/snapshot authority. Many native events coalesce to at most one refresh in flight plus one pending dirty edge; event bursts cannot create parallel GSMTC awaits or per-display queries.
-- [ ] Session identity replacement is transactional: subscribe new identity only through the controller owner, retire old session tokens deterministically, and fence every callback by runtime/provider/session generation. No stale callback can revive a retired Settings/recreation generation.
-- [ ] Preserve command confirmation semantics: user Play/Pause/Next/Previous/Seek may request an immediate/coalesced refresh, but command completion and provider events must converge on the same owner rather than creating a second confirmation poller.
-- [ ] Retain one **slow reconciliation heartbeat** (target deep-idle scale, e.g. ~30 s unless evidence chooses another value) solely to detect dropped native events/session disappearance and provider liveness. Every heartbeat is identifiable in perf logs. If it discovers a state change that should have arrived by event, increment/log `[MEDIA_EVENT][MISSED_EVENT]` with provider/session/reason; never silently normalize missed delivery as ordinary operation.
-- [ ] **No silent polling fallback. Migration endpoint:** failure/unavailability of required event observation must emit a loud `[MEDIA_EVENT][DEGRADED]` ERROR/diagnostic state. Do not automatically resume the old 1–2.5 s active polling loop. If a temporary compatibility poll is ever needed during development, it must be explicitly gated, loudly logged/counted on activation and every recovery, and removed before this item can close.
-- [ ] Teardown order is a first-class gate: close event admission -> detach session tokens -> detach manager tokens -> fence/join any queued dirty delivery -> retire controller -> retire shared owner/presenters. Repeated dual-display Settings recreation, provider changes, CUSTOM cycles and clean app exit must show zero late native callback/native termination.
-- [ ] Perf/behavior acceptance: steady active playback produces near-zero periodic Media queries between real changes; event→accepted-snapshot latency is measured; no duplicate runtime/controller/query owner appears; Media controls/artwork/timeline remain correct; reconciliation finds no unexplained missed events in an ordinary run.
+- [x] Windows reality harness proved the manager/session event surface, `EventRegistrationToken` add/remove semantics, and the non-main callback thread before production wiring (facts above). Ephemeral, outside the repo.
+- [x] `BaseMediaController` observation contract added; controller stays presentation-neutral; command/query remain the only read/mutate path.
+- [x] `WindowsGlobalMediaController` owns retained manager/session subscriptions on one controlled lifetime; native callbacks only generation-fence + hand a tiny dirty reason to the owner (no query/decode/log-flood/UI access). Deterministic gate: `test_media_event_observation.py`.
+- [x] `_SharedMediaRuntimeOwner` is the sole query authority; native events coalesce to ≤1 in-flight + 1 pending; no per-display fan-out. Gate: `test_event_storm_coalesces_to_one_inflight_and_one_pending`, `test_dirty_edge_triggers_one_shared_refresh_and_reason_is_counted`.
+- [x] Session replacement is transactional and generation-fenced; a stale old-session callback cannot revive. Gate: `test_session_replacement_detaches_old_tokens_before_adopting_new`, `test_stale_generation_dirty_edge_is_rejected_after_stop`.
+- [x] Command confirmation and provider events converge on the same coalescing owner (no second confirmation poller). Gate: `test_command_result_and_native_event_share_one_coalescing_owner`.
+- [x] One ~30s reconcile watchdog, single-owner, identifiable, with `[MEDIA_EVENT][MISSED_EVENT]`. Gate: `test_reconcile_watchdog_flags_missed_event_on_untracked_change`, `test_healthy_event_runtime_arms_only_a_slow_reconcile_watchdog`.
+- [x] No silent poll fallback: unavailable observation → loud `[MEDIA_EVENT][DEGRADED]`, watchdog-only. Gate: `test_unsupported_observation_is_degraded_and_never_fast_polls`.
+- [x] Teardown order (close admission → detach session tokens → detach manager tokens → fence queued deliveries → retire) with generation fencing. Gate: `test_retire_stops_observation_exactly_once_and_blocks_late_publish`, plus the controller detach tests.
+- [x] Production controller path validated end-to-end against **real** WinRT in the dev environment: observation established with session bound, ~0.25 Hz timeline edges during steady playback (old ~1 Hz `media_refresh` stream gone), callbacks on the WinRT pool thread, clean 0-edge detach after stop.
+- [ ] **`AWAITING PHYSICAL VALIDATION`:** an installed/frozen run — repeated dual-display Settings recreation, CUSTOM Save/Continue/reload, provider switches and clean app exit — shows no late native callback, no native termination, no stale-generation snapshot, no leaked token, and no unexplained `[MEDIA_EVENT][MISSED_EVENT]` in an ordinary run; real track/playback/timeline changes still arrive promptly; no duplicate controller/query owner. Confirm artwork still publishes into the active-engine `MediaArtworkImageProvider` and cross-display Visualizer playback binding is intact.
 - [ ] Keep the broader polling audit evidence: low-frequency usage/system-mute/RSS/weather/Gmail/clock responsibilities are not automatically defects. Migrate another poller only when its provider offers a trustworthy event contract and the change reduces contention without weakening lifecycle correctness.
 
 ### H6 — CUSTOM Settings may lock only size-authoring controls
