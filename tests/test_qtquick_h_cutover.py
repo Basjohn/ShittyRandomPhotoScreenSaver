@@ -60,6 +60,7 @@ class _ManagerVisualizerEngine:
         self.cancel_count = 0
         self.floor_reset_count = 0
         self.bar_count = 32
+        self.source_config_calls: list[tuple[str, object]] = []
         self._audio_worker = SimpleNamespace(
             set_audio_block_size=lambda _size: None,
         )
@@ -78,6 +79,21 @@ class _ManagerVisualizerEngine:
 
     def set_input_gain(self, *_args) -> None:
         pass
+
+    def set_spectrum_mirrored(self, mirrored: bool) -> None:
+        self.source_config_calls.append(("mirrored", bool(mirrored)))
+
+    def set_spectrum_shape_nodes(self, nodes: list) -> None:
+        self.source_config_calls.append(("shape_nodes", list(nodes)))
+
+    def set_notch_positions(self, positions: list) -> None:
+        self.source_config_calls.append(("notches", list(positions)))
+
+    def set_spectrum_shape_config(self, config) -> None:
+        self.source_config_calls.append(("shape_config", config))
+
+    def set_drop_speed(self, speed: float) -> None:
+        self.source_config_calls.append(("drop_speed", float(speed)))
 
     def get_generation_id(self) -> int:
         return self.generation
@@ -372,6 +388,13 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         assert owner.render_identity.activation_id == 23
         assert engine.acquire_count == 1
         assert engine.release_count == 0
+        assert [name for name, _value in engine.source_config_calls] == [
+            "mirrored",
+            "shape_nodes",
+            "notches",
+            "shape_config",
+            "drop_speed",
+        ]
         assert owner.is_started is True
         assert chosen.runtime.frame_pacer.demands & QuickFrameDemand.VISUALIZER
         ownership = manager.describe_resource_ownership()["by_generation"]["702"]
