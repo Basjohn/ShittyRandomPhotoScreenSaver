@@ -161,7 +161,7 @@ It proves saver handoff opens exactly once then requests normal exit exactly onc
 
 - [x] `tests/test_qtquick_family_product_actions.py` GREEN
 - [x] relevant retained Reddit / h-destination tests GREEN
-- [ ] MC: admitted Reddit click opens the URL and keeps MC alive
+- [x] MC: admitted Reddit click opens the URL and keeps MC alive
 - [ ] SCR/source-saver path: admitted click hands off once and exits normally
 - [ ] rejected/untrusted/interaction-disabled URL still does not open
 - [ ] inspect `screensaver.log` + `screensaver_qml.log` for unexplained action/QML errors
