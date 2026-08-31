@@ -18,6 +18,8 @@ Item {
     property real cardShadowOffsetX: 0.0
     property real cardShadowOffsetY: 4.0
     property real cardShadowSpread: 0.0
+    property bool perfHudEnabled: false
+    property string perfHudText: ""
 
     visible: presentationActive && customLayoutWorkingVisible
 
@@ -65,5 +67,33 @@ Item {
         border.color: visualizerPresentationRoot.cardBorderColor
         border.width: visualizerPresentationRoot.cardBorderWidth
         z: 2
+    }
+
+    Rectangle {
+        id: visualizerPerfHud
+        objectName: "visualizerPerfHud"
+        visible: visualizerPresentationRoot.perfHudEnabled
+            && visualizerPresentationRoot.perfHudText.length > 0
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.margins: 6
+        width: visualizerPerfHudLabel.implicitWidth + 10
+        height: visualizerPerfHudLabel.implicitHeight + 6
+        radius: 3
+        color: "#b8000000"
+        border.color: "#80ffffff"
+        border.width: 1
+        z: 20
+        enabled: false
+
+        Text {
+            id: visualizerPerfHudLabel
+            anchors.centerIn: parent
+            text: visualizerPresentationRoot.perfHudText
+            color: "white"
+            font.family: "Consolas"
+            font.pixelSize: 10
+            renderType: Text.NativeRendering
+        }
     }
 }

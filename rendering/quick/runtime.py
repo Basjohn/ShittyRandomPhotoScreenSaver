@@ -135,6 +135,7 @@ class QuickDisplayRuntime(QObject):
                 parent=self,
             )
         )
+        self._scene.bind_perf_pacer_state_provider(self._pacer.describe)
         self._auxiliary.set_pixel_shift_defer_check(
             lambda: self._transition is not None and self._transition.is_active
         )

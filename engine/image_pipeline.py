@@ -33,6 +33,7 @@ from rendering.image_processor_async import AsyncImageProcessor
 from sources.base_provider import ImageMetadata
 
 if TYPE_CHECKING:
+    from engine.image_change_trace import ImageChangePerfTrace
     from engine.screensaver_engine import ScreensaverEngine
 
 logger = get_logger(__name__)
@@ -216,11 +217,19 @@ def _apply_display_pixmap_with_perf(
     *,
     reason: str,
     display_index: int,
+    perf_trace: "ImageChangePerfTrace | None" = None,
 ) -> None:
     """Apply one display image while exposing setter/transition-start cost."""
     stage = "present_processed_image"
     perf_enabled = is_perf_metrics_enabled()
     started_ts = time.perf_counter() if perf_enabled else 0.0
+    if perf_trace is not None:
+        perf_trace.mark(
+            "display_handoff",
+            display=display_index,
+            reason=reason,
+            image=image_path,
+        )
     try:
         presenter = getattr(display_manager, "present_processed_image", None)
         if not callable(presenter):
@@ -231,6 +240,12 @@ def _apply_display_pixmap_with_perf(
             original_pixmap,
             image_path,
         )
+        if perf_trace is not None:
+            perf_trace.mark(
+                "transition_admitted",
+                display=display_index,
+                reason=reason,
+            )
     finally:
         if perf_enabled:
             logger.info(
@@ -503,6 +518,59 @@ def _build_prefetch_scaled_requests(
             len(paths),
         )
     return requests
+
+
+def _build_immediate_prefetch_protected_keys(
+    engine: ScreensaverEngine,
+    paths: List[str],
+) -> List[str]:
+    """Return display-ready keys for exactly the next predicted image batch.
+
+    Deeper prefetch entries are useful but expendable.  The immediate next
+    batch is different: evicting it merely because later warmups filled the LRU
+    recreates ImageWorker prescale work immediately before a natural rotation.
+    """
+    if not paths:
+        return []
+    plan = _get_prefetch_request_plan(engine, paths)
+    if not plan:
+        return []
+
+    ordered_specs = _get_prefetch_target_specs_in_display_order(engine)
+    settings_manager = getattr(engine, "settings_manager", None)
+    raw_same_image = (
+        settings_manager.get("display.same_image_all_monitors", True)
+        if settings_manager is not None
+        else True
+    )
+    same_image = SettingsManager.to_bool(raw_same_image, True)
+    if same_image:
+        first_path = paths[0]
+        immediate_plan = []
+        for path, spec in plan:
+            if path != first_path:
+                break
+            immediate_plan.append((path, spec))
+    else:
+        immediate_plan = plan[: max(1, len(ordered_specs))]
+
+    use_lanczos, sharpen = _get_display_quality_settings(engine)
+    keys: List[str] = []
+    seen: set[str] = set()
+    for path, spec in immediate_plan:
+        key = _build_scaled_cache_key(
+            path,
+            spec["width"],
+            spec["height"],
+            spec["display_mode"],
+            use_lanczos,
+            sharpen,
+            spec["device_pixel_ratio"],
+        )
+        if key not in seen:
+            seen.add(key)
+            keys.append(key)
+    return keys
 
 
 def _derive_scaled_pixmap_from_raw_cache(
@@ -1010,6 +1078,8 @@ def _process_display_image_candidate(
     meta: ImageMetadata,
     use_lanczos: bool,
     sharpen: bool,
+    *,
+    perf_trace: "ImageChangePerfTrace | None" = None,
 ) -> Optional[_ProcessedDisplayImage]:
     """Load and prescale one candidate into a GUI-independent QImage payload."""
     from pathlib import Path
@@ -1029,6 +1099,7 @@ def _process_display_image_candidate(
     qimage: Optional[QImage] = None
     processed_qimage: Optional[QImage] = None
     scaled_cache_hit = False
+    process_source = "unknown"
     scaled_key = _build_scaled_cache_key(
         img_path,
         width,
@@ -1038,12 +1109,20 @@ def _process_display_image_candidate(
         sharpen,
         getattr(display, "device_pixel_ratio", 1.0),
     )
+    if perf_trace is not None:
+        perf_trace.mark(
+            "display_process_start",
+            display=display_index,
+            target=f"{width}x{height}",
+            image=img_path,
+        )
 
     if cache is not None:
         cached_scaled = cache.get(scaled_key)
         if isinstance(cached_scaled, QImage) and not cached_scaled.isNull():
             processed_qimage = cached_scaled
             scaled_cache_hit = True
+            process_source = "scaled_cache"
             _bump_cache_runtime_stat(engine, "scaled_hits")
         else:
             _bump_cache_runtime_stat(engine, "scaled_misses")
@@ -1052,6 +1131,7 @@ def _process_display_image_candidate(
             cached_raw = cache.get(img_path)
             if isinstance(cached_raw, QImage) and not cached_raw.isNull():
                 qimage = cached_raw
+                process_source = "raw_cache"
                 _bump_cache_runtime_stat(engine, "raw_hits")
             else:
                 _bump_cache_runtime_stat(engine, "raw_misses")
@@ -1082,6 +1162,7 @@ def _process_display_image_candidate(
             )
             if worker_qimage is not None and not worker_qimage.isNull():
                 processed_qimage = worker_qimage
+                process_source = "image_worker"
             else:
                 _bump_cache_runtime_stat(engine, "worker_fallbacks")
                 raw_state = (
@@ -1115,6 +1196,7 @@ def _process_display_image_candidate(
                         cache.put(img_path, qimage)
             if qimage is None or qimage.isNull():
                 return None
+            process_source = "cpu_fallback"
             processed_qimage = AsyncImageProcessor.process_qimage(
                 qimage,
                 target_size,
@@ -1130,6 +1212,14 @@ def _process_display_image_candidate(
         cache.put(scaled_key, processed_qimage)
     elif scaled_cache_hit:
         _bump_cache_runtime_stat(engine, "scaled_reuses_without_put")
+
+    if perf_trace is not None:
+        perf_trace.mark(
+            "display_processed",
+            display=display_index,
+            source=process_source,
+            target=f"{width}x{height}",
+        )
 
     return _ProcessedDisplayImage(
         image=processed_qimage,
@@ -1150,6 +1240,7 @@ def _process_display_with_replacements(
     sharpen: bool,
     *,
     max_replacements: int = _DISPLAY_IMAGE_REPLACEMENT_LIMIT,
+    perf_trace: "ImageChangePerfTrace | None" = None,
 ) -> tuple[Optional[_ProcessedDisplayImage | Dict[str, Any]], Optional[ImageMetadata]]:
     """Process one display, advancing the queue after bounded candidate failures."""
     candidate = initial_meta
@@ -1163,6 +1254,7 @@ def _process_display_with_replacements(
             candidate,
             use_lanczos,
             sharpen,
+            perf_trace=perf_trace,
         )
         if result is not None:
             if replacement_index:
@@ -1220,6 +1312,7 @@ def _process_same_image_with_replacements(
     sharpen: bool,
     *,
     max_replacements: int = _DISPLAY_IMAGE_REPLACEMENT_LIMIT,
+    perf_trace: "ImageChangePerfTrace | None" = None,
 ) -> tuple[Dict[int, _ProcessedDisplayImage | Dict[str, Any]], Optional[ImageMetadata]]:
     """Keep same-image mode atomic while replacing a candidate rejected by any display."""
     candidate = initial_meta
@@ -1239,6 +1332,7 @@ def _process_same_image_with_replacements(
                     candidate,
                     use_lanczos,
                     sharpen,
+                    perf_trace=perf_trace,
                 )
                 if result is not None:
                     processed_by_transform[transform_key] = result
@@ -1321,6 +1415,8 @@ def load_and_display_image_async(
     engine: ScreensaverEngine,
     image_meta: ImageMetadata,
     retry_count: int = 0,
+    *,
+    perf_trace: "ImageChangePerfTrace | None" = None,
 ) -> bool:
     """
     Load and display image asynchronously. Processes image on background thread.
@@ -1341,12 +1437,20 @@ def load_and_display_image_async(
     """
     if not engine.thread_manager or not engine.display_manager:
         # Fall back to sync path if no thread manager
-        return bool(load_and_display_image(engine, image_meta, retry_count))
+        return bool(
+            load_and_display_image(
+                engine, image_meta, retry_count, perf_trace=perf_trace
+            )
+        )
 
     runtime_generation, display_manager = _capture_runtime_identity(engine)
     processing_targets = _snapshot_display_processing_targets(display_manager)
     if not processing_targets:
-        return bool(load_and_display_image(engine, image_meta, retry_count))
+        return bool(
+            load_and_display_image(
+                engine, image_meta, retry_count, perf_trace=perf_trace
+            )
+        )
 
     # Check same_image setting to determine how many images to load
     raw_same_image = engine.settings_manager.get('display.same_image_all_monitors', True)
@@ -1390,8 +1494,17 @@ def load_and_display_image_async(
             f"{len(processing_targets)} displays"
         )
 
+    if perf_trace is not None:
+        perf_trace.mark(
+            "worker_submit_ready",
+            displays=len(processing_targets),
+            same_image=same_image,
+        )
+
     def _do_load_and_process() -> Optional[Dict]:
         """Background task: load and process images for all displays."""
+        if perf_trace is not None:
+            perf_trace.mark("worker_started", displays=len(processing_targets))
         try:
             if not _runtime_identity_is_current(
                 engine,
@@ -1413,6 +1526,7 @@ def load_and_display_image_async(
                     image_metas[0],
                     use_lanczos,
                     sharpen,
+                    perf_trace=perf_trace,
                 )
                 if not processed_images or selected_meta is None:
                     return None
@@ -1432,6 +1546,7 @@ def load_and_display_image_async(
                         initial_meta,
                         use_lanczos,
                         sharpen,
+                        perf_trace=perf_trace,
                     )
                     if processed is None or selected_meta is None:
                         continue
@@ -1444,11 +1559,18 @@ def load_and_display_image_async(
             if not processed_images:
                 return None
 
+            if perf_trace is not None:
+                perf_trace.mark(
+                    "worker_completed",
+                    processed=len(processed_images),
+                )
             return {
                 "processed": processed_images,
                 "same_image": same_image,
             }
         except Exception as exc:
+            if perf_trace is not None:
+                perf_trace.mark("worker_failed", error=type(exc).__name__)
             logger.exception("[ASYNC] Background image processing failed: %s", exc)
             return None
 
@@ -1462,15 +1584,22 @@ def load_and_display_image_async(
         ):
             return
         try:
+            if perf_trace is not None:
+                perf_trace.mark("ui_callback_started")
             data = result.result if result and result.success else None
             if data is None:
+                if perf_trace is not None:
+                    perf_trace.mark("worker_result_empty", retry=retry_count)
                 logger.warning(f"[ASYNC] Image processing failed, retrying (attempt {retry_count + 1}/10)")
                 if retry_count < 10 and engine.image_queue:
                     next_meta = engine.image_queue.next()
+                    if perf_trace is not None:
+                        perf_trace.mark("retry_selected", retry=retry_count + 1)
                     if next_meta and load_and_display_image_async(
                         engine,
                         next_meta,
                         retry_count + 1,
+                        perf_trace=perf_trace,
                     ):
                         return
                 engine._loading_in_progress = False
@@ -1484,6 +1613,18 @@ def load_and_display_image_async(
 
             processed = data['processed']
             is_same_image = data.get('same_image', True)
+            remaining_handoffs = [len(processed)]
+
+            def _complete_handoff() -> None:
+                if perf_trace is None:
+                    return
+                remaining_handoffs[0] = max(0, remaining_handoffs[0] - 1)
+                if remaining_handoffs[0] == 0:
+                    perf_trace.finish(
+                        "admitted",
+                        displays=len(processed),
+                        same_image=is_same_image,
+                    )
 
             for i, descriptor in enumerate(processing_targets):
                 if i not in processed:
@@ -1534,7 +1675,9 @@ def load_and_display_image_async(
                             ip,
                             reason="transition_display_stagger",
                             display_index=screen_index,
+                            perf_trace=perf_trace,
                         )
+                        _complete_handoff()
                     _schedule_engine_delay(
                         engine,
                         delay_ms,
@@ -1551,7 +1694,9 @@ def load_and_display_image_async(
                         img_path,
                         reason="transition_display_immediate",
                         display_index=descriptor.screen_index,
+                        perf_trace=perf_trace,
                     )
+                    _complete_handoff()
 
                 displayed_paths.append(img_path)
 
@@ -1593,6 +1738,8 @@ def load_and_display_image_async(
             callback=lambda r: engine.thread_manager.run_on_ui_thread(lambda: _on_process_complete(r)),
             category="image.load_and_process",
         )
+        if perf_trace is not None:
+            perf_trace.mark("worker_submitted")
         return True
     except Exception as e:
         logger.warning(f"[ASYNC] Failed to submit task, falling back to sync: {e}")
@@ -1602,7 +1749,11 @@ def load_and_display_image_async(
             display_manager,
             label="image_submit_fallback",
         ):
-            return bool(load_and_display_image(engine, image_meta, retry_count))
+            return bool(
+                load_and_display_image(
+                    engine, image_meta, retry_count, perf_trace=perf_trace
+                )
+            )
         return False
 
 
@@ -1799,6 +1950,8 @@ def load_and_display_image(
     engine: ScreensaverEngine,
     image_meta: ImageMetadata,
     retry_count: int = 0,
+    *,
+    perf_trace: "ImageChangePerfTrace | None" = None,
 ) -> bool:
     """
     Load and display image synchronously. Auto-retries with next image on failure.
@@ -1815,6 +1968,8 @@ def load_and_display_image(
         True if successful, False otherwise
     """
     try:
+        if perf_trace is not None:
+            perf_trace.mark("sync_load_started")
         pixmap = load_image_task(engine, image_meta)
 
         if not pixmap:
@@ -1830,7 +1985,12 @@ def load_and_display_image(
             if retry_count < 10 and engine.image_queue:
                 next_image = engine.image_queue.next()
                 if next_image:
-                    return load_and_display_image(engine, next_image, retry_count + 1)
+                    return load_and_display_image(
+                        engine,
+                        next_image,
+                        retry_count + 1,
+                        perf_trace=perf_trace,
+                    )
 
             logger.error("[CACHE][FALLBACK] Failed to load any images after 10 attempts")
             engine.display_manager.show_error("No valid images available")
@@ -1885,6 +2045,8 @@ def load_and_display_image(
                 pending(False)
         except Exception:
             logger.warning("[CACHE][FALLBACK] Failed to reconcile transition pending state", exc_info=True)
+        if perf_trace is not None:
+            perf_trace.finish("published_sync")
         return True
 
     except Exception as e:
@@ -1945,7 +2107,15 @@ def schedule_prefetch(engine: ScreensaverEngine) -> None:
                 logger.debug("[ENGINE] Exception suppressed: %s", _e)
                 continue
         if not paths:
+            protector = getattr(getattr(engine, "_image_cache", None), "set_protected_keys", None)
+            if callable(protector):
+                protector(())
             return
+
+        protected_keys = _build_immediate_prefetch_protected_keys(engine, paths)
+        protector = getattr(getattr(engine, "_image_cache", None), "set_protected_keys", None)
+        if callable(protector):
+            protector(protected_keys)
 
         scaled_requests = _build_prefetch_scaled_requests(engine, paths)
         raw_prefetch_paths: List[str] = []
@@ -2000,10 +2170,11 @@ def schedule_prefetch(engine: ScreensaverEngine) -> None:
         if is_perf_metrics_enabled():
             logger.info(
                 "[PERF] [PREFETCH] scheduled preview_paths=%d raw_producers=%d "
-                "scaled_requests=%d source=%s",
+                "scaled_requests=%d protected_immediate=%d source=%s",
                 len(paths),
                 len(raw_prefetch_paths),
                 len(scaled_requests),
+                len(protected_keys),
                 preview_source,
             )
         elif is_verbose_logging():

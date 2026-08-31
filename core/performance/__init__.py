@@ -1,4 +1,9 @@
 """Performance optimization module."""
+from core.performance.gc_policy import (
+    GCPolicySnapshot,
+    RuntimeGCPolicy,
+    derive_runtime_thresholds,
+)
 from core.performance.frame_budget import (
     FrameBudget,
     FrameBudgetConfig,
@@ -15,6 +20,9 @@ from core.performance.widget_profiler import (
 )
 
 __all__ = [
+    "GCPolicySnapshot",
+    "RuntimeGCPolicy",
+    "derive_runtime_thresholds",
     "FrameBudget",
     "FrameBudgetConfig",
     "GCController",

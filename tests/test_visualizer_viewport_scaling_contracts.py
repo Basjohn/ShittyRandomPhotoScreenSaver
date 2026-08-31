@@ -279,6 +279,46 @@ class BubbleViewportScalingTests(unittest.TestCase):
         self.assertIn("float stroke = clamp(r * 0.0375, 0.35 * px, 1.8 * px);", shader)
         self.assertNotIn("float base_stroke_px = 1.2;", shader)
 
+    def test_motion_tail_presentation_footprint_stays_authored_pixel_scaled(self):
+        # Stored trail history remains normalized/content-space invariant, while
+        # the renderer compresses only the historical offset by baseline/current
+        # viewport axis so its three samples do not separate into three apparent
+        # ghost bubbles on a tall/wide CUSTOM card.
+        baseline = (420.0, 280.0)
+        head = (0.62, 0.44)
+        sample = (0.52, 0.50)
+        expected_px = (
+            (sample[0] - head[0]) * baseline[0],
+            (sample[1] - head[1]) * baseline[1],
+        )
+        for extent in (
+            baseline,
+            (840.0, 280.0),
+            (420.0, 560.0),
+            (724.0, 816.0),
+        ):
+            axis = (
+                min(1.0, baseline[0] / extent[0]),
+                min(1.0, baseline[1] / extent[1]),
+            )
+            rendered = (
+                head[0] + (sample[0] - head[0]) * axis[0],
+                head[1] + (sample[1] - head[1]) * axis[1],
+            )
+            actual_px = (
+                (rendered[0] - head[0]) * extent[0],
+                (rendered[1] - head[1]) * extent[1],
+            )
+            self.assertAlmostEqual(actual_px[0], expected_px[0], places=12)
+            self.assertAlmostEqual(actual_px[1], expected_px[1], places=12)
+
+        quick = (ROOT / "rendering/quick/visualizer/implementations/bubble.py").read_text()
+        shader = (ROOT / "widgets/spotify_visualizer/shaders/bubble.frag").read_text()
+        self.assertIn("trail_axis_scale", quick)
+        self.assertIn("u_trail_axis_scale", shader)
+        self.assertIn("sample_data.xy - bpos.xy", shader)
+        self.assertIn("ripple_bound", shader)
+
     def test_spawn_overlap_policy_is_content_space_invariant(self):
         bs = self.bubble
         decisions = []
@@ -317,6 +357,44 @@ class BubbleViewportScalingTests(unittest.TestCase):
             )
         self.assertEqual(decisions[0], (True, False))
         self.assertTrue(all(value == decisions[0] for value in decisions[1:]))
+
+
+class RetainedPresentationCoherenceTests(unittest.TestCase):
+    def test_capture_uses_one_playback_identity_snapshot(self):
+        source = (
+            ROOT / "widgets/spotify_visualizer/legacy_render_snapshot_adapter.py"
+        ).read_text()
+        self.assertIn("playing = context.playing", source)
+        self.assertIn("raw_playing", source)
+        self.assertNotIn(
+            'mode_state, extra = captured\n    playing = bool(getattr(widget, "_spotify_playing", False))',
+            source,
+        )
+
+    def test_geometry_mismatch_keeps_last_valid_visualizer_pixels(self):
+        bridge = (ROOT / "widgets/spotify_visualizer/render_bridge.py").read_text()
+        item = (ROOT / "rendering/quick/visualizer/item.py").read_text()
+        self.assertIn("required_presentation", bridge)
+        self.assertIn("self._presentation_mismatch_count += 1", bridge)
+        self.assertIn("required_presentation=presentation", item)
+        self.assertNotIn(
+            'clear_snapshot = True\n\n        if snapshot is not None and is_viz_diagnostics_enabled()',
+            item,
+        )
+
+    def test_perf_hud_is_passive_and_perf_gated(self):
+        scene = (ROOT / "rendering/quick/scene_controller.py").read_text()
+        qml = (ROOT / "rendering/quick/qml/DisplayScene.qml").read_text()
+        viz_qml = (
+            ROOT / "rendering/quick/qml/VisualizerPresentation.qml"
+        ).read_text()
+        self.assertIn("is_perf_metrics_enabled", scene)
+        self.assertIn("_update_perf_hud_on_swap", scene)
+        self.assertIn("elapsed_ns < 1_000_000_000", scene)
+        self.assertNotIn("QTimer", scene)
+        self.assertIn("property bool perfHudEnabled", qml)
+        self.assertIn("property bool perfHudEnabled", viz_qml)
+
 
 
 class OtherModeViewportScalingTests(unittest.TestCase):
