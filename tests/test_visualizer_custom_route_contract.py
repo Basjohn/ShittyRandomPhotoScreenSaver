@@ -12,15 +12,55 @@ from rendering.quick.display_unit import QuickDisplayUnit
 from rendering.quick.visualizer_failover import get_visualizer_failover_state
 
 
-def _live_unit(screen_index: int, *, binding_loss=None) -> QuickDisplayUnit:
+class _Signal:
+    def __init__(self) -> None:
+        self._callbacks = []
+
+    def connect(self, callback) -> None:
+        self._callbacks.append(callback)
+
+    def disconnect(self, callback) -> None:
+        self._callbacks.remove(callback)
+
+    def emit(self) -> None:
+        for callback in tuple(self._callbacks):
+            callback()
+
+
+class _Presenter:
+    def __init__(self, media_model=None) -> None:
+        self._media_presentation = (
+            None
+            if media_model is None
+            else SimpleNamespace(model=media_model)
+        )
+
+    def presentation_for_widget_id(self, widget_id: str):
+        if widget_id == "media":
+            return self._media_presentation
+        return None
+
+
+def _live_unit(
+    screen_index: int,
+    *,
+    binding_loss=None,
+    media_model=None,
+) -> QuickDisplayUnit:
     """Build a live production-unit shell without depending on CI screen count."""
 
+    scene_controller = SimpleNamespace(
+        visualizer_contains_scene_position=lambda _position: True,
+        set_visualizer_double_click_admission=lambda _admission: None,
+    )
     return QuickDisplayUnit(
         runtime=SimpleNamespace(
             screen_index=screen_index,
             binding_loss=binding_loss,
+            scene_controller=scene_controller,
+            window=SimpleNamespace(screen=lambda: object()),
         ),
-        presenter=SimpleNamespace(),
+        presenter=_Presenter(media_model),
         ctrl_coordinator=SimpleNamespace(),
         ctrl_key=object(),
     )
@@ -35,6 +75,11 @@ def _manager(position: str) -> DisplayManager:
     manager._quick_visualizer_construct_result = "not_attempted"
     manager._quick_visualizer_construct_reject_reason = None
     manager._quick_visualizer_routing_trace_emitted = False
+    manager._quick_visualizer_media_model = None
+    manager._quick_visualizer_diag_last_playing = None
+    manager._thread_manager = None
+    manager._process_supervisor = None
+    manager.displays = []
     manager._widgets_config_snapshot = {
         "family_activation": {"media": True, "visualizers": True},
         "media": {
@@ -50,6 +95,96 @@ def _manager(position: str) -> DisplayManager:
         },
     }
     return manager
+
+
+def test_custom_owner_binds_media_model_from_the_other_live_display(
+    monkeypatch,
+) -> None:
+    """CUSTOM routing must not make playback binding same-display-only."""
+
+    state = get_visualizer_failover_state()
+    state.clear_visualizer_failover()
+    media_model = SimpleNamespace(
+        playbackState="paused",
+        stateChanged=_Signal(),
+    )
+    media_unit = _live_unit(0, media_model=media_model)
+    visualizer_unit = _live_unit(1)
+    manager = _manager("Custom")
+    manager.displays = [media_unit, visualizer_unit]
+    manager._refresh_all_quick_context_menus = lambda: None
+    owners = []
+
+    class _Engine:
+        @staticmethod
+        def get_generation_id() -> int:
+            return 17
+
+        @staticmethod
+        def get_activation_id() -> int:
+            return 23
+
+    class _Owner:
+        def __init__(self, runtime, *, bar_count, initial_mode) -> None:
+            del runtime, bar_count
+            self.controller = SimpleNamespace(
+                mode_id=initial_mode,
+                engine=_Engine(),
+                settings_model=None,
+                technical_config_cache=None,
+                record_resolved_activation=lambda _activation: None,
+            )
+            self.playing = []
+            self.is_retired = False
+            owners.append(self)
+
+        def configure(self, **_kwargs) -> None:
+            return None
+
+        def bind(self, **_kwargs) -> None:
+            return None
+
+        def set_playing(self, playing: bool, **_kwargs) -> None:
+            self.playing.append(bool(playing))
+
+        def start(self) -> None:
+            return None
+
+        def retire(self) -> None:
+            self.is_retired = True
+
+    import widgets.spotify_visualizer.quick_display_visualizer_owner as owner_module
+
+    monkeypatch.setattr(owner_module, "QuickDisplayVisualizerOwner", _Owner)
+    monkeypatch.setattr(
+        display_manager_module,
+        "resolve_quick_custom_entry",
+        lambda *_args, **_kwargs: None,
+    )
+    try:
+        assert manager._admit_quick_visualizer(manager.displays) is True
+        assert len(owners) == 1
+        owner = owners[0]
+        assert manager._quick_visualizer_owner is owner
+        assert manager._quick_visualizer_unit is visualizer_unit
+        assert visualizer_unit._visualizer_owner is owner
+        assert media_unit._visualizer_owner is None
+        assert visualizer_unit.presenter.presentation_for_widget_id("media") is None
+        assert manager._quick_visualizer_media_model is media_model
+        assert owner.playing[-1] is False
+
+        media_model.playbackState = "playing"
+        media_model.stateChanged.emit()
+        assert owner.playing[-1] is True
+
+        manager._disconnect_quick_visualizer_media_route()
+        observed_count = len(owner.playing)
+        media_model.playbackState = "paused"
+        media_model.stateChanged.emit()
+        assert len(owner.playing) == observed_count
+    finally:
+        manager._disconnect_quick_visualizer_media_route()
+        state.clear_visualizer_failover()
 
 
 @pytest.mark.parametrize(
