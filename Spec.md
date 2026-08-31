@@ -211,7 +211,9 @@ Cancel restores the pre-edit committed extent. "No active CUSTOM session" is not
 
 Double-click inside the active retained Visualizer advances to the next visualizer mode. Middle-click is a separate action:
 it advances exactly one preset in the current mode with wraparound and consumes no next-image, exit or context-menu action.
-The Custom slot is user-owned: leaving it snapshots the exact normalized mode payload and returning restores it. Runtime
+The Custom slot is user-owned: leaving it snapshots the exact normalized **mode-owned** payload and returning restores it.
+Preset/Custom payloads never own widget admission, `position`, `monitor`, or outer CUSTOM geometry; those remain live route
+and layout authority across every preset transition. Runtime
 preset persistence replaces only `widgets.spotify_visualizer` plus the canonical `visualizer_custom_presets` cache in one
 Settings transaction; it must not refresh the whole widgets map or disturb Media. A same-mode preset activation reuses the
 one Visualizer owner, controller, BeatEngine/source, logical-runtime slot, retained presentation and display frame pacer.

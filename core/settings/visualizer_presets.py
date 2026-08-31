@@ -63,10 +63,11 @@ _PLACEHOLDER_NAME_RE = re.compile(
     flags=re.IGNORECASE,
 )
 
-GLOBAL_ALLOWED_KEYS = {
-    "monitor",
-    "mode",
-}
+GLOBAL_ALLOWED_KEYS = {"mode"}
+# Presets own only the active mode's authored payload.  Widget admission,
+# routing, and outer geometry (for example ``enabled``, ``position`` and
+# ``monitor``) belong to the live spotify_visualizer section and must survive a
+# preset/Custom round-trip unchanged.
 # rainbow_enabled / rainbow_speed are now per-mode keys (e.g. spectrum_rainbow_enabled)
 # and match MODE_KEY_PREFIXES automatically. Kept out of GLOBAL_ALLOWED_KEYS so presets
 # only carry each mode's own rainbow state.
@@ -91,16 +92,31 @@ def _is_key_for_mode(key: str, prefixes: list[str]) -> bool:
 
 
 def _is_global_visualizer_key(key: str) -> bool:
-    if key in GLOBAL_ALLOWED_KEYS:
-        return True
-    return key in {
-        "mode",
-        "enabled",
-        "visualizers_enabled",
-        "monitor",
-        "rainbow_enabled",
-        "rainbow_speed",
-    }
+    return key in GLOBAL_ALLOWED_KEYS
+
+
+def _filter_snapshot_payload_ownership(
+    mode_key: str,
+    payload: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Keep only state owned by one mode snapshot.
+
+    Older Custom caches admitted ``monitor`` as a pseudo-global preset key.
+    Restoring one of those snapshots could silently reroute the widget, after
+    which CUSTOM hydration quite correctly looked in a different display
+    bucket and appeared to lose both location and viewport shape.  Filtering at
+    both cache normalization and restore makes that shipped data forward-safe
+    without retaining a layout compatibility path.
+    """
+
+    prefixes = MODE_KEY_PREFIXES.get(mode_key, [])
+    filtered: Dict[str, Any] = {}
+    for key, value in payload.items():
+        if key == "mode":
+            filtered[key] = mode_key
+        elif _is_key_for_mode(key, prefixes):
+            filtered[key] = deepcopy(value)
+    return filtered
 
 
 def extract_visualizer_snapshot(mode_key: str, spotify_vis_config: Mapping[str, Any]) -> Dict[str, Any]:
@@ -173,6 +189,8 @@ def normalize_visualizer_custom_snapshot_cache(
     for mode_key, payload in flat.items():
         if mode_key not in nested:
             nested[mode_key] = payload
+    for mode_key, payload in list(nested.items()):
+        nested[mode_key] = _filter_snapshot_payload_ownership(mode_key, payload)
     return nested
 
 
@@ -247,6 +265,7 @@ def restore_visualizer_snapshot(
 ) -> bool:
     if not isinstance(payload, Mapping):
         return False
+    payload = _filter_snapshot_payload_ownership(mode_key, payload)
     sanitized = strip_legacy_global_technical_keys(spotify_vis_config)
     if dict(sanitized) != dict(spotify_vis_config):
         spotify_vis_config.clear()

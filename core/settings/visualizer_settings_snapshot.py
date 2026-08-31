@@ -187,9 +187,9 @@ def normalize_visualizer_mode_payload(
 ) -> Dict[str, Any]:
     """Return a canonical mode-scoped payload for presets/custom snapshots.
 
-    This keeps shared visual keys (colors/monitor/ghost settings) while
-    promoting technical controls to mode-owned keys and dropping legacy shared
-    technical duplicates from exported payloads.
+    This keeps only mode-owned authored visual and technical controls. Widget
+    admission, routing, and outer geometry stay in the live section and are not
+    preset/Custom payload state.
     """
     normalized = normalize_visualizer_section_mapping(
         data,

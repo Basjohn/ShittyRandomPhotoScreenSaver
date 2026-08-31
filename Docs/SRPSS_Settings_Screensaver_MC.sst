@@ -357,8 +357,7 @@
         "bubble_transient_mix_bass": 0.2,
         "bubble_transient_mix_vocal": 0.15,
         "bubble_transient_pulse_gain": 0.05,
-        "mode": "bubble",
-        "monitor": "2"
+        "mode": "bubble"
       }
     },
     "widgets": {

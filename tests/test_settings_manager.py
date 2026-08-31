@@ -712,6 +712,48 @@ class TestSettingsManagerDefaults:
             == SettingsManager._VISUALIZER_SCHEMA_VERSION
         )
 
+    def test_visualizer_schema_v5_strips_custom_cache_route_leak(self, tmp_path: Path) -> None:
+        storage_root = tmp_path / "visualizer_custom_cache_route_leak"
+        app_name = f"TestApp_{uuid.uuid4().hex}"
+        manager = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+        manager._settings.setValue(
+            "visualizer_custom_presets",
+            {
+                "bubble": {
+                    "mode": "bubble",
+                    "bubble_growth": 5.25,
+                    "monitor": "ALL",
+                    "position": "Top Left",
+                    "enabled": False,
+                }
+            },
+        )
+        manager._settings.update_metadata(visualizer_schema_version=4)
+        manager._settings.sync()
+        assert manager.flush(timeout=5.0) is True
+        manager._settings.load()
+
+        reloaded = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+
+        assert reloaded.get("visualizer_custom_presets") == {
+            "bubble": {
+                "mode": "bubble",
+                "bubble_growth": 5.25,
+            }
+        }
+        assert (
+            reloaded._settings.metadata().get("visualizer_schema_version")
+            == SettingsManager._VISUALIZER_SCHEMA_VERSION
+        )
+
     def test_runtime_preset_state_write_preserves_media_and_reloads_custom_cache(
         self,
         tmp_path: Path,

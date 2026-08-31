@@ -889,6 +889,30 @@ def test_restore_visualizer_snapshot_clears_mode_technical_keys_absent_from_payl
     assert "spectrum_manual_floor" not in cfg
 
 
+def test_restore_visualizer_snapshot_never_applies_widget_route_fields():
+    cfg = {
+        "mode": "spectrum",
+        "position": "Custom",
+        "monitor": "2",
+        "spectrum_growth": 2.0,
+    }
+    payload = {
+        "mode": "spectrum",
+        "position": "Top Left",
+        "monitor": "ALL",
+        "enabled": False,
+        "spectrum_growth": 1.2,
+    }
+
+    changed = vp.restore_visualizer_snapshot("spectrum", cfg, payload)
+
+    assert changed is True
+    assert cfg["position"] == "Custom"
+    assert cfg["monitor"] == "2"
+    assert "enabled" not in cfg
+    assert cfg["spectrum_growth"] == pytest.approx(1.2)
+
+
 def test_reindex_curated_presets_fills_gaps_with_markerless_files(tmp_path, monkeypatch):
     root = tmp_path
     mode = "spectrum"

@@ -1,6 +1,6 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-31 — H8's retained middle-click preset hotswap, lossless Custom cache and same-mode activation path are deterministic GREEN and await physical acceptance. Bubble magnitude and Play/Pause response are dramatically better; hero-radius elasticity still flickers instead of breathing, and stream/drift transient influence still needs re-measurement on the latest bounded motion correction. DevCurve AA remains ready for the same visual recheck.
+Last updated: 2026-08-31 — New geometry logs proved that shipped H8 Custom snapshots could carry `monitor`, reroute the Visualizer on Settings/preset restoration, and therefore hydrate a different display's CUSTOM geometry bucket. Schema v5 strips that route leak and preset restore now preserves widget admission/route deterministically; physical Settings/CUSTOM recreation remains open. Bubble magnitude and Play/Pause response are dramatically better; hero-radius elasticity still flickers instead of breathing, stream/drift viewport behavior needs a production-path A/B, and the all-five viewport audit found one separate Spectrum height-transfer defect. DevCurve AA remains ready for the same visual recheck.
 
 ## Current checkpoint
 
@@ -221,6 +221,8 @@ What is already established / implemented:
 - [ ] Spectrum pause handoff: steady idle floor is already authored correctly (~0.24 max). Use corrected T7 + `[VIS_SPECTRUM_HANDOFF]` samples to locate the brief pre-floor zero; do not raise the floor.
 - [ ] Complete Oscilloscope final renderer-input comparison as a control.
 - [x] Preserve current scale/viewport sizing contracts and Bubble's expanded position/motion world; radius remains the historical fraction of actual card height and maps back into collision/spawn world units without changing the canonical 1x1 path. Retired `*_growth` controls are not parity targets.
+- [ ] Add a production-path Bubble viewport A/B that consumes the same transient at canonical, wide and tall extents and compares final head/trail displacement in content coordinates, event-consumption count and radius sequence. Use that falsifier before changing stream/drift scale; do not infer correctness from raw world-step logs alone.
+- [ ] Correct the separately proven Spectrum viewport-height transfer duplication: Python already computes the capped height boost, so the shader must consume that boost once rather than applying a second square-root curve. Preserve the independent historical `0.55` bar/peak transfer and add a shown-Quick canonical/tall oracle.
 
 Detailed live checklist and repair sequence: `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`.  
 Exact historical/current evidence matrix and next source paths: `Docs/QtQuick_Migration/Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`.  
@@ -270,7 +272,7 @@ middle-click inside active retained Visualizer
 
 `request_mode_change()` still rejects a target equal to the current mode. The distinct `request_preset_change()` transaction reuses the existing owner/controller/BeatEngine hidden boundary, hard-joins the outgoing logical runtime, admits one fresh target identity and reveals it through the existing fade. A second request while any visualizer transition is active is consumed but dropped before another activation can begin.
 
-Preset persistence is one narrow Settings transaction: replace the `widgets.spotify_visualizer` child and its canonical root `visualizer_custom_presets` companion cache only. It never emits or refreshes the whole `widgets` mapping, so Media siblings remain untouched. Schema v4 migrates the shipped flat Bubble cache to the nested per-mode shape and preserves that cache as a structured JSON/SST root across reload. A missing mode snapshot is seeded from its persisted raw mode payload before the first runtime mutation. Curated application uses replace semantics.
+Preset persistence is one narrow Settings transaction: replace the `widgets.spotify_visualizer` child and its canonical root `visualizer_custom_presets` companion cache only. It never emits or refreshes the whole `widgets` mapping, so Media siblings remain untouched. Schema v4 migrated the shipped flat Bubble cache to the nested per-mode shape; schema v5 strips the shipped route leak (`monitor` and any other non-mode-owned admission/layout fields) from every cached mode. Presets and Custom own only the normalized active-mode payload. A missing mode snapshot is seeded from its persisted raw mode payload before the first runtime mutation. Curated application uses replace semantics.
 
 Work this after H5/H6 source changes to avoid overlapping visualizer-activation churn, but close it before H re-closes.
 
@@ -280,8 +282,9 @@ Closure checklist:
 - [x] Same-mode preset activation transaction through the existing visualizer owner/controller/BeatEngine (NOT `request_mode_change()`), wraparound, mode identity unchanged.
 - [x] Custom slot round-trips losslessly; shipped flat cache migrates once and missing-mode first use snapshots pre-mutation raw state.
 - [x] Atomic visualizer-child + canonical Custom-cache persistence uses replace semantics; no whole-`widgets` refresh and Media remains unchanged.
+- [x] Preset/Custom payload ownership excludes widget admission, `position`, `monitor` and CUSTOM geometry; schema v5 migrates leaked caches and runtime/Settings restore preserves the live route.
 - [x] No next-image/exit/context-menu side effect; one source/pacer, stale-generation fencing, fresh-frame admission and overlap rejection preserved.
-- [ ] Operator middle-click through several presets in Bubble and Spectrum, round-trip Custom, then recheck Settings recreation, CUSTOM Save/Continue and restart/reload with clean logs.
+- [ ] Operator middle-click through several presets in Bubble and Spectrum, round-trip Custom, then recheck Settings recreation, CUSTOM Save/Continue and restart/reload with clean logs. Confirm requested monitor, owning display, outer rect and viewport extent remain the same across each recreation.
 
 Technical route: `Docs/QtQuick_Migration/H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md`.
 
