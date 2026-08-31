@@ -1,6 +1,6 @@
 # H5 Technical Decomposition — Visualizer CUSTOM Routing and Spectrum Saturation
 
-Date: 2026-08-30  
+Date: 2026-08-30; Spectrum evidence refreshed 2026-08-31  
 Starting source: `af8896b52fbee153fe1cd0b627a55455c14625d1`
 
 This decomposition covers two independent functional Visualizer regressions. Keep them separate in implementation and testing.
@@ -107,141 +107,127 @@ Also preserve missing-monitor 30 s grace/fallback/reclaim behavior.
 
 ## Part B — Spectrum saturation + wrong renderer topology
 
-### Physical symptom
+### Updated evidence status — 2026-08-31
 
-The current Spectrum/Organ result is wrong in two distinguishable ways:
+The direct line-by-line comparison against the user-supplied known-good `3fe5df687387b6b6a121142372c43a7719442386` tree has converted the previous broad H5b hypotheses into **three independent source-proven migration deviations**.
 
-1. energy is effectively pinned/saturated;
-2. the **representation family itself is wrong** — a dense screen-filling matrix of tiny segmented blocks appears where the established Organ/Spectrum presentation uses bottom-aligned continuous vertical frequency columns.
+The historical source is a behavioral oracle only. The accepted retained Quick architecture remains binding.
 
-The second point matters: all-1.00 data can make bars uniformly tall, but it cannot by itself explain a renderer drawing hundreds of repeated mini-cells instead of the intended column topology.
+### B1 — canonical topology mapping was lost (**H proven**)
 
-### Historical reference boundary
-
-For user-visible Spectrum/Organ intent only:
+Historical `rendering/spotify_widget_creators.py::apply_spotify_vis_model_config()` explicitly derived:
 
 ```text
-Primary broad visual baseline:
-  release 4.7.2 screenshot
-  https://github.com/Basjohn/ShittyRandomPhotoScreenSaver/releases/tag/4.7.2
-
-Secondary broad baseline:
-  release 4.7.0 screenshot
-  https://github.com/Basjohn/ShittyRandomPhotoScreenSaver/releases/tag/4.7.0
-
-Cleaner historical behavior code:
-  15099d389e5091942a0ce3d6e6311d33b6043d3d
-
-Later mixed reference:
-  3fe5df687387b6b6a121142372c43a7719442386
+spectrum_render_mode == "bars"    -> spectrum_single_piece = True
+spectrum_render_mode == "segment" -> spectrum_single_piece = False
 ```
 
-`3fe5df6` already contains migration-era work. Neither historical commit is an implementation source for current H. Extract the neutral visible invariant only.
+Current `core/settings/visualizer_presets.py` correctly makes `spectrum_render_mode` canonical and removes the legacy `spectrum_single_piece` key. But current `apply_logical_vis_mode_kwargs()` still consumes only `spectrum_single_piece`; it ignores `spectrum_render_mode`. The logical default is `_spectrum_single_piece = False`.
 
-### Latest data evidence
+Therefore a canonical `bars` preset can reach the Quick owner and still render the default segmented topology. This directly explains the dense mini-cell family independently of energy saturation.
 
-Spectrum successfully switches/loads:
+Repair checklist:
+
+- [ ] Normalize/consume canonical `spectrum_render_mode` in the current logical configuration seam.
+- [ ] Derive the runtime boolean there; keep any legacy boolean fallback narrow and tested.
+- [ ] Test `bars` and `segment` through `QuickDisplayVisualizerOwner`, not only the helper.
+- [ ] Preserve mode switch/recreation/preset-swap topology.
+
+Do not revive the historical widget creator.
+
+### B2 — Spectrum BeatEngine shaping ownership was lost (**H proven**)
+
+The old/current legacy mixed applier contains live engine configuration for:
 
 ```text
-Quick mode activation committed mode=spectrum
-spectrum.frag loaded
-bar_count=35
+spectrum_mirrored
+spectrum_shape_nodes
+spectrum_notch_positions_mirrored / linear
+spectrum_wave_amplitude
+spectrum_profile_floor
+spectrum_lane_strengths_mirrored / linear
+spectrum_drop_speed
 ```
 
-But the authored/computed bar sidecar repeatedly reports:
+Those values reach existing `BeatEngine` setters / `SpectrumShapeConfig` in the historical path.
+
+The new Quick owner correctly avoids the broad catch-all applier, but neither `build_technical_cache()` nor `apply_controller_technical_config()` carries this Spectrum shaping family. The shared engine algorithms themselves are unchanged, yet the selected preset can therefore feed **different/default engine shaping**.
+
+Repair checklist:
+
+- [ ] Route the exact engine-consumed Spectrum shape values through a narrow presentation-neutral controller configuration seam.
+- [ ] Apply them through the existing one BeatEngine and existing setters.
+- [ ] Apply only on configure/mode/preset/settings refresh; never on every authored/render frame.
+- [ ] Keep mirrored-state + active-notch selection coherent in one transaction.
+- [ ] Test in-place preset A -> B reconfiguration without engine/runtime recreation.
+
+This must be repaired before interpreting remaining all-`1.00` data as a new math problem.
+
+### B3 — historical final `0.55` renderer transfer is absent (**J-shaped numerical parity / required for H5b functional closure**)
+
+Historical `widgets/spotify_visualizer/renderers/spectrum.py` multiplies both bars and peaks by `0.55` immediately before shader upload.
+
+Current `rendering/quick/visualizer/implementations/spectrum.py` uploads raw authored bars/peaks. The same authored value `1.0` therefore reaches the current shader as `1.0` instead of historical `0.55` — approximately 1.82x the historical input.
+
+Current `widgets/spotify_visualizer/spectrum_solid_hysteresis.py` still owns `_SPECTRUM_UPLOAD_SCALE = 0.55`, reinforcing that this transfer remains part of the intended presentation domain.
+
+Repair checklist:
+
+- [ ] Reuse/export one canonical transfer constant/helper; do not duplicate a new magic number.
+- [ ] Apply it exactly once to Quick live bars and peaks at renderer input.
+- [ ] Keep logical/snapshot bar values canonical and untouched.
+- [ ] Test bar + peak transfer and both continuous/segmented topology.
+
+### B4 — re-measure only after B1-B3
+
+After the three known deviations are removed, trace:
 
 ```text
-[1.00, 1.00, ...] x35
+S0 selected preset/model
+S1 resolved controller/engine config
+S2 actual BeatEngine shape/mirror/notch/drop state
+S3 current feature/bar state
+S4 SpectrumFrameRuntime source-ready + resolved bars/peaks
+S5 immutable SpectrumFrame
+S6 Quick input after historical transfer
+S7 visible shader/topology
 ```
 
-Around the saturated frames, floor telemetry also shows Spectrum dynamic floor/gate inputs and a large expansion value (`5.527`).
+- [ ] If S3 is still upper-bound degenerate, find the first engine/config transformation producing it.
+- [ ] If S3 is healthy and S4/S5 degenerates, fix Spectrum authored runtime semantics.
+- [ ] If S5 is healthy and S6/S7 is wrong, keep the repair in Quick presentation.
+- [ ] Do **not** change global visualizer gain based on Spectrum.
 
-### Two-branch investigation
-
-#### B1 — data/shaping
-
-Capture one bounded sample at each Spectrum-only layer:
-
-```text
-D0 audio FFT/bin magnitudes
-D1 frequency-band aggregation
-D2 resolved mode/preset technical parameters
-D3 pre-floor/pre-expansion Spectrum bars
-D4 post-floor/expansion/gain bars
-D5 upper clamp count + final bar vector
-D6 render snapshot bar payload
-```
-
-Stop where healthy variation first becomes persistent upper-bound saturation.
-
-Likely classes to test, not assume:
-
-- preset overlay applied twice;
-- mode-specific gain/expansion interpreted in the wrong domain;
-- dynamic floor support value used as multiplier rather than gate;
-- wrong normalization reference;
-- clamp ordering error;
-- technical settings carried incorrectly from another mode during switch/recreation.
-
-#### B2 — presentation identity/topology
-
-Trace:
-
-```text
-P0 canonical mode id
-P1 preset identity
-P2 render snapshot mode/preset
-P3 renderer implementation selected
-P4 primitive/topology parameters (columns vs segments/cells)
-P5 geometry/uniforms
-P6 retained node drawn mode/preset
-```
-
-Find why the Organ/Spectrum path resolves to a dense segmented matrix rather than continuous frequency columns.
-
-Possible classes to inspect, not assume:
-
-- wrong renderer/preset implementation selected;
-- a segmented visualization primitive reused accidentally;
-- bar-count interpreted as rows/segments rather than columns;
-- stale mode-specific geometry/technical payload surviving a mode switch;
-- QSG node retaining topology from another mode.
-
-Do not begin by copying old Spectrum renderer code. Recreate the correct presentation contract in the accepted retained Quick path.
-
-### H acceptance
+### H5b acceptance
 
 H5b is GREEN when:
 
-- correct Spectrum mode/preset identity survives switch/recreation;
-- live input produces non-degenerate bar variation;
-- the final bar vector is not persistently all upper-bound;
-- Organ/Spectrum renders the correct **basic continuous-column frequency representation**, not the current dense block matrix;
-- one retained Spectrum owner/draw path remains;
-- shared cadence/Bubble behavior is untouched.
+- [ ] canonical `bars` produces the intended continuous-column family;
+- [ ] canonical `segment` remains intentionally segmented;
+- [ ] selected Spectrum preset shape/mirror/notch/drop values reach the one BeatEngine;
+- [ ] historical `0.55` final transfer is present exactly once;
+- [ ] live input is materially/non-degenerately reactive after the known parity repairs;
+- [ ] topology + shaping survive mode switch, generation recreation and preset change;
+- [ ] one retained Spectrum owner/draw path remains;
+- [ ] no shared/global gain/cadence/Bubble workaround is introduced.
 
-H stops there.
+J Parity+ still owns fine spacing/glow/gradient/outline/elegance after the functional family is correct.
 
-J Parity+ then owns:
+## Part C — Bubble is excluded from **Spectrum tuning**, not from H
 
-```text
-column width/gap
-outline thickness
-gradient/rainbow distribution
-glow strength
-shell relationship
-fine height/easing feel
-overall elegance versus historical screenshots
-```
-## Part C — Bubble is deliberately excluded from this repair
+Bubble must not be changed as collateral damage while repairing H5b. In particular, Spectrum's broken height/reactivity is not evidence for a shared global gain change.
 
-Bubble still has a physical reactivity complaint. Do not alter its cadence, growth, sensitivity or physics in this H5 work merely because Spectrum is being touched.
+However, the 2026-08-31 historical/current audit has now found source-proven Bubble configuration ownership omissions and has promoted the Bubble/common reactivity investigation to **H5c**.
 
-Preserve:
+Preserve during H5b:
 
-- ~90 Hz authored cadence;
-- requested/integrated ratio;
-- one logical runtime;
-- current good partial/CUSTOM resizing.
+- [x] ~90 Hz authored cadence;
+- [x] one logical runtime / one source owner;
+- [x] current good partial/CUSTOM resize contract;
+- [x] current scale/viewport sizing architecture;
+- [ ] no Bubble sensitivity/physics/growth retune.
 
-Only a separately proven stale/delayed source/logical/publication seam should promote Bubble out of J.
+H5c owns Bubble's stranded logical settings, shared source-readiness classification, Play/Pause visible delay, Sine idle transport and the full all-mode historical parity audit.
+
+Detailed route: `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`.  
+Evidence matrix: `Docs/QtQuick_Migration/Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`.

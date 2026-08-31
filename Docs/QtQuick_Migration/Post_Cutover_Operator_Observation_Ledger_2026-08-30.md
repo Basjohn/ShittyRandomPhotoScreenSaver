@@ -6,7 +6,7 @@ This ledger is mandatory phase-close input. Narrow implementation prompts never 
 
 ## Baseline / parity rule
 
-**J is Parity+.** Historical successful presentation is a quality/behavior floor where better, not a ceiling and never an implementation source. Preferred references are the 4.7.2/4.7.0 release screenshots, then `15099d3` (cleaner old behavior reference), then `3fe5df6` (later mixed/migration-era reference). Current operator observations outrank historical inference. Never restore/wrap/adapt the deleted QWidget/QRhi/GL presenter.
+**J is Parity+.** Historical successful presentation is a quality/behavior floor where better, not a ceiling and never an implementation source. Preferred broad visual references are the 4.7.2/4.7.0 release screenshots and `15099d3`. **For visualizer reactivity specifically, the user-supplied `3fe5df6` tree is the known-good pre-Qt-Quick behavioral oracle.** Current operator observations outrank historical inference, and current Quick ownership remains implementation authority. Never restore/wrap/adapt the deleted QWidget/QRhi/GL presenter.
 
 Legend:
 
@@ -47,11 +47,12 @@ Legend:
 | State | ID | Phase | Observation | Durable handling / close condition |
 |---|---|---|---|---|
 | [x] | O-012 | H preservation | Visualizer retained delivery now visibly evolves. | Preserve `adcfd96d`. |
-| [ ] | O-013 | **H** | Spectrum/Organ is functionally the wrong representation: current Quick output is a dense full-height matrix of tiny segmented blocks, while the intended family is bottom-aligned continuous frequency columns. Logs independently show the 35-bar payload repeatedly saturating at 1.00 before shader presentation. | H5b has two branches: repair Spectrum-specific data saturation and identify the wrong renderer/primitive/topology path. H closes when data is non-degenerate and the basic continuous-column Spectrum family is restored; exact glow/spacing/colour polish is J Parity+. |
-| [x] | O-014 | J provisional | Oscilloscope/Sine/DevCurve look good in current smoke. | Preserve and recheck in J. |
-| [ ] | O-015 | J / H conditional | Bubble is barely reactive: delayed visible start/stop and little contraction/expansion despite healthy authored cadence/integration. | Do not blind-tune. Trace playback/source/logical/publication/visible consequence in J; deterministic stale seam may be fixed at owner. |
+| [ ] | O-013 | **H** | Spectrum/Organ is both visually and reactively broken: dense segmented topology, full-height/saturated response, and selected preset semantics do not survive the migration. | H5b now has three source-proven deviations: canonical `spectrum_render_mode` no longer maps to continuous/segmented runtime topology; Spectrum mirror/shape/notch/lane/profile/drop values are stranded outside the Quick BeatEngine config path; historical bar+peak `0.55` final upload transfer is absent. Repair all three narrowly, then re-measure remaining saturation. No global gain. |
+| [ ] | O-014 | **H/J audit** | Earlier smoke said Oscilloscope/Sine/DevCurve broadly looked good, but Sine is now physically reported to have lost its historical paused idle motion. That invalidates the blanket closed row. | H5c compares all three against `3fe5df6`. Sine runtime still advances paused time/travel/shift, so trace snapshot/uniform/present before changing formulas. Oscilloscope/DevCurve remain comparative controls; close only after exact reactivity/idle transport is proven. |
+| [ ] | O-015 | **H active (H5c)** | Bubble is barely reactive under real music: delayed visible start/stop and little contraction/expansion despite healthy ~90 Hz authored cadence/integration. Intentional idle-energy motion can therefore mask loss of live-source reactivity. | Historical/current audit found three source-proven Bubble logical-config omissions and a shared per-mode `source_ready` gate capable of zeroing reactive input while cadence continues. Restore known config parity, then trace B0-B9 and readiness identity before any sensitivity/physics tuning. Preserve current good resizing. |
 | [x] | O-016 | J preservation | Bubble partial/CUSTOM resize works quite well. | Preserve. |
 | [ ] | O-044 | **H** | In CUSTOM, Visualizer does not activate when its committed display differs from Media's display. | H5a. Existing source contract already grants Visualizer own monitor in CUSTOM; repair persistence/admission/failover seam without creating another owner. |
+| [ ] | O-052 | **H active (H5c / H4 boundary)** | Visualizer has a visible startup/stop response delay on Play/Pause. | Current route is direct Media model -> Quick visualizer owner -> unchanged BeatEngine, whose historical cold ramp is 1.5 s with 6 s capture keepalive. Capture one T0-T7 edge trace to distinguish late Media truth, cold-vs-warm source, source-readiness delay, authored publication delay and retained draw delay. Do not tune the historical ramp as a workaround. |
 
 ## Media — functional/settings
 

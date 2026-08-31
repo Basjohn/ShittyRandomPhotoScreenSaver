@@ -1,6 +1,6 @@
 # 03 — Visualizer Qt Quick Migration
 
-Last updated: 2026-08-29
+Last updated: 2026-08-31
 
 Cross-links:
 
@@ -8,6 +8,8 @@ Cross-links:
 - presentation guardrail: `Docs/Guardrails/Visualizer_Presentation.md`
 - Bubble temporal fidelity: `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - authored behavior/reference: `Docs/Visualizer_Reference.md`
+- current historical-vs-Quick reactivity decomposition: `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`
+- exact reactivity evidence matrix: `Docs/QtQuick_Migration/Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`
 - CUSTOM/input implementation: `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`
 - harness routing: `Docs/Harness_Index.md`
 - historical painted-card bleed: `Docs/Historical_Bugs/R-21_Visualizer_Painted_Card_GL_Boundary.md`
@@ -485,13 +487,16 @@ requirement and must now expose that geometry seam for every current mode.
 Preserve:
 
 - authored bar/peak behavior;
+- canonical `spectrum_render_mode` semantics (`bars` = continuous columns, `segment` = segmented topology);
+- selected preset's BeatEngine mirror/shape/notch/lane/profile/drop configuration;
+- the historical final Spectrum bar/peak presentation transfer (`0.55`) exactly once at renderer input while logical bars remain canonical;
 - ghosting/persistence;
 - border/mask/style;
 - paused idle bars perceptibly visible;
 - source identity absent until a real source is authoritative;
 - Play replacing idle state in place rather than recreating presentation ownership.
 
-No mode-specific presentation clock.
+No mode-specific presentation clock. Spectrum-specific saturation/topology defects must not be compensated with a global visualizer gain change.
 
 ### Oscilloscope
 
@@ -504,6 +509,8 @@ Physical render cadence does not become waveform sampling cadence.
 
 Preserve authored idle motion, layers/line persistence, reactive behavior, ghosting and tuning.
 `Sine` does not gain a separate timer merely because Quick has animation primitives.
+
+Paused/no-source Sine remains an authored-state contract: animation time, resolved travel/phase/shift changes must continue through the immutable snapshot and retained Quick presentation. If physical idle motion disappears, trace that transport/presentation seam; never add a QML animation to conceal it.
 
 `sin_wave_growth`/`sine_wave_growth` legacy presentation sizing is not authored mode behavior.
 
@@ -544,6 +551,26 @@ Preserve each active layer's:
 
 Do not flatten DevCurve into a generic line visualizer.
 
+## 11A. Historical reactivity parity oracle and configuration completeness
+
+For audio reactivity, known-good `3fe5df687387b6b6a121142372c43a7719442386` is the behavioral oracle. Quick may change rendering ownership and geometry implementation; it may not silently change mode state, engine shaping, source admission or renderer transfer without an explicit documented improvement.
+
+The 2026-08-31 audit established that the upstream capture/BeatEngine/bar-analysis algorithms are substantially unchanged and that migration defects can instead arise where the old mixed visualizer configuration owner was split into logical, engine-technical and presentation owners.
+
+Binding rules:
+
+- [ ] Every canonical setting/preset value with a live current consumer has exactly one explicit current route to that consumer.
+- [ ] BeatEngine/audio-worker inputs are applied at the one engine boundary.
+- [ ] authored mode/runtime inputs are applied to controller-owned logical state.
+- [ ] renderer/style inputs are presentation-owned.
+- [ ] defaults/fallbacks do not count as parity when the selected preset carries a different value.
+- [ ] per-mode `source_ready` fencing remains stale-safe but must not reject/delay valid current audio.
+- [ ] intentional idle energy/motion is distinct from live music reactivity.
+- [ ] retired `*_growth` card-sizing controls do not return.
+- [ ] no global tuning compensates for a mode-specific lost mapping/transfer.
+
+Exact live checklist: `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`.
+
 ## 12. Pause / Play
 
 Ordinary Pause/Play keeps runtime ownership warm:
@@ -554,6 +581,8 @@ Ordinary Pause/Play keeps runtime ownership warm:
 - visible authored state changes promptly;
 - expected-state confirmation behavior preserved;
 - Quick visibility/activation is not a second playback authority.
+
+Historical/current `BeatEngine` source is identical here: the existing cold-Play reactivity ramp is `1.5 s` and capture keepalive grace is `6.0 s`. Do not shorten/retune the historical cold ramp to hide a migration delay. A visible edge delay must be classified from canonical Media truth through owner, BeatEngine, first current source, mode readiness, authored publication, Quick snapshot and retained draw; warm resumes must remain distinguishable from genuine cold starts.
 
 Shell policy does not become playback authority.
 
