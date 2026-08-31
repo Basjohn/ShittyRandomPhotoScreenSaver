@@ -4,6 +4,13 @@ OverlayWidget {
     id: redditRoot
     objectName: "redditPresentation"
 
+    // H9: CUSTOM wheel/corner resize is one uniform retained-presentation scale.
+    // The whole authored card (header, rows, spacing, chrome) scales together
+    // from the outer-rect / baseline-preferred ratio, so rows can no longer
+    // escape a shrunk card. CUSTOM resize is purely geometric here; font size
+    // stays Settings-owned (no per-value payload scaling).
+    uniformScaleTransform: true
+
     required property var redditModel
     signal openPostRequested(string url)
     signal refreshRequested()

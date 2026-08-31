@@ -1092,16 +1092,13 @@ class RetainedMediaPresentation:
         self,
         payload: Mapping[str, object],
     ) -> None:
-        config = self._model.config
-        self._model.apply_config(
-            replace(
-                config,
-                font_size=int(payload.get("font_size", config.font_size)),
-                artwork_size=int(
-                    payload.get("artwork_size", config.artwork_size)
-                ),
-            )
-        )
+        # H9: Media CUSTOM resize is one uniform retained-presentation scale
+        # (``OverlayWidget.uniformScaleTransform``) derived from the outer rect,
+        # so it carries no per-value size payload and never mutates the
+        # Settings-owned font or artwork sizes. Stale scaled ``font_size`` /
+        # ``artwork_size`` from a pre-H9 committed layout are intentionally
+        # ignored so replay resolves the correct uniform scale from geometry.
+        del payload
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

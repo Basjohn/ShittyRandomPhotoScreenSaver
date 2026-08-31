@@ -53,6 +53,7 @@ H_DESTINATION_PROFILE = (
     "test_qtquick_context_menu.py",
     "test_qtquick_custom_layout_owner.py",
     "test_qtquick_custom_layout_overlay.py",
+    "test_qtquick_h9_uniform_resize.py",
     "test_qtquick_ordinary_widget_host.py",
     "test_qtquick_clock_presentation.py",
     "test_qtquick_weather_presentation.py",

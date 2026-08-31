@@ -42,6 +42,34 @@ Item {
         overlayWidget.preferredContentWidth, overlayWidget.preferredContentHeight
     )
 
+    // H9 uniform CUSTOM resize (opt-in). When a family enables this, the whole
+    // authored presentation - card shell plus every composed primitive - is laid
+    // out ONCE at its content-driven baseline size and scaled as a single
+    // coordinate relationship, so text, spacing, row heights, artwork, chrome,
+    // borders/shadows and pointer/hit geometry enlarge/shrink together. This is
+    // the one real retained-presentation scale: the factor is DERIVED from the
+    // ratio of the Python-assigned outer rect to the family's own baseline
+    // preferred content size, so there is no QML->Python size feedback, no second
+    // geometry owner, and Python/session remains the sole outer-rect authority.
+    // `Math.min` keeps the scale uniform (never distorts a single axis); if an
+    // axis clamp changes the outer aspect the presentation letterboxes centred
+    // rather than stretching. Families that do not opt in keep the historical
+    // fill behaviour at scale 1, so this shared change is inert for them.
+    property bool uniformScaleTransform: false
+
+    readonly property real presentationScale: (
+        overlayWidget.uniformScaleTransform
+            && overlayWidget.preferredContentWidth > 0.0
+            && overlayWidget.preferredContentHeight > 0.0
+            && overlayWidget.width > 0.0
+            && overlayWidget.height > 0.0
+    )
+        ? Math.min(
+            overlayWidget.width / overlayWidget.preferredContentWidth,
+            overlayWidget.height / overlayWidget.preferredContentHeight
+        )
+        : 1.0
+
     // Expose the shell inset so families compute preferred size consistently.
     readonly property real shellInset: card.shellInset
 
@@ -60,9 +88,30 @@ Item {
     property alias cardShadowOffsetY: card.shadowOffsetY
     property alias cardShadowSpread: card.shadowSpread
 
-    OverlayCard {
-        id: card
-        objectName: "overlayWidgetCard"
-        anchors.fill: parent
+    Item {
+        id: authoredRoot
+        objectName: "overlayAuthoredRoot"
+        // Uniform-scale families lay out at their fixed baseline content size and
+        // scale as a whole; every other family fills the assigned rect exactly
+        // (historical behaviour). `anchors.centerIn` only sets position, so the
+        // non-transform case is identical to the former `card` fill.
+        width: (overlayWidget.uniformScaleTransform
+            && overlayWidget.preferredContentWidth > 0.0)
+            ? overlayWidget.preferredContentWidth
+            : overlayWidget.width
+        height: (overlayWidget.uniformScaleTransform
+            && overlayWidget.preferredContentHeight > 0.0)
+            ? overlayWidget.preferredContentHeight
+            : overlayWidget.height
+        anchors.centerIn: parent
+        transformOrigin: Item.Center
+        scale: overlayWidget.presentationScale
+        clip: false
+
+        OverlayCard {
+            id: card
+            objectName: "overlayWidgetCard"
+            anchors.fill: parent
+        }
     }
 }
