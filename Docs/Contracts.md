@@ -1,6 +1,6 @@
 # Contracts — Current Owner Map
 
-Last updated: 2026-08-29
+Last updated: 2026-08-31
 
 `Current_Plan.md` owns work admission. This file owns fast current/destination owner routing.
 
@@ -14,7 +14,7 @@ Last updated: 2026-08-29
 | ordinary widget presentation | per-display `OrdinaryWidgetPresentationHost` |
 | CUSTOM edit scene | neutral `CustomLayoutSession` + retained Quick overlay/model |
 | context menu | retained Quick context-menu model/QML; Python semantic action authority |
-| dimming / pixel shift / cursor halo | generation-scoped retained Quick auxiliary semantic state + same display scene; Halo pointer position/inactivity are QML-local high-rate presentation facts |
+| dimming / pixel shift / cursor halo | `QuickAuxiliaryController` owns low-rate semantic admission/shape; dimming + pixel shift project into the retained scene, while Cursor Halo presentation is a generation-scoped native `QCursor` owned by `QuickCursorController` and never moves a retained QML item |
 | custom transition pixels | inline display `QSGRenderNode` |
 | custom visualizer pixels | inline visualizer `QSGRenderNode` |
 | Settings UI | existing QWidget/settings owners |

@@ -14,7 +14,8 @@ The display orchestrator (``DisplayManager``) constructs one unit per selected
 ``QScreen`` and drives it through **clean** operations - it does not emulate the
 legacy widget surface. Image, transition and visualizer routing use the
 runtime's own explicit APIs; families and their content-driven geometry use the
-presenter; Ctrl state is coordinated through the shared coordinator.
+presenter; each generation publishes its local Ctrl contribution and receives
+event-broadcast global Ctrl truth from the shared coordinator.
 """
 
 from __future__ import annotations
@@ -355,7 +356,7 @@ def create_quick_display_unit(
     scene_factory: QuickSceneFactory,
     window_policy: QuickWindowPolicy,
     ctrl_coordinator: SharedCtrlCoordinator,
-    interaction_mode_provider: Callable[[], bool] | None = None,
+    interaction_mode_enabled: bool = False,
     custom_layout_active_provider: Callable[[], bool] | None = None,
     telemetry: RenderNodeTelemetry | None = None,
     adapters: Sequence[OrdinaryFamilyAdapter] | None = None,
@@ -363,10 +364,11 @@ def create_quick_display_unit(
     """Construct one display's full Quick destination chain.
 
     The runtime's cross-display Ctrl seam is bound to ``ctrl_coordinator`` so this
-    display publishes only its own Ctrl state while reading the authoritative
-    global-held truth. The Ctrl key is the screen index.
+    generation publishes only its own Ctrl contribution while receiving pushed
+    authoritative global-held truth. The key is ``(runtime_generation, screen_index)``.
     """
 
+    ctrl_key = (int(runtime_generation), int(screen_index))
     runtime = QuickDisplayRuntime(
         screen_index=screen_index,
         runtime_generation=runtime_generation,
@@ -374,17 +376,20 @@ def create_quick_display_unit(
         scene_factory=scene_factory,
         window_policy=window_policy,
         telemetry=telemetry,
-        interaction_mode_provider=interaction_mode_provider,
+        interaction_mode_enabled=bool(interaction_mode_enabled),
         custom_layout_active_provider=custom_layout_active_provider,
-        global_ctrl_held_provider=ctrl_coordinator.held_provider(),
-        ctrl_state_publisher=ctrl_coordinator.publisher_for(screen_index),
+        ctrl_state_publisher=ctrl_coordinator.publisher_for(ctrl_key),
+    )
+    ctrl_coordinator.subscribe(
+        ctrl_key,
+        runtime.input_controller.set_shared_ctrl_held,
     )
     presenter = QuickDisplayPresenter(runtime, adapters=adapters)
     return QuickDisplayUnit(
         runtime=runtime,
         presenter=presenter,
         ctrl_coordinator=ctrl_coordinator,
-        ctrl_key=screen_index,
+        ctrl_key=ctrl_key,
     )
 
 

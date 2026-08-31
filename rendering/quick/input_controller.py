@@ -14,7 +14,7 @@ from .state import QuickInputState
 
 
 class QuickInputController(RuntimeInputOwner):
-    """Apply shared product input policy without retaining widget-era owners."""
+    """Apply shared product input policy without hot-path Settings/provider reads."""
 
     input_state_changed = Signal(object)
     custom_layout_save_requested = Signal()
@@ -25,16 +25,18 @@ class QuickInputController(RuntimeInputOwner):
         *,
         screen_index: int,
         runtime_generation: int | None,
-        interaction_mode_provider: Callable[[], bool] | None = None,
-        global_ctrl_held_provider: Callable[[], bool] | None = None,
+        interaction_mode_enabled: bool = False,
         ctrl_state_publisher: Callable[[bool], None] | None = None,
         custom_layout_active_provider: Callable[[], bool] | None = None,
         parent: QObject | None = None,
     ) -> None:
+        # Quick owns interaction/Ctrl as event-updated generation-scoped facts.
+        # Do not retain live providers here: passive pointer motion must never
+        # query Settings or cross-display state at mouse polling frequency.
         super().__init__(
             parent,
-            interaction_mode_provider=interaction_mode_provider,
-            global_ctrl_held_provider=global_ctrl_held_provider,
+            interaction_mode_provider=None,
+            global_ctrl_held_provider=None,
             ctrl_state_publisher=ctrl_state_publisher,
             consume_control_key=True,
         )
@@ -43,6 +45,7 @@ class QuickInputController(RuntimeInputOwner):
             runtime_generation=(
                 None if runtime_generation is None else int(runtime_generation)
             ),
+            interaction_mode_enabled=bool(interaction_mode_enabled),
         )
         self._custom_layout_active_provider = custom_layout_active_provider
 
@@ -58,29 +61,46 @@ class QuickInputController(RuntimeInputOwner):
     def input_state(self) -> QuickInputState:
         return self._state
 
+    @property
+    def passive_mouse_move_requires_routing(self) -> bool:
+        """Whether pointer motion can still trigger the non-interaction exit gesture."""
+
+        state = self._state
+        return bool(
+            state.admission_open
+            and not state.exiting
+            and not state.context_menu_active
+            and not state.interaction_mode_enabled
+            and not state.ctrl_held
+        )
+
+    def set_interaction_mode_enabled(self, enabled: bool) -> bool:
+        """Publish event-driven interaction admission; never re-read Settings here."""
+
+        if not self._state.admission_open:
+            return False
+        return self._publish_state(interaction_mode_enabled=bool(enabled))
+
     def is_interaction_mode_enabled(self) -> bool:
-        enabled = super().is_interaction_mode_enabled()
-        self._publish_state(interaction_mode_enabled=enabled)
-        return enabled
+        return bool(self._state.interaction_mode_enabled)
 
     def set_ctrl_held(self, held: bool) -> None:
+        """Publish this display's Ctrl contribution to the shared coordinator."""
+
+        has_shared_publisher = self._ctrl_state_publisher is not None
         super().set_ctrl_held(held)
-        self.is_ctrl_mode_active()
+        if not has_shared_publisher:
+            self.set_shared_ctrl_held(bool(held))
+
+    def set_shared_ctrl_held(self, held: bool) -> bool:
+        """Accept the coordinator's event-driven global Ctrl truth."""
+
+        if not self._state.admission_open:
+            return False
+        return self._publish_state(ctrl_held=bool(held))
 
     def is_ctrl_mode_active(self) -> bool:
-        # The cross-display coordinator is authoritative for Ctrl mode. A display
-        # must not stay stuck on a stale local Ctrl-held after focus moved to a
-        # peer and the shared state cleared (the release lands on the focused
-        # display). Local input still feeds the coordinator via set_ctrl_held()'s
-        # publisher; when no coordinator is wired we keep the local base behavior.
-        global_state = self._global_ctrl_held()
-        active = (
-            global_state
-            if global_state is not None
-            else super().is_ctrl_mode_active()
-        )
-        self._publish_state(ctrl_held=active)
-        return active
+        return bool(self._state.ctrl_held)
 
     def set_context_menu_active(self, active: bool) -> None:
         super().set_context_menu_active(active)
@@ -155,16 +175,23 @@ class QuickInputController(RuntimeInputOwner):
         return True
 
     def describe_input_state(self) -> dict[str, object]:
-        return self._state.as_dict()
+        state = self._state.as_dict()
+        state["interaction_owner"] = "event_cached"
+        state["ctrl_owner"] = "event_cached_shared"
+        state["passive_mouse_move_requires_routing"] = (
+            self.passive_mouse_move_requires_routing
+        )
+        return state
 
     def _request_exit(self) -> None:
         self._exiting = True
         self._publish_state(exiting=True)
         self.exit_requested.emit()
 
-    def _publish_state(self, **changes: object) -> None:
+    def _publish_state(self, **changes: object) -> bool:
         next_state = replace(self._state, **changes)
         if next_state == self._state:
-            return
+            return False
         self._state = next_state
         self.input_state_changed.emit(next_state)
+        return True

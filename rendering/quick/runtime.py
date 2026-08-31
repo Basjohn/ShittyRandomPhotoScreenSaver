@@ -12,6 +12,7 @@ from rendering.widget_runtime_manager import WidgetRuntimeManager
 
 from .auxiliary import QuickAuxiliaryController
 from .context_menu import QuickContextMenuModel
+from .cursor_controller import QuickCursorController
 from .frame_pacer import QuickFramePacer
 from .image_state import PresentationImage
 from .input_controller import QuickInputController
@@ -73,8 +74,7 @@ class QuickDisplayRuntime(QObject):
         scene_factory: QuickSceneFactory,
         window_policy: QuickWindowPolicy,
         telemetry: RenderNodeTelemetry | None = None,
-        interaction_mode_provider: Callable[[], bool] | None = None,
-        global_ctrl_held_provider: Callable[[], bool] | None = None,
+        interaction_mode_enabled: bool = False,
         ctrl_state_publisher: Callable[[bool], None] | None = None,
         custom_layout_active_provider: Callable[[], bool] | None = None,
         parent: QObject | None = None,
@@ -95,13 +95,19 @@ class QuickDisplayRuntime(QObject):
         self._input: QuickInputController | None = QuickInputController(
             screen_index=self._screen_index,
             runtime_generation=self._runtime_generation,
-            interaction_mode_provider=interaction_mode_provider,
-            global_ctrl_held_provider=global_ctrl_held_provider,
+            interaction_mode_enabled=interaction_mode_enabled,
             ctrl_state_publisher=ctrl_state_publisher,
             custom_layout_active_provider=custom_layout_active_provider,
             parent=self,
         )
         self._window.bind_input_controller(self._input)
+        self._cursor: QuickCursorController | None = QuickCursorController(
+            window=self._window,
+            screen_index=self._screen_index,
+            runtime_generation=self._runtime_generation,
+            parent=self,
+        )
+        self._window.bind_cursor_controller(self._cursor)
         refresh_rate = float(self._display_identity.refresh_rate_hz)
         if refresh_rate <= 0.0:
             raise RuntimeError(
@@ -155,6 +161,7 @@ class QuickDisplayRuntime(QObject):
         self._retired_pacer_state: dict[str, Any] | None = None
         self._retired_input_state: dict[str, Any] | None = None
         self._retired_auxiliary_state: dict[str, Any] | None = None
+        self._retired_cursor_state: dict[str, Any] | None = None
         self._retired_context_menu_state: dict[str, Any] | None = None
         self._retired_transition_state: dict[str, Any] | None = None
 
@@ -167,6 +174,8 @@ class QuickDisplayRuntime(QObject):
         self._scene.readiness_changed.connect(self._on_scene_readiness_changed)
         self._auxiliary.state_changed.connect(self._scene.apply_auxiliary_state)
         self._scene.apply_auxiliary_state(self._auxiliary.state)
+        self._auxiliary.state_changed.connect(self._cursor.apply_auxiliary_state)
+        self._cursor.apply_auxiliary_state(self._auxiliary.state)
         self._input.input_state_changed.connect(self._auxiliary.apply_input_state)
         self._auxiliary.apply_input_state(self._input.input_state)
         self._context_menu.visibilityChanged.connect(
@@ -298,6 +307,13 @@ class QuickDisplayRuntime(QObject):
         controller = self._transition
         if controller is None:
             raise RuntimeError("Quick transition controller has retired")
+        return controller
+
+    @property
+    def cursor_controller(self) -> QuickCursorController:
+        controller = self._cursor
+        if controller is None:
+            raise RuntimeError("Quick cursor controller has retired")
         return controller
 
     @property
@@ -468,6 +484,7 @@ class QuickDisplayRuntime(QObject):
         self.input_controller.close_input()
         self.context_menu_model.close()
         self.auxiliary_controller.close()
+        self.cursor_controller.close()
         self.transition_controller.close()
         # Retire the neutral capability/service owner's generation-owned provider
         # and model lifetimes exactly once before scene/render teardown, so no
@@ -503,6 +520,9 @@ class QuickDisplayRuntime(QObject):
         auxiliary_state = self._retired_auxiliary_state
         if auxiliary_state is None and self._auxiliary is not None:
             auxiliary_state = self._auxiliary.describe()
+        cursor_state = self._retired_cursor_state
+        if cursor_state is None and self._cursor is not None:
+            cursor_state = self._cursor.describe()
         context_menu_state = self._retired_context_menu_state
         if context_menu_state is None and self._context_menu is not None:
             context_menu_state = self._context_menu.describe()
@@ -520,6 +540,7 @@ class QuickDisplayRuntime(QObject):
             "frame_pacer": pacer_state,
             "input": input_state,
             "auxiliary": auxiliary_state,
+            "cursor": cursor_state,
             "context_menu": context_menu_state,
             "transition": transition_state,
             "close_meta_calls_queued": self._close_meta_calls_queued,
@@ -547,6 +568,8 @@ class QuickDisplayRuntime(QObject):
         self._display_identity = identity
         if self._pacer is not None:
             self._pacer.set_target_hz(identity.refresh_rate_hz)
+        if self._cursor is not None:
+            self._cursor.refresh_display_metrics()
         self.display_identity_changed.emit(identity)
 
     def _on_window_binding_lost(self, loss: QuickDisplayBindingLoss) -> None:
@@ -567,6 +590,7 @@ class QuickDisplayRuntime(QObject):
         self.frame_pacer.pause()
         self.context_menu_model.close()
         self.auxiliary_controller.close()
+        self.cursor_controller.close()
         self.input_controller.close_input()
         self._set_phase(QuickRuntimePhase.PAUSED)
         self.topology_loss_detected.emit(loss)
@@ -623,6 +647,8 @@ class QuickDisplayRuntime(QObject):
             self._retired_input_state = self._input.describe_input_state()
         if self._auxiliary is not None:
             self._retired_auxiliary_state = self._auxiliary.describe()
+        if self._cursor is not None:
+            self._retired_cursor_state = self._cursor.describe()
         if self._context_menu is not None:
             self._retired_context_menu_state = self._context_menu.describe()
         if self._transition is not None:
@@ -644,6 +670,10 @@ class QuickDisplayRuntime(QObject):
             self._retired_auxiliary_state = self._auxiliary.describe()
             self._auxiliary.deleteLater()
             self._auxiliary = None
+        if self._cursor is not None:
+            self._retired_cursor_state = self._cursor.describe()
+            self._cursor.deleteLater()
+            self._cursor = None
         if self._context_menu is not None:
             self._retired_context_menu_state = self._context_menu.describe()
             self._context_menu.deleteLater()

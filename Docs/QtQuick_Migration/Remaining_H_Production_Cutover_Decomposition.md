@@ -295,10 +295,10 @@ For a display that owns the admitted visualizer, visualizer publication closes a
 stop/join **before** Quick runtime/window terminal retirement proceeds. A failed join is a failed generation-retirement
 barrier: retain ownership and fail the transition rather than reporting successful retirement while non-daemon work survives.
 
-`SharedCtrlCoordinator` is currently contribution-keyed by screen identity/index. The cutover must prove old/new generations
-for the same screen cannot overlap while contributions are live; if overlap is introduced by the exact implementation,
-generation-qualify that contribution or otherwise prove stale retirement cannot clear the replacement contribution. Do not
-refactor this speculatively when the destruction barrier already proves non-overlap.
+`SharedCtrlCoordinator` is contribution-keyed by `(runtime_generation, screen_index)` and event-broadcasts the global
+OR truth to each live generation-scoped input owner. Preserve that generation qualification: old/new generations may overlap
+briefly during replacement, and stale retirement must not clear the replacement contribution or listener. Passive pointer
+motion must never poll the coordinator for Ctrl truth.
 
 ## 10. Readiness
 

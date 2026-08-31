@@ -142,7 +142,7 @@ Landed destination presentation:
 
 - dimming is one retained same-scene overlay;
 - pixel shift is one retained shared scene transform/cadence owner;
-- cursor halo is retained same-scene presentation: Python owns generation-scoped semantic admission/shape, while high-rate pointer position + 2 s inactivity remain inside the passive retained QML scene; Halo admission blanks the native cursor and intentional Halo suppression exposes one normal pointer;
+- cursor halo is native window-system presentation: `QuickAuxiliaryController` owns generation-scoped semantic admission/shape and `QuickCursorController` owns a cached `QCursor`; physical pointer motion no longer moves a retained QML item or polls Settings/Ctrl providers. The 2 s inactivity contract is deadline-based with a bounded native-cursor fade; retained context-menu suppression selects one ordinary arrow cursor immediately;
 - context menu is a retained Quick model/QML surface with Python semantic command authority.
 
 No auxiliary feature gets a second translucent top-level accelerated window. A QWidget context menu is no longer a

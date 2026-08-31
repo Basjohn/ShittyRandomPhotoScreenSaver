@@ -34,9 +34,15 @@ QuickDisplayWindow
                 -> semantic halo admission / native-cursor treatment / auxiliary state
             -> QuickSceneController / ordinary-widget host
 
-DisplayScene retained passive HoverHandler
-    -> pointer position + 2 s motion inactivity stay inside QML
-    -> CursorHalo retained item
+QuickAuxiliaryController.state_changed
+    -> QuickCursorController
+        -> cached native QCursor pixmap for the admitted Halo shape
+        -> one deadline-based 2 s inactivity timer + bounded native-cursor fade
+
+QuickDisplayWindow.mouseMoveEvent
+    -> QuickCursorController.note_pointer_motion() only while Halo admitted
+    -> RuntimeInputOwner mouse-move route only when the classic non-interaction
+       >10 px exit gesture can still fire
 
 QuickContextMenuModel.visibilityChanged
     -> QuickInputController.set_context_menu_active
@@ -48,7 +54,6 @@ QuickAuxiliaryController.state_changed
         -> same DisplayScene root
             dimming
             pixel shift
-            halo
 
 QuickContextMenuModel
     -> same DisplayScene root ContextMenu.qml
@@ -64,7 +69,7 @@ Already landed:
 
 - retained same-scene dimming;
 - one shared retained pixel-shift transform/cadence owner;
-- retained same-scene cursor halo with inactivity behavior;
+- native window-system Cursor Halo (`QCursor`) with deadline-based inactivity behavior;
 - retained context-menu model/QML;
 - context-menu visibility feeding generation-scoped input state;
 - semantic action admission in Python.
@@ -113,12 +118,14 @@ historical compatibility with no destination caller
 
 ### Cursor halo
 
-- same retained scene, never a top-level translucent window;
-- Python owns only generation-scoped semantic admission/suppression/shape; mouse-poll-rate pointer coordinates do **not** cross the Python auxiliary-state bridge;
-- one passive retained-QML pointer handler owns live position and the 2 s motion-inactivity presentation clock; it does not become a second semantic input/click owner;
-- while the cursor-shaped Halo is admitted the native cursor is explicitly blank; intentional Halo suppression such as the retained context menu exposes one normal native cursor, never both;
+- native `QCursor` presentation, never a moving retained-QML item and never a second top-level translucent window;
+- `QuickAuxiliaryController` owns only generation-scoped semantic admission/suppression/shape; `QuickCursorController` renders/caches the corresponding cursor pixmap and the window system owns physical pointer movement;
+- mouse-poll-rate pointer coordinates do **not** cross auxiliary state, Settings, Ctrl providers or scene-root properties; admitted Halo motion only updates one monotonic inactivity deadline while the existing timer remains armed;
+- interaction-mode and global Ctrl admission are event-updated cached `QuickInputState` facts. Cross-display Ctrl changes are pushed by `SharedCtrlCoordinator`; passive Halo movement does not poll a provider;
+- while Halo is admitted the window cursor itself is the Halo. Intentional suppression such as the retained context menu immediately selects one ordinary arrow cursor, never both; normal non-interaction screensaver mode remains blank;
+- the 2 s inactivity fade is bounded native-cursor pixmap replacement only. It must not request a QQuick scene presentation or introduce recurring polling;
 - context-menu active, exiting, closed admission or inactive interaction/Ctrl state suppresses Halo admission coherently;
-- a stale display/generation semantic update is rejected rather than repainting a replacement runtime.
+- a stale display/generation semantic update is rejected rather than mutating a replacement runtime.
 
 ### Context menu
 

@@ -258,9 +258,7 @@ small generation-scoped presentation state
 retained Quick runtime item/layer
 ```
 
-G7 has already landed same-scene dimming/pixel shift, cursor halo and retained context-menu presentation. Avoid
-reimplementing network/provider/business/settings authority in QML. Any remaining QWidget/top-level auxiliary pixels are
-migration debris, not a second destination path.
+G7 has already landed same-scene dimming/pixel shift and retained context-menu presentation. Cursor Halo is deliberately **outside** the composited scene: `QuickCursorController` supplies one native `QCursor`, so physical pointer motion cannot dirty wallpaper/Visualizer pixels. Avoid reimplementing network/provider/business/settings authority in QML. Any remaining QWidget/top-level auxiliary pixels are migration debris, not a second destination path.
 
 The one Quick scene owns runtime pixels that visually coexist over the screensaver.
 
