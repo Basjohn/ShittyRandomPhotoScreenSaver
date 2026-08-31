@@ -269,7 +269,7 @@ H3 Reddit product opener composition: IMPLEMENTED / AWAITING TEST VALIDATION
 H3b Clock runtime mode-toggle persistence: IMPLEMENTED / AWAITING TEST VALIDATION
 H4 Media Play/Pause + seek provider-result semantics: IMPLEMENTED / deterministic focused gates GREEN / physical Spotify gate pending
 H5a CUSTOM Visualizer independent display admission: route/owner/draw exonerated; cross-display Media-model binding repair + focused two-live-unit gate GREEN / physical confirmation pending
-H5b Spectrum upstream saturation + wrong topology: pending
+H5b Spectrum source/configuration/renderer-transfer parity: focused `10/10` + primary physical reactivity GREEN; topology/recreation/preset gate pending
 H6 CUSTOM Settings size-lock scope: source/runtime-shaped GREEN; physical revalidation pending
 H8 Visualizer middle-click preset hotswap: pending; requires retained middle-button admission + same-mode activation coverage
 H7 exit visible-response/perf classification: pending / likely J if windows dismiss promptly
@@ -448,6 +448,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_visualizer_logical_ownership.py` | **KEEP — MIGRATION PERMANENT / H** | Controller-owned authored logical state/runtime ownership without QWidget host. |
 | `tests/test_qtquick_visualizer_owner_edge.py` | **KEEP — MIGRATION PERMANENT / H** | Thin display/generation visualizer ownership edge, single shared-engine acquire/release, hard retirement, and terminal callback release semantics. |
 | `tests/test_qtquick_visualizer_pre_cutover_audit.py` | **KEEP — MIGRATION PERMANENT / H** | Standing source/behavior regression bars from the H pre-cutover audit. |
+| `tests/test_qtquick_visualizer_reactivity_config_parity.py` | **KEEP — MIGRATION PERMANENT / H5b-H5c** | Canonical Spectrum topology translation, shared BeatEngine shaping while another mode is active, exact Quick `0.55` transfer, Bubble live controls and technical zero/false semantics; maintained H profile. |
 | `tests/test_qtquick_visualizer_true_f_gate.py` | **KEEP — MIGRATION PERMANENT / H** | Strong True-F technical-engine/logical/bar-count + exact retained-item consumption gate. |
 
 ### 10.2 Visualizer
