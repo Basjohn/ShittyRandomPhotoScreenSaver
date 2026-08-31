@@ -122,6 +122,26 @@ def test_bubble_frame_runtime_freezes_one_authored_step_and_visible_event() -> N
             return {"tick_ms": 0.04}
 
         @staticmethod
+        def get_big_lane_diagnostics():
+            return {
+                "active_big_count": 1.0,
+                "max_big_raw_src": 0.8,
+                "max_big_gated_energy": 0.7,
+                "max_big_pulse_after": 0.6,
+            }
+
+        @staticmethod
+        def get_big_render_diagnostics():
+            return {
+                "big_render_count": 1.0,
+                "big_clamp_hits": 0.0,
+                "max_big_render_radius": 0.07,
+                "max_big_render_delta": 0.03,
+                "avg_big_render_radius": 0.07,
+                "max_big_payload_radius": 0.07,
+            }
+
+        @staticmethod
         def reset():
             return None
 
@@ -157,6 +177,12 @@ def test_bubble_frame_runtime_freezes_one_authored_step_and_visible_event() -> N
     assert perf["tick_ms"] == pytest.approx(0.04)
     assert perf["integration_total_ms"] >= 0.0
     assert perf["result_count"] == 1.0
+    geometry = dict(resolved.geometry_diagnostics)
+    assert geometry["final_big_max_radius"] == pytest.approx(0.07)
+    assert geometry["frozen_big_max_radius"] == pytest.approx(0.07)
+    assert geometry["frozen_any_max_radius"] == pytest.approx(0.07)
+    assert geometry["frozen_max_alpha"] == pytest.approx(1.0)
+    assert geometry["max_big_raw_src"] == pytest.approx(0.8)
     assert resolved.runtime_generation == 2
     assert resolved.engine_generation == 5
     assert resolved.activation_id == 7
@@ -355,6 +381,24 @@ def test_quick_bubble_payload_keeps_latest_geometry_when_protected_edge_survives
     current = resolve_quick_bubble_payload(_snapshot())
     assert current.protected is False
     assert current.positions[0] == pytest.approx(0.25)
+
+
+def test_bubble_frame_freezes_compact_geometry_diagnostics() -> None:
+    diagnostics = {
+        "frozen_big_max_radius": 0.12,
+        "domain_h": 2.7601113172541742,
+    }
+    frame = BubbleFrame(
+        positions=(0.5, 0.5, 0.12, 1.0),
+        extras=(1.0, 0.0, 0.0, 0.0),
+        bubble_count=1,
+        geometry_diagnostics=diagnostics,
+    )
+
+    diagnostics["frozen_big_max_radius"] = 0.0
+    frozen = dict(frame.geometry_diagnostics)
+    assert frozen["frozen_big_max_radius"] == pytest.approx(0.12)
+    assert frozen["domain_h"] == pytest.approx(2.7601113172541742)
 
 
 def _layout(presentation):

@@ -606,9 +606,15 @@ R2 repair:
 - [x] warm Play current logical publication arrives in `20.0 ms`;
 - [x] retained Quick first observes the pre-edge idle snapshot (warm source age about `2527 ms`) before the current frame;
 - [x] sustained current source remains strong (`bass` about `0.60-0.77`, `mid` up to about `0.97`) and Bubble cadence remains healthy;
-- [ ] authored radius/alpha, frozen payload radius, and retained Quick projected pixels are not present in this package and are the next B6-B8 evidence boundary.
+- [x] operator quantifies visible magnitude as at least ~3x weaker than genuine old architecture; incomplete old goldens do not overrule the physical observation;
+- [x] source comparison finds exact 2.72-2.76x nonbaseline loss: current snapshot divided final radius by `domain_h=772.831/280=2.760111...`, while historical snapshot/shader used the authored radius directly against actual card height;
+- [x] restore card-height-normalized radius while position/trail world coordinates remain normalized and circles remain aspect-correct;
+- [x] inverse-map that radius plus collision-only gap/correction distances by `domain_h` for collision/spawn coherence, preserving canonical 1x1 behavior;
+- [x] add B6/B7 final-simulation/frozen-big radius-alpha plus B8 retained logical/device-pixel diagnostics around steady music and Play/Pause;
+- [x] first corrected B9 run reports dramatically better / almost close-worthy magnitude; B6/B7/B8 agree, the source is current by `105.7 ms`, cadence remains ~89 Hz / 1.000 integration, and B8 reaches about `75.95` logical px / `113.92` device px radius at DPR `1.5`;
+- [ ] final B9 gate is now the display-only smoothing/elasticity shape at the active `1.0` setting.
 
-Classification: source/config/cadence and long Play transport delay are exonerated. The retained-old first observation is real but too brief to explain the full physical ramp. No Bubble gain/smoothing/contraction change is justified until B6-B8 shows whether compression exists in simulation output, normalization, retained payload, or physical projection.
+Classification: source/config/cadence and long Play transport delay are exonerated. The retained-old first observation is real but too brief to explain the full physical ramp. Final nonbaseline radius normalization was the magnitude defect and is physically validated as dramatically better. The remaining source-visible mechanism is the display-only filter's hard hold band: at authored smoothing `1.0` it can retain an unchanged hero radius through roughly 13-19% target error before releasing into a faster correction. The next bounded repair is continuous visual settling only, with no gain/cadence/timer change.
 
 ### 15.2 DevCurve source-proven continuation
 

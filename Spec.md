@@ -1,6 +1,6 @@
 # SRPSS Specification
 
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
 Canonical durable architecture and product-behavior contracts. `Current_Plan.md` owns sequence; independent closure
 narrative belongs under `Docs/audits/` or historical evidence.
@@ -180,7 +180,10 @@ viewport_extent
 Viewport extent is world/layout playroom, not final-pixel X/Y stretch. All five current modes—Spectrum,
 Oscilloscope, Sine, Bubble and DevCurve—must reflow/adapt to wide/tall extents. Bubble's viewport bounds are spatial
 configuration to its logical side; changing them must preserve round geometry, motion/collision semantics and BTF and
-must not create another clock.
+must not create another clock. Bubble position/trail coordinates normalize from that expanded world, but authored render
+radius remains a fraction of actual card height as in the historical renderer; it is not divided by viewport-domain height.
+Collision/spawn radius and collision-only gap/correction distances use the inverse domain-height mapping in simulation
+coordinates, preserving visible contact and the exact canonical 1x1 behavior.
 
 The all-five-mode viewport capability policy is part of the destination contract and the core Bubble reflow path has landed.
 Do not reintroduce a Bubble false capability gate to conceal a viewport ownership or spatial-domain defect.

@@ -4,9 +4,11 @@ Bubble runs in a baseline-relative logical domain: canonical (420x280) is a
 strict 1x1 no-op that leaves the legacy unit-square path and render arrays
 exactly unchanged; a wide/tall committed extent expands the logical world while
 authored population and Bubble personality stay unchanged (a larger world is
-naturally less dense), and the render seam normalizes back to [0,1] so the
-shader keeps circles round. These bars prove that contract deterministically;
-final visual acceptance is deferred to after H.
+naturally less dense). The render seam normalizes positions/trails back to
+[0,1], retains historical card-height-normalized radius, maps that radius back
+into expanded-world collision units, and lets the shader keep circles round.
+These bars prove that contract deterministically; H5c B9 remains the operator
+physical-acceptance gate.
 """
 
 from __future__ import annotations
@@ -125,10 +127,12 @@ def test_geometry_change_creates_no_extra_tick() -> None:
     assert sim._diag_tick_count == 3
 
 
-def test_output_radius_normalizes_by_domain_height_preserving_physical_scale() -> None:
-    # Two fresh sims with one identical bubble: only the domain projection
-    # differs, so the tall render radius is exactly the baseline radius / 2 and x
-    # is unscaled while y halves - the shader then re-expands to the same pixels.
+def test_output_radius_preserves_historical_card_height_normalization() -> None:
+    # Two fresh sims with one identical authored bubble: position belongs to the
+    # expanded logical world and therefore normalizes, but radius remains a
+    # fraction of the actual card height exactly as in the historical renderer.
+    # This is the reactivity-critical distinction: dividing by domain_h made a
+    # restored tall viewport physically under-react by that same factor.
     def _sim_with_bubble(domain_w, domain_h):
         sim = BubbleSimulation()
         sim._domain_w = domain_w
@@ -145,8 +149,139 @@ def test_output_radius_normalizes_by_domain_height_preserving_physical_scale() -
     assert base_pos[1] == pytest.approx(0.5)
     assert tall_pos[0] == pytest.approx(0.6)
     assert tall_pos[1] == pytest.approx(0.25)
-    # Same pre-projection radius; tall halves the normalized radius.
-    assert tall_pos[2] == pytest.approx(base_pos[2] / 2.0)
+    assert tall_pos[2] == pytest.approx(base_pos[2])
+
+
+def test_active_profile_radius_projection_restores_the_exact_three_x_class_loss() -> None:
+    extent_h = 772.8311688311688
+    domain_h = extent_h / 280.0
+    authored_radius = 0.03
+
+    sim = BubbleSimulation()
+    sim._domain_w = 1275.1714285714286 / 420.0
+    sim._domain_h = domain_h
+    sim._bubbles.append(
+        BubbleState(
+            x=0.5 * sim._domain_w,
+            y=0.5 * domain_h,
+            radius=authored_radius,
+            is_big=True,
+            alpha=1.0,
+        )
+    )
+
+    positions, _extras, _trails = sim.snapshot(big_size_clamp=4.0)
+    payload_radius = positions[2]
+    authored_render_radius = sim.get_big_render_diagnostics()[
+        "max_big_render_radius"
+    ]
+    removed_projection_radius = authored_render_radius / domain_h
+
+    assert payload_radius == pytest.approx(authored_render_radius)
+    assert payload_radius / removed_projection_radius == pytest.approx(domain_h)
+    assert domain_h == pytest.approx(2.7601113172541742)
+
+
+def test_card_relative_radius_maps_back_into_expanded_collision_world() -> None:
+    domain_h = 772.8311688311688 / 280.0
+    radius = 0.03
+
+    def _sim(height_scale: float) -> BubbleSimulation:
+        sim = BubbleSimulation()
+        sim._domain_h = height_scale
+        center_y = 0.5 * height_scale
+        sim._bubbles = [
+            BubbleState(
+                x=0.5,
+                y=center_y - 0.06,
+                radius=radius,
+                is_big=True,
+                alpha=1.0,
+                pulse_energy=0.27,
+                size_gate_energy=0.27,
+            ),
+            BubbleState(
+                x=0.5,
+                y=center_y + 0.06,
+                radius=radius,
+                is_big=True,
+                alpha=1.0,
+                pulse_energy=0.27,
+                size_gate_energy=0.27,
+            ),
+        ]
+        return sim
+
+    baseline = _sim(1.0)
+    expanded = _sim(domain_h)
+    assert baseline._render_radius_in_world(radius) == pytest.approx(radius)
+    assert expanded._render_radius_in_world(radius) == pytest.approx(
+        radius * domain_h
+    )
+
+    # The 0.12-world-unit center gap does not overlap at the canonical size. At
+    # the active tall profile it projects to only 33.6 logical pixels while two
+    # rendered 0.03 radii span about 46.4 pixels, so both spawn and collision
+    # paths must recognize the visible overlap.
+    candidate = expanded._bubbles[1]
+    expanded._bubbles = [expanded._bubbles[0]]
+    assert expanded._overlaps_existing(
+        candidate.x,
+        candidate.y,
+        candidate.radius,
+        candidate_is_big=True,
+    ) is True
+    existing = expanded._bubbles[0]
+    radii_sum_world = 2.0 * radius * domain_h
+    spawn_gap_world = max(
+        0.010 * domain_h,
+        radii_sum_world * 0.10,
+    )
+    assert expanded._overlaps_existing(
+        existing.x,
+        existing.y + radii_sum_world + spawn_gap_world + 1e-6,
+        radius,
+        candidate_is_big=True,
+    ) is False
+
+    expanded = _sim(domain_h)
+    before_gap = expanded._bubbles[1].y - expanded._bubbles[0].y
+    expanded._apply_bubble_collision_response(
+        0.016,
+        bounce_big_pct=100.0,
+        bounce_small_pct=100.0,
+        bounce_big_speed=2.0,
+        bounce_small_speed=2.0,
+    )
+    after_gap = expanded._bubbles[1].y - expanded._bubbles[0].y
+    assert expanded.get_perf_diagnostics()["collision_overlaps"] >= 1.0
+    assert after_gap > before_gap
+
+    separated = _sim(domain_h)
+    final_radius = separated._effective_collision_radius(
+        separated._bubbles[0],
+        big_bass_pulse=0.5,
+        small_freq_pulse=0.5,
+        big_contraction_bias=1.0,
+        big_size_clamp=4.0,
+    )
+    target_gap_world = (
+        2.0 * final_radius * domain_h * 1.12
+        + 0.008 * domain_h
+    )
+    center_y = 0.5 * domain_h
+    separated._bubbles[0].y = center_y - target_gap_world / 2.0
+    separated._bubbles[1].y = center_y + target_gap_world / 2.0 + 1e-6
+    positions_before = [(bubble.x, bubble.y) for bubble in separated._bubbles]
+    separated._apply_bubble_collision_response(
+        0.016,
+        bounce_big_pct=0.0,
+        bounce_small_pct=0.0,
+        bounce_big_speed=2.0,
+        bounce_small_speed=2.0,
+    )
+    assert separated.get_perf_diagnostics()["collision_overlaps"] == 0.0
+    assert [(bubble.x, bubble.y) for bubble in separated._bubbles] == positions_before
 
 
 def test_overlap_retry_clamp_uses_actual_logical_domain() -> None:
@@ -196,7 +331,8 @@ def _quiet_settings(extent):
 def test_specular_offsets_are_local_and_domain_independent() -> None:
     # spec_ox/spec_oy are dimensionless local bubble-space mutations (a fraction
     # of the bubble's own radius in the shader), NOT viewport positions. They
-    # must pass through unchanged for every domain while the radius is projected,
+    # must pass through unchanged for every domain while radius remains
+    # card-height-normalized,
     # so a wide/tall aspect cannot create a specular displacement stretch.
     def _snapshot_with_spec(domain_w, domain_h):
         sim = BubbleSimulation()
@@ -222,8 +358,9 @@ def test_specular_offsets_are_local_and_domain_independent() -> None:
     assert wide_extra[3] == pytest.approx(base_extra[3])
     assert tall_extra[2] == pytest.approx(base_extra[2])
     assert tall_extra[3] == pytest.approx(base_extra[3])
-    # Position/radius ARE a separate, projected authority.
-    assert tall_pos[2] == pytest.approx(base_pos[2] / 2.0)
+    # Position is projected; authored card-relative radius is not.
+    assert tall_pos[1] == pytest.approx(base_pos[1] / 2.0)
+    assert tall_pos[2] == pytest.approx(base_pos[2])
 
 
 def test_shader_applies_specular_offset_relative_to_radius() -> None:

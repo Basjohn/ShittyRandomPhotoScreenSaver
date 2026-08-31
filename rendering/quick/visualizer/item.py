@@ -13,7 +13,10 @@ from widgets.spotify_visualizer.render_bridge import (
     VisualizerRenderIdentity,
     VisualizerSnapshotBridge,
 )
-from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
+from widgets.spotify_visualizer.render_state import (
+    BubbleFrame,
+    ResolvedVisualizerPresentation,
+)
 
 from .node import VisualizerRenderNode
 from .telemetry import VisualizerRenderNodeTelemetry
@@ -64,6 +67,8 @@ class VisualizerRenderItem(QQuickItem):
         self._bound_window: QQuickWindow | None = None
         self._diag_last_render_playing: bool | None = None
         self._diag_spectrum_handoff_remaining = 0
+        self._diag_bubble_geometry_last_ts = 0.0
+        self._diag_bubble_geometry_burst_remaining = 0
         super().__init__(parent)
         self.setFlag(QQuickItem.Flag.ItemHasContents, True)
         self.windowChanged.connect(self._bind_window_invalidation)
@@ -231,6 +236,59 @@ class VisualizerRenderItem(QQuickItem):
                     logical.source_activation_id,
                 )
                 self._diag_spectrum_handoff_remaining -= 1
+            if logical.mode_id == "bubble" and isinstance(
+                logical.mode_state,
+                BubbleFrame,
+            ):
+                if previous is None or previous != playing:
+                    self._diag_bubble_geometry_burst_remaining = 8
+                now_mono = time.monotonic()
+                interval_s = (
+                    0.12
+                    if self._diag_bubble_geometry_burst_remaining > 0
+                    else 0.8
+                )
+                if (
+                    self._diag_bubble_geometry_last_ts <= 0.0
+                    or now_mono - self._diag_bubble_geometry_last_ts >= interval_s
+                    or (
+                        previous is not None
+                        and previous != playing
+                    )
+                ):
+                    mode_state = logical.mode_state
+                    geometry = dict(mode_state.geometry_diagnostics)
+                    frozen_big_max_radius = geometry.get(
+                        "frozen_big_max_radius",
+                        max(mode_state.positions[2::4], default=0.0),
+                    )
+                    frozen_max_alpha = geometry.get(
+                        "frozen_max_alpha",
+                        max(mode_state.positions[3::4], default=0.0),
+                    )
+                    content_height = float(presentation.content_rect[3])
+                    logical_radius_px = frozen_big_max_radius * content_height
+                    device_radius_px = logical_radius_px * float(presentation.dpr)
+                    logger.debug(
+                        "[VIS_BUBBLE_GEOMETRY] stage=B8 revision=%d "
+                        "sim_ts=%.6f playing=%s final_big_max_r=%.5f "
+                        "frozen_big_max_r=%.5f radius_logical_px=%.2f "
+                        "radius_device_px=%.2f dpr=%.3f alpha=%.3f "
+                        "domain_h=%.3f",
+                        snapshot.logical_revision,
+                        mode_state.simulation_timestamp,
+                        playing,
+                        geometry.get("final_big_max_radius", 0.0),
+                        frozen_big_max_radius,
+                        logical_radius_px,
+                        device_radius_px,
+                        presentation.dpr,
+                        frozen_max_alpha,
+                        geometry.get("domain_h", 1.0),
+                    )
+                    self._diag_bubble_geometry_last_ts = now_mono
+                    if self._diag_bubble_geometry_burst_remaining > 0:
+                        self._diag_bubble_geometry_burst_remaining -= 1
             self._diag_last_render_playing = playing
 
         logical_size = (

@@ -23,6 +23,9 @@ class _Engine:
     def get_bubble_energy_bands(self):
         return SimpleNamespace(bass=0.0, mid=0.0, high=0.0, overall=0.0)
 
+    def get_energy_bands(self):
+        return SimpleNamespace(bass=0.0, mid=0.0, high=0.0, overall=0.0)
+
     def get_transient_energy_bands(self):
         return SimpleNamespace(
             bass_transient=0.0,
@@ -105,6 +108,18 @@ def test_fresh_controller_configured_started_advanced_without_widget(
     monkeypatch.setattr(
         tick_pipeline, "dispatch_devcurve_field", lambda owner, now: None
     )
+    diagnostic_messages: list[str] = []
+    monkeypatch.setattr(tick_pipeline, "is_viz_diagnostics_enabled", lambda: True)
+    monkeypatch.setattr(
+        tick_pipeline,
+        "maybe_log_reactivity_boundary",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        tick_pipeline.logger,
+        "debug",
+        lambda message, *args: diagnostic_messages.append(message % args),
+    )
 
     # Advance: the authored logical step runs against the controller-owned state
     # and publishes - no SpotifyVisualizerWidget was ever constructed.
@@ -116,3 +131,46 @@ def test_fresh_controller_configured_started_advanced_without_widget(
             publication = controller.logical_mailbox.take()
             assert publication is not None
     assert produced >= 1
+    bubble_geometry = next(
+        message
+        for message in diagnostic_messages
+        if "stage=B6_B7" in message
+    )
+    assert "final_big_max_r=" in bubble_geometry
+    assert "frozen_big_max_r=" in bubble_geometry
+
+
+def test_devcurve_diagnostics_do_not_cross_into_bubble_geometry(monkeypatch) -> None:
+    from widgets.spotify_visualizer.devcurve_frame_runtime import (
+        DevCurveFrameRuntime,
+    )
+    from widgets.spotify_visualizer.logical_tick_state import (
+        install_default_logical_tick_state,
+    )
+    from widgets.spotify_visualizer.runtime_controller import (
+        VisualizerRuntimeController,
+    )
+
+    controller = VisualizerRuntimeController(
+        runtime_generation=0,
+        bar_count=32,
+        initial_mode="devcurve",
+    )
+    state = controller.logical_tick_state
+    install_default_logical_tick_state(state, bar_count=32)
+    controller.enabled = True
+    controller.playing = True
+    controller.engine = _Engine()
+    controller.begin_render_activation(engine_generation=3, activation_id=4)
+    monkeypatch.setattr(tick_pipeline, "is_viz_diagnostics_enabled", lambda: True)
+    monkeypatch.setattr(
+        tick_pipeline,
+        "maybe_log_reactivity_boundary",
+        lambda *_args, **_kwargs: None,
+    )
+
+    tick_pipeline.dispatch_devcurve_field(state, 10.0)
+
+    runtime = controller.peek_logical_mode_state("devcurve")
+    assert isinstance(runtime, DevCurveFrameRuntime)
+    assert runtime.latest.curves

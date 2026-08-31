@@ -906,6 +906,64 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
                 f"mid_high={pulse_payload.get('mid_high', 0.0):.3f}"
             ),
         )
+        geometry = dict(resolved.geometry_diagnostics)
+        playing = bool(widget._spotify_playing)
+        previous_playing = getattr(
+            widget,
+            "_bubble_geometry_diag_last_playing",
+            None,
+        )
+        burst_remaining = int(
+            getattr(widget, "_bubble_geometry_diag_burst_remaining", 0) or 0
+        )
+        if previous_playing is None or bool(previous_playing) != playing:
+            burst_remaining = 8
+        last_geometry_log_ts = float(
+            getattr(widget, "_bubble_geometry_diag_last_log_ts", 0.0) or 0.0
+        )
+        interval_s = 0.12 if burst_remaining > 0 else 0.8
+        if (
+            last_geometry_log_ts <= 0.0
+            or now_ts - last_geometry_log_ts >= interval_s
+            or (
+                previous_playing is not None
+                and bool(previous_playing) != playing
+            )
+        ):
+            logger.debug(
+                "[VIS_BUBBLE_GEOMETRY] stage=B6_B7 sim_ts=%.6f playing=%s "
+                "ready=%s final_big_max_r=%.5f final_big_avg_r=%.5f "
+                "final_big_delta=%.5f frozen_big_max_r=%.5f "
+                "frozen_any_max_r=%.5f alpha=%.3f "
+                "domain=%.3fx%.3f raw=%.3f gated=%.3f pulse=%.3f "
+                "clamp_hits=%.0f active=%.0f size=%.3f pulse_gain=%.3f "
+                "smoothing=%.3f clamp=%.3f",
+                resolved.simulation_timestamp,
+                playing,
+                source_ready,
+                geometry.get("final_big_max_radius", 0.0),
+                geometry.get("final_big_avg_radius", 0.0),
+                geometry.get("final_big_max_delta", 0.0),
+                geometry.get("frozen_big_max_radius", 0.0),
+                geometry.get("frozen_any_max_radius", 0.0),
+                geometry.get("frozen_max_alpha", 0.0),
+                geometry.get("domain_w", 1.0),
+                geometry.get("domain_h", 1.0),
+                geometry.get("max_big_raw_src", 0.0),
+                geometry.get("max_big_gated_energy", 0.0),
+                geometry.get("max_big_pulse_after", 0.0),
+                geometry.get("big_clamp_hits", 0.0),
+                geometry.get("active_big_count", 0.0),
+                geometry.get("configured_big_size_max", 0.0),
+                geometry.get("configured_big_bass_pulse", 0.0),
+                geometry.get("configured_big_visual_smoothing", 0.0),
+                geometry.get("configured_big_size_clamp", 0.0),
+            )
+            widget._bubble_geometry_diag_last_log_ts = now_ts
+            if burst_remaining > 0:
+                burst_remaining -= 1
+        widget._bubble_geometry_diag_burst_remaining = burst_remaining
+        widget._bubble_geometry_diag_last_playing = playing
 
     # Temporary old-presenter mirror. The immutable controller-owned result is
     # authoritative; no Quick renderer reads these QWidget adapter fields.

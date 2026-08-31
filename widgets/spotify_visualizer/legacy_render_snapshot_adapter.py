@@ -660,6 +660,9 @@ def _capture_bubble(
             bubble_count=resolved.bubble_count,
             source_timestamp=resolved.source_timestamp,
             simulation_timestamp=resolved.simulation_timestamp,
+            geometry_diagnostics=freeze_render_fields(
+                dict(resolved.geometry_diagnostics)
+            ),
             parameters=_render_parameters(
                 {
                     name: value

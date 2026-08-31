@@ -236,8 +236,9 @@ class BubbleSimulation:
         # A non-baseline committed viewport extent widens/heightens this domain:
         # the logical world expands while authored population and Bubble
         # personality remain unchanged (so a larger world is naturally less
-        # dense). The render seam then normalizes back to [0,1] so the shader
-        # keeps circles round.
+        # dense). The render seam normalizes positions/trails back to [0,1];
+        # authored render radius stays card-height-normalized and the shader's
+        # aspect correction keeps circles round.
         self._domain_w: float = 1.0
         self._domain_h: float = 1.0
         self._big_size_max: float = 0.038
@@ -362,6 +363,18 @@ class BubbleSimulation:
         """True on the canonical 1x1 world - the strict legacy no-op path."""
 
         return self._domain_w == 1.0 and self._domain_h == 1.0
+
+    def _render_radius_in_world(self, radius: float) -> float:
+        """Map a card-height-normalized render radius into simulation units.
+
+        Bubble centers live in the expanded baseline-relative world and their Y
+        coordinate is divided by ``domain_h`` at the render seam. Render radius
+        deliberately retains the historical card-height-normalized contract, so
+        collision/spawn math must apply the inverse mapping. The canonical 1x1
+        world remains an exact no-op.
+        """
+
+        return max(0.0, float(radius)) * self._domain_h
 
     def _retire_non_surface_bubbles_outside_domain(self) -> None:
         """Pop non-surface bubbles left materially outside a contracted domain.
@@ -1392,7 +1405,8 @@ class BubbleSimulation:
         dt_scale = min(1.0, dt * 60.0)
         max_speed_norm = max(0.0, min(1.0, max_bounce_speed / 2.0))
         smooth_mode = max_speed_norm < 0.45
-        view_margin = 0.02
+        collision_scale = self._domain_h
+        view_margin = 0.02 * collision_scale
         if collision_pop_mode not in {"off", "one", "all"}:
             collision_pop_mode = "off"
 
@@ -1408,12 +1422,16 @@ class BubbleSimulation:
             bounce_strength = max(0.0, min(1.0, bounce_pct / 100.0))
             speed_norm = max(0.0, min(1.0, bounce_speed / 2.0))
             strict_gap_factor = 0.92 + 0.08 * bounce_strength
-            strict_gap_bias = 0.0015 if bounce_strength >= 0.85 else 0.0
+            strict_gap_bias = (
+                0.0015 * collision_scale
+                if bounce_strength >= 0.85
+                else 0.0
+            )
             return (
                 gap_factor,
-                gap_bias,
+                gap_bias * collision_scale,
                 softness,
-                max_push,
+                max_push * collision_scale,
                 bounce_strength,
                 speed_norm,
                 strict_gap_factor,
@@ -1455,12 +1473,14 @@ class BubbleSimulation:
             pending_dx = [0.0] * count if smooth_mode else []
             pending_dy = [0.0] * count if smooth_mode else []
             collision_radii = [
-                self._effective_collision_radius(
-                    bubble,
-                    big_bass_pulse=big_bass_pulse,
-                    small_freq_pulse=small_freq_pulse,
-                    big_contraction_bias=big_contraction_bias,
-                    big_size_clamp=big_size_clamp,
+                self._render_radius_in_world(
+                    self._effective_collision_radius(
+                        bubble,
+                        big_bass_pulse=big_bass_pulse,
+                        small_freq_pulse=small_freq_pulse,
+                        big_contraction_bias=big_contraction_bias,
+                        big_size_clamp=big_size_clamp,
+                    )
                 )
                 for bubble in active
             ]
@@ -1677,6 +1697,7 @@ class BubbleSimulation:
                     max_disp += 0.0015 * max_speed_norm
                     if max_speed_norm >= 0.80:
                         max_disp = max(max_disp, 0.014 + 0.010 * max_speed_norm)
+                max_disp *= collision_scale
                 for i, bubble in enumerate(active):
                     dx = pending_dx[i]
                     dy = pending_dy[i]
@@ -2135,21 +2156,36 @@ class BubbleSimulation:
         candidate_vy: float = 0.0,
     ) -> bool:
         """Return True if (x, y, radius) overlaps any existing bubble."""
+        candidate_radius_world = self._render_radius_in_world(radius)
         for b in self._bubbles:
+            existing_radius_world = self._render_radius_in_world(b.radius)
             existing_big = _bubble_behaves_big(b)
             if candidate_is_big and existing_big:
-                min_gap = max(0.010, (radius + b.radius) * 0.10)
+                min_gap = max(
+                    0.010 * self._domain_h,
+                    (candidate_radius_world + existing_radius_world) * 0.10,
+                )
             elif candidate_is_big or existing_big:
-                min_gap = 0.001
+                min_gap = 0.001 * self._domain_h
             else:
-                min_gap = -min(radius, b.radius) * 0.10
+                min_gap = -min(
+                    candidate_radius_world,
+                    existing_radius_world,
+                ) * 0.10
             if candidate_is_big and existing_big and stream_dir not in {"none", "random"}:
                 # Entry-lane guard: directional streams can otherwise spawn
                 # big bubbles too close outside the viewport and they enter as
                 # sticky overlap groups.
-                min_gap = max(min_gap, (radius + b.radius) * 0.22 + 0.010)
+                min_gap = max(
+                    min_gap,
+                    (candidate_radius_world + existing_radius_world) * 0.22
+                    + 0.010 * self._domain_h,
+                )
             dist = math.hypot(b.x - x, b.y - y)
-            if dist < b.radius + radius + min_gap:
+            if (
+                dist
+                < existing_radius_world + candidate_radius_world + min_gap
+            ):
                 return True
 
             # Pre-entry lane guard: keep big bubbles from spawning into future
@@ -2169,8 +2205,13 @@ class BubbleSimulation:
                     vx=b.vx,
                     vy=b.vy,
                 )
-                future_gap = max(0.014, (radius + b.radius) * 0.16)
-                if math.hypot(existing_px - cand_px, existing_py - cand_py) < (b.radius + radius + future_gap):
+                future_gap = max(
+                    0.014 * self._domain_h,
+                    (candidate_radius_world + existing_radius_world) * 0.16,
+                )
+                if math.hypot(existing_px - cand_px, existing_py - cand_py) < (
+                    existing_radius_world + candidate_radius_world + future_gap
+                ):
                     return True
         return False
 
@@ -2457,14 +2498,16 @@ class BubbleSimulation:
             "max_big_render_radius": 0.0,
             "max_big_render_delta": 0.0,
             "avg_big_render_radius": 0.0,
+            "max_big_payload_radius": 0.0,
         }
 
-        # Render-result projection: the logical world is baseline-relative, but
-        # the renderer/shader consume viewport-normalized [0,1] positions with a
-        # height-normalized radius. At the canonical 1x1 world this is a strict
-        # no-op and the legacy arrays are emitted unchanged; otherwise positions
-        # and radius normalize by the domain so physical scale and circularity
-        # are preserved (the shader keeps circles round via its own aspect fix).
+        # Render-result projection: positions/trails belong to the expanded
+        # baseline-relative world and normalize back to [0,1]. Radius does not:
+        # the historical shader contract defines it directly as a fraction of
+        # the actual card height. Dividing radius by domain_h made a restored
+        # 773px-high viewport about 2.76x less reactive than the historical
+        # 280px-baseline renderer. Keep the authored card-height-normalized
+        # radius unchanged; the shader's aspect correction keeps circles round.
         baseline_domain = self._is_baseline_domain()
         inv_domain_w = 1.0 / self._domain_w
         inv_domain_h = 1.0 / self._domain_h
@@ -2540,12 +2583,16 @@ class BubbleSimulation:
             if baseline_domain:
                 pos_data[pos_base] = b.x
                 pos_data[pos_base + 1] = b.y
-                pos_data[pos_base + 2] = r
             else:
                 pos_data[pos_base] = b.x * inv_domain_w
                 pos_data[pos_base + 1] = b.y * inv_domain_h
-                pos_data[pos_base + 2] = r * inv_domain_h
+            pos_data[pos_base + 2] = r
             pos_data[pos_base + 3] = b.alpha
+            if b.is_big:
+                big_render_diag["max_big_payload_radius"] = max(
+                    big_render_diag["max_big_payload_radius"],
+                    pos_data[pos_base + 2],
+                )
             extra_data[pos_base] = spec_factor
             extra_data[pos_base + 1] = b.rotation
             # spec_ox/spec_oy are dimensionless LOCAL bubble-space offsets: the

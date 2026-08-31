@@ -414,7 +414,11 @@ semantics and the canonical baseline path.
 When Bubble or another logical mode needs viewport bounds, presentation-neutral viewport configuration enters the logical
 side as state. Ordinary committed extent is the baseline runtime truth; while CUSTOM is active its working extent may
 temporarily override that value. Save commits the new value, Cancel restores the old committed value, and ending CUSTOM
-must remove the override without assuming canonical `(420,280)`.
+must remove the override without assuming canonical `(420,280)`. Bubble normalizes expanded-world position/trail
+coordinates at the render seam but preserves its historically card-height-normalized authored radius; dividing radius by
+domain height is a reactivity loss, not viewport reflow. Collision/spawn geometry applies the inverse `domain_h` mapping
+to that radius and its collision-only gap/correction distances so visible contact remains coherent without an aspect-aware
+physics rewrite; canonical 1x1 behavior is unchanged.
 
 Geometry changes are never another authored clock and mouse-move/render frequency never becomes
 simulation cadence.
