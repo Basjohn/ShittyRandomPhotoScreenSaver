@@ -65,6 +65,13 @@ reject_reason
 
 Do not emit per-frame routing logs.
 
+Implemented source bar (2026-08-31): `DisplayManager` now emits exactly one bounded
+`[VIS_ROUTING]` INFO record when the generation-level admission attempt completes. Expected
+pre-construction and final-construction declines retain a scalar reject reason. Existing
+`[VIS_FAILOVER]` messages remain the separate event-driven grace/deadline/reclaim record. A
+`pending_grace` routing result is therefore the generation's initial decision rather than a
+claim about the later deadline/reclaim outcome.
+
 ### Decision tree
 
 1. `is_custom=False` unexpectedly:
@@ -102,6 +109,15 @@ participants 0 + 1 live
 same but Visualizer non-Custom
 => chosen owner screen_index 0
 ```
+
+- [x] Added `tests/test_visualizer_custom_route_contract.py` over the real
+  `DisplayManager._admit_quick_visualizer()` + descriptor/admission/failover route with two
+  live production-unit shells and deliberately disagreeing Media/Visualizer monitors.
+- [x] Proved CUSTOM chooses Visualizer monitor 2 while non-CUSTOM chooses Media monitor 1,
+  with exactly one construction/owner pair and no Media-presence requirement on the target.
+- [x] Added the permanent routing pin to the maintained `h-destination` profile.
+- [ ] Read `[VIS_ROUTING]` in the reported physical dual-display source config before changing
+  persistence, admission or failover behavior.
 
 Also preserve missing-monitor 30 s grace/fallback/reclaim behavior.
 

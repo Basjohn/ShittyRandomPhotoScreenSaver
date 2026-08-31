@@ -1,6 +1,6 @@
 # Logging Guide
 
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
 ## Purpose
 
@@ -83,6 +83,13 @@ Existing sidecars remain the first destinations for their domains:
 
 Do not create a new sidecar merely because one logger is noisy. Add a family only when a
 distinct high-volume domain has a coherent correlation workflow.
+
+`[VIS_ROUTING]` is a bounded main-sequence INFO record emitted once when a `DisplayManager`
+generation attempts to admit the single Visualizer. It records the persisted Visualizer/Media route,
+CUSTOM decision, canonical effective monitor, requested screen, participant/binding-loss
+set, current failover state, chosen unit and construction result/reject reason. It is not a
+per-frame stream. A pending-grace result describes that initial decision; correlate it with
+the existing `[VIS_FAILOVER]` lifecycle messages for later fallback/reclaim outcomes.
 
 Ordinary `--perf` is the comparable CPU/frame/delivery profile. The heavier
 `--gpu-timing` route is separate because GL query polling and begin/end calls can alter

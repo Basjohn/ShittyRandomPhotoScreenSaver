@@ -162,6 +162,9 @@ class DisplayManager(QObject):
         # Secondary fence for the CUSTOM failover grace deadline (bumped on a
         # temporary-owner retirement so a stale deadline cannot resurrect it).
         self._quick_visualizer_failover_token: int = 0
+        self._quick_visualizer_construct_result = "not_attempted"
+        self._quick_visualizer_construct_reject_reason: str | None = None
+        self._quick_visualizer_routing_trace_emitted = False
         self._quick_custom_layout_owner = QuickCustomLayoutOwner(
             settings_manager=settings_manager,
             participants_provider=lambda: tuple(self.displays),
@@ -1268,6 +1271,125 @@ class DisplayManager(QObject):
         )
         return cls._requested_visualizer_screen_index(effective_monitor)
 
+    def _set_quick_visualizer_construct_outcome(
+        self,
+        result: str,
+        reject_reason: str | None = None,
+    ) -> None:
+        """Retain one bounded construction outcome for the generation trace."""
+
+        self._quick_visualizer_construct_result = str(result)
+        self._quick_visualizer_construct_reject_reason = (
+            None if reject_reason is None else str(reject_reason)
+        )
+
+    def _log_quick_visualizer_routing_trace(
+        self,
+        participants: list[QuickDisplayUnit],
+        *,
+        chosen: QuickDisplayUnit | None,
+        construct_result: str,
+        reject_reason: str | None,
+    ) -> None:
+        """Emit one bounded, generation-level Visualizer routing record."""
+
+        if getattr(self, "_quick_visualizer_routing_trace_emitted", False):
+            return
+        self._quick_visualizer_routing_trace_emitted = True
+
+        from rendering.quick.visualizer_failover import (
+            get_visualizer_failover_state,
+        )
+        from rendering.widget_descriptors import (
+            get_effective_monitor_value_for_widget,
+            is_custom_position_selected_for_widget,
+        )
+
+        widgets = (
+            self._widgets_config_snapshot
+            if isinstance(self._widgets_config_snapshot, dict)
+            else {}
+        )
+        section = widgets.get("spotify_visualizer", {})
+        if not isinstance(section, Mapping):
+            section = {}
+        media = widgets.get("media", {})
+        if not isinstance(media, Mapping):
+            media = {}
+        effective_monitor = get_effective_monitor_value_for_widget(
+            "spotify_visualizer",
+            widgets,
+            default="ALL",
+        )
+        requested = self._requested_visualizer_screen_index(effective_monitor)
+        custom = bool(
+            is_custom_position_selected_for_widget("spotify_visualizer", widgets)
+        )
+
+        participant_state: list[dict[str, object]] = []
+        for unit in participants:
+            probe = getattr(unit, "is_visualizer_participant", None)
+            try:
+                participating = bool(probe()) if callable(probe) else False
+            except Exception:
+                participating = False
+            runtime = getattr(unit, "runtime", None)
+            binding_loss = getattr(runtime, "binding_loss", None)
+            if binding_loss is None:
+                binding_loss_state = None
+            else:
+                as_dict = getattr(binding_loss, "as_dict", None)
+                try:
+                    binding_loss_state = (
+                        as_dict() if callable(as_dict) else type(binding_loss).__name__
+                    )
+                except Exception:
+                    binding_loss_state = type(binding_loss).__name__
+            participant_state.append(
+                {
+                    "screen": getattr(unit, "screen_index", None),
+                    "participating": participating,
+                    "binding_loss": binding_loss_state,
+                }
+            )
+
+        failover_record = get_visualizer_failover_state().get_visualizer_failover()
+        if failover_record is None:
+            failover_state = None
+        else:
+            failover_host = failover_record.get("host")
+            failover_state = {
+                "target": failover_record.get("intended_index"),
+                "pending": bool(failover_record.get("pending", False)),
+                "generation": failover_record.get("generation"),
+                "fallback": getattr(failover_host, "screen_index", None),
+            }
+
+        selected = chosen if chosen is not None else self._quick_visualizer_unit
+        logger.info(
+            "[VIS_ROUTING] runtime_generation=%s spotify_enabled=%r "
+            "spotify_visualizers_enabled=%r spotify_position=%r spotify_monitor=%r "
+            "media_enabled=%r media_position=%r media_monitor=%r custom=%s "
+            "effective_monitor=%r requested_screen=%s participants=%s failover=%s "
+            "chosen_screen=%s construct_result=%s reject_reason=%s",
+            self._runtime_generation,
+            section.get("enabled"),
+            section.get("visualizers_enabled"),
+            section.get("position"),
+            section.get("monitor"),
+            media.get("enabled"),
+            media.get("position"),
+            media.get("monitor"),
+            custom,
+            effective_monitor,
+            requested,
+            participant_state,
+            failover_state,
+            getattr(selected, "screen_index", None),
+            construct_result,
+            reject_reason,
+        )
+
     def _admit_quick_visualizer(
         self,
         participants: list[QuickDisplayUnit],
@@ -1284,12 +1406,43 @@ class DisplayManager(QObject):
 
         if self._quick_visualizer_owner is not None:
             raise RuntimeError("Quick visualizer owner already admitted")
+        self._set_quick_visualizer_construct_outcome("not_attempted")
+
+        def _finish(
+            admitted: bool,
+            *,
+            chosen: QuickDisplayUnit | None = None,
+            result: str | None = None,
+            reason: str | None = None,
+        ) -> bool:
+            resolved_result = result or self._quick_visualizer_construct_result
+            if admitted:
+                resolved_result = "admitted"
+                reason = None
+            elif reason is None:
+                reason = self._quick_visualizer_construct_reject_reason
+            self._log_quick_visualizer_routing_trace(
+                participants,
+                chosen=chosen,
+                construct_result=resolved_result,
+                reject_reason=reason,
+            )
+            return admitted
+
         widgets = self._widgets_config_snapshot
         section = widgets.get("spotify_visualizer", {})
         if not isinstance(section, dict):
-            return False
+            return _finish(
+                False,
+                result="rejected",
+                reason="invalid_visualizer_section",
+            )
         if not is_widget_family_effective(widgets, "visualizers"):
-            return False
+            return _finish(
+                False,
+                result="rejected",
+                reason="visualizer_capability_not_effective",
+            )
 
         from rendering.widget_descriptors import (
             is_custom_position_selected_for_widget,
@@ -1314,10 +1467,33 @@ class DisplayManager(QObject):
 
             get_visualizer_failover_state().clear_visualizer_failover()
             self._quick_visualizer_failover_token = 0
-            reconcile_custom_visualizer(
-                _QuickVisualizerFailoverTopology(self, participants)
+            try:
+                reconcile_custom_visualizer(
+                    _QuickVisualizerFailoverTopology(self, participants)
+                )
+            except Exception as exc:
+                if self._quick_visualizer_construct_result != "exception":
+                    self._set_quick_visualizer_construct_outcome(
+                        "exception",
+                        f"custom_reconcile_raised_{type(exc).__name__}",
+                    )
+                _finish(False)
+                raise
+            admitted = self._quick_visualizer_owner is not None
+            if admitted:
+                return _finish(True, chosen=self._quick_visualizer_unit)
+            failover_record = (
+                get_visualizer_failover_state().get_visualizer_failover()
             )
-            return self._quick_visualizer_owner is not None
+            if failover_record is not None and bool(
+                failover_record.get("pending", False)
+            ):
+                return _finish(
+                    False,
+                    result="pending_grace",
+                    reason="requested_custom_display_not_participating",
+                )
+            return _finish(False)
 
         from rendering.quick.visualizer_admission import (
             resolve_quick_visualizer_owner_unit,
@@ -1328,8 +1504,22 @@ class DisplayManager(QObject):
             logger.warning(
                 "[SPOTIFY_VIS] No participating Quick display admits the visualizer"
             )
-            return False
-        return self._construct_quick_visualizer_owner_on(chosen)
+            return _finish(
+                False,
+                result="rejected",
+                reason="no_participating_quick_display",
+            )
+        try:
+            admitted = self._construct_quick_visualizer_owner_on(chosen)
+        except Exception as exc:
+            if self._quick_visualizer_construct_result != "exception":
+                self._set_quick_visualizer_construct_outcome(
+                    "exception",
+                    f"construct_raised_{type(exc).__name__}",
+                )
+            _finish(False, chosen=chosen)
+            raise
+        return _finish(admitted, chosen=chosen)
 
     def _construct_quick_visualizer_owner_on(
         self,
@@ -1345,12 +1535,24 @@ class DisplayManager(QObject):
         """
 
         if self._quick_visualizer_owner is not None:
+            self._set_quick_visualizer_construct_outcome(
+                "rejected",
+                "owner_already_admitted",
+            )
             return False
         widgets = self._widgets_config_snapshot
         section = widgets.get("spotify_visualizer", {})
         if not isinstance(section, dict):
+            self._set_quick_visualizer_construct_outcome(
+                "rejected",
+                "invalid_visualizer_section",
+            )
             return False
         if not is_widget_family_effective(widgets, "visualizers"):
+            self._set_quick_visualizer_construct_outcome(
+                "rejected",
+                "visualizer_capability_not_effective",
+            )
             return False
 
         from core.settings.models import SpotifyVisualizerSettings
@@ -1365,10 +1567,17 @@ class DisplayManager(QObject):
             apply_preset_overlay=False,
             resolve_preset_indices=False,
         )
-        if not (
-            SettingsManager.to_bool(model.enabled, False)
-            and SettingsManager.to_bool(model.visualizers_enabled, True)
-        ):
+        if not SettingsManager.to_bool(model.enabled, False):
+            self._set_quick_visualizer_construct_outcome(
+                "rejected",
+                "visualizer_instance_disabled",
+            )
+            return False
+        if not SettingsManager.to_bool(model.visualizers_enabled, True):
+            self._set_quick_visualizer_construct_outcome(
+                "rejected",
+                "visualizers_disabled",
+            )
             return False
 
         from widgets.spotify_visualizer.quick_display_visualizer_owner import (
@@ -1464,6 +1673,10 @@ class DisplayManager(QObject):
             )
             self._refresh_all_quick_context_menus()
         except Exception:
+            self._set_quick_visualizer_construct_outcome(
+                "exception",
+                "owner_configuration_failed",
+            )
             if self._quick_visualizer_owner is owner:
                 self._release_quick_visualizer_routes()
             if not owner.is_retired:
@@ -1477,6 +1690,7 @@ class DisplayManager(QObject):
             generation,
             activation_id,
         )
+        self._set_quick_visualizer_construct_outcome("admitted")
         return True
 
     def _bind_quick_visualizer_media(self, unit: QuickDisplayUnit) -> None:
