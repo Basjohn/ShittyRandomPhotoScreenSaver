@@ -55,12 +55,12 @@ Cleaner old-code reference:
 - `15099d389e5091942a0ce3d6e6311d33b6043d3d`
 - <https://github.com/Basjohn/ShittyRandomPhotoScreenSaver/commit/15099d389e5091942a0ce3d6e6311d33b6043d3d>
 
-Later mixed reference:
+Later reference:
 
 - `3fe5df687387b6b6a121142372c43a7719442386`
 - <https://github.com/Basjohn/ShittyRandomPhotoScreenSaver/commit/3fe5df687387b6b6a121142372c43a7719442386>
 
-`3fe5df6` already contains some migration-era work, so use it more cautiously. It may help recover user-visible semantics or later feature behavior, but it is not a cleaner architecture snapshot than `15099d3`.
+For broad UI/presentation archaeology, `15099d3` can still be the cleaner old architecture snapshot. **For visualizer reactivity, however, the user-supplied `3fe5df6` source tree is explicitly the known-good pre-Qt-Quick behavioral oracle** and should be compared line-by-line against current logical/configuration/presentation semantics. It remains a behavior oracle only, never an architecture to restore.
 
 ### 2.4 Current architecture and contracts
 
@@ -277,7 +277,7 @@ When a J cell is unclear:
 
 1. inspect the release screenshot first;
 2. inspect `15099d3` for the old behavior/value/layout rule if needed;
-3. inspect `3fe5df6` only when later behavior/features matter and separate migration-era changes from legacy intent;
+3. for visualizer reactivity, compare directly against the known-good `3fe5df6` tree; for unrelated UI archaeology, use whichever historical source best exposes the successful behavior;
 4. write down the **user-visible invariant** in neutral language;
 5. implement that invariant through current Quick owners;
 6. compare physical output against the reference;

@@ -1,6 +1,6 @@
 # Visualizer Reference
 
-Last updated: 2026-08-28
+Last updated: 2026-08-31
 
 Current visualizer behavior and accepted presentation destination.
 
@@ -19,13 +19,13 @@ heavy implementation imports into it.
 
 ## 2. Capability model
 
-| Mode | Idle reveal | Idle self-animation | Presentation-owned idle scene | Fresh real source required for reactive playback |
+| Mode | Idle reveal | Idle self-animation | Presentation-owned idle scene | Fresh current source required for **live audio reactivity** |
 |---|---:|---:|---:|---:|
-| Bubble | yes | yes | no | no |
+| Bubble | yes | yes | no | yes |
 | Spectrum | yes | no | yes | yes |
-| Sine | yes | yes | no | no |
-| Oscilloscope | yes | yes | no | no |
-| DevCurve | yes | yes | no | no |
+| Sine | yes | yes | no | yes |
+| Oscilloscope | yes | yes | no | yes |
+| DevCurve | yes | yes | no | yes |
 
 Paused Spectrum remains intentionally mixed:
 
@@ -34,6 +34,8 @@ presentation_ready = true
 reactive_source_ready = false
 source identity = absent
 ```
+
+Idle reveal/self-animation and live audio reactivity are separate contracts. A mode may remain visibly alive while paused or while awaiting a fresh source, but real music must not be treated as current reactive input until generation/activation identity is authoritative. Healthy authored cadence or idle motion therefore does not prove live-source reactivity.
 
 ## 3. Logical cadence
 
@@ -304,7 +306,9 @@ Pause/Play preserves:
 - no visualizer pause debounce;
 - prompt visible authored state change.
 
-The migration must not turn normal Pause/Play into renderer/window recreation.
+Historical/current `BeatEngine` retains the same cold-Play ramp and warm-capture policy. Migration-added visible delay must be localized across Media truth -> owner -> source freshness -> mode readiness -> publication -> retained draw rather than hidden by retuning the historical ramp.
+
+The migration must not turn normal Pause/Play into renderer/window recreation. Detailed timing/readiness work lives in `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`.
 
 ## 14. CUSTOM / Edit
 

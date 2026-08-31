@@ -1,6 +1,6 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-08-28
+Last updated: 2026-08-31
 
 Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavior or presentation.
 
@@ -10,6 +10,8 @@ Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavio
 - `Docs/Guardrails/Visualizer_Presentation.md`
 - `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - `Docs/Visualizer_Reference.md`
+- `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`
+- `Docs/QtQuick_Migration/Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`
 - `Current_Plan.md`
 
 If source contradicts these durable destination contracts, determine whether source is missing implementation before
@@ -42,6 +44,9 @@ Render-thread state is detached, generation/activation fenced and latest-state o
       coherent.
 - [ ] Legacy overlay-only technical mirrors were not recreated without an exact retained consumer.
 - [ ] No broad copy of legacy widget attributes into `VisualizerRuntimeController` was used to hide missing ownership.
+- [ ] Historical canonicalization/translation steps were audited when a preset key differs from the current runtime field name (for example Spectrum `spectrum_render_mode` -> continuous/segmented runtime topology).
+- [ ] Every key still read by BeatEngine/audio worker, authored tick/frame runtime, or retained Quick renderer has a current configuration route; plausible defaults/fallbacks do not count as proof.
+- [ ] Engine-facing per-mode configuration removed from the old mixed applier has a narrow current controller/engine seam rather than silently remaining at defaults.
 
 ## 4B. Quick snapshot publication
 
@@ -55,6 +60,20 @@ Render-thread state is detached, generation/activation fenced and latest-state o
       item/render-node synchronization path admits the exact snapshot identity.
 - [ ] Bridge binding alone is never treated as proof.
 - [ ] No second timer/cadence, FIFO, catch-up, paint acknowledgement or legacy `present_tick()` call was introduced.
+
+## 4C. Historical reactivity parity audit
+
+For reactivity regressions, compare directly with known-good `3fe5df687387b6b6a121142372c43a7719442386` before tuning.
+
+- [ ] Separate intentional idle energy/motion from real music reactivity; smooth authored idle motion at ~90 Hz is not proof that live source energy arrived.
+- [ ] Compare source identity/readiness before changing gain. If `playing && !reactive_source_ready`, determine why current source identity was rejected/delayed.
+- [ ] Compare raw engine state -> mode-runtime input -> resolved mode state -> snapshot -> Quick renderer input -> visible output.
+- [ ] Preserve historical renderer-side numerical transfers when they are part of visible semantics; keep canonical logical state unmolested.
+- [ ] Spectrum changes remain Spectrum-specific unless shared source evidence proves a common cause.
+- [ ] Bubble physics/sensitivity are not tuned until source/configuration/publication parity is proven.
+- [ ] Sine paused idle must continue through authored state/snapshot/presentation; no QML timer workaround.
+- [ ] Play/Pause timing distinguishes historical cold-start shaping from migration-added warm/source/publication/presentation delay.
+- [ ] Retired `*_growth` sizing controls stay retired.
 
 ## 5. Shell / clip
 
@@ -106,8 +125,11 @@ Persist and restore uniform scale and viewport extent separately through Save/Ca
 ## 8. Bubble
 
 BTF is binding. Geometry changes are configuration, never another clock. Do not retune Bubble simulation to hide
-presentation or resize defects. Preserve continuous positional evolution, collisions, trails, ghosts/pop/transients,
+presentation, configuration-ownership or resize defects. Preserve continuous positional evolution, collisions, trails, ghosts/pop/transients,
 protected renderer-visible consequences and source freshness.
+
+- [ ] `bubble_group_drift`, `bubble_collision_pop_mode` and `bubble_big_visual_smoothing` reach controller-owned logical state from resolved settings/presets.
+- [ ] Active music magnitude is traced before/after `reactive_source_ready`; intentional idle-energy motion is not mistaken for healthy live response.
 
 ## 9. Fade / readiness
 
@@ -133,6 +155,10 @@ source identity.
 
 Pause/Play preserves runtime identity and warm-source semantics. Generation zero is valid. Stale snapshots are rejected.
 GPU resources retire on the legal render owner.
+
+- [ ] Visible Play/Pause edge can be decomposed Media truth -> owner -> BeatEngine -> first current source -> mode readiness -> logical publication -> Quick snapshot -> retained draw.
+- [ ] Historical BeatEngine cold ramp is not changed to hide a new delay; warm resumes are tested separately.
+- [ ] Paused Sine continues authored idle evolution and retained publication without another clock.
 
 ## 11. Required proof for geometry changes
 

@@ -23,7 +23,7 @@ Reference hierarchy for user-visible outcomes:
 2. 4.7.2 release screenshot — strongest broad visual baseline and explicitly the last Raw PySide6 architecture release;
 3. 4.7.0 release screenshot;
 4. `15099d3` — cleaner historical behavior-code reference;
-5. `3fe5df6` — later mixed reference containing some migration work.
+5. `3fe5df6` — **known-good pre-Qt-Quick behavioral oracle for visualizer reactivity**; for unrelated broad UI archaeology it is simply a later reference than `15099d3`.
 
 For implementation, current accepted Quick architecture always wins.
 

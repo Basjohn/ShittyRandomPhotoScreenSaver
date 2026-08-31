@@ -1,6 +1,6 @@
 # Qt Quick Production Migration — Technical Index
 
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
 Sequence/work admission comes only from `Current_Plan.md`.
 
@@ -25,6 +25,9 @@ Live phase/checkpoint status is intentionally not duplicated here; read `Current
 | `Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` | G7/G8 auxiliary/focus closure reference |
 | `Remaining_H_Production_Cutover_Decomposition.md` | H production authority wiring, cardinality, lifecycle and old-host deletion |
 | `H_Post_Cutover_Runtime_Reality_Corrections.md` | bounded H correction/evidence for live retained delivery, transition replacement and visible context-menu reality gate |
+| `H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md` | H5a CUSTOM visualizer routing plus H5b Spectrum topology/shaping/renderer-transfer repair |
+| `H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md` | live H decomposition for historical-vs-Quick reactivity parity, known config losses, readiness/timing, Bubble/Sine and bounded repair sequence |
+| `Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md` | exact source-comparison evidence, proven deviations, field audit and next source paths |
 | `H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md` | H restoration of the omitted retained middle-click current-mode preset hotswap contract |
 | `H_Pre_Cutover_Visualizer_Edge_Corrections.md` | **closed audit record** for the pre-cutover visualizer edge findings |
 | `H_True_F_Technical_Closure.md` | **closed follow-up evidence** for technical-config ownership + real retained-consumer proof |

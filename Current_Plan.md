@@ -1,6 +1,6 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-31 — black-flash root cause MEASURED (fullscreen-flip-promotion PresentMode transitions on the LG/Display-1 output) and fixed (1px overscan); plan converted to live-checklist style; "Reveal / startup composition" area decomposed (residual startup micro-flash, visualizer-does-not-fade-in bug, desktop->app crossfade aspiration). Maintained h-destination GREEN.
+Last updated: 2026-08-31 — visualizer historical-vs-current reactivity audit opened as H5c. Source-proven migration deviations now include Spectrum topology canonicalization loss, Spectrum BeatEngine shaping configuration loss, Spectrum historical renderer-input transfer loss, and three stranded Bubble logical settings. Shared source-readiness, Play/Pause edge latency and Sine idle transport remain instrument-first open work. Black-flash PresentMode fix and maintained h-destination GREEN remain preserved.
 
 ## Current checkpoint
 
@@ -26,7 +26,8 @@ Move a row between groups only when its state genuinely changes; do not keep a s
 **Pending**
 
 - [ ] H5a — CUSTOM Visualizer independent display admission
-- [ ] H5b — Spectrum data saturation + wrong presentation topology
+- [ ] H5b — Spectrum topology + shaping + renderer-transfer repair (three source-proven migration deviations)
+- [ ] H5c — end-to-end visualizer reactivity parity audit (interleaved: Bubble weak response, Play/Pause edge delay, Sine idle, shared field/readiness audit)
 - [ ] H6 — CUSTOM Settings size-lock scope
 - [ ] H8 — Visualizer middle-click preset hotswap (source-proven contract omission)
 - [ ] H7 — Exit visible-response/perf classification (likely J after measurement)
@@ -287,32 +288,49 @@ Technical route: `Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Deco
 
 ### H5b — Spectrum saturation + wrong functional presentation topology
 
-**Status: operator-reproducible; two branches must be localized independently.**
+**Status: three source-proven migration deviations; repair as bounded configuration/presentation parity work, then re-measure.**
 
-Current evidence:
+The direct comparison against known-good `3fe5df687387b6b6a121142372c43a7719442386` has replaced the earlier generic two-branch hypothesis with concrete seams:
 
-1. Spectrum authored/computed payload repeatedly saturates near/all `1.00` before shader presentation.
-2. Physical Organ/Spectrum presentation is the wrong representation family: a dense full-height matrix of tiny segmented blocks instead of the intended bottom-aligned continuous frequency columns.
+- [x] **Topology:** historical creator mapped canonical `spectrum_render_mode` to runtime `spectrum_single_piece`; current preset normalization removes the legacy boolean while the Quick logical applier ignores the canonical key, leaving the segmented default.
+- [x] **Engine shaping:** historical/live engine configuration for mirror/shape nodes/notches/wave/profile/lane strengths/drop speed remains in the old catch-all applier but is absent from the new Quick controller/technical path.
+- [x] **Renderer transfer:** historical Spectrum multiplied bars and peaks by `0.55` immediately before shader upload; Quick uploads raw values even though current Spectrum hysteresis still carries the same `0.55` transfer constant.
 
-Saturation may explain pinned energy; it does not explain the topology substitution.
+Live repair checklist:
 
-Trace:
+- [ ] Restore canonical `bars`/`segment` mapping at the current logical configuration owner; do not revive the historical creator.
+- [ ] Route the Spectrum engine-shaping family through one narrow controller-owned configuration seam into the existing BeatEngine setters; no new engine, timer or per-frame settings reads.
+- [ ] Restore the historical `0.55` bar+peak transfer exactly once at the Quick Spectrum renderer input; keep logical bars canonical.
+- [ ] Add focused Quick-owner/configuration + renderer-transfer tests.
+- [ ] Re-measure Spectrum S0-S7 only after those known deviations are removed from the path.
+- [ ] If bars still saturate, find the first remaining saturating transformation; do not apply global visualizer gain.
+- [ ] Physical: real music is non-degenerate/reactive; `bars` presets are continuous columns; segmented presets remain intentionally segmented; switch/recreation/preset swap preserve both topology and shaping.
 
-```text
-data: FFT/bands -> Spectrum shaping -> floor/gain/expansion/normalization -> clamp -> final vector
-presentation: mode/preset -> render snapshot -> renderer -> primitive/topology -> retained draw
-```
+H5b still must not change Bubble/shared cadence to make Spectrum look better.
 
-H stops when live Spectrum data is non-degenerate and the correct functional continuous-column representation survives switch/recreation. Exact spacing/glow/gradient/line-thickness polish belongs to J Parity+.
+Technical route: `Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md`.  
+Reactivity evidence/decomposition: `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md` and `Docs/QtQuick_Migration/Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`.
 
-Do not alter Bubble/shared cadence while fixing Spectrum.
+### H5c — historical-vs-Quick visualizer reactivity parity audit
 
-Closure checklist (two independent branches):
+**Status: ACTIVE H audit, intentionally interleaved because it is a major user-visible migration regression. Do not tune around known ownership deviations.**
 
-- [ ] Data: trace the shaping chain; prove the pre-shader vector is non-degenerate (not pinned at ~1.00) on live audio.
-- [ ] Presentation: identify where the render snapshot -> renderer -> primitive/topology chose the dense segmented-block matrix instead of bottom-aligned continuous columns; correct the topology at its owner.
-- [ ] Correct continuous-column representation survives mode switch + generation recreation.
-- [ ] Bubble/shared cadence untouched; exact spacing/glow/gradient polish deferred to J.
+What is already established:
+
+- [x] Core `audio_worker`, `BeatEngine`, energy-band, feature-frame, signal, oscilloscope-contract, technical-config and transient-bus source is byte-identical historical/current; bar computation is behaviorally identical apart from a type-only import path.
+- [x] Healthy ~90 Hz authored Bubble cadence does not prove live music energy is admitted; intentional idle-energy motion can continue at full authored cadence.
+- [x] Bubble's `bubble_group_drift`, `bubble_collision_pop_mode` and `bubble_big_visual_smoothing` are consumed by current authored simulation but are not populated by the Quick logical applier.
+- [x] Historical Bubble renderer energy uniforms are a dead end: they were not consumed by the historical shader and must not be restored.
+- [ ] Complete systematic current-consumer configuration audit for all five modes; fix every live field stranded by the old mixed-applier split.
+- [ ] Add bounded `[VIS_REACTIVITY]` readiness/identity telemetry and prove whether current per-mode `source_ready` gates reject/delay valid live audio before changing them.
+- [ ] Trace visible Play/Pause edge T0-T7 (Media truth -> owner -> BeatEngine -> first current source -> mode ready -> logical publication -> Quick snapshot -> retained draw), distinguishing historical 1.5 s cold ramp from warm-resume/migration delay.
+- [ ] Trace Sine paused idle from `SineFrameRuntime` changing animation/shift state through snapshot/uniform/present; never add a QML timer to fake it.
+- [ ] Complete Bubble B0-B9 magnitude trace only after known config gaps are restored; no global sensitivity/physics retune.
+- [ ] Complete Oscilloscope/DevCurve final renderer-input comparison as controls for shared vs mode-specific deviations.
+- [ ] Preserve current scale/viewport sizing contracts; retired `*_growth` controls are not parity targets.
+
+Detailed live checklist and repair sequence: `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`.  
+Exact historical/current evidence matrix and next source paths: `Docs/QtQuick_Migration/Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`.
 
 ### H6 — CUSTOM Settings may lock only size-authoring controls
 
@@ -468,13 +486,9 @@ existing desktop (last composed frame)
 
 Technical route: `Docs/QtQuick_Migration/J_Reveal_Startup_Composition_Decomposition_2026-08-31.md`.
 
-## H observations intentionally carried to J unless a deterministic seam appears
+## Observations intentionally carried to J unless a deterministic H seam appears
 
-### Bubble response
-
-Bubble remains physically weak/delayed despite healthy authored ~90 Hz cadence/integration. Do not tune sensitivity/physics during unrelated H work. J must correlate playback edge -> source freshness -> logical Bubble state -> retained publication -> visible consequence. Promote only a proven stale/delayed owner seam.
-
-Preserve the currently good Bubble partial/CUSTOM resizing.
+Bubble reactivity is **no longer in this carry bucket**: the historical/current audit found source-proven configuration-ownership defects and promoted the end-to-end response investigation to H5c. Preserve the currently good Bubble partial/CUSTOM resizing while H5c proceeds.
 
 ### Black/test-frame/focus/context flashes
 
@@ -491,7 +505,8 @@ H closes only when (live checklist):
 - [ ] Clock runtime mode toggle + matching per-mode CUSTOM rect/scale survive Settings/Edit recreation (H3b physical gate)
 - [ ] Media Play/Pause + seek work on the real provider while Previous/Next remain working (H4 physical gate)
 - [ ] CUSTOM Visualizer can own a different selected display from Media while non-CUSTOM still follows Media (H5a)
-- [ ] Spectrum has non-degenerate data + correct continuous-column representation after switch/recreation (H5b)
+- [ ] Spectrum has non-degenerate data + canonical topology + restored engine-shaping/render-transfer parity after switch/recreation (H5b)
+- [ ] historical-vs-current visualizer reactivity audit closes the live-consumer config gaps, Bubble weak response, Play/Pause edge delay and Sine idle transport without adding clocks/owners/global tuning (H5c)
 - [ ] CUSTOM Settings locks only size-authoring controls (H6)
 - [ ] middle-click hotswaps exactly one preset in-place, lossless Custom round-trip, no mode change / no Media disturbance (H8)
 - [ ] Exit visible response measured/understood with clean natural termination (H7)
@@ -520,7 +535,7 @@ Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md
 Docs/Qt_QML_Observability.md
 ```
 
-Primary visual references are the 4.7.2/4.7.0 release screenshots. `15099d3` is the cleaner historical behavior-code reference; `3fe5df6` is a later mixed reference with migration work. Historical code is never implementation authority.
+Primary broad visual references are the 4.7.2/4.7.0 release screenshots and `15099d3` remains useful for older UI/presentation archaeology. **Visualizer reactivity is a specific exception:** the user-supplied `3fe5df6` tree is the known-good pre-Qt-Quick behavioral oracle for Bubble/Oscillo/Sine/Spectrum/DevCurve semantics. Historical code is never implementation authority; reproduce its behavior through current Quick owners.
 
 Named J cells include:
 
@@ -536,7 +551,7 @@ Named J cells include:
 - CUSTOM overlap/cross-display authority untouched by ordinary collision avoidance;
 - coherent context-submenu hover-leave lifetime;
 - all-five visualizer eyes-on fidelity after H restores Spectrum data/topology;
-- Bubble visible response/latency without sacrificing BTF or its currently good partial resizing;
+- after H5c restores functional historical reactivity/timing, any remaining Bubble fine visual feel/parity without sacrificing BTF or its currently good partial resizing;
 - mixed refresh/DPR, off/wake, A->B->A focus/topology, installed performance tails and clean exit;
 - low-priority CUSTOM/Edit guide visibility: existing grid/guide presentation must actually publish useful snap/alignment guides during editing; do not invent a second layout owner;
 - low-priority Quick-native performance/debug overlay parity if the product affordance is still desired; it must consume read-only current metrics and must not resurrect legacy GL presenter/profiler ownership;
