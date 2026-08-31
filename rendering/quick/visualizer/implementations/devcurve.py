@@ -174,6 +174,15 @@ class QuickDevCurveRenderer:
         gl.glUniform2f(uniforms["u_viewport_origin_px"], 0.0, 0.0)
         gl.glUniform1i(uniforms["u_quick_item_coords"], 1)
         gl.glUniform4f(uniforms["u_content_rect"], *layout.content_rect)
+        gl.glUniform2f(
+            uniforms["u_devcurve_normalized_scale"],
+            layout.normalized_x_scale,
+            layout.normalized_y_scale,
+        )
+        gl.glUniform1f(
+            uniforms["u_devcurve_x_to_y_scale"],
+            layout.normalized_y_scale / layout.normalized_x_scale,
+        )
         gl.glUniform1f(uniforms["u_border_width"], presentation.border_width)
         gl.glUniform1f(uniforms["u_fade"], presentation.content_fade)
         gl.glUniform1i(uniforms["u_devcurve_sample_count"], sample_count)
@@ -211,10 +220,10 @@ class QuickDevCurveRenderer:
                                 f"devcurve_layer_{name}_outline_width",
                                 0.006,
                             )
-                        )
-                        * layout.normalized_y_scale,
+                        ),
                     ),
-                ),
+                )
+                * layout.normalized_y_scale,
             )
             gl.glUniform1i(
                 uniforms[f"u_devcurve_layer_{name}_enabled"],
@@ -356,10 +365,10 @@ class QuickDevCurveRenderer:
                             "devcurve_foreground_specular_width",
                             0.022,
                         )
-                    )
-                    * layout.normalized_x_scale,
+                    ),
                 ),
-            ),
+            )
+            * layout.normalized_x_scale,
         )
         gl.glUniform1f(
             uniforms["u_devcurve_foreground_specular_offset"],
@@ -373,10 +382,10 @@ class QuickDevCurveRenderer:
                             "devcurve_foreground_specular_offset",
                             0.028,
                         )
-                    )
-                    * layout.normalized_y_scale,
+                    ),
                 ),
-            ),
+            )
+            * layout.normalized_y_scale,
         )
         gl.glUniform1f(
             uniforms["u_devcurve_foreground_specular_crest_bias"],
@@ -440,6 +449,8 @@ class QuickDevCurveRenderer:
                 "u_viewport_origin_px",
                 "u_quick_item_coords",
                 "u_content_rect",
+                "u_devcurve_normalized_scale",
+                "u_devcurve_x_to_y_scale",
                 "u_border_width",
                 "u_fade",
                 "u_rainbow_hue_offset",
