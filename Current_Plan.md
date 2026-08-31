@@ -446,7 +446,7 @@ Named J cells include:
 
 ### J-Media app-volume child widget — separate by default
 
-**Status: actionable J Parity+ restoration; current Quick presentation is incorrectly folded into the Media card.**
+**Status: actionable J Parity+ restoration; current Quick presentation is incorrectly folded into the Media card and no separate/integrated settings selector exists yet.**
 
 The app-volume control is a child/accessory of Media, not an independent widget-family capability. It depends on an effective Media presentation and provider app-volume capability, follows Media's effective display route and lifecycle, and reuses the existing Media presentation model plus its one `MediaVolumeRuntimeService` lease/action seam. The established toggle outcome and migration default are a separate retained Quick item beside the Media card. An in-card form may remain only as an explicit optional presentation variant.
 
