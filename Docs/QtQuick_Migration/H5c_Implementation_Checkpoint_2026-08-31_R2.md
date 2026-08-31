@@ -423,6 +423,22 @@ The active preset authors `bubble_big_visual_smoothing=1.0`. At that setting, th
 
 The bounded correction removes only that hard early-return band. The existing micro rise/drop rates now converge continuously for sub-settle changes; large-delta attack, hot-energy smoothing blend, pulse/contraction/clamp authority and the authored cadence are unchanged. A same-bubble 90 Hz rise/drop oracle pins nonzero monotonic settling at smoothing `1.0`, and B6/B7 now reports target maximum plus maximum display lag for the next physical run. Final Play/Pause visual validation remains open because the confirming short trace contained Play but no new Play -> Pause edge.
 
+### 15.1.2 Latest B9 trace: edge response improved; rate switching still flickers
+
+The next short operator run accepts the magnitude and reports Play/Pause as much better, but rejects the remaining elasticity/hero smoothing: contractions rapidly flicker rather than breathe. Source age remains about `5.5-46.9 ms`, authored service remains about `89.8 Hz`, requested/integrated remains `1.000`, and the enlarged radius does not contact its clamp. The failure is therefore inside the display-only settling shape, not source freshness, cadence, transport, magnitude or clamp authority.
+
+Source inspection finds a second discontinuity after removal of the hard hold: a target hovering around the settle band can alternate between the micro rate and the much faster macro rate on adjacent frames. The bounded correction now:
+
+- [x] replaces that threshold switch with a continuous smooth interpolation over target error;
+- [x] continuously blends drop-ratio and soft/sharp-drop thresholds as well;
+- [x] preserves exact large-edge `40 Hz` rise and `22 Hz` drop endpoints so the newly-good Play/Pause path is not weakened;
+- [x] tracks one stable live big Bubble until retirement and publishes its target/display radius, delta, applied step, effective rate and blend through the existing bounded B6/B7/B8 cadence;
+- [x] adds same-bubble threshold-hover and tracked-identity runtime oracles;
+- [x] focused Bubble/Quick gates pass `85/85` and the maintained `h-destination` profile passes `78/78`;
+- [ ] requires another physical B9 run to accept breathing contraction/elasticity.
+
+The same operator run also reports that stream speed and drift speed/amount do not react perceptibly to transients. Existing source shows stream motion dominated by smoothed mid/high plus a weak vocal/snare envelope, while drift is dominated by sustained/body energy and authored static controls. That is the next separate bounded correction: add a decaying transient contribution to the existing motion drive and prove visible short-window displacement without changing authored settings, source gain, radius response, cadence or adding a clock.
+
 ### 15.2 DevCurve AA and transient-diagnostic corrections
 
 The second physical report says DevCurve edges remain jagged after removal of migration-invented ghost layers. Source comparison now disproves the remaining AA mapping:

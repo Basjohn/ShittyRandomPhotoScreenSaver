@@ -1121,4 +1121,7 @@ Detailed source/repair handoff: `H5c_Implementation_Checkpoint_2026-08-31_R2.md`
 - [x] First corrected B9 run reports magnitude dramatically better / almost close-worthy; B6/B7/B8 agree while source is fresh, cadence is ~89 Hz and integration is 1.000.
 - [x] The trace reaches about `75.95` logical px / `113.92` device px radius at DPR `1.5`, physically validating the projection correction.
 - [x] Remove the display-only held-then-released size mechanism at authored smoothing `1.0`: replace the hard 13-19% hold band with continuous existing micro-rate convergence, pin same-bubble 90 Hz rise/drop motion, and expose target/lag scalars in B6/B7.
-- [ ] Repeat physical Play/Pause validation; the corrected magnitude trace did not contain a new Play -> Pause edge.
+- [x] Latest physical run reports much better Play/Pause and magnitude but still rapidly flickering contraction instead of breathing elasticity; fresh source, ~89.8 Hz cadence, 1.000 integration and no radius-clamp contact keep the defect at the visual filter.
+- [x] Replace residual micro/macro settle/drop threshold switching with continuous rate interpolation; preserve exact 40 Hz rise / 22 Hz large-drop endpoints and add stable tracked-bubble target/display/delta/step/rate/mix evidence to bounded B6-B8 logs.
+- [ ] Repeat physical elasticity validation and require breathing contraction without rapid flicker.
+- [ ] Add bounded decaying transient influence to existing stream/drift motion drive, with a same-body event/no-event displacement oracle; do not mutate authored drift settings, inflate radius or add a clock.

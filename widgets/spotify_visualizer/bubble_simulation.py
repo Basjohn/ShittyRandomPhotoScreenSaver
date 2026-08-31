@@ -107,6 +107,13 @@ def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
+def _smoothstep01(value: float) -> float:
+    """Return a continuous eased 0..1 blend without adding temporal state."""
+
+    x = _clamp01(value)
+    return x * x * (3.0 - 2.0 * x)
+
+
 def _shape_authored_bubble_control(
     value: float,
     *,
@@ -264,6 +271,11 @@ class BubbleSimulation:
         self._last_big_lane_diag: Dict[str, float] = {}
         self._last_big_render_diag: Dict[str, float] = {}
         self._last_perf_diag: Dict[str, float] = {}
+        self._tracked_big_bubble: Optional[BubbleState] = None
+        self._tracked_big_token: int = 0
+        self._tracked_big_smoothing_rate_hz: float = 0.0
+        self._tracked_big_smoothing_mix: float = 0.0
+        self._tracked_big_smoothing_step: float = 0.0
         self._group_drift_dx: float = 0.0
         self._group_drift_dy: float = 0.0
         self._group_drift_from_dx: float = 0.0
@@ -305,6 +317,11 @@ class BubbleSimulation:
         self._last_big_lane_diag = {}
         self._last_big_render_diag = {}
         self._last_perf_diag = {}
+        self._tracked_big_bubble = None
+        self._tracked_big_token = 0
+        self._tracked_big_smoothing_rate_hz = 0.0
+        self._tracked_big_smoothing_mix = 0.0
+        self._tracked_big_smoothing_step = 0.0
         self._group_drift_dx = 0.0
         self._group_drift_dy = 0.0
         self._group_drift_from_dx = 0.0
@@ -1903,6 +1920,8 @@ class BubbleSimulation:
         bubble: BubbleState,
         target_radius: float,
         visual_smoothing: float,
+        *,
+        track_diagnostics: bool = False,
     ) -> float:
         """Smooth only the rendered hero radius; audio/pulse authority stays raw."""
         if not bubble.is_big:
@@ -1968,20 +1987,38 @@ class BubbleSimulation:
         # settling without delaying or latching the underlying audio response.
         if delta_abs <= 1e-7:
             bubble.display_radius = max(0.001, target_radius)
+            if track_diagnostics:
+                self._tracked_big_smoothing_rate_hz = 0.0
+                self._tracked_big_smoothing_mix = 0.0
+                self._tracked_big_smoothing_step = 0.0
             return bubble.display_radius
 
+        # The old two-rate switch made the visual filter discontinuous exactly
+        # where a live target tends to hover: one frame used the gentle micro
+        # rate and the next used the much faster macro rate. Interpolate over a
+        # bounded error region instead. Large Play/Pause and hot-passage edges
+        # still reach the original macro endpoints; only settling is blended.
+        error_mix = _smoothstep01(delta_abs / max(1e-9, settle_band * 3.0))
         if delta >= 0.0:
-            if delta_abs <= settle_band:
-                rate = min(1.0, dt * micro_rise_hz)
-            else:
-                rate = min(1.0, dt * rise_hz)
+            smoothing_mix = error_mix
+            rate_hz = micro_rise_hz + (rise_hz - micro_rise_hz) * smoothing_mix
         else:
             drop_ratio = (current - target_radius) / max(current, 1e-6)
-            if delta_abs <= settle_band or drop_ratio <= micro_drop_ratio:
-                rate = min(1.0, dt * micro_drop_hz)
-            else:
-                rate = min(1.0, dt * (sharp_drop_hz if drop_ratio >= 0.22 else soft_drop_hz))
+            ratio_mix = _smoothstep01(
+                (drop_ratio - micro_drop_ratio * 0.5)
+                / max(1e-9, micro_drop_ratio)
+            )
+            smoothing_mix = min(error_mix, ratio_mix)
+            sharp_mix = _smoothstep01((drop_ratio - 0.16) / 0.12)
+            macro_drop_hz = soft_drop_hz + (
+                sharp_drop_hz - soft_drop_hz
+            ) * sharp_mix
+            rate_hz = micro_drop_hz + (
+                macro_drop_hz - micro_drop_hz
+            ) * smoothing_mix
 
+        rate = min(1.0, dt * rate_hz)
+        previous = current
         current += (target_radius - current) * rate
         if (
             amount < 0.45
@@ -1990,6 +2027,10 @@ class BubbleSimulation:
         ):
             current = target_radius
         bubble.display_radius = max(0.001, current)
+        if track_diagnostics:
+            self._tracked_big_smoothing_rate_hz = rate_hz
+            self._tracked_big_smoothing_mix = smoothing_mix
+            self._tracked_big_smoothing_step = abs(bubble.display_radius - previous)
         return bubble.display_radius
 
     @staticmethod
@@ -2492,6 +2533,27 @@ class BubbleSimulation:
             b.trail_strength > 0.001 and b.trail_ready
             for b in self._bubbles
         )
+        tracked_big = self._tracked_big_bubble
+        if not any(
+            bubble is tracked_big
+            and bubble.is_big
+            and not bubble.exiting
+            for bubble in self._bubbles
+        ):
+            tracked_big = next(
+                (
+                    bubble
+                    for bubble in self._bubbles
+                    if bubble.is_big and not bubble.exiting
+                ),
+                None,
+            )
+            if tracked_big is not None:
+                self._tracked_big_token += 1
+            self._tracked_big_bubble = tracked_big
+        self._tracked_big_smoothing_rate_hz = 0.0
+        self._tracked_big_smoothing_mix = 0.0
+        self._tracked_big_smoothing_step = 0.0
         pos_data: List[float] = [0.0] * (bubble_count * 4)
         extra_data: List[float] = [0.0] * (bubble_count * 4)
         trail_data: List[float] = [0.0] * (bubble_count * 9) if trail_payload_active else []
@@ -2505,6 +2567,17 @@ class BubbleSimulation:
             "max_big_payload_radius": 0.0,
             "max_big_target_radius": 0.0,
             "max_big_smoothing_lag": 0.0,
+            "tracked_big_token": float(
+                self._tracked_big_token if tracked_big is not None else 0
+            ),
+            "tracked_big_index": -1.0,
+            "tracked_big_base_radius": 0.0,
+            "tracked_big_target_radius": 0.0,
+            "tracked_big_display_radius": 0.0,
+            "tracked_big_target_delta": 0.0,
+            "tracked_big_smoothing_step": 0.0,
+            "tracked_big_smoothing_rate_hz": 0.0,
+            "tracked_big_smoothing_mix": 0.0,
         }
 
         # Render-result projection: positions/trails belong to the expanded
@@ -2561,6 +2634,7 @@ class BubbleSimulation:
                 b,
                 resolved_target_radius,
                 big_visual_smoothing,
+                track_diagnostics=b is tracked_big,
             )
 
             if b.is_big:
@@ -2579,6 +2653,25 @@ class BubbleSimulation:
                     max(0.0, r - b.radius),
                 )
                 big_render_diag["avg_big_render_radius"] += r
+                if b is tracked_big:
+                    big_render_diag["tracked_big_index"] = float(idx)
+                    big_render_diag["tracked_big_base_radius"] = b.radius
+                    big_render_diag["tracked_big_target_radius"] = (
+                        resolved_target_radius
+                    )
+                    big_render_diag["tracked_big_display_radius"] = r
+                    big_render_diag["tracked_big_target_delta"] = (
+                        resolved_target_radius - r
+                    )
+                    big_render_diag["tracked_big_smoothing_step"] = (
+                        self._tracked_big_smoothing_step
+                    )
+                    big_render_diag["tracked_big_smoothing_rate_hz"] = (
+                        self._tracked_big_smoothing_rate_hz
+                    )
+                    big_render_diag["tracked_big_smoothing_mix"] = (
+                        self._tracked_big_smoothing_mix
+                    )
 
             # Specular size should follow the rendered bubble radius itself.
             # Let pulse make the bubble larger, but do not let specular size

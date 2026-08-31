@@ -938,7 +938,9 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
                 "frozen_any_max_r=%.5f alpha=%.3f "
                 "domain=%.3fx%.3f raw=%.3f gated=%.3f pulse=%.3f "
                 "clamp_hits=%.0f active=%.0f size=%.3f pulse_gain=%.3f "
-                "smoothing=%.3f clamp=%.3f",
+                "smoothing=%.3f clamp=%.3f "
+                "track(token=%.0f index=%.0f base=%.5f target=%.5f "
+                "display=%.5f delta=%.5f step=%.5f rate_hz=%.3f mix=%.3f)",
                 resolved.simulation_timestamp,
                 playing,
                 source_ready,
@@ -961,6 +963,15 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
                 geometry.get("configured_big_bass_pulse", 0.0),
                 geometry.get("configured_big_visual_smoothing", 0.0),
                 geometry.get("configured_big_size_clamp", 0.0),
+                geometry.get("tracked_big_token", 0.0),
+                geometry.get("tracked_big_index", -1.0),
+                geometry.get("tracked_big_base_radius", 0.0),
+                geometry.get("tracked_big_target_radius", 0.0),
+                geometry.get("tracked_big_display_radius", 0.0),
+                geometry.get("tracked_big_target_delta", 0.0),
+                geometry.get("tracked_big_smoothing_step", 0.0),
+                geometry.get("tracked_big_smoothing_rate_hz", 0.0),
+                geometry.get("tracked_big_smoothing_mix", 0.0),
             )
             widget._bubble_geometry_diag_last_log_ts = now_ts
             if burst_remaining > 0:

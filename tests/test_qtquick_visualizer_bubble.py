@@ -141,6 +141,15 @@ def test_bubble_frame_runtime_freezes_one_authored_step_and_visible_event() -> N
                 "max_big_payload_radius": 0.07,
                 "max_big_target_radius": 0.072,
                 "max_big_smoothing_lag": 0.002,
+                "tracked_big_token": 4.0,
+                "tracked_big_index": 0.0,
+                "tracked_big_base_radius": 0.036,
+                "tracked_big_target_radius": 0.072,
+                "tracked_big_display_radius": 0.07,
+                "tracked_big_target_delta": 0.002,
+                "tracked_big_smoothing_step": 0.001,
+                "tracked_big_smoothing_rate_hz": 12.0,
+                "tracked_big_smoothing_mix": 0.25,
             }
 
         @staticmethod
@@ -183,6 +192,11 @@ def test_bubble_frame_runtime_freezes_one_authored_step_and_visible_event() -> N
     assert geometry["final_big_max_radius"] == pytest.approx(0.07)
     assert geometry["final_big_target_radius"] == pytest.approx(0.072)
     assert geometry["final_big_smoothing_lag"] == pytest.approx(0.002)
+    assert geometry["tracked_big_token"] == pytest.approx(4.0)
+    assert geometry["tracked_big_target_radius"] == pytest.approx(0.072)
+    assert geometry["tracked_big_display_radius"] == pytest.approx(0.07)
+    assert geometry["tracked_big_smoothing_rate_hz"] == pytest.approx(12.0)
+    assert geometry["tracked_big_smoothing_mix"] == pytest.approx(0.25)
     assert geometry["frozen_big_max_radius"] == pytest.approx(0.07)
     assert geometry["frozen_any_max_radius"] == pytest.approx(0.07)
     assert geometry["frozen_max_alpha"] == pytest.approx(1.0)

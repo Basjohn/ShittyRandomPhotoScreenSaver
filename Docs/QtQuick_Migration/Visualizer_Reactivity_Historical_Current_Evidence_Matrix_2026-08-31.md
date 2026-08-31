@@ -613,9 +613,13 @@ R2 repair:
 - [x] add B6/B7 final-simulation/frozen-big radius-alpha plus B8 retained logical/device-pixel diagnostics around steady music and Play/Pause;
 - [x] first corrected B9 run reports dramatically better / almost close-worthy magnitude; B6/B7/B8 agree, the source is current by `105.7 ms`, cadence remains ~89 Hz / 1.000 integration, and B8 reaches about `75.95` logical px / `113.92` device px radius at DPR `1.5`;
 - [x] remove the display-only hard hold band at smoothing `1.0`, preserve existing micro rise/drop and attack paths, pin continuous same-bubble 90 Hz settling, and add target/lag scalars to B6/B7;
-- [ ] final B9 gate is physical Play/Pause validation of that continuous visual-only settling.
+- [x] next B9 run accepts much better Play/Pause and magnitude but rejects elasticity: contractions rapidly flicker rather than breathe; source is fresh, cadence is about `89.8 Hz`, integration is `1.000`, and the enlarged radius does not contact its clamp;
+- [x] localize the residual flicker to discontinuous micro/macro rate selection around the settle/drop thresholds; replace it with continuous interpolation while preserving exact `40 Hz` rise / `22 Hz` large-drop endpoints;
+- [x] add one stable tracked-bubble target/display/delta/step/rate/mix diagnostic to the existing bounded B6-B8 samples so aggregate maxima no longer hide same-bubble threshold switching;
+- [ ] final B9 gate is physical acceptance of breathing contraction/elasticity after rate interpolation;
+- [ ] stream/drift transient motion remains visibly imperceptible; add and falsify one bounded decaying transient contribution at the existing motion owner without changing authored settings, source gain, radius or cadence.
 
-Classification: source/config/cadence and long Play transport delay are exonerated. The retained-old first observation is real but too brief to explain the full physical ramp. Final nonbaseline radius normalization was the magnitude defect and is physically validated as dramatically better. The remaining source-visible display-only hard hold band is now removed: materially nonzero target error converges continuously through the existing micro rates. No gain, cadence, timer, pulse, contraction or latest-state contract changed; physical Play/Pause validation remains.
+Classification: source/config/cadence and long Play transport delay are exonerated. The retained-old first observation is real but too brief to explain the full physical ramp. Final nonbaseline radius normalization was the magnitude defect and is physically validated as dramatically better. Removing the hard hold improved Play/Pause but did not close elasticity because the remaining two-rate threshold still toggled under a moving target. The display-only correction rate now varies continuously, with stable per-bubble evidence added at existing cadence. No gain, cadence, timer, pulse, contraction or latest-state contract changed; physical elasticity validation and a separate transient-motion correction remain open.
 
 ### 15.2 DevCurve source-proven continuation
 

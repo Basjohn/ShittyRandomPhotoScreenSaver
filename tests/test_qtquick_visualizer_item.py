@@ -163,6 +163,14 @@ def test_bubble_retained_sync_logs_logical_and_device_radius(
                     "frozen_big_max_radius": 0.10,
                     "frozen_max_alpha": 1.0,
                     "domain_h": 2.7601113172541742,
+                    "tracked_big_token": 12.0,
+                    "tracked_big_index": 3.0,
+                    "tracked_big_target_radius": 0.11,
+                    "tracked_big_display_radius": 0.10,
+                    "tracked_big_target_delta": 0.01,
+                    "tracked_big_smoothing_step": 0.002,
+                    "tracked_big_smoothing_rate_hz": 14.0,
+                    "tracked_big_smoothing_mix": 0.28,
                 }
             ),
         ),
@@ -198,6 +206,9 @@ def test_bubble_retained_sync_logs_logical_and_device_radius(
     assert f"radius_logical_px={logical_radius:.2f}" in geometry_message
     assert f"radius_device_px={logical_radius * 1.5:.2f}" in geometry_message
     assert "dpr=1.500" in geometry_message
+    assert "track(token=12 index=3" in geometry_message
+    assert "target=0.11000 display=0.10000 delta=0.01000" in geometry_message
+    assert "step=0.00200 rate_hz=14.000 mix=0.280" in geometry_message
 
 
 def test_mismatched_snapshot_geometry_fails_closed() -> None:
