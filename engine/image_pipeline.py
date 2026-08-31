@@ -234,18 +234,25 @@ def _apply_display_pixmap_with_perf(
         presenter = getattr(display_manager, "present_processed_image", None)
         if not callable(presenter):
             raise TypeError("DisplayManager has no processed-image publication contract")
-        presenter(
+        presentation_outcome = presenter(
             display_index,
             processed_pixmap,
             original_pixmap,
             image_path,
         )
         if perf_trace is not None:
-            perf_trace.mark(
-                "transition_admitted",
-                display=display_index,
-                reason=reason,
-            )
+            if presentation_outcome == "base_published":
+                perf_trace.mark(
+                    "base_image_published",
+                    display=display_index,
+                    reason=reason,
+                )
+            else:
+                perf_trace.mark(
+                    "transition_started",
+                    display=display_index,
+                    reason=reason,
+                )
     finally:
         if perf_enabled:
             logger.info(
@@ -2190,73 +2197,117 @@ def _schedule_prefetch_resume(
     screen_index: Optional[int],
     reason: str,
 ) -> None:
-    """Run one generation-fenced prefetch pass once image/transition work is idle.
+    """Resume one generation-scoped prefetch intent when image work is idle.
 
-    A single shared deferred-resume bit covers both ordinary transition cooldown
-    and first-frame reseeding after a replacement runtime.  This is one-shot
-    event-loop work, not a polling cadence: it exists only while a concrete
-    image batch/cooldown is preventing the requested prefetch pass.
+    The old process-wide boolean could be stranded when a delayed callback was
+    rejected as stale before its body ran.  Ownership is now a
+    ``(runtime_generation, token, reason)`` claim.  A newer generation may always
+    supersede an older claim, and an active transition does not cause a periodic
+    recheck: the intent simply waits for the authoritative transition-complete
+    event to call this function again.
     """
 
     prefetcher = getattr(engine, "_prefetcher", None)
     if prefetcher is None:
         return
-    if bool(getattr(engine, "_prefetch_resume_scheduled", False)):
+
+    generation = int(getattr(engine, "_runtime_generation", 0))
+    claim = getattr(engine, "_prefetch_resume_claim", None)
+    if claim is not None and int(claim[0]) != generation:
+        _cache_trace(
+            "Discarding stale prefetch-resume claim old_generation=%s new_generation=%s",
+            claim[0],
+            generation,
+        )
+        engine._prefetch_resume_claim = None
+        claim = None
+
+    if claim is None:
+        token = int(getattr(engine, "_prefetch_resume_token", 0)) + 1
+        engine._prefetch_resume_token = token
+        claim = (generation, token, str(reason))
+        engine._prefetch_resume_claim = claim
+        _bump_cache_runtime_stat(engine, "prefetch_resume_scheduled")
+    else:
+        token = int(claim[1])
+
+    if _has_transition_work_pending(engine):
+        _cache_trace(
+            "Deferred prefetch resume waiting on transition event "
+            "origin=%s generation=%d token=%d screen=%s",
+            reason,
+            generation,
+            token,
+            screen_index if screen_index is not None else "shared",
+        )
         return
 
     delay_ms = max(0, int(initial_delay_ms))
-    engine._prefetch_resume_scheduled = True
-    _bump_cache_runtime_stat(engine, "prefetch_resume_scheduled")
+    in_cooldown = getattr(prefetcher, "is_in_post_transition_delay", None)
+    if callable(in_cooldown) and in_cooldown():
+        remaining_reader = getattr(
+            prefetcher,
+            "get_remaining_post_transition_delay_ms",
+            None,
+        )
+        if callable(remaining_reader):
+            try:
+                delay_ms = max(delay_ms, int(remaining_reader()))
+            except Exception:
+                pass
+
     _cache_trace(
-        "Deferred prefetch resume scheduled reason=%s screen=%s delay_ms=%d",
+        "Deferred prefetch resume scheduled reason=%s generation=%d token=%d "
+        "screen=%s delay_ms=%d",
         reason,
+        generation,
+        token,
         screen_index if screen_index is not None else "shared",
         delay_ms,
     )
 
     def _resume_prefetch() -> None:
-        try:
-            if _has_transition_work_pending(engine):
-                recheck_delay_ms = max(50, delay_ms)
-                _cache_trace(
-                    "Deferred prefetch resume rearmed reason=transition_work_pending "
-                    "origin=%s delay_ms=%d",
-                    reason,
-                    recheck_delay_ms,
-                )
-                _schedule_engine_delay(
-                    engine,
-                    recheck_delay_ms,
-                    _resume_prefetch,
-                    reason=f"prefetch_resume_{reason}_transition_pending",
-                    display_index=screen_index,
-                    callable_label="prefetch_resume",
-                )
-                return
+        current_claim = getattr(engine, "_prefetch_resume_claim", None)
+        if current_claim != claim:
+            return
+        # A transition may have begun after the event scheduled this callback.
+        # Do not poll.  Leave the claim pending; the next authoritative
+        # transition-complete event will schedule it again.
+        if _has_transition_work_pending(engine):
+            _cache_trace(
+                "Deferred prefetch resume returned to transition wait "
+                "origin=%s generation=%d token=%d",
+                reason,
+                generation,
+                token,
+            )
+            return
 
-            in_cooldown = getattr(prefetcher, "is_in_post_transition_delay", None)
-            if callable(in_cooldown) and in_cooldown():
-                remaining_ms = delay_ms
-                remaining_reader = getattr(
-                    prefetcher,
-                    "get_remaining_post_transition_delay_ms",
-                    None,
-                )
-                if callable(remaining_reader):
-                    try:
-                        remaining_ms = int(remaining_reader())
-                    except Exception:
-                        remaining_ms = delay_ms
-                recheck_delay_ms = max(25, remaining_ms)
+        in_cooldown_now = getattr(prefetcher, "is_in_post_transition_delay", None)
+        if callable(in_cooldown_now) and in_cooldown_now():
+            remaining_ms = 0
+            remaining_reader = getattr(
+                prefetcher,
+                "get_remaining_post_transition_delay_ms",
+                None,
+            )
+            if callable(remaining_reader):
+                try:
+                    remaining_ms = max(0, int(remaining_reader()))
+                except Exception:
+                    remaining_ms = 0
+            if remaining_ms > 0:
                 _cache_trace(
-                    "Deferred prefetch resume rearmed reason=prefetch_cooldown "
-                    "origin=%s delay_ms=%d",
+                    "Deferred prefetch resume honoring remaining cooldown "
+                    "origin=%s generation=%d token=%d delay_ms=%d",
                     reason,
-                    recheck_delay_ms,
+                    generation,
+                    token,
+                    remaining_ms,
                 )
                 _schedule_engine_delay(
                     engine,
-                    recheck_delay_ms,
+                    remaining_ms,
                     _resume_prefetch,
                     reason=f"prefetch_resume_{reason}_cooldown",
                     display_index=screen_index,
@@ -2264,13 +2315,15 @@ def _schedule_prefetch_resume(
                 )
                 return
 
-            engine._prefetch_resume_scheduled = False
-            _bump_cache_runtime_stat(engine, "prefetch_resume_runs")
-            _cache_trace("Deferred prefetch resume running origin=%s", reason)
-            schedule_prefetch(engine)
-        except Exception:
-            engine._prefetch_resume_scheduled = False
-            logger.debug("[PREFETCH] Deferred resume failed", exc_info=True)
+        engine._prefetch_resume_claim = None
+        _bump_cache_runtime_stat(engine, "prefetch_resume_runs")
+        _cache_trace(
+            "Deferred prefetch resume running origin=%s generation=%d token=%d",
+            reason,
+            generation,
+            token,
+        )
+        schedule_prefetch(engine)
 
     _schedule_engine_delay(
         engine,
@@ -2280,7 +2333,6 @@ def _schedule_prefetch_resume(
         display_index=screen_index,
         callable_label="prefetch_resume",
     )
-
 
 def schedule_prefetch_after_runtime_ready(engine: ScreensaverEngine) -> None:
     """Reseed exact-next warmup after a rebuilt runtime owns first frames.

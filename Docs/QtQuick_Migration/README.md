@@ -28,6 +28,7 @@ Live phase/checkpoint status is intentionally not duplicated here; read `Current
 | `H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md` | H5a CUSTOM visualizer routing plus H5b Spectrum topology/shaping/renderer-transfer repair |
 | `H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md` | live H decomposition for historical-vs-Quick reactivity parity, known config losses, readiness/timing, Bubble/Sine and bounded repair sequence |
 | `H5c_Performance_Cursor_Halo_Checkpoint_2026-08-31_R6_Outside_Codex.md` | current R6 native-QCursor Cursor Halo ownership, event-cached interaction/Ctrl semantics and mandatory physical performance gate |
+| `H_Image_Transition_Prefetch_Seam_Checkpoint_2026-08-31_R7_Outside_Codex.md` | R7 transactional image-change admission, generation/token prefetch resume and exterior-edge R-63 seam refinement; physical/log gates remain mandatory |
 | `H5c_Implementation_Checkpoint_2026-08-31_R2.md` | current H5c physical-evidence checkpoint plus post-R2 continuation: Bubble transport exoneration/B6-B8 gate, resume handoff evidence, Sine idle +20%, and DevCurve historical ghost/AA restoration |
 | `Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md` | exact source-comparison evidence, proven deviations, field audit and next source paths |
 | `H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md` | H restoration of the omitted retained middle-click current-mode preset hotswap contract |
@@ -38,6 +39,10 @@ Live phase/checkpoint status is intentionally not duplicated here; read `Current
 | `J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md` | historical quality floor + Parity+ outcome rules |
 | `J_Black_Flash_Surface_Continuity_Decomposition_2026-08-30.md` | source-proven proof-frame leak + bounded black/focus/context surface classification |
 | `Post_Cutover_Operator_Observation_Ledger_2026-08-30.md` | mandatory unresolved/closed physical observation ledger |
+
+## J visual oracle rule
+
+For covered ordinary families, the paired repository images under `images/migration/Ideal (PreMigration)/` and `images/migration/Current (PostMigration)/` are the highest J authority for visible parity details. Inspect the relevant pair before changing J geometry/density/alignment/chrome. `J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md` owns the hierarchy and explicit-exception rule.
 
 ## Qt/QML observability rule
 

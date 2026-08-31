@@ -26,29 +26,51 @@ Examples:
 
 Use references in this order for **user-visible outcomes**:
 
-### 2.1 Current explicit operator observations
+### 2.1 Repository paired migration screenshots — highest J visual authority
 
-The operator's current physical observations and comparison screenshots outrank historical inference. If the operator explicitly says a newer Quick treatment is better, preserve it unless it conflicts with a surviving product contract.
+The strongest family-by-family parity oracle now lives in the repository itself:
 
-### 2.2 Release screenshots — strongest broad visual oracle
+- `images/migration/Ideal (PreMigration)/` — the achievable pre-migration visual target.
+- `images/migration/Current (PostMigration)/` — the current Quick comparison/regression baseline.
 
-The GitHub Releases screenshots are the preferred whole-screen/widget-composition visual reference.
+For any J work on a covered family, inspect the corresponding image pair **before changing QML or layout constants**. When prose, release-wide screenshots, or historical-source inference disagree with a detail clearly shown by the pair, the `Ideal (PreMigration)` image wins for that visible detail. The paired images are outcome authority only; they grant no authority to resurrect the old presenter architecture.
+
+The current paired set covers Abandonment Issues, Achievement Pulse, Gmail, Media, Reddit and Weather. Clock is intentionally absent because its current Quick presentation is already considered acceptable. Current filenames in the `Current (PostMigration)` directory are intentionally descriptive of visible defects and may be used as a compact visual checklist.
+
+For a vision-capable agent this paired-image reconciliation is an **early mandatory J task**, not optional finishing polish. Weak-vision agents may briefly defer it to a vision-capable pass, but cannot downgrade or close it from prose.
+
+| Family | Ideal oracle | Current comparison |
+| --- | --- | --- |
+| Abandonment Issues | `Ideal (PreMigration)/AbandonmentIssues.png` | `Current (PostMigration)/AbandonIsFineActually.png` |
+| Achievement Pulse | `Ideal (PreMigration)/AchievementPulse.png` | `Current (PostMigration)/AchievPulseBigMiddlespaceTruncatedUnlockWrongAchievIconPosition.png` |
+| Gmail | `Ideal (PreMigration)/Gmail.png` | `Current (PostMigration)/Gmailescapingtextlogoalignbad.png` |
+| Media | `Ideal (PreMigration)/Media.png` | `Current (PostMigration)/MediaGoodControlBarBadRest.png` |
+| Reddit | `Ideal (PreMigration)/Reddit.png` | `Current (PostMigration)/RedLogoAlignmentRefreshwrongUglyGapBetweenTimeAndPost.png` |
+| Weather | `Ideal (PreMigration)/Weather.png` | `Current (PostMigration)/Weatherpoorpaddingandspacing.png` |
+
+Explicit operator decisions may preserve a newer treatment that is preferred even when it differs from the old image (for example the current Media transport/control strip). That exception must be explicit; an implementation agent must not replace the pictured target with its own aesthetic judgement.
+
+### 2.2 Current explicit operator observations
+
+Current physical observations are the strongest clarification of behavior not completely captured by the paired stills, and they decide explicit exceptions where a newer Quick treatment is preferred. They do not downgrade the paired images into optional inspiration.
+
+### 2.3 Release screenshots — broad composition oracle
+
+The GitHub Releases screenshots remain useful whole-screen/widget-composition references, especially for relationships not visible in the isolated paired images.
 
 Primary:
 
 - Release 4.7.2: <https://github.com/Basjohn/ShittyRandomPhotoScreenSaver/releases/tag/4.7.2>
 - Embedded release screenshot: <https://github.com/user-attachments/assets/76cb21ce-d228-49bb-a397-9a0a47a0ee06>
 
-The 4.7.2 release explicitly identifies itself as the **last version on the Raw PySide6 architecture** before the major Qt Quick migration. It is therefore an especially useful visual baseline without granting its implementation any authority.
+The 4.7.2 release explicitly identifies itself as the **last version on the Raw PySide6 architecture** before the major Qt Quick migration. It is therefore an especially useful broad visual baseline without granting its implementation any authority.
 
 Secondary:
 
 - Release 4.7.0: <https://github.com/Basjohn/ShittyRandomPhotoScreenSaver/releases/tag/4.7.0>
 - Embedded release screenshot: <https://github.com/user-attachments/assets/82e1fd3e-99b7-4c96-8536-580f4cdef463>
 
-The release screenshots are also useful because they show the application under heavy/many-widget presentation rather than one isolated card.
-
-### 2.3 Historical source snapshots — behavior/reference archaeology only
+### 2.4 Historical source snapshots — behavior/reference archaeology only
 
 Cleaner old-code reference:
 
@@ -62,9 +84,9 @@ Later reference:
 
 For broad UI/presentation archaeology, `15099d3` can still be the cleaner old architecture snapshot. **For visualizer reactivity, however, the user-supplied `3fe5df6` source tree is explicitly the known-good pre-Qt-Quick behavioral oracle** and should be compared line-by-line against current logical/configuration/presentation semantics. It remains a behavior oracle only, never an architecture to restore.
 
-### 2.4 Current architecture and contracts
+### 2.5 Current architecture and contracts
 
-For **implementation**, current accepted Quick architecture always wins over every historical reference.
+For **implementation**, current accepted Quick architecture always wins over every historical visual reference.
 
 If historical code achieved the right outcome through a deleted owner, reproduce the outcome through the current owner instead.
 
@@ -259,7 +281,7 @@ Floor:
 - no unreadable dog-pile;
 - Media + Visualizer honor their established ordinary free-space relationship where room exists;
 - CUSTOM user geometry wins and may intentionally overlap/cross displays;
-- Edit mode exposes useful alignment/snap guides when relationships are actually available. Current Quick already contains guide presentation seams; this is an outcome to reconnect, not a reason to restore old layout code.
+- Edit mode restores the **missing visible alignment/snap guide lines** when relationships are available (centre/peer/edge/safe-gutter). This is mandatory J interaction parity, ideally worked early with the visual oracle. Current Quick already contains guide presentation seams; reconnect the existing Python snap/layout authority rather than restoring old layout code or inventing QML geometry truth.
 
 Low-priority diagnostic parity:
 

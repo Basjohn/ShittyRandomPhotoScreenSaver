@@ -376,8 +376,9 @@ Before I begins, H additionally requires one short source-mode runtime reality
 smoke after the current deterministic corrections:
 
 - successive Visualizer logical revisions visibly reach the retained consumer;
-- a second image request during an active transition follows the surviving
-  interruption/replacement contract rather than raising or clearing to black;
+- a second image request during an active transition is rejected/deferred before
+  queue/history mutation; it must never cancel/snap the active run to destination,
+  bare-publish the newer image, or reuse the active batch's transition spec;
 - the retained context menu is visibly present and its action path works through
   the real QML surface;
 - Settings recreation preserves the same single-owner topology;

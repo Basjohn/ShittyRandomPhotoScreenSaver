@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import logging
 from typing import Any
 
 from PySide6.QtCore import QMetaObject, QPointF, QRect, Signal, Qt
@@ -17,6 +18,9 @@ from .state import (
 )
 from .cursor_controller import QuickCursorController
 from .input_controller import QuickInputController
+
+
+logger = logging.getLogger(__name__)
 
 
 class QuickDisplayWindow(QQuickWindow):
@@ -366,28 +370,47 @@ class QuickDisplayWindow(QQuickWindow):
             self.requestActivate()
 
     @staticmethod
-    def _fullscreen_compat_geometry(geometry: QRect) -> QRect:
-        """Return a coverage-preserving overscan of an exact-cover screen rect.
+    def _fullscreen_compat_geometry(
+        geometry: QRect,
+        virtual_geometry: QRect | None = None,
+    ) -> QRect:
+        """Return a coverage-preserving non-exact-cover screen rectangle.
 
-        Windows non-deterministically promotes an *exact-cover* borderless
-        top-level window to a hardware fullscreen-flip presentation. PresentMon
-        proved the resulting composition <-> ``Hardware: Legacy Flip`` PresentMode
-        transitions are what present the black/stale frames on some outputs
-        (measured on a 4K 60 Hz secondary TV = the "Display-1 flash"); with a
-        non-exact-cover window the mode stays stable ``Composed: Copy with GPU
-        GDI`` and never transitions, so the flash disappears (6/6 launches,
-        black=0). This is the SRPSS historical ``_FULLSCREEN_COMPAT_WORKAROUND``
-        recovered.
+        R-63 is binding: an exact-cover borderless top-level window can be
+        promoted by Windows into ``Hardware: Legacy Flip``, and the measured
+        composition <-> flip transitions caused recurring black/stale frames.
+        The compatibility geometry must therefore remain *larger* than the exact
+        screen rectangle.
 
-        One logical pixel of overscan on every edge disqualifies exact-cover
-        promotion while preserving full visible coverage and centering: only an
-        imperceptible 1px ring is clipped off-screen (vs the historical height-1,
-        which lost a visible bottom row). The display's own geometry/identity is
-        untouched, so image target size and CUSTOM widget geometry are unaffected.
+        The first R-63 implementation overscanned all four edges.  On mixed-DPR
+        side-by-side displays that also perturbs the shared seam, where one
+        logical pixel can round to a fractional device-pixel boundary.  Prefer a
+        single virtual-desktop *exterior* edge instead: it is still non-exact
+        cover, loses no visible pixel, and leaves every shared edge bit-for-bit at
+        the screen geometry.  If topology exposes no exterior edge (for example a
+        fully surrounded monitor), use top-only overscan as the narrowest safe
+        compatibility fallback rather than returning exact cover.
         """
 
         adjusted = QRect(geometry)
-        adjusted.adjust(-1, -1, 1, 1)
+        virtual = QRect(virtual_geometry) if virtual_geometry is not None else QRect()
+        if virtual.isValid() and virtual.width() > 0 and virtual.height() > 0:
+            if geometry.top() == virtual.top():
+                adjusted.adjust(0, -1, 0, 0)
+                return adjusted
+            if geometry.bottom() == virtual.bottom():
+                adjusted.adjust(0, 0, 0, 1)
+                return adjusted
+            if geometry.left() == virtual.left():
+                adjusted.adjust(-1, 0, 0, 0)
+                return adjusted
+            if geometry.right() == virtual.right():
+                adjusted.adjust(0, 0, 1, 0)
+                return adjusted
+
+        # Never return exact-cover geometry: preserving R-63 is more important
+        # than guessing a shared-edge topology for an interior display.
+        adjusted.adjust(0, -1, 0, 0)
         return adjusted
 
     def _apply_screen_geometry(self, screen: QScreen) -> None:
@@ -396,7 +419,35 @@ class QuickDisplayWindow(QQuickWindow):
             raise RuntimeError(
                 f"screen {self._screen_index} has invalid geometry: {geometry.getRect()}"
             )
-        self.setGeometry(self._fullscreen_compat_geometry(geometry))
+        try:
+            virtual_geometry = screen.virtualGeometry()
+        except Exception:
+            virtual_geometry = QRect()
+        adjusted = self._fullscreen_compat_geometry(geometry, virtual_geometry)
+        self.setGeometry(adjusted)
+
+        # Bounded surface-geometry evidence for the intermittent seam falsifier.
+        # Size projections are useful across DPR without pretending Qt's virtual
+        # desktop origins share one device-pixel coordinate scale.
+        try:
+            dpr = float(screen.devicePixelRatio())
+        except Exception:
+            dpr = 1.0
+        logger.info(
+            "[QUICK_GEOMETRY] screen=%d generation=%s dpr=%.3f "
+            "screen_logical=%s window_logical=%s virtual_logical=%s "
+            "screen_device_size=%dx%d window_device_size=%dx%d",
+            self._screen_index,
+            self._runtime_generation,
+            dpr,
+            geometry.getRect(),
+            adjusted.getRect(),
+            virtual_geometry.getRect() if virtual_geometry.isValid() else None,
+            int(round(geometry.width() * dpr)),
+            int(round(geometry.height() * dpr)),
+            int(round(adjusted.width() * dpr)),
+            int(round(adjusted.height() * dpr)),
+        )
 
     def _queue_meta_call(self, method: str) -> None:
         if not QMetaObject.invokeMethod(

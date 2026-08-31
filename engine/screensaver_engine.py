@@ -203,6 +203,11 @@ class ScreensaverEngine(QObject):
         self._image_cache: Optional[ImageCache] = None
         self._prefetcher: Optional[ImagePrefetcher] = None
         self._prefetch_ahead: int = 5
+        # One generation/token-scoped deferred prefetch intent.  The claim can
+        # wait on an active image batch without polling; a replacement generation
+        # simply supersedes an older claim rather than inheriting a stale bool.
+        self._prefetch_resume_claim: tuple[int, int, str] | None = None
+        self._prefetch_resume_token: int = 0
         # Background RSS refresh
         self._rss_refresh_timer: Optional[QTimer] = None
         self._rss_merge_lock = threading.Lock()
@@ -1155,23 +1160,65 @@ class ScreensaverEngine(QObject):
             logger.warning("[FALLBACK] Queue or display not initialized")
             return False
 
-        # Atomic check-and-set for loading ownership.  The trace deliberately
-        # begins before this boundary so timer/manual contention is visible.
-        with self._loading_lock:
-            if self._loading_in_progress:
-                perf_trace.finish("rejected", reason="load_in_progress")
-                logger.debug("Image load already in progress, skipping")
-                return False
-            self._loading_in_progress = True
-            try:
-                mark_pending = getattr(self.display_manager, "set_transition_work_pending", None)
-                if callable(mark_pending):
-                    mark_pending(True)
-            except Exception as e:
-                logger.debug("[TRANSITION] Failed to mark transition work pending: %s", e)
+        # Claim the complete image-change transaction before queue/history
+        # mutation.  A running/pending transition is authoritative busy state:
+        # timer/manual requests are rejected here rather than cancelling the
+        # active run to its destination or advancing the queue underneath it.
+        if not self._try_begin_image_change_work():
+            reason = (
+                "transition_work_pending"
+                if self._has_active_image_change_work()
+                else "load_owner_unavailable"
+            )
+            perf_trace.finish("rejected", reason=reason)
+            logger.info(
+                "[TRANSITION][IMAGE_CHANGE] request_rejected origin=%s reason=%s",
+                origin,
+                reason,
+            )
+            return False
         perf_trace.mark("owner_claimed")
 
         try:
+            # Resolve the batch transition *before* queue/history mutation.  The
+            # transition is image-independent, so there is no reason to advance
+            # image truth and only then discover that the selected transition
+            # cannot be admitted.  Random selection is persisted once here and
+            # the display manager caches the resolved spec for the whole batch.
+            transition_choice = None
+            try:
+                transition_choice = self._prepare_random_transition_if_needed()
+            except Exception as e:
+                logger.exception("[TRANSITION] Failed to prepare image-batch transition: %s", e)
+                self._clear_unaccepted_image_change_work()
+                perf_trace.finish("rejected", reason="transition_prepare_failed")
+                return False
+            perf_trace.mark("transition_resolved", transition=transition_choice)
+
+            validate_transition = getattr(
+                self.display_manager,
+                "has_admissible_transition_for_open_batch",
+                None,
+            )
+            if not callable(validate_transition):
+                self._clear_unaccepted_image_change_work()
+                perf_trace.finish("rejected", reason="transition_preflight_unavailable")
+                logger.error(
+                    "[TRANSITION][IMAGE_CHANGE] request_rejected origin=%s "
+                    "reason=transition_preflight_unavailable",
+                    origin,
+                )
+                return False
+            if not bool(validate_transition()):
+                self._clear_unaccepted_image_change_work()
+                perf_trace.finish("rejected", reason="no_admissible_transition")
+                logger.error(
+                    "[TRANSITION][IMAGE_CHANGE] request_rejected origin=%s "
+                    "reason=no_admissible_transition",
+                    origin,
+                )
+                return False
+
             # Queue selection is deliberately measured on the caller/UI thread.
             # Natural rotations have shown visible disturbance before worker
             # admission, so this boundary must not be hidden inside one broad
@@ -1199,15 +1246,6 @@ class ScreensaverEngine(QObject):
                 return False
 
             self._current_image = image_meta
-
-            # Random transition selection belongs to accepted image batches, not
-            # startup/display probes that may never reach display handoff.
-            transition_choice = None
-            try:
-                transition_choice = self._prepare_random_transition_if_needed()
-            except Exception as e:
-                logger.debug("[TRANSITION] Failed to prepare random transition: %s", e)
-            perf_trace.mark("transition_resolved", transition=transition_choice)
 
             # Heavy decode/scale work stays off the UI thread.
             if self.thread_manager:
@@ -1365,23 +1403,58 @@ class ScreensaverEngine(QObject):
             return False
 
     def _try_begin_image_change_work(self) -> bool:
-        """Claim the load owner before queue/history mutation or worker submission."""
+        """Atomically admit one whole image-change batch before queue mutation.
+
+        The destination transition batch is part of the ownership claim, not a
+        best-effort side effect.  If another image batch/transition is active, or
+        the display owner cannot open a new batch, the caller must leave queue,
+        history and current-image truth untouched and try again later (or skip
+        that request entirely).
+        """
+
+        display_manager = self.display_manager
+        if display_manager is None:
+            return False
 
         with self._loading_lock:
             if self._loading_in_progress:
                 return False
-            self._loading_in_progress = True
 
-        try:
-            mark_pending = getattr(self.display_manager, "set_transition_work_pending", None)
-            if callable(mark_pending):
+            checker = getattr(display_manager, "has_transition_work_pending", None)
+            if not callable(checker):
+                logger.error(
+                    "[TRANSITION] Image-change admission rejected: destination "
+                    "has no transition-state inspection contract"
+                )
+                return False
+            try:
+                if bool(checker()):
+                    return False
+            except Exception:
+                logger.exception(
+                    "[TRANSITION] Image-change admission could not inspect "
+                    "destination transition state"
+                )
+                return False
+
+            mark_pending = getattr(display_manager, "set_transition_work_pending", None)
+            if not callable(mark_pending):
+                logger.error(
+                    "[TRANSITION] Image-change admission rejected: destination "
+                    "has no transition-batch ownership contract"
+                )
+                return False
+            try:
                 mark_pending(True)
-        except Exception:
-            logger.debug(
-                "[TRANSITION] Failed to mark image-change work pending",
-                exc_info=True,
-            )
-        return True
+            except Exception:
+                logger.exception(
+                    "[TRANSITION] Image-change admission rejected while opening "
+                    "destination transition batch"
+                )
+                return False
+
+            self._loading_in_progress = True
+            return True
 
     def _clear_unaccepted_image_change_work(self) -> None:
         """Release a claimed image-change owner when no submission was accepted."""

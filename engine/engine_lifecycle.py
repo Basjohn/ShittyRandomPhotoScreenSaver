@@ -487,7 +487,7 @@ def stop(
         logger.debug("Lifecycle generation snapshot failed", exc_info=True)
     engine._pending_displays_ready_generation = None
     engine._pending_monitor_replay_image = None
-    engine._prefetch_resume_scheduled = False
+    engine._prefetch_resume_claim = None
 
     try:
         logger.info("Stopping screensaver engine...")
