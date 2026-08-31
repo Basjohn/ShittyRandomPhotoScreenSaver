@@ -428,6 +428,13 @@ def test_bubble_quick_geometry_keeps_round_pixels_at_each_exercised_aspect() -> 
     assert tall["outer_pixel_size"][0] == canonical["outer_pixel_size"][0]
     assert tall["outer_pixel_size"][1] > canonical["outer_pixel_size"][1]
 
+    # Bubble radius is historically authored as a fraction of actual card
+    # height. The retained Quick shader must therefore turn the same payload
+    # radius into a larger *round* physical bubble in a taller viewport.
+    canonical_diameter = canonical["lit_bounds"][3] - canonical["lit_bounds"][1] + 1
+    tall_diameter = tall["lit_bounds"][3] - tall["lit_bounds"][1] + 1
+    assert tall_diameter > canonical_diameter * 1.35
+
 
 def test_bubble_ghost_trail_pop_and_idle_are_real_quick_pixels() -> None:
     canonical = _run_bubble_smoke("canonical")["captures"]["canonical"]

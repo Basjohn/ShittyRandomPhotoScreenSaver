@@ -1113,5 +1113,11 @@ Detailed source/repair handoff: `H5c_Implementation_Checkpoint_2026-08-31_R2.md`
 - [x] Cold T3/T4/T5 reaches a fresh current frame in `93.8 ms`; warm T3/T5 reaches one in `20.0 ms`. Source/capture delay is not the multi-second visible ramp.
 - [x] T7 initially observes the retained pre-edge idle snapshot (warm source age about `2527 ms`) before the fresh frame. Preserve this as a handoff fact, not a justification for a delay workaround.
 - [x] Sustained real music remains strong and current; no shared or Bubble gain retune is admitted.
-- [ ] Add bounded B6/B7 authored/frozen radius-alpha summaries and B8 retained Quick projected-radius summaries, with extra samples around Play/Pause but no new clock.
-- [ ] Use that trace to classify both the weak maximum and slow-then-abrupt edge shape before changing Bubble response math.
+- [x] Operator quantifies the physical magnitude gap as at least ~3x versus the genuine old architecture; flawed historical goldens are clues, not closure.
+- [x] Historical/current final projection proves the exact 3x-class loss: nonbaseline Quick-era snapshot divided radius by `domain_h`; active `772.831/280` domain attenuated radius `2.760x`, while the old shader consumed radius directly against actual card height.
+- [x] Restore historical card-height-normalized radius while retaining expanded-world position/trail normalization and shader roundness.
+- [x] Map rendered radius plus collision-only gap/correction distances back into expanded collision/spawn coordinates by `domain_h`; retain exact canonical 1x1 physics rather than introducing a new aspect-aware solver.
+- [x] Add bounded B6/B7 final-simulation/frozen-big radius-alpha summaries and B8 retained Quick logical/device-pixel radius summaries, with extra samples around Play/Pause but no new clock.
+- [x] First corrected B9 run reports magnitude dramatically better / almost close-worthy; B6/B7/B8 agree while source is fresh, cadence is ~89 Hz and integration is 1.000.
+- [x] The trace reaches about `75.95` logical px / `113.92` device px radius at DPR `1.5`, physically validating the projection correction.
+- [ ] Remove the remaining display-only held-then-released size shape at authored smoothing `1.0`; the current hard hold band tolerates roughly 13-19% target error before moving. Preserve prompt attack and hot-passage variation, then repeat physical Play/Pause validation.

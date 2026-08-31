@@ -283,6 +283,7 @@ def install_default_logical_tick_state(state: Any, *, bar_count: int) -> None:
     state._bubble_big_contraction_bias = 1.0
     state._bubble_big_specular_max_size = 2.5
     state._bubble_big_bass_pulse = 0.5
+    state._bubble_big_visual_smoothing = 0.5
     state._bubble_small_freq_pulse = 0.5
     state._bubble_surface_reach = 0.6
     state._bubble_rotation_amount = 0.5
@@ -300,6 +301,9 @@ def install_default_logical_tick_state(state: Any, *, bar_count: int) -> None:
     state._bubble_bounce_small_speed = 0.5
     state._bubble_bounce_same_only = False
     state._bubble_trail_strength = 0.0
+    state._bubble_geometry_diag_last_log_ts = 0.0
+    state._bubble_geometry_diag_last_playing = None
+    state._bubble_geometry_diag_burst_remaining = 0
     state._sine_heartbeat = 0.0
 
     # Authored per-mode logical config defaults (canonical settings override

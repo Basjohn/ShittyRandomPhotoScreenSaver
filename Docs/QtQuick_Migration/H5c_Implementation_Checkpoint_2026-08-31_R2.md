@@ -367,10 +367,9 @@ Capture at least one long-idle Pause -> Play. Corrected T3/T4/T5/T6/T7 now disti
 
 ## 14. Still open after packaging
 
-- [ ] Bubble B6-B9 if latest-geometry repair is insufficient.
+- [ ] Bubble B9 final visual-only smoothing/elasticity validation after the physically successful nonbaseline radius correction.
 - [ ] Spectrum brief zero-before-floor seam after corrected trace.
-- [ ] DevCurve bottom transient lane if removal of invented ghosts does not restore visibility.
-- [ ] DevCurve AA only if jaggedness persists after ghost removal; preserve adjustable viewport scaling unless its coordinate math is specifically disproven.
+- [ ] DevCurve physical validation after historical ghost no-op, bass-only transient diagnostics and logical-pixel AA restoration.
 - [ ] Oscilloscope final presentation parity control.
 - [ ] H5a/H6/H8/H7 according to `Current_Plan.md`.
 
@@ -378,7 +377,7 @@ Capture at least one long-idle Pause -> Play. Corrected T3/T4/T5/T6/T7 now disti
 
 ### 15.1 Bubble remains visibly compressed; source and edge transport are prompt
 
-The next two operator runs still report wildly weak Bubble response that never approaches the expected maximum size. Stop decay improved slightly, while the most recent Pause -> Play ramp looked worse. The new trace does **not** support retuning the shared source or inserting an edge timer:
+The next two operator runs still report wildly weak Bubble response that never approaches the expected maximum size. The operator then quantified the gap as **at least about 3x weaker than the genuine old architecture**; the old goldens were known to be incomplete and are not accepted as physical closure. Stop decay improved slightly, while the most recent Pause -> Play ramp looked worse. The new trace does **not** support retuning the shared source or inserting an edge timer:
 
 - [x] sustained live samples remain strong (`bass` commonly about `0.60-0.77`, `mid` up to about `0.97`);
 - [x] Bubble remains fresh/ready and authored integration remains near 90 Hz / one step per request;
@@ -386,7 +385,41 @@ The next two operator runs still report wildly weak Bubble response that never a
 - [x] warm Play reaches a current logical publication at `20.0 ms`;
 - [x] the retained item initially observes the already-published pre-Play idle snapshot: on the warm edge T7 reported about `2527 ms` source age, followed by the current logical frame at `20.0 ms`.
 
-That immediate retained-old observation is a real handoff detail, but its tens-of-milliseconds lifetime cannot explain the full perceived slow radius ramp. Existing logs still stop before authored radius/alpha and Quick-projected size, so the next repair is evidence-only B6-B8 geometry telemetry around steady music and both playback edges. Do not change Bubble gain, contraction, smoothing, or add a timer until those values identify the first compressed/discontinuous seam.
+That immediate retained-old observation is a real handoff detail, but its tens-of-milliseconds lifetime cannot explain the full perceived slow radius ramp. Historical/current radius projection then exposes the exact magnitude loss:
+
+```text
+historical snapshot/shader: pos.z = authored_radius
+current nonbaseline path:   pos.z = authored_radius / domain_h
+active domain_h:            772.8311688311688 / 280 = 2.760111317...
+```
+
+The historical renderer interpreted `pos.z` as a fraction of the actual card inner height. Quick uploaded the already-divided value unchanged, and its shader applied no compensating multiplier. Depending on border accounting, this is a source-proven **2.72-2.76x physical radius loss**, matching the operator's 3x-class observation.
+
+Correction:
+
+- [x] keep expanded-world X/Y and trail normalization;
+- [x] keep shader aspect correction so bubbles remain round;
+- [x] restore final authored radius unchanged as a fraction of actual card height;
+- [x] inverse-map rendered radius, collision-only gaps and positional correction caps by `domain_h` inside collision/spawn geometry so visually enlarged bubbles do not overlap at the old attenuated spacing; canonical 1x1 behavior remains exact;
+- [x] do not alter source gain, pulse formulas, smoothing, contraction, cadence, DPR, or retired `bubble_growth`;
+- [x] add compact `[VIS_BUBBLE_GEOMETRY] stage=B6_B7` final-simulation/frozen-big summaries and `stage=B8` retained logical/device-pixel summaries, with bounded extra samples around playback edges and no new clock;
+- [x] pin the active-profile 2.760x correction, expanded-world collision/spawn conversion and shown-Quick round/tall projection in focused tests;
+- [ ] physically validate old-architecture magnitude and the Play/Pause radius trajectory (B9).
+
+If ramp shape remains wrong after the magnitude restoration, the new B6-B8 samples now identify whether final simulation radius or retained projection is discontinuous before any smoothing/contraction change is considered.
+
+### 15.1.1 First corrected B9 trace: magnitude restored, visual-only settling remains
+
+The first operator run with the corrected radius projection reports Bubble as **dramatically better and almost close-worthy**. The compact trace confirms that the corrected magnitude reaches retained Quick without a new transport defect:
+
+- [x] Play reaches current source/logical state in `105.7 ms`, with the first current frame only `6 ms` old;
+- [x] authored service remains about `88-90 Hz` and requested/integrated Bubble steps remain `1.000`;
+- [x] B6 final, B7 frozen and B8 retained radii agree;
+- [x] retained radius reaches about `75.95` logical px / `113.92` device px at DPR `1.5` in the short run;
+- [x] the operator physically confirms the magnitude correction;
+- [ ] the remaining visual complaint is limited to size smoothing/elasticity shape.
+
+The active preset authors `bubble_big_visual_smoothing=1.0`. At that setting, the display-only filter's hard hold band can retain an unchanged radius until target error reaches roughly 13-19% of the current hero radius, then switch to a much faster correction rate. That mechanism can make Play/Pause settling look held-then-released even though source, cadence, publication and retained magnitude are current. The admitted next repair is therefore limited to continuous visual-only settling: no source gain, pulse, contraction, cadence, timer or latest-state change.
 
 ### 15.2 DevCurve AA and transient-diagnostic corrections
 

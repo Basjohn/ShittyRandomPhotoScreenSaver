@@ -16,6 +16,12 @@ from widgets.spotify_visualizer.beat_engine import (
 from widgets.spotify_visualizer.quick_display_visualizer_owner import (
     QuickDisplayVisualizerOwner,
 )
+from widgets.spotify_visualizer.logical_tick_state import (
+    install_default_logical_tick_state,
+)
+from widgets.spotify_visualizer.logical_tick_state_adapter import (
+    LOCAL_LOGICAL_TICK_FIELDS,
+)
 from widgets.spotify_visualizer.quick_technical_config import (
     apply_controller_technical_config,
 )
@@ -168,6 +174,14 @@ def test_quick_logical_owner_restores_stranded_bubble_preset_controls() -> None:
     assert state._bubble_group_drift is True
     assert state._bubble_collision_pop_mode == "one"
     assert state._bubble_big_visual_smoothing == pytest.approx(0.93)
+
+
+def test_bubble_visual_smoothing_has_controller_default_and_legacy_delegation() -> None:
+    state = SimpleNamespace()
+    install_default_logical_tick_state(state, bar_count=48)
+
+    assert state._bubble_big_visual_smoothing == pytest.approx(0.5)
+    assert "_bubble_big_visual_smoothing" in LOCAL_LOGICAL_TICK_FIELDS
 
 
 def test_canonical_spectrum_render_mode_has_priority_over_legacy_boolean() -> None:

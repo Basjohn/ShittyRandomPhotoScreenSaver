@@ -1,6 +1,6 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
 ## Start here
 
@@ -110,6 +110,10 @@ only in `Current_Plan.md`.
 
 The all-five-mode capability policy is landed. Do not reintroduce a Bubble false gate to avoid correcting viewport
 ownership or spatial-domain defects.
+
+Bubble's durable reflow contract is routed through `Spec.md` and `Docs/Visualizer_Reference.md`: expanded-world
+positions/trails remain distinct from the historical card-height-normalized render radius, whose collision/spawn mapping
+is explicitly converted back into world units.
 
 ## Historical evidence
 

@@ -18,10 +18,12 @@ from widgets.spotify_visualizer.presentation_geometry import (
 )
 from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
 from widgets.spotify_visualizer.render_state import (
+    BubbleFrame,
     SpectrumFrame,
     VisualizerCommonState,
     VisualizerLogicalFrame,
     compose_visualizer_render_snapshot,
+    freeze_render_fields,
 )
 
 
@@ -120,6 +122,82 @@ def test_item_consumes_exact_bridge_identity_once_and_resets_on_replacement() ->
     item.updatePaintNode(node, None)
     assert node.identity == replacement
     assert node.snapshot is None
+
+
+def test_bubble_retained_sync_logs_logical_and_device_radius(
+    monkeypatch,
+) -> None:
+    from rendering.quick.visualizer import item as item_module
+
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("bubble"),
+        display_size=(1920.0, 1080.0),
+        outer_origin=(120.0, 80.0),
+        dpr=1.5,
+        viewport_extent=(1275.1714285714286, 772.8311688311688),
+        border_width=4.0,
+        corner_radius=8.0,
+    )
+    logical = VisualizerLogicalFrame(
+        runtime_generation=0,
+        engine_generation=0,
+        activation_id=0,
+        source_generation=0,
+        source_activation_id=0,
+        mode_id="bubble",
+        playing=True,
+        logical_timestamp=1.0,
+        source_timestamp=0.99,
+        changed=True,
+        present_frame=True,
+        mode_reveal_ready=True,
+        common=VisualizerCommonState(bars=(), bar_count=0),
+        mode_state=BubbleFrame(
+            positions=(0.5, 0.5, 0.10, 1.0),
+            extras=(1.0, 0.0, 0.0, 0.0),
+            bubble_count=1,
+            simulation_timestamp=1.0,
+            geometry_diagnostics=freeze_render_fields(
+                {
+                    "final_big_max_radius": 0.10,
+                    "frozen_big_max_radius": 0.10,
+                    "frozen_max_alpha": 1.0,
+                    "domain_h": 2.7601113172541742,
+                }
+            ),
+        ),
+    )
+    snapshot = compose_visualizer_render_snapshot(
+        logical,
+        presentation,
+        logical_revision=7,
+    )
+    bridge = VisualizerSnapshotBridge()
+    identity = bridge.begin_activation(
+        runtime_generation=0,
+        engine_generation=0,
+        activation_id=0,
+        mode_id="bubble",
+    )
+    assert bridge.publish(snapshot)
+    messages: list[str] = []
+    monkeypatch.setattr(item_module, "is_viz_diagnostics_enabled", lambda: True)
+    monkeypatch.setattr(
+        item_module.logger,
+        "debug",
+        lambda message, *args: messages.append(message % args),
+    )
+
+    item = VisualizerRenderItem()
+    item.set_presentation(presentation)
+    item.bind_render_source(bridge, identity)
+    item.updatePaintNode(None, None)
+
+    geometry_message = next(message for message in messages if "stage=B8" in message)
+    logical_radius = 0.10 * presentation.content_rect[3]
+    assert f"radius_logical_px={logical_radius:.2f}" in geometry_message
+    assert f"radius_device_px={logical_radius * 1.5:.2f}" in geometry_message
+    assert "dpr=1.500" in geometry_message
 
 
 def test_mismatched_snapshot_geometry_fails_closed() -> None:

@@ -357,6 +357,7 @@ class BubbleFrame:
     source_timestamp: float = 0.0
     simulation_timestamp: float = 0.0
     parameters: FrozenFields = FrozenFields()
+    geometry_diagnostics: FrozenFields = FrozenFields()
 
     def __post_init__(self) -> None:
         count = int(self.bubble_count)
@@ -370,6 +371,14 @@ class BubbleFrame:
             self,
             "parameters",
             _coerce_frozen_fields(self.parameters, name="bubble parameters"),
+        )
+        object.__setattr__(
+            self,
+            "geometry_diagnostics",
+            _coerce_frozen_fields(
+                self.geometry_diagnostics,
+                name="bubble geometry diagnostics",
+            ),
         )
         object.__setattr__(
             self,

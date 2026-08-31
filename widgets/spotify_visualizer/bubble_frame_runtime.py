@@ -16,6 +16,19 @@ from widgets.spotify_visualizer.render_state import (
 SimulationFactory = Callable[[], Any]
 
 
+def _read_float_diagnostics(source: Any, method_name: str) -> dict[str, float]:
+    method = getattr(source, method_name, None)
+    if not callable(method):
+        return {}
+    try:
+        return {
+            str(name): float(value)
+            for name, value in dict(method()).items()
+        }
+    except (TypeError, ValueError):
+        return {}
+
+
 class _EventRecorder:
     """Record consume-once source events without changing scheduler semantics."""
 
@@ -61,6 +74,7 @@ class BubbleResolvedFrame:
     playing: bool = False
     protected_edges: tuple[VisualizerProtectedEdge, ...] = ()
     perf_diagnostics: tuple[tuple[str, float], ...] = ()
+    geometry_diagnostics: tuple[tuple[str, float], ...] = ()
 
 
 class BubbleFrameRuntime:
@@ -245,6 +259,60 @@ class BubbleFrameRuntime:
         bubble_count = int(getattr(simulation, "count", 0) or 0)
         authored_ts = float(authored_timestamp)
         source_ts = float(source_timestamp or 0.0)
+        lane_diag = _read_float_diagnostics(
+            simulation,
+            "get_big_lane_diagnostics",
+        )
+        render_diag = _read_float_diagnostics(
+            simulation,
+            "get_big_render_diagnostics",
+        )
+        geometry_diag = {
+            "active_big_count": lane_diag.get("active_big_count", 0.0),
+            "final_big_avg_radius": render_diag.get(
+                "avg_big_render_radius",
+                0.0,
+            ),
+            "final_big_max_delta": render_diag.get(
+                "max_big_render_delta",
+                0.0,
+            ),
+            "final_big_max_radius": render_diag.get(
+                "max_big_render_radius",
+                0.0,
+            ),
+            "big_clamp_hits": render_diag.get("big_clamp_hits", 0.0),
+            "big_render_count": render_diag.get("big_render_count", 0.0),
+            "configured_big_bass_pulse": float(
+                pulse_payload.get("big_bass_pulse", 0.5)
+            ),
+            "configured_big_size_clamp": float(
+                pulse_payload.get("big_size_clamp", 4.0)
+            ),
+            "configured_big_size_max": float(
+                settings_payload.get("bubble_big_size_max", 0.038)
+            ),
+            "configured_big_visual_smoothing": float(
+                pulse_payload.get("big_visual_smoothing", 0.5)
+            ),
+            "domain_h": float(getattr(simulation, "_domain_h", 1.0) or 1.0),
+            "domain_w": float(getattr(simulation, "_domain_w", 1.0) or 1.0),
+            "max_big_gated_energy": lane_diag.get(
+                "max_big_gated_energy",
+                0.0,
+            ),
+            "max_big_pulse_after": lane_diag.get("max_big_pulse_after", 0.0),
+            "max_big_raw_src": lane_diag.get("max_big_raw_src", 0.0),
+            "frozen_big_max_radius": render_diag.get(
+                "max_big_payload_radius",
+                0.0,
+            ),
+            "frozen_max_alpha": max(frozen_positions[3::4], default=0.0),
+            "frozen_any_max_radius": max(
+                frozen_positions[2::4],
+                default=0.0,
+            ),
+        }
 
         protected_edges: tuple[VisualizerProtectedEdge, ...] = ()
         consumed = tuple(event_recorder.consumed) if event_recorder else ()
@@ -308,6 +376,7 @@ class BubbleFrameRuntime:
             playing=bool(playing),
             protected_edges=protected_edges,
             perf_diagnostics=tuple(sorted(perf.items())),
+            geometry_diagnostics=tuple(sorted(geometry_diag.items())),
         )
         return self._latest
 

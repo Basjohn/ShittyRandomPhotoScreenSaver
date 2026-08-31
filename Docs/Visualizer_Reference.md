@@ -278,7 +278,7 @@ top/bottom edge -> viewport height only
 Expected adaptation at constant scale:
 
 - Spectrum reflows/redistributes bars across available width/height;
-- Bubble changes domain/aspect without stretching circles or changing velocity/radius semantics;
+- Bubble expands/reflows its position, trail and motion world without stretching circles; its authored render radius remains the historical fraction of actual card height and is not divided by viewport-domain height, while collision/spawn radius and correction distances multiply by domain height when mapped into that expanded world;
 - Oscilloscope/Sine/DevCurve adapt domain while keeping stroke scale;
 - a future 3D sphere uses aspect-correct projection and stays round.
 

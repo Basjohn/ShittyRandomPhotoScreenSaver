@@ -253,8 +253,10 @@ retired per-mode growth value as a hidden viewport-extent alias.
 Where a logical mode needs spatial bounds, viewport metrics enter the logical runtime as configuration. Ordinary committed
 extent is truth outside edit mode; an active CUSTOM working extent is a temporary higher-precedence override. Save commits
 the new extent, Cancel restores the old committed extent, and ending CUSTOM removes the override without assuming canonical
-`(420,280)`. Bubble is the strict case: circles/radii/velocity/collision/BTF semantics stay coherent as its domain changes.
-Geometry input does not become another clock.
+`(420,280)`. Bubble is the strict case: positions/trails reflow through the expanded logical world, circles remain round,
+and authored render radius remains a fraction of actual card height rather than being divided by domain height. Velocity,
+collision and BTF semantics stay coherent: collision/spawn radii and collision-only gap/correction distances multiply by
+`domain_h` when mapped back into the expanded world, with an exact canonical 1x1 no-op. Geometry never becomes a clock.
 
 ## 10. Readiness
 
