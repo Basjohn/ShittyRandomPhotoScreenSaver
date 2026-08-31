@@ -340,6 +340,10 @@ edge survival, state-to-screen timing, and final continuity.
 Non-default viewport aspect must not be implemented by anisotropically stretching Bubble circles,
 line widths, or future 3D objects.
 
+Bubble stream/drift movement remains renderer-content-relative across viewport extents: project each nonbaseline axis once
+into the expanded logical world and solve trail smear in content coordinates. Do not compensate viewport loss with input
+gain, authored speed/control retuning, a new timer, or a second motion state.
+
 ## 14A. Product display admission and semantic input
 
 Current product semantics admit one visualizer instance. Resolve its requested monitor against participating Quick displays

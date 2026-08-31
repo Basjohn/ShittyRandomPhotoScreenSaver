@@ -190,15 +190,19 @@ viewport_extent
 Viewport extent is world/layout playroom, not final-pixel X/Y stretch. All five current modes—Spectrum,
 Oscilloscope, Sine, Bubble and DevCurve—must reflow/adapt to wide/tall extents. Bubble's viewport bounds are spatial
 configuration to its logical side; changing them must preserve round geometry, motion/collision semantics and BTF and
-must not create another clock. Bubble position/trail coordinates normalize from that expanded world, but authored render
-radius remains a fraction of actual card height as in the historical renderer; it is not divided by viewport-domain height.
-Collision/spawn radius and collision-only gap/correction distances use the inverse domain-height mapping in simulation
-coordinates, preserving visible contact and the exact canonical 1x1 behavior.
+must not create another clock. Bubble position/trail coordinates normalize from that expanded world. Stream/drift deltas
+are renderer-content-relative: each nonbaseline movement axis projects once onto the corresponding expanded domain axis,
+and nonbaseline trail length/strength are solved in content coordinates before world storage. This preserves the same
+visible fraction-of-viewport motion at canonical, wide and tall extents rather than losing `1 / domain_axis`; canonical
+`1x1` takes the exact pre-projection path. Authored render radius remains a fraction of actual card height as in the
+historical renderer; it is not divided by viewport-domain height. Collision/spawn radius and collision-only gap/correction
+distances use the inverse domain-height mapping in simulation coordinates, preserving visible contact and exact canonical
+behavior.
 
 Bubble consume-once kick/snare/vocal events may accent stream and drift motion only through the existing decaying
 stream-burst state. They must not add a clock, mutate authored motion settings, replay an event, or leak into pulse/radius
-authority. Motion diagnostics report pre-collision stream/drift contributions; final trajectory can still be changed by
-the existing impulse and collision stages.
+authority. Motion diagnostics report renderer-normalized, pre-collision stream/drift contributions; final trajectory can
+still be changed by the existing impulse and collision stages.
 
 The all-five-mode viewport capability policy is part of the destination contract and the core Bubble reflow path has landed.
 Do not reintroduce a Bubble false capability gate to conceal a viewport ownership or spatial-domain defect.

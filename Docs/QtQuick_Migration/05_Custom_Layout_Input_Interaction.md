@@ -99,8 +99,9 @@ stretch of a rendered image.
 All five current modes participate: Spectrum, Oscilloscope, Sine, Bubble and DevCurve. The core Bubble logical reflow and
 all-five-mode capability policy are landed; do not reintroduce a false gate as a workaround.
 
-Bubble receives viewport bounds as spatial configuration, preserving circles/radii/velocity units, trajectories/collisions,
-trails/transients and BTF. Pointer/render cadence may not become simulation cadence.
+Bubble receives viewport bounds as spatial configuration, preserving circles/radii, trajectories/collisions,
+trails/transients and BTF. Authored stream/drift velocity remains renderer-content-relative and projects once onto each
+expanded logical axis; this is not a gain or cadence change. Pointer/render cadence may not become simulation cadence.
 
 Save/Cancel, committed CUSTOM geometry and layout slots round-trip `uniform_visual_scale` and viewport extent as separate
 values. Corner/wheel operations may not silently rewrite extent; edge operations may not silently rewrite scale. In

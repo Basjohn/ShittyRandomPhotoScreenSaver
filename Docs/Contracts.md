@@ -200,7 +200,8 @@ viewport_extent          # left/right width; top/bottom height
 ```
 
 All five current modes must support viewport extent and the core capability policy is now all-five-mode capable. Bubble is
-not a destination exception and must not be re-gated to hide a defect. Preserve focused BTF/reflow proof.
+not a destination exception and must not be re-gated to hide a defect. Preserve focused BTF/reflow proof, including equal
+renderer-content stream/drift head/trail travel for the same consume-once transient at canonical, wide and tall extents.
 
 Viewport configuration has two precedence levels, not two persistence owners: ordinary committed extent is runtime truth;
 an active CUSTOM session may provide a temporary working override. Save promotes the new value into committed truth, Cancel
