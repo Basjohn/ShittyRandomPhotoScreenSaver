@@ -204,3 +204,13 @@ Current target order:
 - [ ] verify resource plateau through representative long soak/recreation;
 - [ ] preserve the modest-load quality envelope while validating representative heavy load;
 - [ ] leave stable CPU/GPU/cache/thread/handle numbers alone unless evidence shows avoidable work or growth.
+
+
+## Instrumentation/tool ownership
+
+- Built-in PERF/usage/QML instrumentation is the primary runtime evidence plane.
+- Generic offline archaeology parsers are not performance authority merely because they can summarize the same numbers.
+- Keep an external parser only for a narrow demonstrated cross-event question that the runtime does not already summarize; `image_change_perf_parser.py` is the current example.
+- `perf_measure.py` is retained because it observes the process tree independently/out of process; its CPU/RSS/thread/handle results remain context, never Visualizer freshness proof.
+- Production must never import/execute operator analysis tools (`R-72`).
+- Tool output cannot authorize any change forbidden by the reactivity/freshness/latency-tail checklist above.

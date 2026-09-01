@@ -37,9 +37,7 @@ surviving contract.
 
 ## Settings GUI residue
 
-- Re-audit `tools/regenerate_defaults_snapshot_artifacts.py` and `tools/regenerate_sst_defaults.py` against the final Quick
-  destination settings schema before using them for migration-era defaults. Their installed-profile write hazard is fixed by `R-33`, but
-  that safety proof does not establish that every generated field still follows current mode/layout ownership.
+- **Defaults tooling re-audit completed 2026-09-01.** `regenerate_defaults_artifacts.py` is the current schema-derived owner; snapshot/SST entry points delegate into that pipeline. It constructs repo artifacts in memory, rejects private fields, supports check/dry-run semantics where applicable, and uses transactional multi-file writes with rollback. Preserve those safety properties and never add installed-profile mutation as a convenience fallback (`R-33`).
 - `ui/settings_theme_paths.py` contains temporary theme-directory packaging/dev-fallback wiring. Before release, wire the
   real packaged themes directory and remove temporary fallback once that resource-path contract is durable. Preserve
   compiled Default Dark as unconditional no-file fallback.
@@ -75,14 +73,13 @@ cleanup.
 Current I residue discovered during H closure/test reconciliation:
 
 - `tests/test_spotify_visualizer_widget.py` still imports deleted `widgets.spotify_bars_gl_overlay` and cannot collect;
-- `tests/test_visualizer_replay.py` / `tools/visualizer_replay.py` still import deleted `widgets.spotify_visualizer.replay_runtime` and cannot collect.
+- the 2026-09-01 tooling audit confirmed `tests/test_visualizer_replay.py` / `tools/visualizer_replay.py` have no current executable owner; delete them while preserving fixture/golden/temporal/BTF evidence.
 - `tests/test_visualizer_preset_cycling_runtime.py` still imports the deleted QWidget `InputHandler`, `WidgetManager`, and
   `SpotifyVisualizerWidget`. Its `InputHandler` cases are mouse-button routing only, not audio input. Surviving preset
   resolution/Custom round-trip contracts live in `test_visualizer_runtime_preset_cycle.py`; mode-owned `input_gain` and
   other audio settings reaching the shared BeatEngine are pinned by the Quick reactivity/config and True-F gates.
 
-Do not restore either retired presenter/replay module to satisfy these files. Reconcile the stale harnesses against surviving
-Quick/logical owners during I; maintained Bubble BTF/cadence/Quick tests remain permanent destination guards.
+Do not restore retired presenter/replay modules to satisfy these files. Delete the audit-proven replay executable/test in I and reconcile only the remaining stale harnesses against surviving Quick/logical owners; maintained Bubble BTF/cadence/Quick tests remain permanent destination guards.
 
 ## Closed Phase G
 
@@ -122,6 +119,36 @@ Additional high-confidence source/tool residue to prove then remove in bounded I
 - temporary `h-destination` runner alias after exact script/doc caller proof shows all automation has moved to `destination`.
 
 Do not classify rare deep GC pauses as deletion cleanup. R-71 carries that evidence to late J performance work, and `Docs/Guardrails/Performance_Optimization_Contract.md` governs that work. Future cleanup must target proven ownership/growth/useless work; stable RSS/VRAM/thread/handle/cache counts are not deletion targets merely because they look large, and no cleanup may sacrifice Visualizer reactivity/freshness/cadence.
+
+
+### Tooling authority cleanup — audited 2026-09-01
+
+`Docs/Tooling_Audit_2026-09-01.md` is the exact keep/delete ledger. The audit established that executable historical evidence is not automatically worth retaining. In particular, generic GL/overlay parsers, phase benchmarks, the simulation-only Bubble parity harness and the deleted-host Visualizer replay executable are I debris.
+
+Manual delete set from that audit:
+
+- `tools/bubble_parity_harness.py`;
+- `tools/manual_preset_cleanup.py`;
+- `tools/overlay_log_parser.py`;
+- `tools/perf_integration_harness.py`;
+- `tools/phase1_measurement_benchmark.py`;
+- `tools/phase3_lifecycle_harness.py`;
+- `tools/phase4_image_worker_shm_harness.py` (re-homed as `image_worker_shm_lifecycle_harness.py`);
+- `tools/phase4_resource_harness.py`;
+- `tools/phase5_frame_owner_benchmark.py`;
+- `tools/phase5_thread_manager_benchmark.py`;
+- `tools/qtquick_p0_presentation_benchmark.py`;
+- `tools/recovery_evidence_parser.py`;
+- `tools/run_qtquick_p0_light_01.ps1`;
+- `tools/run_worker_push_p0_light_01.ps1`;
+- `tools/slide_metrics_parser.py`;
+- `tools/spotify_vis_metrics_parser.py`;
+- `tools/transition_perf_health_parser.py`;
+- `tools/visualizer_distribution_harness.py`;
+- `tools/visualizer_replay.py`;
+- `tools/worker_push_presentation_benchmark.py`.
+
+Coupled stale tests are listed in `Docs/TestSuite.md`. High-confidence manual deletions include `test_phase1_measurement_benchmark.py`, `test_phase3_runtime_lifecycle.py`, `test_qtquick_p0_presentation_benchmark.py`, `test_recovery_evidence_parser.py`, `test_transition_perf_health_parser.py`, `test_visualizer_replay.py` and `test_worker_push_presentation_benchmark.py`. Do not restore deleted production owners to keep any of these tools/tests alive. `R-72` permanently forbids production from importing operator analysis tools.
 
 ## Phase J
 

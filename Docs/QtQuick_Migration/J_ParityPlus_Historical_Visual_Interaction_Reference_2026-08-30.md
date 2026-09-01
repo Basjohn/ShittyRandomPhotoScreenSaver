@@ -315,3 +315,57 @@ J closes when:
 - no historical bug is restored merely for fidelity;
 - multi-widget composition, mixed display conditions and interactions are coherent as one product;
 - remaining differences from historical screenshots are either deliberate improvements or setting/data-driven differences, not migration accidents.
+
+## 10. Committed non-blocking J+ work — ordinary-widget Glass / Acrylic cards
+
+**Committed J+ work, non-blocking for J close.** This is not migration parity and is not required to close J, but it must remain tracked until implemented/accepted or explicitly superseded. Schedule it after the mandatory parity/fidelity/installed acceptance rows are under control, and keep the Normal card path untouched by default.
+
+Canonical architecture/deeper design: `Future_Work.md`, section **10. Ordinary-widget card materials — committed Normal / Glass / Acrylic modes**. That section owns the shared/lazy backdrop design; J must not invent a second implementation.
+
+### Product contract
+
+- [ ] Add one mutually-exclusive `Settings -> Widgets -> General` choice: **Normal / Glass / Acrylic**.
+- [ ] Default is **Normal**, which means the current cheap translucent `OverlayCard` path and creates **no** blur/capture/offscreen material resources.
+- [ ] Never expose independent Glass/Acrylic booleans; simultaneous material states must be impossible.
+- [ ] Eventually allow Widget Themes (`.srwtheme`) to set the same material enum. Themes do not gain a parallel backdrop/material owner.
+- [ ] Widget activation, provider/account state, geometry, cadence and business logic remain completely outside material/theme ownership.
+
+### Architecture admission checklist
+
+- [ ] Reuse the single retained `QQuickWindow`; never create a native backdrop HWND or one accelerated window per card.
+- [ ] Treat the accepted Settings Glass/Acrylic work as **semantic evidence only**. Do **not** port `SetWindowCompositionAttribute`, AccentPolicy or HWND backdrop mechanisms into Quick widget cards.
+- [ ] Build at most **one lazy shared backdrop/blur source per display** (or a very small measured set of shared blur tiers), activated only while at least one Glass/Acrylic card is visible.
+- [ ] Source the material from the scene below ordinary widgets only. Never recursively capture cards, Visualizer, CUSTOM overlay, Halo or context menus.
+- [ ] Keep blur/capture/material work render-thread/GPU native. No Python pixel loops, screenshots, `QPixmap` bridges, CPU blur or per-tick Python material updates.
+- [ ] Prefer a deliberately downsampled shared backdrop and cheap card-local crop/mask/tint. Never create one `ShaderEffectSource`, FBO, blur chain or scene capture per card.
+- [ ] Card-local Glass/Acrylic differences should mostly be cheap parameters: tint/opacity/border plus, for Acrylic only, restrained noise/luminosity if it visibly earns its cost.
+- [ ] When the last material consumer disappears, retire the shared backdrop resources and return fully to Normal-path cost.
+
+### Temporal / geometry correctness checklist
+
+- [ ] Material samples use the **same current background/transition frame state** as the display behind the card; no one-frame lag or independent transition clock.
+- [ ] Resolve crop UVs from final display-space geometry, including current CUSTOM position/resize/pixel-shift transforms and mixed DPR.
+- [ ] Rounded clipping/masking stays card-local; the shared per-display backdrop remains geometry-neutral.
+- [ ] Background dimming and material sampling remain visually coherent without forcing a second full-scene capture.
+
+### Performance acceptance checklist
+
+- [ ] Follow `Docs/Guardrails/Performance_Optimization_Contract.md`; reactivity/freshness and R-69 remain sacred.
+- [ ] Normal mode shows no measurable new steady-state capture/blur cadence, GPU owner or allocation stream when no material card is active.
+- [ ] Glass/Acrylic do not introduce a Python timer, polling loop, per-frame settings propagation or per-card offscreen owner.
+- [ ] Measure 1 / several / many material cards at representative 1440p/4K and mixed-DPR displays; adding another card should mostly add cheap crop/mask/tint work, not another full blur pipeline.
+- [ ] Exercise image transitions while material cards are visible and reject any backdrop lag, swimming, seam, black flash or stale crop.
+- [ ] Re-run modest-load and representative-heavy acceptance. A prettier material is rejected if it worsens Visualizer freshness/reactivity, transition continuity, R-63 `black=0`, or creates sustained resource pressure.
+
+### Recommended implementation order
+
+1. [ ] Add the enum/schema/UI with **Normal only effectively enabled** first; prove persistence/theme ownership without adding render cost.
+2. [ ] Prototype one shared per-display reduced-resolution Quick backdrop source + bounded blur, consumed by one test card.
+3. [ ] Prove temporal/geometry correctness during transitions and CUSTOM movement/resize before widening family coverage.
+4. [ ] Add Glass card-local recipe; measure.
+5. [ ] Add Acrylic as the same shared backdrop plus stronger cheap local treatment; measure again.
+6. [ ] Only if the simple Quick capture/effect route is demonstrably too expensive, consider producing the shared material backdrop beside `BackgroundRenderNode` from the same frame state. Do not lower-level-optimize pre-emptively.
+7. [ ] After physical/performance acceptance, allow Widget Themes to serialize/apply the same enum and material parameters.
+
+If this committed slice is scheduled after J close, leave `card_material_mode=normal` and the current card architecture alone until implementation begins. The live plan and Future Work retain the requirement; there is no reason to partially land blur ownership merely because the UI enum exists.
+

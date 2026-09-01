@@ -777,13 +777,11 @@ Use as a negative control for:
 
 Canonical, very wide and very tall CUSTOM shapes must preserve comparable authored response character. This is a BTF property, not optional visual polish.
 
-### Bubble parity / reactivity harnesses
+### Bubble parity / reactivity evidence
 
-Current relevant tests/tools include Bubble reactivity, cadence/temporal fixtures, replay goldens and:
+Current authority is the maintained Bubble reactivity/cadence/BTF/viewport test set plus temporal fixtures/goldens and live PERF evidence. The former `tools/bubble_parity_harness.py` was retired in I because it compared simulation revisions only and had **no viewport/domain/DPR/presentation-scaling oracle**; it could not catch R-69.
 
-`tools/bubble_parity_harness.py`
-
-Use them for behaviour-shape comparison, not as a substitute for live scheduler/delivery evidence.
+Synthetic logical evidence is useful only for the layer it actually observes and is never a substitute for live scheduler/delivery/presentation evidence.
 
 ---
 

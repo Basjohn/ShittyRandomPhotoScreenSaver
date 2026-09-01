@@ -8,6 +8,7 @@ Cross-links:
 - `Current_Plan.md`
 - `Docs/TestSuite.md`
 - `Docs/Harness_Index.md`
+- `Docs/Tooling_Audit_2026-09-01.md`
 - `Future_Cleanup.md`
 - `Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md`
 
@@ -133,7 +134,22 @@ owner contract.
 
 ### Lifecycle harness
 
-Prefer adapting existing lifecycle harnesses rather than creating another lifecycle framework.
+Prefer adapting a **current-owner** lifecycle harness rather than creating another lifecycle framework. Phase-coded/deleted-owner harnesses are not automatically reusable; consult `Docs/Tooling_Audit_2026-09-01.md`.
+
+### Tool ownership boundary
+
+Production emits telemetry and operator tools consume it out of process. Production Python must never import analysis modules from `tools`/`scripts` (`R-72`). A generic parser that merely re-summarizes built-in telemetry is not retained without a demonstrated unique cross-event question.
+
+### Curated preset/default artifact tools
+
+Repository preset/default mutation must stay behind current schema owners rather than ad-hoc cleanup scripts:
+
+- `tools/visualizer_preset_repair.py` is the curated Visualizer preset repair/audit owner. It backs up mutations, uses current mode/schema migration rules and synchronizes shipped artifacts once per batch boundary.
+- `tools/regenerate_visualizer_shipped_presets.py --check` is the preferred read-only shipped-preset drift gate; `--dry-run` reports drift without failing. Run the mutating form only when regeneration is intended.
+- `tools/regenerate_defaults_artifacts.py` and Defaults Foundry own canonical defaults artifacts; they must not import transient preset/custom-backup/profile-local state into defaults.
+- `tools/manual_preset_cleanup.py` is retired debris and must not return as a convenience runtime-state mutator.
+
+Preset tooling may repair/generate repository artifacts; it is never a second runtime preset owner.
 
 ## 8. Existing P0 benchmark
 
@@ -142,8 +158,7 @@ Preserve P0 as architecture evidence.
 Do not keep expanding it merely to reconfirm Quick. Use production-shaped harnesses for migration
 regression.
 
-Architecture-selection benchmark tests/harnesses may be **WILL BE OBSOLETE — Phase J** once final
-Quick evidence is recorded; see `Docs/TestSuite.md` before deleting them.
+Only `presentation_benchmark_core.py` + `qtquick_presentation_spike.py` remain as explicitly non-authoritative architecture-selection evidence until J. P0/worker-push/deleted-replay benchmarks are I debris; see `Docs/Tooling_Audit_2026-09-01.md` and `Docs/TestSuite.md`.
 
 ## 9. Automated/focused tests
 

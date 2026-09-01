@@ -1,6 +1,6 @@
 # Contracts — Current Owner Map
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 `Current_Plan.md` owns work admission. This file owns fast current/destination owner routing.
 
@@ -75,6 +75,14 @@ concrete QWidget/Quick presenter objects, compositor internals or private DPR fi
 | residue/aliases/expired adapters | I |
 
 Historical code is not reference-protected merely because the half-migrated product once needed it to run.
+
+## Tooling authority
+
+Production runtime emits evidence; operator tooling consumes that evidence out of process unless a focused harness must explicitly construct a current owner. Production Python must not import `tools`/`scripts` analysis modules, and operator tooling must not restore deleted QWidget/GL/compositor/replay owners simply to preserve an old benchmark or parser. `tests/run_chunked.py` is the single test-profile authority; `tools/run_tests.py` is convenience delegation only.
+
+Built-in PERF/usage/QML instrumentation is the primary destination performance evidence. Retain an external parser/harness only when it answers a bounded question that current instrumentation/tests cannot answer more directly. Resource counters never authorize weakening Visualizer cadence, newest-state freshness, R-69 authored response, Media event ownership or R-63 black-flash protection.
+
+Current tool disposition and deletion routing live in `Docs/Tooling_Audit_2026-09-01.md`; production/tool boundary history is R-72.
 
 ## Capability / ordinary enabled
 

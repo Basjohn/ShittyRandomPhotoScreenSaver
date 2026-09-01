@@ -28,6 +28,7 @@ No other R-series record is current implementation sequencing. Current migration
 
 ## Standalone R Records
 
+- [R-72 — Production Shutdown Imported A Dead Performance Parser](Historical_Bugs/R-72_Production_Shutdown_Imported_Dead_Perf_Parser.md)
 - [R-71 — Visualizer Audio Per-Frame Task And DSP-State Allocation Drove GC Pressure](Historical_Bugs/R-71_Visualizer_Audio_Per_Frame_Task_And_DSP_State_Allocation.md)
 - [R-70 — Gmail CUSTOM Uniform Scale Needed Different Width And Height Shell Semantics](Historical_Bugs/R-70_Gmail_Custom_Uniform_Scale_Preferred_Dimension_Split.md)
 - [R-69 — Bubble Extreme-Viewport Global Radius Compression Suppressed Reactivity](Historical_Bugs/R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md)

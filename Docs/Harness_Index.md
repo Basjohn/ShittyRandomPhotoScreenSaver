@@ -60,6 +60,24 @@ Focused capture validation: `pytest tests/test_qt_message_capture_contract.py te
 
 Relevant Qt/QML warning/error lines must be correlated to the same timestamp window before calling a runtime/J claim GREEN. Use `Docs/Qt_QML_Observability.md` for capture semantics and the raw-stderr boundary.
 
+## 1B. Tooling authority
+
+Use `Docs/Tooling_Audit_2026-09-01.md` before running or preserving a migration-era script. Production code must never import operator analysis tools (`R-72`). Built-in PERF/usage/QML telemetry is the primary application-health evidence; retain external parsers only for a narrow demonstrated cross-event question.
+
+Current independent resource observation:
+
+```powershell
+python tools\perf_measure.py --pid <PID> --duration 30
+```
+
+Current ImageWorker shared-memory lifecycle proof:
+
+```powershell
+python tools\image_worker_shm_lifecycle_harness.py --cycles 50 --width 3840 --height 2160
+```
+
+`tools/run_tests.py` is convenience only and delegates to `tests/run_chunked.py`.
+
 ## 2. Phase-C Quick transition regression harnesses
 
 Phase-C implementation and deterministic hardening are landed. These commands remain useful regression/
@@ -129,17 +147,13 @@ The common fence includes the exception path where renderer execution raises.
 
 See `Docs/TestSuite.md` and `Docs/Transition_Change_Checklist.md`.
 
-## 5. Visualizer authored-fidelity replay
+## 5. Visualizer authored-fidelity evidence
 
-```powershell
-$env:QT_QPA_PLATFORM='offscreen'
-.\.venv\Scripts\python.exe tools\visualizer_replay.py verify
-.\.venv\Scripts\python.exe tools\visualizer_replay.py metrics
-```
+The old `tools/visualizer_replay.py` executable is retired in I because it imports the deleted replay physical owner. **Do not restore that host.**
 
-Do not regenerate goldens merely to accommodate presentation migration.
+Preserve authored evidence through current temporal/BTF/viewport tests plus `tests/fixtures/visualizer_replay/`, `tests/goldens/visualizer_replay/` and `tests/goldens/visualizer_temporal/`. `tools/generate_visualizer_replay_fixtures.py` remains only as the synthetic `FeatureClip` fixture generator.
 
-For Bubble, also apply `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
+Do not regenerate goldens merely to accommodate presentation migration. For Bubble, apply `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
 
 ## 6. Logical-runtime / Phase-D permanent gates
 

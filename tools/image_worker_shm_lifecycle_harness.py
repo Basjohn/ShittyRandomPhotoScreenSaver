@@ -1,8 +1,10 @@
-"""Runtime-shaped ImageWorker shared-memory plateau harness.
+"""Current ImageWorker shared-memory lifecycle/plateau harness.
 
 The default scenario performs 50 sequential 4K prescales through the real
-spawned ImageWorker and the production parent QImage consumption path.  Each
-run writes a plain evidence subfolder; no archive is created.
+spawned ImageWorker and the production parent QImage consumption path, then
+checks shared-memory disposal and optional shutdown while a transfer is in flight.
+It is a current R-52 regression harness, not Phase-4 migration authority. Each run
+writes a plain evidence subfolder; no archive is created.
 """
 from __future__ import annotations
 
@@ -103,7 +105,7 @@ def run_harness(
     orphans_before_shutdown: list[str] = []
     started_at = time.time()
 
-    with tempfile.TemporaryDirectory(prefix="srpss_phase4_shm_") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="srpss_image_worker_shm_") as temp_dir:
         source_path = Path(temp_dir) / "synthetic_4k.png"
         # A deterministic pattern avoids file/network variability while still
         # forcing the full RGBA output allocation in the worker.
@@ -268,7 +270,7 @@ def run_harness(
         "worker_rss_tail_high_water_bounded": tail_high_water_growth <= 64.0,
     }
     return {
-        "scenario": "phase4_image_worker_shared_memory",
+        "scenario": "image_worker_shared_memory_lifecycle",
         "cycles_requested": cycles,
         "cycles_completed": len(samples),
         "width": width,
@@ -293,7 +295,7 @@ def run_harness(
 
 def _default_output_dir() -> Path:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return Path("logs") / "evidence_chest" / f"phase4_shm_{stamp}"
+    return Path("logs") / "evidence_chest" / f"image_worker_shm_{stamp}"
 
 
 def main() -> int:
@@ -315,7 +317,7 @@ def main() -> int:
     )
     output_dir = args.output_dir or _default_output_dir()
     output_dir.mkdir(parents=True, exist_ok=True)
-    report_path = output_dir / "phase4_image_worker_shm_report.json"
+    report_path = output_dir / "image_worker_shm_lifecycle_report.json"
     report_path.write_text(
         json.dumps(report, indent=2, sort_keys=True),
         encoding="utf-8",

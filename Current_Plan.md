@@ -12,6 +12,7 @@ The production Qt Quick authority cutover, post-cutover functional/runtime corre
 - `Docs/Historical_Bugs/README.md`
 - `Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md`
 - `Docs/Guardrails/Performance_Optimization_Contract.md` — canonical post-H performance admission/acceptance rules and modest/heavy reference envelopes.
+- `Docs/Tooling_Audit_2026-09-01.md` — current I keep/delete/migrate authority for operator tools; production/tool boundary is protected by R-72.
 - the superseded H5c/R6/R7 checkpoint documents retained for provenance.
 
 Do **not** repopulate the active work queue with hundreds of stale completed H sub-items. Preserve H as a compact **completed checklist** here and keep the detailed evidence in its closure/historical records. If later evidence falsifies an accepted H contract, reopen the smallest demonstrated owner/incident and repair it; do not revive H wholesale.
@@ -166,10 +167,25 @@ Use `Docs/TestSuite.md` as the live inventory. Highest-confidence residue alread
 - [ ] Reconcile old compositor metrics/GPU-query/fallback tests.
 - [ ] Reconcile old visualizer physical-host/card geometry tests.
 - [ ] Reconcile `tests/test_spotify_visualizer_widget.py` importing deleted overlay/host code.
-- [ ] Reconcile `tests/test_visualizer_replay.py` + `tools/visualizer_replay.py` referring to deleted replay-runtime ownership.
+- [x] Tooling audit proved `tests/test_visualizer_replay.py` + `tools/visualizer_replay.py` have no current executable owner; delete them while preserving current fixtures/goldens/temporal/BTF contracts.
 - [ ] Reconcile old MC physical-window implementation tests where current Quick role/policy tests own the surviving contract.
 - [ ] For every candidate deletion/rehome: identify the exact surviving product-neutral contract and prove its current owner/test first.
 - [ ] Do not mass-delete by filename/phase prefix; record each resolved owner/removal in `Docs/TestSuite.md` / cleanup ledger.
+
+
+### I1A — tooling authority cleanup
+
+- [x] Audit every `tools/` executable against current post-H owners rather than filename/phase age.
+- [x] Remove the dead in-process PERF parser hook from `main.py`; production now only emits/flushes evidence (`R-72`).
+- [x] Make `tools/run_tests.py` delegate to canonical `tests/run_chunked.py` instead of owning a second suite manifest.
+- [x] Re-home the still-useful ImageWorker SHM proof as `tools/image_worker_shm_lifecycle_harness.py`.
+- [x] Re-audit defaults regeneration tooling against the current schema/atomic-write safety contract.
+- [x] Reject `bubble_parity_harness.py` as R-69 authority: it has no viewport/domain/DPR/presentation-scaling oracle.
+- [x] Reject the generic `transition_perf_health_parser.py`/synthetic Visualizer distribution harness as permanent authority; current instrumentation + focused tests own those contracts.
+- [ ] Apply the manual tool/test deletions in `Docs/Tooling_Audit_2026-09-01.md`.
+- [ ] Run `test_tooling_ownership.py` in the real project environment as part of `destination`.
+- [ ] Confirm no production Python imports `tools`/`scripts` analysis modules after the deletion batch.
+- [ ] Carry only `presentation_benchmark_core.py` + `qtquick_presentation_spike.py` as explicitly non-authoritative architecture-selection evidence until J physical acceptance, then delete them.
 
 ### I2 — source/tool residue
 
@@ -178,7 +194,7 @@ After exact caller search:
 - [ ] Delete orphan `rendering/quick/qml/CursorHalo.qml` if still unreferenced.
 - [ ] Remove caller-dead Media process-probe helpers retired by event ownership.
 - [ ] Remove old physical-presenter/compositor aliases/adapters/comments/spikes that no longer have a production caller.
-- [ ] Reconcile regeneration/default tools against current Settings/Quick schema before using them.
+- [x] Reconcile regeneration/default tools against current Settings/Quick schema; audit completed 2026-09-01 and current atomic/schema-derived pipeline is protected.
 - [ ] Preserve neutral transition registry/settings/math/shaders and neutral visualizer DSP/logical algorithms used by Quick.
 - [ ] Re-run exact caller/import searches after each residue batch so deletion does not create hidden compatibility fallback pressure.
 
@@ -239,6 +255,10 @@ Front-load the mandatory image-oracle parity work (`images/migration/Ideal (PreM
 - [ ] Reconcile remaining historical-bug records, including failed methods worth preserving.
 - [ ] Remove migration-only harness/planning debris only after acceptance evidence exists.
 - [ ] Run final maintained destination + broad suite gates and reconcile docs before J closes.
+
+### Committed J+ card-material checklist — non-blocking for J close
+
+- [ ] Implement the committed, non-blocking ordinary-widget **Normal / Glass / Acrylic** card-material slice after mandatory parity is under control, using the shared/lazy Qt Quick design at the bottom of `Docs/QtQuick_Migration/J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md` and `Future_Work.md` section 10. This item must remain tracked until implemented/accepted or explicitly superseded; J may close before it. Default remains Normal/off-cost; do not create per-card capture/blur owners or weaken performance/reactivity contracts.
 
 ## Authority order
 

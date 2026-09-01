@@ -1365,6 +1365,43 @@ def test_repair_file_regenerates_shipped_artifacts_for_curated_source_paths(tmp_
     assert calls == [root]
 
 
+def test_repair_all_presets_regenerates_shipped_artifacts_once(tmp_path, monkeypatch):
+    first = tmp_path / "presets" / "visualizer_modes" / "bubble" / "preset_1_alpha.json"
+    second = tmp_path / "presets" / "visualizer_modes" / "spectrum" / "preset_1_beta.json"
+    first.parent.mkdir(parents=True)
+    second.parent.mkdir(parents=True)
+    first.write_text("{}", encoding="utf-8")
+    second.write_text("{}", encoding="utf-8")
+
+    repair_calls: list[tuple[Path, str, bool]] = []
+    sync_calls: list[tuple[Path, ...]] = []
+    monkeypatch.setattr(
+        repair,
+        "_discover_preset_files",
+        lambda: [("bubble", first), ("spectrum", second)],
+    )
+
+    def _fake_repair_file(path, mode, *, sync_shipped_artifacts=True):
+        repair_calls.append((Path(path), mode, bool(sync_shipped_artifacts)))
+        return tmp_path / f"{Path(path).name}.bak", {"added": [], "removed": [], "changed": []}
+
+    monkeypatch.setattr(repair, "repair_file", _fake_repair_file)
+    monkeypatch.setattr(
+        repair,
+        "_regenerate_shipped_preset_artifacts_if_needed",
+        lambda paths: sync_calls.append(tuple(Path(path) for path in paths)),
+    )
+
+    results = repair.repair_all_presets()
+
+    assert len(results) == 2
+    assert repair_calls == [
+        (first, "bubble", False),
+        (second, "spectrum", False),
+    ]
+    assert sync_calls == [(first, second)]
+
+
 def test_reindex_curated_presets_regenerates_shipped_artifacts_once(tmp_path, monkeypatch):
     root = tmp_path
     mode = "spectrum"

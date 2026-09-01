@@ -103,6 +103,7 @@ DESTINATION_PROFILE = (
     "test_visualizer_viewport_scaling_contracts.py",
     "test_visualizer_doc_references.py",
     "test_runtime_perf_policy_contracts.py",
+    "test_tooling_ownership.py",
     "test_widgets_tab.py::TestWidgetsTab::test_widgets_tab_disables_media_size_controls_when_custom_is_active",
     "test_settings_eventfilter_teardown_guards.py",
     "test_terminal_runtime_destruction.py",
