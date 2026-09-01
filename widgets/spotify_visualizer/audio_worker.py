@@ -89,6 +89,7 @@ _COMPUTE_SNAPSHOT_ATTRS = (
     "_spectrum_notch_positions",
     "_transient_bus",
     "_kick_lane_gain",
+    "_spectrum_lane_transient_mix",
     "_transient_bass",
     "_transient_mid",
     "_transient_high",
@@ -247,6 +248,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         from widgets.spotify_visualizer.transient_bus import TransientBus
         self._transient_bus: TransientBus = TransientBus()
         self._kick_lane_gain: float = 1.0  # Spectrum kick express lane gain (0-2)
+        self._spectrum_lane_transient_mix: float = 0.65
         # Latest transient snapshot fields (written by bar_computation, read by beat_engine)
         self._transient_bass: float = 0.0
         self._transient_mid: float = 0.0
@@ -448,6 +450,16 @@ class SpotifyVisualizerAudioWorker(QObject):
             val = 2.0
         self._input_gain = val
 
+    def set_transient_lane_config(
+        self, kick_lane_gain: float, spectrum_lane_transient_mix: float
+    ) -> None:
+        """Set transient express-lane controls consumed by FFT bar computation."""
+
+        self._kick_lane_gain = max(0.0, min(2.0, float(kick_lane_gain)))
+        self._spectrum_lane_transient_mix = max(
+            0.0, min(1.0, float(spectrum_lane_transient_mix))
+        )
+
     def set_energy_boost(self, boost: float) -> None:
         """Adjust post-FFT energy boost factor."""
         try:
@@ -512,10 +524,15 @@ class SpotifyVisualizerAudioWorker(QObject):
             self._pre_agc_live_bass = 0.0
             self._pre_agc_live_mid = 0.0
             self._pre_agc_live_treble = 0.0
+        # Replace rather than mutate the bus in place. The serial analysis
+        # lane may still be finishing a fenced packet against the previous
+        # detached state; replacing the live reset authority avoids mutating a
+        # bus that packet can still reference.
         try:
-            self._transient_bus.reset()
+            from widgets.spotify_visualizer.transient_bus import TransientBus
+            self._transient_bus = TransientBus()
         except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to reset transient bus", exc_info=True)
+            logger.debug("[SPOTIFY_VIS] Failed to replace transient bus", exc_info=True)
 
     def reset_processing_caches(self) -> None:
         """Discard bar-shaping/banding caches at a runtime activation boundary."""
@@ -746,13 +763,13 @@ class SpotifyVisualizerAudioWorker(QObject):
         maybe_log_floor_state(self, **kwargs)
 
     def make_compute_snapshot(self) -> SimpleNamespace:
-        """Return a detached DSP state object for one FFT compute job.
+        """Return detached DSP state for one serial-lane admission epoch.
 
-        Background compute tasks must not mutate the live worker until the
-        owning beat-engine callback verifies the current activation token.
-        The bar computation module intentionally writes its intermediate
-        floor/AGC/transient/bar-history state into the object it receives, so
-        we give it a plain snapshot and commit only after the token check.
+        The retained compute lane reuses this object across ordinary audio
+        frames and rebuilds it only after a gate/activation/config boundary.
+        That preserves stale-result isolation without deep-copying NumPy and
+        history state on every FFT step. The synchronous no-lane diagnostic
+        path may still use it as a one-shot snapshot.
         """
 
         state = SimpleNamespace()

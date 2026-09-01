@@ -1,6 +1,6 @@
 # Historical Bug Records
 
-Last updated: 2026-08-28
+Last updated: 2026-09-01
 
 Authoritative standalone incident records for significant SRPSS regressions.
 `Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory own the full
@@ -26,11 +26,19 @@ Rehome surviving regression coverage before deleting an old owner.
 
 ## Active / Pending Acceptance
 
+- [R-69 — Bubble Extreme-Viewport Global Radius Compression Suppressed Reactivity](R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md) — **PARTIAL / AWAITING PHYSICAL VALIDATION**. Failed global head/Ghost viewport compression is retired; contract restoration awaits wide/tall replay, while any remaining oversized full-expansion tail stays a separate open visual problem.
 - [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN at `5b3cbaef`; only physical dual-display acceptance remains.
 
 Current migration implementation sequencing is **not** owned by this folder. Read `Current_Plan.md` for current status.
 
 ## R Records
+
+- [R-69 — Bubble Extreme-Viewport Global Radius Compression Suppressed Reactivity](R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md)
+- [R-68 — Visualizer CUSTOM Working Geometry Rejected Fresh Logical Snapshots](R-68_Visualizer_Custom_Presentation_Authority_Rebase.md)
+- [R-67 — CUSTOM Resize Re-entry Rebased Persisted Geometry And Could Compound Shrink](R-67_Custom_Resize_Reentry_Absolute_Scale.md)
+- [R-66 — Media Runtime Fast Polling Replaced By Provider Event Ownership](R-66_Media_Event_Ownership_Replaced_Fast_Polling.md)
+- [R-65 — Image Change Admission Could Bare-Snap And Prefetch Could Strand Across Recreation](R-65_Transactional_Image_Admission_And_Prefetch_Latch.md)
+- [R-64 — Retained Cursor Halo Turned Passive Pointer Motion Into Scene Pressure](R-64_Native_Cursor_Halo_Scene_Pressure.md)
 
 - [R-63 — Display-1 Black Flash From Fullscreen-Flip PresentMode Transitions](R-63_Display1_Black_Flash_Fullscreen_Flip_Promotion.md)
 - [R-62 — Transition-Scoped Presentation Deferral Degraded Bubble](R-62_Transition_Scoped_Presentation_Deferral_Bubble_Regression.md)

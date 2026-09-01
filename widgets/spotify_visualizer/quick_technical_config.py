@@ -42,24 +42,21 @@ def _apply_worker_only_technical(
     kick_lane_gain: float,
     spectrum_lane_transient_mix: float,
 ) -> None:
-    """Apply the few technical controls not exposed by BeatEngine forwarding APIs.
-
-    The audio worker is part of the shared BeatEngine/source implementation, not
-    presentation state.  Keeping this reach here prevents QWidget from remaining
-    the technical-config authority.  If BeatEngine later grows public forwarding
-    methods, this helper can switch to them without changing owner semantics.
-    """
+    """Apply capture sizing plus transient controls through their real owners."""
 
     worker = getattr(engine, "_audio_worker", None)
     if worker is None:
-        return
+        raise RuntimeError("visualizer BeatEngine has no audio worker")
 
     set_block_size = getattr(worker, "set_audio_block_size", None)
-    if callable(set_block_size):
-        set_block_size(int(audio_block_size))
+    if not callable(set_block_size):
+        raise RuntimeError("visualizer audio worker has no block-size authority")
+    set_block_size(int(audio_block_size))
 
-    worker._kick_lane_gain = float(kick_lane_gain)
-    worker._spectrum_lane_transient_mix = float(spectrum_lane_transient_mix)
+    set_transient_lane = getattr(engine, "set_transient_lane_config", None)
+    if not callable(set_transient_lane):
+        raise RuntimeError("visualizer BeatEngine has no transient-lane config authority")
+    set_transient_lane(kick_lane_gain, spectrum_lane_transient_mix)
 
 
 def _resize_controller_logical_bar_state(controller: Any, target_bars: int) -> None:

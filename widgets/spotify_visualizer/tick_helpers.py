@@ -617,6 +617,7 @@ def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
                     "[PERF] [SPOTIFY_VIS][AUDIO_LANE] lane_registrations=%d "
                     "executor_tasks=%d logical_steps=%d completed=%d published=%d "
                     "rejected_busy=%d rejected_stopped=%d cancelled=%d "
+                    "dsp_state_rebuilds=%d dsp_state_reuses=%d "
                     "handoff_ms_mean=%.3f handoff_ms_max=%.3f "
                     "execution_ms_mean=%.3f execution_ms_max=%.3f "
                     "callback_ms_mean=%.3f callback_ms_max=%.3f",
@@ -628,6 +629,8 @@ def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
                     int(analysis_diag.get("submit_rejected_busy", 0)),
                     int(analysis_diag.get("submit_rejected_stopped", 0)),
                     int(analysis_diag.get("pending_cancelled", 0)),
+                    int(analysis_diag.get("dsp_state_rebuilds", 0)),
+                    int(analysis_diag.get("dsp_state_reuses", 0)),
                     float(analysis_diag.get("handoff_ms_mean", 0.0)),
                     float(analysis_diag.get("handoff_ms_max", 0.0)),
                     float(analysis_diag.get("execution_ms_mean", 0.0)),

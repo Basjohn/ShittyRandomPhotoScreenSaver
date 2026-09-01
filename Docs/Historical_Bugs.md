@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-08-28
+Last updated: 2026-09-01
 
 Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
 `Docs/Historical_Bugs/`.
@@ -19,12 +19,22 @@ not automatic current architecture instructions.
 
 ## Active / Pending Acceptance Records
 
+- [R-69 — Bubble Extreme-Viewport Global Radius Compression Suppressed Reactivity](Historical_Bugs/R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md) — **PARTIAL / AWAITING PHYSICAL VALIDATION**. Failed global head/Ghost viewport compression is retired; contract restoration awaits wide/tall replay, while any remaining oversized full-expansion tail stays a separate open visual problem.
 - [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN; physical dual-display wake/late-return acceptance remains.
 
 No other R-series record is current implementation sequencing. Current migration work is owned by
 `Current_Plan.md`; historical Phase/P-number status prose never admits current work.
 
 ## Standalone R Records
+
+- [R-69 — Bubble Extreme-Viewport Global Radius Compression Suppressed Reactivity](Historical_Bugs/R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md)
+- [R-68 — Visualizer CUSTOM Working Geometry Rejected Fresh Logical Snapshots](Historical_Bugs/R-68_Visualizer_Custom_Presentation_Authority_Rebase.md)
+- [R-67 — CUSTOM Resize Re-entry Rebased Persisted Geometry And Could Compound Shrink](Historical_Bugs/R-67_Custom_Resize_Reentry_Absolute_Scale.md)
+- [R-66 — Media Runtime Fast Polling Replaced By Provider Event Ownership](Historical_Bugs/R-66_Media_Event_Ownership_Replaced_Fast_Polling.md)
+- [R-65 — Image Change Admission Could Bare-Snap And Prefetch Could Strand Across Recreation](Historical_Bugs/R-65_Transactional_Image_Admission_And_Prefetch_Latch.md)
+- [R-64 — Retained Cursor Halo Turned Passive Pointer Motion Into Scene Pressure](Historical_Bugs/R-64_Native_Cursor_Halo_Scene_Pressure.md)
+- [R-63 — Display-1 Black Flash From Fullscreen-Flip PresentMode Transitions](Historical_Bugs/R-63_Display1_Black_Flash_Fullscreen_Flip_Promotion.md)
+- [R-62 — Transition-Scoped Presentation Deferral Degraded Bubble](Historical_Bugs/R-62_Transition_Scoped_Presentation_Deferral_Bubble_Regression.md)
 
 - [R-61 — Settings Glass Used The Wrong Composition Family For A Layered QWidget](Historical_Bugs/R-61_Settings_Glass_Layered_HWND_Backdrop_Mismatch.md)
 - [R-60 — ImagePresenter DPR Split Rekeyed The Retained Current Texture](Historical_Bugs/R-60_ImagePresenter_DPR_Texture_Identity.md)

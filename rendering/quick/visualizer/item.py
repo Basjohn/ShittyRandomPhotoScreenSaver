@@ -64,6 +64,7 @@ class VisualizerRenderItem(QQuickItem):
         self._bridge: VisualizerSnapshotBridge | None = None
         self._identity: VisualizerRenderIdentity | None = None
         self._presentation: ResolvedVisualizerPresentation | None = None
+        self._custom_layout_presentation_authority = False
         self._bound_window: QQuickWindow | None = None
         self._diag_last_render_playing: bool | None = None
         self._diag_spectrum_handoff_remaining = 0
@@ -106,6 +107,15 @@ class VisualizerRenderItem(QQuickItem):
             return
         self._bridge = None
         self._identity = None
+        self.update()
+
+    def set_custom_layout_presentation_authority(self, enabled: bool) -> None:
+        """Allow CUSTOM working geometry to rebase fresh logical snapshots."""
+
+        enabled = bool(enabled)
+        if enabled == self._custom_layout_presentation_authority:
+            return
+        self._custom_layout_presentation_authority = enabled
         self.update()
 
     def set_presentation(
@@ -171,6 +181,7 @@ class VisualizerRenderItem(QQuickItem):
                 activation_id=identity.activation_id,
                 mode_id=identity.mode_id,
                 required_presentation=presentation,
+                allow_presentation_rebase=self._custom_layout_presentation_authority,
             )
 
         if snapshot is not None and is_viz_diagnostics_enabled():

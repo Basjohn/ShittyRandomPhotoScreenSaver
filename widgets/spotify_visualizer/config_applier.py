@@ -1054,13 +1054,10 @@ def replay_engine_config(widget: Any, engine: Any) -> None:
     widget._apply_input_gain(input_gain)
 
     if engine is not None:
-        aw = getattr(engine, '_audio_worker', None)
-        if aw is not None:
-            try:
-                aw._kick_lane_gain = kick_lane_gain
-                aw._spectrum_lane_transient_mix = spectrum_lane_transient_mix
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to replay transient config to audio worker", exc_info=True)
+        set_transient_lane = getattr(engine, 'set_transient_lane_config', None)
+        if not callable(set_transient_lane):
+            raise RuntimeError("visualizer BeatEngine has no transient-lane config authority")
+        set_transient_lane(kick_lane_gain, spectrum_lane_transient_mix)
 
     parent = widget.parent()
     overlay = getattr(parent, '_spotify_bars_overlay', None) if parent else None
