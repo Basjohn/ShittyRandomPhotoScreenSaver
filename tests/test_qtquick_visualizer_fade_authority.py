@@ -87,3 +87,69 @@ def test_presentation_fade_remains_the_single_derivation_authority():
     assert "one animation, one progress scalar" in source.lower() or (
         "one animation" in source.lower()
     )
+
+
+def test_render_node_folds_inherited_opacity_into_content_fade():
+    """The GL content must fade with the QML root, not ignore its opacity.
+
+    The visualizer render node draws raw GL, so the scene graph cannot apply the
+    inherited item opacity (authored scene fade x generation startup-reveal gate)
+    for it. Before this was folded into ``content_fade``, the GL bars rendered at
+    full opacity through the coordinated startup reveal and popped in while the
+    card faded. This guards that the fold stays in place.
+    """
+
+    source = (
+        ROOT / "rendering" / "quick" / "visualizer" / "node.py"
+    ).read_text(encoding="utf-8")
+    assert "inheritedOpacity" in source, (
+        "the visualizer render node must read the QML root's inherited opacity"
+    )
+    assert "content_fade" in source and "inherited" in source.lower(), (
+        "inherited opacity must be folded into the authored content fade so the "
+        "coordinated startup reveal fades the GL content, not just the card"
+    )
+
+
+def test_owner_scene_fade_eases_from_zero_on_activation():
+    """The Quick owner eases ``scene_fade`` 0 -> 1 once per activation.
+
+    This is the visualizer's own authored first-appearance fade in the Qt Quick
+    path: it must start hidden the moment it is armed and land exactly on full
+    opacity, so a heavy first frame that arrives outside the coordinated reveal
+    window never snaps the whole scene in. Before arming it must be fully opaque
+    so no pre-start metrics resolve can hide the scene.
+    """
+
+    from dataclasses import dataclass, replace as _replace  # noqa: F401
+
+    from widgets.spotify_visualizer.quick_display_visualizer_owner import (
+        QuickDisplayVisualizerOwner,
+        _ACTIVATION_SCENE_FADE_DURATION_S,
+    )
+
+    @dataclass(frozen=True)
+    class _StubPresentation:
+        scene_fade: float = 1.0
+        content_fade: float = 1.0
+
+    clock = {"now": 100.0}
+    owner = object.__new__(QuickDisplayVisualizerOwner)
+    owner._presentation_resolver = lambda: _StubPresentation()
+    owner._mode_transition_fade = 1.0
+    owner._activation_fade_started_at = None
+    owner._transition_clock = lambda: clock["now"]
+
+    # Not yet armed -> fully opaque (never hidden by the fade before start).
+    assert owner._resolve_current_presentation().scene_fade == 1.0
+
+    # Armed -> starts hidden, eases up, lands exactly on 1.0 and stays there.
+    owner._activation_fade_started_at = 100.0
+    assert owner._resolve_current_presentation().scene_fade == 0.0
+    clock["now"] = 100.0 + _ACTIVATION_SCENE_FADE_DURATION_S / 2.0
+    midway = owner._resolve_current_presentation().scene_fade
+    assert 0.0 < midway < 1.0
+    clock["now"] = 100.0 + _ACTIVATION_SCENE_FADE_DURATION_S + 5.0
+    assert owner._resolve_current_presentation().scene_fade == 1.0
+    # content_fade stays the mode-transition layer, untouched by the scene fade.
+    assert owner._resolve_current_presentation().content_fade == 1.0

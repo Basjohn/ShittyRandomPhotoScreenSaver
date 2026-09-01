@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from PySide6.QtCore import QRectF
 from PySide6.QtGui import QOpenGLContext
 from PySide6.QtQuick import QSGRenderNode
@@ -132,6 +134,23 @@ class VisualizerRenderNode(QSGRenderNode):
             | QSGRenderNode.StateFlag.StencilState
         )
 
+    def _inherited_scene_opacity(self) -> float:
+        """Return the QML-inherited opacity applied to this node's content.
+
+        ``QSGRenderNode.inheritedOpacity()`` carries the effective opacity of the
+        item subtree (here: authored visualizer scene fade x generation startup
+        reveal gate). It is clamped to ``[0, 1]``; any binding/availability gap
+        fails open to a fully opaque draw rather than hiding the visualizer.
+        """
+
+        getter = getattr(self, "inheritedOpacity", None)
+        if not callable(getter):
+            return 1.0
+        try:
+            return max(0.0, min(1.0, float(getter())))
+        except (TypeError, ValueError):
+            return 1.0
+
     def render(self, state: QSGRenderNode.RenderState) -> None:
         """Draw the latest admitted state without advancing logical state."""
 
@@ -151,6 +170,25 @@ class VisualizerRenderNode(QSGRenderNode):
             snapshot = self._snapshot
             if snapshot is None or min(self._logical_size) <= 0.0:
                 return
+            # The QML root's inherited opacity (the generation startup-reveal gate
+            # multiplied by the authored scene fade) must fade the GL content
+            # coherently with the card, exactly as it fades every other Quick
+            # item. This node draws raw GL, so the scene graph cannot apply that
+            # opacity for us; fold it into the authored content fade the shaders
+            # already honour via ``u_fade``. Rebasing only allocates while the
+            # scene is genuinely mid-fade, so steady-state rendering is unchanged.
+            inherited_opacity = self._inherited_scene_opacity()
+            if inherited_opacity < 1.0:
+                presentation = snapshot.presentation
+                snapshot = replace(
+                    snapshot,
+                    presentation=replace(
+                        presentation,
+                        content_fade=max(
+                            0.0, presentation.content_fade * inherited_opacity
+                        ),
+                    ),
+                )
             render_target = self.renderTarget()
             if render_target is None:
                 raise RuntimeError("Quick visualizer has no active render target")
