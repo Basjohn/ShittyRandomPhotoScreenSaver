@@ -83,11 +83,11 @@ class _ManagerVisualizerEngine:
     def set_transient_lane_config(
         self, kick_lane_gain: float, spectrum_lane_transient_mix: float
     ) -> None:
-        self.source_config_calls.append(
-            (
-                "transient_lane",
-                (float(kick_lane_gain), float(spectrum_lane_transient_mix)),
-            )
+        # Recorded on a dedicated field so it does not perturb the exact
+        # source_config_calls ordering assertions elsewhere in this file.
+        self.transient_lane_config = (
+            float(kick_lane_gain),
+            float(spectrum_lane_transient_mix),
         )
 
     def set_spectrum_mirrored(self, mirrored: bool) -> None:
