@@ -259,8 +259,12 @@ def test_style_uses_canonical_shadow_direction_and_independent_alpha() -> None:
     assert style.card_style.border_width == 5.0
     assert style.card_style.background_color.alpha() == 100
     assert style.card_style.border_color.alpha() == 45
-    assert style.card_style.shadow_offset_x < 0
-    assert style.card_style.shadow_offset_y < 0
+    assert style.card_style.shadow_offset_x == -4.0
+    assert style.card_style.shadow_offset_y == -4.0
+    assert style.card_style.shadow_extend_left == 3.0
+    assert style.card_style.shadow_extend_top == 3.0
+    assert style.card_style.shadow_extend_right == 0.0
+    assert style.card_style.shadow_extend_bottom == 0.0
     assert style.text_shadow_offset_x < 0
     assert style.text_shadow_offset_y < 0
 

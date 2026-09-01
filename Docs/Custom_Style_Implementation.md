@@ -59,8 +59,9 @@ Ordinary text: duplicate shadow glyph at signed offset + visible glyph.
 No ordinary text blur/MultiEffect/layer capture. Whole-widget fade is ancestor/root opacity; no staged
 shadow/effect carriers.
 
-Current deliberate ordinary base magnitudes live in retained widget host. User Extra Offset adds before
-`ShadowDirection` resolves axes/signs.
+Current deliberate ordinary base magnitudes live in the retained widget host. Card/frame **Extra Offset is directional growth**, not whole-shadow translation: the base signed offset stays authored and only the selected far edge(s) extend. Text Extra Offset remains signed glyph displacement. Direction still resolves in Python.
+
+Retained Context Menu is a runtime Quick overlay and consumes the same global **Card** shadow direction/opacity/blur/Extra Offset contract once per runtime generation. Its cached shadow is composed in the menu overlay plane so it can cast over runtime widgets/Visualizer/edit chrome while remaining behind the menu itself. Future Context Menu palette/material comes from **Widget Theme** semantic roles, not directly from the Settings QWidget theme. `Keep Synced` (future, default ON) links each Settings theme to its mirrored Widget Theme; Glass/Acrylic menu pixels must reuse the same scene-local material authority as widget cards and never the Settings HWND AccentPolicy path.
 
 ## Header styling
 

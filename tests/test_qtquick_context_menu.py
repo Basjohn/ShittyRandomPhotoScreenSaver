@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import QEvent, QEventLoop, QObject, QPointF, QSize, QTimer, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtQuick import QQuickItem, QQuickWindow
@@ -10,6 +12,7 @@ from rendering.quick.context_menu import (
     QuickContextMenuEntry,
     QuickContextMenuModel,
     build_quick_context_menu_entries,
+    project_quick_context_menu_shadow,
 )
 from rendering.quick.runtime import QuickDisplayRuntime
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
@@ -74,6 +77,48 @@ def test_context_menu_builder_preserves_admitted_product_structure() -> None:
     ]
     assert "✥  Edit Widget Layout" not in unavailable_labels
     assert "✓  Save Widget Layout" not in unavailable_labels
+
+
+
+def test_context_menu_shadow_projects_global_card_direction_without_translation() -> None:
+    style = project_quick_context_menu_shadow(
+        {
+            "enabled": True,
+            "color": [10, 20, 30, 200],
+            "frame_opacity": 0.5,
+            "blur_radius": 22,
+            "direction": "NW",
+            "frame_extra_offset": 17,
+        }
+    )
+
+    assert style.enabled is True
+    assert style.color == (10, 20, 30, 100)
+    assert style.blur == 22.0
+    assert (style.offset_x, style.offset_y) == (-4.0, -4.0)
+    assert (
+        style.extend_left,
+        style.extend_top,
+        style.extend_right,
+        style.extend_bottom,
+    ) == (17.0, 17.0, 0.0, 0.0)
+
+
+def test_context_menu_qml_shadow_is_high_plane_cached_and_never_qt_translated() -> None:
+    root = Path(__file__).resolve().parents[1]
+    qml = (root / "rendering" / "quick" / "qml" / "ContextMenu.qml").read_text(
+        encoding="utf-8"
+    )
+    scene = (root / "rendering" / "quick" / "qml" / "DisplayScene.qml").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'objectName: "retainedContextMenuShadow"' in qml
+    assert "offset: Qt.vector2d(0.0, 0.0)" in qml
+    assert "cached: true" in qml
+    assert "menuSurface.x - menuRoot.shadowBaseLeft - menuRoot.shadowExtendLeft" in qml
+    assert "contextMenuShadowEnabled" in scene
+    assert "z: 300" in scene
 
 
 def test_context_menu_model_admits_only_live_enabled_semantic_actions() -> None:

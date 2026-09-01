@@ -460,8 +460,9 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
             value=tab._default_int("shadows", "frame_extra_offset", 0),
             suffix=" px",
             tooltip=(
-                "Additional card/frame shadow distance added before the global "
-                "direction applies signs. 0 keeps the authored distance."
+                "Grow the card/frame shadow farther only in the selected global "
+                "direction without pulling shadow coverage away from the opposite edge. "
+                "0 keeps the authored footprint."
             ),
         )
     )
@@ -504,8 +505,8 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
             value=tab._default_int("shadows", "text_extra_offset", 0),
             suffix=" px",
             tooltip=(
-                "Additional text shadow distance added before the global direction "
-                "applies signs. 0 keeps the authored distance."
+                "Additional text-shadow glyph displacement in the selected global "
+                "direction. 0 keeps the authored distance."
             ),
         )
     )

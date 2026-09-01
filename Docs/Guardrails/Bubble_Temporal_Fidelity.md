@@ -837,3 +837,16 @@ If the user says **“BTF failure”**, **“check BTF”**, or **“this violat
 affected change against this entire contract, especially the mechanical alarm panel in Section 15.
 
 Do not require the user to restate the metrics or explain what “Bubble feel” means.
+
+
+### Runtime birth/pop alpha lifecycle (2026-09-01)
+
+New runtime bubbles may fade through the already-existing per-bubble alpha channel: approximately **200 ms** under active energy and **500 ms** when born under idle/very-low energy. A popped bubble may fade out over approximately **400 ms** while the existing brief pop expansion runs. This is a presentation-lifecycle envelope only.
+
+Golden negative controls:
+
+- no new timer/cadence, queue, history buffer or render pass;
+- no viewport/domain-dependent fade duration or alpha attenuation;
+- no radius, pulse, movement, stream/drift, Ghost/history, trail or R-69 scaling rewrite;
+- cold-start field bootstrap keeps its distinct slower authored fade;
+- physical J acceptance must compare canonical, very wide and very tall CUSTOM geometry.

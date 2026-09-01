@@ -762,6 +762,7 @@ class ScreensaverEngine(QObject):
                 thread_manager=self.thread_manager,
                 runtime_generation=self._runtime_generation,
                 image_accounting_publisher=self._set_display_image_accounting_snapshot,
+                desktop_startup_crossfade_enabled=(self._runtime_generation == 0),
             )
             
             display_manager = self.display_manager

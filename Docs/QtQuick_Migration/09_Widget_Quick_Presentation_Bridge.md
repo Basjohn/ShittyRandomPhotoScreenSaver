@@ -76,7 +76,7 @@ menu state must not become committed geometry. G owns final CUSTOM persistence/s
 
 QML receives final presentation values, not persistence semantics: card shadow enabled/colour/blur/signed
 offset, text shadow enabled/colour/signed offset, header gates/style, family colours/geometry. Direction and
-Extra Offset remain Python-side. No Text Blur or hidden legacy tuning.
+Extra Offset remains Python-side. Frame Extra Offset projects to directional card-shadow edge growth (not whole-shadow translation); Text Extra Offset remains glyph displacement. No Text Blur or hidden legacy tuning.
 
 ## Retained wrappers
 

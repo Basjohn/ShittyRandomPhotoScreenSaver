@@ -55,10 +55,14 @@ Item {
             Separator {
                 objectName: "clockDigitalSeparator"
                 width: separatorBand.width * 0.77
-                height: 2.0
+                height: digitalFace.clockModel.separatorThickness
                 anchors.centerIn: parent
-                thickness: 2.0
+                thickness: digitalFace.clockModel.separatorThickness
                 lineColor: digitalFace.clockModel.separatorColor
+                shadowEnabled: digitalFace.clockModel.textShadowEnabled
+                shadowColor: digitalFace.clockModel.textShadowColor
+                shadowOffsetX: digitalFace.clockModel.textShadowOffsetX
+                shadowOffsetY: digitalFace.clockModel.textShadowOffsetY
             }
         }
 

@@ -41,6 +41,11 @@ colour/opacity. Off = state 0. Do not conflate AccentPolicy state 3 with the doc
 `themes/dark.qss` is legacy base-stylesheet residue, not visual authority. Its audited retirement is owned by
 `Future_Cleanup.md`; do not alter native backdrop or forged-edge geometry merely to delete it.
 
+Future runtime Widget Themes are a separate visual bundle authority over widget/runtime-overlay settings. The retained
+Context Menu follows Widget Theme semantics/material because it lives in the Quick display scene; it never consumes the
+Settings QWidget theme/AccentPolicy backdrop directly. Future `Keep Synced` defaults ON and links each Settings theme to
+an explicit mirrored Widget Theme; sync OFF permits independent GUI/runtime combinations.
+
 ## Production runtime chain
 
 The destination connects exactly once:
@@ -113,8 +118,7 @@ provider/backend/runtime owner
 -> OverlayWidget shell
 ```
 
-Host owns item creation/retirement, display rect, root fade and card style; not provider, persistence, SettingsManager,
-network or cadence.
+Host owns item creation/retirement, display rect, family-authored root fade, independent generation startup gate and card style; not provider, persistence, SettingsManager, network or cadence. Family-local `fadeOpacity` is multiplied by `startupRevealOpacity`, so a lifecycle publication cannot bypass startup staging.
 
 | Family | Neutral/runtime owner | Presentation |
 | --- | --- | --- |
@@ -127,6 +131,24 @@ network or cadence.
 | Abandonment Issues | neutral Steam runtime/data/cache/rotation owners | retained model/QML |
 
 Presentation destruction does not automatically mean backend destruction; shared owners use real consumer cardinality.
+
+### Startup composition
+
+**Physical status 2026-09-01:** the attempted implementation below failed operator validation: the desktop -> first-wallpaper crossfade was not visible and the same Steam-family startup flashes remained. Treat this as the intended contract pending repair, not accepted behavior. The repair must preserve R-63 non-exact-cover/1 px overscan geometry throughout startup.
+
+Cold application startup (runtime generation 0) is intended to have one ordered retained presentation contract:
+
+```text
+hidden selected QScreen
+-> one pre-show desktop snapshot captured into PresentationImage staging state
+-> same retained Quick window shows that snapshot
+-> fixed retained 1300 ms Crossfade into first processed wallpaper
+-> transition finalization publishes first-wallpaper authority/readiness
+-> one existing 1800 ms QuickStartupRevealCoordinator scalar opens
+   ordinary startupRevealOpacity + Visualizer startupRevealOpacity together
+```
+
+The desktop snapshot is never queue/history/current-image semantic truth and is released by first-image finalization. Desktop staging is application-session-only: later Settings/runtime replacement generations must skip desktop recapture/crossfade, while the independent startup gate may still protect replacement presentation from early family content. The startup gate is independent of family/Visualizer authored fades. Ordinary-host startup-gate state is retained and applied before every newly created root joins the scene; any explicit initial family fade value is also projected before parenting, so a late/Steam-style root cannot flash at either QML default. Immediately before the synchronized reveal begins the coordinator re-projects the closed gate and refreshes its target count, covering roots completed during the desktop crossfade. Visualizer startup-gate state is likewise retained by its scene owner. Desktop capture is opt-in at the manager boundary and enabled only by the cold engine generation. Startup adds no recurring timer/pacer, transparent-window opacity ramp, cover surface, second scene, or repaint loop. A desktop-capture failure is loud and uses the explicit no-seed first-image path; it never creates a hidden fallback presenter.
 
 ## Actions / images
 
@@ -145,11 +167,23 @@ glyph admission and the exact provider method. Seek uses absolute 100 ns ticks.
 Dynamic image precedent is process-engine `MediaArtworkImageProvider` over runtime-owned decoded `QImage` with stable
 identity/bounded retention. No QPixmap worker transport, base64/tempfile churn or unchanged reupload.
 
+Dynamic artwork presentation invariant: **every changing artwork surface fades**. Media, Achievement Pulse and
+Abandonment Issues use the shared retained `ArtworkFadeImage.qml` fade-through primitive; future dynamic artwork must
+reuse the same contract or an explicitly superior retained equivalent. Source changes never become visible as an instant
+texture swap: old art fades to zero, the new source waits for `Image.Ready`, then fades in. These are bounded event-driven
+QML animations only while artwork changes; no recurring timer/poller/cadence owner is permitted for artwork fading.
+
 ## Shadow authority
 
 Canonical includes direction, Card enabled/opacity/blur/extra offset, Text enabled/opacity/extra offset, and Header
 enabled. No `widgets.shadows.offset`, Intense mode, Text Blur or `shadowtuning.json` replacement. Python resolves
-direction to signed offsets before QML. Clock analogue geometry is the permanent explicit family exception.
+direction to signed offsets before QML. Card/frame Extra Offset is directional one-sided geometry with zero Qt
+effect translation; ordinary production card shadows are composed in one display-level underlay beneath every
+ordinary card so a later sibling shadow cannot overpaint earlier widget content. The retained Context Menu consumes
+the same global Card shadow direction/opacity/blur/Extra Offset contract at generation admission, but its shadow lives in
+the menu overlay plane so it may cast over runtime content while remaining below the menu surface itself. Text shadows
+remain retained duplicate glyphs with signed displacement, not MultiEffect blur. Clock analogue geometry is the permanent
+explicit family exception.
 
 ## Transition / visualizer
 

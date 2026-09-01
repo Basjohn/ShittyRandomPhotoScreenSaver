@@ -83,6 +83,7 @@ def resolve_visualizer_presentation(
     shadow_blur: float = 18.0,
     shadow_offset: Sequence[object] = (0.0, 4.0),
     shadow_spread: float = 0.0,
+    shadow_extensions: Sequence[object] = (0.0, 0.0, 0.0, 0.0),
 ) -> ResolvedVisualizerPresentation:
     """Resolve one display-local, scale-committed visualizer presentation.
 
@@ -124,6 +125,16 @@ def resolve_visualizer_presentation(
     authored_shadow_blur = _non_negative(shadow_blur, name="shadow blur")
     authored_shadow_spread = _non_negative(shadow_spread, name="shadow spread")
     authored_shadow_offset = _point(shadow_offset, name="shadow offset")
+    if len(shadow_extensions) != 4:
+        raise ValueError("shadow extensions must contain left, top, right, bottom")
+    authored_shadow_extensions = tuple(
+        _non_negative(value, name=f"shadow extension {name}")
+        for value, name in zip(
+            shadow_extensions,
+            ("left", "top", "right", "bottom"),
+            strict=True,
+        )
+    )
 
     is_card = policy.shell_policy is VisualizerShellPolicy.CARD
     resolved_border = authored_border * resolved_scale if is_card else 0.0
@@ -165,6 +176,10 @@ def resolve_visualizer_presentation(
             ),
             "shadow_spread": (
                 authored_shadow_spread * resolved_scale if is_card else 0.0
+            ),
+            "shadow_extensions": tuple(
+                value * resolved_scale if is_card else 0.0
+                for value in authored_shadow_extensions
             ),
         }
     )
@@ -229,6 +244,7 @@ def resize_visualizer_presentation(
         return float(style.get(name, default)) / baseline_scale
 
     shadow_offset = style.get("shadow_offset", (0.0, 0.0))
+    shadow_extensions = style.get("shadow_extensions", (0.0, 0.0, 0.0, 0.0))
     return resolve_visualizer_presentation(
         policy=policy,
         display_size=display_size,
@@ -254,6 +270,9 @@ def resize_visualizer_presentation(
             float(shadow_offset[1]) / baseline_scale,
         ),
         shadow_spread=_authored_scalar("shadow_spread"),
+        shadow_extensions=tuple(
+            float(value) / baseline_scale for value in shadow_extensions
+        ),
     )
 
 

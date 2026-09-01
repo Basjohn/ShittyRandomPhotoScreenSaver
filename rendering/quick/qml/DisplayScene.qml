@@ -11,6 +11,15 @@ Item {
     property real pixelShiftX: 0.0
     property real pixelShiftY: 0.0
     property var contextMenuModel: null
+    property bool contextMenuShadowEnabled: true
+    property color contextMenuShadowColor: "#c4000000"
+    property real contextMenuShadowBlur: 18.0
+    property real contextMenuShadowOffsetX: 4.0
+    property real contextMenuShadowOffsetY: 4.0
+    property real contextMenuShadowExtendLeft: 0.0
+    property real contextMenuShadowExtendTop: 0.0
+    property real contextMenuShadowExtendRight: 0.0
+    property real contextMenuShadowExtendBottom: 0.0
     property bool perfHudEnabled: false
     property string perfHudText: ""
 
@@ -37,6 +46,18 @@ Item {
             y: displayScene.pixelShiftY
         }
 
+        // All ordinary card shadows live in a shared underlay below every card.
+        // A shadow nested inside one widget subtree can otherwise overpaint an
+        // earlier sibling even with z < 0, because sibling subtree order wins.
+        Item {
+            id: ordinaryWidgetShadowHost
+            objectName: "ordinaryWidgetShadowHost"
+            anchors.fill: parent
+            clip: false
+            enabled: false
+            z: 0
+        }
+
         // Per-display retained ordinary-widget presentation host. The Python
         // QuickSceneController owns creation/retirement of the OverlayWidget
         // items parented here; pixel shift remains one shared transform.
@@ -45,7 +66,7 @@ Item {
             objectName: "ordinaryWidgetHost"
             anchors.fill: parent
             clip: false
-            z: 0
+            z: 10
         }
 
         Loader {
@@ -54,7 +75,7 @@ Item {
             active: false
             asynchronous: false
             source: "VisualizerPresentation.qml"
-            z: 5
+            z: 20
         }
     }
 
@@ -67,6 +88,15 @@ Item {
     ContextMenu {
         id: retainedContextMenu
         contextMenuModel: displayScene.contextMenuModel
+        shadowEnabled: displayScene.contextMenuShadowEnabled
+        shadowColor: displayScene.contextMenuShadowColor
+        shadowBlur: displayScene.contextMenuShadowBlur
+        shadowOffsetX: displayScene.contextMenuShadowOffsetX
+        shadowOffsetY: displayScene.contextMenuShadowOffsetY
+        shadowExtendLeft: displayScene.contextMenuShadowExtendLeft
+        shadowExtendTop: displayScene.contextMenuShadowExtendTop
+        shadowExtendRight: displayScene.contextMenuShadowExtendRight
+        shadowExtendBottom: displayScene.contextMenuShadowExtendBottom
         z: 300
     }
 

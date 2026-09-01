@@ -195,10 +195,12 @@ class ShadowSettings:
     # Canonical eight-direction shadow orientation (Phase E4). Orientation only;
     # per-class magnitudes are family-authored. Default SE.
     direction: str = "SE"
-    # Optional additive Extra Offset scalars (Phase F0.5). Non-negative logical
-    # pixels added to the applicable authored magnitude before the canonical E4
-    # direction resolver applies signs/axis zeroing. Default 0. The retired
-    # ``widgets.shadows.offset`` pair is NOT this control and is not migrated.
+    # Optional Extra Offset controls (Phase F0.5). Frame Extra Offset is
+    # directional *growth*: the authored base drop offset stays in place and
+    # only the selected far edge(s) extend. Text Extra Offset remains glyph
+    # displacement because text has no stretchable card footprint. Default 0.
+    # The retired ``widgets.shadows.offset`` pair is NOT this control and is not
+    # migrated.
     frame_extra_offset: int = 0
     text_extra_offset: int = 0
 
@@ -247,7 +249,8 @@ class ClockWidgetSettings:
     show_timezone: bool = False
     show_day_of_week: bool = False
     show_date: bool = False
-    show_digital_separator: bool = False
+    show_separator: bool = False
+    separator_thickness: int = 2
     calendar_layout: str = "shared_line"
     calendar_font_size: int = 20
     font_family: str = "Inter"
@@ -279,10 +282,11 @@ class ClockWidgetSettings:
             show_timezone=settings.get(f"{prefix}.show_timezone", False),
             show_day_of_week=settings.get(f"{prefix}.show_day_of_week", False),
             show_date=settings.get(f"{prefix}.show_date", False),
-            show_digital_separator=settings.get(
-                f"{prefix}.show_digital_separator",
-                False,
+            show_separator=settings.get(
+                f"{prefix}.show_separator",
+                settings.get(f"{prefix}.show_digital_separator", False),
             ),
+            separator_thickness=settings.get(f"{prefix}.separator_thickness", 2),
             calendar_layout=settings.get(f"{prefix}.calendar_layout", "shared_line"),
             calendar_font_size=settings.get(f"{prefix}.calendar_font_size", 20),
             font_family=settings.get(f"{prefix}.font_family", "Inter"),

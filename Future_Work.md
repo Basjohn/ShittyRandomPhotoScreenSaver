@@ -695,6 +695,24 @@ Default/Dark Widget Theme must resolve to `card_material_mode = normal` and repr
 card appearance as closely as practical. Glass/Acrylic remain opt-in and **must not become selectable merely because
 the file schema can name them**; the shared/lazy Qt Quick material path needs runtime visual/performance proof first.
 
+### Settings Theme <-> Widget Theme mirroring / Keep Synced
+
+Every mature Settings GUI theme should have a mirrored Widget Theme intended to produce the same visual language on
+runtime cards/overlays. The Themes tab should expose **Keep Synced**, default **ON**. With sync ON, choosing a Settings
+Theme selects its linked/mirrored Widget Theme (and choosing the linked Widget Theme keeps the pair coherent); the user
+sees one coordinated style without maintaining two selections. Turning sync OFF explicitly permits arbitrary combinations
+of Settings GUI theme + Widget Theme. Manual visual edits still follow the one-authority/custom-modified rule above; sync
+must never create two writers fighting over the same widget setting. Theme IDs/link metadata should be explicit rather than
+matched by display-name heuristics.
+
+The retained screensaver **Context Menu belongs to Widget Theme semantics**, because it is a runtime display-scene overlay
+rendered beside widgets. It must not read the QWidget Settings theme directly. When Keep Synced is ON, the mirrored Widget
+Theme naturally makes the Context Menu match the Settings GUI; when OFF, the Context Menu follows the independently
+selected Widget Theme. Candidate Context Menu roles include surface/background, border, separator, normal/disabled text,
+hover/selected row, toggle/choice indicator, submenu arrow, and the canonical global Card shadow. If Widget Theme selects
+Glass/Acrylic, Context Menu material must use the same lazy scene-local Qt Quick material/backdrop authority as widget
+cards; never invoke the Settings HWND Acrylic/Glass AccentPolicy path for runtime menu pixels.
+
 ## 10.7 Performance / acceptance gates
 
 Measure with representative simultaneous cards and real transitions on 1/2/N displays and relevant DPRs:
@@ -727,5 +745,5 @@ coherence and bounded-cost rules are not.
 Ideas put in this box are to be added to work asap but at a lower priotiy than future cleanup or current plan work, unless existing in those as well.
 ############
 1. Add two options in the Interaction Pill for Display. "Widget Glow on Hover" "Widget Glow On Click" with a shared swatch colour selector. These will cause a small pulse in glow effect when triggered in relation to the cursor halo and pulse out when hover leaves or click leaves. This must not introduce timers or any thread contention/starvation.
-2. Finish the already-reserved Widget Themes pill in the landed Themes tab. Prefer serializing/applying the mature existing widget visual settings (swatches, opacity, borders, shadows and other proven visual-only values) rather than inventing parallel presentation controls. Widget Themes use `.srwtheme` files and never own widget activation/ordinary ON/OFF, provider/account/source state, geometry, refresh cadence or runtime business logic. The existing/Dark Widget Theme remains the default and resolves to `card_material_mode = normal` / the current cheap translucent card architecture. The committed `glass` and `acrylic` material modes remain blocked on the shared/lazy Qt Quick material contract in section 10 and require runtime visual/performance proof before becoming selectable.
+2. Finish the already-reserved Widget Themes pill in the landed Themes tab. Prefer serializing/applying the mature existing widget visual settings (swatches, opacity, borders, shadows and other proven visual-only values) rather than inventing parallel presentation controls. Widget Themes use `.srwtheme` files and never own widget activation/ordinary ON/OFF, provider/account/source state, geometry, refresh cadence or runtime business logic. Add `Keep Synced` default ON: each Settings GUI theme has an explicitly linked mirrored Widget Theme; sync OFF permits independent pairings. Runtime Context Menu follows Widget Theme roles/material and therefore matches Settings naturally while synced. The existing/Dark Widget Theme remains the default and resolves to `card_material_mode = normal` / the current cheap translucent card architecture. The committed `glass` and `acrylic` material modes remain blocked on the shared/lazy Qt Quick material contract in section 10 and require runtime visual/performance proof before becoming selectable.
 3. [LOW] Give more SettingsGUI sections Flowcontainers where it would benefit well aligned space usage.

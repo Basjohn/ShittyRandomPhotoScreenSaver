@@ -17,7 +17,10 @@ from typing import Any
 from PySide6.QtCore import QObject, Property, Signal
 from PySide6.QtGui import QColor
 
-from core.settings.shadow_direction import resolve_signed_offset
+from core.settings.shadow_direction import (
+    resolve_directional_extensions,
+    resolve_signed_offset,
+)
 from widgets.clock_ticker import GlobalClockTicker, get_global_clock_ticker
 
 from .host import (
@@ -125,6 +128,7 @@ class ClockPresentationConfig:
     show_day_of_week: bool = False
     show_date: bool = False
     show_separator: bool = False
+    separator_thickness: float = 2.0
     calendar_layout: str = "shared_line"
     calendar_font_size: int = 20
     font_family: str = "Inter"
@@ -161,7 +165,13 @@ class ClockPresentationConfig:
             show_timezone=_as_bool(values.get("show_timezone"), False),
             show_day_of_week=_as_bool(values.get("show_day_of_week"), False),
             show_date=_as_bool(values.get("show_date"), False),
-            show_separator=_as_bool(values.get("show_digital_separator"), False),
+            show_separator=_as_bool(
+                values.get("show_separator", values.get("show_digital_separator")),
+                False,
+            ),
+            separator_thickness=_bounded_float(
+                values.get("separator_thickness"), 2.0, 1.0, 8.0
+            ),
             calendar_layout=calendar_layout,
             calendar_font_size=_bounded_int(values.get("calendar_font_size"), 20, 8, 256),
             font_family=str(values.get("font_family", "Inter") or "Inter"),
@@ -232,7 +242,8 @@ class ClockPresentationConfig:
                 "show_timezone",
                 "show_day_of_week",
                 "show_date",
-                "show_digital_separator",
+                "show_separator",
+                "separator_thickness",
                 "calendar_layout",
                 "calendar_font_size",
                 "font_family",
@@ -248,6 +259,24 @@ class ClockPresentationConfig:
                 "analog_face_shadow",
             )
         }
+        # Compatibility read for configurations saved before the separator was
+        # recognized as a shared analogue/digital control.  Current saves use
+        # ``show_separator`` only; remove this fallback in Future Cleanup once
+        # the migration horizon has passed.
+        if "show_separator" not in values and "show_separator" not in base_values:
+            if normalized_id == "clock":
+                projected["show_separator"] = values.get(
+                    "show_digital_separator",
+                    base_canonical.get("show_separator", base_canonical.get("show_digital_separator", False)),
+                )
+            else:
+                projected["show_separator"] = base_values.get(
+                    "show_digital_separator",
+                    values.get(
+                        "show_digital_separator",
+                        base_canonical.get("show_separator", base_canonical.get("show_digital_separator", False)),
+                    ),
+                )
         projected["timezone"] = values.get("timezone", "local")
 
         overrides = values.get("display_mode_overrides", {})
@@ -295,11 +324,8 @@ class ClockPresentationStyle:
         text_extra = _bounded_float(
             shadow_values.get("text_extra_offset"), 0.0, 0.0, 40.0
         )
-        card_offset = resolve_signed_offset(
-            direction,
-            ORDINARY_CARD_SHADOW_BASE[0] + frame_extra,
-            ORDINARY_CARD_SHADOW_BASE[1] + frame_extra,
-        )
+        card_offset = resolve_signed_offset(direction, *ORDINARY_CARD_SHADOW_BASE)
+        card_extensions = resolve_directional_extensions(direction, frame_extra)
         text_offset = resolve_signed_offset(
             direction,
             ORDINARY_TEXT_SHADOW_BASE[0] + text_extra,
@@ -349,6 +375,10 @@ class ClockPresentationStyle:
                 shadow_offset_x=card_offset[0],
                 shadow_offset_y=card_offset[1],
                 shadow_spread=0.0,
+                shadow_extend_left=card_extensions[0],
+                shadow_extend_top=card_extensions[1],
+                shadow_extend_right=card_extensions[2],
+                shadow_extend_bottom=card_extensions[3],
             ),
             text_shadow_enabled=text_shadow_enabled,
             text_shadow_color=_with_alpha(shadow_rgba, text_opacity),
@@ -672,10 +702,14 @@ class ClockPresentationModel(QObject):
     def textShadowOffsetY(self) -> float:
         return self._snapshot.style.text_shadow_offset_y
 
+    @Property(float, notify=stateChanged)
+    def separatorThickness(self) -> float:
+        return float(self._snapshot.config.separator_thickness)
+
     @Property(QColor, notify=stateChanged)
     def separatorColor(self) -> QColor:
         color = QColor(*self._snapshot.config.text_color)
-        color.setAlpha(max(0, min(255, int(round(color.alpha() * 0.45)))))
+        color.setAlpha(max(0, min(255, int(round(color.alpha() * 0.80)))))
         return color
 
     @Property(float, notify=stateChanged)

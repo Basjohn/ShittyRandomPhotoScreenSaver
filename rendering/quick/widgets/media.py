@@ -15,7 +15,10 @@ from core.media.provider_registry import (
     get_media_provider_header_name,
     preserve_provider_setting,
 )
-from core.settings.shadow_direction import resolve_signed_offset
+from core.settings.shadow_direction import (
+    resolve_directional_extensions,
+    resolve_signed_offset,
+)
 from rendering.quick.media_artwork import MediaArtworkImageProvider
 
 if TYPE_CHECKING:
@@ -212,11 +215,8 @@ class MediaPresentationStyle:
         direction = shadow_values.get("direction", "SE")
         frame_extra = _bounded_float(shadow_values.get("frame_extra_offset"), 0, 0, 40)
         text_extra = _bounded_float(shadow_values.get("text_extra_offset"), 0, 0, 40)
-        card_offset = resolve_signed_offset(
-            direction,
-            ORDINARY_CARD_SHADOW_BASE[0] + frame_extra,
-            ORDINARY_CARD_SHADOW_BASE[1] + frame_extra,
-        )
+        card_offset = resolve_signed_offset(direction, *ORDINARY_CARD_SHADOW_BASE)
+        card_extensions = resolve_directional_extensions(direction, frame_extra)
         text_offset = resolve_signed_offset(
             direction,
             ORDINARY_TEXT_SHADOW_BASE[0] + text_extra,
@@ -246,6 +246,10 @@ class MediaPresentationStyle:
                 ),
                 shadow_offset_x=float(card_offset[0]),
                 shadow_offset_y=float(card_offset[1]),
+                shadow_extend_left=card_extensions[0],
+                shadow_extend_top=card_extensions[1],
+                shadow_extend_right=card_extensions[2],
+                shadow_extend_bottom=card_extensions[3],
             ),
             text_shadow_enabled=_as_bool(shadow_values.get("text_enabled"), True),
             text_shadow_color=_with_alpha(

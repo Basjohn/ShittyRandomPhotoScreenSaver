@@ -14,18 +14,20 @@ from rendering.custom_layout_contract import (
     get_widget_layout_variant_payload,
     load_custom_layout_map,
 )
+from rendering.custom_layout_session import CustomLayoutSession
 from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.custom_layout_hydration import (
     apply_quick_committed_payloads,
     resolve_quick_committed_geometry,
 )
-from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
+from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner, _DisplayBinding
 from rendering.quick.display_unit import create_quick_display_unit
 from rendering.quick.input_controller import QuickInputController
 from rendering.quick.runtime import QuickDisplayRuntime
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.widgets.family_binder import ClockFamilyAdapter
+from rendering.quick.widgets.host import OverlayWidgetGeometry
 from widgets.spotify_visualizer.presentation_geometry import (
     resolve_visualizer_presentation,
 )
@@ -112,6 +114,65 @@ def _clock_unit(
     )
     apply_quick_committed_payloads(unit, widgets)
     return unit, factory
+
+
+def test_uniform_custom_admission_uses_visible_card_envelope_not_dead_letterbox(qt_app) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+
+    class _QmlItem:
+        def property(self, name: str):
+            return {
+                "preferredContentWidth": 600.0,
+                "preferredContentHeight": 400.0,
+            }.get(name)
+
+    presentation = SimpleNamespace(item=_QmlItem(), model=SimpleNamespace(config=None))
+    presenter = SimpleNamespace(
+        bound_widget_ids=("reddit",),
+        geometry_for=lambda _widget_id: OverlayWidgetGeometry(100, 120, 600, 800),
+        presentation_for_widget_id=lambda _widget_id: presentation,
+    )
+    unit = SimpleNamespace(presenter=presenter)
+    binding = _DisplayBinding(
+        identity="display:test",
+        monitor_route="1",
+        unit=unit,
+        screen=screen,
+        geometry=QRect(screen.geometry()),
+    )
+    settings = _Settings({
+        "reddit": {
+            "enabled": True,
+            "position": "Custom",
+            "monitor": "1",
+        }
+    })
+    owner = QuickCustomLayoutOwner(
+        settings_manager=settings,
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    session = CustomLayoutSession()
+    descriptors = {}
+
+    owner._admit_ordinary_items(
+        session, descriptors, binding, settings.widgets
+    )
+
+    assert len(session.items()) == 1
+    item = session.items()[0]
+    # Assigned 600x800 renders a 600x400 Reddit card centred vertically. The
+    # edit frame must outline that actual visible card, not the 400px dead axis.
+    assert item.current_global_rect == QRect(
+        screen.geometry().x() + 100,
+        screen.geometry().y() + 320,
+        600,
+        400,
+    )
+    assert item.baseline_resize_scale == 1.0
+    assert item.resize_scale == 1.0
 
 
 def test_single_quick_custom_owner_cancel_restores_same_retained_item(qt_app) -> None:

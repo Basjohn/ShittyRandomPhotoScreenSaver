@@ -218,8 +218,12 @@ def test_weather_config_and_style_project_canonical_settings_and_direction() -> 
     assert config.font_size == 31
     assert config.icon_alignment == "LEFT"
     assert config.show_details_row is False
-    assert style.card_style.shadow_offset_x == pytest.approx(-6.0)
-    assert style.card_style.shadow_offset_y == pytest.approx(-6.0)
+    assert style.card_style.shadow_offset_x == pytest.approx(-4.0)
+    assert style.card_style.shadow_offset_y == pytest.approx(-4.0)
+    assert style.card_style.shadow_extend_left == pytest.approx(2.0)
+    assert style.card_style.shadow_extend_top == pytest.approx(2.0)
+    assert style.card_style.shadow_extend_right == pytest.approx(0.0)
+    assert style.card_style.shadow_extend_bottom == pytest.approx(0.0)
     assert style.text_shadow_offset_x == pytest.approx(-5.0)
     assert style.text_shadow_offset_y == pytest.approx(-5.0)
     assert style.card_style.background_color.alpha() == 128

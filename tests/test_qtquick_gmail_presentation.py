@@ -336,8 +336,12 @@ def test_gmail_style_uses_canonical_card_and_text_shadow_direction() -> None:
     style = _style(_config())
 
     assert style.card_style.shadow_enabled is True
-    assert style.card_style.shadow_offset_x < 0
-    assert style.card_style.shadow_offset_y < 0
+    assert style.card_style.shadow_offset_x == -4.0
+    assert style.card_style.shadow_offset_y == -4.0
+    assert style.card_style.shadow_extend_left == 1.0
+    assert style.card_style.shadow_extend_top == 1.0
+    assert style.card_style.shadow_extend_right == 0.0
+    assert style.card_style.shadow_extend_bottom == 0.0
     assert style.text_shadow_offset_x < 0
     assert style.text_shadow_offset_y < 0
     assert isinstance(style.text_shadow_color, QColor)

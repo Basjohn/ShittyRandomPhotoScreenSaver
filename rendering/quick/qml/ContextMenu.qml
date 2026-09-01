@@ -1,10 +1,25 @@
 import QtQuick
+import QtQuick.Effects
 
 Item {
     id: menuRoot
     objectName: "retainedContextMenu"
 
     required property var contextMenuModel
+    property bool shadowEnabled: true
+    property color shadowColor: "#c4000000"
+    property real shadowBlur: 18.0
+    property real shadowOffsetX: 4.0
+    property real shadowOffsetY: 4.0
+    property real shadowExtendLeft: 0.0
+    property real shadowExtendTop: 0.0
+    property real shadowExtendRight: 0.0
+    property real shadowExtendBottom: 0.0
+
+    readonly property real shadowBaseLeft: Math.max(0.0, -shadowOffsetX)
+    readonly property real shadowBaseTop: Math.max(0.0, -shadowOffsetY)
+    readonly property real shadowBaseRight: Math.max(0.0, shadowOffsetX)
+    readonly property real shadowBaseBottom: Math.max(0.0, shadowOffsetY)
     property int activeSubmenuIndex: -1
     readonly property real menuWidth: 292.0
     readonly property real menuHeight: menuColumn.implicitHeight + 16.0
@@ -27,9 +42,39 @@ Item {
         onPressed: menuRoot.contextMenuModel.dismiss()
     }
 
+    // Context-menu shadow is intentionally inside the menu's z=300 scene plane:
+    // it therefore paints above widgets/Visualizer/edit chrome, but below the
+    // menu surface itself. Direction/Extra Offset use one-sided geometry exactly
+    // like ordinary Card shadows; RectangularShadow.offset remains zero.
+    RectangularShadow {
+        id: menuShadow
+        objectName: "retainedContextMenuShadow"
+        x: menuSurface.x - menuRoot.shadowBaseLeft - menuRoot.shadowExtendLeft
+        y: menuSurface.y - menuRoot.shadowBaseTop - menuRoot.shadowExtendTop
+        width: menuSurface.width
+            + menuRoot.shadowBaseLeft + menuRoot.shadowBaseRight
+            + menuRoot.shadowExtendLeft + menuRoot.shadowExtendRight
+        height: menuSurface.height
+            + menuRoot.shadowBaseTop + menuRoot.shadowBaseBottom
+            + menuRoot.shadowExtendTop + menuRoot.shadowExtendBottom
+        visible: menuRoot.visible && menuRoot.shadowEnabled
+        color: menuRoot.shadowColor
+        blur: menuRoot.shadowBlur
+        radius: menuSurface.radius
+        offset: Qt.vector2d(0.0, 0.0)
+        cached: true
+        enabled: false
+        z: 1
+    }
+
+    // These palette literals are the current Default-Dark appearance only.
+    // Future theme ownership is Widget Theme semantic roles (with Settings<->
+    // Widget Keep Synced able to make them match), never direct QWidget theme
+    // or native Settings Acrylic/Glass ownership.
     Rectangle {
         id: menuSurface
         objectName: "retainedContextMenuSurface"
+        z: 2
         width: menuRoot.menuWidth
         height: menuRoot.menuHeight
         x: Math.max(

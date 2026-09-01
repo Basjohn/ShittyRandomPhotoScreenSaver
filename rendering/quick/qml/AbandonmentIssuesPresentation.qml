@@ -328,14 +328,18 @@ OverlayWidget {
                             }
                         }
 
-                        Image {
+                        ArtworkFadeImage {
+                            id: abandonmentArtworkImage
                             objectName: "abandonmentArtworkImage"
-                            visible: source.toString().length > 0
                             anchors.fill: parent
                             source: abandonmentRoot.abandonmentModel.artworkSource
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
                             cache: true
+                            // The archive transition commits the new model at
+                            // parent opacity zero; do not waste 140 ms fading an
+                            // already-invisible old texture before loading new art.
+                            fadeOutDuration: archiveContent.opacity <= 0.001 ? 0 : 140
                             layer.enabled: true
                             layer.effect: MultiEffect {
                                 maskEnabled: true

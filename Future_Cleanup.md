@@ -35,6 +35,17 @@ surviving contract.
 - Real two-display QScreen identity/topology smoke cells are **J physical acceptance evidence**, not generic cleanup debt and
   not an H deterministic gate. Keep them unless their evidence role is rehomed to an equivalent current harness.
 
+
+## Clock separator LEGACY compatibility residue — DELETE AFTER HORIZON
+
+- Current Clock separator ownership is mode-neutral: `widgets.clock.show_separator` +
+  `widgets.clock.separator_thickness` drive both analogue and digital retained faces.
+- `widgets.clock.show_digital_separator` survives **only as a read compatibility input** for older
+  saved configurations. Current Settings UI/saves/defaults must never write it again. **This is explicitly legacy debt, not a second supported key.**
+- [ ] After the compatibility horizon and exact persisted-config/caller proof, remove the
+  `show_digital_separator` fallback from `ClockPresentationConfig`, `ClockWidgetSettings` and Clock
+  Settings loading/tests. Do not rename the current generic control back to the legacy key.
+
 ## Settings GUI residue
 
 - **Defaults tooling re-audit completed 2026-09-01.** `regenerate_defaults_artifacts.py` is the current schema-derived owner; snapshot/SST entry points delegate into that pipeline. It constructs repo artifacts in memory, rejects private fields, supports check/dry-run semantics where applicable, and uses transactional multi-file writes with rollback. Preserve those safety properties and never add installed-profile mutation as a convenience fallback (`R-33`).

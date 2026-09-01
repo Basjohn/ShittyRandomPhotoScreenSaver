@@ -20,6 +20,7 @@ from core.settings.shadow_direction import (
     get_shadow_direction,
     resolve_shadow_direction,
     resolve_shadow_offsets,
+    resolve_directional_extensions,
     resolve_signed_offset,
     shadow_direction_signs,
 )
@@ -161,3 +162,11 @@ def test_direction_authority_is_not_duplicated_in_qml() -> None:
         assert "shadowdirection" not in lowered, filename
         assert "settingsmanager" not in lowered, filename
         assert "widgets.shadows" not in lowered, filename
+
+
+def test_directional_extensions_grow_only_selected_far_edges() -> None:
+    assert resolve_directional_extensions("SE", 6) == (0.0, 0.0, 6.0, 6.0)
+    assert resolve_directional_extensions("NW", 6) == (6.0, 6.0, 0.0, 0.0)
+    assert resolve_directional_extensions("E", 6) == (0.0, 0.0, 6.0, 0.0)
+    assert resolve_directional_extensions("N", 6) == (0.0, 6.0, 0.0, 0.0)
+    assert resolve_directional_extensions("SE", -4) == (0.0, 0.0, 0.0, 0.0)

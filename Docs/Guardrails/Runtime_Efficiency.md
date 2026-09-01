@@ -60,6 +60,8 @@ Rare deep GC pauses remain late-J evidence debt. `Docs/Guardrails/Performance_Op
 
 The 2026-09-01 modest-load reference also showed why: perceived quality was excellent with ~89.9 Hz logical Visualizer publication and ~20 ms median snapshot age while the worst gen-2 pause fell to ~67.7 ms. Protect that freshness/latency shape rather than optimizing one counter.
 
+A paired later log comparison strengthens the mechanism: every sampled Gen2 event aligned with a Bubble wall-clock gap of similar duration, including ~41–47 ms Gen2 scans that collected zero objects in the lighter run, while Bubble's own compute/cadence counters stayed healthy. Treat wall-clock inter-tick time + GC callback duration/yield as the attribution seam; internal per-tick work timing alone cannot see a process-wide stop-the-world pause. Non-GC stalls remain a separate J attribution track.
+
 ## 4. Runtime overlays
 
 Provider/model work and pixel presentation are separate.

@@ -106,6 +106,30 @@ def resolve_signed_offset(
     )
 
 
+
+def resolve_directional_extensions(
+    direction: object,
+    amount: float,
+) -> tuple[float, float, float, float]:
+    """Return directional card-shadow growth as ``(left, top, right, bottom)``.
+
+    ``Extra Offset`` for *card/frame* shadows is a growth control, not another
+    translation authority.  The base drop-shadow offset remains family-authored;
+    this helper extends only the edges selected by the canonical direction so
+    the opposite edge never loses its existing shadow footprint.
+
+    Text shadows deliberately do not use this helper: their Extra Offset is a
+    glyph displacement and therefore remains a signed offset.
+    """
+
+    extension = max(0.0, float(amount))
+    sign_x, sign_y = shadow_direction_signs(direction)
+    left = extension if sign_x < 0 else 0.0
+    right = extension if sign_x > 0 else 0.0
+    top = extension if sign_y < 0 else 0.0
+    bottom = extension if sign_y > 0 else 0.0
+    return (left, top, right, bottom)
+
 def resolve_shadow_offsets(
     direction: object,
     magnitudes: Mapping[str, tuple[float, float]],

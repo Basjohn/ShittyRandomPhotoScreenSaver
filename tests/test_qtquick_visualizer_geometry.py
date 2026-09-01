@@ -294,3 +294,40 @@ def test_quick_geometry_has_no_legacy_growth_or_qt_authority() -> None:
     assert "growth" not in inspect.signature(
         geometry.resolve_visualizer_presentation
     ).parameters
+
+
+def test_visualizer_card_shadow_extensions_scale_with_committed_presentation() -> None:
+    state = resolve_visualizer_presentation(
+        policy=_card_policy(),
+        display_size=(1920.0, 1080.0),
+        uniform_visual_scale=1.5,
+        shadow_offset=(4.0, 4.0),
+        shadow_extensions=(0.0, 0.0, 6.0, 6.0),
+    )
+    assert state.shell_style["shadow_offset"] == pytest.approx((6.0, 6.0))
+    assert state.shell_style["shadow_extensions"] == pytest.approx((0.0, 0.0, 9.0, 9.0))
+
+
+def test_visualizer_shadow_projection_is_owner_time_and_cached() -> None:
+    root = Path(__file__).resolve().parents[1]
+    display_manager = (root / "engine" / "display_manager.py").read_text(encoding="utf-8")
+    owner = (root / "widgets" / "spotify_visualizer" / "quick_display_visualizer_owner.py").read_text(encoding="utf-8")
+    qml = (root / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml").read_text(encoding="utf-8")
+
+    assert "card_shadow_kwargs = {" in display_manager
+    assert "resolve_directional_extensions(direction, frame_extra)" in display_manager
+    assert "card_shadow_kwargs=card_shadow_kwargs" in display_manager
+    assert "self._card_shadow_kwargs = dict(card_shadow_kwargs or {})" in owner
+    assert "**self._card_shadow_kwargs" in owner
+
+    # Global settings are projected when the display owner is built/rebuilt;
+    # the Visualizer tick/render path must not poll Settings for shadow style.
+    resolver_body = owner.split("def _resolve_current_presentation", 1)[1].split("def _apply_resolved_presentation", 1)[0]
+    assert "SettingsManager" not in resolver_body
+    assert "settings.get(" not in resolver_body
+    assert "cached: true" in qml
+    assert "cardShadowExtendLeft" in qml and "cardShadowExtendBottom" in qml
+    # Card shadows never use RectangularShadow translation: signed base
+    # direction plus Extra Offset are folded into asymmetric surface geometry.
+    assert "cardShadowBaseLeft" in qml and "cardShadowBaseBottom" in qml
+    assert "offset: Qt.vector2d(0.0, 0.0)" in qml

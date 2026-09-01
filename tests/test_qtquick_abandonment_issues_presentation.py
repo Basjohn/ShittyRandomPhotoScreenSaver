@@ -258,8 +258,12 @@ def test_style_uses_shared_steam_card_projection_without_changing_shelf_style() 
     )
 
     assert style.card_style.border_width == 3
-    assert style.card_style.shadow_offset_x < 0
-    assert style.card_style.shadow_offset_y < 0
+    assert style.card_style.shadow_offset_x == -4.0
+    assert style.card_style.shadow_offset_y == -4.0
+    assert style.card_style.shadow_extend_left == 2.0
+    assert style.card_style.shadow_extend_top == 2.0
+    assert style.card_style.shadow_extend_right == 0.0
+    assert style.card_style.shadow_extend_bottom == 0.0
     assert style.text_shadow_offset_x < 0
     assert style.text_shadow_offset_y < 0
 

@@ -34,6 +34,7 @@ Current migration implementation sequencing is **not** owned by this folder. Rea
 
 ## R Records
 
+- [R-73 — Quick Card-Shadow Extra Offset Translation And Visualizer Omission](R-73_Quick_Card_Shadow_Extra_Offset_Translation_And_Visualizer_Omission.md)
 - [R-72 — Production Shutdown Imported A Dead Performance Parser](R-72_Production_Shutdown_Imported_Dead_Perf_Parser.md)
 - [R-71 — Visualizer Audio Per-Frame Task And DSP-State Allocation Drove GC Pressure](R-71_Visualizer_Audio_Per_Frame_Task_And_DSP_State_Allocation.md)
 - [R-70 — Gmail CUSTOM Uniform Scale Needed Different Width And Height Shell Semantics](R-70_Gmail_Custom_Uniform_Scale_Preferred_Dimension_Split.md)
@@ -112,6 +113,8 @@ Current migration implementation sequencing is **not** owned by this folder. Rea
 `U-02` and `U-03`. The monolithic source never contained independent anchored R-19/R-20 bodies, so
 duplicate standalone records are intentionally absent.
 
+- [R-74 — Quick Card Shadows Could Overpaint Sibling Widget Content](R-74_Quick_Card_Shadow_Sibling_Subtree_Overpaint.md)
+
 ## U Records
 
 - [U-10 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift](U-10_Oscilloscope_Strobe_Waveform_Ghost_Contract.md)
@@ -146,3 +149,4 @@ duplicate standalone records are intentionally absent.
 
 The standalone split is complete. `Docs/Historical_Bugs.md` is navigation/status only, not a fallback
 store for unsplit incident bodies.
+

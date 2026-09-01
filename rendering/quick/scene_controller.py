@@ -31,7 +31,7 @@ from widgets.spotify_visualizer.presentation_geometry import (
 
 from .bootstrap import quick_qml_root
 from .auxiliary import QuickAuxiliaryState
-from .context_menu import QuickContextMenuModel
+from .context_menu import QuickContextMenuModel, QuickContextMenuShadowStyle
 from .custom_layout_overlay import (
     CustomLayoutOverlayModel,
     GeometryResolver,
@@ -112,6 +112,19 @@ class QuickSceneFactory(QObject):
                 self._component_error(
                     "OverlayWidget.qml failed to load",
                     self._overlay_widget_component,
+                )
+            )
+        self._overlay_card_shadow_url = QUrl.fromLocalFile(
+            str(self._qml_root / "OverlayCardShadow.qml")
+        )
+        self._overlay_card_shadow_component = QQmlComponent(
+            self._engine, self._overlay_card_shadow_url
+        )
+        if self._overlay_card_shadow_component.status() != QQmlComponent.Status.Ready:
+            raise RuntimeError(
+                self._component_error(
+                    "OverlayCardShadow.qml failed to load",
+                    self._overlay_card_shadow_component,
                 )
             )
         self._ordinary_widget_family_components: dict[str, QQmlComponent] = {}
@@ -204,6 +217,35 @@ class QuickSceneFactory(QObject):
         )
         return item
 
+    def create_overlay_card_shadow(
+        self,
+        initial_properties: dict[str, object],
+        context: QQmlContext,
+    ) -> QQuickItem:
+        """Create one retained display-level ordinary-card shadow underlay."""
+
+        component = self._overlay_card_shadow_component
+        if component.status() != QQmlComponent.Status.Ready:
+            raise RuntimeError(
+                self._component_error(
+                    "OverlayCardShadow.qml is not ready", component
+                )
+            )
+        item = component.createWithInitialProperties(
+            dict(initial_properties), context
+        )
+        if not isinstance(item, QQuickItem):
+            raise RuntimeError(
+                self._component_error(
+                    "OverlayCardShadow.qml did not create a QQuickItem", component
+                )
+            )
+        QQmlEngine.setObjectOwnership(
+            item,
+            QQmlEngine.ObjectOwnership.CppOwnership,
+        )
+        return item
+
     def create_ordinary_widget_family(
         self,
         family_id: str,
@@ -279,6 +321,7 @@ class QuickSceneController(QObject):
         ) = None
         self._visualizer_loader: QQuickItem | None = None
         self._visualizer_root: QQuickItem | None = None
+        self._visualizer_startup_reveal_opacity = 1.0
         self._visualizer_content_host: QQuickItem | None = None
         self._visualizer_item: VisualizerRenderItem | None = None
         self._visualizer_bridge: VisualizerSnapshotBridge | None = None
@@ -334,10 +377,18 @@ class QuickSceneController(QObject):
         )
         if ordinary_widget_host_item is None:
             raise RuntimeError("DisplayScene.qml has no ordinary widget host")
+        ordinary_widget_shadow_host_item = root.findChild(
+            QQuickItem,
+            "ordinaryWidgetShadowHost",
+        )
+        if ordinary_widget_shadow_host_item is None:
+            raise RuntimeError("DisplayScene.qml has no ordinary widget shadow host")
         self._ordinary_widget_host = OrdinaryWidgetPresentationHost(
             host_item=ordinary_widget_host_item,
+            shadow_host_item=ordinary_widget_shadow_host_item,
             context=context,
             create_overlay_item=factory.create_overlay_widget,
+            create_shadow_item=factory.create_overlay_card_shadow,
             create_family_item=factory.create_ordinary_widget_family,
         )
         window.bind_semantic_double_click_hit_test(
@@ -442,6 +493,27 @@ class QuickSceneController(QObject):
         root.setProperty("dimmingOpacity", state.dimming_opacity)
         root.setProperty("pixelShiftX", float(state.pixel_shift_x))
         root.setProperty("pixelShiftY", float(state.pixel_shift_y))
+        return True
+
+    def apply_context_menu_shadow_style(
+        self, style: QuickContextMenuShadowStyle
+    ) -> bool:
+        """Project generation-scoped global Card-shadow values into menu QML."""
+
+        if not isinstance(style, QuickContextMenuShadowStyle):
+            raise TypeError("Quick context-menu shadow requires QuickContextMenuShadowStyle")
+        root = self._scene_root
+        if root is None or not self._readiness.admission_open:
+            return False
+        root.setProperty("contextMenuShadowEnabled", bool(style.enabled))
+        root.setProperty("contextMenuShadowColor", QColor(*style.color))
+        root.setProperty("contextMenuShadowBlur", float(style.blur))
+        root.setProperty("contextMenuShadowOffsetX", float(style.offset_x))
+        root.setProperty("contextMenuShadowOffsetY", float(style.offset_y))
+        root.setProperty("contextMenuShadowExtendLeft", float(style.extend_left))
+        root.setProperty("contextMenuShadowExtendTop", float(style.extend_top))
+        root.setProperty("contextMenuShadowExtendRight", float(style.extend_right))
+        root.setProperty("contextMenuShadowExtendBottom", float(style.extend_bottom))
         return True
 
     def bind_context_menu_model(self, model: QuickContextMenuModel) -> bool:
@@ -985,7 +1057,7 @@ class QuickSceneController(QObject):
         item.set_presentation(presentation)
 
         style = presentation.shell_style
-        root.setOpacity(presentation.scene_fade)
+        root.setProperty("authoredSceneOpacity", presentation.scene_fade)
         root.setProperty(
             "cardShellEnabled",
             presentation.shell_policy is VisualizerShellPolicy.CARD,
@@ -1028,6 +1100,13 @@ class QuickSceneController(QObject):
             "cardShadowSpread",
             float(style.get("shadow_spread", 0.0)),
         )
+        shadow_extensions = style.get(
+            "shadow_extensions", (0.0, 0.0, 0.0, 0.0)
+        )
+        root.setProperty("cardShadowExtendLeft", float(shadow_extensions[0]))
+        root.setProperty("cardShadowExtendTop", float(shadow_extensions[1]))
+        root.setProperty("cardShadowExtendRight", float(shadow_extensions[2]))
+        root.setProperty("cardShadowExtendBottom", float(shadow_extensions[3]))
         root.setProperty("presentationActive", bool(active))
 
     def set_visualizer_presentation_active(self, active: bool) -> None:
@@ -1144,6 +1223,17 @@ class QuickSceneController(QObject):
             },
         }
 
+    def set_visualizer_startup_reveal_opacity(self, opacity: float) -> bool:
+        """Project the generation startup gate without touching authored fade."""
+
+        clamped = max(0.0, min(1.0, float(opacity)))
+        self._visualizer_startup_reveal_opacity = clamped
+        root = self._visualizer_root
+        if root is None:
+            return False
+        root.setProperty("startupRevealOpacity", clamped)
+        return True
+
     def _ensure_visualizer_items(self) -> VisualizerRenderItem:
         if self._visualizer_item is not None:
             return self._visualizer_item
@@ -1169,6 +1259,10 @@ class QuickSceneController(QObject):
             self._custom_layout_session is not None
         )
         self._visualizer_root = root
+        root.setProperty(
+            "startupRevealOpacity",
+            self._visualizer_startup_reveal_opacity,
+        )
         self._visualizer_content_host = content_host
         self._visualizer_item = item
         root.setProperty("perfHudEnabled", self._perf_hud_enabled)

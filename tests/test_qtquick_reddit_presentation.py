@@ -145,8 +145,12 @@ def test_reddit2_config_inherits_base_style_but_keeps_member_feed_settings() -> 
     assert config.font_size == 31
     assert config.text_color == (1, 2, 3, 240)
     assert config.show_separators is False
-    assert style.card_style.shadow_offset_x == pytest.approx(-6.0)
-    assert style.card_style.shadow_offset_y == pytest.approx(-6.0)
+    assert style.card_style.shadow_offset_x == pytest.approx(-4.0)
+    assert style.card_style.shadow_offset_y == pytest.approx(-4.0)
+    assert style.card_style.shadow_extend_left == pytest.approx(2.0)
+    assert style.card_style.shadow_extend_top == pytest.approx(2.0)
+    assert style.card_style.shadow_extend_right == pytest.approx(0.0)
+    assert style.card_style.shadow_extend_bottom == pytest.approx(0.0)
     assert style.text_shadow_offset_x == pytest.approx(-5.0)
     assert style.text_shadow_offset_y == pytest.approx(-5.0)
 

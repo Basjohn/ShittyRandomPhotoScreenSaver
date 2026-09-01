@@ -2,11 +2,109 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from PySide6.QtCore import QObject, Property, Signal, Slot
+from PySide6.QtGui import QColor
+
+from core.settings.shadow_direction import (
+    resolve_directional_extensions,
+    resolve_signed_offset,
+)
+
+
+_CONTEXT_MENU_SHADOW_BASE = (4.0, 4.0)
+
+
+def _bounded_float(value: object, default: float, low: float, high: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = float(default)
+    return max(low, min(high, parsed))
+
+
+def _as_bool(value: object, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    return default if value is None else bool(value)
+
+
+def _shadow_rgba(value: object) -> tuple[int, int, int, int]:
+    if isinstance(value, QColor):
+        color = QColor(value)
+    elif isinstance(value, (tuple, list)) and len(value) in {3, 4}:
+        channels = list(value)
+        if len(channels) == 3:
+            channels.append(255)
+        try:
+            color = QColor(*(max(0, min(255, int(v))) for v in channels))
+        except (TypeError, ValueError):
+            color = QColor(0, 0, 0, 255)
+    else:
+        color = QColor(str(value)) if value is not None else QColor()
+    if not color.isValid():
+        color = QColor(0, 0, 0, 255)
+    return color.red(), color.green(), color.blue(), color.alpha()
+
+
+@dataclass(frozen=True, slots=True)
+class QuickContextMenuShadowStyle:
+    """Generation-scoped projection of the canonical widget shadow controls."""
+
+    enabled: bool
+    color: tuple[int, int, int, int]
+    blur: float
+    offset_x: float
+    offset_y: float
+    extend_left: float
+    extend_top: float
+    extend_right: float
+    extend_bottom: float
+
+
+def project_quick_context_menu_shadow(
+    shadow_values: Mapping[str, object],
+) -> QuickContextMenuShadowStyle:
+    """Project global Card shadow semantics onto the retained context menu.
+
+    The context menu is a runtime overlay, so it follows the same Card shadow
+    direction/opacity/blur/Extra Offset contract as widgets. Direction and Extra
+    Offset are asymmetric geometry; Qt's effect offset stays zero so the opposite
+    edge never loses coverage.
+    """
+
+    direction = shadow_values.get("direction", "SE")
+    frame_extra = _bounded_float(
+        shadow_values.get("frame_extra_offset"), 0.0, 0.0, 40.0
+    )
+    frame_opacity = _bounded_float(
+        shadow_values.get("frame_opacity"), 0.77, 0.0, 1.0
+    )
+    blur = _bounded_float(shadow_values.get("blur_radius"), 18.0, 0.0, 128.0)
+    rgba = list(_shadow_rgba(shadow_values.get("color", (0, 0, 0, 255))))
+    rgba[3] = max(0, min(255, int(round(rgba[3] * frame_opacity))))
+    offset_x, offset_y = resolve_signed_offset(direction, *_CONTEXT_MENU_SHADOW_BASE)
+    left, top, right, bottom = resolve_directional_extensions(direction, frame_extra)
+    return QuickContextMenuShadowStyle(
+        enabled=_as_bool(shadow_values.get("enabled"), True),
+        color=tuple(rgba),
+        blur=blur,
+        offset_x=float(offset_x),
+        offset_y=float(offset_y),
+        extend_left=float(left),
+        extend_top=float(top),
+        extend_right=float(right),
+        extend_bottom=float(bottom),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -321,7 +419,9 @@ def enforce_single_visible_context_menu(
 
 __all__ = [
     "QuickContextMenuEntry",
+    "QuickContextMenuShadowStyle",
     "QuickContextMenuModel",
     "build_quick_context_menu_entries",
     "enforce_single_visible_context_menu",
+    "project_quick_context_menu_shadow",
 ]
