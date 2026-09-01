@@ -1,6 +1,6 @@
 # Future Work
 
-Last updated: 2026-08-28
+Last updated: 2026-09-01
 
 Long-horizon feature / new-implementation backlog.
 
@@ -88,6 +88,12 @@ create effect-specific GL resources, and do not run effect-specific timers/worke
 
 Future transitions/options consume the final monotonic transition run. They may author internal
 deformation/easing/physics deterministically from that sample but do not become another clock.
+
+Permanent post-H safety rules apply to every future visual/transition experiment:
+
+- **R-69 Visualizer reactivity is golden.** Geometry/aspect adaptation may reframe, reflow, project or presentation-smooth, but must not globally compress authored musical response, head/radius amplitude, motion, Ghost/history displacement, transient strength, or source freshness as a viewport becomes wide/tall. State already normalized/projected into renderer-content coordinates is consumed exactly once. If an extreme visual tail is too large, target only that proven tail.
+- **R-63 black=0 outranks exact shared-edge cover.** A bounded one-device-pixel overshoot is preferable to resurrecting black/stale flashes. Any future seam/coverage change must derive native device geometry from actual monitor rectangles/DPR and remain valid across different resolutions, coordinates, monitor ordering and mixed 1.0/1.25/1.5/1.75/2.0 DPR rather than hard-coding the operator's current pair.
+- Future performance work removes measured useless allocation/work. It does not lower authored cadence, grow source/snapshot age, reintroduce FIFO/catch-up, or make visuals less reactive simply to improve counters.
 
 Performance rules:
 
@@ -424,7 +430,7 @@ authored phase/history through X/Z twist, neighboring-sample normals and bounded
 
 ## 7.4 Bubble Depth Field
 
-Shallow Z/depth presentation option without changing Bubble logical motion. Prefer instanced billboard
+Shallow Z/depth presentation option without changing Bubble logical motion **or R-69 response amplitude**. Depth/parallax must not become a viewport-dependent damping term. Prefer instanced billboard
 sphere impostors with analytic normals/specular, per-bubble Z from authored state, depth ordering and
 subtle parallax.
 

@@ -444,6 +444,8 @@ def _layout(presentation):
             content_height,
         ),
         visual_scale=presentation.uniform_visual_scale,
+        viewport_extent=presentation.viewport_extent,
+        baseline_viewport_size=presentation.baseline_viewport_size,
     )
 
 
@@ -463,6 +465,18 @@ def test_bubble_layout_scales_uniformly_and_keeps_circle_radii_isotropic() -> No
         x_radius_px = (radius / layout.aspect_ratio) * layout.content_rect[2]
         y_radius_px = radius * layout.content_rect[3]
         assert x_radius_px == pytest.approx(y_radius_px)
+
+    # R-69 golden contract: CUSTOM aspect/extent may compact the historical
+    # ripple wake, but it must never introduce a second head-radius transfer.
+    assert not hasattr(canonical, "head_radial_scale")
+    assert not hasattr(wide, "head_radial_scale")
+    assert not hasattr(tall, "head_radial_scale")
+    assert wide.trail_axis_scale[0] < 1.0
+    assert wide.trail_axis_scale[1] == pytest.approx(1.0)
+    assert tall.trail_axis_scale[0] == pytest.approx(1.0)
+    assert tall.trail_axis_scale[1] < 1.0
+    assert tall.trail_radial_scale < 1.0
+    assert canonical.large_viewport_stroke_bonus_px == pytest.approx(0.0)
 
 
 def test_quick_bubble_registry_is_static_lazy_and_resource_dormant() -> None:

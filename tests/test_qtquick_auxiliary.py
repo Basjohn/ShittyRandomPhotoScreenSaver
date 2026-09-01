@@ -1,25 +1,14 @@
-"""Phase G7 gates for same-scene dimming and pixel shift."""
+"""Permanent Qt Quick dimming/pixel-shift/native-cursor ownership gates."""
 
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import (
-    QCoreApplication,
-    QEvent,
-    QEventLoop,
-    QObject,
-    QPointF,
-    QSize,
-    QTimer,
-    Qt,
-)
+from PySide6.QtCore import QCoreApplication, QEvent, QPointF, Qt
 from PySide6.QtGui import QKeyEvent, QMouseEvent
-from PySide6.QtQuick import QQuickItem, QQuickWindow
+from PySide6.QtQuick import QQuickItem
 
-from rendering.quick.auxiliary import (
-    QuickAuxiliaryController,
-    QuickAuxiliaryState,
-)
+from rendering.quick.auxiliary import QuickAuxiliaryController, QuickAuxiliaryState
+from rendering.quick.cursor_controller import QuickCursorController
 from rendering.quick.input_controller import QuickInputController
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
 from rendering.quick.state import QuickInputState, QuickWindowPolicy
@@ -27,14 +16,8 @@ from rendering.quick.widgets.host import OverlayWidgetGeometry
 from rendering.quick.window import QuickDisplayWindow
 
 
-def test_auxiliary_controller_owns_bounded_state_and_visible_cadence(
-    monkeypatch,
-    qt_app,
-) -> None:
-    controller = QuickAuxiliaryController(
-        screen_index=2,
-        runtime_generation=17,
-    )
+def test_auxiliary_controller_owns_bounded_state_and_visible_cadence(monkeypatch, qt_app) -> None:
+    controller = QuickAuxiliaryController(screen_index=2, runtime_generation=17)
     published = []
     controller.state_changed.connect(published.append)
 
@@ -50,26 +33,17 @@ def test_auxiliary_controller_owns_bounded_state_and_visible_cadence(
     monkeypatch.setattr(controller, "_next_pixel_shift", lambda _x, _y: (2, -1))
     controller.set_pixel_shift_defer_check(lambda: True)
     controller._advance_pixel_shift()
-    assert (controller.state.pixel_shift_x, controller.state.pixel_shift_y) == (
-        0,
-        0,
-    )
+    assert (controller.state.pixel_shift_x, controller.state.pixel_shift_y) == (0, 0)
     controller.set_pixel_shift_defer_check(lambda: False)
     controller._advance_pixel_shift()
-    assert (controller.state.pixel_shift_x, controller.state.pixel_shift_y) == (
-        2,
-        -1,
-    )
+    assert (controller.state.pixel_shift_x, controller.state.pixel_shift_y) == (2, -1)
     assert published[-1] is controller.state
 
     assert controller.pause() is True
     assert controller.describe()["pixel_shift_timer_active"] is False
     assert controller._pixel_shift_defer_check is not None
     assert controller.configure_pixel_shift(False, 1) is True
-    assert (controller.state.pixel_shift_x, controller.state.pixel_shift_y) == (
-        0,
-        0,
-    )
+    assert (controller.state.pixel_shift_x, controller.state.pixel_shift_y) == (0, 0)
     assert controller.close() is True
     assert controller.state.admission_open is False
     assert controller._pixel_shift_defer_check is None
@@ -91,10 +65,6 @@ def test_pixel_shift_walk_stays_bounded_and_turns_inward_at_the_edge() -> None:
 
 
 def test_halo_follows_cross_display_ctrl_clear_after_focus_moves(qt_app) -> None:
-    # Integrated A->B->A coherence tying the input and auxiliary owners: display
-    # A's halo is Ctrl-admitted; when focus moves to B and the shared coordinator
-    # clears Ctrl, A's derived input state clears and its halo hides rather than
-    # staying stuck visible.
     global_state = {"held": False}
     display_a = QuickInputController(
         screen_index=0,
@@ -104,63 +74,47 @@ def test_halo_follows_cross_display_ctrl_clear_after_focus_moves(qt_app) -> None
     )
     aux_a = QuickAuxiliaryController(screen_index=0, runtime_generation=7)
     aux_a.resume()
-    aux_a.update_halo_pointer(QPointF(100.0, 50.0))
 
-    # A presses Ctrl -> its input state admits the halo.
     display_a.handle_key_press(
         QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Control, Qt.KeyboardModifier.NoModifier)
     )
     assert display_a.is_ctrl_mode_active() is True
     assert aux_a.apply_input_state(display_a.input_state) is True
-    assert aux_a.state.halo_visible is True
+    assert aux_a.state.halo_enabled is True
+    assert aux_a.state.native_cursor_visible is False
 
-    # Focus moves to B; the coordinator clears the shared Ctrl state.
     global_state["held"] = False
-    display_a.is_ctrl_mode_active()  # re-derive and republish A's input state
+    display_a.is_ctrl_mode_active()
     assert display_a.input_state.ctrl_held is False
     aux_a.apply_input_state(display_a.input_state)
-    assert aux_a.state.halo_visible is False
-
+    assert aux_a.state.halo_enabled is False
     aux_a.close()
 
 
-def test_halo_visibility_is_input_admitted_suppressed_and_shape_bounded(
-    qt_app,
-) -> None:
-    controller = QuickAuxiliaryController(
-        screen_index=1,
-        runtime_generation=8,
-    )
+def test_halo_visibility_is_input_admitted_suppressed_and_shape_bounded(qt_app) -> None:
+    controller = QuickAuxiliaryController(screen_index=1, runtime_generation=8)
     controller.resume()
-    assert controller.update_halo_pointer(QPointF(120.5, 70.25)) is False
-    assert controller.state.halo_visible is False
-    assert controller.apply_input_state(
-        QuickInputState(
-            screen_index=1,
-            runtime_generation=9,
-            ctrl_held=True,
-        )
-    ) is False
+    assert controller.state.halo_enabled is False
 
     assert controller.apply_input_state(
-        QuickInputState(
-            screen_index=1,
-            runtime_generation=8,
-            ctrl_held=True,
-        )
+        QuickInputState(screen_index=1, runtime_generation=9, ctrl_held=True)
+    ) is False
+    assert controller.apply_input_state(
+        QuickInputState(screen_index=1, runtime_generation=8, ctrl_held=True)
     ) is True
-    assert controller.state.halo_visible is True
-    assert controller.state.halo_x == pytest.approx(120.5)
-    assert controller.state.halo_y == pytest.approx(70.25)
+    assert controller.state.halo_enabled is True
+    assert controller.state.native_cursor_visible is False
+
     assert controller.set_halo_shape("diamond") is True
     assert controller.state.halo_shape == "diamond"
     assert controller.set_halo_shape("not-a-shape") is True
     assert controller.state.halo_shape == "cursor_light"
 
     assert controller.set_halo_suppressed(True) is True
-    assert controller.state.halo_visible is False
-    assert controller.update_halo_pointer(QPointF(140.0, 90.0)) is False
-    assert controller.set_halo_suppressed(False) is False
+    assert controller.state.halo_enabled is False
+    assert controller.set_halo_suppressed(False) is True
+    assert controller.state.halo_enabled is True
+
     assert controller.apply_input_state(
         QuickInputState(
             screen_index=1,
@@ -168,8 +122,9 @@ def test_halo_visibility_is_input_admitted_suppressed_and_shape_bounded(
             ctrl_held=True,
             context_menu_active=True,
         )
-    ) is False
-    assert controller.state.halo_visible is False
+    ) is True
+    assert controller.state.halo_enabled is False
+    assert controller.state.native_cursor_visible is True
     controller.close()
 
 
@@ -190,21 +145,18 @@ def test_scene_projects_matching_auxiliary_state_without_item_recreation(qt_app)
         layer = root.findChild(QQuickItem, "pixelShiftLayer")
         dimming = root.findChild(QQuickItem, "backgroundDimming")
         ordinary_host_item = root.findChild(QQuickItem, "ordinaryWidgetHost")
-        visualizer_loader = root.findChild(
-            QQuickItem,
-            "visualizerPresentationLoader",
-        )
-        halo = root.findChild(QQuickItem, "cursorHalo")
+        visualizer_loader = root.findChild(QQuickItem, "visualizerPresentationLoader")
         assert layer is not None
         assert dimming is not None
         assert ordinary_host_item is not None
         assert visualizer_loader is not None
-        assert halo is not None
+        # R-64: Halo is native QCursor presentation; it must not return to the scene.
+        assert root.findChild(QQuickItem, "cursorHalo") is None
         assert ordinary_host_item.parentItem() is layer
         assert visualizer_loader.parentItem() is layer
 
         retained = controller.ordinary_widget_host.create_widget(
-            geometry=OverlayWidgetGeometry(10.0, 12.0, 100.0, 60.0),
+            geometry=OverlayWidgetGeometry(10.0, 12.0, 100.0, 60.0)
         )
         retained_item = retained.item
 
@@ -230,9 +182,7 @@ def test_scene_projects_matching_auxiliary_state_without_item_recreation(qt_app)
                 pixel_shift_enabled=True,
                 pixel_shift_x=3,
                 pixel_shift_y=-2,
-                halo_visible=True,
-                halo_x=100.0,
-                halo_y=120.0,
+                halo_enabled=True,
                 halo_shape="circle",
             )
         ) is True
@@ -244,21 +194,12 @@ def test_scene_projects_matching_auxiliary_state_without_item_recreation(qt_app)
         assert root.property("pixelShiftX") == pytest.approx(3.0)
         assert root.property("pixelShiftY") == pytest.approx(-2.0)
         assert dimming.property("opacity") == pytest.approx(0.35)
-        assert halo.property("haloShape") == "circle"
-        assert halo.property("haloVisible") is True
-        assert halo.property("visible") is True
-        assert halo.x() == pytest.approx(81.0)
-        assert halo.y() == pytest.approx(101.0)
         mapped_origin = layer.mapToScene(QPointF(0.0, 0.0))
         assert mapped_origin.x() == pytest.approx(3.0)
         assert mapped_origin.y() == pytest.approx(-2.0)
 
         assert controller.apply_auxiliary_state(
-            QuickAuxiliaryState(
-                screen_index=0,
-                runtime_generation=44,
-                admission_open=False,
-            )
+            QuickAuxiliaryState(screen_index=0, runtime_generation=44, admission_open=False)
         ) is True
         qt_app.processEvents()
         assert root.property("dimmingEnabled") is False
@@ -272,7 +213,7 @@ def test_scene_projects_matching_auxiliary_state_without_item_recreation(qt_app)
 
 
 @pytest.mark.qt
-def test_quick_window_publishes_local_pointer_without_forwarding_window(qt_app) -> None:
+def test_quick_window_routes_motion_only_to_native_cursor_owner(qt_app) -> None:
     screen = qt_app.primaryScreen()
     assert screen is not None
     window = QuickDisplayWindow(
@@ -281,8 +222,19 @@ def test_quick_window_publishes_local_pointer_without_forwarding_window(qt_app) 
         screen=screen,
         policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
     )
-    positions = []
-    window.pointer_position_changed.connect(positions.append)
+
+    class _CursorProbe:
+        tracks_pointer_motion = True
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def note_pointer_motion(self) -> bool:
+            self.calls += 1
+            return True
+
+    cursor = _CursorProbe()
+    window.bind_cursor_controller(cursor)
     try:
         event = QMouseEvent(
             QEvent.Type.MouseMove,
@@ -293,43 +245,25 @@ def test_quick_window_publishes_local_pointer_without_forwarding_window(qt_app) 
             Qt.KeyboardModifier.NoModifier,
         )
         QCoreApplication.sendEvent(window, event)
-        assert len(positions) == 1
-        assert positions[0].x() == pytest.approx(45.5)
-        assert positions[0].y() == pytest.approx(36.25)
+        assert cursor.calls == 1
+        assert not hasattr(window, "pointer_position_changed")
     finally:
         window.deleteLater()
         qt_app.processEvents()
 
 
 @pytest.mark.qt
-def test_all_retained_halo_shapes_draw_real_quick_pixels(qt_app) -> None:
-    owner = QObject()
-    factory = QuickSceneFactory(owner)
-    window = QQuickWindow()
-    window.resize(100, 100)
-    context, root = factory.create_display_root(
-        owner=owner,
+def test_all_native_halo_shapes_render_real_cursor_pixels(qt_app) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
         screen_index=0,
         runtime_generation=1,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
     )
-    root.setParent(window.contentItem())
-    root.setParentItem(window.contentItem())
-    root.setWidth(100.0)
-    root.setHeight(100.0)
-    halo = root.findChild(QQuickItem, "cursorHalo")
-    assert halo is not None
-
-    def wait(milliseconds: int) -> None:
-        loop = QEventLoop()
-        QTimer.singleShot(milliseconds, loop.quit)
-        loop.exec()
-
+    cursor = QuickCursorController(window=window, screen_index=0, runtime_generation=1)
     try:
-        root.setProperty("haloX", 50.0)
-        root.setProperty("haloY", 50.0)
-        root.setProperty("haloVisible", True)
-        window.show()
-        wait(700)
         for shape in (
             "circle",
             "ring",
@@ -339,18 +273,10 @@ def test_all_retained_halo_shapes_draw_real_quick_pixels(qt_app) -> None:
             "cursor_light",
             "cursor_dark",
         ):
-            root.setProperty("haloShape", shape)
-            wait(50)
-            result = halo.grabToImage(QSize(38, 38))
-            loop = QEventLoop()
-            timeout = QTimer()
-            timeout.setSingleShot(True)
-            timeout.timeout.connect(loop.quit)
-            result.ready.connect(loop.quit)
-            timeout.start(5_000)
-            loop.exec()
-            timeout.stop()
-            image = result.image()
+            pixmap, _hot_x, _hot_y = cursor._render_halo_pixmap(
+                shape=shape, dpr=1.0, opacity=1.0
+            )
+            image = pixmap.toImage()
             assert not image.isNull(), shape
             visible_pixels = sum(
                 image.pixelColor(x, y).alpha() > 8
@@ -359,44 +285,32 @@ def test_all_retained_halo_shapes_draw_real_quick_pixels(qt_app) -> None:
             )
             assert visible_pixels >= 12, (shape, visible_pixels)
     finally:
-        window.hide()
-        root.setParentItem(None)
-        root.setParent(None)
-        root.deleteLater()
-        context.deleteLater()
+        cursor.close()
         window.deleteLater()
-        owner.deleteLater()
         qt_app.processEvents()
 
 
-def test_quick_auxiliary_owner_has_no_qwidget_or_settings_authority() -> None:
+def test_quick_auxiliary_and_cursor_owners_preserve_native_halo_contract() -> None:
     from pathlib import Path
 
-    source = (
-        Path(__file__).resolve().parents[1]
-        / "rendering"
-        / "quick"
-        / "auxiliary.py"
-    ).read_text(encoding="utf-8")
-    for forbidden in ("QWidget", "SettingsManager", "DisplayWidget", "PixelShiftManager"):
-        assert forbidden not in source
+    root = Path(__file__).resolve().parents[1]
+    auxiliary = (root / "rendering" / "quick" / "auxiliary.py").read_text(encoding="utf-8")
+    cursor = (root / "rendering" / "quick" / "cursor_controller.py").read_text(encoding="utf-8")
+    window = (root / "rendering" / "quick" / "window.py").read_text(encoding="utf-8")
 
-    qml = (
-        Path(__file__).resolve().parents[1]
-        / "rendering"
-        / "quick"
-        / "qml"
-        / "CursorHalo.qml"
-    ).read_text(encoding="utf-8")
-    assert "Window {" not in qml
-    assert "enabled: false" in qml
-    for shape in (
-        "circle",
-        "ring",
-        "crosshair",
-        "diamond",
-        "dot",
-        "cursor_light",
-        "cursor_dark",
-    ):
-        assert f'"{shape}"' in source
+    for forbidden in ("QWidget", "SettingsManager", "DisplayWidget", "PixelShiftManager"):
+        assert forbidden not in auxiliary
+    for retired in ("update_halo_pointer", "halo_x", "halo_y", "halo_visible"):
+        assert retired not in auxiliary
+    assert '"halo_pointer_owner": "native_qcursor"' in auxiliary
+    assert "QCursor" in cursor
+    assert '"scene_position_binding": False' in cursor
+    assert "def note_pointer_motion" in cursor
+    assert "pointer_position_changed" not in window
+    assert "cursor.note_pointer_motion()" in window
+
+    qml_dir = root / "rendering" / "quick" / "qml"
+    for qml_path in qml_dir.glob("*.qml"):
+        if qml_path.name == "CursorHalo.qml":
+            continue  # orphan resource is an explicit Phase-I deletion candidate
+        assert "CursorHalo" not in qml_path.read_text(encoding="utf-8")

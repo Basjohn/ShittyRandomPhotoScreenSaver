@@ -8,7 +8,7 @@ Cross-links:
 - presentation guardrail: `Docs/Guardrails/Visualizer_Presentation.md`
 - Bubble temporal fidelity: `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - authored behavior/reference: `Docs/Visualizer_Reference.md`
-- current historical-vs-Quick reactivity decomposition: `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`
+- closed-H historical-vs-Quick reactivity evidence: `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`
 - exact reactivity evidence matrix: `Docs/QtQuick_Migration/Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`
 - CUSTOM/input implementation: `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`
 - harness routing: `Docs/Harness_Index.md`

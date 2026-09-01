@@ -17,9 +17,9 @@ The correction is latest-state freshness, not a queue:
   pending frame launches immediately;
 * intermediate frames are never replayed.
 
-These bars use a DELAYED compute manager so the overlap case actually happens.
-An immediate manager completes each task inside ``submit``, which is exactly the
-shape that hid this defect.
+These bars use a DELAYED persistent compute lane so the overlap case actually happens.
+An immediate lane completes each packet inside ``submit``, which is exactly the
+shape that hid this defect. The old per-frame Future/task path is forbidden.
 """
 
 from __future__ import annotations
@@ -35,35 +35,84 @@ class _Result:
         self.result = value
 
 
-class _DelayedComputeManager:
-    """Holds each submitted task until the test explicitly completes it."""
+class _DelayedComputeLane:
+    """One serial lane packet held until the test explicitly completes it."""
 
-    def __init__(self):
-        self.jobs: list[tuple] = []
+    def __init__(self, worker, callback, *, category: str):
+        self.worker = worker
+        self.callback = callback
+        self.category = category
+        self.jobs: list[object] = []
         self.submits = 0
-        self.fail_next = False
+        self.is_stopped = False
 
-    def submit_compute_task(self, job, callback=None, category=None):
+    def submit(self, payload) -> bool:
+        if self.is_stopped or self.jobs:
+            return False
         self.submits += 1
-        self.jobs.append((job, callback))
+        self.jobs.append(payload)
+        return True
 
-    # -- test control ---------------------------------------------------
+    def cancel_pending(self) -> int:
+        # A packet already executing is not cancelable in the production lane;
+        # these tests model that one in-flight packet and engine-side newest slot.
+        return 0
+
+    def stop(self) -> None:
+        self.is_stopped = True
+        self.jobs.clear()
+
     @property
     def in_flight(self) -> int:
         return len(self.jobs)
 
     def complete_next(self):
-        """Run the oldest outstanding task and deliver its result."""
-        job, callback = self.jobs.pop(0)
-        value = job()
-        if callback is not None:
-            callback(_Result(value))
+        payload = self.jobs.pop(0)
+        value = self.worker(payload)
+        self.callback(_Result(value), payload=payload)
 
     def fail_next_task(self):
-        job, callback = self.jobs.pop(0)
-        del job
-        if callback is not None:
-            callback(_Result(None, success=False))
+        payload = self.jobs.pop(0)
+        self.callback(_Result(None, success=False), payload=payload)
+
+
+class _DelayedComputeManager:
+    """Creates the required persistent audio-analysis lane; no Future fallback."""
+
+    supports_persistent_compute_lanes = True
+
+    def __init__(self):
+        self.lane: _DelayedComputeLane | None = None
+        self.general_submits = 0
+
+    def create_compute_lane(self, worker, callback, *, lane_id, category):
+        del lane_id
+        self.lane = _DelayedComputeLane(worker, callback, category=str(category))
+        return self.lane
+
+    def submit_compute_task(self, *_args, **_kwargs):
+        self.general_submits += 1
+        raise AssertionError("visualizer audio must not submit generic Future tasks")
+
+    @property
+    def jobs(self):
+        return [] if self.lane is None else self.lane.jobs
+
+    @property
+    def submits(self) -> int:
+        return 0 if self.lane is None else self.lane.submits
+
+    @property
+    def in_flight(self) -> int:
+        return 0 if self.lane is None else self.lane.in_flight
+
+    def complete_next(self):
+        assert self.lane is not None
+        self.lane.complete_next()
+
+    def fail_next_task(self):
+        assert self.lane is not None
+        self.lane.fail_next_task()
 
 
 @pytest.fixture
@@ -85,7 +134,7 @@ def engine(qt_app, np_module):
 @pytest.fixture
 def manager(engine):
     tm = _DelayedComputeManager()
-    engine._thread_manager = tm
+    engine.set_thread_manager(tm)
     return tm
 
 
@@ -254,6 +303,11 @@ class TestFailureAndFencing:
         engine.reset_smoothing_state()
 
         assert engine.has_pending_analysis_frame() is False
+        # A serial-lane packet already executing cannot be unsafely preempted.
+        # The generation fence keeps its slot asserted until the stale callback
+        # returns, then releases it without publication.
+        assert engine._compute_task_active is True
+        manager.complete_next()
         assert engine._compute_task_active is False
 
     def test_a_stale_pending_frame_is_never_launched(self, engine, manager, np_module):

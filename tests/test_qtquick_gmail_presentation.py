@@ -736,6 +736,12 @@ def test_gmail_qml_is_presentation_only_and_keeps_popup_height_independent() -> 
         assert marker not in qml
     assert "onDoubleTapped: gmailRoot.refreshRequested()" in qml
     assert "committedContentHeight: gmailModel.contentHeight" in qml
+    # H9/R-67: Gmail is a whole-card uniform-transform family. Its model width
+    # is already outer width; only row-derived height needs the shell inset.
+    assert "uniformScaleTransform: true" in qml
+    assert "preferredContentWidth: gmailModel.contentWidth" in qml
+    assert "preferredContentHeight: gmailModel.contentHeight + gmailRoot.shellInset" in qml
+    assert "preferredContentWidth: gmailModel.contentWidth +" not in qml
     assert "MultiEffect" in qml
     assert "gmailActionPopup" in qml
     assert "menuOpen ?" not in qml

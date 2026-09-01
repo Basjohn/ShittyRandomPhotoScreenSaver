@@ -8,7 +8,48 @@ ensuring significant CPU savings while maintaining visual fidelity.
 import pytest
 import time
 from unittest.mock import Mock
-from widgets.spotify_visualizer_widget import _SpotifyBeatEngine
+from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
+
+
+class _GatingLane:
+    def __init__(self, callback) -> None:
+        self.callback = callback
+        self.submits = 0
+        self.is_stopped = False
+
+    def submit(self, payload) -> bool:
+        if self.is_stopped:
+            return False
+        self.submits += 1
+        # Playback-gating tests only care whether analysis work is admitted.
+        # Complete with a failed result so the engine releases its in-flight slot
+        # without invoking FFT/DSP in this unit test.
+        self.callback(Mock(success=False, result=None), payload=payload)
+        return True
+
+    def cancel_pending(self) -> int:
+        return 0
+
+    def stop(self) -> None:
+        self.is_stopped = True
+
+
+class _GatingThreadManager:
+    supports_persistent_compute_lanes = True
+
+    def __init__(self) -> None:
+        self.lane: _GatingLane | None = None
+        self.general_submits = 0
+
+    def create_compute_lane(self, _worker, callback, *, lane_id, category):
+        assert str(lane_id).startswith("spotify_visualizer.audio_analysis:")
+        assert category == "visualizer.audio_analysis"
+        self.lane = _GatingLane(callback)
+        return self.lane
+
+    def submit_compute_task(self, *_args, **_kwargs):
+        self.general_submits += 1
+        raise AssertionError("audio analysis must not use generic Future tasks")
 
 
 class TestVisualizerPlaybackGating:
@@ -16,10 +57,11 @@ class TestVisualizerPlaybackGating:
     
     @pytest.fixture
     def beat_engine(self):
-        """Create a test beat engine instance."""
+        """Create a beat engine with the destination persistent analysis lane."""
         engine = _SpotifyBeatEngine(bar_count=32)
-        # Mock thread manager to avoid actual threading
-        engine._thread_manager = Mock()
+        manager = _GatingThreadManager()
+        engine.set_thread_manager(manager)
+        engine._test_thread_manager = manager
         return engine
     
     def test_playback_state_setting(self, beat_engine):
@@ -75,18 +117,16 @@ class TestVisualizerPlaybackGating:
         # Mock the audio buffer to return our frame
         beat_engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
         
-        # Mock the thread manager
-        mock_tm = beat_engine._thread_manager
-        mock_tm.submit_compute_task = Mock()
-        
-        # Call tick - should schedule FFT processing
+        manager = beat_engine._test_thread_manager
+        assert manager.lane is not None
+        before = manager.lane.submits
+
+        # Call tick - playing state should admit one packet to the persistent lane.
         result = beat_engine.tick()
-        
-        # Should return None (processing in background)
+
         assert result is None or isinstance(result, list)
-        
-        # Verify compute task was scheduled
-        mock_tm.submit_compute_task.assert_called_once()
+        assert manager.lane.submits == before + 1
+        assert manager.general_submits == 0
     
     def test_state_transition_handling(self, beat_engine):
         """Test that state transitions are handled correctly."""
@@ -99,20 +139,22 @@ class TestVisualizerPlaybackGating:
         mock_frame.samples = mock_samples
         beat_engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
         
-        # Process while playing
+        manager = beat_engine._test_thread_manager
+        assert manager.lane is not None
+
+        # Process while playing: one lane packet is admitted. The unit lane
+        # completes immediately with a failed result, so no active slot lingers.
+        before = manager.lane.submits
         beat_engine.tick()
-        assert beat_engine._compute_task_active is True
-        
-        # Transition to not playing
+        assert manager.lane.submits == before + 1
+        assert beat_engine._compute_task_active is False
+
+        # Transition to not playing. Idle presentation must not admit analysis.
         beat_engine.set_playback_state(False)
-        
-        # Reset compute task active to test gating
-        beat_engine._compute_task_active = False
-        
-        # Process while not playing - should not schedule compute task
         result = beat_engine.tick()
         assert isinstance(result, list)
         assert len([bar for bar in result if bar > 0.0]) > 8
+        assert manager.lane.submits == before + 1
         assert beat_engine._compute_task_active is False
     
     def test_idle_seed_requirement(self, beat_engine):
@@ -178,49 +220,31 @@ class TestVisualizerPlaybackGating:
         assert max(result) < 0.05
     
     def test_performance_impact_simulation(self, beat_engine):
-        """Test that CPU usage is reduced when not playing."""
-        # Mock the compute task scheduling to track calls
-        compute_calls = []
-        
-        def track_compute_calls(job, callback, **_metadata):
-            compute_calls.append((job, callback))
-            return Mock()
-        
-        beat_engine._thread_manager.submit_compute_task = track_compute_calls
-        
-        # Mock audio data
+        """Paused playback admits no audio-analysis lane work."""
+        manager = beat_engine._test_thread_manager
+        assert manager.lane is not None
+
         mock_samples = [0.1, 0.2, 0.3] * 100
         mock_frame = Mock()
         mock_frame.samples = mock_samples
         beat_engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
-        
-        # Simulate playing state - should schedule compute tasks
+
         beat_engine.set_playback_state(True)
+        before = manager.lane.submits
         for _ in range(10):
-            beat_engine._compute_task_active = False  # Reset each time
             beat_engine.tick()
-        
-        playing_calls = len(compute_calls)
-        
-        # Reset for not playing test
-        compute_calls.clear()
-        beat_engine._compute_task_active = False
-        
-        # Simulate not playing state - should NOT schedule compute tasks
+        playing_calls = manager.lane.submits - before
+
         beat_engine.set_playback_state(False)
+        before_paused = manager.lane.submits
         for _ in range(10):
             beat_engine.tick()
-        
-        not_playing_calls = len(compute_calls)
-        
-        # Verify significant reduction in compute task scheduling
-        assert playing_calls > 0, "Should schedule compute tasks when playing"
-        assert not_playing_calls == 0, "Should not schedule compute tasks when not playing"
-        
-        # Calculate simulated CPU savings
-        cpu_savings_percentage = (playing_calls - not_playing_calls) / playing_calls * 100
-        assert cpu_savings_percentage >= 90, f"Expected >= 90% CPU savings, got {cpu_savings_percentage:.1f}%"
-    
+        not_playing_calls = manager.lane.submits - before_paused
+
+        assert playing_calls > 0, "playing state must admit analysis packets"
+        assert not_playing_calls == 0, "paused state must not admit analysis packets"
+        assert manager.general_submits == 0
+
     def test_sparse_polling_simulation(self, beat_engine):
         """Test that state changes are detected with minimal overhead."""
         # Track state change timestamps

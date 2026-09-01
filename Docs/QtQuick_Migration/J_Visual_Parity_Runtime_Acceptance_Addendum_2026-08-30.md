@@ -5,7 +5,7 @@ Applies to: `Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decom
 
 This addendum records concrete eyes-on/runtime acceptance observations from the first corrected Quick production smokes so they do not disappear into vague “visual parity” wording.
 
-It does **not** move deterministic H failures into J. H1 reconstruction/terminal ownership, H2 Media artwork provider identity, H3 Reddit opening, H3b Clock mode/CUSTOM persistence and H4 Media Play/Pause/seek are closed and must not be reopened by stale prose. Remaining H work is only what `Current_Plan.md` still names (including current Visualizer/settings/resize gates and R7 physical validation); this addendum owns visual/interaction acceptance after those functional contracts exist.
+H is now closed. This addendum must not reopen deterministic H contracts through stale prose: lifecycle/reconstruction, Media artwork/actions/event ownership, Reddit opening, Clock mode/CUSTOM persistence, Visualizer routing/reactivity/topology, ordinary-family resize, R6 Halo and R7 transition admission are accepted source/physical baselines. This addendum owns J visual/interaction acceptance on top of those contracts.
 
 ## 1. Parity+ baseline rule
 
@@ -145,15 +145,15 @@ A pre-R7/H9 physical resize experiment emitted repeated Qt/QML warnings:
 
 `WeatherPresentation.qml: Binding loop detected for property preferredContentHeight` (binding at line 24 in the observed build).
 
-Treat this as **J geometry/parity correctness debt by default**, not harmless log cosmetics. It does not block escape from H unless later evidence shows it corrupts functional/committed geometry or lifecycle before H closes. The current preferred-height expression reads `readyColumn.childrenRect.height + shellInset` while the content column is centred inside the Python-assigned outer rect; during resize/reflow the preferred-size notification can participate in the QML -> Python outer-rect -> QML layout feedback edge. Before Weather J parity is accepted, source-localize the smallest cycle and prove repeated wheel/corner resize plus Save/recreation yields stable preferred geometry with **zero binding-loop warnings** in `screensaver_qml.log`. Do not paper it over by suppressing Qt messages or by adding a second geometry owner.
+Treat this as **J geometry/parity correctness debt by default**, not harmless log cosmetics. H is already closed; reopen a smaller functional owner only if later evidence proves actual committed-geometry or lifecycle corruption. The current preferred-height expression reads `readyColumn.childrenRect.height + shellInset` while the content column is centred inside the Python-assigned outer rect; during resize/reflow the preferred-size notification can participate in the QML -> Python outer-rect -> QML layout feedback edge. Before Weather J parity is accepted, source-localize the smallest cycle and prove repeated wheel/corner resize plus Save/recreation yields stable preferred geometry with **zero binding-loop warnings** in `screensaver_qml.log`. Do not paper it over by suppressing Qt messages or by adding a second geometry owner.
 
 ## 8. Visualizer
 
-After H Spectrum repair and H CUSTOM cross-display admission repair, physically inspect all five modes again.
+With H Spectrum topology/data and CUSTOM cross-display admission accepted, physically inspect all five modes again for J Parity+.
 
-Bubble: the current complaint is now stronger than “slightly less reactive”: physical use can be **barely reactive**, with delayed visible start/stop and very little contraction/expansion. Do not answer this by arbitrary sensitivity/growth tuning. First correlate playback edge -> source/logical state -> retained publication -> visible response; an obvious stale/delayed owner defect is repaired at that seam, otherwise compare/tune authored visible response against the accepted baseline in J. Raw ~90 Hz cadence alone does not close this cell. **Partial/CUSTOM resizing is currently a provisional physical PASS and should be preserved.**
+Bubble: H closed with R-69 as a golden scaling/reactivity contract. Canonical, wide and tall CUSTOM geometry must preserve authored musical response; do not globally compress head radius, pulse/motion or already-normalized Ghost/history displacement to make extreme geometry tidier. J may polish an oversized extreme expansion tail only if it preserves the full response curve. Raw ~90 Hz cadence never licenses visible-reactivity loss.
 
-Spectrum: H must first restore the correct **functional** representation family. The operator's intended Organ/Spectrum comparison is continuous bottom-aligned frequency columns; the current dense matrix of tiny segmented blocks is not merely a styling difference. Once H restores correct data + topology, J Parity+ owns exact spacing, outline/glow, gradient/rainbow treatment and motion polish. Explicitly include “switch into Spectrum from another mode,” not only cold-start Spectrum.
+Spectrum: H already restored/validated the correct functional representation family and live topology. J Parity+ owns exact spacing, outline/glow, gradient/rainbow treatment and motion polish while preserving the accepted large-viewport smoothing and musical response. Explicitly include “switch into Spectrum from another mode,” not only cold-start Spectrum.
 
 All modes: verify canonical/wide/tall viewport behavior and shell/clip/shadow correctness already required by the main J decomposition.
 

@@ -1,6 +1,6 @@
 # Visualizer Presentation Guardrails
 
-Last updated: 2026-08-29
+Last updated: 2026-09-01
 
 Read for visualizer cadence, source freshness, render state, fade/readiness, shell/clip policy,
 geometry, and presentation work.
@@ -60,6 +60,8 @@ The canonical resolved technical cache is also split by consumer:
 - legacy overlay mirrors do not survive merely because the old QWidget technical applier wrote them.
 
 Needing the shared BeatEngine is not a reason to retain a QWidget owner.
+
+Accepted audio-analysis ownership after H is one persistent serial `visualizer.audio_analysis` compute lane: one packet executing, at most one newest pending source replacement, retained detached DSP state across ordinary frames, explicit config/activation/reset epoch invalidation, and stale-result rejection across an epoch boundary. There is no generic per-frame Future/task fallback. Preserve the small stable previous-bars packet snapshot unless a replacement correctness proof removes the live-list mutation race.
 
 ## 2. One logical clock
 
@@ -345,10 +347,11 @@ into the expanded logical world and solve trail smear in content coordinates. Do
 gain, authored speed/control retuning, a new timer, or a second motion state.
 
 Bubble wake history and Bubble-head magnitude are separate contracts. Stored trail history remains content-space invariant and
-head radius/reactivity may legitimately follow actual card height, but the Quick wake is an authored presentation effect: each
-trail source's **complete** visible footprint (source separation, ripple radius/cap and ring spacing) must remain baseline-pixel
-authoritative under edge-resized wide/tall viewports. Correcting only the three trail-source centres is insufficient. This rule
-does not define the separate Bubble Ghost/Decay product contract.
+head radius/reactivity follows actual card height, but the Quick ripple wake is an authored presentation effect: each
+trail source's **complete** visible footprint (source separation, ripple radius/cap and ring spacing) remains baseline-pixel
+authoritative under edge-resized wide/tall viewports. Correcting only the three trail-source centres is insufficient.
+
+**R-69 is the golden viewport rule.** Bubble's renderer-facing head radius must not receive a global `baseline/current`, `1 / viewport_extent`, or equivalent large-viewport compressor. Ghost consumes already-normalized historical positions exactly once and must not inherit the ripple-wake axis/radial compression. The rejected global head compressor made extreme CUSTOM Bubble look nearly non-reactive while DSP/logical telemetry stayed healthy. If full expansion is aesthetically too large, target only a proven upper visual tail; do not flatten the full response curve. The same principle applies across Spectrum/Oscilloscope/Sine/DevCurve: geometry adaptation or smoothing may not silently weaken authored musical response or freshness.
 
 ## 14A. Product display admission and semantic input
 

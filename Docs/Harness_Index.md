@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-08-30
+Last updated: 2026-09-01
 
 Compact routing for recurring investigation and migration sign-off commands.
 
@@ -26,16 +26,16 @@ pytest path\to\test_file.py -q --tb=short
 Use `Docs/TestSuite.md` to identify current/permanent, migration-critical, WILL-BE-OBSOLETE and obsolete
 test ownership.
 
-For current H destination work, use the maintained profile owned by `Docs/TestSuite.md`:
+For current destination-authority work, use the maintained phase-neutral profile owned by `Docs/TestSuite.md`:
 
 ```powershell
-python tests/run_chunked.py --profile h-destination --chunks 4 --timeout-seconds 900 --log
+python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 900 --log
 ```
 
 Maintained profiles isolate selected targets in fresh pytest subprocesses so queued Qt/QQuick teardown from one target cannot
 poison an unrelated result. `--chunks` groups/logs those isolated targets; it is not four giant shared Qt processes.
 
-The whole-tree wrapper remains a broad H/I **reconciliation diagnostic**:
+The whole-tree wrapper remains a broad Phase-I **reconciliation diagnostic**:
 
 ```powershell
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
@@ -58,7 +58,7 @@ A successful capture eagerly creates `screensaver_qml.log` with a session marker
 
 Focused capture validation: `pytest tests/test_qt_message_capture_contract.py tests/test_qt_message_capture_qml_runtime.py -q --tb=short`. The second test requires real PySide6/QQmlEngine.
 
-Relevant Qt/QML warning/error lines must be correlated to the same timestamp window before calling H/J GREEN. Use `Docs/Qt_QML_Observability.md` for capture semantics and the raw-stderr boundary.
+Relevant Qt/QML warning/error lines must be correlated to the same timestamp window before calling a runtime/J claim GREEN. Use `Docs/Qt_QML_Observability.md` for capture semantics and the raw-stderr boundary.
 
 ## 2. Phase-C Quick transition regression harnesses
 
@@ -186,7 +186,7 @@ Focused Quick harnesses prove as relevant:
 - resource cleanup;
 - exact transition/visualizer/widget contract being changed.
 
-## 8. Closed E/F/G ownership regressions and current H routing
+## 8. Closed E/F/G/H ownership regressions and current I routing
 
 ### 8.1 Landed E/F capability/ownership foundation
 
@@ -242,17 +242,17 @@ Preserve focused Settings/runtime cases for:
 
 Provider/model/resource retirement assertions stay at the actual neutral owner; do not move them back into presentation tests.
 
-### 8.4 Current H destination routing
+### 8.4 Current destination routing
 
-G4/G7/G8 implementation is closed. Do not use old G command bundles as the default H bar.
+G4/G7/G8/H implementation and H physical acceptance are closed. Do not use old phase command bundles as the current bar.
 
-The maintained H destination profile is the ordinary broad architecture regression route:
+The maintained `destination` profile is the ordinary broad architecture regression route:
 
 ```powershell
-python tests/run_chunked.py --profile h-destination --chunks 4 --timeout-seconds 900 --log
+python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 900 --log
 ```
 
-Use smaller focused files/nodeids first for the slice being changed. The H profile covers deterministic/runtime-shaped Quick
+Use smaller focused files/nodeids first for the slice being changed. The destination profile covers deterministic/runtime-shaped Quick
 display/unit/family/CUSTOM/input/transition/visualizer ownership, including the stronger technical-config + real retained-item
 visualizer boundary. It intentionally does **not** turn operator-hardware-dependent QScreen/topology cells into a per-commit H
 gate.
@@ -271,8 +271,7 @@ Do not interpret startup/capture rows before intentional presentation as active-
 Do not infer continuous displayed FPS from sparse/non-occupancy GDI `DisplayedTime` rows.
 Use p95/p99/tails/severe gaps plus phase correlation when cadence evidence is actually needed.
 
-R-26 remains **PARTIAL / AWAITING VALIDATION** until the real dual-display wake/late-return behavior is
-accepted on corresponding hardware; implementation review alone does not manufacture that evidence.
+R-26 remains a separate **PARTIAL / AWAITING VALIDATION** historical topology/failover record until its full off/asleep/late-return sequence is exercised on corresponding hardware. That residual is J physical evidence and does not reopen H; implementation review alone does not manufacture the missing scenario.
 
 ## 10. Runtime diagnostics
 

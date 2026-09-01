@@ -1,6 +1,6 @@
 # Presentation / Cadence Change Preflight
 
-Last updated: 2026-08-28
+Last updated: 2026-09-01
 
 Read before changing physical presentation, visualizer delivery, cadence or render-state ownership.
 
@@ -17,9 +17,7 @@ VisualizerLogicalRuntime
 -> Quick presentation
 ```
 
-Legacy `DisplayWidget`/QRhiWidget/`GLCompositorWidget` source may survive until H only where still physically wired. It
-is not rollback architecture and **does not need to remain a functioning product during migration**. Do not rebuild old
-pixels for continuity.
+Legacy `DisplayWidget`/QRhiWidget/`GLCompositorWidget` physical presentation was removed by H. It is not rollback architecture, a test convenience fallback or a continuity path. Do not rebuild old pixels to satisfy stale harnesses.
 
 ## Rejected
 
@@ -28,6 +26,7 @@ pixels for continuity.
 - paint/swap acknowledgement;
 - catch-up replay;
 - source/event decimation;
+- per-frame generic Future/task submission for Visualizer audio analysis;
 - separate visualizer presentation surface;
 - GUI recurring timer as visualizer simulation owner;
 - per-mode visualizer logical clocks;
@@ -48,6 +47,8 @@ left/right edge        -> viewport width
 
 All five current modes, including Bubble, must support the viewport operation. Bubble viewport changes are spatial
 configuration and remain subordinate to BTF; they are not grounds for algorithm/cadence retuning.
+
+R-69 is a hard preflight veto: do not make wide/tall geometry look tidier by globally shrinking authored response amplitude, Bubble head radius, motion or already-normalized Ghost/history displacement. Apply the same principle to every mode. Extreme-tail polish must target only the proven visual tail.
 
 ## Before changing a renderer
 

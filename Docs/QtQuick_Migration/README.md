@@ -23,19 +23,20 @@ Live phase/checkpoint status is intentionally not duplicated here; read `Current
 | `Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` | durable G4 scale/extent architecture and closure bars |
 | `G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` | G4 ownership/spatial correction closure reference |
 | `Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` | G7/G8 auxiliary/focus closure reference |
-| `Remaining_H_Production_Cutover_Decomposition.md` | H production authority wiring, cardinality, lifecycle and old-host deletion |
-| `H_Post_Cutover_Runtime_Reality_Corrections.md` | bounded H correction/evidence for live retained delivery, transition replacement and visible context-menu reality gate |
-| `H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md` | H5a CUSTOM visualizer routing plus H5b Spectrum topology/shaping/renderer-transfer repair |
-| `H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md` | live H decomposition for historical-vs-Quick reactivity parity, known config losses, readiness/timing, Bubble/Sine and bounded repair sequence |
-| `H5c_Performance_Cursor_Halo_Checkpoint_2026-08-31_R6_Outside_Codex.md` | current R6 native-QCursor Cursor Halo ownership, event-cached interaction/Ctrl semantics and mandatory physical performance gate |
-| `H_Image_Transition_Prefetch_Seam_Checkpoint_2026-08-31_R7_Outside_Codex.md` | R7 transactional image-change admission, generation/token prefetch resume and exterior-edge R-63 seam refinement; physical/log gates remain mandatory |
-| `H_Media_Event_Observation_Physical_Smoke_2026-09-01.md` | short installed validation of the event-driven GSMTC Media runtime: observation re-established across recreations, real events delivered, stale/missed/degraded counters clean; broader frozen/provider-switch gate remains |
+| `Remaining_H_Production_Cutover_Decomposition.md` | **closed H record**: production authority wiring, cardinality, lifecycle and old-host deletion |
+| `H_Post_Cutover_Runtime_Reality_Corrections.md` | **closed H record**: retained delivery, transition replacement and context-menu runtime corrections |
+| `H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md` | **closed H5 evidence**: CUSTOM visualizer routing plus Spectrum topology/shaping/renderer-transfer repair |
+| `H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md` | historical H5c decomposition; permanent reactivity lessons are superseded by the H closure record + R-69/R-71 |
+| `H5c_Performance_Cursor_Halo_Checkpoint_2026-08-31_R6_Outside_Codex.md` | R6 native-QCursor Halo provenance; architecture physically accepted and permanent |
+| `H_Image_Transition_Prefetch_Seam_Checkpoint_2026-08-31_R7_Outside_Codex.md` | R7 transactional image admission/prefetch provenance; H accepts black=0 with bounded <=1px mixed-DPR seam residual |
+| `H_Media_Event_Observation_Physical_Smoke_2026-09-01.md` | event-driven GSMTC Media physical evidence; H closure accepts native observation + slow reconciliation/watchdog, no fast-poll fallback |
 | `R7_Claude_Media_Integration_Manifest_2026-09-01.md` | integration boundary for Claude Media commit `2e7a9242` against the R7 checkpoint; use as provenance, not sequence authority |
 | `H5c_Implementation_Checkpoint_2026-08-31_R2.md` | earlier H5c physical-evidence checkpoint; retain for provenance, but later R6/R7/current-plan evidence supersedes its live pointer/perf/image-pipeline status |
 | `Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md` | exact source-comparison evidence, proven deviations, field audit and next source paths |
 | `H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md` | H restoration of the omitted retained middle-click current-mode preset hotswap contract |
 | `H_Pre_Cutover_Visualizer_Edge_Corrections.md` | **closed audit record** for the pre-cutover visualizer edge findings |
 | `H_True_F_Technical_Closure.md` | **closed follow-up evidence** for technical-config ownership + real retained-consumer proof |
+| `H_Phase_Closure_2026-09-01.md` | **authoritative H closure record**: accepted gates, R-69 reactivity goldens, R-71 performance boundary, R-63 seam priority and I admission |
 | `Remaining_J_Final_Installed_Acceptance_Decomposition.md` | J compiled/installed/physical acceptance and closure matrix |
 | `J_Visual_Parity_Runtime_Acceptance_Addendum_2026-08-30.md` | current J physical/parity acceptance cells |
 | `J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md` | historical quality floor + Parity+ outcome rules |
@@ -52,7 +53,7 @@ For covered ordinary families, the paired repository images under `images/migrat
 
 ## Qt/QML observability rule
 
-Migration runtime evidence is not Python-log-only. `Docs/Qt_QML_Observability.md` owns the permanent always-on `screensaver_qml.log` contract. H/J physical Quick gates inspect it beside `screensaver.log`; unexplained migration-relevant QML/Qt diagnostics must be classified before closure.
+Migration runtime evidence is not Python-log-only. `Docs/Qt_QML_Observability.md` owns the permanent always-on `screensaver_qml.log` contract. Physical/J Quick gates inspect it beside `screensaver.log`; unexplained migration-relevant QML/Qt diagnostics must be classified before closure.
 
 ## Migration scaffolding rule
 
@@ -73,7 +74,7 @@ volatile facts.
 
 ## Final-phase decomposition rule
 
-H already has a decomposition because it changes production ownership. J has a decomposition because physical/build acceptance
+H is closed; its decomposition remains because it changed production ownership. J has a decomposition because physical/build acceptance
 spans many environments and cannot safely live as a prose footnote. I deliberately does **not** have a standing decomposition:
 post-H residue must be derived from the exact caller graph. If I ceases to be residue-only, create a bounded decomposition from
 that exact source rather than following a speculative pre-H deletion list.

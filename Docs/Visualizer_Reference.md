@@ -1,6 +1,6 @@
 # Visualizer Reference
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 Current visualizer behavior and accepted presentation destination.
 
@@ -45,7 +45,7 @@ Primary owner:
 
 Supporting logical/source modules remain Python.
 
-Durable destination flow (Phase-D components plus the H production synchronization edge):
+Durable accepted destination flow:
 
 ```text
 source / engine
@@ -63,11 +63,9 @@ source / engine
     -> admitted display's standalone QQuickWindow
 ```
 
-The bridge/render components can exist before H cutover, but bridge binding alone does not mean the destination is wired: a
-complete current snapshot must actually be composed and published.
+Bridge binding alone does not prove delivery: a complete current snapshot must actually be composed, published and admitted by the retained visualizer item.
 
-During migration, old GUI `present_tick`/compositor code may still exist as source scaffolding or historical reference.
-It is not destination architecture and need not remain runnable merely to preserve intermediate product continuity.
+Old GUI `present_tick`/compositor presentation is retired production architecture. Any surviving reference belongs to historical evidence or caller-dead I residue and must not be restored merely to satisfy an old harness.
 
 ## 4. Presentation ownership
 
@@ -79,8 +77,7 @@ Destination:
 - no independent swap/vsync owner;
 - no self-driven visualizer repaint loop.
 
-The historical `SpotifyBarsGLOverlay` name may temporarily survive as state/resource code during
-migration. It is not a presentation-surface contract.
+The historical `SpotifyBarsGLOverlay` presenter is retired. A surviving import/reference is I residue unless exact caller proof identifies a neutral non-presentation contract.
 
 ## 5. Logical / presentation split
 
@@ -98,6 +95,8 @@ Presentation side owns:
 - physical presentation.
 
 The worker does not mutate Quick items or GPU resources.
+
+Audio analysis uses one persistent serial `visualizer.audio_analysis` compute lane with one in-flight packet plus newest-pending source replacement. Detached DSP state is retained across ordinary frames and rebuilt/fenced only at real config/activation/reset epochs; no generic per-frame Future/task fallback is part of the destination.
 
 Configuration follows the consuming owner. Values used by authored logical evolution or mode-owned frame runtimes are
 presentation-neutral resolved configuration; renderer-only style/chrome is presentation-owned. Legacy widget attribute

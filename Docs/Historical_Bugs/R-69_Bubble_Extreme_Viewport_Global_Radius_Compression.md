@@ -1,7 +1,7 @@
 # R-69 — Bubble Extreme-Viewport Global Radius Compression Suppressed Reactivity
 
 Date: 2026-09-01
-Status: PARTIAL / AWAITING PHYSICAL VALIDATION — failed correction retired; original extreme full-expansion footprint remains open
+Status: Solved / GOLDEN CONTRACT ACCEPTED — failed correction permanently retired; extreme full-expansion footprint, if objectionable, is J visual-tail debt
 
 ## Symptom
 
@@ -49,7 +49,11 @@ Restoring the binding radius contract can make an extreme-tall Bubble at **full 
 
 If the oversized full-expansion tail remains objectionable after this restoration is physically validated, the next repair must target only a **proven upper expansion tail** (or another source-proven presentation seam). It must not multiply the entire radius sequence by viewport extent, and it must preserve the same visible response delta at canonical, wide and tall CUSTOM geometry.
 
-## Acceptance Required
+## Physical Acceptance
+
+The operator physically confirmed the restoration: non-CUSTOM Bubble and near-canonical CUSTOM react strongly, while the failed global-compression build degraded progressively as CUSTOM became wide/tall. After restoring the scaling contract, the Bubble response was accepted as the golden behavior to preserve. Any remaining extreme full-expansion size concern is explicitly separated from the reactivity contract.
+
+Permanent acceptance bars:
 
 - Near-canonical, very wide and very tall CUSTOM Bubble must show comparable musical expansion/contraction character.
 - Ghost displacement must remain visible at wide/tall shapes and decay gently rather than vanishing from double viewport compensation.

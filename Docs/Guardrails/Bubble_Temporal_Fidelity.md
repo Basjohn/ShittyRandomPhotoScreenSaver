@@ -1,6 +1,6 @@
 # Bubble Temporal Fidelity Contract
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 Status: **durable focused guardrail / behavioural contract**
 
@@ -763,6 +763,19 @@ Use as negative control for:
 - logically correct Bubble reaching screen too late;
 - healthy publication ratio failing because presentation age worsened;
 - testing a trigger rather than its resulting visible Bubble edge.
+
+### R-69 Bubble Extreme-Viewport Global Radius Compression
+
+`Docs/Historical_Bugs/R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md`
+
+Use as a negative control for:
+
+- healthy DSP/cadence telemetry hiding viewport-dependent visible response loss;
+- globally scaling renderer-facing head radius down as viewport height grows;
+- applying ripple-wake `baseline/current` compression to Ghost/history that is already renderer-normalized;
+- solving an oversized full-expansion tail by flattening every musical radius delta.
+
+Canonical, very wide and very tall CUSTOM shapes must preserve comparable authored response character. This is a BTF property, not optional visual polish.
 
 ### Bubble parity / reactivity harnesses
 

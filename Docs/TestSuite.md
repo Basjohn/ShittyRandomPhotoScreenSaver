@@ -5,36 +5,32 @@ Last updated: 2026-09-01
 Reviewed authority:
 
 ```text
-G: independently audited and accepted.
-H production Quick authority / old physical-host deletion: structurally accepted.
-H1a reconstruction hang: CLOSED; repeated dual-display Settings/CUSTOM physical gate passed.
-H1b terminal retirement / retained model lifetime / Settings event-filter teardown: CLOSED; later dual-display exits are clean.
-H2 Media artwork provider identity: CLOSED; exact engine-registered provider is injected and artwork is physically visible.
-H3 Reddit production opener: CLOSED; operator validated product opening behavior physically.
-H3b Clock runtime mode-toggle persistence + CUSTOM geometry recreation: CLOSED; operator validated physically.
-H4 Media Play/Pause/seek provider-result semantics: CLOSED; operator validated physically.
-H5a/H5b/H5c/H6/H8/H9/H7: exact remaining validation belongs to Current_Plan.md; do not copy volatile sub-status here.
-R6 native-QCursor Halo: pointer-motion performance physically accepted; visible custom Halo parity remains J.
-H9 uniform ordinary resize: deterministic 8/8 falsifiers + broad affected surface GREEN; operator reports major physical improvement; final Save/recreation containment still required.
-R7 image/surface integrity: transactional image-change, generation/token prefetch resume and exterior-edge R-63 refinement implemented; source-only R4-R7 contract files GREEN (`test_visualizer_viewport_scaling_contracts.py` + `test_runtime_perf_policy_contracts.py`); physical/log validation pending.
-Media event migration: event-driven GSMTC observation implemented at `2e7a9242`; short installed smoke established observation on each recreation with real events, stale=0/missed=0/degraded=False and clean exit; broader provider-switch/frozen validation remains open.
-Qt/QML observability: permanent always-on direct `screensaver_qml.log`; physical Quick gates inspect it alongside the Python log.
-I residue reconciliation: BLOCKED until H re-closes.
+G: CLOSED.
+H: CLOSED — production Quick authority, post-cutover runtime correction and heavy-load acceptance complete.
+I: ACTIVE — caller-proven stale test/tool/source reconciliation.
+J: queued — final visual/fidelity/installed/physical acceptance and residual performance polish.
+
+Permanent H destination contracts include:
+- native-QCursor Halo; no mouse-rate QML scene motion;
+- transactional image admission + generation/token prefetch wake;
+- R-63 non-exact-cover overscan with black=0 priority over a harmless bounded 1px mixed-DPR overshoot;
+- event-driven Media observation; no fast polling fallback;
+- persistent serial visualizer.audio_analysis lane with retained DSP state and no generic Future fallback;
+- R-68 CUSTOM Visualizer working-geometry presentation authority;
+- R-69 golden Visualizer/Bubble scaling rule: viewport adaptation may not compress authored reactivity;
+- ordinary CUSTOM absolute 40% scale floor; Reddit/Reddit2/Media/Gmail whole-card uniform transform;
+- H7 Exit, H8 preset cycling, H5a/H5b routing/topology accepted physically.
 ```
 
-This document is the SRPSS testing strategy and **live test-file inventory/retirement ledger**. It is not a phase changelog.
-`Current_Plan.md` owns the current implementation sequence and exact checkpoint. Exact source outranks this inventory when
-later work has landed. **At this checkpoint the inventory combines current `main` with the explicitly named R6/R7 local checkpoint additions that are being folded into the next cohesive worktree; do not assume a file is absent merely because an intermediate ZIP was sparse.**
+This document is the SRPSS testing strategy and **live test-file inventory/retirement ledger**. It is not a phase changelog. `Current_Plan.md` owns active sequence; exact source/test tree and physical evidence outrank stale prose. H acceptance details are preserved in `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md`.
 
-The whole top-level test tree is **not currently one homogeneous current-owner gate**. H has deleted the legacy physical
-`DisplayWidget`/GLCompositor presenter, while the tree still contains tests/tools whose implementation owners are already
-gone or are awaiting I re-home/deletion. A whole-tree run therefore mixes destination Quick contracts with admitted residue.
-Whole-tree results remain valuable for debt reconciliation, but an unrelated legacy red does not reopen a proven destination
-contract by itself.
+The whole top-level test tree is **not yet one homogeneous current-owner gate**. H deleted the legacy physical `DisplayWidget`/GLCompositor presenter, while the complete supplied tree still contains tests/tools whose implementation owners are gone. Phase I exists to rehome/delete that residue. A broad whole-tree red therefore requires classification; it never authorizes restoring a retired production owner.
 
-This reconciliation also accounts for the Settings GUI overhaul that did not travel through the usual migration-agent doc
-loop: stale direct imports of the retired `NoSourcesPopup`, retired `ui.widgets.color_swatch`, and the old
-`build_sine_wave_tab` builder entry point are replaced with tests against the current centralized Settings owners.
+The maintained production-authority profile is now phase-neutral **`destination`**. `h-destination` remains a temporary compatibility alias only.
+
+### H-closure execution qualification
+
+The H-closure environment has `pytest`/NumPy but lacks PySide6 and PyOpenGL. `tests/conftest.py` imports PySide6 unconditionally, so complete pytest collection cannot run here and **no new aggregate pass count is claimed**. The corrected changed tests all compile syntactically; the pure source-only viewport/Bubble contract suite executed successfully (`17` tests); every `destination` target exists in the supplied complete test tree and the profile has no duplicate target. The first Phase-I gate is the real-environment `destination` run.
 
 ## 1. Audit method and status vocabulary
 
@@ -74,33 +70,27 @@ Targeted tests are the normal per-slice gate:
 pytest path\to\test_file.py -q --tb=short
 ```
 
-The closed H destination topology remains protected by the maintained profile:
+The accepted destination topology is protected by the canonical maintained profile:
 
 ```powershell
-python tests/run_chunked.py --profile h-destination --chunks 4 --timeout-seconds 900 --log
+python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 900 --log
 ```
 
-`run_chunked.py` performs one collection preflight before starting the maintained profile. A stale import therefore fails
-once and stops. **Maintained profiles are then isolated by target:** every selected file or nodeid runs in its own fresh pytest process,
-while `--chunks` only partitions those subprocesses into a small number of reporting/log groups. This is deliberate for
-QQuick/Qt lifecycle tests: a queued callback or scene-graph teardown defect in one target must not contaminate unrelated tests
-in another target. Whole-tree/explicit-target mode still uses pytest-chunk test-level partitioning because it is a reconciliation
-diagnostic during H/I rather than the current destination authority.
+`run_chunked.py` performs one collection preflight before starting the maintained profile. Every selected maintained-profile target then runs in its own fresh pytest subprocess; `--chunks` groups reporting/logs only. This isolation is deliberate for QQuick/Qt lifecycle tests so queued teardown from one target cannot contaminate another.
 
-A complete-tree run remains available as a **broad reconciliation diagnostic** during H/I:
+`h-destination` is a temporary alias for existing scripts/habits. New documentation and automation use `destination`. Remove the alias only after exact caller/search proof in I.
+
+A complete-tree run remains a broad Phase-I reconciliation diagnostic:
 
 ```powershell
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
 ```
 
-Until the I residue pass reconciles tests/tools for the now-deleted physical host, do not interpret that whole-tree command as
-a single production-authority gate. Do **not** preserve old aggregate collection/failure counts in this living guide; regenerate them from the exact current tree when doing a broad reconciliation. Legacy-owner collection failures are admitted I inventory, not a reason to restore H production modules. After I retires/re-homes them, the complete tree should regain normal broad-gate authority.
+Until I retires/re-homes deleted-owner tests/tools, do not treat whole-tree results as one homogeneous production-authority gate. After I, broad collection should become truthful again.
 
-Do not use a red broad-suite run as the only evidence that the active slice failed. Inspect the exact failure/timeout and run
-the smallest focused gate that can falsify the changed contract.
+Do not use a red broad-suite run as the only evidence that a current slice failed. Inspect the exact failure and run the smallest focused gate that can falsify the changed contract. Never restore retired production seams to satisfy stale tests.
 
-SRPSS does not use repository-hosted CI as the normal migration workflow. Do not add GitHub Actions or another hosted
-workflow unless the operator explicitly asks for it.
+SRPSS does not use repository-hosted CI as the normal migration workflow. Do not add hosted CI unless the operator explicitly asks.
 
 Validation levels:
 
@@ -113,46 +103,20 @@ Validation levels:
 Use `Docs/Harness_Index.md` for recurring real-GL/physical/runtime harness commands.
 
 
-### 2A. H -> I source-mode runtime reality smoke
+### 2A. H closure -> I runtime reality smoke
 
-A maintained pytest profile proves deterministic ownership contracts but does not replace Windows/driver/QML evidence.
+A maintained pytest profile proves deterministic ownership contracts but does not replace Windows/driver/QML evidence. H's physical acceptance is preserved in `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md` rather than duplicated here.
 
-Closed physical gates now include:
-
-```text
-H1a: 3 Settings + 5 CUSTOM dual-display recreations, no watchdog dump
-H1b: terminal destruction barrier completes before final process/Qt shutdown; clean natural exit
-H2: real Media artwork resolves through the engine-registered provider
-H3: Reddit production opener physically validated
-H3b: Clock mode-toggle/CUSTOM recreation physically validated
-H4: Media Play/Pause/seek provider-result semantics physically validated
-```
-
-The Qt Quick runtime has a second diagnostic plane. Every physical H/J Quick claim must inspect:
+Every physical Quick/J claim inspects both diagnostic planes:
 
 ```text
 screensaver.log
 screensaver_qml.log
 ```
 
-A successful Qt/QML capture eagerly creates `screensaver_qml.log` even when Qt emits zero messages. The file therefore doubles as capture-health evidence. See `Docs/Qt_QML_Observability.md`.
+The first I run must execute the corrected `destination` profile in the normal PySide6/OpenGL environment. A target failure is classified against current source and the row-level inventory before any production change. If a genuine accepted destination contract is falsified, reopen that smallest owner/incident; do not reopen H wholesale.
 
-Permanent/focused regression coverage should preserve:
-
-```text
-tests/test_qtquick_family_binder_two_phase.py
-tests/test_settings_eventfilter_teardown_guards.py
-tests/test_terminal_runtime_destruction.py
-tests/test_qtquick_retained_model_lifetime.py
-tests/test_qt_message_capture_contract.py
-tests/test_qt_message_capture_qml_runtime.py
-```
-
-Reddit URL opening, Clock runtime mode persistence/CUSTOM recreation and Media Play/Pause/seek are physically closed. Current H work is the narrower set named by `Current_Plan.md`: remaining Visualizer routing/reactivity/settings/resize gates, R7 transition/prefetch/seam validation, GC/perf classification and exit classification. Do not reopen closed H3/H3b/H4 from stale test prose.
-
-Spectrum has two H-level evidence streams: repeated live bar payload saturation before shader presentation **and** the wrong basic Organ/Spectrum topology. A test that proves only shader load/draw count is insufficient.
-
-The short operator smoke remains mandatory for black/test-frame flashes, Bubble visible response, clipping, cursor duplication, layout composition and other J Parity+ facts.
+For Visualizer performance/quality, deterministic tests may prove ownership but the operator remains the oracle for visible reactivity, Bubble temporal fidelity, large-viewport behavior, transition/black-flash behavior and real multi-DPR composition. R-69's no-reactivity-compression rule is binding even if a counter-oriented test appears easier to satisfy another way.
 
 ## 3. Failure triage and stale-test rule
 
@@ -169,34 +133,28 @@ For every directly relevant red test:
 
 The E2.7 `test_widget_manager_refresh.py` stale-test incident is the model: six tests had old capability/grace/coordinator API assumptions. They were updated to exercise the same intended behavior through the current API rather than deferred as “pre-existing red.”
 
-### 3A. Current maintained-profile drift that must be reconciled
+### 3A. H-closure maintained-profile reconciliation
 
-The last completed maintained-profile run **before the newest R6/R7 source-contract and full Media-runtime wiring** was 79/85. Treat that as historical evidence only; do not quote it as the count/result of the reconciled profile. The six red **files are not obsolete wholesale**; specific assertions inside them are obsolete against current owners. Do not make product code imitate these retired seams:
+The previous `79/85` H-profile result is historical only. Its six known stale assertion-bearing files were repaired against current authority rather than by restoring retired seams:
 
-| File | Current stale assertion | Correct disposition |
-| --- | --- | --- |
-| `tests/test_qtquick_auxiliary.py` | names `update_halo_pointer`, `halo_visible`, `pointer_position_changed` / retained-QML pointer motion | **UPDATE REQUIRED NOW.** Keep dimming/pixel-shift/semantic auxiliary coverage; replace Halo assertions with R6 native-`QCursor`, event-cached interaction/Ctrl and no scene-position binding. |
-| `tests/test_qtquick_visualizer_bubble.py` | checkpoint-specific Bubble telemetry literals that drifted after accepted reactivity/wake repairs | **UPDATE REQUIRED NOW.** Keep behavior/ownership/BTF assertions; compare expected telemetry to current diagnostic schema rather than restoring removed fields. |
-| `tests/test_qtquick_visualizer_devcurve.py` | checkpoint-specific visualizer telemetry/presentation literals | **UPDATE REQUIRED NOW.** Preserve visible/renderer contract; update removed diagnostic-token expectations only. |
-| `tests/test_qtquick_visualizer_item.py` | checkpoint-specific visualizer telemetry/presentation literals | **UPDATE REQUIRED NOW.** Preserve retained-item consumption/fencing; update removed diagnostic-token expectations only. |
-| `tests/test_bubble_viewport_reflow.py` | references retired `_render_radius_in_world` helper | **UPDATE REQUIRED NOW.** File remains permanent G4/BTF coverage; assert the current authored-pixel/radial/ring-spacing projection contract through public/current helpers. |
-| `tests/test_s_hotkey_workflow.py` | monkeypatched `_show_next_image()` fake does not accept current `origin=` keyword | **UPDATE REQUIRED NOW.** Production `origin=` is current instrumentation/admission truth; update the fake signature, do not remove the production keyword. |
+- `test_qtquick_auxiliary.py` — R6 native `QCursor`, event-cached semantic Ctrl/interaction, no scene pointer-position ownership;
+- `test_qtquick_visualizer_bubble.py` — current viewport/layout signature and R-69 source guards;
+- `test_qtquick_visualizer_devcurve.py` — current Quick normalization literal;
+- `test_qtquick_visualizer_item.py` — current fail-closed mismatch telemetry plus R-68 CUSTOM presentation-authority rebase;
+- `test_bubble_viewport_reflow.py` — current card-relative radius/collision-world contract instead of retired `_render_radius_in_world`;
+- `test_s_hotkey_workflow.py` — current `_show_next_image(origin=...)` instrumentation/admission signature.
 
-New/current tests that must be represented in the maintained test story:
+The full test pack exposed additional current-authority drift that is also repaired:
 
-| File | Status |
-| --- | --- |
-| `tests/test_qtquick_h9_uniform_resize.py` | **KEEP — H9 PERMANENT.** Uniform retained-presentation scale, geometry-only Reddit/Media CUSTOM payload and Visualizer non-interference. Already in `h-destination` on current `main`. |
-| `tests/test_visualizer_viewport_scaling_contracts.py` | **KEEP — R4/R5/BTF PERMANENT.** Source/presentation-neutral viewport projection contracts for Bubble wake/spatial scaling and related nonbaseline invariants. Present in the R7 worktree but not yet wired into current-main `h-destination`. |
-| `tests/test_runtime_perf_policy_contracts.py` | **KEEP — R6/R7 CHECKPOINT CONTRACTS.** Native cursor hot-path, runtime GC policy guard, transactional image change, generation/token prefetch wake and exterior-edge R-63 geometry. Present in the R7 worktree but not yet wired into current-main `h-destination`. |
-| `tests/test_media_event_observation.py` | **KEEP — MEDIA EVENT PERMANENT.** GSMTC token/session replacement/threading observation contract. Added to `h-destination` by `2e7a9242`. |
-| `tests/test_media_runtime.py` | **KEEP — MEDIA EVENT PERMANENT / OWNER INTEGRATION.** Shared owner coalescing, command/event convergence, degraded/watchdog/missed-event behavior and stale-generation fencing were rewritten for the event-driven architecture. **Important runner gap:** current-main `h-destination` does not list this file yet. |
+- `test_visualizer_compute_lanes.py` no longer asserts per-frame generic executor/Future ownership; it pins the persistent serial audio-analysis lane, retained detached DSP state, config invalidation and loud no-fallback failure;
+- `test_visualizer_analysis_acceptance.py`, `test_p2_analysis_freshness.py` and `test_visualizer_playback_gating.py` use the persistent lane rather than fake generic Future submission;
+- `test_qtquick_h9_uniform_resize.py` includes Gmail in the whole-card uniform-transform family;
+- `test_qtquick_gmail_presentation.py` pins truthful asymmetric preferred-size semantics;
+- `test_visualizer_viewport_scaling_contracts.py` pins the R-69 golden prohibition on second viewport compression of Bubble head/Ghost state;
+- `test_spectrum_presentation_smoothing.py` pins large-width/height smoothing via the larger axis without a second cadence;
+- `test_runtime_perf_policy_contracts.py` pins the R-63 no-hardcoded-monitor rule while preserving the non-exact-cover principle.
 
-`tests/test_qtquick_black_flash_contract.py` and `tests/test_qt_message_capture.py` are **not current files on `main`**; older docs that named them as executable gates were stale. Black-flash source contracts now live in `test_runtime_perf_policy_contracts.py`; Qt/QML capture is owned by `test_qt_message_capture_contract.py` + `test_qt_message_capture_qml_runtime.py`.
-
-**Maintained-profile reconciliation before the next aggregate claim:** keep the six stale-bearing files in the profile while their assertions are repaired; add `test_visualizer_viewport_scaling_contracts.py`, `test_runtime_perf_policy_contracts.py`, and `test_media_runtime.py`. `test_media_event_observation.py` and `test_qtquick_h9_uniform_resize.py` are already listed by current-main `run_chunked.py`. Do not remove a red file merely to obtain a green count, and do not assign a new pass/target total until that exact profile has run.
-
-**Runner state at repo checkpoint `2e43a0cb`:** `tests/run_chunked.py` still lacks exactly those three additions. This document is therefore accurate about the desired maintained inventory even though the runner is not yet reconciled. Update the runner from the exact cohesive worktree, then run collection preflight before changing any pass-count prose here.
+`tests/run_chunked.py` now exposes canonical `destination` and includes the surviving permanent R4-R7/Media/audio/freshness targets that were missing from the old H list. At closure it contains **95 unique targets**, all present in the supplied complete test tree. Do not publish an aggregate pass count until this exact profile runs in the real PySide6/OpenGL environment.
 
 ## 4. Permanent architecture gates
 
@@ -289,80 +247,61 @@ E2/E2.7, E1, E3 and E4 are closed and Phase E is structurally **CLOSED**. F0 dep
 
 ### Closed foundations
 
-E, F and complete G are closed at their accepted boundaries. The H production authority flip/deletion is structurally accepted; the deleted old physical presenter is not a legitimate test target merely because I residue still references it.
+F/G/H destination ownership and H post-cutover acceptance are closed. Their surviving tests are permanent regression coverage, not phase work.
 
-### H — OPEN: post-cutover runtime reality
+### I — ACTIVE
 
-`Current_Plan.md` owns exact sequence. Current state:
+I is caller-proven residue reconciliation. Its test responsibilities are:
 
-```text
-H1a/H1b/H2/H3/H3b/H4: CLOSED; preserve their permanent regressions.
-H5a/H5b/H5c/H6/H8/H9/H7: OPEN only as named by Current_Plan.md; do not duplicate volatile sub-status here.
-R6 native cursor: performance physically GREEN; visible Halo parity is J.
-R7 image-change/prefetch/seam: deterministic/source contracts implemented; physical/log validation pending.
-Media event observation: implemented; short installed recreation smoke clean; broader frozen/provider-switch validation pending.
-Maintained profile: last completed pre-R6/R7 wiring run was 79/85 because six stale assertions listed in §3A need test-source reconciliation. The reconciled profile also needs the three currently omitted permanent targets named in §3A; do not assign a new aggregate count until run.
-```
+1. run `destination` in the real PySide6/OpenGL environment;
+2. classify any red against current owners;
+3. delete/rehome tests that import deleted physical presenters, GL compositor transitions/backends, retired replay hosts or obsolete migration scaffolding;
+4. preserve product-neutral/logical contracts through current Quick/neutral tests before deleting an old harness;
+5. restore meaningful whole-tree collection without resurrecting deleted production modules.
 
-Use `h-destination` as the maintained deterministic bar and extend it only for surviving destination contracts. H re-closes only after every H ledger row is reconciled, both Python + Qt/QML logs are clean/understood, and the final dual-display source smoke remains physically GREEN.
+Immediate manual deletions are intentionally conservative:
 
-### I — BLOCKED
+- `tests/test_settings_sync.py` — tombstone, no executable tests;
+- `tests/test_phase_e_effect_corruption.py` — historical QGraphicsEffect corruption investigation;
+- `tests/test_visualizer_preset_cycling_runtime.py` — deleted QWidget host/imports; surviving preset/Custom/audio-setting contracts are already current-owned.
 
-Residue-only source/test/tool reconciliation after H. Do not use I to absorb current runtime failures or restore deleted presenter owners to satisfy stale tests.
+The broader `STALE I RESIDUE` rows in the inventory are candidates, not an instruction to mass-delete by filename. Prove the surviving contract and caller graph first.
 
-### Black-flash / image-surface source contract — current
+### Black-flash / image-surface source contract — accepted with bounded seam residual
 
-The old documentation referenced `tests/test_qtquick_black_flash_contract.py`, but that file is not current test-tree authority and its deferred-show/background-refresh experiment was physically rejected and removed. Do not recreate it to satisfy old prose. Current deterministic/source checks live in `tests/test_runtime_perf_policy_contracts.py` and protect the accepted R-63 principle plus the R7 exterior-edge refinement. Physical acceptance still requires **both** recurring black/stale flash = 0 and shared-edge seam pixel = 0.
+Do not recreate old rejected `test_qtquick_black_flash_contract.py` experiments. Current deterministic/source protection lives in `tests/test_runtime_perf_policy_contracts.py` plus the real physical R-63 evidence. The accepted R-63 contract requires recurring black/stale flash = 0. A bounded mixed-DPR <=1px shared-edge overshoot is acceptable rather than risking exact-cover fullscreen promotion. Any optional J refinement must be generic device-space logic, not a hard-coded monitor/DPR correction.
 
-### J — pending H re-close
+### J — queued after I
 
-Comprehensive **Parity+** physical visual/fidelity/installed acceptance. Use the J decomposition, J addendum, `J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md`, mandatory operator ledger and `Docs/Qt_QML_Observability.md`. Historical screenshots/code establish user-visible floor/behavior only; current Quick architecture remains implementation authority.
+Comprehensive **Parity+** visual/fidelity/installed acceptance, residual diagnostics/performance work and optional seam refinement. J may not weaken R-69 reactivity/freshness/cadence or R-63 black=0 to improve counters or visual neatness.
 
-## 6. Immediate test-maintenance state
+## 6. H-closure test-maintenance state
 
-Current post-cutover focused additions:
+Changed/current permanent contracts in the closure patch:
 
-| File | Status | Disposition |
-| --- | --- | --- |
-| `tests/test_qt_message_capture_contract.py` | **ADDED — PERMANENT OBSERVABILITY** | Eager sidecar creation/session markers, structured Qt context, prior-handler delegation/restoration, sink relocation and metrics. |
-| `tests/test_qt_message_capture_qml_runtime.py` | **ADDED — PERMANENT REAL-QML OBSERVABILITY** | Real `QQmlEngine`/`console.warn` probe must reach the direct sidecar and session markers; requires PySide runtime, so awaiting execution in the real environment. |
-| `tests/test_qtquick_family_product_actions.py` | **ADDED — H3/H3b + PERMANENT PRODUCT SEMANTICS** | Pins Reddit saver-vs-interactive consequences and per-display Clock mode override persistence. Pure subset GREEN in handoff environment; production PySide composition still needs physical/runtime validation. |
-| `tests/test_settings_eventfilter_teardown_guards.py` | **CLOSED H1b / KEEP** | Late Settings helper events cannot dereference retired targets. |
-| `tests/test_visualizer_custom_route_contract.py` | **ADDED — PERMANENT H5a ROUTING/BINDING PIN** | Real manager admission over two live unit shells proves CUSTOM Visualizer owns its intentionally different monitor, non-CUSTOM follows Media, one bounded generation trace reports the exact route/outcome, and the sole owner can bind playback from the existing Media model on the other display without creating a Media copy. |
-| `tests/test_qtquick_visualizer_middle_click.py` + `tests/test_visualizer_runtime_preset_cycle.py` + affected H/Settings suites | **ADDED — PERMANENT H8 CONTRACT / DETERMINISTIC GREEN** | Pins middle-click preemption, one-step/wraparound, unchanged mode, Custom round-trip, curated replace semantics, atomic narrow persistence with no Media mutation, schema-v5 removal of leaked route/admission fields, live monitor/position preservation, one same-mode activation, overlap/stale-owner rejection, structured restart persistence and all-five-mode coverage. Physical interaction/recreation acceptance remains open. |
-| `tests/test_qtquick_h9_uniform_resize.py` | **ADDED — H9 PERMANENT / DETERMINISTIC GREEN** | Pins whole-card uniform scale for Reddit/Media, geometry-only payload replay, stale pre-H9 payload rejection, opt-out family inertness and Visualizer contract isolation. |
-| `tests/test_visualizer_viewport_scaling_contracts.py` | **ADDED — R4/R5/BTF SOURCE CONTRACT / DETERMINISTIC GREEN** | Pins viewport/domain projection invariants, including accepted Bubble wake/spatial behavior across nonbaseline aspect/extent. **Not yet listed by current-main `tests/run_chunked.py`.** |
-| `tests/test_runtime_perf_policy_contracts.py` | **ADDED — R6/R7 SOURCE CONTRACT / DETERMINISTIC GREEN** | Source-only guard for native cursor ownership/no scene motion, runtime GC policy, generation/token prefetch wake, transactional image-change fail-closed behavior and exterior-edge R-63 geometry. **Not yet listed by current-main `tests/run_chunked.py`.** |
-| `tests/test_media_event_observation.py` | **ADDED — MEDIA EVENT PERMANENT / DETERMINISTIC GREEN** | Pins GSMTC manager/session add-remove token lifetime, transactional session replacement and stale callback fencing; real-WinRT round-trip remains environment-gated. Already listed by current-main `h-destination`. |
-| `tests/test_media_runtime.py` | **UPDATED — MEDIA EVENT PERMANENT / DETERMINISTIC OWNER CONTRACT** | Event-driven shared-owner/coalescing/command-convergence/reconcile/degraded/missed-event/stale-generation falsifiers. **Current-main runner omission: add the whole file to `h-destination`; controller-token tests alone are insufficient.** |
-| Media app-volume child presentation tests (to add with J implementation) | **PENDING J PARITY+ CONTRACT** | Pin separate retained child/item as the existing and unspecified default, integrated only by explicit option, Media-effective/provider-capability dependency, shared Media display route/lifecycle, own CUSTOM rect/size in Media's display bucket, and the existing Media presentation model plus one `MediaVolumeRuntimeService` lease/action seam across both variants. |
-| `tests/test_widget_descriptors.py` + `tests/test_widgets_tab.py` | **PERMANENT SETTINGS PIN / H6** | Media CUSTOM lock metadata and real Settings state: only font/artwork lock; progress/glow/volume/mute retain normal dependency truth. |
+| File | H-closure disposition |
+| --- | --- |
+| `tests/run_chunked.py` | Canonical `destination` profile; temporary `h-destination` alias; current permanent targets included. |
+| `tests/test_qtquick_auxiliary.py` | R6 native cursor Halo + semantic auxiliary ownership; retired QML pointer-motion APIs forbidden. |
+| `tests/test_visualizer_compute_lanes.py` | Persistent serial `visualizer.audio_analysis` lane, retained DSP state, config invalidation, stable previous-bars packet and loud no-Future fallback. |
+| `tests/test_visualizer_analysis_acceptance.py` | Current persistent-lane analysis acceptance. |
+| `tests/test_p2_analysis_freshness.py` | Newest-source freshness/cancellation semantics on the serial lane. |
+| `tests/test_visualizer_playback_gating.py` | Playback admission uses current lane; no generic per-frame Future path. |
+| `tests/test_qtquick_visualizer_item.py` | Current presentation mismatch fencing + R-68 active-CUSTOM presentation rebase. |
+| `tests/test_visualizer_viewport_scaling_contracts.py` | R4/R5 viewport projection plus R-69 golden Bubble head/Ghost no-second-compression guard. |
+| `tests/test_bubble_viewport_reflow.py` | Current card-relative radius / expanded collision-world invariant. |
+| `tests/test_spectrum_presentation_smoothing.py` | Wide/tall smoothing scales by the larger axis, capped, without adding cadence/timer ownership. |
+| `tests/test_qtquick_h9_uniform_resize.py` | Reddit/Reddit2/Media/Gmail whole-card transform and Visualizer isolation. |
+| `tests/test_qtquick_gmail_presentation.py` | Gmail outer-width vs row-height+shell-inset baseline truth. |
+| `tests/test_runtime_perf_policy_contracts.py` | R6/R7/R-63 source bars; no hard-coded current monitor geometry. |
+| `tests/test_visualizer_doc_references.py` | Current live-doc owner/guardrail routing; historical negative-control wording is allowed where explicitly framed. |
+| `tests/test_media_runtime.py` | Removed one stale deleted-`WidgetManager` production-setup case; current Quick binder + generation suites own that integration. |
+| `tests/test_qtquick_visualizer_bubble.py` / `devcurve.py` | Current layout/shader source contracts. |
+| `tests/test_s_hotkey_workflow.py` | Current image-change `origin=` signature. |
 
-Qt/QML capture tests are not a substitute for real QML runtime evidence; physical gates must inspect `screensaver_qml.log`.
+No changed test was weakened merely to produce green output. The closure environment cannot execute PySide-dependent collection, so runtime GREEN remains the I0 gate.
 
-
-The Settings-overhaul drift found during the pre-cutover caution run is reconciled in this pass:
-
-| File | Status | Disposition |
-| --- | --- | --- |
-| `tests/test_settings_no_sources_popup.py` | **RECONCILED** | Tests current central `StyledPopup` construction/result routing and current curated-source actions; no retired `NoSourcesPopup` import. |
-| `tests/test_sine_line4_ui_simulation.py` | **RECONCILED** | Tests the central `ColorSwatchButton` + `bind_color_button` contract, including programmatic-load no-save behavior. |
-| `tests/test_sine_line4_builder_integration.py` | **RECONCILED** | Uses the real lazy `WidgetsTab` visualizer hydration/save owner and round-trips Line 4 colour/glow/shift. |
-| `tests/test_sine_line4_persistence.py` | **RECONCILED** | Removes retired `_sine_line4_horizontal_shift` assumptions; locks current normalized `sine_line4_shift` binder semantics. |
-| `tests/test_visualizer_settings_plumbing.py` | **PARTIALLY RECONCILED / I MIXED** | Known unknown-mode assertion now follows the canonical registry fallback. Surviving settings contracts remain; legacy presenter/overlay portions retire or rehome with their owners in I. |
-| `tests/test_settings_theme_system.py` | **ADDED — PERMANENT** | Locks the centralized Settings ThemeSpec runtime transaction, catalog/default-mirror rules, persisted fallback semantics and temporary path-resolution precedence. |
-| `tests/run_chunked.py` | **RECONCILED, PROFILE LIST NEEDS ONE FINAL UPDATE** | Collection preflight + target-isolated `h-destination` are correct. Before the next aggregate H claim, add `test_visualizer_viewport_scaling_contracts.py`, `test_runtime_perf_policy_contracts.py`, and `test_media_runtime.py`; keep the six stale-bearing files until their assertions are repaired. Whole-tree mode remains reconciliation evidence. |
-| `tests/test_qtquick_custom_layout_owner.py` | **ADDED — H DESTINATION** | Proves one manager-generation CUSTOM owner, same-item Cancel, exact committed geometry/size/enabled Save, routed ordinary same-item A-to-B transfer/Cancel/Save without a target duplicate, retained menu/Enter/Escape routes, and visualizer transfer retargeting without duplicate logical/presentation ownership. |
-
-Current I ledger debt belongs to the owner named by each row:
-
-- **OBSOLETE WHOLE FILE:** `tests/test_settings_sync.py` is tombstone-only and can be deleted in residue cleanup;
-- **OBSOLETE WHOLE FILE:** `tests/test_phase_e_effect_corruption.py` is historical corruption-investigation scaffolding with no current production owner;
-- **OBSOLETE/NONEXISTENT OLD NAMES:** `tests/test_qtquick_black_flash_contract.py` and `tests/test_qt_message_capture.py` must not be recreated; their surviving contracts moved to the current files named above;
-- **STALE HARNESS, NOT CURRENT AUTHORITY:** `tests/test_spotify_visualizer_widget.py`, `tests/test_visualizer_replay.py`, and `tests/test_visualizer_preset_cycling_runtime.py` still depend on deleted presenter/replay/input owners. Preserve surviving logical/product contracts only through current Quick/neutral tests during I; never restore deleted modules so these collect;
-- `tests/test_visualizer_doc_references.py` still deserves a later brittle-prose-token cleanup;
-- the six §3A maintained-profile files are **not obsolete whole files**. Repair only the stale assertions;
-- whole-tree legacy physical-host reds are classified in the inventory/retirement register and are not silently skipped.
+Generated `.pytest_cache`, `__pycache__` and `.pyc` files are not test authority and should not be copied into repository patches.
 
 ## 7. Legacy-retirement register
 
@@ -398,7 +337,7 @@ These are support infrastructure rather than inventory test cases:
 | `tests/_gl_test_utils.py` | Shared GL test helpers. |
 | `tests/pytest.ini` | Test configuration. |
 | `tests/pytest.py` | Repository-local test support module. |
-| `tests/run_chunked.py` | Collection-preflight chunk runner; owns the current `h-destination` profile and whole-tree reconciliation mode. |
+| `tests/run_chunked.py` | Collection-preflight chunk runner; owns the current `destination` profile and whole-tree reconciliation mode. |
 | `tests/__init__.py` | Package marker/support. |
 | `tests/fixtures/` | Deterministic external/sample inputs. |
 | `tests/goldens/` | Visualizer authored replay/temporal expected data. |
@@ -423,8 +362,8 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_image_textures.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_custom_layout_session.py` | **KEEP — MIGRATION PERMANENT / G** | Neutral session/variants/working-state contract; separate visualizer scale + viewport extent is landed and remains permanent. |
 | `tests/test_qtquick_custom_layout_overlay.py` | **KEEP — MIGRATION PERMANENT / G** | Retained CUSTOM overlay/drag/edge+corner resize/cross-display contract; extend only for current viewport-lifecycle corrections where applicable. |
-| `tests/test_qtquick_h9_uniform_resize.py` | **KEEP — H9 PERMANENT** | Whole-card uniform retained-presentation resize for Reddit/Media, geometry-only payload replay and Visualizer non-interference. |
-| `tests/test_qtquick_auxiliary.py` | **UPDATE REQUIRED NOW / KEEP FILE** | Dimming/pixel-shift/semantic auxiliary coverage survives. Retired QML Halo coordinate/visibility assertions are obsolete after R6 native `QCursor`; update those assertions rather than restoring the old seams. |
+| `tests/test_qtquick_h9_uniform_resize.py` | **KEEP — MIGRATION PERMANENT** | Whole-card uniform retained-presentation resize for Reddit/Reddit2/Media/Gmail, absolute-floor replay and Visualizer non-interference. |
+| `tests/test_qtquick_auxiliary.py` | **KEEP — MIGRATION PERMANENT / RECONCILED** | Dimming/pixel-shift plus R6 native `QCursor` Halo/event-cached semantic state; retired QML pointer-motion APIs are forbidden. |
 | `tests/test_qtquick_context_menu.py` | **KEEP — MIGRATION PERMANENT / G7** | Retained context-menu model/QML/action admission contract. |
 | `tests/test_qtquick_input_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination/current input contract, including generation closure and the presentation-neutral runtime-replacement pointer guard consumed by Quick. |
 | `tests/test_qtquick_clock_presentation.py` | **KEEP — MIGRATION PERMANENT** | F1 retained Clock model/family/ticker/style/geometry/analogue-shadow destination contract; retain as permanent current coverage. |
@@ -438,49 +377,49 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_presentation_spike.py` | **WILL BE OBSOLETE — J** | Architecture-selection spike, not a forever product regression. |
 | `tests/test_qtquick_render_node.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_ripple_transition.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
-| `tests/test_qtquick_runtime.py` | **KEEP — MIXED H/J** | Deterministic/source-shaped runtime ownership, generation recreation and coordinated input-exit tests remain in the H destination profile. The two tests explicitly requiring real physical displays (`test_threaded_runtime_uses_exact_identity_for_two_physical_displays` and `test_threaded_runtime_recreates_removed_and_added_physical_topology`) are J physical/topology evidence and are intentionally not part of the per-commit H profile. |
+| `tests/test_qtquick_runtime.py` | **KEEP — DESTINATION / J PHYSICAL** | Deterministic/source-shaped runtime ownership, generation recreation and coordinated input-exit tests remain in the `destination` profile. The two tests explicitly requiring real physical displays (`test_threaded_runtime_uses_exact_identity_for_two_physical_displays` and `test_threaded_runtime_recreates_removed_and_added_physical_topology`) are J physical/topology evidence and are intentionally not part of the deterministic destination profile. |
 | `tests/test_qtquick_scene_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_transition_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_transition_implementations.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_transition_parameter_defaults.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_transition_parameter_resolution.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
-| `tests/test_qtquick_transition_request_resolution.py` | **KEEP — MIGRATION PERMANENT / H** | One Settings-authored transition spec per accepted image batch, fail-closed Random admission and frozen direction/parameter values. |
+| `tests/test_qtquick_transition_request_resolution.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | One Settings-authored transition spec per accepted image batch, fail-closed Random admission and frozen direction/parameter values. |
 | `tests/test_qtquick_transition_state.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_transition_state_fence.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_transition_uniform_wiring.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_visualizer_all_modes.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
-| `tests/test_qtquick_visualizer_bubble.py` | **UPDATE REQUIRED NOW / KEEP FILE** | Destination Bubble ownership/BTF coverage survives; reconcile stale checkpoint-specific telemetry literals with the current diagnostic schema. |
+| `tests/test_qtquick_visualizer_bubble.py` | **KEEP — MIGRATION PERMANENT / RECONCILED** | Destination Bubble ownership/BTF/layout coverage plus R-69 no-global-radius-compression guard. |
 | `tests/test_qtquick_visualizer_clip_smoke.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
-| `tests/test_qtquick_visualizer_devcurve.py` | **UPDATE REQUIRED NOW / KEEP FILE** | Retained DevCurve contract survives; reconcile stale diagnostic/presentation-token expectations only. |
+| `tests/test_qtquick_visualizer_devcurve.py` | **KEEP — MIGRATION PERMANENT / RECONCILED** | Retained DevCurve presentation/normalization contract updated to current Quick shader semantics. |
 | `tests/test_qtquick_visualizer_fade_authority.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_visualizer_geometry.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
-| `tests/test_qtquick_visualizer_item.py` | **UPDATE REQUIRED NOW / KEEP FILE** | Retained-item consumption/fencing survives; reconcile stale diagnostic-token expectations only. |
+| `tests/test_qtquick_visualizer_item.py` | **KEEP — MIGRATION PERMANENT / RECONCILED** | Retained-item admission/fencing plus R-68 CUSTOM working-geometry presentation authority. |
 | `tests/test_qtquick_visualizer_oscilloscope.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_visualizer_render_bridge.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_visualizer_sine.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_visualizer_spectrum.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_window.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
-| `tests/test_visualizer_viewport_scaling_contracts.py` | **KEEP — R4/R5/BTF SOURCE CONTRACT** | Permanent source/presentation-neutral viewport-domain projection bars, including accepted Bubble wake/spatial nonbaseline invariants. Wire into maintained profile on exact-runner reconciliation. |
-| `tests/test_runtime_perf_policy_contracts.py` | **KEEP — R6/R7 SOURCE CONTRACT** | Native cursor/no-scene-motion, runtime GC policy, R7 image-change/prefetch and R-63 exterior-edge geometry source bars. Wire into maintained profile on exact-runner reconciliation. |
+| `tests/test_visualizer_viewport_scaling_contracts.py` | **KEEP — R4/R5/R-69/BTF PERMANENT** | Viewport-domain projection plus golden prohibition on second viewport compression of Bubble head/Ghost reactivity. Listed in `destination`. |
+| `tests/test_runtime_perf_policy_contracts.py` | **KEEP — R6/R7/R-63 PERMANENT** | Native cursor/no-scene-motion, runtime GC policy, R7 image/prefetch and generic no-hardcoded-monitor R-63 geometry source bars. Listed in `destination`. |
 
-| `tests/test_qtquick_ctrl_coordinator.py` | **KEEP — MIGRATION PERMANENT / H** | One authoritative cross-display Ctrl truth and retired-contribution cleanup. |
-| `tests/test_qtquick_display_image_route.py` | **KEEP — MIGRATION PERMANENT / H** | GUI pixmap -> immutable Quick presentation-image routing, detached image-accounting aggregation and target-size contract. |
-| `tests/test_qtquick_display_presenter.py` | **KEEP — MIGRATION PERMANENT / H** | Thin per-display destination presenter; no provider/window/persistence authority. |
-| `tests/test_qtquick_display_unit.py` | **KEEP — MIGRATION PERMANENT / H** | Per-display Quick destination-chain assembly and semantic display operations. |
-| `tests/test_qtquick_family_binder.py` | **KEEP — MIGRATION PERMANENT / H** | Single-manager family admission/runtime service ownership, canonical per-instance monitor routing across logical displays, and retained host binding. |
-| `tests/test_qtquick_family_size_policy.py` | **KEEP — MIGRATION PERMANENT / H** | Historical deterministic family preferred-size policies under Option-A geometry. |
-| `tests/test_qtquick_geometry_resolver.py` | **KEEP — MIGRATION PERMANENT / H** | Python outer-rect/anchor/clamp authority; no QML outer-position feedback loop. |
-| `tests/test_qtquick_h_cutover.py` | **KEEP — MIGRATION PERMANENT / H** | H authority-cutover/cardinality/deletion bars, including one canonical manager-admitted visualizer owner, retained menu/double-click mode actions, H8 middle-click same-mode preset transaction, overlap rejection, delayed narrow persistence, hidden-boundary hard join, fresh-target reveal and engine-retirement lifecycle. |
-| `tests/test_qtquick_overlay_preferred_size.py` | **KEEP — MIGRATION PERMANENT / H** | Size-only preferred-content signal contract used by Python geometry ownership, including terminal disconnection before retained-item retirement. |
-| `tests/test_qtquick_visualizer_admission.py` | **KEEP — MIGRATION PERMANENT / H** | Exactly one admitted Quick visualizer display owner with requested/hold/fallback policy. |
-| `tests/test_qtquick_visualizer_all_five_owner_chain.py` | **KEEP — MIGRATION PERMANENT / H** | Owner-shaped all-five widget-free destination chain. |
-| `tests/test_qtquick_visualizer_double_click.py` | **KEEP — MIGRATION PERMANENT / H** | Retained visualizer mode-cycle semantic admission before global next-image fallback. |
+| `tests/test_qtquick_ctrl_coordinator.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | One authoritative cross-display Ctrl truth and retired-contribution cleanup. |
+| `tests/test_qtquick_display_image_route.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | GUI pixmap -> immutable Quick presentation-image routing, detached image-accounting aggregation and target-size contract. |
+| `tests/test_qtquick_display_presenter.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | Thin per-display destination presenter; no provider/window/persistence authority. |
+| `tests/test_qtquick_display_unit.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | Per-display Quick destination-chain assembly and semantic display operations. |
+| `tests/test_qtquick_family_binder.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | Single-manager family admission/runtime service ownership, canonical per-instance monitor routing across logical displays, and retained host binding. |
+| `tests/test_qtquick_family_size_policy.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | Historical deterministic family preferred-size policies under Option-A geometry. |
+| `tests/test_qtquick_geometry_resolver.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | Python outer-rect/anchor/clamp authority; no QML outer-position feedback loop. |
+| `tests/test_qtquick_h_cutover.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | H authority-cutover/cardinality/deletion bars, including one canonical manager-admitted visualizer owner, retained menu/double-click mode actions, H8 middle-click same-mode preset transaction, overlap rejection, delayed narrow persistence, hidden-boundary hard join, fresh-target reveal and engine-retirement lifecycle. |
+| `tests/test_qtquick_overlay_preferred_size.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | Size-only preferred-content signal contract used by Python geometry ownership, including terminal disconnection before retained-item retirement. |
+| `tests/test_qtquick_visualizer_admission.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | Exactly one admitted Quick visualizer display owner with requested/hold/fallback policy. |
+| `tests/test_qtquick_visualizer_all_five_owner_chain.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | Owner-shaped all-five widget-free destination chain. |
+| `tests/test_qtquick_visualizer_double_click.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | Retained visualizer mode-cycle semantic admission before global next-image fallback. |
 | `tests/test_qtquick_visualizer_middle_click.py` | **KEEP — MIGRATION PERMANENT / H8** | Actual Quick-window middle-button preemption plus active/inside retained Visualizer preset-cycle admission with no neutral-input side effect. |
-| `tests/test_qtquick_visualizer_logical_ownership.py` | **KEEP — MIGRATION PERMANENT / H** | Controller-owned authored logical state/runtime ownership without QWidget host. |
-| `tests/test_qtquick_visualizer_owner_edge.py` | **KEEP — MIGRATION PERMANENT / H** | Thin display/generation visualizer ownership edge, single shared-engine acquire/release, hard retirement, and terminal callback release semantics. |
-| `tests/test_qtquick_visualizer_pre_cutover_audit.py` | **KEEP — MIGRATION PERMANENT / H** | Standing source/behavior regression bars from the H pre-cutover audit. |
-| `tests/test_qtquick_visualizer_reactivity_config_parity.py` | **KEEP — MIGRATION PERMANENT / H5b-H5c** | Canonical Spectrum topology translation, shared BeatEngine shaping while another mode is active, exact Quick `0.55` transfer, Bubble live controls and technical zero/false semantics; maintained H profile. |
-| `tests/test_qtquick_visualizer_true_f_gate.py` | **KEEP — MIGRATION PERMANENT / H** | Strong True-F technical-engine/logical/bar-count + exact retained-item consumption gate. |
+| `tests/test_qtquick_visualizer_logical_ownership.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | Controller-owned authored logical state/runtime ownership without QWidget host. |
+| `tests/test_qtquick_visualizer_owner_edge.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | Thin display/generation visualizer ownership edge, single shared-engine acquire/release, hard retirement, and terminal callback release semantics. |
+| `tests/test_qtquick_visualizer_pre_cutover_audit.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | Standing source/behavior regression bars from the H pre-cutover audit. |
+| `tests/test_qtquick_visualizer_reactivity_config_parity.py` | **KEEP — MIGRATION PERMANENT / DESTINATION** | Canonical Spectrum topology translation, shared BeatEngine shaping while another mode is active, exact Quick `0.55` transfer, Bubble live controls and technical zero/false semantics; maintained `destination` profile. |
+| `tests/test_qtquick_visualizer_true_f_gate.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | Strong True-F technical-engine/logical/bar-count + exact retained-item consumption gate. |
 
 ### 10.2 Visualizer
 
@@ -488,7 +427,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | --- | --- | --- |
 | `tests/test_bubble_btf_coalescing.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_bubble_viewport_config_route.py` | **KEEP — MIGRATION PERMANENT / G4** | Live/coalesced viewport configuration route into each authored Bubble step; extend for committed-vs-CUSTOM override lifecycle. |
-| `tests/test_bubble_viewport_reflow.py` | **UPDATE REQUIRED NOW / KEEP — G4/BTF PERMANENT** | Core viewport/BTF contract survives; the `_render_radius_in_world` helper reference is obsolete. Re-express that assertion through the current authored-pixel radial/ring-spacing projection contract. |
+| `tests/test_bubble_viewport_reflow.py` | **KEEP — G4/BTF PERMANENT / RECONCILED** | Current card-relative radius and expanded collision/spawn-world projection; no retired radius helper. |
 | `tests/test_bubble_cadence.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_runtime_preset_cycle.py` | **KEEP — MIGRATION PERMANENT / H8** | All-five same-mode wrap, curated replace semantics, lossless Custom round-trip, first-use snapshot seeding and flat-cache migration. |
 | `tests/test_bubble_reactivity.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract, including same-body consume-once transient stream/drift displacement with exact pulse/radius isolation; retain as permanent current coverage. |
@@ -522,7 +461,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_visualizer_capability_admission.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_card_geometry.py` | **STALE I RESIDUE — OLD PHYSICAL OWNER** | Tests pre-Quick mode growth/relative card geometry that destination explicitly retires; Quick geometry tests are the destination authority. |
 | `tests/test_visualizer_compute_lanes.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
-| `tests/test_visualizer_doc_references.py` | **UPDATE REQUIRED NOW** | Known stale brittle assertion: do not ban a token globally when legitimate historical/contrast wording may mention it. |
+| `tests/test_visualizer_doc_references.py` | **KEEP — RECONCILED / PERMANENT** | Current docs are checked for owner/guardrail facts rather than obsolete exact phrases or global bans on legitimate historical negative-control wording. |
 | `tests/test_visualizer_failover_reclaim.py` | **KEEP — MIGRATION PERMANENT** | E2.7 canonical global-singleton/grace/reclaim/capability lifecycle suite. Must remain authoritative until successor owner inherits it. |
 | `tests/test_visualizer_feature_frame.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_mode_isolation.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
@@ -531,12 +470,12 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_visualizer_playback_gating.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_presentation_contract.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_presentation_negative_controls.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
-| `tests/test_visualizer_preset_cycling_runtime.py` | **STALE I RESIDUE — DO NOT RESTORE DELETED HOSTS** | Imports retired QWidget `InputHandler`/`WidgetManager`/visualizer host and cannot collect. The input handler covered mouse-button routing, not audio. Current H8 resolver/Custom tests and Quick reactivity/True-F gates own the surviving preset and mode-owned `input_gain` contracts. |
+| `tests/test_visualizer_preset_cycling_runtime.py` | **STALE I RESIDUE — DO NOT RESTORE DELETED HOSTS** | Imports retired QWidget `InputHandler`/`WidgetManager`/visualizer host and cannot collect. The input handler covered mouse-button routing, not audio. Current destination resolver/Custom tests and Quick reactivity/True-F gates own the surviving preset and mode-owned `input_gain` contracts. |
 | `tests/test_visualizer_preset_manifest.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_preset_transfer.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_presets.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_reactivity_quality.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
-| `tests/test_visualizer_replay.py` | **RETIRE/REHOME — I** | Imports the removed QWidget replay host; the maintained H profile now uses runtime-shaped Settings replacement and controller-owned cadence/bridge tests instead. Preserve only authored-fidelity assertions that still falsify a destination contract. |
+| `tests/test_visualizer_replay.py` | **RETIRE/REHOME — I** | Imports the removed QWidget replay host; the maintained `destination` profile uses runtime-shaped Settings replacement and controller-owned cadence/bridge tests instead. Preserve only authored-fidelity assertions that still falsify a destination contract. |
 | `tests/test_visualizer_retired_modes.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_runtime_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination runtime-controller contract, including presentation-neutral viewport configuration ownership; retain as permanent current coverage. |
 | `tests/test_visualizer_settings_plumbing.py` | **I RECONCILIATION — OLD PHYSICAL OWNER (MIXED)** | Registry/settings/shader contracts survive; known mode fallback is current. Retire/rehome old presenter/overlay assertions with their source owner. |
@@ -652,7 +591,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_media_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Media core plus enabled-glyph/transport/progress/app-volume/system-mute/input admission, separate neutral-owner injection, real runtime-owner/host lifecycle and no-recreation destination coverage; retain as permanent current coverage. |
 | `tests/test_media_runtime_artwork.py` | **KEEP — PERMANENT** | Presentation-neutral artwork decode, stable key and unchanged-payload deduplication contract. |
 | `tests/test_media_runtime_state.py` | **KEEP** | Retain; no current retirement identified. |
-| `tests/test_media_runtime.py` | **KEEP — PERMANENT / EVENT-DRIVEN** | Shared Media owner/lease/controller/state/artwork/generation plus native-event coalescing, command convergence, slow reconcile watchdog, degraded/missed-event telemetry and stale-generation fencing; the retired 1–2.5s active poll is not authority. |
+| `tests/test_media_runtime.py` | **KEEP — PERMANENT / EVENT-DRIVEN / RECONCILED** | Shared Media owner/lease/controller/state/artwork/generation plus native-event coalescing, command convergence, slow reconcile watchdog, degraded/missed-event telemetry and stale-generation fencing. The stale deleted-`WidgetManager` production-setup test was removed because current Quick binder + generation recreation suites own that integration; the retired 1–2.5s active poll is not authority. |
 | `tests/test_media_event_observation.py` | **KEEP — PERMANENT / EVENT-DRIVEN** | Controller-level GSMTC subscription/token/session-replacement contract; native callbacks remain tiny and generation-fenced, with real-WinRT round-trip environment-gated. |
 | `tests/test_media_volume_runtime.py` | **KEEP — PERMANENT** | Shared app-volume owner/lease/read-write generation/coalescing plus neutral Media-anchor injection contract. |
 | `tests/test_system_mute_runtime.py` | **KEEP — PERMANENT** | Shared system-audio endpoint/poll/action/lease plus neutral Media-anchor injection contract. |
@@ -867,7 +806,7 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_line4_6_pipeline_trace.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/test_log_throttling.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/test_prewarm_no_deadlock.py` | **I RECONCILIATION — QUICK SUCCESSOR EXISTS** | Rehome display/input/topology behavior to Quick runtime. |
-| `tests/test_s_hotkey_workflow.py` | **UPDATE REQUIRED NOW / KEEP — H PERMANENT** | Settings-generation retirement/replacement contract survives. Update the `_show_next_image` test double to accept current `origin=`; do not remove production image-change origin telemetry/admission. |
+| `tests/test_s_hotkey_workflow.py` | **KEEP — MIGRATION PERMANENT / RECONCILED** | Settings-generation retirement/replacement plus current image-change `origin=` telemetry/admission signature. |
 | `tests/test_worker_latency_tuning.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/unit/test_policy_compliance.py` | **KEEP** | Retain; no current retirement identified. |
 

@@ -367,3 +367,10 @@ def test_fullscreen_compat_overscan_preserves_shared_edges_and_logs_device_sizes
     assert "adjust(-1, -1, 1, 1)" not in block
     assert "screen_device_size=%dx%d window_device_size=%dx%d" in block
     assert "screen.virtualGeometry()" in block
+    # R-63 device-space lesson: mixed-DPR rounding may yield a harmless bounded
+    # one-pixel shared-edge overshoot. Never hard-code the observed monitor pair
+    # or force exact cover at the cost of resurrecting black flashes.
+    assert "2560" not in block
+    assert "1440" not in block
+    assert "1.5" not in block
+    assert "device_pixel_ratio" not in block.lower() or "screen_device_size" in block

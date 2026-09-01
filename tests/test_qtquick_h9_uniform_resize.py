@@ -4,8 +4,8 @@ These would fail under the pre-H9 partial-payload design, where CUSTOM resize
 scaled the outer rect (and a couple of Settings-like values such as ``font_size``
 / ``artwork_size``) while the retained QML relaid the rest of the card from many
 unscaled authored constants. That let Reddit rows escape a shrunk card and let
-Media bands recentre independently, and Save/replay faithfully reproduced the
-broken geometry.
+Media bands recentre independently, and Gmail fixed rows/header escaped the
+shell. Save/replay faithfully reproduced the broken geometry.
 
 The fix is a single retained-presentation scale (``OverlayWidget``
 ``uniformScaleTransform``): the whole authored card is laid out once at its
@@ -14,7 +14,7 @@ derived from the Python-assigned outer rect / baseline-preferred ratio (no
 QML->Python feedback, no second geometry owner). CUSTOM resize for these families
 is therefore purely geometric; font/artwork stay Settings-owned.
 
-Physical Reddit + Media falsifiers still require the operator (see Current_Plan).
+Reddit/Media/Gmail have operator acceptance; this file is the permanent deterministic contract.
 """
 
 from __future__ import annotations
@@ -145,12 +145,12 @@ def _geom(child: QQuickItem) -> tuple[float, float, float, float]:
 # --------------------------------------------------------------------------- #
 # Pure descriptor / payload contract (no Qt).                                 #
 # --------------------------------------------------------------------------- #
-def test_uniform_transform_scope_is_reddit_and_media_only() -> None:
-    for widget_id in ("reddit", "reddit2", "media"):
+def test_uniform_transform_scope_includes_reddit_media_and_gmail() -> None:
+    for widget_id in ("reddit", "reddit2", "media", "gmail"):
         mode = get_widget_runtime_descriptor(widget_id).custom_layout_resize_mode
         assert is_uniform_transform_resize_mode(mode), widget_id
     # Families deliberately left on their existing payload path (audited, inert).
-    for widget_id in ("clock", "gmail", "weather", "steam"):
+    for widget_id in ("clock", "weather", "steam"):
         descriptor = get_widget_runtime_descriptor(widget_id)
         if descriptor is None:
             continue
@@ -164,13 +164,16 @@ def test_uniform_transform_scope_is_reddit_and_media_only() -> None:
 def test_transform_family_resize_carries_no_settings_like_payload() -> None:
     reddit = get_widget_runtime_descriptor("reddit")
     media = get_widget_runtime_descriptor("media")
+    gmail = get_widget_runtime_descriptor("gmail")
 
     # Capture is geometry-only for the uniform-transform families...
     assert capture_quick_size_payload(reddit, None, None) == {}
     assert capture_quick_size_payload(media, None, None) == {}
+    assert capture_quick_size_payload(gmail, None, None) == {}
     # ...and scaling never manufactures a per-value payload from the geometry.
     assert scale_quick_size_payload(reddit, {}, 1.6) == {}
     assert scale_quick_size_payload(media, {}, 0.5) == {}
+    assert scale_quick_size_payload(gmail, {}, 0.4) == {}
 
     # A payload family still scales its authored values (unchanged behaviour).
     weather = get_widget_runtime_descriptor("weather")

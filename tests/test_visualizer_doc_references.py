@@ -29,13 +29,13 @@ def test_index_does_not_reference_missing_visualizer_docs():
 
 def test_spec_describes_the_current_visualizer_presentation_contract():
     spec_text = (ROOT / "Spec.md").read_text(encoding="utf-8")
-    assert "## 5. Visualizer logical contract" in spec_text
-    assert "shell_policy = CARD" in spec_text
-    assert "shell_policy = FRAMELESS" in spec_text
-    assert "canonical baseline visualizer viewport aspect ratio" in spec_text
-    assert "scroll-wheel resize" in spec_text
-    assert "spectrum_growth" in spec_text
-    assert "explicitly retired from destination ownership" in spec_text
+    assert "## Visualizer geometry" in spec_text
+    assert "`VisualizerLogicalRuntime` remains sole mode-general authored visualizer clock" in spec_text
+    assert "uniform_visual_scale" in spec_text
+    assert "viewport_extent" in spec_text
+    assert "all-five-mode viewport capability policy" in spec_text
+    assert "R-69 is golden" in spec_text
+    assert "may not globally compress renderer-facing Bubble head radius" in spec_text
     assert "Docs/Visualizer_Reset_Matrix.md" not in spec_text
     assert "Docs/Visualizer_Signal_Contract.md" not in spec_text
     assert "Docs/Visualizer_Baseline_Tuning_Matrix.md" not in spec_text
@@ -55,14 +55,14 @@ def test_visualizer_reference_describes_the_current_quick_boundary():
 
 def test_contracts_route_visualizer_shell_clip_and_geometry_owners():
     contracts_text = (ROOT / "Docs" / "Contracts.md").read_text(encoding="utf-8")
-    assert "Mode presentation policy" in contracts_text
-    assert "one render-node-local SDF/stencil host" in contracts_text
-    assert "QSGClipNode" not in contracts_text
-    assert "shell_policy = FRAMELESS" in contracts_text
-    assert "canonical baseline viewport/aspect" in contracts_text
+    assert "retained visualizer render node on the admitted display" in contracts_text
+    assert "persistent serial `visualizer.audio_analysis` lane" in contracts_text
+    assert "no generic Future/task fallback" in contracts_text
     assert "uniform_visual_scale" in contracts_text
     assert "viewport_extent" in contracts_text
-    assert "left/right edge-handle resize" in contracts_text
+    assert "shared 40% floor" in contracts_text
+    assert "Gmail model width is already outer width" in contracts_text
+    assert "R-69 is binding" in contracts_text
 
 
 def test_compositor_architecture_does_not_make_visualizer_card_universal():
@@ -77,9 +77,11 @@ def test_compositor_architecture_does_not_make_visualizer_card_universal():
 def test_project_overview_keeps_visualizer_scope_current():
     overview_text = (ROOT / "Docs" / "00_PROJECT_OVERVIEW.md").read_text(encoding="utf-8")
     assert "high-fidelity multi-mode visualizer" in overview_text
-    assert "FRAMELESS + VIEWPORT_RECT" in overview_text
-    assert "scroll / corner resize" in overview_text
-    assert "per-mode visualizer card-height/growth controls" in overview_text
+    assert "H is closed" in overview_text
+    assert "I is active caller-proven residue" in overview_text
+    assert "wheel/corners -> uniform scale" in overview_text
+    assert "R-69 is golden" in overview_text
+    assert "persistent newest-source serial lane" in overview_text
     assert "tools/rebuild_visualizer_presets.py" not in overview_text
 
 

@@ -421,11 +421,11 @@ def test_engine_start_schedules_bounded_first_image_retry(monkeypatch, qt_app):
     engine._rotation_timer = None
     engine.display_manager = SimpleNamespace(displays=[])
 
-    show_calls: list[bool] = []
+    show_calls: list[str] = []
     monkeypatch.setattr(engine, "_prepare_random_transition_if_needed", lambda: None)
 
-    def _show_next_image():
-        show_calls.append(True)
+    def _show_next_image(*, origin="unspecified"):
+        show_calls.append(str(origin))
         return False
 
     monkeypatch.setattr(engine, "_show_next_image", _show_next_image)
@@ -436,7 +436,7 @@ def test_engine_start_schedules_bounded_first_image_retry(monkeypatch, qt_app):
     )
 
     assert engine.start() is True
-    assert len(show_calls) == 1
+    assert show_calls == ["startup"]
     assert scheduled == [180]
 
 

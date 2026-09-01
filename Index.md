@@ -1,6 +1,6 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 ## Start here
 
@@ -24,11 +24,12 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | `dark.qss` retirement execution | `Docs/Settings_Dark_QSS_Retirement.md` |
 | physical scene/presenter architecture | `Docs/Compositor_Architecture.md` |
 | CUSTOM/edit/input/auxiliary | `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md` |
-| runtime host/lifecycle/H | `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md` |
+| runtime host/lifecycle | `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md` |
 | visualizer migration architecture | `Docs/QtQuick_Migration/03_Visualizer.md` |
 | visualizer presentation invariant | `Docs/Guardrails/Visualizer_Presentation.md` |
 | Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
 | visualizer authored/reference behavior | `Docs/Visualizer_Reference.md` |
+| Visualizer change checklist / preflight | `Docs/Visualizer_Change_Checklist.md` |
 | ordinary widget authoring | `Docs/10_WIDGET_GUIDELINES.md` |
 | safety | `Docs/Guardrails.md` |
 | test inventory/retirement | `Docs/TestSuite.md` |
@@ -39,10 +40,11 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | G4 durable scale/extent contract | `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` |
 | G4 post-checkpoint correction playbook | `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` |
 | G7/G8 auxiliary/focus implementation route | `Docs/QtQuick_Migration/Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` |
-| H production cutover implementation route | `Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md` |
-| H post-cutover runtime corrections, including Media command outcomes | `Docs/QtQuick_Migration/H_Post_Cutover_Runtime_Reality_Corrections.md` |
-| H5 Visualizer CUSTOM routing and Spectrum correction route | `Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md` |
-| H8 retained visualizer middle-click preset hotswap implementation/acceptance | `Docs/QtQuick_Migration/H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md` |
+| closed H production-cutover record | `Docs/QtQuick_Migration/Remaining_H_Production_Cutover_Decomposition.md` |
+| closed H post-cutover runtime corrections | `Docs/QtQuick_Migration/H_Post_Cutover_Runtime_Reality_Corrections.md` |
+| closed H5 Visualizer CUSTOM routing/Spectrum evidence | `Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md` |
+| closed H8 retained visualizer middle-click preset evidence | `Docs/QtQuick_Migration/H8_Visualizer_Middle_Click_Preset_Cycle_Decomposition_2026-08-30.md` |
+| Phase H closure / permanent golden guardrails | `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md` |
 | closed H visualizer edge audit evidence | `Docs/QtQuick_Migration/H_Pre_Cutover_Visualizer_Edge_Corrections.md` |
 | closed True-F technical/retained-consumer evidence | `Docs/QtQuick_Migration/H_True_F_Technical_Closure.md` |
 | J final installed/physical acceptance route | `Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md` |
@@ -56,7 +58,7 @@ reorientation file under `Docs/` unless the operator explicitly asks for a repos
 
 Qt Quick acceptance has two first-class log planes: `screensaver.log` and always-on `screensaver_qml.log`. The latter is direct Qt/QML message-handler evidence and must exist even on a zero-message clean run. Read `Docs/Qt_QML_Observability.md` before changing capture lifetime, sidecar semantics or considering an OS-level stderr redirect. Permanent health coverage includes both a fake-handler contract test and a real `QQmlEngine` warning probe (`tests/test_qt_message_capture_qml_runtime.py`).
 
-Physical H/J Quick gates are not fully evidenced by the Python log alone.
+Physical/J Quick gates are not fully evidenced by the Python log alone.
 
 ## Settings themes
 
@@ -82,8 +84,8 @@ that volatile status.
 Durable roles:
 
 - G owns retained CUSTOM/input/auxiliary/focus destination contracts and deterministic closure;
-- H owns final production Quick owner/orchestration cutover plus caller-proven old physical-host deletion;
-- I is source-driven residue only and has no standing speculative deletion plan;
+- H is closed: final production Quick owner/orchestration cutover, old physical-host deletion and post-cutover acceptance are preserved in the H closure record;
+- I is active source-driven residue only and has no standing speculative deletion plan;
 - J owns compiled/installed/physical acceptance, including real displays, mixed refresh/DPR, off/wake, MC/screensaver input,
   eyes-on parity, performance tails and packaging.
 
@@ -103,7 +105,7 @@ For geometry/CUSTOM work read these together:
 - `Docs/Visualizer_Reference.md`
 - `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md`
 - `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` for the bounded G4 correction record
-- `Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md` for active H CUSTOM route evidence
+- `Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md` for closed H CUSTOM route evidence
 
 For historical H visualizer-edge reasoning only, use the closed
 `H_Pre_Cutover_Visualizer_Edge_Corrections.md` + `H_True_F_Technical_Closure.md` pair. They are evidence, not active work
@@ -113,9 +115,7 @@ only in `Current_Plan.md`.
 The all-five-mode capability policy is landed. Do not reintroduce a Bubble false gate to avoid correcting viewport
 ownership or spatial-domain defects.
 
-Bubble's durable reflow contract is routed through `Spec.md` and `Docs/Visualizer_Reference.md`: expanded-world
-positions/trails remain distinct from the historical card-height-normalized render radius, whose collision/spawn mapping
-is explicitly converted back into world units.
+Bubble's durable reflow contract is routed through `Spec.md`, `Docs/Visualizer_Reference.md`, `Docs/Guardrails/Bubble_Temporal_Fidelity.md` and R-69: expanded-world positions/trails remain distinct from the historical card-height-normalized render radius, whose collision/spawn mapping is explicitly converted back into world units. Never restore a viewport-dependent global head/Ghost compressor to make extreme geometry look smaller.
 
 ## Historical evidence
 

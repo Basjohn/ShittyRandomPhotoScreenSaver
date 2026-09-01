@@ -552,107 +552,63 @@ def test_active_profile_radius_projection_restores_the_exact_three_x_class_loss(
     assert domain_h == pytest.approx(2.7601113172541742)
 
 
-def test_card_relative_radius_maps_back_into_expanded_collision_world() -> None:
-    domain_h = 772.8311688311688 / 280.0
+def test_card_relative_radius_stays_authored_in_expanded_collision_world() -> None:
+    """R-69: viewport expansion must not multiply Bubble reaction radius."""
+
     radius = 0.03
 
-    def _sim(height_scale: float) -> BubbleSimulation:
+    def _sim(extent: tuple[float, float]) -> BubbleSimulation:
         sim = BubbleSimulation()
-        sim._domain_h = height_scale
-        center_y = 0.5 * height_scale
+        sim._apply_viewport_domain(extent)
         sim._bubbles = [
             BubbleState(
-                x=0.5,
-                y=center_y - 0.06,
+                x=0.50 * sim._domain_w,
+                y=0.50 * sim._domain_h,
                 radius=radius,
                 is_big=True,
                 alpha=1.0,
                 pulse_energy=0.27,
                 size_gate_energy=0.27,
-            ),
-            BubbleState(
-                x=0.5,
-                y=center_y + 0.06,
-                radius=radius,
-                is_big=True,
-                alpha=1.0,
-                pulse_energy=0.27,
-                size_gate_energy=0.27,
-            ),
+            )
         ]
         return sim
 
-    baseline = _sim(1.0)
-    expanded = _sim(domain_h)
-    assert baseline._render_radius_in_world(radius) == pytest.approx(radius)
-    assert expanded._render_radius_in_world(radius) == pytest.approx(
-        radius * domain_h
-    )
+    baseline = _sim((420.0, 280.0))
+    tall = _sim((420.0, 772.8311688311688))
+    wide = _sim((990.0, 280.0))
 
-    # The 0.12-world-unit center gap does not overlap at the canonical size. At
-    # the active tall profile it projects to only 33.6 logical pixels while two
-    # rendered 0.03 radii span about 46.4 pixels, so both spawn and collision
-    # paths must recognize the visible overlap.
-    candidate = expanded._bubbles[1]
-    expanded._bubbles = [expanded._bubbles[0]]
-    assert expanded._overlaps_existing(
-        candidate.x,
-        candidate.y,
-        candidate.radius,
-        candidate_is_big=True,
-    ) is True
-    existing = expanded._bubbles[0]
-    radii_sum_world = 2.0 * radius * domain_h
-    spawn_gap_world = max(
-        0.010 * domain_h,
-        radii_sum_world * 0.10,
-    )
-    assert expanded._overlaps_existing(
-        existing.x,
-        existing.y + radii_sum_world + spawn_gap_world + 1e-6,
-        radius,
-        candidate_is_big=True,
-    ) is False
-
-    expanded = _sim(domain_h)
-    before_gap = expanded._bubbles[1].y - expanded._bubbles[0].y
-    expanded._apply_bubble_collision_response(
-        0.016,
-        bounce_big_pct=100.0,
-        bounce_small_pct=100.0,
-        bounce_big_speed=2.0,
-        bounce_small_speed=2.0,
-    )
-    after_gap = expanded._bubbles[1].y - expanded._bubbles[0].y
-    assert expanded.get_perf_diagnostics()["collision_overlaps"] >= 1.0
-    assert after_gap > before_gap
-
-    separated = _sim(domain_h)
-    final_radius = separated._effective_collision_radius(
-        separated._bubbles[0],
+    # Radius is authored in canonical renderer-content units. Expanded CUSTOM
+    # domains normalize positions/collision geometry, not the reaction radius.
+    baseline_radius = baseline._effective_collision_radius(
+        baseline._bubbles[0],
         big_bass_pulse=0.5,
         small_freq_pulse=0.5,
         big_contraction_bias=1.0,
         big_size_clamp=4.0,
     )
-    target_gap_world = (
-        2.0 * final_radius * domain_h * 1.12
-        + 0.008 * domain_h
-    )
-    center_y = 0.5 * domain_h
-    separated._bubbles[0].y = center_y - target_gap_world / 2.0
-    separated._bubbles[1].y = center_y + target_gap_world / 2.0 + 1e-6
-    positions_before = [(bubble.x, bubble.y) for bubble in separated._bubbles]
-    separated._apply_bubble_collision_response(
-        0.016,
-        bounce_big_pct=0.0,
-        bounce_small_pct=0.0,
-        bounce_big_speed=2.0,
-        bounce_small_speed=2.0,
-    )
-    assert separated.get_perf_diagnostics()["collision_overlaps"] == 0.0
-    assert [(bubble.x, bubble.y) for bubble in separated._bubbles] == positions_before
+    for sim in (tall, wide):
+        actual = sim._effective_collision_radius(
+            sim._bubbles[0],
+            big_bass_pulse=0.5,
+            small_freq_pulse=0.5,
+            big_contraction_bias=1.0,
+            big_size_clamp=4.0,
+        )
+        assert actual == pytest.approx(baseline_radius)
 
+    # The same normalized candidate has the same overlap decision at canonical,
+    # tall and wide extents; there is no hidden radius*domain transfer.
+    decisions = []
+    for sim in (baseline, tall, wide):
+        decisions.append(
+            sim._overlaps_existing(
+                0.555 * sim._domain_w,
+                0.50 * sim._domain_h,
+                radius,
+                candidate_is_big=True,
+            )
+        )
+    assert decisions == [True, True, True]
 
 def test_overlap_retry_clamp_uses_actual_logical_domain() -> None:
     # The overlap-retry jitter clamp must bound to the actual logical world plus

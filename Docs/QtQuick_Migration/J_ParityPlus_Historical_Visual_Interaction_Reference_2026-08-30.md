@@ -1,7 +1,7 @@
 # J Parity+ — Historical Visual / Interaction Reference
 
 Date: 2026-08-30  
-Applies to: Phase J final physical/visual acceptance and any earlier H defect whose *functional presentation topology* must be identified before J polish.
+Applies to: Phase J final physical/visual acceptance, using closed-H functional presentation contracts as the non-regression baseline.
 
 ## 1. Purpose
 
@@ -18,9 +18,9 @@ This is **not** bug-for-bug compatibility and it is **not** implementation compa
 Examples:
 
 - the newer Media transport strip may be kept because the operator prefers it;
-- the old 4.7.2 seek bar is useful as a visual/interaction reference even though the release notes explicitly say clicking it did not seek yet — H4 should make seeking actually work rather than reproducing that limitation;
+- the old 4.7.2 seek bar is useful as a visual/interaction reference even though the release notes explicitly say clicking it did not seek yet — closed H4 made seeking functional, and J must not reproduce that limitation;
 - the app-volume control remains a Media-dependent child widget; the historical separate adjacent accessory is the default outcome for the existing toggle, while an integrated in-card variant may survive only as an explicit additional option;
-- old Spectrum/Organ presentation is a topology/design oracle, but current H must also provide correct dynamic data before J tunes glow/spacing/colour.
+- old Spectrum/Organ presentation is a topology/design oracle; closed H already established correct functional topology/live data, and J now tunes glow/spacing/colour without weakening that response.
 
 ## 2. Reference hierarchy
 
@@ -117,23 +117,11 @@ Should a second accelerated surface be created?
 
 Never restore, wrap, adapt, copy back or proxy through the deleted QWidget/QRhi/GL physical presenter architecture merely because its pixels were better.
 
-## 4. H versus J under Parity+
+## 4. Closed H boundary versus J under Parity+
 
-Parity+ does not make H a visual-polish phase.
+Parity+ does not reopen H functional contracts. H closed with Quick-only lifecycle/presentation ownership, functional family actions, Visualizer routing/topology/reactivity, CUSTOM ownership, R6 Halo and R7 transition admission accepted. J preserves those behaviors while improving physical quality. If later evidence falsifies one, reopen the smallest demonstrated owner/incident rather than treating J as permission to redesign the accepted contract.
 
-### H owns broken functional presentation contracts
-
-Examples:
-
-- Media artwork provider identity is now functionally closed in H2; J must preserve that while restoring better artwork scale/chrome/fade;
-- Reddit opener composition has a prepared H repair but remains awaiting MC/SCR validation;
-- Media Play/Pause/seek do not execute;
-- CUSTOM Visualizer refuses its own committed display;
-- Spectrum receives saturated data and/or renders the **wrong fundamental presentation topology**;
-- CUSTOM Settings disables controls it does not own;
-- shutdown crashes.
-
-For Spectrum specifically, H ends when the selected Spectrum preset is recognizably the correct functional representation and is driven by non-degenerate live frequency data. It does not need screenshot-perfect glow/spacing before H closes.
+For Spectrum specifically, H accepted the recognizable continuous-column representation family with non-degenerate live frequency data and large-viewport smoothing. J owns screenshot-level spacing/glow/colour/motion parity without changing that functional identity or weakening musical response.
 
 ### J owns Parity+ physical quality
 
@@ -169,7 +157,7 @@ The current Quick failure is fundamentally different:
 - visual topology is wrong before considering exact colour/glow polish;
 - runtime evidence also shows a 35-bar authored/computed payload repeatedly saturating at/near `1.00`.
 
-Therefore H5 must investigate **both**:
+Closed H5 investigated and accepted **both**:
 
 ```text
 data correctness:
@@ -181,7 +169,7 @@ mode/preset -> render snapshot -> renderer implementation -> primitive/segment t
 
 Saturation may explain uniform height/energy. It does **not** by itself explain why a continuous-column Spectrum became a dense segmented-cell matrix.
 
-H acceptance for Spectrum:
+Accepted H Spectrum baseline:
 
 - correct Spectrum mode/preset path;
 - non-degenerate live frequency data;

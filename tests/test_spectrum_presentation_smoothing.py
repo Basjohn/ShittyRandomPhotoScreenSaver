@@ -84,6 +84,40 @@ def test_default_spectrum_smoothing_is_symmetric_and_sub_tick_bounded():
     assert widget._spectrum_presentation_pending is True
 
 
+def test_large_viewport_smoothing_uses_larger_axis_without_changing_cadence():
+    canonical = _state(runtime_controller=SimpleNamespace(presentation_viewport_extent=(420.0, 280.0)))
+    wide = _state(runtime_controller=SimpleNamespace(presentation_viewport_extent=(840.0, 280.0)))
+    tall = _state(runtime_controller=SimpleNamespace(presentation_viewport_extent=(420.0, 560.0)))
+    both = _state(runtime_controller=SimpleNamespace(presentation_viewport_extent=(840.0, 560.0)))
+
+    def _rise(widget):
+        resolve_widget_spectrum_presentation(widget, [0.0], now_ts=1.0, first_frame=True)
+        value, changed = resolve_widget_spectrum_presentation(widget, [1.0], now_ts=1.01)
+        assert changed is True
+        return value[0]
+
+    canonical_rise = _rise(canonical)
+    wide_rise = _rise(wide)
+    tall_rise = _rise(tall)
+    both_rise = _rise(both)
+
+    # Larger cards get more presentation smoothing (smaller one-tick jump),
+    # but width+height do not multiply into an excessive new time constant.
+    assert wide_rise < canonical_rise
+    assert tall_rise < canonical_rise
+    assert both_rise == pytest.approx(wide_rise)
+
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "widgets"
+        / "spotify_visualizer"
+        / "spectrum_presentation_smoothing.py"
+    ).read_text(encoding="utf-8")
+    assert "extent_ratio = max(width / baseline_width, height / baseline_height)" in source
+    assert "min(4.0, extent_ratio)" in source
+    assert "QTimer" not in source
+
+
 def test_spectrum_authoritative_tick_trace_matches_versioned_golden():
     fixture = json.loads(_TEMPORAL_FIXTURE.read_text(encoding="utf-8"))
     golden = json.loads(_TEMPORAL_GOLDEN.read_text(encoding="utf-8"))
