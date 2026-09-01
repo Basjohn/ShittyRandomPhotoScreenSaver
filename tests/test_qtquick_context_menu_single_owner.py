@@ -94,7 +94,7 @@ def test_opening_one_display_menu_retires_the_other_through_production_wiring(
         screen=screen,
         scene_factory=factory,
         window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
-        interaction_mode_provider=lambda: True,
+        interaction_mode_enabled=True,
     )
     runtime_b = QuickDisplayRuntime(
         screen_index=1,
@@ -102,7 +102,7 @@ def test_opening_one_display_menu_retires_the_other_through_production_wiring(
         screen=screen,
         scene_factory=factory,
         window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
-        interaction_mode_provider=lambda: True,
+        interaction_mode_enabled=True,
     )
     try:
         for runtime in (runtime_a, runtime_b):

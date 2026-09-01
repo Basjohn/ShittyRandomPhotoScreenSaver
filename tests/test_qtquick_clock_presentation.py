@@ -449,7 +449,7 @@ def test_quick_window_gives_clock_double_tap_first_refusal_before_next_fallback(
     input_controller = QuickInputController(
         screen_index=0,
         runtime_generation=117,
-        interaction_mode_provider=lambda: True,
+        interaction_mode_enabled=True,
     )
     window.bind_input_controller(input_controller)
     scene = QuickSceneController(window=window, factory=factory)
