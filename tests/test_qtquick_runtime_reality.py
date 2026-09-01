@@ -349,7 +349,7 @@ def test_qwindow_right_click_leaves_retained_qml_context_menu_visibly_open(
             always_on_top=False,
             blank_cursor=False,
         ),
-        interaction_mode_provider=lambda: True,
+        interaction_mode_enabled=True,
     )
     model = runtime.context_menu_model
     model.replace_entries(_menu_entries())

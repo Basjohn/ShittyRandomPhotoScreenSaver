@@ -38,7 +38,7 @@ def _make_unit(qt_app, generation: int, ctrl_coordinator):
         scene_factory=factory,
         window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
         ctrl_coordinator=ctrl_coordinator,
-        interaction_mode_provider=lambda: True,
+        interaction_mode_enabled=True,
         adapters=(ClockFamilyAdapter(),),
     )
     return unit, factory

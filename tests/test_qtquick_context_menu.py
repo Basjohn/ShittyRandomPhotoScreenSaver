@@ -198,7 +198,7 @@ def test_runtime_right_click_opens_retained_menu_and_action_closes_admission(
         screen=screen,
         scene_factory=factory,
         window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
-        interaction_mode_provider=lambda: True,
+        interaction_mode_enabled=True,
     )
     routed = []
     model = runtime.context_menu_model
@@ -246,7 +246,7 @@ def test_context_menu_active_clears_on_dismiss_and_retirement_close_paths(qt_app
         screen=screen,
         scene_factory=factory,
         window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
-        interaction_mode_provider=lambda: True,
+        interaction_mode_enabled=True,
     )
     model = runtime.context_menu_model
     model.replace_entries(_entries())

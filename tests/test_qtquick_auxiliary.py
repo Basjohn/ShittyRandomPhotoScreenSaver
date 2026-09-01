@@ -8,6 +8,7 @@ from PySide6.QtGui import QKeyEvent, QMouseEvent
 from PySide6.QtQuick import QQuickItem
 
 from rendering.quick.auxiliary import QuickAuxiliaryController, QuickAuxiliaryState
+from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.cursor_controller import QuickCursorController
 from rendering.quick.input_controller import QuickInputController
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
@@ -65,13 +66,14 @@ def test_pixel_shift_walk_stays_bounded_and_turns_inward_at_the_edge() -> None:
 
 
 def test_halo_follows_cross_display_ctrl_clear_after_focus_moves(qt_app) -> None:
-    global_state = {"held": False}
+    coord = SharedCtrlCoordinator()
+    key_a = (7, 0)
     display_a = QuickInputController(
         screen_index=0,
         runtime_generation=7,
-        global_ctrl_held_provider=lambda: global_state["held"],
-        ctrl_state_publisher=lambda held: global_state.__setitem__("held", held),
+        ctrl_state_publisher=coord.publisher_for(key_a),
     )
+    coord.subscribe(key_a, display_a.set_shared_ctrl_held)
     aux_a = QuickAuxiliaryController(screen_index=0, runtime_generation=7)
     aux_a.resume()
 
@@ -83,8 +85,9 @@ def test_halo_follows_cross_display_ctrl_clear_after_focus_moves(qt_app) -> None
     assert aux_a.state.halo_enabled is True
     assert aux_a.state.native_cursor_visible is False
 
-    global_state["held"] = False
-    display_a.is_ctrl_mode_active()
+    # Focus moved away; the coordinator broadcasts the authoritative global Ctrl
+    # clear and the halo must follow it rather than staying on a stale press.
+    display_a.set_shared_ctrl_held(False)
     assert display_a.input_state.ctrl_held is False
     aux_a.apply_input_state(display_a.input_state)
     assert aux_a.state.halo_enabled is False

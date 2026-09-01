@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtGui import QKeyEvent
 
+from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.input_controller import QuickInputController
 from rendering.quick.runtime import QuickDisplayRuntime
 from rendering.quick.scene_controller import QuickSceneFactory
@@ -280,53 +281,58 @@ def test_ctrl_state_is_not_stuck_when_global_clears_after_focus_moves():
     # coordinator clears Ctrl (the physical release lands on the other display),
     # this display must follow the authoritative global clear, never staying
     # stuck on a stale local Ctrl-held that it never received a release for.
-    global_state = {"held": False}
+    coord = SharedCtrlCoordinator()
+    key_a = (0, 0)
     display_a = QuickInputController(
         screen_index=0,
         runtime_generation=0,
-        global_ctrl_held_provider=lambda: global_state["held"],
-        ctrl_state_publisher=lambda held: global_state.__setitem__("held", held),
+        ctrl_state_publisher=coord.publisher_for(key_a),
     )
+    coord.subscribe(key_a, display_a.set_shared_ctrl_held)
 
     assert display_a.handle_key_press(_key_press(Qt.Key.Key_Control)) is True
-    assert global_state["held"] is True
+    assert coord.is_held() is True
     assert display_a.is_ctrl_mode_active() is True
 
-    # Focus moved to display B; the coordinator clears the shared Ctrl state.
-    global_state["held"] = False
+    # Focus moved to display B; the physical release landed there and the shared
+    # coordinator broadcasts the authoritative global clear to this display,
+    # which never received its own key release.
+    display_a.set_shared_ctrl_held(False)
 
     assert display_a.is_ctrl_mode_active() is False
     assert display_a.input_state.ctrl_held is False
 
 
 def test_quick_input_uses_injected_cross_display_ctrl_state():
-    coordination = {"ctrl_held": False}
-
-    def publish(held: bool) -> None:
-        coordination["ctrl_held"] = held
-
+    # Event-driven cross-display Ctrl: each display publishes only its own
+    # contribution and the coordinator broadcasts the authoritative global OR to
+    # every subscribed display, so a peer that never saw the key press still
+    # observes Ctrl-held and does not exit on an ordinary key.
+    coord = SharedCtrlCoordinator()
+    key_owner = (0, 0)
+    key_peer = (0, 1)
     owner = QuickInputController(
         screen_index=0,
         runtime_generation=0,
-        global_ctrl_held_provider=lambda: coordination["ctrl_held"],
-        ctrl_state_publisher=publish,
+        ctrl_state_publisher=coord.publisher_for(key_owner),
     )
     peer = QuickInputController(
         screen_index=1,
         runtime_generation=0,
-        global_ctrl_held_provider=lambda: coordination["ctrl_held"],
-        ctrl_state_publisher=publish,
+        ctrl_state_publisher=coord.publisher_for(key_peer),
     )
+    coord.subscribe(key_owner, owner.set_shared_ctrl_held)
+    coord.subscribe(key_peer, peer.set_shared_ctrl_held)
     peer_exits: list[bool] = []
     peer.exit_requested.connect(lambda: peer_exits.append(True))
 
     assert owner.handle_key_press(_key_press(Qt.Key.Key_Control)) is True
-    assert coordination["ctrl_held"] is True
+    assert coord.is_held() is True
     assert peer.handle_key_press(_key_press(Qt.Key.Key_A, "a")) is False
     assert peer.input_state.ctrl_held is True
     assert peer_exits == []
 
     assert owner.handle_key_release(_key_release(Qt.Key.Key_Control)) is True
-    assert coordination["ctrl_held"] is False
+    assert coord.is_held() is False
     assert peer.handle_key_press(_key_press(Qt.Key.Key_A, "a")) is True
     assert peer_exits == [True]
