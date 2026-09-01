@@ -82,8 +82,8 @@ selected display
 ```
 
 The visualizer viewport-config seam is part of this binding. Ordinary committed extent remains authoritative outside
-CUSTOM; a live CUSTOM working extent is only a temporary override. H must not rely on "CUSTOM inactive -> None -> canonical"
-as a substitute for the committed configuration owner.
+CUSTOM; a live CUSTOM working extent is only a temporary override. The accepted post-H contract must not rely on
+"CUSTOM inactive -> None -> canonical" as a substitute for the committed configuration owner.
 
 Retained visualizer double-click remains semantic mode-cycle input and must be handled before the window-level unhandled
 next-image fallback.

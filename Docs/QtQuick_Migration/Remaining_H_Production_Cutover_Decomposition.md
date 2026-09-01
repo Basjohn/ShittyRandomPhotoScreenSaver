@@ -1,5 +1,9 @@
 # Remaining H — Production Quick Cutover Technical Decomposition
 
+Status: **CLOSED — historical production-cutover decomposition.** Phase-I admission/current sequence is in `Current_Plan.md`; final H acceptance is in `H_Phase_Closure_2026-09-01.md`.
+
+Do not execute unchecked H steps from this file as current work. Preserve it for ownership/caller-proof rationale only.
+
 Work admission and live checkpoint: `Current_Plan.md`  
 Source basis: inspect exact current source before execution; this decomposition owns durable H destination boundaries rather
 than transient checkpoint status.

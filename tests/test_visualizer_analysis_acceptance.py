@@ -14,15 +14,44 @@ from widgets.spotify_visualizer.beat_engine import (
 from widgets.spotify_visualizer.energy_bands import EnergyBands, extract_energy_bands
 
 
+class _ImmediateComputeLane:
+    def __init__(self, worker, callback, *, lane_id: str, category: str) -> None:
+        self.worker = worker
+        self.callback = callback
+        self.lane_id = lane_id
+        self.category = category
+        self.is_stopped = False
+
+    def submit(self, payload) -> bool:
+        result = SimpleNamespace(success=True, result=self.worker(payload))
+        self.callback(result, payload=payload)
+        return True
+
+    def cancel_pending(self) -> int:
+        return 0
+
+    def stop(self) -> None:
+        self.is_stopped = True
+
+
 class _ImmediateComputeThreadManager:
+    supports_persistent_compute_lanes = True
+
     def __init__(self) -> None:
         self.categories: list[str] = []
+        self.lane: _ImmediateComputeLane | None = None
 
-    def submit_compute_task(self, fn, callback=None, category="uncategorized") -> None:
-        self.categories.append(category)
-        result = SimpleNamespace(success=True, result=fn())
-        if callback is not None:
-            callback(result)
+    def create_compute_lane(self, worker, callback, *, lane_id, category):
+        self.categories.append(str(category))
+        self.lane = _ImmediateComputeLane(
+            worker, callback, lane_id=str(lane_id), category=str(category)
+        )
+        return self.lane
+
+    def submit_compute_task(self, *_args, **_kwargs):
+        raise AssertionError(
+            "audio analysis must use its persistent serial lane, not generic Future tasks"
+        )
 
 
 def _pre_extraction_formula(

@@ -1,7 +1,7 @@
 # 06 — Build, Tooling, Tests, Installed Validation and Cutover Evidence
 
-Status: **current validation contract; implementation migration at tail of G**  
-Last updated: 2026-08-28
+Status: **current validation contract; H closed, I active, J queued**  
+Last updated: 2026-09-01
 
 Cross-links:
 
@@ -19,14 +19,14 @@ performance evidence. This document remains the durable build/tooling contract b
 
 ## 1. Build risk is handled early; build execution is deferred
 
-During implementation migration through G/H, update build scripts, packaging declarations and `build_runner.py` only
+During implementation migration and post-cutover reconciliation, update build scripts, packaging declarations and `build_runner.py` only
 when required, validating with focused static/script/runtime-shaped tests.
 
 Do not initiate a compiled/full product build merely as routine migration validation.
 
-Comprehensive executable/product validation belongs to J after H/I unless the operator explicitly schedules an earlier
-build. H may use focused runtime-shaped proof to establish destination ownership; it does not require the full installed
-physical acceptance matrix.
+Comprehensive executable/product validation belongs to J after I unless the operator explicitly schedules an earlier
+build. H destination ownership is closed evidence; I uses focused runtime-shaped proof while reconciling stale callers/tests,
+then J owns the full installed physical acceptance matrix.
 
 ## 2. Test/workflow environment
 
@@ -204,16 +204,18 @@ Every slice:
 focused pytest
 ```
 
-At H architecture boundaries, use the maintained destination profile owned by `Docs/TestSuite.md`:
+For post-H destination gates, use the maintained phase-neutral profile owned by `Docs/TestSuite.md`:
 
 ```text
-python tests/run_chunked.py --profile h-destination --chunks 4 --timeout-seconds 900 --log
+python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 900 --log
 ```
+
+`h-destination` is a temporary compatibility alias only; new commands and automation use `destination`.
 
 Maintained profile targets run in fresh pytest subprocesses to prevent Qt/QQuick lifecycle contamination across unrelated
 targets. Do not run the entire suite after every small edit.
 
-The no-profile whole-tree command remains useful during H/I as a reconciliation diagnostic, not as a homogeneous
+The no-profile whole-tree command remains useful during I as a reconciliation diagnostic, not as a homogeneous
 production-authority gate while legacy-presenter tests still exist. A red old-presenter test is not automatically a current
 defect. Classify it against `Docs/TestSuite.md`; likewise, do not delete a `WILL BE OBSOLETE` test before its
 replacement-owner coverage exists.
@@ -327,10 +329,10 @@ Never use destructive Git to make the tree convenient.
 Low-risk work may continue after green push. High-risk/audit-required work stops after push for
 independent review.
 
-## 16. H owner-cutover checklist
+## 16. Closed H owner-cutover record
 
-H ends with Quick as the only production presenter/runtime owner. The remaining physical-host source must have no live
-runtime caller before deletion:
+H closed with Quick as the only production presenter/runtime owner. The retired physical-host source below must not regain a live
+runtime caller during I/J:
 
 ```text
 DisplayWidget runtime presenter
@@ -342,7 +344,7 @@ legacy software/backend-demotion presenter path
 ```
 
 `QQuickWidget` is prohibited. Historical evidence may still name these owners. Do not keep them executable merely to
-preserve a half-migrated product path; caller-dead pieces can leave earlier, while the final host edge leaves at H.
+preserve a half-migrated product path. I removes/re-homes caller-dead residue only after current-owner contract proof.
 
 J then performs the comprehensive installed/physical matrix against the Quick-only product.
 

@@ -1,6 +1,6 @@
 # Project Overview
 
-Last updated: 2026-08-29
+Last updated: 2026-09-01
 
 SRPSS is a Windows screensaver/media runtime with multi-display image presentation, accelerated transitions, a
 high-fidelity multi-mode visualizer, configurable runtime overlays and durable settings.
@@ -19,25 +19,16 @@ one selected physical display
 Settings, providers, persistence, media/business orchestration and logical runtimes remain Python/QWidget where
 appropriate.
 
-The old `DisplayWidget` / QRhiWidget / `GLCompositorWidget` physical path may still exist in source until H. It is
-migration scaffolding, not a supported fallback and not something agents should preserve to keep the partially migrated
-application runnable.
+The old `DisplayWidget` / QRhiWidget / `GLCompositorWidget` physical path was removed by H after caller proof. It is not rollback architecture, a supported fallback, or something agents should reconstruct to satisfy stale tests.
 
 ## Current migration position
 
 Exact sequence and source checkpoint live only in `Current_Plan.md`; this overview deliberately does not carry a commit hash.
 
-- F0–F8 closed;
-- G1–G3 closed;
-- G4 core independent viewport-extent resize, Bubble logical reflow and all-five-mode capability policy landed; a bounded
-  post-checkpoint audit correction batch is priority before G7 resumes;
-- G5 cross-display retained transfer closed;
-- G6 retained input/semantic family actions closed;
-- G7 retained dimming/pixel shift, halo and context menu landed and needs caller-proof closure;
-- G8 MC/focus closure follows;
-- the complete GREEN G checkpoint receives one independent audit before H;
-- H finalizes production Quick orchestration and removes the remaining physical host;
-- I is residue; J is final installed/physical acceptance.
+- F/G are closed;
+- H is closed: Quick is the sole production presentation authority and post-cutover functional/performance acceptance is preserved in `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md`;
+- I is active caller-proven residue/test/tool/source reconciliation;
+- J is queued for final visual/fidelity/compiled/installed/physical acceptance plus evidence-driven residual performance work.
 
 ## Visualizer geometry
 
@@ -49,10 +40,9 @@ left/right    -> viewport width
 top/bottom    -> viewport height
 ```
 
-Bubble is included and its capability policy is no longer an accepted place to hide missing reflow. Current G4 correction
-work is narrower: committed-vs-CUSTOM viewport configuration ownership plus a few Bubble nonbaseline spatial edge cases.
-Viewport changes reconfigure the spatial domain while preserving BTF; they never stretch finished pixels or redefine
-simulation cadence.
+Bubble is included and its capability policy is no longer an accepted place to hide a reflow defect. Committed runtime viewport truth is distinct from the temporary CUSTOM working override. Viewport changes reconfigure the spatial domain while preserving BTF; they never stretch finished pixels or redefine simulation cadence.
+
+**R-69 is golden:** wide/tall adaptation may not globally compress Bubble renderer-facing head radius, already-normalized Ghost/history displacement, or another mode's authored musical response/freshness. If an extreme full-expansion visual tail is too large, fix only that proven tail. Audio analysis remains one persistent newest-source serial lane with retained DSP state; performance work may not lower authored cadence or increase visible staleness.
 
 ## Ordinary widget pattern
 

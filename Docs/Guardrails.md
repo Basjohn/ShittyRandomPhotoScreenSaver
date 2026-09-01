@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-08-28
+Last updated: 2026-09-01
 
 ## Architecture decision
 
@@ -12,15 +12,13 @@ one selected physical display
 ```
 
 Do not reopen broad native/C++ presenter work without new evidence the accepted architecture cannot satisfy production.
-Do not use `QQuickWidget`, second accelerated runtime surfaces, or deepen QRhiWidget architecture to avoid migration
-work. Remaining old QRhiWidget/DisplayWidget code is temporary scaffolding until H, not a fallback product.
+Do not use `QQuickWidget`, second accelerated runtime surfaces, or restore/deepen the deleted QRhiWidget/DisplayWidget architecture. H is closed; the old physical presenter is not a fallback product or test convenience.
 
 ## Migration continuity
 
 A working legacy screensaver during intermediate migration slices is **not** required. Do not preserve, restore or
 invent old QWidget/compositor presentation solely so the half-migrated app keeps running. Caller-dead old pixels may be
-deleted once their destination contract is owned and proven. H wires final production ownership; J proves the complete
-installed product.
+deleted once their destination contract is owned and proven. H already established final production ownership; I removes caller-dead residue and J proves final visual/compiled/installed/physical quality.
 
 ## Priority
 
@@ -84,6 +82,8 @@ All five current modes support both destination operations. Edge viewport resize
 must receive changed spatial bounds without deforming circles or compromising BTF. Ordinary committed viewport extent
 remains truth outside CUSTOM; a working CUSTOM extent is a temporary override only. Leaving CUSTOM must not reset a saved
 non-baseline layout to canonical by confusing "no override" with "baseline".
+
+**R-69 golden rule:** viewport adaptation must not globally compress Bubble head/radius response, already-normalized Ghost/history displacement, or another Visualizer mode's authored musical response/freshness. Never add a second `baseline/current` or `1 / viewport_extent` compensation to state that is already projected into renderer content coordinates. If an extreme visual tail is too large, fix only that proven tail.
 
 ## Capability state
 

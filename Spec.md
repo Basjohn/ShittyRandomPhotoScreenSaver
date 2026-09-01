@@ -1,6 +1,6 @@
 # SRPSS Specification
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 Canonical durable architecture and product-behavior contracts. `Current_Plan.md` owns sequence; independent closure
 narrative belongs under `Docs/audits/` or historical evidence.
@@ -41,8 +41,8 @@ fallback.
 
 **Pre-H product continuity is not a migration requirement.** The old path must not be preserved, rebuilt or expanded
 merely to keep a half-migrated screensaver functional. Caller-dead old pixels/helpers should retire as soon as their
-replacement owns the contract. H wires the destination production owner and removes the remaining physical host; I is
-residue only; J is full installed/physical acceptance.
+replacement owns the contract. H wired the destination production owner, removed the remaining physical host and closed post-cutover runtime/performance acceptance; I is
+caller-proven residue only; J is final visual/installed/physical acceptance and residual evidence-driven performance polish.
 
 ## Settings themes / native backdrop
 
@@ -210,7 +210,7 @@ authority. Motion diagnostics report renderer-normalized, pre-collision stream/d
 still be changed by the existing impulse and collision stages.
 
 The all-five-mode viewport capability policy is part of the destination contract and the core Bubble reflow path has landed.
-Do not reintroduce a Bubble false capability gate to conceal a viewport ownership or spatial-domain defect.
+Do not reintroduce a Bubble false capability gate to conceal a viewport ownership or spatial-domain defect. **R-69 is golden:** wide/tall geometry may not globally compress renderer-facing Bubble head radius, already-normalized Ghost/history displacement, or another mode's authored musical response/freshness. If an extreme Bubble full-expansion tail is too large, fix only that proven tail.
 
 Committed viewport extent is ordinary runtime truth. While CUSTOM is active, its working extent may temporarily override
 that committed value. Ending CUSTOM removes the temporary override: Save leaves the newly committed extent authoritative;
@@ -248,9 +248,9 @@ Old generation loses admission before replacement gains authority; generation 0 
 created/used/destroyed by legal render/context owner. No `glFinish()`, `DwmFlush()`, GUI sleeps or nested event pumping
 as cadence repair. Shared `QQmlEngine` is component/cache owner, not hidden runtime-generation owner.
 
-## H production authority
+## Production authority
 
-H makes the existing Quick destination the sole production owner:
+The accepted Quick destination is the sole production owner:
 
 ```text
 selected display
@@ -263,18 +263,14 @@ selected display
 -> retained family items
 ```
 
-Do not run old/new production runtime managers in parallel. Preserve semantic cardinality. H binds the existing G owners
-exactly once, including the visualizer viewport-config route: ordinary committed extent remains authoritative outside CUSTOM
-and the temporary CUSTOM working override wins only while editing. H deletes the remaining old physical presenter/backend
-in the same audited owner-cutover boundary; it does not need to preserve a fully working legacy application or provide a
-product switch back. H begins only after the complete checkpointed G state passes its independent audit.
+Do not run old/new production runtime managers in parallel or restore the deleted physical presenter/backend. Preserve semantic cardinality. Ordinary committed Visualizer viewport extent remains authoritative outside CUSTOM and the temporary CUSTOM working override wins only while editing.
 
-## Validation epochs
+The H closure record is `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md`. Current migration epochs are:
 
-- G: focused implementation/runtime-shaped proof;
-- H: destination production ownership + lifecycle/caller proof and physical-host deletion;
-- I: residue only;
-- J: compiled/installed and physical 1/2/N-display/DPR/topology/eyes-on/performance closure.
+- G: closed retained CUSTOM/input/auxiliary foundation;
+- H: closed production ownership + post-cutover physical/performance acceptance;
+- I: active caller-proven residue/test/tool/source reconciliation;
+- J: final visual/compiled/installed/physical 1/2/N-display/DPR/topology acceptance plus evidence-driven residual performance work.
 
 ## Documentation roles
 

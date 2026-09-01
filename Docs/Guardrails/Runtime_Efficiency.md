@@ -1,6 +1,6 @@
 # Runtime Efficiency / Change Safety Guardrails
 
-Last updated: 2026-08-20
+Last updated: 2026-09-01
 
 Core principle:
 
@@ -14,7 +14,7 @@ Accepted destination:
 - one `VisualizerLogicalRuntime` for authored visualizer cadence;
 - Python/QWidget Settings and service/model logic retained where appropriate.
 
-The old QRhiWidget presenter may remain during migration but is not a new optimization target.
+The old QRhiWidget/GLCompositor physical presenter is deleted and must not be restored as an optimization fallback or test convenience.
 
 ## 2. No-op means no-op
 
@@ -46,6 +46,15 @@ After migration, distinguish:
 Do not infer that moving presentation to a render thread makes GUI or Python contention irrelevant.
 
 Do not infer that any remaining heavy-load hole proves a C++ presenter is required.
+
+
+## 3A. Visualizer performance safety after H
+
+R-71 is the accepted performance boundary: one persistent serial `visualizer.audio_analysis` lane, one in-flight + newest pending source, retained detached DSP state across ordinary frames, and explicit rebuild/fencing at real config/activation/reset epochs. No generic per-frame Future/task fallback.
+
+R-69 is the performance admission veto. A change is **not** an optimization if it improves GC/FPS/skip counters by weakening visible musical response, shrinking Bubble head/radius deltas with viewport extent, suppressing Ghost/history displacement, lowering authored cadence, increasing source/snapshot age, or coalescing away protected transient edges. Apply the same rule to all Visualizer modes.
+
+Rare deep GC pauses remain late-J evidence debt. Change GC thresholds/lifetime policy only from a measured allocation/lifetime mechanism; do not tune collection counters in isolation.
 
 ## 4. Runtime overlays
 

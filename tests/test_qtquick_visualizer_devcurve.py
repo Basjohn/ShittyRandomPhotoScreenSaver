@@ -201,7 +201,7 @@ def test_devcurve_shader_does_not_render_migration_invented_ghost_layers() -> No
 def test_devcurve_quick_aa_keeps_historical_logical_pixel_width() -> None:
     source = load_fragment_shader("devcurve")
     assert source is not None
-    assert "float aa = max(1.15 / max(inner_h, 1.0), 0.0010);" in source
+    assert "float aa = max(1.15 / max(inner_h, 1.0), _quick_norm_y(0.0010));" in source
     assert "1.15 * authoredScale" not in source
     assert "uniform float u_visual_scale" not in source
 

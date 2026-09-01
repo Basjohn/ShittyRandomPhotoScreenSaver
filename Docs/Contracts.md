@@ -164,7 +164,7 @@ canonical enabled/activation + requested monitor
 -> retained visualizer render node on the admitted display
 ```
 
-The logical runtime step advances against controller-owned state, never a live QWidget. Configuration ownership follows the
+The logical runtime step advances against controller-owned state, never a live QWidget. Audio analysis is one persistent serial `visualizer.audio_analysis` lane with one in-flight + newest pending source, retained detached DSP state across ordinary frames, explicit config/activation/reset epoch invalidation, and no generic Future/task fallback. Configuration ownership follows the
 **actual consumer**, not the Settings subsection or historical widget field that supplied it. In particular, the canonical
 resolved "technical" cache is not one ownership bucket:
 
@@ -202,6 +202,7 @@ viewport_extent          # left/right width; top/bottom height
 All five current modes must support viewport extent and the core capability policy is now all-five-mode capable. Bubble is
 not a destination exception and must not be re-gated to hide a defect. Preserve focused BTF/reflow proof, including equal
 renderer-content stream/drift head/trail travel for the same consume-once transient at canonical, wide and tall extents.
+R-69 is binding: viewport adaptation must not add a second compressor to Bubble head radius, Ghost/history displacement, or another mode's authored musical response/freshness.
 
 Viewport configuration has two precedence levels, not two persistence owners: ordinary committed extent is runtime truth;
 an active CUSTOM session may provide a temporary working override. Save promotes the new value into committed truth, Cancel
@@ -213,3 +214,5 @@ restores the old committed value, and ending CUSTOM removes only the override. I
 `CustomLayoutSession` owns working geometry/state independent of QWidget. Geometry keys include display identity and
 variant. Save/Cancel and layout slots preserve ordinary ON/OFF semantics without crossing capability activation.
 Cross-display transfer has one live retained pixel owner and preserves logical runtime/model identity.
+
+Ordinary uniform CUSTOM scale is absolute against stable authored/preferred geometry with a shared 40% floor; re-entering CUSTOM must not compound shrink. Reddit/Reddit2, Media and Gmail use whole-card retained uniform scaling. Gmail model width is already outer width; its row-derived preferred height alone receives shell inset. Visualizer is intentionally separate: `uniform_visual_scale` and `viewport_extent` remain independent intents.

@@ -26,13 +26,16 @@ Rehome surviving regression coverage before deleting an old owner.
 
 ## Active / Pending Acceptance
 
-- [R-69 — Bubble Extreme-Viewport Global Radius Compression Suppressed Reactivity](R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md) — **PARTIAL / AWAITING PHYSICAL VALIDATION**. Failed global head/Ghost viewport compression is retired; contract restoration awaits wide/tall replay, while any remaining oversized full-expansion tail stays a separate open visual problem.
 - [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN at `5b3cbaef`; only physical dual-display acceptance remains.
 
 Current migration implementation sequencing is **not** owned by this folder. Read `Current_Plan.md` for current status.
 
+- R-69 Bubble extreme-viewport scaling is **accepted as a golden contract**: never reintroduce global viewport compression of authored head/Ghost response. Any oversized extreme expansion tail is separate J visual debt.
+
 ## R Records
 
+- [R-71 — Visualizer Audio Per-Frame Task And DSP-State Allocation Drove GC Pressure](R-71_Visualizer_Audio_Per_Frame_Task_And_DSP_State_Allocation.md)
+- [R-70 — Gmail CUSTOM Uniform Scale Needed Different Width And Height Shell Semantics](R-70_Gmail_Custom_Uniform_Scale_Preferred_Dimension_Split.md)
 - [R-69 — Bubble Extreme-Viewport Global Radius Compression Suppressed Reactivity](R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md)
 - [R-68 — Visualizer CUSTOM Working Geometry Rejected Fresh Logical Snapshots](R-68_Visualizer_Custom_Presentation_Authority_Rebase.md)
 - [R-67 — CUSTOM Resize Re-entry Rebased Persisted Geometry And Could Compound Shrink](R-67_Custom_Resize_Reentry_Absolute_Scale.md)

@@ -1,6 +1,6 @@
 # Remaining J — Final Installed / Physical Acceptance Decomposition
 
-Status: **future acceptance phase; the H production cutover is already complete. Execute final J closure after the remaining post-cutover H gates re-close and I caller-proven residue cleanup is GREEN. Vision-capable agents may prepare/front-load the mandatory image-oracle parity tranche, but may not use J to hide an H correctness failure.**  
+Status: **future acceptance phase; H is closed and I is active. Execute final J closure after I caller-proven residue cleanup is GREEN. Vision-capable agents may prepare/front-load the mandatory image-oracle parity tranche, but may not use J to hide a deterministic I defect or weaken an accepted H contract.**  
 Work admission: `Current_Plan.md`  
 Validation shape: `Docs/QtQuick_Migration/06_Build_Tooling_Validation.md`  
 Test ownership/retirement: `Docs/TestSuite.md`
@@ -54,7 +54,7 @@ A model with weak/unreliable vision may **briefly defer** the eyes-on implementa
 
 ### Why I has no standing prewritten decomposition
 
-Phase I is intentionally source-driven residue cleanup. Its exact deletion list must be derived from the exact source after H re-closes; it is not safely predeclared here even though the production cutover has already changed
+Phase I is intentionally source-driven residue cleanup. Its exact deletion list must be derived from the exact closed-H source; it is not safely predeclared here even though the production cutover has already changed
 the production caller graph. At I entry:
 
 1. inspect exact post-H source/callers;

@@ -9,8 +9,8 @@ This tracks deferred/caller-proven deletion work and does not admit work ahead o
 ```text
 caller-dead replaced pixels/helpers        -> delete when replacement contract is proven
 G replacement GREEN                        -> no old CUSTOM/auxiliary pixel authority remains
-H Quick production owner GREEN             -> delete remaining physical presenter/backend
-I                                           -> residue only
+H Quick production owner + acceptance GREEN -> H closed; never restore physical presenter/backend
+I ACTIVE                                    -> caller-proven residue only
 ```
 
 A working legacy product during migration is not a retention reason.
@@ -20,9 +20,10 @@ A working legacy product during migration is not a retention reason.
 G is closed. Do not reopen G4/G7/G8 as cleanup work.
 
 The H authority cutover closed at `9dcb02be`: exact caller proof established the Quick destination as sole production
-authority and the legacy physical-host presenter/backend source was deleted. H physical/correction acceptance remains open
-in `Current_Plan.md`. Preserve Python semantic command/settings authority and neutral configuration/runtime logic; do not
-restore superseded pixel/presentation ownership.
+authority and the legacy physical-host presenter/backend source was deleted. H post-cutover physical/correction/performance
+acceptance is now also closed; durable evidence lives in `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md`. Preserve
+Python semantic command/settings authority and neutral configuration/runtime logic; do not restore superseded
+pixel/presentation ownership.
 
 After the authority flip, I is source-driven residue only: expired aliases/adapters/tools/tests/comments that no longer own a
 surviving contract.
@@ -36,8 +37,8 @@ surviving contract.
 
 ## Settings GUI residue
 
-- Re-audit `tools/regenerate_defaults_snapshot_artifacts.py` and `tools/regenerate_sst_defaults.py` against the final Quick/H
-  settings schema before using them for migration-era defaults. Their installed-profile write hazard is fixed by `R-33`, but
+- Re-audit `tools/regenerate_defaults_snapshot_artifacts.py` and `tools/regenerate_sst_defaults.py` against the final Quick
+  destination settings schema before using them for migration-era defaults. Their installed-profile write hazard is fixed by `R-33`, but
   that safety proof does not establish that every generated field still follows current mode/layout ownership.
 - `ui/settings_theme_paths.py` contains temporary theme-directory packaging/dev-fallback wiring. Before release, wire the
   real packaged themes directory and remove temporary fallback once that resource-path contract is durable. Preserve
@@ -51,7 +52,7 @@ surviving contract.
 
 ## Closed Phase-F family retirement
 
-F1–F8 family pixel retirement is closed. Do not retain or reconstruct old QWidget/QPainter family presenters for H/I.
+F1–F8 family pixel retirement is closed. Do not retain or reconstruct old QWidget/QPainter family presenters during I/J.
 Keep neutral provider/model/business/settings/runtime code still used by the Quick destination.
 
 ## Media post-event-migration residue
@@ -71,7 +72,7 @@ ownership, immutable render state, snapshot bridge/adapters and shaders/math use
 compositor/card/overlay pixels. The G4 viewport-edge ownership/spatial correction work is closed; do not mistake its retained contracts/tests for legacy
 cleanup.
 
-Current I residue discovered during H5c focused validation:
+Current I residue discovered during H closure/test reconciliation:
 
 - `tests/test_spotify_visualizer_widget.py` still imports deleted `widgets.spotify_bars_gl_overlay` and cannot collect;
 - `tests/test_visualizer_replay.py` / `tools/visualizer_replay.py` still import deleted `widgets.spotify_visualizer.replay_runtime` and cannot collect.
@@ -81,7 +82,7 @@ Current I residue discovered during H5c focused validation:
   other audio settings reaching the shared BeatEngine are pinned by the Quick reactivity/config and True-F gates.
 
 Do not restore either retired presenter/replay module to satisfy these files. Reconcile the stale harnesses against surviving
-Quick/logical owners only after H re-closes and admits I; maintained Bubble BTF/cadence/Quick tests remain the H gate.
+Quick/logical owners during I; maintained Bubble BTF/cadence/Quick tests remain permanent destination guards.
 
 ## Closed Phase G
 
@@ -89,22 +90,38 @@ G is closed at the accepted deterministic destination boundary. Its surviving ne
 regressions, not deletion candidates. Any old G-era presenter code that still survives is post-cutover I residue and must be classified from exact current
 callers rather than preserved because this ledger once named a G task.
 
-## Completed H production cutover / H post-cutover gates still open
+## Closed Phase H production + post-cutover acceptance
 
 The H production-authority cutover wired final Quick orchestration and removed the remaining physical presentation:
 `DisplayWidget`, QRhiWidget/`GLCompositorWidget`, old compositor scheduling/presentation glue,
 software/backend-demotion fallback, render-backend selection used only by that fallback, obsolete
 `hw_accel`/fallback-overlay policy, remaining physical-host transition/visualizer debris, temporary legacy anchors and
-obsolete presentation compatibility settings. **This cutover is accepted; H itself remains open only for the named
-post-cutover functional/runtime/performance gates in `Current_Plan.md`.**
+obsolete presentation compatibility settings. **The cutover and its named post-cutover functional/runtime/performance gates are accepted; H is closed.**
+See `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md`.
 
-No production switch back. I must not recreate a functional old app for residue-test convenience, and I is not admitted
-until those remaining H gates close.
+No production switch back. I is active and must not recreate a functional old app for residue-test convenience.
 
 ## Phase I
 
 I should be small: expired adapters, compatibility aliases, stale old-presenter utilities, obsolete tests/tools/comments
 and abandoned spike code. Preserve product-neutral logic, diagnostics and resilience.
+
+Immediate caller/contract-proven manual test deletions from the H-closure audit:
+
+- `tests/test_settings_sync.py` — tombstone only;
+- `tests/test_phase_e_effect_corruption.py` — historical QGraphicsEffect investigation;
+- `tests/test_visualizer_preset_cycling_runtime.py` — deleted QWidget host; surviving same-mode preset/Custom/audio-setting contracts have current owners.
+
+Other stale-owner rows in `Docs/TestSuite.md` are **candidates**, not a bulk-delete list. Prove the surviving contract/current owner before deleting each one.
+
+Additional high-confidence source/tool residue to prove then remove in bounded I slices:
+
+- orphan `rendering/quick/qml/CursorHalo.qml` if exact caller search remains empty; native `QCursor` is the permanent Halo pixel owner;
+- Media process-probe helpers retired by event ownership (`is_app_process_running`, `_win_*_process_exists`, provider-process-name helpers) if exact caller search confirms no non-polling consumer;
+- old GL/compositor/visualizer presenter aliases/adapters/comments/spikes whose production callers disappeared with H;
+- temporary `h-destination` runner alias after exact script/doc caller proof shows all automation has moved to `destination`.
+
+Do not classify rare deep GC pauses as deletion cleanup. R-71 carries that evidence to late J performance work, and any future optimization must preserve Visualizer reactivity/freshness/cadence.
 
 ## Phase J
 

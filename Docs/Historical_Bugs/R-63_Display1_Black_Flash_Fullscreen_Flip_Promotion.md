@@ -1,7 +1,7 @@
 # R-63 — Display-1 Black Flash from Fullscreen-Flip PresentMode Transitions
 
 Date: 2026-08-31
-Status: Solved (recurring/activation flash); minor startup-only flash carried to J
+Status: Solved / H accepted — recurring black/stale flash eliminated; bounded mixed-DPR 1px shared-edge overshoot accepted residual
 
 ## Symptom
 
@@ -77,3 +77,25 @@ run >=3 launches per condition: launch-to-launch presentation behavior is variab
 ```
 
 See `Docs/Qt_QML_Observability.md` and `Current_Plan.md` "Interleaved black-flash".
+
+
+## 2026-09-01 Mixed-DPR Shared-Edge Follow-Up
+
+After the anti-fullscreen-flip geometry was refined away from all-edge overscan, an intermittent one-pixel seam appeared on Display 1. One-shot native Win32 geometry telemetry proved the mechanism rather than guessing from logical Qt rectangles:
+
+```text
+Display 0 monitor device rect width = 2560
+Display 0 Quick window device width = 2561
+Display 1 begins at device x = 2560
+```
+
+The intended exterior/top logical overscan on the operator's 1.5-DPR display rounds into one extra device pixel on the shared right edge. This is a mixed-DPR logical->native rounding consequence, not a return of the fullscreen-flip failure.
+
+The H acceptance priority is now explicit:
+
+```text
+recurring black/stale flash = 0        mandatory
+bounded shared-edge overshoot <= 1px  acceptable residual
+```
+
+Do **not** remove overscan, force exact-cover geometry, or hard-code this monitor's `2560x1440`, `1.5` DPR, coordinate, display index or neighbour relationship merely to erase the pixel. Any optional J refinement must derive native/device-space coverage from the actual monitor rectangles/DPR and remain correct for different resolutions, origins/orderings and common mixed DPR combinations. A harmless bounded overshoot is preferable to re-admitting exact-cover fullscreen promotion.

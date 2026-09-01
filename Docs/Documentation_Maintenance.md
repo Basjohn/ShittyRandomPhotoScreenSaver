@@ -1,6 +1,6 @@
 # Documentation Maintenance
 
-Last updated: 2026-08-29
+Last updated: 2026-09-01
 
 ## Roles
 
@@ -73,6 +73,22 @@ finding body into fake present-tense GREEN prose**. Add an unmistakable CLOSED/e
 belong to the named audit basis, and route live status to `Current_Plan.md` / the current contract. This preserves reasoning
 without inviting a later agent to reopen already-closed work.
 
+## Historical bug / failed-repair preservation
+
+Historical bug records are not victory-only changelogs. Create or extend a standalone record when a failed repair teaches a mechanism that a later agent could plausibly reintroduce, especially when the failed method looked locally reasonable or improved one metric while damaging another contract.
+
+Record at minimum:
+
+- symptom and falsifier/evidence;
+- actual owner/root mechanism where known;
+- the failed method and **why it is forbidden**;
+- the restored/accepted contract or remaining open tail;
+- physical/test acceptance status without pretending pending evidence is solved.
+
+R-69 is the canonical example: the failed global Bubble viewport radius/Ghost compression must remain searchable forever because it made extreme geometry prettier while destroying visible reactivity. R-71 similarly preserves why GC work may not trade cadence/freshness for lower counters.
+
+Do not wait until a successful replacement exists if the failed method itself is important safety history. A failed or partial incident may legitimately remain `PARTIAL`, `REJECTED METHOD`, or `AWAITING VALIDATION` in Historical Bugs.
+
 ## Migration-epoch wording
 
 Distinguish destination authority, temporary source scaffolding, temporary visual/behavior reference and historical
@@ -83,8 +99,8 @@ Current retirement policy:
 - ordinary family pixels -> already retired during F after destination proof/caller proof;
 - transition/visualizer old pixel-only owners -> caller-proof as soon as dead;
 - old CUSTOM/auxiliary pixels -> caller-proof during G;
-- remaining physical presenter/backend -> H;
-- residue -> I.
+- remaining physical presenter/backend -> closed in H;
+- caller-dead residue/tests/tools/aliases -> I (active).
 
 Do not preserve old presentation to maintain temporary product continuity. Do not use blanket H/I retirement labels for
 caller-dead components that can already leave.
@@ -112,7 +128,7 @@ heavy family implementation resolves at real activation/caller boundary.
 
 Inspect at least `Current_Plan.md`, `Spec.md`, `Index.md`, `Docs/Contracts.md`, `Future_Cleanup.md`, relevant focused
 QtQuick docs, `Docs/10_WIDGET_GUIDELINES.md` when ordinary-family patterns changed, feature plans naming concrete owners,
-and `Docs/TestSuite.md` when test ownership/inventory materially changed.
+and `Docs/TestSuite.md` when test ownership/inventory materially changed. When a repair/failed repair creates a durable negative-control lesson, also update `Docs/Historical_Bugs/README.md` and the relevant standalone incident record.
 
 For Settings theme/backdrop ownership changes, also inspect `Docs/Settings_Theme_Architecture.md`, Theme Foundry,
 `ui/settings_theme_spec.py`, `ui/settings_theme.py`, `ui/settings_dialog.py` and `core/windows/dwm_blur.py` together.

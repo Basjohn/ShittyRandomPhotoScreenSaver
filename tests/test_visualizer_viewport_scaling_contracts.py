@@ -348,6 +348,32 @@ class BubbleViewportScalingTests(unittest.TestCase):
         self.assertIn("float max_ripple_radius = 0.12 * trail_radial_scale;", shader)
         self.assertIn("ripple_bound", shader)
 
+    def test_bubble_head_and_ghost_never_gain_a_second_viewport_compressor(self):
+        """R-69 golden bar: preserve authored reactivity at wide/tall CUSTOM extents."""
+        quick = (ROOT / "rendering/quick/visualizer/implementations/bubble.py").read_text()
+        shader = (ROOT / "widgets/spotify_visualizer/shaders/bubble.frag").read_text()
+
+        # The failed repair globally compressed head radius as viewport height
+        # grew. That made Bubble appear nearly non-reactive at extreme CUSTOM
+        # sizes even though the simulation remained lively. Never restore it.
+        self.assertNotIn("head_radial_scale", quick)
+        self.assertNotIn("u_head_radial_scale", quick)
+        self.assertNotIn("u_head_radial_scale", shader)
+
+        # Ripple wake is intentionally authored-pixel compact, but Ghost history
+        # is already renderer-normalized and must be consumed exactly once.
+        ghost = shader.split("// --- Ghost pass", 1)[1]
+        self.assertIn("vec2 history_xy = history.xy;", ghost)
+        self.assertNotIn("trail_axis_scale", ghost)
+        self.assertNotIn("trail_radial_scale", ghost)
+        self.assertIn("u_ghost_decay", ghost)
+        self.assertIn("ghost_decay_exponent", ghost)
+
+        # Extreme-size correction may strengthen only the presentation edge; it
+        # must not change authored radius or motion amplitude.
+        self.assertIn("large_viewport_stroke_bonus_px", quick)
+        self.assertIn("large_viewport_stroke_bonus_px", shader)
+
     def test_spawn_overlap_policy_is_content_space_invariant(self):
         bs = self.bubble
         decisions = []

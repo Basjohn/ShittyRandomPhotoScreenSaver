@@ -30,7 +30,7 @@ Date: 2026-08-30 (superseded in part 2026-08-31)
 > verdict. See Current_Plan.md "Interleaved black-flash" for the live plan and
 > the failed-approaches checklist.
 
-This is a high-priority J / H-conditional decomposition. The physical trace has now separated the former generic “black flash” report into distinct owners instead of treating it as visual polish by default.
+This is now a J reference with the recurring R-63 black-flash failure closed in H. The physical trace separated the former generic “black flash” report into distinct owners; J may refine only residual startup/seam details without weakening the accepted overscan/non-exact-cover contract.
 
 ## 1. Product requirement
 

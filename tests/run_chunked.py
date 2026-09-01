@@ -2,7 +2,7 @@
 
 Two execution modes intentionally differ:
 
-* Maintained profiles (currently ``h-destination``) are **target-isolated**.
+* Maintained profiles (canonical ``destination``; ``h-destination`` is a temporary compatibility alias) are **target-isolated**.
   A single collection preflight validates the whole profile, then every selected
   profile target runs in its own fresh pytest process. ``--chunks`` only partitions those
   file processes into a small number of reporting/log groups. This prevents
@@ -10,12 +10,12 @@ Two execution modes intentionally differ:
   another file.
 
 * Whole-tree or explicit-target runs retain pytest-chunk's test-level chunking.
-  They are broad reconciliation diagnostics during H/I, not the current H
+  They are broad reconciliation diagnostics during I/J, not the maintained
   destination authority.
 
 Examples::
 
-    python tests/run_chunked.py --profile h-destination --chunks 4 --log
+    python tests/run_chunked.py --profile destination --chunks 4 --log
     python tests/run_chunked.py --chunks 4 --log
     python tests/run_chunked.py --chunks 4 tests/test_widgets_tab.py
 """
@@ -31,7 +31,7 @@ from typing import TextIO
 TESTS_DIR = Path(__file__).resolve().parent
 LOG_DIR = TESTS_DIR.parent / "logs"
 
-H_DESTINATION_PROFILE = (
+DESTINATION_PROFILE = (
     "test_qtquick_h_cutover.py",
     "test_qtquick_ctrl_coordinator.py",
     "test_qtquick_display_image_route.py",
@@ -91,6 +91,18 @@ H_DESTINATION_PROFILE = (
     "test_qtquick_runtime_reality.py",
     "test_media_generation_recreation.py",
     "test_media_event_observation.py",
+    "test_media_runtime.py",
+    # Permanent post-H performance/freshness contracts. These are deliberately
+    # phase-neutral: I/J must not regain green by weakening reaction cadence,
+    # newest-state semantics, native-cursor ownership or viewport fidelity.
+    "test_visualizer_compute_lanes.py",
+    "test_visualizer_analysis_acceptance.py",
+    "test_visualizer_playback_gating.py",
+    "test_p2_analysis_freshness.py",
+    "test_spectrum_presentation_smoothing.py",
+    "test_visualizer_viewport_scaling_contracts.py",
+    "test_visualizer_doc_references.py",
+    "test_runtime_perf_policy_contracts.py",
     "test_widgets_tab.py::TestWidgetsTab::test_widgets_tab_disables_media_size_controls_when_custom_is_active",
     "test_settings_eventfilter_teardown_guards.py",
     "test_terminal_runtime_destruction.py",
@@ -127,7 +139,10 @@ H_DESTINATION_PROFILE = (
 )
 
 PROFILES = {
-    "h-destination": H_DESTINATION_PROFILE,
+    "destination": DESTINATION_PROFILE,
+    # Temporary compatibility alias for old local commands/docs while I removes
+    # phase-named migration residue. It is intentionally the exact same tuple.
+    "h-destination": DESTINATION_PROFILE,
 }
 
 

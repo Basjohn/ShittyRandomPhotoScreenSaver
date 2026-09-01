@@ -1,6 +1,6 @@
 # Defaults Guide
 
-Last updated: 2026-08-26
+Last updated: 2026-09-01
 
 Canonical guidance for defaults, reset behavior, snapshots, import safety and runtime application.
 
@@ -30,8 +30,7 @@ transitions.activation.<canonical transition name>
 ```
 
 Family activation != ordinary widget enabled. Transition activation != Random pool/manual selection.
-Missing activation keys resolve compatibly to activated. Current migration compatibility defaults remain
-activated; H settings epoch owns final Quick-era default/reset choices.
+Missing activation keys resolve compatibly to activated. Current Quick-destination compatibility defaults remain activated; any further default/reset change is an intentional current product/schema decision, not unfinished H work.
 
 Deactivation is not reset: preserve detailed settings, ordinary enabled, CUSTOM geometry and transition
 pool preferences unless explicit schema/default migration says otherwise.
@@ -91,8 +90,6 @@ Authored widget defaults remain baseline under CUSTOM; committed CUSTOM geometry
 start empty in checked-in defaults. Family deactivation preserves saved layout/detail. Preview Cancel restores
 prior live state when not committed.
 
-## H settings epoch
+## Post-H settings authority
 
-H chooses final Quick-era family/transition activation defaults, Random/pool defaults, retired presentation
-schema ignore/removal, regenerated artifacts and old-installed-settings migration/import handling. Do not move
-this reset policy earlier merely to simplify F/G.
+The Quick-era family/transition activation defaults, Random/pool defaults and retired-presentation schema handling are landed destination behavior. Phase I may delete caller-dead schema/tool residue only after exact use/caller proof; it must not silently redefine reset/default behavior. Any future default change follows the safe-default workflow above and updates generated artifacts deliberately.

@@ -19,14 +19,17 @@ not automatic current architecture instructions.
 
 ## Active / Pending Acceptance Records
 
-- [R-69 — Bubble Extreme-Viewport Global Radius Compression Suppressed Reactivity](Historical_Bugs/R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md) — **PARTIAL / AWAITING PHYSICAL VALIDATION**. Failed global head/Ghost viewport compression is retired; contract restoration awaits wide/tall replay, while any remaining oversized full-expansion tail stays a separate open visual problem.
 - [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN; physical dual-display wake/late-return acceptance remains.
 
 No other R-series record is current implementation sequencing. Current migration work is owned by
 `Current_Plan.md`; historical Phase/P-number status prose never admits current work.
 
+- R-69 Bubble extreme-viewport scaling is **accepted as a golden contract**: never reintroduce global viewport compression of authored head/Ghost response. Any oversized extreme expansion tail is separate J visual debt.
+
 ## Standalone R Records
 
+- [R-71 — Visualizer Audio Per-Frame Task And DSP-State Allocation Drove GC Pressure](Historical_Bugs/R-71_Visualizer_Audio_Per_Frame_Task_And_DSP_State_Allocation.md)
+- [R-70 — Gmail CUSTOM Uniform Scale Needed Different Width And Height Shell Semantics](Historical_Bugs/R-70_Gmail_Custom_Uniform_Scale_Preferred_Dimension_Split.md)
 - [R-69 — Bubble Extreme-Viewport Global Radius Compression Suppressed Reactivity](Historical_Bugs/R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md)
 - [R-68 — Visualizer CUSTOM Working Geometry Rejected Fresh Logical Snapshots](Historical_Bugs/R-68_Visualizer_Custom_Presentation_Authority_Rebase.md)
 - [R-67 — CUSTOM Resize Re-entry Rebased Persisted Geometry And Could Compound Shrink](Historical_Bugs/R-67_Custom_Resize_Reentry_Absolute_Scale.md)

@@ -236,7 +236,37 @@ def test_mismatched_snapshot_geometry_fails_closed() -> None:
     node = item.updatePaintNode(None, None)
 
     assert node.snapshot is None
-    assert "does not match" in (item.telemetry.snapshot().error or "")
+    assert bridge.presentation_mismatch_count == 1
+    # Fail closed without throwing away the newest logical snapshot. A later
+    # coherent presentation may consume the same slot.
+    assert bridge.peek() is not None
+
+
+def test_custom_layout_presentation_authority_rebases_fresh_logical_snapshot() -> None:
+    working = _presentation(origin=(640.0, 220.0), scale=1.25)
+    producer_presentation = _presentation(origin=(120.0, 80.0), scale=1.0)
+    bridge = VisualizerSnapshotBridge()
+    identity = bridge.begin_activation(
+        runtime_generation=0,
+        engine_generation=0,
+        activation_id=0,
+        mode_id="spectrum",
+    )
+    original = _snapshot(producer_presentation, revision=9)
+    assert bridge.publish(original)
+
+    item = VisualizerRenderItem()
+    item.set_presentation(working)
+    item.set_custom_layout_presentation_authority(True)
+    item.bind_render_source(bridge, identity)
+    node = item.updatePaintNode(None, None)
+
+    assert node.snapshot is not None
+    assert node.snapshot.logical is original.logical
+    assert node.snapshot.logical_revision == original.logical_revision
+    assert node.snapshot.presentation == working
+    assert bridge.presentation_mismatch_count == 0
+    assert bridge.peek() is None
 
 
 def test_direct_invalidation_releases_current_node_once_without_resources() -> None:
