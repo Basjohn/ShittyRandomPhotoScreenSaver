@@ -86,7 +86,7 @@ def _clock_config(**overrides) -> ClockPresentationConfig:
         "show_timezone": True,
         "show_day_of_week": True,
         "show_date": True,
-        "show_digital_separator": True,
+        "show_separator": True,
         "calendar_layout": "shared_line",
         "calendar_font_size": 22,
         "font_family": "Inter",
@@ -333,7 +333,7 @@ def test_style_direction_and_mode_updates_mutate_existing_clock_in_place(qt_app)
                         "show_timezone": config.show_timezone,
                         "show_day_of_week": config.show_day_of_week,
                         "show_date": config.show_date,
-                        "show_digital_separator": config.show_separator,
+                        "show_separator": config.show_separator,
                         "calendar_layout": config.calendar_layout,
                         "calendar_font_size": config.calendar_font_size,
                         "font_family": "Aptos",
@@ -364,8 +364,10 @@ def test_style_direction_and_mode_updates_mutate_existing_clock_in_place(qt_app)
         assert item.findChild(QQuickItem, "clockAnalogueStaticFace") is static_face
         assert _find_visual_item(item, "clockAnalogueNumeral0") is numeral
         assert len(ticker.subscribers) == 1
-        assert card.property("shadowOffsetX") == pytest.approx(-6.0)
-        assert card.property("shadowOffsetY") == pytest.approx(-6.0)
+        assert card.property("shadowOffsetX") == pytest.approx(-4.0)
+        assert card.property("shadowOffsetY") == pytest.approx(-4.0)
+        assert card.property("shadowExtendLeft") == pytest.approx(2.0)
+        assert card.property("shadowExtendTop") == pytest.approx(2.0)
         assert text_shadow.x() == pytest.approx(-3.0)
         assert text_shadow.y() == pytest.approx(-3.0)
         assert model.analogRingOffsetX == pytest.approx(-3.0)
@@ -671,7 +673,7 @@ def test_clock_family_caller_projects_settings_through_current_scene_host(qt_app
             "show_seconds": True,
             "show_day_of_week": True,
             "show_date": True,
-            "show_digital_separator": True,
+            "show_separator": True,
             "calendar_layout": "two_lines",
             "calendar_font_size": 27,
             "font_family": "Aptos",
@@ -748,7 +750,9 @@ def test_clock_family_caller_projects_settings_through_current_scene_host(qt_app
         assert presentations[1].model.config.display_mode == "analog"
         assert presentations[2].model.config.timezone_name == "UTC"
         assert presentations[2].model.config.show_seconds is True
-        assert presentations[0].model.style.card_style.shadow_offset_x == pytest.approx(-6.0)
+        assert presentations[0].model.style.card_style.shadow_offset_x == pytest.approx(-4.0)
+        assert presentations[0].model.style.card_style.shadow_extend_left == pytest.approx(2.0)
+        assert presentations[0].model.style.card_style.shadow_extend_top == pytest.approx(2.0)
         assert presentations[0].model.textShadowOffsetY == pytest.approx(-3.0)
 
         item = presentations[0].item
@@ -794,8 +798,37 @@ def test_clock_qml_contract_has_retained_two_pass_analogue_shadows_and_no_effect
     assert "clockAnalogueMinuteHand" in analogue
     assert "clockAnalogueSecondHand" in analogue
     assert "width: separatorBand.width * 0.77" in digital
-    assert "thickness: 2.0" in digital
+    assert "thickness: digitalFace.clockModel.separatorThickness" in digital
+    assert "thickness: analogueFace.clockModel.separatorThickness" in analogue
+    assert "height: visible ? 10.0 : 0.0" in analogue
     assert "clockAnalogueSeparator" in analogue
+    for source, prefix in ((digital, "digitalFace"), (analogue, "analogueFace")):
+        assert f"shadowEnabled: {prefix}.clockModel.textShadowEnabled" in source
+        assert f"shadowColor: {prefix}.clockModel.textShadowColor" in source
+        assert f"shadowOffsetX: {prefix}.clockModel.textShadowOffsetX" in source
+        assert f"shadowOffsetY: {prefix}.clockModel.textShadowOffsetY" in source
+    separator = (ROOT / "rendering" / "quick" / "qml" / "Separator.qml").read_text(encoding="utf-8")
+    assert 'objectName: "overlaySeparatorShadow"' in separator
+    assert "MultiEffect {" not in separator
+
+    clock_model = (ROOT / "rendering" / "quick" / "widgets" / "clock.py").read_text(encoding="utf-8")
+    assert "color.alpha() * 0.80" in clock_model
+    assert "color.alpha() * 0.45" not in clock_model
+
+
+def test_clock_separator_legacy_key_is_read_only_compatibility_input() -> None:
+    legacy = ClockPresentationConfig.from_mapping(
+        "clock",
+        {"show_digital_separator": True, "separator_thickness": 3},
+    )
+    current = ClockPresentationConfig.from_mapping(
+        "clock",
+        {"show_separator": False, "show_digital_separator": True, "separator_thickness": 5},
+    )
+    assert legacy.show_separator is True
+    assert legacy.separator_thickness == pytest.approx(3.0)
+    assert current.show_separator is False
+    assert current.separator_thickness == pytest.approx(5.0)
 
 
 def test_static_registry_maps_clock_family_without_member_duplication() -> None:

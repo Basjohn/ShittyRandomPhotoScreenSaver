@@ -360,15 +360,16 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_frame_pacer.py` | **KEEP — MIGRATION PERMANENT** | Single display-local presentation pacer, including callback-required visualizer GUI synchronization before each retained update opportunity. |
 | `tests/test_qtquick_image_boundary.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_image_textures.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
+| `tests/test_qtquick_artwork_fade_contract.py` | **KEEP — MIGRATION PERMANENT** | Mandatory event-driven/timerless dynamic-artwork fade-through contract for Media, Achievement Pulse and Abandonment Issues; future dynamic artwork surfaces must reuse the shared retained primitive or prove an equivalent no-flash fade owner. |
 | `tests/test_custom_layout_session.py` | **KEEP — MIGRATION PERMANENT / G** | Neutral session/variants/working-state contract; separate visualizer scale + viewport extent is landed and remains permanent. |
 | `tests/test_qtquick_custom_layout_overlay.py` | **KEEP — MIGRATION PERMANENT / G** | Retained CUSTOM overlay/drag/edge+corner resize/cross-display contract; extend only for current viewport-lifecycle corrections where applicable. |
 | `tests/test_qtquick_h9_uniform_resize.py` | **KEEP — MIGRATION PERMANENT** | Whole-card uniform retained-presentation resize for Reddit/Reddit2/Media/Gmail, absolute-floor replay and Visualizer non-interference. |
 | `tests/test_qtquick_auxiliary.py` | **KEEP — MIGRATION PERMANENT / RECONCILED** | Dimming/pixel-shift plus R6 native `QCursor` Halo/event-cached semantic state; retired QML pointer-motion APIs are forbidden. |
-| `tests/test_qtquick_context_menu.py` | **KEEP — MIGRATION PERMANENT / G7** | Retained context-menu model/QML/action admission contract. |
+| `tests/test_qtquick_context_menu.py` | **KEEP — MIGRATION PERMANENT / G7** | Retained context-menu model/QML/action admission plus generation-owned global Card-shadow projection/high-plane composition contract. |
 | `tests/test_qtquick_input_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination/current input contract, including generation closure and the presentation-neutral runtime-replacement pointer guard consumed by Quick. |
-| `tests/test_qtquick_clock_presentation.py` | **KEEP — MIGRATION PERMANENT** | F1 retained Clock model/family/ticker/style/geometry/analogue-shadow destination contract; retain as permanent current coverage. |
+| `tests/test_qtquick_clock_presentation.py` | **KEEP — MIGRATION PERMANENT** | F1 retained Clock model/family/ticker/style/geometry/analogue-shadow destination contract, including shared 80%-alpha separator and cheap retained separator shadow; retain as permanent current coverage. |
 | `tests/test_qtquick_weather_presentation.py` | **KEEP — MIGRATION PERMANENT** | F2 retained Weather runtime-consumer/model/state/icon/style/action/host contract; retain as permanent current coverage. |
-| `tests/test_qtquick_ordinary_widget_host.py` | **KEEP — MIGRATION PERMANENT** | E3/E4 retained ordinary-widget host + shared shell primitives; root fade, cached card shadow, signed offsets and offset-only text shadow are destination architecture. |
+| `tests/test_qtquick_ordinary_widget_host.py` | **KEEP — MIGRATION PERMANENT** | E3/E4 retained ordinary-widget host + shared shell primitives; root fade, cached directional card shadow, production display-level shadow underlay (all ordinary shadows below all ordinary cards), signed offsets and offset-only text shadow are destination architecture. |
 | `tests/test_shadow_direction.py` | **KEEP — MIGRATION PERMANENT** | E4 canonical direction/settings/resolver/QML-boundary contract; retain as permanent current coverage. |
 | `tests/test_qtquick_p0_presentation_benchmark.py` | **DELETE — I TOOLING AUDIT** | Coupled to deleted replay/P0 benchmark ownership; current Quick runtime/presentation tests own destination behavior. |
 | `tests/test_qtquick_particle_transition.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
@@ -906,3 +907,15 @@ Do not turn an unchecked gate into a pass because:
 - later implementation has already begun.
 
 A later failure reopens the smallest demonstrated defect.
+
+### 2026-09-01 destination additions — Clock/shadow/Bubble/startup/CUSTOM
+
+- `tests/test_shadow_direction.py` — permanent canonical direction + card-frame directional Extra Offset growth contract.
+- `tests/test_bubble_lifecycle_fades.py` — permanent alpha-only runtime birth/pop fade contract; explicitly protects R-69 by asserting no viewport/domain authority is introduced.
+- `tests/test_qtquick_clock_presentation.py` — current mode-neutral Clock separator + thickness + legacy-read compatibility and analogue spacing contract.
+- `tests/test_qtquick_ordinary_widget_host.py` — shared retained card shadow grows selected far edges rather than translating the whole shadow; the independent startup gate cannot be bypassed by a family-authored fade.
+- `tests/test_qtquick_startup_reveal.py` — cold-session-only desktop staging source -> fixed first Crossfade -> coordinated widget gate sequencing; replacement runtimes skip desktop recapture; startup staging adds no recurring timer/poller.
+- `tests/test_qtquick_visualizer_fade_authority.py` — Visualizer authored `scene_fade` remains its single real fade authority while the generation startup gate multiplies root opacity independently.
+- `tests/test_qtquick_custom_layout_owner.py` — uniform-transform edit admission canonicalizes a stale aspect-mismatched outer rectangle to the actual visible retained-card envelope, preventing dead letterbox geometry from becoming resize authority.
+
+The new permanent files are included in the canonical `destination` profile. Physical J validation still owns subjective shadow coverage, analogue spacing, Bubble fade feel, Reddit edit-frame fit and the desktop/startup reveal.

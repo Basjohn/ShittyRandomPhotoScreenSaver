@@ -2,8 +2,10 @@ import QtQuick
 
 // One retained ordinary-widget presentation root, assigned an explicit display
 // rectangle by the per-display presentation host. `fadeOpacity` is the
-// whole-widget authored fade and maps to root opacity, independent of the
-// card/text/shadow alphas beneath it. Callers compose shell primitives
+// family-authored lifecycle fade; `startupRevealOpacity` is an independent
+// generation gate. Multiplying them prevents a family-local fade request (Steam
+// in particular) from punching through before the coordinated startup reveal.
+// Callers compose shell primitives
 // (ShadowedText, Separator, rows) into `content`. This is a thin presentation
 // shell that composes shared E3 primitives; it holds no model, service, settings
 // or QWidget reference.
@@ -12,9 +14,10 @@ Item {
     objectName: "overlayWidget"
 
     property real fadeOpacity: 1.0
+    property real startupRevealOpacity: 1.0
     property bool workingVisible: true
     property bool semanticDoubleClickEnabled: false
-    opacity: fadeOpacity
+    opacity: fadeOpacity * startupRevealOpacity
     // Never clip the composed card/text shadows or their negative offsets.
     clip: false
     visible: workingVisible && opacity > 0.0
@@ -81,12 +84,30 @@ Item {
     property alias cardBorderWidth: card.borderWidth
     property alias cardCornerRadius: card.cornerRadius
     property alias cardPadding: card.padding
-    property alias cardShadowEnabled: card.shadowEnabled
-    property alias cardShadowColor: card.shadowColor
-    property alias cardShadowBlur: card.shadowBlur
-    property alias cardShadowOffsetX: card.shadowOffsetX
-    property alias cardShadowOffsetY: card.shadowOffsetY
-    property alias cardShadowSpread: card.shadowSpread
+    // Production ordinary cards project their shadow into the display-level
+    // underlay so no widget shadow can overpaint another widget's content.
+    // Direct primitive/smoke hosts may leave this false and keep the local
+    // fallback shadow; production host adoption flips it true atomically.
+    property bool externalCardShadow: false
+    property bool cardShadowEnabled: true
+    property color cardShadowColor: "#96000000"
+    property real cardShadowBlur: 18.0
+    property real cardShadowOffsetX: 0.0
+    property real cardShadowOffsetY: 4.0
+    property real cardShadowSpread: 0.0
+    property real cardShadowExtendLeft: 0.0
+    property real cardShadowExtendTop: 0.0
+    property real cardShadowExtendRight: 0.0
+    property real cardShadowExtendBottom: 0.0
+
+    // Visual card bounds in this root's coordinate system after the optional
+    // whole-card uniform transform. The external underlay binds these values so
+    // letterboxed CUSTOM geometry still shadows the actual rendered card, not
+    // the larger assigned outer rectangle.
+    readonly property real cardShadowVisualWidth: authoredRoot.width * presentationScale
+    readonly property real cardShadowVisualHeight: authoredRoot.height * presentationScale
+    readonly property real cardShadowVisualX: (width - cardShadowVisualWidth) / 2.0
+    readonly property real cardShadowVisualY: (height - cardShadowVisualHeight) / 2.0
 
     Item {
         id: authoredRoot
@@ -112,6 +133,16 @@ Item {
             id: card
             objectName: "overlayWidgetCard"
             anchors.fill: parent
+            shadowEnabled: overlayWidget.cardShadowEnabled && !overlayWidget.externalCardShadow
+            shadowColor: overlayWidget.cardShadowColor
+            shadowBlur: overlayWidget.cardShadowBlur
+            shadowOffsetX: overlayWidget.cardShadowOffsetX
+            shadowOffsetY: overlayWidget.cardShadowOffsetY
+            shadowSpread: overlayWidget.cardShadowSpread
+            shadowExtendLeft: overlayWidget.cardShadowExtendLeft
+            shadowExtendTop: overlayWidget.cardShadowExtendTop
+            shadowExtendRight: overlayWidget.cardShadowExtendRight
+            shadowExtendBottom: overlayWidget.cardShadowExtendBottom
         }
     }
 }

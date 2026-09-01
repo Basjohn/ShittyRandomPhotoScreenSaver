@@ -46,7 +46,10 @@ from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
 from rendering.quick.display_unit import QuickDisplayUnit, create_quick_display_unit
 from rendering.quick.display_processing import DisplayProcessingDescriptor
 from rendering.quick.scene_controller import QuickSceneFactory
-from rendering.quick.startup_reveal import QuickStartupRevealCoordinator
+from rendering.quick.startup_reveal import (
+    QUICK_STARTUP_DESKTOP_CROSSFADE_DURATION_MS,
+    QuickStartupRevealCoordinator,
+)
 from rendering.quick.state import (
     QuickSceneReadiness,
     QuickWindowPolicy,
@@ -106,6 +109,7 @@ class DisplayManager(QObject):
         thread_manager=None,
         runtime_generation: int | None = None,
         image_accounting_publisher=None,
+        desktop_startup_crossfade_enabled: bool = False,
     ):
         """
         Initialize display manager.
@@ -119,6 +123,13 @@ class DisplayManager(QObject):
 
         self._runtime_generation = (
             int(runtime_generation) if runtime_generation is not None else None
+        )
+        # Application/session ownership lives above DisplayManager.  The engine
+        # enables desktop staging only for the cold runtime generation; later
+        # Settings/runtime replacements still use the flash-proof widget reveal
+        # gate but must not replay the desktop -> wallpaper startup ceremony.
+        self._desktop_startup_crossfade_enabled = bool(
+            desktop_startup_crossfade_enabled
         )
         self._retired = False
         
@@ -187,6 +198,10 @@ class DisplayManager(QObject):
         self._display_startup_ready_emitted_generation: int = -1
         self._authoritative_first_frame_screens: Set[int] = set()
         self._authoritative_first_frame_emitted = False
+        # Screens whose retained base image is a one-session desktop snapshot.
+        # This staging source makes the first authored wallpaper a real crossfade
+        # without pretending the snapshot is queue/history/current-image truth.
+        self._startup_desktop_seed_screens: Set[int] = set()
         self._startup_reveal_screens: Set[int] = set()
         self._startup_reveal_started = False
         self._startup_reveal_emitted = False
@@ -576,6 +591,15 @@ class DisplayManager(QObject):
             pixel_shift_rate = 1
         auxiliary.configure_pixel_shift(pixel_shift_enabled, pixel_shift_rate)
         auxiliary.set_halo_shape(settings.get("input.halo_shape", "cursor_light"))
+
+        # The retained context menu is a runtime-scene overlay, so its shadow
+        # follows the canonical widget Card shadow contract for this generation.
+        # This is one owner-time projection, not a menu-open poll/settings read.
+        from rendering.quick.context_menu import project_quick_context_menu_shadow
+
+        unit.runtime.scene_controller.apply_context_menu_shadow_style(
+            project_quick_context_menu_shadow(self._shadow_values_snapshot)
+        )
 
     def _quick_context_transition_state(
         self,
@@ -1304,6 +1328,7 @@ class DisplayManager(QObject):
         self._display_startup_ready_emitted_generation = -1
 
         self._admit_quick_visualizer(pending_displays)
+        self._prime_quick_startup_desktop_sources(pending_displays)
         self._prepare_quick_startup_reveal(pending_displays)
 
         # Preserve staggered show behavior without processEvents() re-entry.
@@ -1725,10 +1750,52 @@ class DisplayManager(QObject):
 
         mode = str(model.mode)
         technical_cache = build_technical_cache(None, model)
+        shadows = widgets.get("shadows", {})
+        if not isinstance(shadows, dict):
+            shadows = {}
+        from core.settings.shadow_direction import (
+            resolve_directional_extensions,
+            resolve_signed_offset,
+        )
+        from rendering.quick.widgets.host import ORDINARY_CARD_SHADOW_BASE
+
+        direction = shadows.get("direction", "SE")
+        try:
+            frame_extra = max(0.0, min(40.0, float(shadows.get("frame_extra_offset", 0.0))))
+        except (TypeError, ValueError):
+            frame_extra = 0.0
+        try:
+            frame_opacity = max(0.0, min(1.0, float(shadows.get("frame_opacity", 0.77))))
+        except (TypeError, ValueError):
+            frame_opacity = 0.77
+        try:
+            shadow_blur = max(0.0, min(80.0, float(shadows.get("blur_radius", 18.0))))
+        except (TypeError, ValueError):
+            shadow_blur = 18.0
+        raw_shadow_color = shadows.get("color", (0, 0, 0, 255))
+        try:
+            channels = [int(value) for value in raw_shadow_color]
+        except (TypeError, ValueError):
+            channels = [0, 0, 0, 255]
+        if len(channels) == 3:
+            channels.append(255)
+        if len(channels) != 4:
+            channels = [0, 0, 0, 255]
+        channels = [max(0, min(255, value)) for value in channels]
+        channels[3] = max(0, min(255, int(round(channels[3] * frame_opacity))))
+
+        card_shadow_kwargs = {
+            "shadow_enabled": SettingsManager.to_bool(shadows.get("enabled", True), True),
+            "shadow_color": tuple(channels),
+            "shadow_blur": shadow_blur,
+            "shadow_offset": resolve_signed_offset(direction, *ORDINARY_CARD_SHADOW_BASE),
+            "shadow_extensions": resolve_directional_extensions(direction, frame_extra),
+        }
         owner = QuickDisplayVisualizerOwner(
             chosen.runtime,
             bar_count=model.resolve_bar_count(mode),
             initial_mode=mode,
+            card_shadow_kwargs=card_shadow_kwargs,
         )
         try:
             owner.controller.settings_model = model
@@ -2570,7 +2637,15 @@ class DisplayManager(QObject):
             self._on_image_displayed(screen_index, image_path)
             return "base_published"
 
-        spec = self._resolve_quick_transition_batch_spec()
+        startup_desktop_transition = (
+            screen_index in self._startup_desktop_seed_screens
+            and screen_index not in self.current_images
+        )
+        spec = (
+            self._startup_desktop_crossfade_spec()
+            if startup_desktop_transition
+            else self._resolve_quick_transition_batch_spec()
+        )
         if spec is None:
             # Once a source image exists, a missing/invalid transition is not
             # permission to flash the destination directly.  Keep the current
@@ -2592,6 +2667,12 @@ class DisplayManager(QObject):
             destination_image=destination,
         )
         start_transition(request)
+        if startup_desktop_transition:
+            logger.info(
+                "[STARTUP_DESKTOP] Crossfade admitted screen=%s duration_ms=%s",
+                screen_index,
+                spec.duration_ms,
+            )
         self._quick_transition_paths[screen_index] = str(image_path or "")
         self._quick_batch_published_screens.add(screen_index)
         return "transition_started"
@@ -2631,7 +2712,8 @@ class DisplayManager(QObject):
         self.transition_completed.emit(screen_index)
     
     def _on_image_displayed(self, screen_index: int, image_path: str) -> None:
-        """Handle image displayed event."""
+        """Handle one authoritative authored image becoming fully displayed."""
+        self._startup_desktop_seed_screens.discard(int(screen_index))
         self.current_images[screen_index] = image_path
         self._authoritative_first_frame_screens.add(int(screen_index))
         logger.debug(f"Image displayed on screen {screen_index}: {image_path}")
@@ -2652,21 +2734,110 @@ class DisplayManager(QObject):
         if readiness is not None and readiness.ready_for_reveal:
             self._mark_startup_reveal_ready(int(screen_index))
 
+    def _prime_quick_startup_desktop_sources(
+        self,
+        pending_displays: list[QuickDisplayUnit],
+    ) -> None:
+        """Capture the visible desktop once and seed each hidden Quick scene.
+
+        The windows are still hidden at this boundary, so ``QScreen.grabWindow(0)``
+        captures what the operator is actually looking at rather than recursively
+        capturing SRPSS. The seed is presentation-only and is explicitly excluded
+        from queue/history/current-image authority. No timer or steady-state owner
+        is introduced; the immutable capture is released by the first transition.
+        """
+
+        self._startup_desktop_seed_screens.clear()
+        if not self._desktop_startup_crossfade_enabled:
+            logger.debug(
+                "[STARTUP_DESKTOP] Desktop staging skipped for replacement runtime "
+                "generation=%s",
+                self._runtime_generation,
+            )
+            return
+
+        for display in pending_displays:
+            if display.is_retired:
+                continue
+            screen = display.runtime.window.screen()
+            if screen is None:
+                logger.error(
+                    "[STARTUP_DESKTOP] No QScreen available for startup capture "
+                    "screen=%s; first image will use the explicit no-seed path",
+                    display.screen_index,
+                )
+                continue
+            try:
+                desktop = screen.grabWindow(0)
+            except Exception:
+                logger.error(
+                    "[STARTUP_DESKTOP] Desktop capture raised screen=%s; "
+                    "first image will use the explicit no-seed path",
+                    display.screen_index,
+                    exc_info=True,
+                )
+                continue
+            if desktop.isNull() or desktop.width() <= 0 or desktop.height() <= 0:
+                logger.error(
+                    "[STARTUP_DESKTOP] Desktop capture was null screen=%s; "
+                    "first image will use the explicit no-seed path",
+                    display.screen_index,
+                )
+                continue
+            seed = display.capture_image(
+                desktop,
+                image_path=f"__startup_desktop_screen_{display.screen_index}__",
+            )
+            display.present_captured_image(seed)
+            self._startup_desktop_seed_screens.add(int(display.screen_index))
+            logger.info(
+                "[STARTUP_DESKTOP] Seeded hidden Quick scene screen=%s "
+                "pixels=%sx%s dpr=%.3f",
+                display.screen_index,
+                desktop.width(),
+                desktop.height(),
+                float(desktop.devicePixelRatio()),
+            )
+
+    @staticmethod
+    def _startup_desktop_crossfade_spec() -> ResolvedQuickTransitionSpec:
+        """Return the fixed one-session desktop -> first-wallpaper transition."""
+
+        return ResolvedQuickTransitionSpec(
+            transition_id="crossfade",
+            requested_name="Crossfade",
+            selected_from_random=False,
+            duration_ms=QUICK_STARTUP_DESKTOP_CROSSFADE_DURATION_MS,
+            direction=None,
+            parameters=(),
+        )
+
     def _apply_quick_startup_reveal_opacity(self, opacity: float) -> int:
-        """Apply the one shared ordinary-widget startup scalar to live displays."""
+        """Apply one shared startup gate without rewriting family-authored fades."""
 
         affected = 0
         for display in tuple(self.displays):
             if display.is_retired:
                 continue
-            affected += len(display.presenter.set_family_fade_opacity(opacity))
+            affected += len(display.presenter.set_startup_reveal_opacity(opacity))
+            try:
+                if display.runtime.scene_controller.set_visualizer_startup_reveal_opacity(
+                    opacity
+                ):
+                    affected += 1
+            except (RuntimeError, TypeError, ValueError):
+                logger.warning(
+                    "[STARTUP_REVEAL] Failed visualizer startup gate screen=%s",
+                    display.screen_index,
+                    exc_info=True,
+                )
         return affected
 
     def _prepare_quick_startup_reveal(
         self,
         pending_displays: list[QuickDisplayUnit],
     ) -> None:
-        """Prime admitted ordinary families at opacity zero before first show."""
+        """Prime all admitted retained widgets at opacity zero before first show."""
 
         self._cancel_quick_startup_reveal()
         generation = int(self._runtime_generation or 0)
@@ -2691,7 +2862,7 @@ class DisplayManager(QObject):
         self._quick_startup_reveal = coordinator
         target_count = coordinator.prime()
         logger.info(
-            "[STARTUP_REVEAL] Primed coordinated ordinary reveal "
+            "[STARTUP_REVEAL] Primed coordinated retained reveal "
             "generation=%s displays=%d families=%d",
             generation,
             len(pending_displays),
@@ -2725,7 +2896,7 @@ class DisplayManager(QObject):
             return
 
         logger.info(
-            "[STARTUP_REVEAL] Starting coordinated ordinary reveal "
+            "[STARTUP_REVEAL] Starting coordinated retained reveal "
             "generation=%s displays=%d families=%d",
             int(self._runtime_generation or 0),
             len(expected),
@@ -2744,7 +2915,7 @@ class DisplayManager(QObject):
             return
         self._startup_reveal_emitted = True
         logger.info(
-            "[STARTUP_REVEAL] Coordinated ordinary reveal complete generation=%s",
+            "[STARTUP_REVEAL] Coordinated retained reveal complete generation=%s",
             generation,
         )
         self.startup_reveal_completed.emit(int(generation))
@@ -2872,6 +3043,7 @@ class DisplayManager(QObject):
         for display in self.displays:
             display.clear()
         self.current_images.clear()
+        self._startup_desktop_seed_screens.clear()
         self._transition_work_pending = False
         self._reset_quick_transition_batch()
         logger.info("All displays cleared")
@@ -2963,6 +3135,9 @@ class DisplayManager(QObject):
         if self.current_images:
             return True
         for display in self.displays:
+            screen_index = int(getattr(display, "screen_index", -1))
+            if screen_index in self._startup_desktop_seed_screens:
+                continue
             runtime = getattr(display, "runtime", None)
             scene = getattr(runtime, "scene_controller", None)
             if scene is not None and getattr(scene, "presentation_image", None) is not None:
@@ -3309,6 +3484,7 @@ class DisplayManager(QObject):
         self._display_startup_ready_emitted_generation = -1
         self._authoritative_first_frame_screens.clear()
         self._authoritative_first_frame_emitted = False
+        self._startup_desktop_seed_screens.clear()
         self._startup_reveal_screens.clear()
         self._startup_reveal_started = False
         self._startup_reveal_emitted = False
@@ -3351,6 +3527,7 @@ class DisplayManager(QObject):
 
         self.displays = failed_units
         self.current_images.clear()
+        self._startup_desktop_seed_screens.clear()
         self._transition_work_pending = False
         self._reset_quick_transition_batch()
         self._quick_readiness_by_screen.clear()
@@ -3390,6 +3567,7 @@ class DisplayManager(QObject):
         self._display_startup_generation += 1
         self._display_startup_ready_expected.clear()
         self._display_startup_ready_seen.clear()
+        self._startup_desktop_seed_screens.clear()
         self._monitor_reconcile_pending = False
         self._transition_work_pending = False
         self._reset_quick_transition_batch()

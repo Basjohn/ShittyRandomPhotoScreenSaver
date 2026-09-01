@@ -208,7 +208,7 @@ OverlayWidget {
             Rectangle {
                 id: artworkFrame
                 objectName: "mediaArtworkFrame"
-                visible: mediaRoot.mediaModel.hasArtwork
+                visible: mediaRoot.mediaModel.hasArtwork || mediaArtwork.transitionVisible
                 width: visible ? Math.min(mediaRoot.mediaModel.artworkSize, mainBand.height) : 0.0
                 height: width
                 anchors.right: parent.right
@@ -227,7 +227,8 @@ OverlayWidget {
                     z: -1
                 }
 
-                Image {
+                ArtworkFadeImage {
+                    id: mediaArtwork
                     objectName: "mediaArtwork"
                     anchors.fill: parent
                     source: mediaRoot.mediaModel.artworkSource.length > 0

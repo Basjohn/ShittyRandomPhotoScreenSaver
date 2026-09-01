@@ -76,3 +76,11 @@ contact/main relationship, shared hand rotation+wider shadow stroke, no blur, st
 global direction mutation in place, ordinary footer/day/date/timezone shadow semantics, and eyes-on card/
 numeral/face-shadow/seconds/calendar/timezone/separator combinations across directions/sizes/DPRs/simple+busy
 backgrounds.
+
+## Shared calendar separator
+
+The separator is intentionally shared by **both** analogue and digital faces. Current persisted/UI
+authority is `show_separator`; `show_digital_separator` is compatibility-read residue only and is queued
+for removal in `Future_Cleanup.md`. `separator_thickness` is one 1-8 logical-pixel value consumed by
+both faces. The analogue separator uses a 10px separator band (formerly 14px), placing the line roughly
+20% closer to the face while leaving face geometry/cadence untouched.

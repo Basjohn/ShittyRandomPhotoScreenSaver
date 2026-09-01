@@ -66,6 +66,10 @@ class OverlayCardStyle:
     shadow_offset_x: float = 0.0
     shadow_offset_y: float = 4.0
     shadow_spread: float = 0.0
+    shadow_extend_left: float = 0.0
+    shadow_extend_top: float = 0.0
+    shadow_extend_right: float = 0.0
+    shadow_extend_bottom: float = 0.0
 
 
 _CARD_STYLE_BINDINGS: tuple[tuple[str, str], ...] = (
@@ -81,14 +85,25 @@ _CARD_STYLE_BINDINGS: tuple[tuple[str, str], ...] = (
     ("cardShadowOffsetX", "shadow_offset_x"),
     ("cardShadowOffsetY", "shadow_offset_y"),
     ("cardShadowSpread", "shadow_spread"),
+    ("cardShadowExtendLeft", "shadow_extend_left"),
+    ("cardShadowExtendTop", "shadow_extend_top"),
+    ("cardShadowExtendRight", "shadow_extend_right"),
+    ("cardShadowExtendBottom", "shadow_extend_bottom"),
 )
 
 
 class RetainedOverlayWidget:
     """One retained ``OverlayWidget`` root with explicit presentation setters."""
 
-    def __init__(self, item: QQuickItem, *, model_identity: str | None = None) -> None:
+    def __init__(
+        self,
+        item: QQuickItem,
+        *,
+        shadow_item: QQuickItem | None = None,
+        model_identity: str | None = None,
+    ) -> None:
         self._item: QQuickItem | None = item
+        self._shadow_item: QQuickItem | None = shadow_item
         self._model_identity = str(model_identity or "").strip()
         self._host: OrdinaryWidgetPresentationHost | None = None
         self._retirement_callbacks: list[Callable[[], None]] = []
@@ -109,6 +124,12 @@ class RetainedOverlayWidget:
         return self._item is None
 
     @property
+    def shadow_item(self) -> QQuickItem | None:
+        """Return the display-level shadow underlay, when production owns one."""
+
+        return self._shadow_item
+
+    @property
     def model_identity(self) -> str:
         return self._model_identity
 
@@ -126,6 +147,12 @@ class RetainedOverlayWidget:
 
         clamped = max(0.0, min(1.0, float(opacity)))
         self.item.setProperty("fadeOpacity", clamped)
+
+    def set_startup_reveal_opacity(self, opacity: float) -> None:
+        """Set the independent generation-scoped startup visibility gate."""
+
+        clamped = max(0.0, min(1.0, float(opacity)))
+        self.item.setProperty("startupRevealOpacity", clamped)
 
     def set_working_visible(self, visible: bool) -> None:
         """Apply transient CUSTOM visibility without rewriting authored fade."""
@@ -184,7 +211,9 @@ class RetainedOverlayWidget:
 
     def _retire(self) -> None:
         item = self._item
+        shadow_item = self._shadow_item
         self._item = None
+        self._shadow_item = None
         self._host = None
         callbacks = self._retirement_callbacks
         self._retirement_callbacks = []
@@ -192,6 +221,13 @@ class RetainedOverlayWidget:
         self._input_state_handler = None
         for callback in callbacks:
             callback()
+        if shadow_item is not None:
+            # The underlay references the widget for geometry/style bindings;
+            # detach and retire it first so no binding can outlive its source.
+            shadow_item.setProperty("sourceWidget", None)
+            shadow_item.setParentItem(None)
+            shadow_item.setParent(None)
+            shadow_item.deleteLater()
         if item is not None:
             # Detach from the scene graph before queuing deletion so retiring one
             # widget never depends on the display generation still being live.
@@ -211,18 +247,34 @@ class OrdinaryWidgetPresentationHost:
         create_overlay_item: Callable[
             [Mapping[str, object], QQmlContext], QQuickItem
         ],
+        shadow_host_item: QQuickItem | None = None,
+        create_shadow_item: Callable[
+            [Mapping[str, object], QQmlContext], QQuickItem
+        ]
+        | None = None,
         create_family_item: Callable[
             [str, Mapping[str, object], QQmlContext], QQuickItem
         ]
         | None = None,
     ) -> None:
         self._host_item: QQuickItem | None = host_item
+        self._shadow_host_item: QQuickItem | None = shadow_host_item
         self._context: QQmlContext | None = context
         self._create_overlay_item = create_overlay_item
+        self._create_shadow_item = create_shadow_item
         self._create_family_item = create_family_item
+        if (shadow_host_item is None) != (create_shadow_item is None):
+            raise RuntimeError(
+                "ordinary-widget shadow underlay requires both host and factory"
+            )
         self._live: list[RetainedOverlayWidget] = []
         self._by_model_identity: dict[str, RetainedOverlayWidget] = {}
         self._input_state: object | None = None
+        # Generation-scoped presentation state.  Remembering this at the host
+        # boundary guarantees a family root created after startup priming joins
+        # the scene already closed/current, rather than flashing at QML's 1.0
+        # default until the coordinator's next animation value arrives.
+        self._startup_reveal_opacity = 1.0
         self._retired = False
 
     @property
@@ -336,6 +388,23 @@ class OrdinaryWidgetPresentationHost:
 
         if not isinstance(item, QQuickItem):
             raise RuntimeError("overlay widget factory did not create a QQuickItem")
+        # Stamp both visibility authorities before the item joins the scene.
+        # The generation startup gate closes cold/replacement admission, while
+        # an explicit family-authored initial fade (Steam starts at 0) must also
+        # be installed before parenting so no retained root can spend even one
+        # synchronized frame at OverlayWidget.qml's default opacity of 1.0.
+        if not item.setProperty(
+            "startupRevealOpacity", float(self._startup_reveal_opacity)
+        ):
+            item.deleteLater()
+            raise RuntimeError(
+                "OverlayWidget.qml rejected startupRevealOpacity projection"
+            )
+        if fade_opacity is not None:
+            initial_fade = max(0.0, min(1.0, float(fade_opacity)))
+            if not item.setProperty("fadeOpacity", initial_fade):
+                item.deleteLater()
+                raise RuntimeError("OverlayWidget.qml rejected fadeOpacity projection")
         item.setParentItem(host_item)
         item.setParent(host_item)
 
@@ -347,8 +416,38 @@ class OrdinaryWidgetPresentationHost:
             raise ValueError(
                 f"duplicate retained model identity: {normalized_identity!r}"
             )
+        shadow_item: QQuickItem | None = None
+        shadow_host_item = self._shadow_host_item
+        shadow_creator = self._create_shadow_item
+        if shadow_host_item is not None and shadow_creator is not None:
+            try:
+                shadow_item = shadow_creator(
+                    {"sourceWidget": item},
+                    self._context,
+                )
+                if not isinstance(shadow_item, QQuickItem):
+                    raise RuntimeError(
+                        "ordinary-widget shadow factory did not create a QQuickItem"
+                    )
+                shadow_item.setParentItem(shadow_host_item)
+                shadow_item.setParent(shadow_host_item)
+                if not item.setProperty("externalCardShadow", True):
+                    raise RuntimeError(
+                        "OverlayWidget.qml rejected externalCardShadow projection"
+                    )
+            except Exception:
+                if shadow_item is not None:
+                    shadow_item.setParentItem(None)
+                    shadow_item.setParent(None)
+                    shadow_item.deleteLater()
+                item.setParentItem(None)
+                item.setParent(None)
+                item.deleteLater()
+                raise
+
         widget = RetainedOverlayWidget(
             item,
+            shadow_item=shadow_item,
             model_identity=normalized_identity or None,
         )
         widget._host = self
@@ -357,8 +456,8 @@ class OrdinaryWidgetPresentationHost:
             self._by_model_identity[normalized_identity] = widget
         if geometry is not None:
             widget.set_geometry(geometry)
-        if fade_opacity is not None:
-            widget.set_fade_opacity(fade_opacity)
+        # ``fade_opacity`` was deliberately projected before scene admission
+        # above. Later lifecycle changes continue through RetainedOverlayWidget.
         if card_style is not None:
             widget.set_card_style(card_style)
         return widget
@@ -392,6 +491,23 @@ class OrdinaryWidgetPresentationHost:
         model_identity: str,
     ) -> RetainedOverlayWidget | None:
         return self._by_model_identity.get(str(model_identity or "").strip())
+
+    def set_startup_reveal_opacity(self, opacity: float) -> tuple[str, ...]:
+        """Store/project the generation startup gate for current and future roots."""
+
+        if self._retired:
+            return ()
+        clamped = max(0.0, min(1.0, float(opacity)))
+        self._startup_reveal_opacity = clamped
+        changed: list[str] = []
+        for widget in tuple(self._live):
+            try:
+                widget.set_startup_reveal_opacity(clamped)
+            except (RuntimeError, TypeError, ValueError):
+                continue
+            if widget.model_identity:
+                changed.append(widget.model_identity)
+        return tuple(changed)
 
     def model_identities(self) -> tuple[str, ...]:
         return tuple(self._by_model_identity)
@@ -475,14 +591,31 @@ class OrdinaryWidgetPresentationHost:
             raise ValueError(f"target already owns model identity: {identity!r}")
 
         item = widget.item
+        shadow_item = widget.shadow_item
+        source_shadow_host = self._shadow_host_item
+        target_shadow_host = target._shadow_host_item
+        if (source_shadow_host is None) != (target_shadow_host is None):
+            raise RuntimeError(
+                "cannot transfer between incompatible ordinary shadow topologies"
+            )
+        if shadow_item is not None and (
+            source_shadow_host is None or target_shadow_host is None
+        ):
+            raise RuntimeError("retained ordinary shadow has no transfer host")
         if target._input_state is not None:
             widget._apply_input_state(target._input_state)
         try:
             item.setParentItem(target_item)
             item.setParent(target_item)
+            if shadow_item is not None and target_shadow_host is not None:
+                shadow_item.setParentItem(target_shadow_host)
+                shadow_item.setParent(target_shadow_host)
         except Exception:
             item.setParentItem(source_item)
             item.setParent(source_item)
+            if shadow_item is not None and source_shadow_host is not None:
+                shadow_item.setParentItem(source_shadow_host)
+                shadow_item.setParent(source_shadow_host)
             raise
         self._live.remove(widget)
         if identity:
@@ -502,7 +635,9 @@ class OrdinaryWidgetPresentationHost:
         self._input_state = None
         self._retired = True
         self._host_item = None
+        self._shadow_host_item = None
         self._context = None
+        self._create_shadow_item = None
         self._create_family_item = None
         for widget in live:
             widget._retire()

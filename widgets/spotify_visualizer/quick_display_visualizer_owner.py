@@ -51,6 +51,7 @@ class QuickDisplayVisualizerOwner:
         initial_mode: str,
         engine_factory: Callable[[int], Any] | None = None,
         presentation_resolver: Callable[[], Any] | None = None,
+        card_shadow_kwargs: Mapping[str, object] | None = None,
         transition_clock: Callable[[], float] | None = None,
         transition_half_duration_s: float = _MODE_TRANSITION_HALF_DURATION_S,
     ) -> None:
@@ -67,6 +68,7 @@ class QuickDisplayVisualizerOwner:
             engine_factory=engine_factory,
         )
         self._presentation_resolver = presentation_resolver
+        self._card_shadow_kwargs = dict(card_shadow_kwargs or {})
         self._transition_clock = transition_clock or time.perf_counter
         self._transition_half_duration_s = max(
             0.0, float(transition_half_duration_s)
@@ -405,6 +407,7 @@ class QuickDisplayVisualizerOwner:
             uniform_visual_scale=uniform_scale,
             viewport_extent=viewport_extent,
             content_fade=self._mode_transition_fade,
+            **self._card_shadow_kwargs,
         )
 
     def _apply_resolved_presentation(self, presentation: Any) -> None:
@@ -736,6 +739,7 @@ class QuickDisplayVisualizerOwner:
         self._sync = None
         self._pending_mode_activation = None
         self._presentation_resolver = None
+        self._card_shadow_kwargs.clear()
         return True
 
 

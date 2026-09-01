@@ -1,17 +1,16 @@
-"""One coordinated retained-Quick startup reveal for ordinary widget families.
+"""One coordinated retained-Quick startup reveal for all widget presentation.
 
-The pre-Quick product had a single manager-owned startup fade authority.  The
-Qt Quick migration already retained a presentation-neutral root opacity seam on
-every ordinary family (`OverlayWidget.fadeOpacity`), but the orchestration that
-actually drove it was missing while lifecycle telemetry still reported a reveal
-completion.
+The pre-Quick product had a single manager-owned startup fade authority. The Qt
+Quick destination now gives ordinary roots and the Visualizer an independent
+``startupRevealOpacity`` gate that multiplies, rather than replaces, each
+family's authored lifecycle/scene fade.
 
-This owner restores the *one shared scalar* contract without resurrecting
+This owner drives that *one shared scalar* without resurrecting
 QWidget/QGraphicsOpacityEffect choreography, per-widget timers, or a second
-presentation surface.  Exact visual timing remains a Parity+ tuning concern;
-the important runtime contract is that all admitted ordinary families start at
-zero opacity, reveal together once the generation is genuinely reveal-ready,
-and publish completion only after the animation has finished.
+presentation surface. Exact visual timing remains a Parity+ tuning concern; the
+important runtime contract is that all admitted roots start behind the closed
+gate, reveal together once the generation is genuinely reveal-ready, and
+publish completion only after the animation has finished.
 """
 from __future__ import annotations
 
@@ -24,10 +23,14 @@ from PySide6.QtCore import QEasingCurve, QObject, QVariantAnimation, Signal
 # than the old 300 ms generic UI fade constant.  Keep this destination-owned so
 # later J Parity+ tuning never needs to import the retired QWidget fade helper.
 QUICK_STARTUP_REVEAL_DURATION_MS = 1800
+# The initial desktop snapshot is a one-session staging source, not authored
+# wallpaper state. Crossfade into the first processed wallpaper on the canonical
+# default transition duration, then release the coordinated widget reveal.
+QUICK_STARTUP_DESKTOP_CROSSFADE_DURATION_MS = 1300
 
 
 class QuickStartupRevealCoordinator(QObject):
-    """Drive one generation-scoped opacity scalar across ordinary families."""
+    """Drive one generation-scoped opacity scalar across retained widgets."""
 
     completed = Signal(int)
 
@@ -77,7 +80,7 @@ class QuickStartupRevealCoordinator(QObject):
         return self._completed
 
     def prime(self) -> int:
-        """Hide every currently admitted ordinary family before window reveal."""
+        """Hide every currently admitted widget behind the startup gate."""
 
         if self._cancelled or self._completed:
             return 0
@@ -94,11 +97,24 @@ class QuickStartupRevealCoordinator(QObject):
             return False
         if not self._primed:
             self.prime()
+        else:
+            # Families may finish retained construction while the desktop ->
+            # first-wallpaper crossfade is running. Re-project the closed gate
+            # immediately before reveal and refresh the target count so a root
+            # that did not exist at prime time still participates in the same
+            # synchronized fade instead of appearing at full opacity.
+            self._target_count = max(
+                self._target_count,
+                max(0, int(self._opacity_sink(0.0) or 0)),
+            )
         self._started = True
 
-        # No ordinary targets must not hold startup accounting hostage.  The
-        # visualizer retains its independent authored startup/fade authority.
-        if self._target_count <= 0 or self._duration_ms <= 0:
+        # The reveal scalar is generation-owned, not target-count-owned. Even an
+        # empty initial target set runs the bounded startup animation so a late
+        # Visualizer/family root admitted during the reveal inherits the current
+        # scalar rather than appearing at full opacity. Only an explicitly zero
+        # duration bypasses animation.
+        if self._duration_ms <= 0:
             self._opacity_sink(1.0)
             self._finish_once()
             return True
@@ -138,6 +154,7 @@ class QuickStartupRevealCoordinator(QObject):
 
 
 __all__ = [
+    "QUICK_STARTUP_DESKTOP_CROSSFADE_DURATION_MS",
     "QUICK_STARTUP_REVEAL_DURATION_MS",
     "QuickStartupRevealCoordinator",
 ]

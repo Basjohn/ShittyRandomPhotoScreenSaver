@@ -34,6 +34,7 @@ QML_ROOT = quick_qml_root()
 PRIMITIVE_FILES = (
     "OverlayWidget.qml",
     "OverlayCard.qml",
+    "OverlayCardShadow.qml",
     "ShadowedText.qml",
     "Separator.qml",
 )
@@ -87,11 +88,15 @@ def test_host_creates_updates_and_retires_synthetic_item_without_new_engine_or_w
     )
     windows_before = len(qt_app.topLevelWindows())
     host_item = root.findChild(QQuickItem, "ordinaryWidgetHost")
+    shadow_host_item = root.findChild(QQuickItem, "ordinaryWidgetShadowHost")
     assert host_item is not None
+    assert shadow_host_item is not None
     host = OrdinaryWidgetPresentationHost(
         host_item=host_item,
+        shadow_host_item=shadow_host_item,
         context=context,
         create_overlay_item=factory.create_overlay_widget,
+        create_shadow_item=factory.create_overlay_card_shadow,
     )
 
     widget = host.create_widget(
@@ -103,7 +108,11 @@ def test_host_creates_updates_and_retires_synthetic_item_without_new_engine_or_w
     assert isinstance(widget, RetainedOverlayWidget)
     assert host.live_count == 1
     item = widget.item
+    shadow_underlay = widget.shadow_item
     assert item.parentItem() is host_item
+    assert shadow_underlay is not None
+    assert shadow_underlay.parentItem() is shadow_host_item
+    assert item.property("externalCardShadow") is True
 
     # Creating a retained item must reuse the display's engine/context, never a
     # second QQmlEngine or top-level runtime window.
@@ -204,7 +213,9 @@ def test_shell_never_clips_signed_negative_shadow_offsets(qt_app) -> None:
     content = item.findChild(QQuickItem, "overlayCardContent")
     shadow = item.findChild(QQuickItem, "overlayCardShadow")
 
-    # No node in the card path may clip the shadow blur or its negative offsets.
+    # No node in the card path may clip the shadow blur or its directional
+    # extrusion. Card shadows never use Qt effect translation: negative signed
+    # direction grows the surface left/up while the actual effect offset stays 0.
     assert item.clip() is False
     assert card.clip() is False
     assert content.clip() is False
@@ -212,8 +223,14 @@ def test_shell_never_clips_signed_negative_shadow_offsets(qt_app) -> None:
     assert shadow is not None
     assert shadow.isVisible() is True
     offset = shadow.property("offset")
-    assert offset.x() == pytest.approx(-9.0)
-    assert offset.y() == pytest.approx(-11.0)
+    assert offset.x() == pytest.approx(0.0)
+    assert offset.y() == pytest.approx(0.0)
+    background = item.findChild(QQuickItem, "overlayCardBackground")
+    assert background is not None
+    assert shadow.x() == pytest.approx(background.x() - 9.0)
+    assert shadow.y() == pytest.approx(background.y() - 11.0)
+    assert shadow.width() == pytest.approx(background.width() + 9.0)
+    assert shadow.height() == pytest.approx(background.height() + 11.0)
 
     host.retire_all()
     factory.deleteLater()
@@ -348,6 +365,30 @@ def _card_offsets(direction: ShadowDirection) -> tuple[float, float]:
     return resolve_signed_offset(direction, 4.0, 6.0)
 
 
+def test_production_ordinary_shadows_use_one_display_underlay_below_all_cards() -> None:
+    display = (QML_ROOT / "DisplayScene.qml").read_text(encoding="utf-8")
+    overlay = (QML_ROOT / "OverlayWidget.qml").read_text(encoding="utf-8")
+    underlay = (QML_ROOT / "OverlayCardShadow.qml").read_text(encoding="utf-8")
+    host = (ROOT / "rendering" / "quick" / "widgets" / "host.py").read_text(encoding="utf-8")
+    scene = (ROOT / "rendering" / "quick" / "scene_controller.py").read_text(encoding="utf-8")
+
+    assert 'objectName: "ordinaryWidgetShadowHost"' in display
+    assert 'objectName: "ordinaryWidgetHost"' in display
+    shadow_pos = display.index('objectName: "ordinaryWidgetShadowHost"')
+    card_pos = display.index('objectName: "ordinaryWidgetHost"')
+    assert shadow_pos < card_pos
+    assert "z: 0" in display[shadow_pos:card_pos]
+    assert "z: 10" in display[card_pos:]
+    assert "property bool externalCardShadow: false" in overlay
+    assert "shadowEnabled: overlayWidget.cardShadowEnabled && !overlayWidget.externalCardShadow" in overlay
+    assert 'objectName: "overlayCardShadowUnderlay"' in underlay
+    assert "sourceWidget.cardShadowVisualWidth" in underlay
+    assert "sourceWidget.opacity" in underlay
+    assert "offset: Qt.vector2d(0.0, 0.0)" in underlay
+    assert 'item.setProperty("externalCardShadow", True)' in host
+    assert "create_overlay_card_shadow" in scene
+
+
 @pytest.mark.qt
 def test_overlay_card_shadow_is_cached_by_default(qt_app) -> None:
     # E4.3: the shared card shadow caches by default so static cards and fades
@@ -426,6 +467,79 @@ def test_direction_change_updates_retained_shadow_without_recreating_item(qt_app
 
 
 @pytest.mark.qt
+def test_startup_gate_is_independent_inherited_and_prevents_punch_through(qt_app) -> None:
+    owner = QObject()
+    factory = QuickSceneFactory()
+    context, root = factory.create_display_root(
+        owner=owner, screen_index=0, runtime_generation=0
+    )
+    host_item = root.findChild(QQuickItem, "ordinaryWidgetHost")
+    host = OrdinaryWidgetPresentationHost(
+        host_item=host_item,
+        context=context,
+        create_overlay_item=factory.create_overlay_widget,
+    )
+
+    # Prime the host before a family root exists. A late-created root must enter
+    # the scene already closed; it may never spend a frame at QML's default 1.0.
+    assert host.set_startup_reveal_opacity(0.0) == ()
+    widget = host.create_widget(
+        model_identity="late-family",
+        geometry=OverlayWidgetGeometry(0.0, 0.0, 200.0, 120.0),
+        fade_opacity=1.0,
+    )
+    assert widget.item.property("startupRevealOpacity") == pytest.approx(0.0)
+    assert widget.item.opacity() == pytest.approx(0.0)
+
+    # A family-local publication may freely drive its authored fade back to one;
+    # it still cannot become visible before the generation startup gate opens.
+    widget.set_fade_opacity(1.0)
+    assert widget.item.property("fadeOpacity") == pytest.approx(1.0)
+    assert widget.item.opacity() == pytest.approx(0.0)
+
+    assert host.set_startup_reveal_opacity(0.5) == ("late-family",)
+    assert widget.item.opacity() == pytest.approx(0.5)
+    widget.set_fade_opacity(0.4)
+    assert widget.item.opacity() == pytest.approx(0.2)
+
+    # A second root created mid-reveal inherits the current scalar synchronously.
+    second = host.create_widget(
+        model_identity="mid-reveal-family",
+        geometry=OverlayWidgetGeometry(220.0, 0.0, 200.0, 120.0),
+        fade_opacity=1.0,
+    )
+    assert second.item.property("startupRevealOpacity") == pytest.approx(0.5)
+    assert second.item.opacity() == pytest.approx(0.5)
+
+    # Steam-style roots authored to begin hidden must enter the scene with BOTH
+    # gates already closed/current; the host must not parent at QML's default
+    # fadeOpacity=1 and correct it afterwards.
+    hidden = host.create_widget(
+        model_identity="initially-hidden-family",
+        geometry=OverlayWidgetGeometry(440.0, 0.0, 200.0, 120.0),
+        fade_opacity=0.0,
+    )
+    assert hidden.item.property("startupRevealOpacity") == pytest.approx(0.5)
+    assert hidden.item.property("fadeOpacity") == pytest.approx(0.0)
+    assert hidden.item.opacity() == pytest.approx(0.0)
+
+    host_source = (ROOT / "rendering" / "quick" / "widgets" / "host.py").read_text(
+        encoding="utf-8"
+    )
+    adopt_start = host_source.index("    def _adopt_item(")
+    adopt_end = host_source.index("    def registered_image_provider", adopt_start)
+    adopt = host_source[adopt_start:adopt_end]
+    assert adopt.index('item.setProperty("fadeOpacity", initial_fade)') < adopt.index(
+        "item.setParentItem(host_item)"
+    )
+
+    host.retire_all()
+    factory.deleteLater()
+    owner.deleteLater()
+    qt_app.processEvents()
+
+
+@pytest.mark.qt
 def test_root_fade_does_not_rewrite_card_shadow_properties(qt_app) -> None:
     # E4.3/E4.5: whole-widget fade is root opacity only and must not touch the
     # card shadow's magnitude/blur/offset/color authorities.
@@ -464,6 +578,101 @@ def test_root_fade_does_not_rewrite_card_shadow_properties(qt_app) -> None:
     assert widget.item.property("fadeOpacity") == pytest.approx(0.3)
     assert widget.item.opacity() == pytest.approx(0.3)
     assert after == before
+
+    host.retire_all()
+    factory.deleteLater()
+    owner.deleteLater()
+    qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_overlay_card_frame_extra_offset_is_directional_growth_not_full_translation(qt_app) -> None:
+    owner = QObject()
+    factory = QuickSceneFactory()
+    context, root = factory.create_display_root(
+        owner=owner, screen_index=0, runtime_generation=0
+    )
+    host_item = root.findChild(QQuickItem, "ordinaryWidgetHost")
+    shadow_host_item = root.findChild(QQuickItem, "ordinaryWidgetShadowHost")
+    assert host_item is not None
+    assert shadow_host_item is not None
+    host = OrdinaryWidgetPresentationHost(
+        host_item=host_item,
+        shadow_host_item=shadow_host_item,
+        context=context,
+        create_overlay_item=factory.create_overlay_widget,
+        create_shadow_item=factory.create_overlay_card_shadow,
+    )
+
+    widget = host.create_widget(
+        geometry=OverlayWidgetGeometry(0.0, 0.0, 200.0, 120.0),
+        card_style=OverlayCardStyle(
+            shadow_offset_x=4.0,
+            shadow_offset_y=4.0,
+            shadow_extend_right=20.0,
+            shadow_extend_bottom=20.0,
+        ),
+    )
+    qt_app.processEvents()
+
+    card = widget.item.findChild(QQuickItem, "overlayWidgetCard")
+    shadow_underlay = widget.shadow_item
+    shadow = None if shadow_underlay is None else shadow_underlay.findChild(
+        QQuickItem, "overlayCardShadow"
+    )
+    background = widget.item.findChild(QQuickItem, "overlayCardBackground")
+    assert card is not None
+    assert shadow_underlay is not None
+    assert shadow_underlay.parentItem() is shadow_host_item
+    assert widget.item.property("externalCardShadow") is True
+    assert shadow is not None
+    assert background is not None
+
+    # The host writes the extension values on OverlayWidget and the card binds
+    # them locally while the display-level shadow underlay consumes the same
+    # root properties. No inert dynamic QObject properties are permitted.
+    assert card.property("shadowExtendLeft") == pytest.approx(0.0)
+    assert card.property("shadowExtendTop") == pytest.approx(0.0)
+    assert card.property("shadowExtendRight") == pytest.approx(20.0)
+    assert card.property("shadowExtendBottom") == pytest.approx(20.0)
+
+    # Both the authored 4px base direction and Extra Offset are asymmetric
+    # geometry. The Qt shadow effect itself must remain untranslated, so SE +20
+    # grows right/bottom by 24px while top/left coordinates remain invariant.
+    assert shadow.property("offset").x() == pytest.approx(0.0)
+    assert shadow.property("offset").y() == pytest.approx(0.0)
+    assert shadow.x() == pytest.approx(background.x())
+    assert shadow.y() == pytest.approx(background.y())
+    assert shadow.width() == pytest.approx(background.width() + 24.0)
+    assert shadow.height() == pytest.approx(background.height() + 24.0)
+
+    # Reorienting to NW mirrors only the extrusion edge. The opposite right/
+    # bottom boundary remains exactly at the background boundary.
+    widget.set_card_style(
+        OverlayCardStyle(
+            shadow_offset_x=-4.0,
+            shadow_offset_y=-4.0,
+            shadow_extend_left=20.0,
+            shadow_extend_top=20.0,
+        )
+    )
+    qt_app.processEvents()
+    assert card.property("shadowExtendLeft") == pytest.approx(20.0)
+    assert card.property("shadowExtendTop") == pytest.approx(20.0)
+    assert card.property("shadowExtendRight") == pytest.approx(0.0)
+    assert card.property("shadowExtendBottom") == pytest.approx(0.0)
+    assert shadow.property("offset").x() == pytest.approx(0.0)
+    assert shadow.property("offset").y() == pytest.approx(0.0)
+    assert shadow.x() == pytest.approx(background.x() - 24.0)
+    assert shadow.y() == pytest.approx(background.y() - 24.0)
+    assert shadow.width() == pytest.approx(background.width() + 24.0)
+    assert shadow.height() == pytest.approx(background.height() + 24.0)
+    assert shadow.x() + shadow.width() == pytest.approx(
+        background.x() + background.width()
+    )
+    assert shadow.y() + shadow.height() == pytest.approx(
+        background.y() + background.height()
+    )
 
     host.retire_all()
     factory.deleteLater()

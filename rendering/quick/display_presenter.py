@@ -96,33 +96,25 @@ class QuickDisplayPresenter:
             return None
         return binder.presentation_for_widget_id(widget_id)
 
-    def set_family_fade_opacity(self, opacity: float) -> tuple[str, ...]:
-        """Project one coordinated startup opacity onto every retained family.
+    def set_startup_reveal_opacity(self, opacity: float) -> tuple[str, ...]:
+        """Project/store the independent startup gate at the retained host boundary.
 
-        This is intentionally a presentation-only fan-out.  It owns no timing
-        and creates no per-widget animation; the generation-scoped startup
-        reveal coordinator supplies the single scalar.
+        Family lifecycle fades continue to own ``fadeOpacity``. The host stores
+        ``startupRevealOpacity`` so both existing roots and any root constructed
+        later in this generation inherit the same gate before entering the scene.
         """
 
         if self._retired:
             return ()
-        changed: list[str] = []
-        for widget_id in self.bound_widget_ids:
-            presentation = self.presentation_for_widget_id(widget_id)
-            setter = getattr(presentation, "set_fade_opacity", None)
-            if not callable(setter):
-                continue
-            try:
-                setter(float(opacity))
-            except (RuntimeError, TypeError, ValueError):
-                logger.warning(
-                    "[STARTUP_REVEAL] Failed to set family opacity widget=%s",
-                    widget_id,
-                    exc_info=True,
-                )
-                continue
-            changed.append(widget_id)
-        return tuple(changed)
+        host = self._runtime.scene_controller.ordinary_widget_host
+        try:
+            return host.set_startup_reveal_opacity(float(opacity))
+        except (RuntimeError, TypeError, ValueError):
+            logger.warning(
+                "[STARTUP_REVEAL] Failed to project ordinary startup gate",
+                exc_info=True,
+            )
+            return ()
 
     def bind_families(
         self,

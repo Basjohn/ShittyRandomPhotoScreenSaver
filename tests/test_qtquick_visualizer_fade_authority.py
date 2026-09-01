@@ -5,7 +5,7 @@ presentation (the single animation/progress owned by ``presentation_fade``).
 ``ResolvedVisualizerPresentation`` exposes two DERIVED per-layer values of that
 one authority:
 
-    scene_fade   -> presentation-root / card opacity (root.setOpacity)
+    scene_fade   -> presentation-root authoredSceneOpacity
     content_fade -> GL content opacity fed to shader ``u_fade`` (the Quick-era
                     successor of the authored bars-stagger fade)
 
@@ -49,13 +49,18 @@ def test_each_mode_renderer_feeds_u_fade_from_the_shared_content_fade(mode_id):
         )
 
 
-def test_scene_root_opacity_derives_from_scene_fade():
+def test_scene_root_opacity_derives_from_scene_fade_without_owning_startup_gate():
     source = (
         ROOT / "rendering" / "quick" / "scene_controller.py"
     ).read_text(encoding="utf-8")
-    assert "setOpacity(presentation.scene_fade)" in source, (
-        "the presentation root opacity must derive from scene_fade"
+    qml = (
+        ROOT / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml"
+    ).read_text(encoding="utf-8")
+    assert 'setProperty("authoredSceneOpacity", presentation.scene_fade)' in source, (
+        "the presentation root authored opacity must derive from scene_fade"
     )
+    assert "opacity: authoredSceneOpacity * startupRevealOpacity" in qml
+    assert "QVariantAnimation" not in qml
 
 
 def test_no_quick_visualizer_render_module_owns_a_second_fade_clock():

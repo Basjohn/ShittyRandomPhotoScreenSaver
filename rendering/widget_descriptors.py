@@ -338,7 +338,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         signal_block_attrs=(
             "clock_enabled", "clock_format", "clock_seconds", "clock_timezone",
             "clock_show_tz", "clock_show_day_of_week", "clock_show_date",
-            "clock_show_digital_separator",
+            "clock_show_separator", "clock_separator_thickness",
             "clock_calendar_layout", "clock_calendar_font_size",
             "clock_position", "clock_font_combo", "clock_font_size",
             "clock_margin", "clock_show_background", "clock_bg_opacity",
@@ -1170,7 +1170,6 @@ class WidgetRuntimeDescriptor:
     supports_layout_resize_edit: bool = False
     requires_size_reset_affordance: bool = False
     custom_layout_resize_mode: str = "none"
-    custom_layout_runtime_vertical_content_resize: bool = False
     writes_custom_position_key: bool = True
     writes_custom_monitor_key: bool = True
     dev_feature_env: str | None = None
@@ -1429,7 +1428,6 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="reddit_font",
-        custom_layout_runtime_vertical_content_resize=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="reddit2",
@@ -1453,7 +1451,6 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="reddit_font",
-        custom_layout_runtime_vertical_content_resize=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="gmail",
@@ -1479,7 +1476,6 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="gmail_font",
-        custom_layout_runtime_vertical_content_resize=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="achievement_pulse",
@@ -2103,7 +2099,8 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
             WidgetPreviewFieldDescriptor("show_timezone_label", "clock_show_tz", "checked", False),
             WidgetPreviewFieldDescriptor("show_day_of_week", "clock_show_day_of_week", "checked", False),
             WidgetPreviewFieldDescriptor("show_date", "clock_show_date", "checked", False),
-            WidgetPreviewFieldDescriptor("show_digital_separator", "clock_show_digital_separator", "checked", False),
+            WidgetPreviewFieldDescriptor("show_separator", "clock_show_separator", "checked", False),
+            WidgetPreviewFieldDescriptor("separator_thickness", "clock_separator_thickness", "value", 2),
             WidgetPreviewFieldDescriptor("calendar_layout", "clock_calendar_layout", "current_data", "shared_line"),
             WidgetPreviewFieldDescriptor("calendar_font_size", "clock_calendar_font_size", "value", 20),
         ),

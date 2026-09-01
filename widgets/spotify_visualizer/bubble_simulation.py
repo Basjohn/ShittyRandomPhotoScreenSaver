@@ -44,6 +44,13 @@ TRAIL_SMEAR_MAX_LENGTH = 0.55   # cap streak length to avoid card wrap
 IMPULSE_DAMPING_PER_SEC = 10.5
 MAX_IMPULSE_SPEED = 0.22
 
+# Presentation-only lifecycle fades. These alter only per-bubble alpha; they
+# never change position/radius/pulse/domain scaling or simulation cadence.
+RUNTIME_SPAWN_FADE_ACTIVE_S = 0.20
+RUNTIME_SPAWN_FADE_IDLE_S = 0.50
+RUNTIME_SPAWN_IDLE_ENERGY = 0.10
+POP_FADE_S = 0.40
+
 
 @dataclass
 class BubbleState:
@@ -80,6 +87,7 @@ class BubbleState:
     bounce_glide: float = 0.0   # short post-collision window where drift/stream are damped
     display_radius: float = 0.0  # display-only hero radius smoothing state
     size_gate_energy: float = 0.0  # unsmoothed size gate used by hero render seam
+    fade_in_duration: float = 0.0  # alpha-only birth fade; never a geometry/reactivity authority
 
 
 # Direction vectors for stream directions
@@ -257,6 +265,7 @@ class BubbleSimulation:
         self._bubbles: List[BubbleState] = []
         self._time: float = 0.0
         self._last_tick_dt: float = 0.016
+        self._runtime_spawn_fade_seconds: float = RUNTIME_SPAWN_FADE_ACTIVE_S
         # Baseline-relative logical domain. 1x1 is the canonical 420x280 world
         # and is a strict no-op path: every spatial site reduces to the exact
         # legacy unit-square values and the render arrays are emitted unchanged.
@@ -314,6 +323,7 @@ class BubbleSimulation:
         self._bubbles.clear()
         self._time = 0.0
         self._last_tick_dt = 0.016
+        self._runtime_spawn_fade_seconds = RUNTIME_SPAWN_FADE_ACTIVE_S
         self._domain_w = 1.0
         self._domain_h = 1.0
         self._diag_tick_count = 0
@@ -532,6 +542,16 @@ class BubbleSimulation:
             pulse_mid = max(0.0, float(getattr(energy_bands, 'pulse_mid', mid) or 0.0))
             pulse_high = max(0.0, float(getattr(energy_bands, 'pulse_high', high) or 0.0))
             pulse_overall = max(0.0, float(getattr(energy_bands, 'pulse_overall', overall) or 0.0))
+
+        # New runtime births fade through the existing alpha channel only.
+        # Low-energy/idle scenes get a gentler entrance; active music remains
+        # deliberately brief. This value is sampled at spawn time so later
+        # energy changes cannot stretch or shorten an already-started fade.
+        self._runtime_spawn_fade_seconds = (
+            RUNTIME_SPAWN_FADE_IDLE_S
+            if overall < RUNTIME_SPAWN_IDLE_ENERGY
+            else RUNTIME_SPAWN_FADE_ACTIVE_S
+        )
 
         # Diagnostic: only log during verbose runs to avoid spamming main logs.
         self._diag_tick_count += 1
@@ -958,25 +978,30 @@ class BubbleSimulation:
             if b.bounce_glide > 0.0:
                 b.bounce_glide = max(0.0, b.bounce_glide - dt)
 
-            # Fade-in ramp for initial-fill bubbles (alpha starts at 0)
+            # Alpha-only birth fade. Cold-start field fill keeps its authored
+            # 1.5s bootstrap; normal runtime births carry a 0.2s active or
+            # 0.5s idle duration sampled when they were created.
             if b.alpha < 1.0 and not b.popping:
-                b.alpha = min(1.0, b.alpha + dt / 1.5)
+                fade_duration = max(0.0, float(b.fade_in_duration))
+                if fade_duration <= 0.0:
+                    b.alpha = 1.0
+                else:
+                    b.alpha = min(1.0, b.alpha + dt / fade_duration)
 
             # Lifecycle: check if should start popping
             if not b.reaches_surface and not b.popping and b.age >= b.max_age:
                 b.popping = True
                 b.pop_timer = 0.0
 
-            # Pop animation
+            # Pop animation: keep the brief authored expansion, but fade the
+            # bubble concurrently over ~400ms instead of holding it fully opaque
+            # and then disappearing. Alpha is the only new lifecycle output.
             if b.popping:
                 b.pop_timer += dt
                 if b.pop_timer < 0.12:
-                    # Expand phase
                     b.radius += b.radius * 0.18 * (dt / 0.12)
-                elif b.pop_timer < 0.45:
-                    # Fade phase (gentler, ~0.33s)
-                    b.alpha = max(0.0, b.alpha - dt / 0.33)
-                else:
+                b.alpha = max(0.0, b.alpha - dt / POP_FADE_S)
+                if b.pop_timer >= POP_FADE_S:
                     b.alpha = 0.0
 
                 if b.alpha <= 0.01:
@@ -2543,14 +2568,18 @@ class BubbleSimulation:
         else:
             speed_mult = 1.0
 
-        # Initial fill or swirl: start transparent for fade-in
+        # Birth visibility is alpha-only. Preserve the established slower
+        # cold-start field bootstrap, while every later runtime birth receives
+        # the brief active/idle fade sampled by tick(). This avoids entry-lane
+        # popping without touching movement, radius, pulse, trail, Ghost, or
+        # viewport/domain scaling.
         age = 0.0
-        alpha = 1.0
+        alpha = 0.0
         if initial_fill:
             age = random.uniform(0.0, max_age * 0.3) if max_age < 900.0 else random.uniform(0.0, 3.0)
-            alpha = 0.0  # will fade in via age-based ramp
-        elif drift_dir in _SWIRL_DIRECTIONS:
-            alpha = 0.0  # swirl bubbles fade in from center spawn
+            fade_in_duration = 1.5
+        else:
+            fade_in_duration = self._runtime_spawn_fade_seconds
 
         # Per-bubble specular mutation: slight random variation so bubbles look distinct
         spec_size_mut = random.uniform(0.85, 1.2)
@@ -2565,6 +2594,7 @@ class BubbleSimulation:
             vx=vx, vy=vy, speed_mult=speed_mult,
             spec_size_mut=spec_size_mut, spec_ox=spec_ox, spec_oy=spec_oy,
             trail_tail_x=x, trail_tail_y=y,
+            fade_in_duration=fade_in_duration,
         )
         self._bubbles.append(b)
 

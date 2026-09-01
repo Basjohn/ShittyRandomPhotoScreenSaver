@@ -126,3 +126,5 @@ Closed rationale and old owner maps belong under `Docs/Historical_Plans/`, `Docs
 admission or ownership and is not rewritten merely to sound current.
 
 - `Docs/Tooling_Audit_2026-09-01.md` — post-H operator-tool keep/delete/migrate authority; R-72 production/tool boundary.
+
+- `Docs/Historical_Bugs/R-73_Quick_Card_Shadow_Extra_Offset_Translation_And_Visualizer_Omission.md` — frame Extra Offset is directional growth, and Visualizer joins global card-shadow ownership.

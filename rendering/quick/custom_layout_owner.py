@@ -495,6 +495,55 @@ class QuickCustomLayoutOwner:
                         if math.isfinite(inferred_scale) and inferred_scale > 0.0:
                             baseline_resize_scale = inferred_scale
 
+                            # H9 whole-card scaling letterboxes whenever a stale
+                            # committed rectangle has a different aspect ratio
+                            # from the authored preferred card. The card pixels are
+                            # centred inside that dead outer area, while CUSTOM's
+                            # frame historically outlined the dead rectangle. That
+                            # is the source of the bizarre over-tall Reddit edit
+                            # bars after older vertical-content geometry commits.
+                            # Canonicalize only the edit/session envelope to the
+                            # *actual visible retained card bounds*. Pixel output
+                            # is unchanged; Save merely retires the invisible dead
+                            # axis from persisted geometry, and Cancel keeps the
+                            # same visible card centre/scale.
+                            visible_width = max(
+                                1, int(round(preferred_width * inferred_scale))
+                            )
+                            visible_height = max(
+                                1, int(round(preferred_height * inferred_scale))
+                            )
+                            if (
+                                visible_width != global_rect.width()
+                                or visible_height != global_rect.height()
+                            ):
+                                original = QRect(global_rect)
+                                global_rect = QRect(
+                                    int(
+                                        round(
+                                            float(original.x())
+                                            + (original.width() - visible_width) / 2.0
+                                        )
+                                    ),
+                                    int(
+                                        round(
+                                            float(original.y())
+                                            + (original.height() - visible_height) / 2.0
+                                        )
+                                    ),
+                                    visible_width,
+                                    visible_height,
+                                )
+                                logger.info(
+                                    "[CUSTOM_LAYOUT] Canonicalized uniform edit "
+                                    "envelope widget=%s assigned=%s visible=%s "
+                                    "scale=%.4f",
+                                    widget_id,
+                                    original.getRect(),
+                                    global_rect.getRect(),
+                                    inferred_scale,
+                                )
+
             item = CustomLayoutSessionItem(
                 source_key=key,
                 model_identity=widget_id,

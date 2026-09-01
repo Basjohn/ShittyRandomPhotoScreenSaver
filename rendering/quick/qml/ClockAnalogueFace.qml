@@ -7,7 +7,7 @@ Item {
     readonly property bool hasCalendar: clockModel.calendarText.length > 0
     readonly property bool hasTimezone: clockModel.timezoneText.length > 0
     readonly property real footerHeight:
-        (clockModel.showSeparator ? 14.0 : 0.0)
+        (clockModel.showSeparator ? 10.0 : 0.0)
         + (hasCalendar ? Math.max(20.0, clockModel.calendarFontSize * 1.4) : 0.0)
         + (hasTimezone ? Math.max(18.0, clockModel.secondaryFontSize * 1.4) : 0.0)
         + ((hasCalendar && hasTimezone) ? 6.0 : 0.0)
@@ -222,16 +222,20 @@ Item {
 
         Item {
             width: footer.width
-            height: visible ? 14.0 : 0.0
+            height: visible ? 10.0 : 0.0
             visible: analogueFace.clockModel.showSeparator
 
             Separator {
                 objectName: "clockAnalogueSeparator"
                 width: parent.width * 0.77
-                height: 2.0
+                height: analogueFace.clockModel.separatorThickness
                 anchors.centerIn: parent
-                thickness: 2.0
+                thickness: analogueFace.clockModel.separatorThickness
                 lineColor: analogueFace.clockModel.separatorColor
+                shadowEnabled: analogueFace.clockModel.textShadowEnabled
+                shadowColor: analogueFace.clockModel.textShadowColor
+                shadowOffsetX: analogueFace.clockModel.textShadowOffsetX
+                shadowOffsetY: analogueFace.clockModel.textShadowOffsetY
             }
         }
 

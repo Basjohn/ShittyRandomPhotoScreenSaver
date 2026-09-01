@@ -641,7 +641,7 @@ class TestWidgetsTab:
                 "position": "Custom",
                 "show_day_of_week": True,
                 "show_date": True,
-                "show_digital_separator": True,
+                "show_separator": True,
                 "calendar_font_size": 28,
             },
             "custom_layout": {
@@ -662,7 +662,7 @@ class TestWidgetsTab:
         try:
             assert tab.clock_font_size.isEnabled() is False
             assert tab.clock_calendar_font_size.isEnabled() is False
-            assert tab.clock_show_digital_separator.isChecked() is True
+            assert tab.clock_show_separator.isChecked() is True
             assert tab.clock_font_combo.isEnabled() is True
             assert tab._custom_resize_lock_notice_labels["clock"].isHidden() is False
         finally:
@@ -2634,7 +2634,8 @@ def test_build_current_widgets_config_uses_live_clock_preview_fields(qt_app, set
         tab.clock_show_tz.setChecked(True)
         tab.clock_show_day_of_week.setChecked(True)
         tab.clock_show_date.setChecked(True)
-        tab.clock_show_digital_separator.setChecked(True)
+        tab.clock_show_separator.setChecked(True)
+        tab.clock_separator_thickness.setValue(4)
         tab.clock_calendar_layout.setCurrentIndex(
             tab.clock_calendar_layout.findData("two_lines")
         )
@@ -2650,7 +2651,8 @@ def test_build_current_widgets_config_uses_live_clock_preview_fields(qt_app, set
         assert built["show_timezone_label"] is True
         assert built["show_day_of_week"] is True
         assert built["show_date"] is True
-        assert built["show_digital_separator"] is True
+        assert built["show_separator"] is True
+        assert built["separator_thickness"] == 4
         assert built["calendar_layout"] == "two_lines"
         assert built["calendar_font_size"] == 26
         assert built["position"] == "Bottom Left"
@@ -2671,12 +2673,12 @@ def test_clock_calendar_controls_are_conditioned_and_save_canonical_keys(
         tab.clock_show_day_of_week.setChecked(False)
         tab.clock_show_date.setChecked(False)
         assert tab._clock_calendar_controls_container.isHidden() is True
-        assert tab.clock_show_digital_separator.isEnabled() is False
+        assert tab.clock_show_separator.isEnabled() is False
 
         tab.clock_show_day_of_week.setChecked(True)
         assert tab._clock_calendar_controls_container.isHidden() is False
         assert tab._clock_calendar_layout_row.isHidden() is True
-        assert tab.clock_show_digital_separator.isEnabled() is True
+        assert tab.clock_show_separator.isEnabled() is True
 
         tab.clock_show_date.setChecked(True)
         assert tab._clock_calendar_layout_row.isHidden() is False
@@ -2684,12 +2686,14 @@ def test_clock_calendar_controls_are_conditioned_and_save_canonical_keys(
             tab.clock_calendar_layout.findData("two_lines")
         )
         tab.clock_calendar_font_size.setValue(31)
-        tab.clock_show_digital_separator.setChecked(True)
+        tab.clock_show_separator.setChecked(True)
+        tab.clock_separator_thickness.setValue(5)
 
         clock, _, _ = save_clock_settings(tab)
         assert clock["show_day_of_week"] is True
         assert clock["show_date"] is True
-        assert clock["show_digital_separator"] is True
+        assert clock["show_separator"] is True
+        assert clock["separator_thickness"] == 5
         assert clock["calendar_layout"] == "two_lines"
         assert clock["calendar_font_size"] == 31
     finally:

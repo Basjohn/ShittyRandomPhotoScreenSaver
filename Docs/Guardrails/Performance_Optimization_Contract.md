@@ -151,6 +151,21 @@ The later modest-load run felt very good physically and provides a useful health
 
 Important comparison: raw GC collection frequency can move independently of perceived quality. The modest run did not win every collection-count statistic, yet the worst deep pause was ~67.7 ms instead of ~130-146 ms and the run felt materially better. **Optimize latency tails and freshness, not collection count in isolation.**
 
+### 2026-09-01 paired Bubble hitch / Gen2 evidence
+
+A later operator comparison of two runs at different overall load provides a stronger attribution seam than aggregate collection counts:
+
+- every observed generation-2 collection in both sampled runs coincided with a Bubble **wall-clock inter-tick gap** of the same order;
+- the newer/lighter sample contained Gen2 pauses of roughly **47.3 ms and 41.2 ms**, paired with Bubble gaps around **50.7 ms and 46.1 ms**; both Gen2 scans collected **zero objects**;
+- the older sample showed the same shape with roughly **49–68 ms** Gen2 pauses;
+- Gen2 recurrence in those samples remained roughly on the same ~75–79 second scale despite the newer run carrying less load;
+- the compared builds contain no Bubble runtime change across the relevant seam, so this recurrent hitch class predates the lifecycle-fade slice;
+- non-GC stalls also exist, so GC is a proven recurring hitch class rather than a complete explanation for every visible hitch.
+
+Interpretation: a stop-the-world pause can be highly visible while Bubble's measured compute cost, FPS/cadence and rolling ms counters remain healthy, because the process is paused **outside** the measured Bubble work and the next calculation resumes cheaply. A zero-yield Gen2 pause also proves that "objects collected" is not a useful proxy for pause cost; long-lived tracked graph scanning/lifetime shape remains a candidate.
+
+J instrumentation should therefore correlate GC callback start/stop timestamps, generation/duration/yield, process wall-clock inter-tick gaps and active GUI/Quick presentation timing in one epoch. When mechanism hunting is needed, prefer bounded tracked-object/type/lifetime evidence around the pause over collector-threshold experiments. Do not remove the scalar Bubble fades, lower authored cadence, or move forced collections merely because aggregate counters look cleaner.
+
 ## 5. Telemetry interpretation guardrails
 
 Do not optimize a number until its semantics are understood.

@@ -7,6 +7,8 @@ Item {
 
     property bool presentationActive: false
     property bool customLayoutWorkingVisible: true
+    property real authoredSceneOpacity: 1.0
+    property real startupRevealOpacity: 1.0
     property bool cardShellEnabled: true
     property color cardBackgroundColor: "#b3101010"
     property color cardBorderColor: "#e6ffffff"
@@ -18,26 +20,50 @@ Item {
     property real cardShadowOffsetX: 0.0
     property real cardShadowOffsetY: 4.0
     property real cardShadowSpread: 0.0
+    property real cardShadowExtendLeft: 0.0
+    property real cardShadowExtendTop: 0.0
+    property real cardShadowExtendRight: 0.0
+    property real cardShadowExtendBottom: 0.0
+    readonly property real cardShadowBaseLeft: Math.max(0.0, -cardShadowOffsetX)
+    readonly property real cardShadowBaseTop: Math.max(0.0, -cardShadowOffsetY)
+    readonly property real cardShadowBaseRight: Math.max(0.0, cardShadowOffsetX)
+    readonly property real cardShadowBaseBottom: Math.max(0.0, cardShadowOffsetY)
     property bool perfHudEnabled: false
     property string perfHudText: ""
 
-    visible: presentationActive && customLayoutWorkingVisible
+    opacity: authoredSceneOpacity * startupRevealOpacity
+    visible: presentationActive && customLayoutWorkingVisible && opacity > 0.0
 
     RectangularShadow {
         id: cardShadow
-        anchors.fill: cardBackground
+        x: cardBackground.x
+            - visualizerPresentationRoot.cardShadowBaseLeft
+            - visualizerPresentationRoot.cardShadowExtendLeft
+        y: cardBackground.y
+            - visualizerPresentationRoot.cardShadowBaseTop
+            - visualizerPresentationRoot.cardShadowExtendTop
+        width: cardBackground.width
+            + visualizerPresentationRoot.cardShadowBaseLeft
+            + visualizerPresentationRoot.cardShadowBaseRight
+            + visualizerPresentationRoot.cardShadowExtendLeft
+            + visualizerPresentationRoot.cardShadowExtendRight
+        height: cardBackground.height
+            + visualizerPresentationRoot.cardShadowBaseTop
+            + visualizerPresentationRoot.cardShadowBaseBottom
+            + visualizerPresentationRoot.cardShadowExtendTop
+            + visualizerPresentationRoot.cardShadowExtendBottom
         visible: visualizerPresentationRoot.cardShellEnabled
             && visualizerPresentationRoot.cardShadowEnabled
         color: visualizerPresentationRoot.cardShadowColor
         blur: visualizerPresentationRoot.cardShadowBlur
         radius: visualizerPresentationRoot.cardCornerRadius
         spread: visualizerPresentationRoot.cardShadowSpread
-        offset: Qt.vector2d(
-            visualizerPresentationRoot.cardShadowOffsetX,
-            visualizerPresentationRoot.cardShadowOffsetY
-        )
-        cached: false
-        z: -1
+        // Card direction is one-sided surface extrusion, never effect
+        // translation. This preserves opposite-edge coverage at large Extra
+        // Offset values just like the shared ordinary-widget OverlayCard.
+        offset: Qt.vector2d(0.0, 0.0)
+        cached: true
+        z: 0
     }
 
     Rectangle {
@@ -47,14 +73,14 @@ Item {
         visible: visualizerPresentationRoot.cardShellEnabled
         color: visualizerPresentationRoot.cardBackgroundColor
         radius: visualizerPresentationRoot.cardCornerRadius
-        z: 0
+        z: 1
     }
 
     Item {
         id: visualizerContentHost
         objectName: "visualizerContentHost"
         anchors.fill: parent
-        z: 1
+        z: 2
     }
 
     Rectangle {
@@ -66,7 +92,7 @@ Item {
         radius: visualizerPresentationRoot.cardCornerRadius
         border.color: visualizerPresentationRoot.cardBorderColor
         border.width: visualizerPresentationRoot.cardBorderWidth
-        z: 2
+        z: 3
     }
 
     Rectangle {

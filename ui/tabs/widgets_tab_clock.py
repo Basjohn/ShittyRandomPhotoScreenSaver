@@ -77,9 +77,15 @@ def _update_clock_calendar_visibility(tab: WidgetsTab) -> None:
         controls.setVisible(show_day or show_date)
     if layout_row is not None:
         layout_row.setVisible(show_day and show_date)
-    separator = getattr(tab, 'clock_show_digital_separator', None)
+    separator = getattr(tab, 'clock_show_separator', None)
+    separator_thickness = getattr(tab, 'clock_separator_thickness', None)
+    separator_available = bool(show_day or show_date)
     if separator is not None:
-        separator.setEnabled(show_day or show_date)
+        separator.setEnabled(separator_available)
+    if separator_thickness is not None:
+        separator_thickness.setEnabled(
+            separator_available and separator is not None and separator.isChecked()
+        )
 
 
 def _sync_clock_swatch(tab: WidgetsTab, btn_attr: str, color_attr: str) -> None:
@@ -334,24 +340,46 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     time_layout.addWidget(tab._clock_analog_container)
 
-    # Digital-only controls container
+    # Separator is shared by analogue and digital faces.  The old persisted
+    # ``show_digital_separator`` name survives as a read-only compatibility
+    # input only; current UI and saves own the mode-neutral ``show_separator``.
+    separator_row = _aligned_row(time_layout, "Separator:")
+    tab.clock_show_separator = QCheckBox("Show Above Day / Date")
+    tab.clock_show_separator.setProperty("circleIndicator", True)
+    tab.clock_show_separator.setChecked(
+        tab._default_bool('clock', 'show_separator', False)
+    )
+    tab.clock_show_separator.setToolTip(
+        "Draw the shared horizontal separator between the clock face/time and optional day/date text."
+    )
+    tab.clock_show_separator.stateChanged.connect(tab._save_settings)
+    tab.clock_show_separator.stateChanged.connect(tab._update_stack_status)
+    tab.clock_show_separator.stateChanged.connect(
+        lambda: _update_clock_calendar_visibility(tab)
+    )
+    separator_row.addWidget(tab.clock_show_separator)
+
+    tab.clock_separator_thickness = QSpinBox()
+    tab.clock_separator_thickness.setRange(1, 8)
+    tab.clock_separator_thickness.setValue(
+        tab._default_int('clock', 'separator_thickness', 2)
+    )
+    tab.clock_separator_thickness.setSuffix(" px")
+    tab.clock_separator_thickness.setAccelerated(True)
+    tab.clock_separator_thickness.setToolTip(
+        "Thickness of the shared analogue/digital separator line in logical pixels."
+    )
+    tab.clock_separator_thickness.valueChanged.connect(tab._save_settings)
+    tab.clock_separator_thickness.valueChanged.connect(tab._update_stack_status)
+    separator_row.addWidget(tab.clock_separator_thickness)
+    separator_row.addStretch()
+
+    # Keep a real digital-only container for future digital-only controls, but
+    # do not hide the shared separator controls when analogue mode is active.
     tab._clock_digital_container = QWidget()
     _digital_layout = QVBoxLayout(tab._clock_digital_container)
     _digital_layout.setContentsMargins(0, 0, 0, 12)
     _digital_layout.setSpacing(12)
-
-    tab.clock_show_digital_separator = QCheckBox("Show Separator Above Day / Date")
-    tab.clock_show_digital_separator.setProperty("circleIndicator", True)
-    tab.clock_show_digital_separator.setChecked(
-        tab._default_bool('clock', 'show_digital_separator', False)
-    )
-    tab.clock_show_digital_separator.setToolTip(
-        "Draw a compact horizontal separator between the Digital time and optional day/date text."
-    )
-    tab.clock_show_digital_separator.stateChanged.connect(tab._save_settings)
-    tab.clock_show_digital_separator.stateChanged.connect(tab._update_stack_status)
-    _digital_layout.addWidget(tab.clock_show_digital_separator)
-
     time_layout.addWidget(tab._clock_digital_container)
 
     tab.clock_analog_mode.stateChanged.connect(lambda: _update_clock_mode_visibility(tab))
@@ -578,8 +606,13 @@ def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.clock_show_date.setChecked(
         tab._config_bool('clock', clock_config, 'show_date', False)
     )
-    tab.clock_show_digital_separator.setChecked(
-        tab._config_bool('clock', clock_config, 'show_digital_separator', False)
+    separator_value = clock_config.get(
+        'show_separator',
+        clock_config.get('show_digital_separator', tab._default_bool('clock', 'show_separator', False)),
+    )
+    tab.clock_show_separator.setChecked(bool(separator_value))
+    tab.clock_separator_thickness.setValue(
+        max(1, min(8, tab._config_int('clock', clock_config, 'separator_thickness', 2)))
     )
     calendar_layout = tab._config_str(
         'clock',
@@ -686,7 +719,8 @@ def save_clock_settings(tab: WidgetsTab) -> tuple[dict, dict, dict]:
         'show_timezone': tab.clock_show_tz.isChecked(),
         'show_day_of_week': tab.clock_show_day_of_week.isChecked(),
         'show_date': tab.clock_show_date.isChecked(),
-        'show_digital_separator': tab.clock_show_digital_separator.isChecked(),
+        'show_separator': tab.clock_show_separator.isChecked(),
+        'separator_thickness': tab.clock_separator_thickness.value(),
         'calendar_layout': tab.clock_calendar_layout.currentData() or 'shared_line',
         'calendar_font_size': tab.clock_calendar_font_size.value(),
         'position': tab.clock_position.currentText(),

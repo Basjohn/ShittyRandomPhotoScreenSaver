@@ -239,8 +239,7 @@ shadow glyph at signed offset
 ```
 
 No ordinary text blur or MultiEffect/layer capture for parity. Canonical direction resolves in Python.
-Current ordinary base distances live in the retained widget host; user Extra Offset is added before
-direction resolves signs/axes.
+Current ordinary base distances live in the retained widget host. Card/frame **Extra Offset grows only the selected far edge(s)** while preserving opposite-edge coverage; Text Extra Offset remains glyph displacement. Canonical direction resolves in Python.
 
 A family owns a visual exception only if it independently authored that relationship. Retired
 `shadowtuning.json` card/text/header/icon/control/volume values are not family-authored because a widget once

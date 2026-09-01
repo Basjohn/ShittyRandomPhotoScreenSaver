@@ -354,6 +354,8 @@ authoritative under edge-resized wide/tall viewports. Correcting only the three 
 
 **R-69 is the golden viewport rule.** Bubble's renderer-facing head radius must not receive a global `baseline/current`, `1 / viewport_extent`, or equivalent large-viewport compressor. Ghost consumes already-normalized historical positions exactly once and must not inherit the ripple-wake axis/radial compression. The rejected global head compressor made extreme CUSTOM Bubble look nearly non-reactive while DSP/logical telemetry stayed healthy. If full expansion is aesthetically too large, target only a proven upper visual tail; do not flatten the full response curve. The same principle applies across Spectrum/Oscilloscope/Sine/DevCurve: geometry adaptation or smoothing may not silently weaken authored musical response or freshness.
 
+Bubble lifecycle visibility is subordinate to that rule. Runtime birth/pop fades may change only the existing per-bubble alpha envelope (current contract: ~200 ms active birth, ~500 ms idle birth, ~400 ms pop). They must not add a cadence, timer, viewport multiplier, radius/pulse/motion rewrite, Ghost/history compression, or presentation queue. Canonical/wide/tall CUSTOM shapes must receive the same alpha timing.
+
 ## 14A. Product display admission and semantic input
 
 Current product semantics admit one visualizer instance. Resolve its requested monitor against participating Quick displays

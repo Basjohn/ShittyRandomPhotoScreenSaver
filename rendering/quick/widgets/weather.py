@@ -15,7 +15,10 @@ from typing import Any
 from PySide6.QtCore import QObject, Property, Signal
 from PySide6.QtGui import QColor
 
-from core.settings.shadow_direction import resolve_signed_offset
+from core.settings.shadow_direction import (
+    resolve_directional_extensions,
+    resolve_signed_offset,
+)
 
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
@@ -256,11 +259,8 @@ class WeatherPresentationStyle:
         text_extra = _bounded_float(
             shadow_values.get("text_extra_offset"), 0.0, 0.0, 40.0
         )
-        card_offset = resolve_signed_offset(
-            direction,
-            ORDINARY_CARD_SHADOW_BASE[0] + frame_extra,
-            ORDINARY_CARD_SHADOW_BASE[1] + frame_extra,
-        )
+        card_offset = resolve_signed_offset(direction, *ORDINARY_CARD_SHADOW_BASE)
+        card_extensions = resolve_directional_extensions(direction, frame_extra)
         text_offset = resolve_signed_offset(
             direction,
             ORDINARY_TEXT_SHADOW_BASE[0] + text_extra,
@@ -293,6 +293,10 @@ class WeatherPresentationStyle:
                 ),
                 shadow_offset_x=card_offset[0],
                 shadow_offset_y=card_offset[1],
+                shadow_extend_left=card_extensions[0],
+                shadow_extend_top=card_extensions[1],
+                shadow_extend_right=card_extensions[2],
+                shadow_extend_bottom=card_extensions[3],
             ),
             text_shadow_enabled=_as_bool(
                 shadow_values.get("text_enabled"), True

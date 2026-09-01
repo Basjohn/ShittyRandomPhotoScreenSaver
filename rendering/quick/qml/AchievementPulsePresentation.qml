@@ -202,10 +202,9 @@ OverlayWidget {
                     }
                 }
 
-                Image {
+                ArtworkFadeImage {
                     id: artworkImage
                     objectName: "achievementArtworkImage"
-                    visible: source.toString().length > 0
                     anchors.fill: parent
                     anchors.margins: 2.0
                     source: achievementRoot.achievementModel.artworkSource
@@ -302,7 +301,8 @@ OverlayWidget {
                 id: latestArtworkFrame
                 objectName: "achievementLatestArtworkFrame"
                 visible: achievementRoot.achievementModel.showLatestArtwork
-                    && achievementRoot.achievementModel.latestArtworkSource.length > 0
+                    && (achievementRoot.achievementModel.latestArtworkSource.length > 0
+                        || latestArtworkImage.transitionVisible)
                     && unlockRepeater.count > 0
                 x: Math.max(18.0, normalContent.artworkX - 48.0)
                 y: 130.0
@@ -327,7 +327,8 @@ OverlayWidget {
                     border.width: 1.0
                 }
 
-                Image {
+                ArtworkFadeImage {
+                    id: latestArtworkImage
                     objectName: "achievementLatestArtworkImage"
                     anchors.fill: parent
                     anchors.margins: 1.0
