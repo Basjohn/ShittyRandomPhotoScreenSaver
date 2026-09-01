@@ -370,7 +370,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_weather_presentation.py` | **KEEP — MIGRATION PERMANENT** | F2 retained Weather runtime-consumer/model/state/icon/style/action/host contract; retain as permanent current coverage. |
 | `tests/test_qtquick_ordinary_widget_host.py` | **KEEP — MIGRATION PERMANENT** | E3/E4 retained ordinary-widget host + shared shell primitives; root fade, cached card shadow, signed offsets and offset-only text shadow are destination architecture. |
 | `tests/test_shadow_direction.py` | **KEEP — MIGRATION PERMANENT** | E4 canonical direction/settings/resolver/QML-boundary contract; retain as permanent current coverage. |
-| `tests/test_qtquick_p0_presentation_benchmark.py` | **WILL BE OBSOLETE — J** | Architecture-selection benchmark, not a forever product regression. |
+| `tests/test_qtquick_p0_presentation_benchmark.py` | **DELETE — I TOOLING AUDIT** | Coupled to deleted replay/P0 benchmark ownership; current Quick runtime/presentation tests own destination behavior. |
 | `tests/test_qtquick_particle_transition.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_phase_c_effect_smoke.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_phase_c_registry_parity.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
@@ -475,7 +475,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_visualizer_preset_transfer.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_presets.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_reactivity_quality.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
-| `tests/test_visualizer_replay.py` | **RETIRE/REHOME — I** | Imports the removed QWidget replay host; the maintained `destination` profile uses runtime-shaped Settings replacement and controller-owned cadence/bridge tests instead. Preserve only authored-fidelity assertions that still falsify a destination contract. |
+| `tests/test_visualizer_replay.py` | **DELETE — I TOOLING AUDIT** | Imports deleted replay host. Preserve fixture/golden data and current temporal/BTF/viewport tests, not executable legacy replay authority. |
 | `tests/test_visualizer_retired_modes.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_runtime_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination runtime-controller contract, including presentation-neutral viewport configuration ownership; retain as permanent current coverage. |
 | `tests/test_visualizer_settings_plumbing.py` | **I RECONCILIATION — OLD PHYSICAL OWNER (MIXED)** | Registry/settings/shader contracts survive; known mode fallback is current. Retire/rehome old presenter/overlay assertions with their source owner. |
@@ -497,7 +497,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_transition_catalog_imports.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_transition_distribution.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_transition_endframe.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
-| `tests/test_transition_perf_health_parser.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
+| `tests/test_transition_perf_health_parser.py` | **DELETE — I TOOLING AUDIT** | Tests an overgrown generic historical parser that duplicates current instrumentation and carries retired GL/QWidget assumptions. |
 | `tests/test_transition_registry.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_transition_state_manager.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_transitions.py` | **KEEP** | Retain; no current retirement identified. |
@@ -704,7 +704,7 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_retained_base_texture.py` | **STALE I RESIDUE — OLD PHYSICAL OWNER** | Delete with legacy presenter during I after equivalent current-owner coverage is confirmed. |
 | `tests/test_startup_shader_warmup.py` | **I RECONCILIATION — OLD PHYSICAL OWNER** | Require equivalent Quick-owner coverage before deleting/re-homing stale legacy-owner assertions in I. |
 | `tests/test_stencil_mask_alignment.py` | **I RECONCILIATION — OLD PHYSICAL OWNER** | Require equivalent Quick-owner coverage before deleting/re-homing stale legacy-owner assertions in I. |
-| `tests/test_worker_push_presentation_benchmark.py` | **WILL BE OBSOLETE — J** | Migration comparison harness; archive after final cutover validation. |
+| `tests/test_worker_push_presentation_benchmark.py` | **DELETE — I TOOLING AUDIT** | Imports deleted physical Visualizer/presenter owners; no current destination contract requires the executable benchmark. |
 
 ### 10.13 Historical phase / migration regression
 
@@ -748,8 +748,8 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_p4_rhi_fallback_visibility.py` | **STALE I RESIDUE — OLD PHYSICAL OWNER** | Legacy retained-base/QPainter fallback diagnostics tied to GLCompositor paint path. |
 | `tests/test_p4_stage_integration.py` | **I RECONCILIATION — OLD PHYSICAL OWNER** | Require equivalent Quick-owner coverage before deleting/re-homing stale legacy-owner assertions in I. |
 | `tests/test_p4_stage_marker_order.py` | **I RECONCILIATION — OLD PHYSICAL OWNER** | Require equivalent Quick-owner coverage before deleting/re-homing stale legacy-owner assertions in I. |
-| `tests/test_phase1_measurement_benchmark.py` | **WILL BE OBSOLETE — J** | Historical architecture/performance evidence; archive after J. |
-| `tests/test_phase3_runtime_lifecycle.py` | **I RECONCILIATION — OLD PHYSICAL OWNER** | Mixed: durable generation/stale-callback lifecycle plus legacy GL/overlay teardown. Split as H/I advances. |
+| `tests/test_phase1_measurement_benchmark.py` | **DELETE — I TOOLING AUDIT** | Historical measurement experiment superseded by built-in PERF/usage instrumentation and passive external resource sampling. |
+| `tests/test_phase3_runtime_lifecycle.py` | **DELETE — I TOOLING AUDIT** | Imports `tools.phase3_lifecycle_harness`; historical lifecycle evidence is already preserved and current runtime teardown/recreation tests own destination behavior. |
 | `tests/test_phase4_resource_containment.py` | **I RECONCILIATION — OLD PHYSICAL OWNER** | Require equivalent Quick-owner coverage before deleting/re-homing stale legacy-owner assertions in I. |
 | `tests/test_phase_e_effect_corruption.py` | **OBSOLETE NOW** | Historical QGraphicsEffect investigation; many pass/documentation bodies and trivial checks. Real focus/native-event coverage exists elsewhere. |
 
@@ -775,7 +775,8 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_qtquick_family_product_actions.py` | **KEEP — PERMANENT** | Presentation-neutral product consequences for retained Reddit URL actions and per-display Clock runtime mode persistence. |
 | `tests/test_logging_console_encoding.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/test_logging_routing.py` | **KEEP** | Retain; no current retirement identified. |
-| `tests/test_main_run_lifetime.py` | **KEEP** | Retain; no current retirement identified. |
+| `tests/test_main_run_lifetime.py` | **KEEP — PERMANENT** | Production shutdown ordering; R-72 requires telemetry flush/close without importing operator analysis tools. |
+| `tests/test_tooling_ownership.py` | **KEEP — PERMANENT** | Production/tool boundary, canonical test-runner delegation, passive attached-PID sampling and current ImageWorker SHM harness ownership. |
 | `tests/test_mc_context_menu.py` | **I RECONCILIATION — QUICK SUCCESSOR EXISTS** | Rehome display/input/topology behavior to Quick runtime. |
 | `tests/test_mc_entrypoint_contract.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/test_mc_keyboard_input.py` | **I RECONCILIATION — QUICK SUCCESSOR EXISTS** | Rehome display/input/topology behavior to Quick runtime. |
@@ -786,7 +787,7 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_process_supervisor.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/test_qt_timer_threading.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/test_queued_logging.py` | **KEEP** | Retain; no current retirement identified. |
-| `tests/test_recovery_evidence_parser.py` | **KEEP** | Retain; no current retirement identified. |
+| `tests/test_recovery_evidence_parser.py` | **DELETE — I TOOLING AUDIT** | Coupled to broken self-importing historical recovery parser; phase reports preserve the old evidence. |
 | `tests/test_runtime_callback_ownership.py` | **I RECONCILIATION — F OWNER ALREADY PORTED** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_runtime_destruction.py` | **I RECONCILIATION — F OWNER ALREADY PORTED** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_save_debounce.py` | **KEEP** | Retain; no current retirement identified. |

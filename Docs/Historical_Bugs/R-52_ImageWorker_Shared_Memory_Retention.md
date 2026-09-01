@@ -48,3 +48,8 @@ Never retain creator mappings as a worker-lifetime cache, clear response buffers
 ## Migration Record
 
 This file is the standalone detailed record copied from the original `R-52` entry in `Docs/Historical_Bugs.md`. The monolithic source entry remains unchanged during the copy-first migration and will be replaced by a compact index summary only after the historical-bug set has been migrated and mechanically checked.
+
+
+## Current Tooling Note
+
+The historical evidence above correctly names `tools/phase4_image_worker_shm_harness.py`. During the post-H I tooling audit on 2026-09-01, that still-useful capability was re-homed as `tools/image_worker_shm_lifecycle_harness.py` so the executable no longer advertises obsolete Phase-4 authority. The historical command remains part of this incident record; current operators should use the re-homed harness.

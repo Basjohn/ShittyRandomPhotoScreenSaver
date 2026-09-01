@@ -725,7 +725,12 @@ def reindex_curated_presets(
     return processed
 
 
-def repair_file(path: Path, mode: str) -> Tuple[Path, Dict[str, Any]]:
+def repair_file(
+    path: Path,
+    mode: str,
+    *,
+    sync_shipped_artifacts: bool = True,
+) -> Tuple[Path, Dict[str, Any]]:
     try:
         raw_text = path.read_text(encoding="utf-8")
         payload = json.loads(raw_text)
@@ -749,7 +754,8 @@ def repair_file(path: Path, mode: str) -> Tuple[Path, Dict[str, Any]]:
         "removed": stats["removed"],
         "changed": stats["changed"],
     }
-    _regenerate_shipped_preset_artifacts_if_needed([path])
+    if sync_shipped_artifacts:
+        _regenerate_shipped_preset_artifacts_if_needed([path])
     return backup_path, stats
 
 
@@ -789,7 +795,7 @@ def repair_all_presets(
     processed: List[Tuple[str, Path, Path, Dict[str, Any]]] = []
     for mode, path in _discover_preset_files():
         try:
-            backup, stats = repair_file(path, mode)
+            backup, stats = repair_file(path, mode, sync_shipped_artifacts=False)
         except Exception as exc:  # pragma: no cover - batch path logging
             if on_error:
                 on_error(mode, path, exc)
@@ -915,7 +921,7 @@ class VisualizerPresetRepairApp(QWidget):
 
     def _repair(self, path: Path, mode: str) -> None:
         try:
-            backup, stats = repair_file(path, mode)
+            backup, stats = repair_file(path, mode, sync_shipped_artifacts=False)
         except Exception as exc:
             self._show_error(str(exc))
             return

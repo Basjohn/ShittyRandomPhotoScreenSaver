@@ -124,3 +124,5 @@ Bubble's durable reflow contract is routed through `Spec.md`, `Docs/Visualizer_R
 Closed rationale and old owner maps belong under `Docs/Historical_Plans/`, `Docs/Historical_Bugs/`,
 `Docs/phase_reports/`, `Docs/Performance_Evidence/`, or `Docs/audits/`. Historical wording does not define current work
 admission or ownership and is not rewritten merely to sound current.
+
+- `Docs/Tooling_Audit_2026-09-01.md` — post-H operator-tool keep/delete/migrate authority; R-72 production/tool boundary.

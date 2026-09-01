@@ -904,30 +904,14 @@ def main(*, entrypoint: str = "main"):
     except Exception:
         logger.debug("[QT_CAPTURE] Pre-exit snapshot failed", exc_info=True)
 
-    logging_flushed_for_parser = flush_logging()
-    if not logging_flushed_for_parser and diagnostic_record is not None:
+    # Flush ordinary telemetry before final close so every out-of-process
+    # diagnostic/parser sees a complete terminal record. Production teardown
+    # must never import or execute tools: parsers consume logs after the app
+    # exits and therefore cannot change runtime/exit semantics.
+    logging_flushed_before_close = flush_logging()
+    if not logging_flushed_before_close and diagnostic_record is not None:
         diagnostic_record(
-            "ordinary_logging_pre_parser_flush_timeout",
-        )
-
-    # When PERF metrics are enabled for this run, automatically invoke the
-    # PERF helper to summarise recent Spotify visualiser and Slide metrics
-    # from the dedicated screensaver_perf.log. This is a best-effort helper
-    # and failures are logged at DEBUG only so normal runs are unaffected.
-    try:
-        if perf_mode and logging_flushed_for_parser:
-            try:
-                from scripts import spotify_vis_metrics_parser as _sv  # type: ignore[import]
-                _sv.main()
-            except Exception:
-                logger.debug(
-                    "[PERF] spotify_vis_metrics_parser auto-run failed",
-                    exc_info=True,
-                )
-    except Exception:
-        logger.debug(
-            "[PERF] spotify_vis_metrics_parser auto-run guard failed",
-            exc_info=True,
+            "ordinary_logging_pre_close_flush_timeout",
         )
 
     logging_metrics = flush_and_close_logging()

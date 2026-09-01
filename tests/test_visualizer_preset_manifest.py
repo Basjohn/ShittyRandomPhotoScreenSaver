@@ -15,6 +15,7 @@ from core.visualizer_preset_manifest import (
     sync_curated_preset_tree,
     write_curated_visualizer_preset_manifest,
 )
+from tools.regenerate_visualizer_shipped_presets import audit_repo_shipped_visualizer_preset_artifacts
 
 
 def test_visualizer_preset_manifest_matches_repo_tree() -> None:
@@ -259,3 +260,32 @@ def test_regenerate_repo_shipped_visualizer_preset_artifacts_rebuilds_release_tr
 def test_is_managed_curated_preset_path_excludes_custom_slot_names() -> None:
     assert is_managed_curated_preset_path(Path("spectrum/preset_2_organs.json")) is True
     assert is_managed_curated_preset_path(Path("spectrum/preset_4_custom.json")) is False
+
+
+def test_shipped_visualizer_preset_audit_is_read_only_and_detects_drift(tmp_path: Path) -> None:
+    source_root = tmp_path / "presets" / "visualizer_modes" / "spectrum"
+    source_root.mkdir(parents=True)
+    source_file = source_root / "preset_1_organs.json"
+    source_file.write_text('{"name":"Organs"}', encoding="utf-8")
+
+    regenerate_repo_shipped_visualizer_preset_artifacts(tmp_path)
+    source_before = source_file.read_bytes()
+    release_file = (
+        tmp_path
+        / "release"
+        / "media_center"
+        / "presets"
+        / "visualizer_modes"
+        / "spectrum"
+        / "preset_1_organs.json"
+    )
+    release_before = release_file.read_bytes()
+
+    assert audit_repo_shipped_visualizer_preset_artifacts(tmp_path) == ()
+    assert source_file.read_bytes() == source_before
+    assert release_file.read_bytes() == release_before
+
+    release_file.write_text('{"name":"Drift"}', encoding="utf-8")
+    findings = audit_repo_shipped_visualizer_preset_artifacts(tmp_path)
+    assert any("release content drift: spectrum/preset_1_organs.json" in item for item in findings)
+    assert source_file.read_bytes() == source_before

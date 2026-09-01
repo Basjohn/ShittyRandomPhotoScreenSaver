@@ -34,6 +34,7 @@ Current migration implementation sequencing is **not** owned by this folder. Rea
 
 ## R Records
 
+- [R-72 — Production Shutdown Imported A Dead Performance Parser](R-72_Production_Shutdown_Imported_Dead_Perf_Parser.md)
 - [R-71 — Visualizer Audio Per-Frame Task And DSP-State Allocation Drove GC Pressure](R-71_Visualizer_Audio_Per_Frame_Task_And_DSP_State_Allocation.md)
 - [R-70 — Gmail CUSTOM Uniform Scale Needed Different Width And Height Shell Semantics](R-70_Gmail_Custom_Uniform_Scale_Preferred_Dimension_Split.md)
 - [R-69 — Bubble Extreme-Viewport Global Radius Compression Suppressed Reactivity](R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md)

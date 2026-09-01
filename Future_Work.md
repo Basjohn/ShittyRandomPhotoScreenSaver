@@ -487,9 +487,11 @@ their first prototypes are abandoned. Their intended identities should not colla
 
 ---
 
-# 10. Ordinary-widget card materials — default translucency, optional Glass/Acrylic
+# 10. Ordinary-widget card materials — committed Normal / Glass / Acrylic modes
 
-**Status: far-future optional customization for the Glass/Acrylic modes. The ordinary translucent card
+Late J+ execution/admission checklist: `Docs/QtQuick_Migration/J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md`, section **10. Committed non-blocking J+ work — ordinary-widget Glass / Acrylic cards**.
+
+**Status: committed J+ work, non-blocking for J close. It remains tracked until implemented/accepted or explicitly superseded. The ordinary translucent card
 is the baseline and must remain the default.** This feature is not migration parity and must not turn
 every ordinary widget into an effect-bearing card simply because Qt Quick makes that possible.
 
@@ -500,10 +502,10 @@ ordinary `Rectangle` background with independent alpha, border and cached shadow
 stays above it. Its current default background (`#b3101010`) is already translucent. Treat that as the
 source-level baseline even if runtime visual acceptance is temporarily unavailable during migration.
 
-The default material mode is therefore:
+The default material path is therefore:
 
 ```text
-material_mode = translucent   # DEFAULT
+card_material_mode = normal   # DEFAULT/OFF; resolves to current translucent path
 
 ordinary OverlayCard
     -> one alpha/tinted Rectangle fill
@@ -512,7 +514,7 @@ ordinary OverlayCard
     -> retained family content
 ```
 
-Requirements for `translucent`:
+Requirements for `normal` / the current translucent path:
 
 - no backdrop capture;
 - no offscreen texture/FBO created for card materials;
@@ -522,18 +524,19 @@ Requirements for `translucent`:
 - preserve current whole-widget root-fade semantics;
 - cost should remain essentially the ordinary retained `OverlayCard` cost that exists now.
 
-A future Widget Theme (`.srwtheme`) may change the simple card's RGB/alpha/border/shadow, but choosing a
-Widget Theme must **not** silently enable Glass or Acrylic. Existing/Dark behavior remains the default.
+A future Widget Theme (`.srwtheme`) may change the simple card's RGB/alpha/border/shadow and, once the committed material system is physically accepted, may also set the same `card_material_mode` enum. Existing/Dark behavior remains `normal`. Theme application must never create a second material owner or independent Glass/Acrylic booleans.
 
 ## 10.2 Material modes
 
-The eventual card-material choice should be explicit and small:
+The eventual **user-facing** card-material choice should be one mutually-exclusive enum in `Settings -> Widgets -> General`, not independent booleans:
 
 ```text
-translucent   # default; current simple alpha card
-Glass         # optional scene-local frosted material
-Acrylic       # optional scene-local stronger material
+card_material_mode = normal    # DEFAULT/OFF: current simple translucent card
+card_material_mode = glass     # user-selectable scene-local frosted material
+card_material_mode = acrylic   # user-selectable scene-local stronger material
 ```
+
+`normal` is the product/UI name for the current cheap translucent `OverlayCard` path. Do not expose separate `Enable Glass` / `Enable Acrylic` toggles: invalid simultaneous states must be impossible by construction. A future Widget Theme may set the same enum, but the ordinary General control remains the direct owner and the existing/Dark theme resolves to `normal`.
 
 Glass and Acrylic are **Qt Quick scene-local materials**. They are not Windows native backdrop modes and
 must not use the Settings HWND implementation (`SetWindowCompositionAttribute`, AccentPolicy state 3/4)
@@ -584,8 +587,8 @@ Glass/Acrylic local material parameters
 normal cached card shadow + retained family content
 ```
 
-When the final Glass/Acrylic consumer disappears, the optional backdrop resources should retire and the
-display returns to the plain `translucent` cost path.
+When the final Glass/Acrylic consumer disappears, the shared backdrop resources should retire and the
+display returns to the plain `normal` / current-translucent cost path.
 
 Hard rules:
 
@@ -673,7 +676,7 @@ visual values may participate where they are genuinely appearance-only.
 
 Candidate visual ownership includes:
 
-- `material_mode`: `translucent` / `glass` / `acrylic`;
+- `card_material_mode`: `normal` / `glass` / `acrylic`;
 - ordinary card tint/opacity and existing card/background swatches;
 - Glass/Acrylic tint/material strength once those scene-local materials are physically proven;
 - border colour/opacity/width where already supported;
@@ -688,7 +691,7 @@ same visual value.
 Widget Themes do **not** own widget activation, ordinary ON/OFF, provider/account/source state, geometry,
 refresh cadence or runtime business logic.
 
-Default/Dark Widget Theme must resolve to `material_mode = translucent` and reproduce the existing simple
+Default/Dark Widget Theme must resolve to `card_material_mode = normal` and reproduce the existing simple
 card appearance as closely as practical. Glass/Acrylic remain opt-in and **must not become selectable merely because
 the file schema can name them**; the shared/lazy Qt Quick material path needs runtime visual/performance proof first.
 
@@ -703,7 +706,7 @@ Measure with representative simultaneous cards and real transitions on 1/2/N dis
 - p95/p99/tail frame cost;
 - transition temporal coherence inside and outside cards;
 - cost when one card uses a material versus many cards;
-- proof that zero Glass/Acrylic consumers returns to the plain translucent cost path.
+- proof that zero Glass/Acrylic consumers returns to the plain Normal/current-translucent cost path.
 
 Bound blur radius/sample count and use deliberate downsampling when the visual result survives it. Only
 add polished Settings controls after the material path is visually worthwhile and cheap enough.
@@ -711,8 +714,8 @@ add polished Settings controls after the material path is visually worthwhile an
 The durable contract is therefore:
 
 ```text
-DEFAULT = current cheap translucent OverlayCard
-OPTIONAL Glass/Acrylic = lazy shared per-display backdrop + bounded scene-local material
+DEFAULT Normal = current cheap translucent OverlayCard
+Glass/Acrylic = committed user-selectable modes using lazy shared per-display backdrop + bounded scene-local material
 NO per-widget capture pipelines
 NO native HWND backdrop mechanism for Quick cards
 ```
@@ -724,5 +727,5 @@ coherence and bounded-cost rules are not.
 Ideas put in this box are to be added to work asap but at a lower priotiy than future cleanup or current plan work, unless existing in those as well.
 ############
 1. Add two options in the Interaction Pill for Display. "Widget Glow on Hover" "Widget Glow On Click" with a shared swatch colour selector. These will cause a small pulse in glow effect when triggered in relation to the cursor halo and pulse out when hover leaves or click leaves. This must not introduce timers or any thread contention/starvation.
-2. Finish the already-reserved Widget Themes pill in the landed Themes tab. Prefer serializing/applying the mature existing widget visual settings (swatches, opacity, borders, shadows and other proven visual-only values) rather than inventing parallel presentation controls. Widget Themes use `.srwtheme` files and never own widget activation/ordinary ON/OFF, provider/account/source state, geometry, refresh cadence or runtime business logic. The existing/Dark Widget Theme remains the default and resolves to the current cheap `translucent` card architecture. Optional `glass` and `acrylic` material modes remain blocked on the shared/lazy Qt Quick material contract in section 10 and require runtime visual/performance proof before becoming selectable.
+2. Finish the already-reserved Widget Themes pill in the landed Themes tab. Prefer serializing/applying the mature existing widget visual settings (swatches, opacity, borders, shadows and other proven visual-only values) rather than inventing parallel presentation controls. Widget Themes use `.srwtheme` files and never own widget activation/ordinary ON/OFF, provider/account/source state, geometry, refresh cadence or runtime business logic. The existing/Dark Widget Theme remains the default and resolves to `card_material_mode = normal` / the current cheap translucent card architecture. The committed `glass` and `acrylic` material modes remain blocked on the shared/lazy Qt Quick material contract in section 10 and require runtime visual/performance proof before becoming selectable.
 3. [LOW] Give more SettingsGUI sections Flowcontainers where it would benefit well aligned space usage.

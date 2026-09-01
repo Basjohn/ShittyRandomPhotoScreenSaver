@@ -1,344 +1,260 @@
-"""Automated performance measurement tool for SRPSS.
+"""Read-only SRPSS process resource sampler.
 
-Measures CPU usage, memory, and frame timing to detect performance regressions.
-Designed to show that 2.5 baseline is better than 2.6 current state.
+This tool measures *process resource shape* without pretending those counters are
+presentation/reaction proof.  For Visualizer freshness, GPU telemetry, GC tails, transitions and Quick
+presentation use the application's own PERF/usage instrumentation and the
+focused contract/tests for the subsystem being investigated.
+
+Safety/authority rules:
+- attaching to an existing PID never terminates it;
+- launching the app is explicit via ``--launch`` and only that child is stopped;
+- no parser is imported/executed by production code;
+- CPU/RAM/thread/handle numbers are context, not permission to reduce authored
+  cadence, newest-state freshness, cache bounds or R-69 reactivity.
 """
-import subprocess
-import time
-import psutil
-import sys
-from pathlib import Path
-from typing import Optional, Dict, List
+from __future__ import annotations
+
+import argparse
 import json
+import statistics
+import subprocess
+import sys
+import time
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Iterable
+
+import psutil
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
-class PerformanceMeasurement:
-    """Measure application performance metrics."""
-    
-    def __init__(self, app_path: Path, duration_seconds: int = 15):
-        self.app_path = app_path
-        self.duration = duration_seconds
-        self.process: Optional[psutil.Process] = None
-        self.cpu_samples: List[float] = []
-        self.memory_samples: List[int] = []
-        
-    def start_app(self) -> bool:
-        """Start the application and get process handle."""
+@dataclass(frozen=True)
+class ResourceSample:
+    elapsed_s: float
+    cpu_pct: float
+    rss_mb: float
+    uss_mb: float | None
+    private_mb: float | None
+    threads: int
+    handles: int | None
+    children: int
+
+
+def _percentile(values: list[float], fraction: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = round((len(ordered) - 1) * fraction)
+    return float(ordered[max(0, min(len(ordered) - 1, index))])
+
+
+def _process_tree(root: psutil.Process) -> list[psutil.Process]:
+    processes = [root]
+    try:
+        processes.extend(root.children(recursive=True))
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        pass
+    alive: list[psutil.Process] = []
+    seen: set[int] = set()
+    for process in processes:
+        if process.pid in seen:
+            continue
+        seen.add(process.pid)
         try:
-            # Start app with PERF logging enabled through the canonical CLI.
-            cmd = [sys.executable, str(self.app_path / "main.py"), "--perf"]
-            proc = subprocess.Popen(
-                cmd,
-                cwd=str(self.app_path),
+            if process.is_running():
+                alive.append(process)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return alive
+
+
+def _memory_fields(process: psutil.Process) -> tuple[int, int | None, int | None]:
+    info = process.memory_info()
+    rss = int(info.rss)
+    uss: int | None = None
+    private: int | None = None
+    try:
+        full = process.memory_full_info()
+        if hasattr(full, "uss"):
+            uss = int(full.uss)
+        # Windows exposes ``private``; some psutil builds expose ``private_bytes``.
+        for name in ("private", "private_bytes"):
+            if hasattr(full, name):
+                private = int(getattr(full, name))
+                break
+    except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+        pass
+    return rss, uss, private
+
+
+def _sample_tree(root: psutil.Process, *, started: float) -> ResourceSample:
+    processes = _process_tree(root)
+    cpu = 0.0
+    rss = 0
+    uss_total = 0
+    private_total = 0
+    uss_known = False
+    private_known = False
+    threads = 0
+    handles = 0
+    handles_known = False
+
+    for process in processes:
+        try:
+            cpu += float(process.cpu_percent(interval=None))
+            proc_rss, proc_uss, proc_private = _memory_fields(process)
+            rss += proc_rss
+            if proc_uss is not None:
+                uss_total += proc_uss
+                uss_known = True
+            if proc_private is not None:
+                private_total += proc_private
+                private_known = True
+            threads += int(process.num_threads())
+            if hasattr(process, "num_handles"):
+                handles += int(process.num_handles())
+                handles_known = True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+
+    mib = 1024.0 * 1024.0
+    return ResourceSample(
+        elapsed_s=time.monotonic() - started,
+        cpu_pct=cpu,
+        rss_mb=rss / mib,
+        uss_mb=(uss_total / mib) if uss_known else None,
+        private_mb=(private_total / mib) if private_known else None,
+        threads=threads,
+        handles=handles if handles_known else None,
+        children=max(0, len(processes) - 1),
+    )
+
+
+def _summarize(samples: list[ResourceSample]) -> dict[str, object]:
+    def numeric(name: str) -> dict[str, float | None]:
+        values = [float(getattr(sample, name)) for sample in samples if getattr(sample, name) is not None]
+        if not values:
+            return {"mean": None, "median": None, "p95": None, "max": None}
+        return {
+            "mean": statistics.fmean(values),
+            "median": statistics.median(values),
+            "p95": _percentile(values, 0.95),
+            "max": max(values),
+        }
+
+    return {
+        "samples": len(samples),
+        "cpu_pct": numeric("cpu_pct"),
+        "rss_mb": numeric("rss_mb"),
+        "uss_mb": numeric("uss_mb"),
+        "private_mb": numeric("private_mb"),
+        "threads": numeric("threads"),
+        "handles": numeric("handles"),
+        "children": numeric("children"),
+        "first": asdict(samples[0]) if samples else None,
+        "last": asdict(samples[-1]) if samples else None,
+        "interpretation": (
+            "Process CPU may exceed 100% (approximately one logical CPU per 100%). "
+            "These resource counters do not replace application freshness/latency/GPU telemetry."
+        ),
+    }
+
+
+def _prime_cpu(root: psutil.Process) -> None:
+    for process in _process_tree(root):
+        try:
+            process.cpu_percent(interval=None)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+
+def _stop_launched(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Sample current SRPSS process resource usage safely")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--pid", type=int, help="Attach to an existing SRPSS PID; never terminated by this tool")
+    source.add_argument(
+        "--launch",
+        action="store_true",
+        help="Explicitly launch this tree's main.py --perf and stop only that child when sampling ends",
+    )
+    parser.add_argument("--duration", type=float, default=30.0, help="Sampling duration in seconds (default: 30)")
+    parser.add_argument("--interval", type=float, default=0.5, help="Sampling interval in seconds (default: 0.5)")
+    parser.add_argument("--startup-wait", type=float, default=4.0, help="Wait after --launch before sampling")
+    parser.add_argument("--output", type=Path, help="Optional JSON output path")
+    return parser
+
+
+def main(argv: Iterable[str] | None = None) -> int:
+    args = _build_parser().parse_args(list(argv) if argv is not None else None)
+    if args.duration <= 0 or args.interval <= 0:
+        raise SystemExit("--duration and --interval must be positive")
+
+    launched: subprocess.Popen[bytes] | None = None
+    try:
+        if args.launch:
+            launched = subprocess.Popen(
+                [sys.executable, str(ROOT / "main.py"), "--perf"],
+                cwd=str(ROOT),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            
-            # Wait for process to initialize and become measurable
-            time.sleep(4)
-            
-            # Verify process is still running
-            if proc.poll() is not None:
-                print(f"Process exited immediately with code {proc.returncode}")
-                return False
-            
-            # Get psutil handle
+            time.sleep(max(0.0, args.startup_wait))
+            if launched.poll() is not None:
+                print(f"SRPSS exited before sampling (code={launched.returncode})", file=sys.stderr)
+                return 2
+            root = psutil.Process(launched.pid)
+        else:
             try:
-                self.process = psutil.Process(proc.pid)
-                # Force initial CPU measurement
-                self.process.cpu_percent(interval=0.1)
-                return True
+                root = psutil.Process(int(args.pid))
+            except (psutil.NoSuchProcess, ValueError):
+                print(f"PID not found: {args.pid}", file=sys.stderr)
+                return 2
+
+        _prime_cpu(root)
+        started = time.monotonic()
+        samples: list[ResourceSample] = []
+        next_sample = started
+        while time.monotonic() - started < args.duration:
+            now = time.monotonic()
+            if now < next_sample:
+                time.sleep(min(next_sample - now, 0.1))
+                continue
+            try:
+                samples.append(_sample_tree(root, started=started))
             except psutil.NoSuchProcess:
-                print(f"Process {proc.pid} not found")
-                return False
-            
-        except Exception as e:
-            print(f"Failed to start app: {e}")
-            return False
-    
-    def measure(self) -> Dict[str, float]:
-        """Measure performance for configured duration."""
-        if not self.process:
-            return {}
-        
-        print(f"Measuring for {self.duration} seconds...")
-        start_time = time.time()
-        sample_interval = 0.5  # Sample every 500ms
-        
-        while (time.time() - start_time) < self.duration:
-            try:
-                # CPU percentage (per-core)
-                cpu = self.process.cpu_percent(interval=0.1)
-                self.cpu_samples.append(cpu)
-                
-                # Memory in MB
-                mem_info = self.process.memory_info()
-                mem_mb = mem_info.rss / (1024 * 1024)
-                self.memory_samples.append(mem_mb)
-                
-                time.sleep(sample_interval)
-                
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                print("Process terminated or access denied")
                 break
-        
-        # Calculate statistics
-        if not self.cpu_samples:
-            return {}
-        
-        cpu_avg = sum(self.cpu_samples) / len(self.cpu_samples)
-        cpu_min = min(self.cpu_samples)
-        cpu_max = max(self.cpu_samples)
-        cpu_p95 = sorted(self.cpu_samples)[int(len(self.cpu_samples) * 0.95)]
-        
-        mem_avg = sum(self.memory_samples) / len(self.memory_samples)
-        mem_max = max(self.memory_samples)
-        
-        return {
-            "cpu_avg": cpu_avg,
-            "cpu_min": cpu_min,
-            "cpu_max": cpu_max,
-            "cpu_p95": cpu_p95,
-            "memory_avg_mb": mem_avg,
-            "memory_max_mb": mem_max,
-            "samples": len(self.cpu_samples),
+            next_sample += args.interval
+
+        report = {
+            "kind": "srpss_process_resource_sample",
+            "pid": root.pid,
+            "launched_by_tool": bool(launched),
+            "duration_requested_s": args.duration,
+            "interval_s": args.interval,
+            "summary": _summarize(samples),
         }
-    
-    def stop_app(self):
-        """Stop the application."""
-        if self.process:
-            try:
-                self.process.terminate()
-                self.process.wait(timeout=5)
-            except (psutil.NoSuchProcess, psutil.TimeoutExpired):
-                try:
-                    self.process.kill()
-                except psutil.NoSuchProcess:
-                    pass
-    
-    def parse_perf_log(self) -> Dict[str, any]:
-        """Parse performance log for frame timing data."""
-        log_path = self.app_path / "logs" / "screensaver_perf.log"
-        if not log_path.exists():
-            return {}
-        
-        frame_times = []
-        paint_times = []
-        
-        try:
-            with open(log_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    # Look for frame timing data
-                    if "[PERF]" in line and "dt=" in line:
-                        # Extract dt value
-                        try:
-                            dt_str = line.split("dt=")[1].split()[0].rstrip("ms")
-                            frame_times.append(float(dt_str))
-                        except (IndexError, ValueError):
-                            pass
-                    
-                    # Look for paint timing
-                    if "[PERF_WIDGET]" in line and "avg_ms=" in line:
-                        try:
-                            avg_str = line.split("avg_ms=")[1].split()[0]
-                            paint_times.append(float(avg_str))
-                        except (IndexError, ValueError):
-                            pass
-        except Exception as e:
-            print(f"Failed to parse perf log: {e}")
-            return {}
-        
-        if not frame_times:
-            return {}
-        
-        return {
-            "frame_time_avg": sum(frame_times) / len(frame_times),
-            "frame_time_max": max(frame_times),
-            "frame_time_p95": sorted(frame_times)[int(len(frame_times) * 0.95)] if frame_times else 0,
-            "paint_time_avg": sum(paint_times) / len(paint_times) if paint_times else 0,
-            "frame_samples": len(frame_times),
-        }
-
-
-def compare_versions(baseline_path: Path, current_path: Path, duration: int = 15) -> Dict:
-    """Compare performance between two versions."""
-    print("=" * 60)
-    print("SRPSS Performance Comparison")
-    print("=" * 60)
-    
-    results = {
-        "baseline": {},
-        "current": {},
-        "comparison": {},
-    }
-    
-    # Measure baseline (2.5)
-    print(f"\n[1/2] Measuring BASELINE: {baseline_path.name}")
-    print("-" * 60)
-    baseline = PerformanceMeasurement(baseline_path, duration)
-    if baseline.start_app():
-        results["baseline"]["runtime"] = baseline.measure()
-        baseline.stop_app()
-        time.sleep(2)  # Cool down
-        results["baseline"]["logs"] = baseline.parse_perf_log()
-    else:
-        print("FAILED to start baseline")
-        return results
-    
-    # Measure current (2.6)
-    print(f"\n[2/2] Measuring CURRENT: {current_path.name}")
-    print("-" * 60)
-    current = PerformanceMeasurement(current_path, duration)
-    if current.start_app():
-        results["current"]["runtime"] = current.measure()
-        current.stop_app()
-        time.sleep(2)
-        results["current"]["logs"] = current.parse_perf_log()
-    else:
-        print("FAILED to start current")
-        return results
-    
-    # Calculate comparison
-    baseline_cpu = results["baseline"]["runtime"].get("cpu_avg", 0)
-    current_cpu = results["current"]["runtime"].get("cpu_avg", 0)
-    
-    if baseline_cpu > 0:
-        cpu_regression = ((current_cpu - baseline_cpu) / baseline_cpu) * 100
-        results["comparison"]["cpu_regression_pct"] = cpu_regression
-    
-    baseline_mem = results["baseline"]["runtime"].get("memory_avg_mb", 0)
-    current_mem = results["current"]["runtime"].get("memory_avg_mb", 0)
-    
-    if baseline_mem > 0:
-        mem_regression = ((current_mem - baseline_mem) / baseline_mem) * 100
-        results["comparison"]["memory_regression_pct"] = mem_regression
-    
-    baseline_frame = results["baseline"]["logs"].get("frame_time_avg", 0)
-    current_frame = results["current"]["logs"].get("frame_time_avg", 0)
-    
-    if baseline_frame > 0:
-        frame_regression = ((current_frame - baseline_frame) / baseline_frame) * 100
-        results["comparison"]["frame_time_regression_pct"] = frame_regression
-    
-    return results
-
-
-def print_results(results: Dict):
-    """Print formatted results."""
-    print("\n" + "=" * 60)
-    print("RESULTS")
-    print("=" * 60)
-    
-    baseline = results.get("baseline", {})
-    current = results.get("current", {})
-    comparison = results.get("comparison", {})
-    
-    # Runtime metrics
-    print("\n[CPU Usage]")
-    b_cpu = baseline.get("runtime", {})
-    c_cpu = current.get("runtime", {})
-    
-    print(f"  Baseline: avg={b_cpu.get('cpu_avg', 0):.2f}% "
-          f"min={b_cpu.get('cpu_min', 0):.2f}% "
-          f"max={b_cpu.get('cpu_max', 0):.2f}% "
-          f"p95={b_cpu.get('cpu_p95', 0):.2f}%")
-    
-    print(f"  Current:  avg={c_cpu.get('cpu_avg', 0):.2f}% "
-          f"min={c_cpu.get('cpu_min', 0):.2f}% "
-          f"max={c_cpu.get('cpu_max', 0):.2f}% "
-          f"p95={c_cpu.get('cpu_p95', 0):.2f}%")
-    
-    cpu_reg = comparison.get("cpu_regression_pct", 0)
-    status = "REGRESSION" if cpu_reg > 10 else "OK"
-    print(f"  Regression: {cpu_reg:+.1f}% [{status}]")
-    
-    # Memory
-    print("\n[Memory Usage]")
-    print(f"  Baseline: avg={b_cpu.get('memory_avg_mb', 0):.1f}MB "
-          f"max={b_cpu.get('memory_max_mb', 0):.1f}MB")
-    print(f"  Current:  avg={c_cpu.get('memory_avg_mb', 0):.1f}MB "
-          f"max={c_cpu.get('memory_max_mb', 0):.1f}MB")
-    
-    mem_reg = comparison.get("memory_regression_pct", 0)
-    status = "REGRESSION" if mem_reg > 10 else "OK"
-    print(f"  Regression: {mem_reg:+.1f}% [{status}]")
-    
-    # Frame timing
-    print("\n[Frame Timing]")
-    b_frame = baseline.get("logs", {})
-    c_frame = current.get("logs", {})
-    
-    if b_frame and c_frame:
-        print(f"  Baseline: avg={b_frame.get('frame_time_avg', 0):.2f}ms "
-              f"max={b_frame.get('frame_time_max', 0):.2f}ms "
-              f"p95={b_frame.get('frame_time_p95', 0):.2f}ms")
-        print(f"  Current:  avg={c_frame.get('frame_time_avg', 0):.2f}ms "
-              f"max={c_frame.get('frame_time_max', 0):.2f}ms "
-              f"p95={c_frame.get('frame_time_p95', 0):.2f}ms")
-        
-        frame_reg = comparison.get("frame_time_regression_pct", 0)
-        status = "REGRESSION" if frame_reg > 10 else "OK"
-        print(f"  Regression: {frame_reg:+.1f}% [{status}]")
-    else:
-        print("  No frame timing data available")
-    
-    # Overall verdict
-    print("\n" + "=" * 60)
-    cpu_bad = cpu_reg > 10
-    mem_bad = mem_reg > 10
-    frame_bad = comparison.get("frame_time_regression_pct", 0) > 10
-    
-    if cpu_bad or mem_bad or frame_bad:
-        print("VERDICT: PERFORMANCE REGRESSION DETECTED")
-        if cpu_bad:
-            print(f"  - CPU usage increased by {cpu_reg:.1f}%")
-        if mem_bad:
-            print(f"  - Memory usage increased by {mem_reg:.1f}%")
-        if frame_bad:
-            print(f"  - Frame time increased by {comparison.get('frame_time_regression_pct', 0):.1f}%")
-    else:
-        print("VERDICT: PERFORMANCE ACCEPTABLE")
-    
-    print("=" * 60)
-
-
-def main():
-    """Main entry point."""
-    # Paths
-    base_dir = Path(__file__).parent.parent.parent
-    baseline_path = base_dir / "ShittyRandomPhotoScreenSaver2_5"
-    current_path = base_dir / "ShittyRandomPhotoScreenSaver"
-    
-    if not baseline_path.exists():
-        print(f"ERROR: Baseline path not found: {baseline_path}")
-        return 1
-    
-    if not current_path.exists():
-        print(f"ERROR: Current path not found: {current_path}")
-        return 1
-    
-    # Run comparison
-    results = compare_versions(baseline_path, current_path, duration=15)
-    
-    # Print results
-    print_results(results)
-    
-    # Save results
-    output_path = Path(__file__).parent / "perf_results.json"
-    with open(output_path, 'w') as f:
-        json.dump(results, f, indent=2)
-    print(f"\nResults saved to: {output_path}")
-    
-    # Return exit code based on verdict
-    comparison = results.get("comparison", {})
-    cpu_reg = comparison.get("cpu_regression_pct", 0)
-    mem_reg = comparison.get("memory_regression_pct", 0)
-    frame_reg = comparison.get("frame_time_regression_pct", 0)
-    
-    if cpu_reg > 10 or mem_reg > 10 or frame_reg > 10:
-        return 1  # Regression detected
-    return 0  # OK
+        text = json.dumps(report, indent=2, sort_keys=True)
+        print(text)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(text + "\n", encoding="utf-8")
+        return 0 if samples else 3
+    finally:
+        if launched is not None:
+            _stop_launched(launched)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
