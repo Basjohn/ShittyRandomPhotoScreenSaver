@@ -502,9 +502,13 @@ class BubbleSimulation:
         self._big_size_max = float(settings.get("bubble_big_size_max", 0.038))
         self._small_size_max = float(settings.get("bubble_small_size_max", 0.018))
         trail_strength = float(settings.get("bubble_trail_strength", 0.0))
+        ghosting_enabled = bool(settings.get("bubble_ghosting_enabled", False))
         # big_bass_pulse / small_freq_pulse are read in snapshot(), not tick()
 
-        trail_enabled = trail_strength > 0.001
+        # Ghost reuses the same three-sample motion history as the ripple trail.
+        # Keep that history alive whenever either presentation consumes it; do
+        # not create a second history owner or cadence for Ghost.
+        trail_enabled = trail_strength > 0.001 or ghosting_enabled
 
         # Energy — accept both object (EnergyBands) and dict snapshots
         if energy_bands is None:

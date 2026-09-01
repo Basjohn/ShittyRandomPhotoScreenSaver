@@ -153,6 +153,20 @@ class _SpotifyBeatEngine(QObject):
         self._thread_manager: Optional[ThreadManager] = None
         self._analysis_lane: Any = None
         self._analysis_lane_last_diag_log_ts: float = 0.0
+        # The serial compute lane owns one detached DSP state per admitted
+        # gate/activation.  Reusing it across frames avoids deep-copying the
+        # worker's NumPy/history/transient graph for every audio packet while
+        # preserving the generation fence that motivated detached state in the
+        # first place.
+        self._analysis_compute_state: object = None
+        self._analysis_compute_state_identity: tuple[int, int, int] | None = None
+        # Separate from the result gate: config-only invalidation does not need
+        # to bump the public activation/generation, but it must prevent a
+        # snapshot being deep-copied concurrently from resurrecting stale DSP
+        # config as the retained lane state.
+        self._analysis_compute_state_epoch: int = 0
+        self._analysis_compute_state_rebuilds: int = 0
+        self._analysis_compute_state_reuses: int = 0
         self._ref_count: int = 0
         self._latest_bars: Optional[List[float]] = None
         self._last_audio_ts: float = 0.0
@@ -235,6 +249,7 @@ class _SpotifyBeatEngine(QObject):
     def _stop_analysis_lane(self) -> None:
         lane = self._analysis_lane
         self._analysis_lane = None
+        self._invalidate_analysis_compute_state()
         if lane is None:
             return
         try:
@@ -244,6 +259,15 @@ class _SpotifyBeatEngine(QObject):
                 "[SPOTIFY_VIS] Audio-analysis compute lane stop failed",
                 exc_info=True,
             )
+
+    def _invalidate_analysis_compute_state(self) -> None:
+        # Atomic reference replacement is sufficient for an already-running
+        # packet. The epoch additionally fences the narrow race where a config
+        # mutation lands while make_compute_snapshot() is still deep-copying;
+        # that half-built state must never become the retained lane authority.
+        self._analysis_compute_state_epoch += 1
+        self._analysis_compute_state = None
+        self._analysis_compute_state_identity = None
 
     def take_analysis_lane_diagnostics_for_log(
         self, *, min_interval_seconds: float = 2.0
@@ -260,7 +284,10 @@ class _SpotifyBeatEngine(QObject):
             return {}
         self._analysis_lane_last_diag_log_ts = now
         try:
-            return dict(lane.diagnostic_snapshot())
+            snapshot = dict(lane.diagnostic_snapshot())
+            snapshot["dsp_state_rebuilds"] = self._analysis_compute_state_rebuilds
+            snapshot["dsp_state_reuses"] = self._analysis_compute_state_reuses
+            return snapshot
         except Exception:
             logger.debug(
                 "[SPOTIFY_VIS] Audio-analysis lane diagnostics failed",
@@ -390,6 +417,7 @@ class _SpotifyBeatEngine(QObject):
     def reset_floor_state(self) -> None:
         """Reset dynamic/manual floor accumulator state."""
         try:
+            self.cancel_pending_compute_tasks()
             aw = self._audio_worker
             aw.reset_reactivity_state()
             aw._last_floor_config = (aw._use_dynamic_floor, aw._manual_floor)
@@ -399,6 +427,7 @@ class _SpotifyBeatEngine(QObject):
     def cancel_pending_compute_tasks(self) -> None:
         """Invalidate outstanding compute callbacks before restarting."""
         self._compute_gate_token += 1
+        self._invalidate_analysis_compute_state()
         lane = self._analysis_lane
         cancelled_pending = 0
         if lane is not None:
@@ -425,11 +454,16 @@ class _SpotifyBeatEngine(QObject):
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         try:
             self._audio_worker.set_sensitivity_config(recommended, sensitivity)
+            self._invalidate_analysis_compute_state()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply sensitivity config", exc_info=True)
     
     def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
         try:
+            # Floor changes intentionally reset adaptive DSP state. Fence any
+            # packet computed from the previous floor before mutating the live
+            # reset authority.
+            self.cancel_pending_compute_tasks()
             self._audio_worker.set_floor_config(dynamic_enabled, manual_floor)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply floor config", exc_info=True)
@@ -438,6 +472,7 @@ class _SpotifyBeatEngine(QObject):
         """Toggle curved vs legacy spectrum bar profile on the audio worker."""
         try:
             self._audio_worker.set_curved_profile(enabled)
+            self._invalidate_analysis_compute_state()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply curved profile config", exc_info=True)
 
@@ -445,6 +480,7 @@ class _SpotifyBeatEngine(QObject):
         """Forward drop speed multiplier to the audio worker DSP pipeline."""
         try:
             self._audio_worker.set_drop_speed(speed)
+            self._invalidate_analysis_compute_state()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply drop speed config", exc_info=True)
 
@@ -452,6 +488,7 @@ class _SpotifyBeatEngine(QObject):
         """Forward frequency-zone notch positions to the audio worker."""
         try:
             self._audio_worker.set_notch_positions(positions)
+            self._invalidate_analysis_compute_state()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply notch positions config", exc_info=True)
 
@@ -459,6 +496,7 @@ class _SpotifyBeatEngine(QObject):
         """Forward SpectrumShapeConfig to the audio worker DSP pipeline."""
         try:
             self._audio_worker.set_spectrum_shape_config(config)
+            self._invalidate_analysis_compute_state()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply spectrum shape config", exc_info=True)
 
@@ -466,6 +504,7 @@ class _SpotifyBeatEngine(QObject):
         """Forward mirrored layout toggle to the audio worker."""
         try:
             self._audio_worker.set_spectrum_mirrored(mirrored)
+            self._invalidate_analysis_compute_state()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply spectrum mirrored config", exc_info=True)
 
@@ -473,6 +512,7 @@ class _SpotifyBeatEngine(QObject):
         """Forward shape editor nodes to the audio worker."""
         try:
             self._audio_worker.set_spectrum_shape_nodes(nodes)
+            self._invalidate_analysis_compute_state()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply spectrum shape nodes", exc_info=True)
 
@@ -480,6 +520,7 @@ class _SpotifyBeatEngine(QObject):
         """Forward energy boost scaling to the audio worker."""
         try:
             self._audio_worker.set_energy_boost(boost)
+            self._invalidate_analysis_compute_state()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply energy boost config", exc_info=True)
 
@@ -487,6 +528,7 @@ class _SpotifyBeatEngine(QObject):
         """Forward pre-FFT input gain (virtual volume) to the audio worker."""
         try:
             self._audio_worker.set_input_gain(gain)
+            self._invalidate_analysis_compute_state()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply input gain config", exc_info=True)
 
@@ -494,8 +536,26 @@ class _SpotifyBeatEngine(QObject):
         """Forward AGC strength to the audio worker."""
         try:
             self._audio_worker.set_agc_strength(strength)
+            self._invalidate_analysis_compute_state()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply agc strength config", exc_info=True)
+
+    def set_transient_lane_config(
+        self, kick_lane_gain: float, spectrum_lane_transient_mix: float
+    ) -> None:
+        """Apply transient express-lane controls and invalidate detached DSP state."""
+
+        try:
+            self._audio_worker.set_transient_lane_config(
+                kick_lane_gain, spectrum_lane_transient_mix
+            )
+            self._invalidate_analysis_compute_state()
+        except Exception:
+            logger.error(
+                "[SPOTIFY_VIS] Failed to apply transient lane config",
+                exc_info=True,
+            )
+            raise
 
     def set_playback_state(self, is_playing: bool) -> None:
         """Set Spotify playback state for FFT processing gating."""
@@ -689,19 +749,48 @@ class _SpotifyBeatEngine(QObject):
             or request.activation_id != self._activation_id
         ):
             return None
-        try:
-            worker_state = self._audio_worker.make_compute_snapshot()
-        except Exception:
-            logger.debug(
-                "[SPOTIFY_VIS] Failed to snapshot audio worker for compute",
-                exc_info=True,
-            )
-            return None
+        state_epoch = self._analysis_compute_state_epoch
+        state_identity = (request.gate_token, request.activation_id, state_epoch)
+        worker_state = self._analysis_compute_state
+        if (
+            worker_state is None
+            or self._analysis_compute_state_identity != state_identity
+        ):
+            try:
+                worker_state = self._audio_worker.make_compute_snapshot()
+            except Exception:
+                logger.debug(
+                    "[SPOTIFY_VIS] Failed to snapshot audio worker for compute",
+                    exc_info=True,
+                )
+                return None
+            # A config/reset boundary may have landed while the detached state
+            # was being built. Do not cache or run that stale state.
+            if (
+                request.gate_token != self._compute_gate_token
+                or request.activation_id != self._activation_id
+                or state_epoch != self._analysis_compute_state_epoch
+            ):
+                return None
+            self._analysis_compute_state = worker_state
+            self._analysis_compute_state_identity = state_identity
+            self._analysis_compute_state_rebuilds += 1
+        else:
+            self._analysis_compute_state_reuses += 1
 
         from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
 
         raw_bars = compute_bars_from_samples(worker_state, request.samples)
         if not isinstance(raw_bars, list):
+            return None
+        # A config/reset boundary can also land while FFT/bar computation is
+        # running against a previously retained state. Drop that one stale
+        # result rather than publishing pre-boundary DSP after the new config.
+        if (
+            request.gate_token != self._compute_gate_token
+            or request.activation_id != self._activation_id
+            or state_epoch != self._analysis_compute_state_epoch
+        ):
             return None
 
         now_ts = time.time()
@@ -715,6 +804,12 @@ class _SpotifyBeatEngine(QObject):
             segment_hysteresis=request.segment_hysteresis,
             min_change_threshold=request.min_change_threshold,
         )
+        if (
+            request.gate_token != self._compute_gate_token
+            or request.activation_id != self._activation_id
+            or state_epoch != self._analysis_compute_state_epoch
+        ):
+            return None
         return _AnalysisResult(
             raw_bars=raw_bars,
             smoothed_bars=smoothed,
@@ -775,6 +870,9 @@ class _SpotifyBeatEngine(QObject):
             capture_ts=float(capture_ts or 0.0),
             gate_token=self._compute_gate_token,
             activation_id=self._activation_id,
+            # The UI/silence path can decay _smoothed_bars in place.  Analysis
+            # must smooth against a stable previous-frame vector rather than a
+            # list that can move concurrently while the serial lane is working.
             previous_bars=tuple(self._smoothed_bars),
             last_smooth_ts=self._last_smooth_ts,
             smoothing_tau=self._smoothing_tau,

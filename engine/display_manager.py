@@ -2210,6 +2210,18 @@ class DisplayManager(QObject):
 
         if self._retired:
             return False
+        from rendering.runtime_input import runtime_pointer_input_is_suppressed
+
+        if runtime_pointer_input_is_suppressed(
+            "redditOpenRequested",
+            screen_index="?",
+        ):
+            logger.info(
+                "[REDDIT] Quick URL action suppressed across runtime/edit boundary "
+                "widget=%s",
+                str(widget_id or "reddit"),
+            )
+            return False
         normalized_url = str(url or "").strip()
         if not normalized_url:
             return False

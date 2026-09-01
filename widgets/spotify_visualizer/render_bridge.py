@@ -186,6 +186,7 @@ class VisualizerSnapshotBridge:
         activation_id: int,
         mode_id: str,
         required_presentation: object | None = None,
+        allow_presentation_rebase: bool = False,
     ) -> VisualizerRenderSnapshot | None:
         """Consume the slot at the Quick synchronization boundary.
 
@@ -211,12 +212,22 @@ class VisualizerSnapshotBridge:
                 and required_presentation is not None
                 and snapshot.presentation != required_presentation
             ):
-                # A CUSTOM geometry commit can beat the next authored snapshot.
-                # Do not consume the stale-geometry slot and, critically, do not
-                # force the retained node blank. The next coherent publication
-                # supersedes this slot while the last admitted pixels remain.
-                self._presentation_mismatch_count += 1
-                return None
+                if allow_presentation_rebase:
+                    # During an active CUSTOM session the editor is the explicit
+                    # authority for temporary working geometry.  Logical mode
+                    # state remains newest-state truth, so rebase only the
+                    # immutable presentation record instead of rejecting every
+                    # fresh revision while a wheel/corner/edge resize is active.
+                    snapshot = replace(
+                        snapshot,
+                        presentation=required_presentation,
+                    )
+                else:
+                    # Outside CUSTOM, a geometry mismatch is stale presentation
+                    # and must not be consumed. Keep the last admitted pixels
+                    # until the next coherent publication supersedes this slot.
+                    self._presentation_mismatch_count += 1
+                    return None
             self._snapshot = None
             self._protected_edges.clear()
             return snapshot

@@ -492,6 +492,8 @@ class QuickSceneController(QObject):
             None if self._visualizer_item is None else self._visualizer_item.presentation
         )
         self._custom_layout_visualizer_baseline = current_visualizer
+        if self._visualizer_item is not None:
+            self._visualizer_item.set_custom_layout_presentation_authority(True)
         return self.custom_layout_overlay.bind_session(
             session,
             display_identity=identity,
@@ -537,6 +539,8 @@ class QuickSceneController(QObject):
         if self._visualizer_root is not None:
             self._visualizer_root.setProperty("customLayoutWorkingVisible", True)
         self.custom_layout_overlay.clear_session()
+        if self._visualizer_item is not None:
+            self._visualizer_item.set_custom_layout_presentation_authority(False)
         self._custom_layout_session = None
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
@@ -1160,6 +1164,9 @@ class QuickSceneController(QObject):
         item = VisualizerRenderItem(
             content_host,
             telemetry=self._visualizer_telemetry,
+        )
+        item.set_custom_layout_presentation_authority(
+            self._custom_layout_session is not None
         )
         self._visualizer_root = root
         self._visualizer_content_host = content_host

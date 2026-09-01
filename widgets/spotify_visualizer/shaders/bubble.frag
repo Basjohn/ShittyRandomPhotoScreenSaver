@@ -40,7 +40,6 @@ uniform float u_trail_strength;     // 0.0 = off, 1.0 = full
 uniform float u_tail_opacity;       // max opacity ceiling for tail gradient (0.0-0.85)
 uniform vec2 u_trail_axis_scale;    // authored-pixel history-source footprint on CUSTOM axes
 uniform float u_trail_radial_scale;  // authored-pixel ripple radius/ring footprint on CUSTOM height
-uniform float u_head_radial_scale;   // extreme-tall CUSTOM head footprint correction (Quick only)
 uniform float u_large_viewport_stroke_bonus_px; // up to +1 authored px at extreme height (Quick only)
 
 // --- Styling ---
@@ -54,8 +53,10 @@ uniform vec4 u_gradient_dark;      // gradient dark end
 uniform vec4 u_pop_color;          // pop flash colour
 uniform float u_rainbow_hue_offset;
 
-// Ghost: trailing afterimage ring around each bubble at slightly expanded radius
+// Ghost: one history-backed afterimage ring per bubble. The existing smear
+// history owns temporal position/strength; this shader adds no second pass or clock.
 uniform float u_ghost_alpha;
+uniform float u_ghost_decay;
 
 // =====================================================================
 // Helpers
@@ -189,9 +190,6 @@ void main() {
     pop_col.rgb = apply_rainbow(pop_col.rgb, u_rainbow_hue_offset);
     
     int count = min(u_bubble_count, 110);
-    float head_radial_scale = (u_quick_item_coords == 1)
-        ? clamp(u_head_radial_scale, 0.01, 1.0)
-        : 1.0;
     float large_viewport_stroke_bonus_px = (u_quick_item_coords == 1)
         ? clamp(u_large_viewport_stroke_bonus_px, 0.0, 1.0)
         : 0.0;
@@ -299,24 +297,53 @@ void main() {
         }
     }
 
-    // --- Ghost pass: expanded faded outline rings behind each bubble ---
+    // --- Ghost pass: one slowly fading historical outline behind each bubble ---
+    // Reuse the oldest smear sample instead of adding another history buffer,
+    // simulation state, timer, or fragment loop. `u_ghost_decay` follows the
+    // existing mode convention: larger values decay faster.
     if (u_ghost_alpha > 0.001) {
         float ga = clamp(u_ghost_alpha, 0.0, 1.0);
+        float ghost_decay = clamp(u_ghost_decay, 0.1, 1.0);
+        // Keep the afterimage gentler than the first retained pass. The
+        // simulation history already owns temporal decay; this only shapes it.
+        float ghost_decay_exponent = mix(0.40, 1.90, ghost_decay);
+        float ghost_history_weight = mix(0.98, 0.68, ghost_decay);
         for (int i = 0; i < count; i++) {
             vec4 bpos = u_bubbles_pos[i];
             vec2 bxy = bpos.xy;
-            float brad = bpos.z * head_radial_scale;
+            float brad = bpos.z;
             float balpha = bpos.w;
             if (balpha < 0.01 || brad < 2.0 * px) continue;
 
+            vec3 history = u_bubbles_trail[i * 3];
+            // The oldest sample stores 0.45 * the simulation smear strength.
+            // Normalize that falloff so Ghost opacity is controlled by the
+            // actual temporal strength, then shape fade speed with the setting.
+            float history_strength = clamp(history.z / 0.45, 0.0, 1.0);
+            if (history_strength <= 0.001) continue;
+
+            // History is already projected into renderer-normalized content
+            // coordinates by BubbleSimulation. Reusing the ripple wake
+            // baseline-pixel compression here made Ghost motion disappear as
+            // CUSTOM width/height grew, so consume the authored history once.
+            vec2 history_xy = history.xy;
+            vec2 ghost_xy = mix(bxy, history_xy, ghost_history_weight);
             float ghost_r = brad * 1.18;
-            vec2 gdelta = uv - bxy;
+            vec2 gdelta = uv - ghost_xy;
             gdelta.x *= aspect;
+            float ghost_stroke = clamp(1.0 * (ghost_r / 0.04), 0.4, 1.5) * px;
+            float ghost_bound = ghost_r + ghost_stroke + 2.0 * px;
+            if (abs(gdelta.x) > ghost_bound || abs(gdelta.y) > ghost_bound) continue;
+
+            // Keep the non-linear decay shaping behind the cheap square reject:
+            // it now runs only for fragments near this ghost rather than for
+            // every fragment x bubble pair in the existing Ghost loop.
+            float ghost_fade = pow(history_strength, ghost_decay_exponent);
+            if (ghost_fade <= 0.001) continue;
             float gdist = length(gdelta);
 
-            float ghost_stroke = clamp(1.0 * (ghost_r / 0.04), 0.4, 1.5) * px;
             float ghost_ring = smoothstep(ghost_stroke + px, ghost_stroke - px * 0.5, abs(gdist - ghost_r));
-            ghost_ring *= balpha * ga * 0.45;
+            ghost_ring *= balpha * ga * ghost_fade * 0.45;
 
             if (ghost_ring > 0.001) {
                 vec3 ghost_rgb = mix(outline_col.rgb, vec3(1.0), 0.15);
@@ -344,7 +371,7 @@ void main() {
         float dist = length(delta);
         
         // Radius in aspect-corrected space
-        float r = brad * head_radial_scale;
+        float r = brad;
         
         // Keep outline weight proportional to rendered bubble radius rather
         // than pinning it to an authored-pixel width. Physical CUSTOM testing

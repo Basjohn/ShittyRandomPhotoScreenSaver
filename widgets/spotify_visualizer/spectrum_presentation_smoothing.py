@@ -79,25 +79,35 @@ def _clamp_strength(value: Any) -> float:
 
 
 
-def _vertical_viewport_smoothing_multiplier(widget: Any) -> float:
-    """Increase only Spectrum presentation smoothing on very tall viewports.
+def _viewport_smoothing_multiplier(widget: Any) -> float:
+    """Increase Spectrum presentation smoothing on very large viewports.
 
-    A bar value traverses many more physical pixels when CUSTOM stretches the
-    visualizer vertically, so the same authored one-pole constant becomes
-    visibly steppy even though logical cadence is unchanged. Scale the existing
-    filter by vertical extent only; this adds no timer, interpolation pass, or
-    paint authority and is exactly 1.0 at/below canonical height.
+    A bar value traverses more physical pixels when CUSTOM stretches either
+    viewport axis, so the same authored one-pole constant becomes visibly
+    steppy on both extreme-tall and extreme-wide cards even though logical
+    cadence is unchanged. Scale the existing filter by the larger axis ratio;
+    this adds no timer, interpolation pass, or paint authority and remains 1.0
+    at/below canonical extent. Using ``max`` rather than multiplying axes avoids
+    over-smoothing a viewport that is large in both dimensions.
     """
     controller = getattr(widget, "runtime_controller", None)
     extent = getattr(controller, "presentation_viewport_extent", None)
     try:
+        width = float(extent[0])
         height = float(extent[1])
+        baseline_width = float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[0])
         baseline_height = float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1])
     except (TypeError, ValueError, IndexError):
         return 1.0
-    if height <= 0.0 or baseline_height <= 0.0:
+    if (
+        width <= 0.0
+        or height <= 0.0
+        or baseline_width <= 0.0
+        or baseline_height <= 0.0
+    ):
         return 1.0
-    return max(1.0, min(4.0, height / baseline_height))
+    extent_ratio = max(width / baseline_width, height / baseline_height)
+    return max(1.0, min(4.0, extent_ratio))
 
 
 def _presentation_identity(widget: Any, strength: float) -> tuple[Any, ...]:
@@ -196,7 +206,7 @@ def resolve_widget_spectrum_presentation(
     time_constant = (
         _MIN_TIME_CONSTANT_SECONDS
         + (_MAX_TIME_CONSTANT_SECONDS - _MIN_TIME_CONSTANT_SECONDS) * strength
-    ) * _vertical_viewport_smoothing_multiplier(widget)
+    ) * _viewport_smoothing_multiplier(widget)
     alpha = 1.0 - math.exp(-dt / max(time_constant, 1.0e-6))
 
     resolved: list[float] = []

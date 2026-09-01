@@ -239,6 +239,9 @@ class QuickDisplayWindow(QQuickWindow):
         super().keyReleaseEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        if self._runtime_discrete_pointer_event_is_suppressed("mousePressEvent"):
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.MiddleButton:
             hit_test = self._semantic_middle_click_hit_test
             if hit_test is not None and hit_test(event.position()):
@@ -269,6 +272,9 @@ class QuickDisplayWindow(QQuickWindow):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if self._runtime_discrete_pointer_event_is_suppressed("mouseReleaseEvent"):
+            event.accept()
+            return
         controller = self._input_controller
         if controller is not None and controller.handle_mouse_release(event):
             event.accept()
@@ -276,6 +282,9 @@ class QuickDisplayWindow(QQuickWindow):
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        if self._runtime_discrete_pointer_event_is_suppressed("mouseDoubleClickEvent"):
+            event.accept()
+            return
         # Retained Quick hit regions own family-specific double-click semantics
         # (Clock mode, Media refresh). Let QML admit those first; the neutral
         # runtime input owner remains the unhandled-display fallback.
@@ -288,6 +297,17 @@ class QuickDisplayWindow(QQuickWindow):
         controller = self._input_controller
         if controller is not None and controller.handle_mouse_double_click(event):
             event.accept()
+
+    def _runtime_discrete_pointer_event_is_suppressed(self, source: str) -> bool:
+        # Keep the R6 passive-move hot path untouched. This helper is reached
+        # only for discrete pointer gestures that could otherwise leak through a
+        # retained overlay/replacement boundary into QML semantic actions.
+        from rendering.runtime_input import runtime_pointer_input_is_suppressed
+
+        return runtime_pointer_input_is_suppressed(
+            source,
+            screen_index=self._screen_index,
+        )
 
     def _bind_screen(self, screen: QScreen, *, apply_geometry: bool) -> None:
         if screen is self._bound_screen:
@@ -355,6 +375,86 @@ class QuickDisplayWindow(QQuickWindow):
         self.queue_hide()
         self.binding_lost.emit(loss)
 
+    def _log_native_window_geometry(self) -> None:
+        """Log the real Win32 rect once the window exists.
+
+        Qt's mixed-DPR virtual geometry is not a physical-pixel coordinate
+        system. R7's remaining one-pixel seam therefore cannot be diagnosed by
+        multiplying logical widths by DPR. Compare the actual HWND and monitor
+        rectangles after show instead; this is bounded startup/reinit telemetry
+        and never runs on the render/pointer hot paths.
+        """
+        import sys
+
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class _Rect(ctypes.Structure):
+                _fields_ = [
+                    ("left", wintypes.LONG),
+                    ("top", wintypes.LONG),
+                    ("right", wintypes.LONG),
+                    ("bottom", wintypes.LONG),
+                ]
+
+            class _MonitorInfo(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", wintypes.DWORD),
+                    ("rcMonitor", _Rect),
+                    ("rcWork", _Rect),
+                    ("dwFlags", wintypes.DWORD),
+                ]
+
+            user32 = ctypes.windll.user32
+            user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(_Rect)]
+            user32.GetWindowRect.restype = wintypes.BOOL
+            user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+            user32.MonitorFromWindow.restype = wintypes.HANDLE
+            user32.GetMonitorInfoW.argtypes = [
+                wintypes.HANDLE, ctypes.POINTER(_MonitorInfo)
+            ]
+            user32.GetMonitorInfoW.restype = wintypes.BOOL
+
+            hwnd = wintypes.HWND(int(self.winId()))
+            window_rect = _Rect()
+            if not user32.GetWindowRect(hwnd, ctypes.byref(window_rect)):
+                return
+            monitor = user32.MonitorFromWindow(hwnd, 2)  # MONITOR_DEFAULTTONEAREST
+            info = _MonitorInfo()
+            info.cbSize = ctypes.sizeof(_MonitorInfo)
+            if not monitor or not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+                return
+            wr = window_rect
+            mr = info.rcMonitor
+            logger.info(
+                "[QUICK_NATIVE_GEOMETRY] screen=%d generation=%s "
+                "window_device=(%d,%d,%d,%d) monitor_device=(%d,%d,%d,%d) "
+                "overscan_device=(left=%d,top=%d,right=%d,bottom=%d)",
+                self._screen_index,
+                self._runtime_generation,
+                wr.left,
+                wr.top,
+                wr.right - wr.left,
+                wr.bottom - wr.top,
+                mr.left,
+                mr.top,
+                mr.right - mr.left,
+                mr.bottom - mr.top,
+                mr.left - wr.left,
+                mr.top - wr.top,
+                wr.right - mr.right,
+                wr.bottom - mr.bottom,
+            )
+        except Exception:
+            logger.debug(
+                "[QUICK_NATIVE_GEOMETRY] native rect unavailable screen=%d",
+                self._screen_index,
+                exc_info=True,
+            )
+
     def _on_screen_metrics_changed(self, *_args: object) -> None:
         screen = self._bound_screen
         if screen is None or self._close_queued or self._binding_loss is not None:
@@ -365,6 +465,7 @@ class QuickDisplayWindow(QQuickWindow):
     def _on_window_visibility_changed(self, visible: bool) -> None:
         if not visible or not self._desired_visible or self._close_queued:
             return
+        self._log_native_window_geometry()
         self.raise_()
         if self._policy.accepts_focus:
             self.requestActivate()

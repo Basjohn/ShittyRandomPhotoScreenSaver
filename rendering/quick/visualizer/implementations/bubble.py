@@ -36,7 +36,6 @@ class QuickBubbleLayout:
     visual_scale: float
     trail_axis_scale: tuple[float, float]
     trail_radial_scale: float
-    head_radial_scale: float
     large_viewport_stroke_bonus_px: float
 
 
@@ -82,14 +81,11 @@ def compute_quick_bubble_layout(
     # intentionally independent and continues to scale the finished effect.
     trail_radial_scale = min(1.0, baseline[1] / extent[1])
 
-    # Head radius remains height-normalized through ordinary CUSTOM sizes, but
-    # a very tall viewport can otherwise turn a full-expansion Bubble into a
-    # physically enormous disk. Preserve the accepted normal/medium behavior
-    # and only compress the extreme tail: above 1.75x authored height, cap the
-    # head's physical growth at that footprint. This is presentation-only and
-    # adds no simulation work or extra render pass.
+    # Bubble head radius remains the authored fraction of the current card
+    # height. Do not globally compress it by CUSTOM viewport extent: doing so
+    # suppresses the radius delta that carries Bubble reactivity. The separate
+    # extreme-size stroke treatment below is presentation-only.
     vertical_scale = extent[1] / baseline[1]
-    head_radial_scale = min(1.0, 1.75 / max(1.0, vertical_scale))
 
     # The same extreme-size presentation benefits from a slightly firmer edge.
     # Ramp to one authored pixel rather than branching the simulation or adding
@@ -104,7 +100,6 @@ def compute_quick_bubble_layout(
         visual_scale=scale,
         trail_axis_scale=trail_axis_scale,
         trail_radial_scale=trail_radial_scale,
-        head_radial_scale=head_radial_scale,
         large_viewport_stroke_bonus_px=large_viewport_stroke_bonus_px,
     )
 
@@ -255,7 +250,6 @@ class QuickBubbleRenderer:
         gl.glUniform1f(uniforms["u_tail_opacity"], tail_opacity)
         gl.glUniform2f(uniforms["u_trail_axis_scale"], *layout.trail_axis_scale)
         gl.glUniform1f(uniforms["u_trail_radial_scale"], layout.trail_radial_scale)
-        gl.glUniform1f(uniforms["u_head_radial_scale"], layout.head_radial_scale)
         gl.glUniform1f(
             uniforms["u_large_viewport_stroke_bonus_px"],
             layout.large_viewport_stroke_bonus_px,
@@ -318,6 +312,14 @@ class QuickBubbleRenderer:
                 ),
             )
         gl.glUniform1f(uniforms["u_ghost_alpha"], ghost_alpha)
+        ghost_decay = max(
+            0.1,
+            min(
+                1.0,
+                float(parameter(parameters, "bubble_ghost_decay", 0.4)),
+            ),
+        )
+        gl.glUniform1f(uniforms["u_ghost_decay"], ghost_decay)
         hue = 0.0
         if bool(parameter(parameters, "rainbow_enabled", False)):
             speed = max(
@@ -369,7 +371,6 @@ class QuickBubbleRenderer:
                 "u_tail_opacity",
                 "u_trail_axis_scale",
                 "u_trail_radial_scale",
-                "u_head_radial_scale",
                 "u_large_viewport_stroke_bonus_px",
                 "u_specular_dir",
                 "u_gradient_dir",
@@ -381,6 +382,7 @@ class QuickBubbleRenderer:
                 "u_pop_color",
                 "u_rainbow_hue_offset",
                 "u_ghost_alpha",
+                "u_ghost_decay",
             )
             uniforms = {
                 name: int(gl.glGetUniformLocation(program, name))

@@ -776,6 +776,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         "bubble_big_size_max": widget._bubble_big_size_max,
         "bubble_small_size_max": widget._bubble_small_size_max,
         "bubble_trail_strength": widget._bubble_trail_strength,
+        "bubble_ghosting_enabled": getattr(widget, "_bubble_ghosting_enabled", False),
         "bubble_bounce_big_pct": widget._bubble_bounce_big_pct,
         "bubble_bounce_small_pct": widget._bubble_bounce_small_pct,
         "bubble_bounce_big_speed": widget._bubble_bounce_big_speed,

@@ -24,8 +24,12 @@ OverlayWidget {
     // height is the model-computed content height. Both are size-only model
     // reports independent of the assigned width - no width<->preferredWidth
     // feedback. J refines exact insets against eyes-on parity.
+    // Gmail model width is already the authored outer-card width.  Height is
+    // row/content-derived and excludes the shell inset, so only height needs
+    // compensation for recreation containment.  Adding shellInset to width
+    // lies to CUSTOM about the editable outer rect and breaks alignment.
     preferredContentWidth: gmailModel.contentWidth
-    preferredContentHeight: gmailModel.contentHeight
+    preferredContentHeight: gmailModel.contentHeight + gmailRoot.shellInset
 
     signal openInboxRequested()
     signal openMessageRequested(string messageId)

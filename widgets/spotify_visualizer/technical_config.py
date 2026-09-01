@@ -188,10 +188,14 @@ def apply_technical_config_for_mode(widget: Any, mode: VisualizerMode, *, reason
     widget._apply_agc_strength(agc_strength)
     widget._apply_input_gain(input_gain)
     if widget._engine is not None:
-        aw = getattr(widget._engine, "_audio_worker", None)
-        if aw is not None:
-            aw._kick_lane_gain = widget._kick_lane_gain
-            aw._spectrum_lane_transient_mix = widget._spectrum_lane_transient_mix
+        set_transient_lane = getattr(widget._engine, "set_transient_lane_config", None)
+        if not callable(set_transient_lane):
+            raise RuntimeError(
+                "visualizer BeatEngine has no transient-lane config authority"
+            )
+        set_transient_lane(
+            widget._kick_lane_gain, widget._spectrum_lane_transient_mix
+        )
     parent = widget.parent()
     overlay = getattr(parent, "_spotify_bars_overlay", None) if parent else None
     if overlay is not None:

@@ -845,6 +845,17 @@ class QuickCustomLayoutOwner:
             owner.controller.commit_presentation_metrics(presentation)
 
     def _finish(self) -> None:
+        # Closing the retained edit overlay can leave the release/click that
+        # activated Save/Cancel in the same native input burst as the underlying
+        # screensaver. Arm the existing replacement guard *before* removing the
+        # overlay so no retained family action can inherit that gesture. This is
+        # event-bound only; it adds no pointer-motion/render cadence.
+        from rendering.runtime_input import suppress_runtime_pointer_input
+
+        suppress_runtime_pointer_input(
+            700,
+            reason="custom_layout_overlay_close",
+        )
         session = self._session
         if session is not None:
             session.unsubscribe_changes(self._sync_visualizer_presentation_runtime)

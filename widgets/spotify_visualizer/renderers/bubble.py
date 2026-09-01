@@ -60,7 +60,7 @@ def _copy_float_buffer(state, attr_name: str, source, size: int, *, active_size:
 def get_uniform_names() -> list[str]:
     return [
         "u_overall_energy", "u_bass_energy", "u_mid_energy", "u_high_energy",
-        "u_playing", "u_ghost_alpha", "u_bubble_count",
+        "u_playing", "u_ghost_alpha", "u_ghost_decay", "u_bubble_count",
         "u_bubbles_pos", "u_bubbles_extra", "u_bubbles_trail",
         "u_trail_strength", "u_tail_opacity",
         "u_specular_dir", "u_gradient_dir", "u_gradient_mode",
@@ -78,14 +78,23 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_high_energy", eb.high)
     _set1i(gl, u, "u_playing", 1 if s._playing else 0)
 
-    # Ghost alpha (mode-specific: bubble)
+    # Ghost controls (mode-specific: bubble). Ghost decay reuses the existing
+    # simulation smear history; no second history/timer/pass is introduced.
     loc = u.get("u_ghost_alpha", -1)
+    try:
+        ghost_enabled = bool(s._bubble_ghosting_enabled)
+        ga = float(s._bubble_ghost_alpha if ghost_enabled else 0.0)
+    except Exception:
+        ghost_enabled = False
+        ga = 0.0
     if loc >= 0:
-        try:
-            ga = float(s._bubble_ghost_alpha if s._bubble_ghosting_enabled else 0.0)
-        except Exception:
-            ga = 0.0
         gl.glUniform1f(loc, max(0.0, min(1.0, ga)))
+    _set1f(
+        gl,
+        u,
+        "u_ghost_decay",
+        max(0.1, min(1.0, float(getattr(s, "_bubble_ghost_decay", 0.4) or 0.4))),
+    )
 
     # Bubble count
     bcount = min(s._bubble_count, _MAX_BUBBLES)
@@ -115,14 +124,18 @@ def upload_uniforms(gl, u: dict, s) -> bool:
         )
         gl.glUniform4fv(loc, bcount, extra_buf)
 
-    # Bubble trail data (vec3 array: TRAIL_STEPS xy + strength per bubble)
+    # Bubble trail data (vec3 array: TRAIL_STEPS xy + strength per bubble).
+    # Ghosting consumes the same already-produced history even when the optional
+    # ripple-tail style is off, so adding temporal Ghost behavior does not create
+    # another Python history owner or scheduler.
     loc = u.get("u_bubbles_trail", -1)
     trail_enabled = (
         bcount > 0
         and float(getattr(s, "_bubble_trail_strength", 0.0) or 0.0) > 0.001
         and float(getattr(s, "_bubble_tail_opacity", 0.0) or 0.0) > 0.001
     )
-    if loc >= 0 and trail_enabled:
+    ghost_history_enabled = bcount > 0 and ghost_enabled and ga > 0.001
+    if loc >= 0 and (trail_enabled or ghost_history_enabled):
         trail_buf = _copy_float_buffer(
             s,
             "_bubble_uniform_trail_buf",
