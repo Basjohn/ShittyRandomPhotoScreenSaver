@@ -293,8 +293,18 @@ That one authority resolves into two DERIVED per-layer values on
 
 `content_fade` is a distinct LAYER value, not a second clock. It must always be a pure function of the
 same fade progress as `scene_fade`; never drive it from an independent animation/timer and never treat
-it as a permanent second fade authority. (Pre-cutover the Quick publisher leaves it at 1.0 because the
-live fade animation is not yet wired into the Quick path.)
+it as a permanent second fade authority.
+
+**Quick-path wiring (2026-09-01).** In the retained Quick path the visualizer's first-appearance fade is
+owned by `QuickDisplayVisualizerOwner`, not the QWidget-era `VisualizerPresentationFade`/`ShadowFadeProfile`
+(those, and the retired per-tick `push_spotify_visualizer_frame`, must not be resurrected). The owner eases
+`scene_fade` 0→1 once per activation (`_activation_scene_fade`, smoothstep over
+`_ACTIVATION_SCENE_FADE_DURATION_S`) sampled through the existing pacer-driven `sync_present` + transition
+clock — no new timer. Because the GL content is a custom `QSGRenderNode` that the scene graph cannot apply
+item opacity to, `rendering/quick/visualizer/node.py` folds `inheritedOpacity()` (authored `scene_fade` x
+generation `startupRevealOpacity` gate) into `content_fade` at render time, only while genuinely fading. The
+whole visualizer therefore fades shell + content coherently and honours the coordinated startup reveal, and
+`content_fade` remains free to carry the mode-transition crossfade layer.
 
 For carded modes the authority fades shell + content coherently.
 

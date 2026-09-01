@@ -20,6 +20,12 @@ logger = get_logger(__name__)
 
 _DEFAULT_MAX_FPS = 90.0
 _MODE_TRANSITION_HALF_DURATION_S = 0.25
+# Authored first-appearance reveal for the visualizer scene fade. The whole
+# visualizer (card + GL content) eases up from zero once per activation so it
+# never snaps in when its heavy first frame lands outside the coordinated
+# startup-reveal window. This is the visualizer's own single scene-fade
+# authority; the generation startup-reveal gate is a separate root multiplicand.
+_ACTIVATION_SCENE_FADE_DURATION_S = 1.3
 
 
 def _mode_runtime_factory(mode_id: str) -> Callable[[], Any]:
@@ -78,6 +84,11 @@ class QuickDisplayVisualizerOwner:
         self._mode_transition_phase = "idle"
         self._mode_transition_started_at = 0.0
         self._mode_transition_fade = 1.0
+        # ``None`` until the owner first starts: any presentation resolved before
+        # then is fully opaque (never hidden). Once armed, the authored scene
+        # fade eases 0 -> 1 over ``_ACTIVATION_SCENE_FADE_DURATION_S`` sampled
+        # against the same clock the mode-transition fade already uses.
+        self._activation_fade_started_at: float | None = None
         self._pending_mode_activation: dict[str, Any] | None = None
         self._sync: Any = None
         self._configured = False
@@ -367,13 +378,37 @@ class QuickDisplayVisualizerOwner:
         )
         self._committed_layout_extent = None
 
+    def _activation_scene_fade(self) -> float:
+        """Return the authored 0 -> 1 first-appearance scene fade progress.
+
+        Before the owner starts (``started_at is None``) this is fully opaque so
+        no pre-start metrics commit can hide the scene. Once armed it eases with
+        a smoothstep against the shared transition clock and lands exactly on
+        1.0, after which it stays there for the generation's lifetime.
+        """
+
+        started = self._activation_fade_started_at
+        if started is None:
+            return 1.0
+        duration = _ACTIVATION_SCENE_FADE_DURATION_S
+        if duration <= 0.0:
+            return 1.0
+        linear = (float(self._transition_clock()) - started) / duration
+        if linear <= 0.0:
+            return 0.0
+        if linear >= 1.0:
+            return 1.0
+        return linear * linear * (3.0 - 2.0 * linear)
+
     def _resolve_current_presentation(self) -> Any:
+        scene_fade = self._activation_scene_fade()
         if self._presentation_resolver is not None:
             presentation = self._presentation_resolver()
             if presentation is None:
                 return None
             return replace(
                 presentation,
+                scene_fade=float(presentation.scene_fade) * scene_fade,
                 content_fade=(
                     float(presentation.content_fade) * self._mode_transition_fade
                 ),
@@ -406,6 +441,7 @@ class QuickDisplayVisualizerOwner:
             dpr=dpr,
             uniform_visual_scale=uniform_scale,
             viewport_extent=viewport_extent,
+            scene_fade=scene_fade,
             content_fade=self._mode_transition_fade,
             **self._card_shadow_kwargs,
         )
@@ -701,6 +737,9 @@ class QuickDisplayVisualizerOwner:
                 self._engine_acquired = True
             self.set_playing(controller.playing)
             self._start_logical_runtime(interval_s=interval_s)
+            # Arm the authored scene fade before the pacer can publish the first
+            # frame so the visualizer eases up from zero instead of snapping in.
+            self._activation_fade_started_at = float(self._transition_clock())
             pacer.set_visualizer_sync(self.sync_present)
             pacer.set_visualizer_active(True)
             self._started = True

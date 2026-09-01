@@ -39,9 +39,21 @@ gate makes that structurally impossible.
 
 ## Area 1 — residual pre-fade widget flash
 
-**2026-09-01 PHYSICAL VALIDATION FAILED — repair pending.**
+**2026-09-01 VISUALIZER SKIP FIXED + PHYSICALLY VALIDATED. Ordinary-family flash not reproduced in recent single-display runs — keep watching.**
 
-The attempted independent gate did not stop the same Steam-family startup flashes in the operator run. The code below describes the intended ownership shape, not accepted behavior. The next repair must identify the actual first-visible frame/admission seam rather than adding Steam-specific delays.
+Instrumenting the actual first-visible boundary (single-display `main_mc` hijack runs with `[STARTUP_TRACE]` logging) proved the orchestration was correct — every ordinary root is created before prime and rides the `startupRevealOpacity` gate — and isolated the real defect to the **Visualizer**, which alone "skipped" its fade:
+
+- the visualizer's GL bars are drawn by a custom `QSGRenderNode` whose content opacity is `u_fade = presentation.content_fade`; the node ignored the QML root's inherited opacity, so `startupRevealOpacity` faded only the card *shell* while the GL bars rendered at full opacity through the reveal and popped;
+- the visualizer's authored scene fade was never wired into the Quick presentation (`scene_fade`/`content_fade` were flat `1.0`), so it had no fade of its own on any activation.
+
+Fix (Qt Quick-native, no legacy QWidget/`ShadowFadeProfile`/`push_spotify_visualizer_frame` resurrection):
+
+1. `rendering/quick/visualizer/node.py` folds `QSGRenderNode.inheritedOpacity()` (authored scene fade x generation reveal gate) into `content_fade` at the single `render` seam, allocating a rebased immutable presentation only while genuinely fading. The GL content now fades in lockstep with the card and honours the coordinated startup reveal.
+2. `widgets/spotify_visualizer/quick_display_visualizer_owner.py` eases `scene_fade` 0→1 (smoothstep, `_ACTIVATION_SCENE_FADE_DURATION_S`) once per activation, sampled through the existing pacer-driven `sync_present` + transition clock — no new timer. This is the visualizer's own single scene-fade authority; it covers the race where the heavy first frame lands outside the coordinated reveal window.
+
+Regression bars: `tests/test_qtquick_visualizer_fade_authority.py::test_render_node_folds_inherited_opacity_into_content_fade` and `::test_owner_scene_fade_eases_from_zero_on_activation`.
+
+The code below describes the ordinary-family gate ownership shape, which continues to hold.
 
 The common retained root now has an independent startup gate. No Steam-specific
 patch exists: every ordinary family is fenced by the same property and the
@@ -68,9 +80,9 @@ new clock. This closes the former ordinary-only fan-out seam without weakening F
 
 ## Area 3 — desktop -> application crossfade reveal
 
-**2026-09-01 PHYSICAL VALIDATION FAILED — repair pending.**
+**2026-09-01 PHYSICALLY VALIDATED WORKING in current source.**
 
-The operator observed **no desktop -> first-wallpaper crossfade at all**, while the same startup widget flashes remained. Do not describe the current implementation as accepted. The next repair must prove that the desktop capture is actually the first presented retained source and must preserve the accepted R-63 non-exact-cover/1 px overscan window geometry during the entire startup presentation; never create an exact-cover startup-only path that can re-admit fullscreen-flip behavior.
+The earlier "no crossfade at all" was from a prior build. In the current tree, single-display `main_mc` runs and operator eyes-on both confirm the desktop -> first-wallpaper crossfade: `[STARTUP_DESKTOP] Seeded hidden Quick scene …` (real desktop dimensions), then `[STARTUP_DESKTOP] Crossfade admitted … duration_ms=1300`, then the coordinated widget reveal. The seed lands in `scene_controller.presentation_image`, so the first authored wallpaper resolves the crossfade branch rather than the direct-publish path. The R-63 non-exact-cover / 1 px overscan window geometry is untouched. Continue to watch multi-display cold starts for consistency; no exact-cover startup path was introduced.
 
 A transparent top-level window is not needed. On the target Windows/Qt path, the
 hidden display's `QScreen.grabWindow(0)` can snapshot the currently composed screen
