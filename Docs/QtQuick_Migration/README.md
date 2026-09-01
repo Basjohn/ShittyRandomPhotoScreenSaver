@@ -37,6 +37,7 @@ Live phase/checkpoint status is intentionally not duplicated here; read `Current
 | `H_Pre_Cutover_Visualizer_Edge_Corrections.md` | **closed audit record** for the pre-cutover visualizer edge findings |
 | `H_True_F_Technical_Closure.md` | **closed follow-up evidence** for technical-config ownership + real retained-consumer proof |
 | `H_Phase_Closure_2026-09-01.md` | **authoritative H closure record**: accepted gates, R-69 reactivity goldens, R-71 performance boundary, R-63 seam priority and I admission |
+| `Docs/Guardrails/Performance_Optimization_Contract.md` | **canonical post-H performance contract**: reactivity/freshness-first admission rules, modest/heavy reference envelopes, telemetry interpretation, late-J target order |
 | `Remaining_J_Final_Installed_Acceptance_Decomposition.md` | J compiled/installed/physical acceptance and closure matrix |
 | `J_Visual_Parity_Runtime_Acceptance_Addendum_2026-08-30.md` | current J physical/parity acceptance cells |
 | `J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md` | historical quality floor + Parity+ outcome rules |

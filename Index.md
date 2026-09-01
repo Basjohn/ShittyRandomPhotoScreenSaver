@@ -27,6 +27,7 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | runtime host/lifecycle | `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md` |
 | visualizer migration architecture | `Docs/QtQuick_Migration/03_Visualizer.md` |
 | visualizer presentation invariant | `Docs/Guardrails/Visualizer_Presentation.md` |
+| performance optimization admission / reference envelopes | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
 | visualizer authored/reference behavior | `Docs/Visualizer_Reference.md` |
 | Visualizer change checklist / preflight | `Docs/Visualizer_Change_Checklist.md` |
@@ -101,6 +102,7 @@ For geometry/CUSTOM work read these together:
 
 - `Docs/QtQuick_Migration/03_Visualizer.md`
 - `Docs/Guardrails/Visualizer_Presentation.md`
+- `Docs/Guardrails/Performance_Optimization_Contract.md` for any performance-motivated Visualizer/runtime change
 - `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - `Docs/Visualizer_Reference.md`
 - `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md`

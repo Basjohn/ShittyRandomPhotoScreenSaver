@@ -7,6 +7,7 @@ Cross-links:
 - current sequence/permission: `Current_Plan.md`
 - presentation guardrail: `Docs/Guardrails/Visualizer_Presentation.md`
 - Bubble temporal fidelity: `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
+- performance admission/acceptance: `Docs/Guardrails/Performance_Optimization_Contract.md`
 - authored behavior/reference: `Docs/Visualizer_Reference.md`
 - closed-H historical-vs-Quick reactivity evidence: `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`
 - exact reactivity evidence matrix: `Docs/QtQuick_Migration/Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`
@@ -20,7 +21,7 @@ logical/render/geometry contract; `Current_Plan.md` owns live migration status a
 work may finish removing migration scaffolding without reopening D1–D9.
 
 Installed Bubble cadence, eyes-on parity and mixed-refresh checks remain physical acceptance concerns. They are not permission
-to change authored behavior or weaken deterministic contracts.
+to change authored behavior or weaken deterministic contracts. Performance work follows `Docs/Guardrails/Performance_Optimization_Contract.md`: protect newest-state freshness/authored reaction first, then target measured latency tails and useless allocation/work.
 
 ## 1. Preserved authored-time owner
 

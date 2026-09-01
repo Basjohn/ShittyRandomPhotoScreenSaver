@@ -6,6 +6,8 @@ Core principle:
 
 > SRPSS stays fast by removing useless work and bad ownership, not by reducing authored work.
 
+Canonical performance admission/acceptance checklist and reference envelopes: `Docs/Guardrails/Performance_Optimization_Contract.md`.
+
 ## 1. Architecture baseline
 
 Accepted destination:
@@ -54,7 +56,9 @@ R-71 is the accepted performance boundary: one persistent serial `visualizer.aud
 
 R-69 is the performance admission veto. A change is **not** an optimization if it improves GC/FPS/skip counters by weakening visible musical response, shrinking Bubble head/radius deltas with viewport extent, suppressing Ghost/history displacement, lowering authored cadence, increasing source/snapshot age, or coalescing away protected transient edges. Apply the same rule to all Visualizer modes.
 
-Rare deep GC pauses remain late-J evidence debt. Change GC thresholds/lifetime policy only from a measured allocation/lifetime mechanism; do not tune collection counters in isolation.
+Rare deep GC pauses remain late-J evidence debt. `Docs/Guardrails/Performance_Optimization_Contract.md` owns the target order: rare active latency tails and exact allocation/lifetime mechanisms first; raw GC count, average FPS, CPU/GPU and resource counts are secondary. Change GC thresholds/lifetime policy only from a measured mechanism; do not tune collection counters in isolation.
+
+The 2026-09-01 modest-load reference also showed why: perceived quality was excellent with ~89.9 Hz logical Visualizer publication and ~20 ms median snapshot age while the worst gen-2 pause fell to ~67.7 ms. Protect that freshness/latency shape rather than optimizing one counter.
 
 ## 4. Runtime overlays
 

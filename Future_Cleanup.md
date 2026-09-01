@@ -121,7 +121,7 @@ Additional high-confidence source/tool residue to prove then remove in bounded I
 - old GL/compositor/visualizer presenter aliases/adapters/comments/spikes whose production callers disappeared with H;
 - temporary `h-destination` runner alias after exact script/doc caller proof shows all automation has moved to `destination`.
 
-Do not classify rare deep GC pauses as deletion cleanup. R-71 carries that evidence to late J performance work, and any future optimization must preserve Visualizer reactivity/freshness/cadence.
+Do not classify rare deep GC pauses as deletion cleanup. R-71 carries that evidence to late J performance work, and `Docs/Guardrails/Performance_Optimization_Contract.md` governs that work. Future cleanup must target proven ownership/growth/useless work; stable RSS/VRAM/thread/handle/cache counts are not deletion targets merely because they look large, and no cleanup may sacrifice Visualizer reactivity/freshness/cadence.
 
 ## Phase J
 
