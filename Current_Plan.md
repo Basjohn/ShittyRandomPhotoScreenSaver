@@ -11,6 +11,7 @@ The production Qt Quick authority cutover, post-cutover functional/runtime corre
 - `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md`
 - `Docs/Historical_Bugs/README.md`
 - `Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md`
+- `Docs/Guardrails/Performance_Optimization_Contract.md` — canonical post-H performance admission/acceptance rules and modest/heavy reference envelopes.
 - the superseded H5c/R6/R7 checkpoint documents retained for provenance.
 
 Do **not** repopulate the active work queue with hundreds of stale completed H sub-items. Preserve H as a compact **completed checklist** here and keep the detailed evidence in its closure/historical records. If later evidence falsifies an accepted H contract, reopen the smallest demonstrated owner/incident and repair it; do not revive H wholesale.
@@ -66,6 +67,8 @@ Residual deep gen-2 pauses:     ~130-146 ms in that run
 Those residual deep pauses are real J/end-performance debt. They are **not** permission to reduce authored work, cadence, freshness, response amplitude, motion, viewport scaling, newest-state semantics, or visible fidelity.
 
 ## Golden guardrails carried into I/J
+
+Performance work in I/J must also follow `Docs/Guardrails/Performance_Optimization_Contract.md`. That document owns the permanent rule that **freshness/reactivity and latency-tail quality outrank prettier aggregate counters**, plus the 2026-09-01 heavy/modest reference envelopes.
 
 ### 1. Visualizer reactivity/freshness is sacred
 
@@ -227,7 +230,10 @@ Front-load the mandatory image-oracle parity work (`images/migration/Ideal (PreM
 - [ ] Complete remaining Visualizer presentation polish, including any proven extreme Bubble full-expansion tail, **without weakening R-69 reactivity**.
 - [ ] Consider device-space R-63 seam refinement only if it preserves `black=0` generically across DPR/resolution combinations; bounded overshoot remains preferable to black flash risk.
 - [ ] Fix latency/telemetry accounting so recreation boundaries cannot report stale pre-recreation timestamps as multi-second live latency.
-- [ ] Revisit late performance/GC only from fresh allocation/lifetime evidence and with no reactivity/freshness/cadence sacrifice.
+- [ ] Run late-J performance work under `Docs/Guardrails/Performance_Optimization_Contract.md`: target rare active latency tails and proven useless allocation/lifetime work before average counters.
+- [ ] Revisit GC only from a clear allocation/lifetime mechanism; preserve ~90 Hz authored Visualizer cadence/newest-state freshness/R-69 and do not tune collection counts in isolation.
+- [ ] Verify resource plateau across recreation/soak (RSS/USS, VRAM, threads, handles, workers/caches) without destroying useful bounded caches merely to reduce Task Manager numbers.
+- [ ] Recheck both modest-load quality and representative-heavy graceful degradation after any performance change.
 - [ ] Complete compiled/frozen/installed 1/2/N-display/DPR/topology acceptance.
 - [ ] Complete final family-specific parity/polish acceptance from `Remaining_J_Final_Installed_Acceptance_Decomposition.md`.
 - [ ] Reconcile remaining historical-bug records, including failed methods worth preserving.

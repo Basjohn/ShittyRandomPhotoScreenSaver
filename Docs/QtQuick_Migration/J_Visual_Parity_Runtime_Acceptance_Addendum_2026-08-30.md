@@ -214,6 +214,8 @@ Acceptance: while moving/resizing an item, useful centre/peer/edge/safe-gutter r
 
 ### Performance/debug overlay — low priority
 
+Any overlay/telemetry or optimization work in J follows `Docs/Guardrails/Performance_Optimization_Contract.md`. In particular, the overlay must distinguish active latency tails from demand-light no-swap `dt_max`, and must not present high-refresh pacer skip or raw GC counts as standalone quality verdicts.
+
 The operator also reports that the prior performance/debug overlay affordance is absent. Preserve this as low-priority J/diagnostic work. A future overlay may consume bounded read-only metrics already owned by current performance/runtime instrumentation, but must be a retained Quick presentation under the accepted scene and must not resurrect the legacy `gl_profiler.py` rendering path, QWidget/QRhi/GL presenter ownership, another accelerated window, or a new cadence owner.
 
 Acceptance: when explicitly enabled for diagnostics, one lightweight Quick-native overlay shows the agreed useful metrics and disappears cleanly; normal product mode pays no hidden polling/render-owner cost merely because the feature exists.

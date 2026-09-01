@@ -44,6 +44,8 @@ enabled / disabled
 Do not revive old presenter, disabled-family, or dual-authority terminology just because a future idea
 was originally written before those migration contracts landed.
 
+All future performance-sensitive features also inherit `Docs/Guardrails/Performance_Optimization_Contract.md`. Feature cost must be measured without weakening current freshness/reactivity or replacing bounded useful caches/resources with latency-heavy churn.
+
 ---
 
 # 1. Post-migration visual-effects architecture
@@ -93,7 +95,7 @@ Permanent post-H safety rules apply to every future visual/transition experiment
 
 - **R-69 Visualizer reactivity is golden.** Geometry/aspect adaptation may reframe, reflow, project or presentation-smooth, but must not globally compress authored musical response, head/radius amplitude, motion, Ghost/history displacement, transient strength, or source freshness as a viewport becomes wide/tall. State already normalized/projected into renderer-content coordinates is consumed exactly once. If an extreme visual tail is too large, target only that proven tail.
 - **R-63 black=0 outranks exact shared-edge cover.** A bounded one-device-pixel overshoot is preferable to resurrecting black/stale flashes. Any future seam/coverage change must derive native device geometry from actual monitor rectangles/DPR and remain valid across different resolutions, coordinates, monitor ordering and mixed 1.0/1.25/1.5/1.75/2.0 DPR rather than hard-coding the operator's current pair.
-- Future performance work removes measured useless allocation/work. It does not lower authored cadence, grow source/snapshot age, reintroduce FIFO/catch-up, or make visuals less reactive simply to improve counters.
+- Future performance work follows `Docs/Guardrails/Performance_Optimization_Contract.md`: remove measured useless allocation/work and target latency tails/resource growth, not authored cadence, source/snapshot freshness, reaction amplitude, bounded useful caches or black-flash safety.
 
 Performance rules:
 

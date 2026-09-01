@@ -33,6 +33,8 @@ deleted once their destination contract is owned and proven. H already establish
 
 Never improve counters by silently reducing authored work/fidelity.
 
+Performance-specific admission, telemetry semantics, load-class evidence and reference envelopes live in `Docs/Guardrails/Performance_Optimization_Contract.md`. Use that checklist before changing cadence, GC policy, scheduling, caching, resource lifetime or presentation for performance.
+
 ## Read / scope discipline
 
 ```text

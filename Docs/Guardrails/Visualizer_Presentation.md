@@ -6,6 +6,7 @@ Read for visualizer cadence, source freshness, render state, fade/readiness, she
 geometry, and presentation work.
 
 For Bubble also read `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
+For any performance-motivated change also read `Docs/Guardrails/Performance_Optimization_Contract.md`; it makes freshness/reactivity and R-69 explicit admission vetoes, not post-hoc checks.
 
 ## 1. Ownership
 

@@ -338,6 +338,8 @@ Require:
 
 ## 10. Performance / physical cadence
 
+Canonical performance rules: `Docs/Guardrails/Performance_Optimization_Contract.md`. J performance work must preserve its golden invariants and run its admission/acceptance checklists; this section defines the installed/physical evidence cells on top of that contract.
+
 Do not infer panel delivery solely from internal render/frame callbacks.
 
 Use the established production evidence approach where relevant, including PresentMon or the current equivalent, and report
@@ -356,6 +358,16 @@ has arrived.
 If parity features add cost, attribute the cost to GUI sync, render node, widget scene, texture upload, source/provider or
 other measured owner before changing architecture. Do not reduce authored Visualizer cadence or visible fidelity simply to
 improve a benchmark.
+
+Late-J performance checklist:
+
+- [ ] separate ordinary active stalls from recreation/teardown and demand-light no-swap intervals;
+- [ ] fix recreation-boundary latency telemetry before treating multi-second warnings as live stalls;
+- [ ] target repeatable p95/p99/max/severe-gap regressions before average FPS/CPU/GPU cosmetics;
+- [ ] correlate GC duration/yield with event-loop/visible stalls rather than optimizing collection count alone;
+- [ ] preserve Visualizer ~90 Hz authored cadence/newest-state freshness and R-69 at canonical/wide/tall geometry;
+- [ ] verify resource plateau across recreation/soak; stable bounded caches are not leaks;
+- [ ] compare both a modest-load quality cell and a representative-heavy degradation cell after meaningful performance changes.
 
 ## 11. Long soak / resource stability
 
