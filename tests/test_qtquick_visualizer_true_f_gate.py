@@ -48,6 +48,12 @@ class _TechnicalWorker:
     def set_audio_block_size(self, value: int) -> None:
         self.audio_block_size = int(value)
 
+    def set_transient_lane_config(
+        self, kick_lane_gain: float, spectrum_lane_transient_mix: float
+    ) -> None:
+        self._kick_lane_gain = float(kick_lane_gain)
+        self._spectrum_lane_transient_mix = float(spectrum_lane_transient_mix)
+
 
 class _TechnicalEngine:
     """Small production-shaped engine recording destination technical apply."""
@@ -78,6 +84,13 @@ class _TechnicalEngine:
 
     def set_input_gain(self, value: float) -> None:
         self.input_gains.append(float(value))
+
+    def set_transient_lane_config(
+        self, kick_lane_gain: float, spectrum_lane_transient_mix: float
+    ) -> None:
+        self._audio_worker.set_transient_lane_config(
+            kick_lane_gain, spectrum_lane_transient_mix
+        )
 
 
 def _bubble_technical_model() -> SpotifyVisualizerSettings:
