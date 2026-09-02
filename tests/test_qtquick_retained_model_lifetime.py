@@ -17,10 +17,24 @@ from __future__ import annotations
 import gc
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent, QObject
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QUrl
+from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
 import shiboken6
+
+
+# Minimal family item that declares the visibility authorities the host stamps
+# (startupRevealOpacity, fadeOpacity) before scene admission, so a bare QQuickItem
+# dynamic property does not make the host's real projection check fail.
+_FAMILY_ITEM_QML = (
+    b"import QtQuick\n"
+    b"Item {\n"
+    b"    property real startupRevealOpacity: 1.0\n"
+    b"    property real fadeOpacity: 1.0\n"
+    b"    property bool externalCardShadow: false\n"
+    b"}\n"
+)
 
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.widgets.host import (
@@ -43,7 +57,15 @@ def _make_host(qt_app):
     created: list[QQuickItem] = []
 
     def _create_family_item(family_id, initial, ctx) -> QQuickItem:
-        item = QQuickItem()
+        # Parent the component to the long-lived owner so it is not GC'd at
+        # return (which would take the item it created with it).
+        component = QQmlComponent(ctx.engine(), owner)
+        component.setData(_FAMILY_ITEM_QML, QUrl())
+        item = component.create(ctx)
+        assert isinstance(item, QQuickItem), component.errorString()
+        # The real factory hands the host C++-owned items; without this the
+        # engine's JS GC can delete this item the moment Python drops its ref.
+        QQmlEngine.setObjectOwnership(item, QQmlEngine.ObjectOwnership.CppOwnership)
         for key, value in initial.items():
             item.setProperty(str(key), value)
         created.append(item)

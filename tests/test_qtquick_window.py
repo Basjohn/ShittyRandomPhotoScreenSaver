@@ -83,9 +83,11 @@ def test_binding_loss_is_immutable_primitive_generation_state():
 def test_fullscreen_compat_geometry_overscans_without_losing_coverage():
     # Windows promotes an exact-cover borderless window to a hardware
     # fullscreen-flip presentation; PresentMon proved the composition<->flip
-    # PresentMode transitions present the Display-1 black flash. A 1px overscan on
-    # every edge disqualifies exact-cover promotion (stable composed present) while
-    # preserving full visible coverage (only an off-screen 1px ring is clipped).
+    # PresentMode transitions present the Display-1 black flash. A 1px overscan
+    # disqualifies exact-cover promotion (stable composed present) while preserving
+    # full visible coverage. The refined R-63 geometry no longer overscans all four
+    # edges (that perturbed mixed-DPR shared seams): with no virtual-desktop
+    # rectangle supplied it uses the narrowest safe top-only overscan.
     screen = QRect(2560, 0, 2560, 1440)
     compat = QuickDisplayWindow._fullscreen_compat_geometry(screen)
 
@@ -93,7 +95,7 @@ def test_fullscreen_compat_geometry_overscans_without_losing_coverage():
     assert compat != screen
     # ...but it still fully covers every visible pixel of the screen.
     assert compat.contains(screen)
-    assert compat == QRect(2559, -1, 2562, 1442)
+    assert compat == QRect(2560, -1, 2560, 1441)
     # The source screen rect the caller passed is not mutated.
     assert screen == QRect(2560, 0, 2560, 1440)
 

@@ -270,7 +270,13 @@ def test_single_quick_custom_owner_save_commits_geometry_size_and_enabled(
         assert matched is not None
         payload = get_widget_layout_variant_payload(entries, "clock", "digital")
         assert payload is not None
-        assert payload["size_payload"] == {"font_size": 64}
+        # The committed size_payload now carries the absolute CUSTOM resize scale
+        # so a later session restores the same scaled geometry rather than a fresh
+        # 100% baseline.
+        assert payload["size_payload"] == {
+            "font_size": 64,
+            "_custom_resize_scale": 4.0 / 3.0,
+        }
 
         committed = resolve_quick_committed_geometry(
             settings.widgets,
