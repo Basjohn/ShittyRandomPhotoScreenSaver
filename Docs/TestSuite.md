@@ -614,7 +614,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_gmail_imap_actions.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/test_gmail_oauth.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/test_gmail_preparation.py` | **KEEP** | Retain; no current retirement identified. |
-| `tests/test_qtquick_gmail_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Gmail config/style, stable accepted-state row projection, static QML popup/height/visual fidelity, real manager-owned runtime/host state and action routing, and no-recreation lifecycle coverage. |
+| `tests/test_qtquick_gmail_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Gmail config/style, stable accepted-state row projection, static QML popup/height/visual fidelity, real manager-owned runtime/host state and action routing, and no-recreation lifecycle coverage. Includes the context-menu click-through guard (`request_open` refuses a browser-open while the shared pointer guard is armed) and the Reusable-Headers QML contract (header-aware `Math.max` width, `BrandedHeader`-owned logo desaturation and border wiring). |
 | `tests/test_gmail_retiring_runtime.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/test_gmail_settings_roundtrip.py` | **KEEP** | Retain; no current retirement identified. |
 
@@ -624,7 +624,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | --- | --- | --- |
 | `tests/test_main_reddit_helper_preload.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/test_qtquick_reddit_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Reddit/Reddit2 config/style/row/state/action and no-recreation destination coverage. |
-| `tests/test_reddit_exit_logic.py` | **KEEP** | Retain; no current retirement identified. |
+| `tests/test_reddit_exit_logic.py` | **KEEP** | Quick-era Reddit URL queue/flush logic plus the context-menu click-through regression bar (`TestContextMenuClickThroughSuppression`: a retained-menu action arms the shared pointer guard so a same-gesture phantom Reddit open is refused). Stale pre-Quick `DisplayWidget`/`cleanup`-deferral tests (removed `rendering.display_widget` module and removed `_pending_reddit_url`-at-cleanup mechanism) were removed; successor coverage lives in `TestCleanQueueFlow`. |
 | `tests/test_reddit_helper_recovery.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/test_reddit_helper_runtime.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/test_reddit_helper_task_harness.py` | **KEEP** | Retain; no current retirement identified. |

@@ -746,6 +746,20 @@ class DisplayManager(QObject):
     ) -> bool:
         """Route one admitted retained-menu action to existing product owners."""
 
+        # A retained-menu item is activated by a pointer tap. Because Qt Quick
+        # TapHandlers take non-exclusive passive grabs, that same press/release
+        # is also recognised by any widget TapHandler (Reddit post, Gmail row)
+        # sitting beneath the menu surface - firing its browser-open/exit action
+        # in the same gesture. Arm the shared pointer-input guard here, before
+        # the action routes and before the menu dismisses, so the phantom widget
+        # open that fires microseconds later on the same release is refused. This
+        # is the arming site the Reddit open path already checks but that no
+        # menu-action boundary previously supplied; the Gmail open path checks it
+        # too. It is a passive monotonic-deadline flag, not a timer.
+        from rendering.runtime_input import suppress_runtime_pointer_input
+
+        suppress_runtime_pointer_input(700, reason="context_menu_action")
+
         action = str(action_id or "").strip()
         if action == "previous":
             self.previous_requested.emit()

@@ -610,6 +610,16 @@ class GmailPresentationModel(QObject):
         )
 
     def request_open(self, message_id: str) -> bool:
+        # Refuse a browser-open that belongs to a just-dismissed context-menu
+        # gesture. A retained-menu item tap is also recognised by this row's
+        # TapHandler (non-exclusive Qt Quick passive grabs), so without this the
+        # same click both selects the menu item and opens Gmail. The shared
+        # pointer guard is armed at the menu-action boundary; this mirrors the
+        # check the Reddit open path already performs.
+        from rendering.runtime_input import runtime_pointer_input_is_suppressed
+
+        if runtime_pointer_input_is_suppressed("gmailOpenMessageRequested"):
+            return False
         if not self.is_active or not self._snapshot.interaction_enabled or self._runtime_service is None:
             return False
         if not any(row.message_id == message_id for row in self._row_model.rows):
@@ -952,6 +962,12 @@ class RetainedGmailPresentation:
         self._retained.set_card_style(style.card_style)
 
     def _handle_open_inbox_requested(self) -> bool:
+        # Same context-menu click-through guard as request_open: the inbox/header
+        # tap target can sit under a dismissed menu item too.
+        from rendering.runtime_input import runtime_pointer_input_is_suppressed
+
+        if runtime_pointer_input_is_suppressed("gmailOpenInboxRequested"):
+            return False
         if (
             not self._model.is_active
             or not self._model.interactionEnabled

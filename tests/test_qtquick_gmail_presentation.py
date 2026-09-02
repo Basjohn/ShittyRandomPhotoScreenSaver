@@ -475,6 +475,49 @@ def test_gmail_semantic_actions_require_active_interaction_and_owned_row() -> No
     assert model.request_open("oauth") is False
 
 
+def test_gmail_open_is_refused_during_context_menu_gesture_suppression() -> None:
+    """A phantom Gmail open on a context-menu click-through must be refused.
+
+    Regression bar for the context-menu click-through bug: a retained-menu item
+    tap is also recognised by the message row's TapHandler beneath it (Qt Quick
+    passive grabs), which fired a browser open in the same gesture that opened
+    Settings. The menu-action boundary now arms the shared pointer guard; this
+    proves request_open honours it. If either the guard check here or the arming
+    is removed, the phantom open reaches the runtime service again.
+    """
+
+    from rendering.runtime_input import (
+        clear_runtime_pointer_input_suppression,
+        suppress_runtime_pointer_input,
+    )
+
+    clear_runtime_pointer_input_suppression()
+    try:
+        service = _Service()
+        config = _config(group_threads=False)
+        model = GmailPresentationModel(config, _style(config), runtime_service=service)
+        assert model.activate(thread_manager="tm") is True
+        model.on_gmail_runtime_snapshot(_snapshot(1, (_email("oauth"),)))
+        assert model.set_interaction_enabled(True) is True
+
+        # Baseline: no gesture suppression armed, the open reaches the service.
+        assert model.request_open("oauth") is True
+        assert service.opens == ["oauth"]
+
+        # A context-menu action arms the shared pointer guard. The phantom open
+        # on the same release must now be refused - no second service open.
+        suppress_runtime_pointer_input(700, reason="context_menu_action")
+        assert model.request_open("oauth") is False
+        assert service.opens == ["oauth"]
+
+        # Once the guard window is cleared, ordinary interaction resumes.
+        clear_runtime_pointer_input_suppression()
+        assert model.request_open("oauth") is True
+        assert service.opens == ["oauth", "oauth"]
+    finally:
+        clear_runtime_pointer_input_suppression()
+
+
 @pytest.mark.qt
 def test_real_gmail_runtime_drives_registered_scene_host_actions_and_state_in_place(
     qt_app, monkeypatch
@@ -672,17 +715,24 @@ def test_gmail_qml_keeps_popup_and_dynamic_height_out_of_row_identity(qt_app) ->
         first_row = _find_visual_item(item, "gmailMessageRow_0")
         popup = _find_visual_item(item, "gmailActionPopup")
         header = _find_visual_item(item, "gmailHeaderFrame")
-        logo_effect = _find_visual_item(item, "gmailHeaderLogoEffect")
+        # Reusable Headers refactor: the logo and its desaturation MultiEffect
+        # moved into the shared BrandedHeader (logo image "gmailHeaderLogo", the
+        # effect now owned as an encapsulated layer.effect with no findable
+        # item). Assert the logo item plus the semantic desaturation driver
+        # (gmailModel.desaturateLogo) that binds the effect, rather than the old
+        # standalone "gmailHeaderLogoEffect" item.
+        logo = _find_visual_item(item, "gmailHeaderLogo")
         assert first_row is not None
         assert popup is not None
         assert header is not None
-        assert logo_effect is not None
+        assert logo is not None
         assert popup.isVisible() is False
-        assert logo_effect.property("saturation") == pytest.approx(-1.0)
-        assert header.property("resolvedBorderColor") == model.headerBorderColor
-        assert header.property("resolvedBorderWidth") == pytest.approx(
-            model.headerBorderWidth
-        )
+        assert model.desaturateLogo is True
+        # Border resolution moved into the shared BrandedHeader (frame border is
+        # a QQuickPen not readable from PySide, and its stroke is scale-adjusted
+        # inside that component). The header-to-model border wiring is asserted
+        # at the QML-text seam in the presentation-only test; here we only need
+        # the header frame to exist, which is confirmed above.
         one_row_height = float(item.property("committedContentHeight"))
 
         item.setProperty("activeActionIdentity", "one")
@@ -740,13 +790,23 @@ def test_gmail_qml_is_presentation_only_and_keeps_popup_height_independent() -> 
         assert marker not in qml
     assert "onDoubleTapped: gmailRoot.refreshRequested()" in qml
     assert "committedContentHeight: gmailModel.contentHeight" in qml
-    # H9/R-67: Gmail is a whole-card uniform-transform family. Its model width
-    # is already outer width; only row-derived height needs the shell inset.
+    # H9/R-67: Gmail is a whole-card uniform-transform family. The content-driven
+    # term is already outer width and excludes the shell inset; Reusable Headers
+    # made width the header-aware max of that content width and the header's own
+    # required width, while only row-derived height carries the shell inset.
     assert "uniformScaleTransform: true" in qml
-    assert "preferredContentWidth: gmailModel.contentWidth" in qml
+    assert "preferredContentWidth: Math.max(" in qml
+    assert "gmailModel.contentWidth," in qml
     assert "preferredContentHeight: gmailModel.contentHeight + gmailRoot.shellInset" in qml
+    # The content term must not gain a shell inset inline (naive outer-rect lie).
     assert "preferredContentWidth: gmailModel.contentWidth +" not in qml
-    assert "MultiEffect" in qml
+    # Logo desaturation now lives inside the shared BrandedHeader, driven by the
+    # model rather than an inline MultiEffect in this presentation.
+    assert "logoDesaturated: gmailRoot.gmailModel.desaturateLogo" in qml
+    # The desaturation MultiEffect is composed via the shared BrandedHeader now,
+    # not inline in this presentation; the header border resolves from the model.
+    assert "BrandedHeader {" in qml
+    assert "borderColor: gmailRoot.gmailModel.headerBorderColor" in qml
     assert "gmailActionPopup" in qml
     assert "menuOpen ?" not in qml
     descriptor = ordinary_widget_family_component("gmail")
