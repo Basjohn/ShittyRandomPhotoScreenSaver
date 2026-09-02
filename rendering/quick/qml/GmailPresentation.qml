@@ -28,7 +28,12 @@ OverlayWidget {
     // row/content-derived and excludes the shell inset, so only height needs
     // compensation for recreation containment.  Adding shellInset to width
     // lies to CUSTOM about the editable outer rect and breaks alignment.
-    preferredContentWidth: gmailModel.contentWidth
+    preferredContentWidth: Math.max(
+        gmailModel.contentWidth,
+        headerFrame.implicitWidth
+            + (refreshGlyph.visible ? refreshGlyph.width + 10.0 : 0.0)
+            + gmailRoot.shellInset
+    )
     preferredContentHeight: gmailModel.contentHeight + gmailRoot.shellInset
 
     signal openInboxRequested()
@@ -102,79 +107,39 @@ OverlayWidget {
             id: headerArea
             objectName: "gmailHeaderArea"
             width: parent.width
-            height: Math.max(36.0, gmailRoot.gmailModel.headerLogoSize + 10.0)
+            height: headerFrame.implicitHeight
 
-            Rectangle {
+            BrandedHeader {
                 id: headerFrame
-                objectName: "gmailHeaderFrame"
-                readonly property color resolvedBorderColor:
-                    gmailRoot.gmailModel.headerBorderColor
-                readonly property real resolvedBorderWidth:
+                frameObjectName: "gmailHeaderFrame"
+                logoObjectName: "gmailHeaderLogo"
+                textObjectName: "gmailHeaderText"
+                anchors.left: parent.left
+                label: gmailRoot.gmailModel.headerText
+                logoSource: gmailRoot.gmailModel.logoSource
+                logoDesaturated: gmailRoot.gmailModel.desaturateLogo
+                interactionEnabled: gmailRoot.gmailModel.interactionEnabled
+                fillColor: gmailRoot.gmailModel.headerFillColor
+                borderColor: gmailRoot.gmailModel.headerBorderColor
+                borderWidth: gmailRoot.scaleAwareStrokeWidth(
                     gmailRoot.gmailModel.showHeaderBorder
                         ? gmailRoot.gmailModel.headerBorderWidth : 0.0
-                anchors.left: parent.left
-                width: Math.min(
-                    parent.width - (refreshGlyph.visible ? refreshGlyph.width + 10.0 : 0.0),
-                    headerRow.implicitWidth + 20.0
                 )
-                height: parent.height
-                radius: 9.0
-                color: "transparent"
-                border.width: resolvedBorderWidth
-                border.color: resolvedBorderColor
-
-                Row {
-                    id: headerRow
-                    anchors.centerIn: parent
-                    spacing: 8.0
-
-                    Item {
-                        objectName: "gmailHeaderLogo"
-                        width: gmailRoot.gmailModel.headerLogoSize
-                        height: width
-
-                        Image {
-                            id: gmailLogoSource
-                            anchors.fill: parent
-                            source: gmailRoot.gmailModel.logoSource
-                            sourceSize.width: width * 2.0
-                            sourceSize.height: height * 2.0
-                            fillMode: Image.PreserveAspectFit
-                            asynchronous: false
-                            cache: true
-                            visible: false
-                        }
-
-                        MultiEffect {
-                            id: gmailLogoEffect
-                            objectName: "gmailHeaderLogoEffect"
-                            anchors.fill: parent
-                            source: gmailLogoSource
-                            saturation: gmailRoot.gmailModel.desaturateLogo ? -1.0 : 0.0
-                        }
-                    }
-
-                    ShadowedText {
-                        id: headerText
-                        objectName: "gmailHeaderText"
-                        text: gmailRoot.gmailModel.headerText
-                        color: gmailRoot.gmailModel.textColor
-                        font.family: gmailRoot.gmailModel.fontFamily
-                        font.pointSize: gmailRoot.gmailModel.headerFontSize
-                        font.bold: true
-                        verticalAlignment: Text.AlignVCenter
-                        shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
-                        shadowColor: gmailRoot.gmailModel.textShadowColor
-                        shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
-                        shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
-                    }
-                }
-
-                TapHandler {
-                    enabled: gmailRoot.gmailModel.interactionEnabled
-                    acceptedButtons: Qt.LeftButton
-                    onTapped: gmailRoot.openInboxRequested()
-                }
+                textColor: gmailRoot.gmailModel.headerTextColor
+                fontFamily: gmailRoot.gmailModel.fontFamily
+                textShadowEnabled: gmailRoot.gmailModel.textShadowEnabled
+                textShadowColor: gmailRoot.gmailModel.textShadowColor
+                textShadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
+                textShadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
+                shadowEnabled: gmailRoot.cardShadowEnabled
+                shadowColor: Qt.rgba(
+                    gmailRoot.cardShadowColor.r, gmailRoot.cardShadowColor.g,
+                    gmailRoot.cardShadowColor.b, gmailRoot.cardShadowColor.a * 0.45
+                )
+                shadowBlur: Math.max(2.0, Math.min(6.0, gmailRoot.cardShadowBlur * 0.25))
+                shadowOffsetX: gmailRoot.cardShadowOffsetX * 1.15
+                shadowOffsetY: gmailRoot.cardShadowOffsetY * 1.15
+                onActivated: gmailRoot.openInboxRequested()
             }
 
             ShadowedText {
@@ -186,6 +151,7 @@ OverlayWidget {
                 width: Math.max(24.0, implicitWidth + 4.0)
                 height: parent.height
                 text: gmailRoot.gmailModel.refreshing ? "◌" : "↻"
+                opacity: 0.7
                 color: gmailRoot.gmailModel.textColor
                 font.family: gmailRoot.gmailModel.fontFamily
                 font.pointSize: gmailRoot.gmailModel.fontSize

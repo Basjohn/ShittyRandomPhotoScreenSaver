@@ -130,9 +130,11 @@ class RedditWidgetSettings:
     show_separators: bool = True
     show_refresh_spiral: bool = True
     margin: int = 30
-    header_logo_px_adjust: int = 0
     border_color: list[int] = field(default_factory=lambda: [255, 255, 255, 255])
     border_opacity: float = 1.0
+    header_fill_color: list[int] = field(default_factory=lambda: [0, 0, 0, 0])
+    header_border_color: list[int] = field(default_factory=lambda: [255, 255, 255, 255])
+    header_text_color: list[int] = field(default_factory=lambda: [255, 255, 255, 230])
     color: list[int] = field(default_factory=lambda: [255, 255, 255, 230])
 
     @classmethod
@@ -157,9 +159,11 @@ class RedditWidgetSettings:
             show_separators=settings.get(f"{prefix}.show_separators", True),
             show_refresh_spiral=settings.get(f"{prefix}.show_refresh_spiral", True),
             margin=int(settings.get(f"{prefix}.margin", 30)),
-            header_logo_px_adjust=int(settings.get(f"{prefix}.header_logo_px_adjust", 0)),
             border_color=settings.get(f"{prefix}.border_color", [255, 255, 255, 255]),
             border_opacity=float(settings.get(f"{prefix}.border_opacity", 1.0)),
+            header_fill_color=settings.get(f"{prefix}.header_fill_color", [0, 0, 0, 0]),
+            header_border_color=settings.get(f"{prefix}.header_border_color", [255, 255, 255, 255]),
+            header_text_color=settings.get(f"{prefix}.header_text_color", [255, 255, 255, 230]),
             color=settings.get(f"{prefix}.color", [255, 255, 255, 230]),
         )
 
@@ -189,9 +193,11 @@ class RedditWidgetSettings:
             show_separators=_get("show_separators", True),
             show_refresh_spiral=_get("show_refresh_spiral", True),
             margin=int(_get("margin", 30)),
-            header_logo_px_adjust=int(_get("header_logo_px_adjust", 0)),
             border_color=_get("border_color", [255, 255, 255, 255]),
             border_opacity=float(_get("border_opacity", 1.0)),
+            header_fill_color=_get("header_fill_color", [0, 0, 0, 0]),
+            header_border_color=_get("header_border_color", [255, 255, 255, 255]),
+            header_text_color=_get("header_text_color", [255, 255, 255, 230]),
             color=_get("color", [255, 255, 255, 230]),
         )
 
@@ -212,9 +218,11 @@ class RedditWidgetSettings:
             f"{prefix}.show_separators": self.show_separators,
             f"{prefix}.show_refresh_spiral": self.show_refresh_spiral,
             f"{prefix}.margin": int(self.margin),
-            f"{prefix}.header_logo_px_adjust": int(self.header_logo_px_adjust),
             f"{prefix}.border_color": self.border_color,
             f"{prefix}.border_opacity": float(self.border_opacity),
+            f"{prefix}.header_fill_color": self.header_fill_color,
+            f"{prefix}.header_border_color": self.header_border_color,
+            f"{prefix}.header_text_color": self.header_text_color,
             f"{prefix}.color": self.color,
         }
 
@@ -233,16 +241,22 @@ class MediaWidgetSettings:
     background_opacity: float = 0.5
     show_controls: bool = True
     show_header_frame: bool = True
+    show_album: bool = True
+    show_playback_state: bool = True
     artwork_size: int = 200
     margin: int = 30
     border_color: list[int] = field(default_factory=lambda: [128, 128, 128, 255])
     border_opacity: float = 0.8
+    header_fill_color: list[int] = field(default_factory=lambda: [0, 0, 0, 0])
+    header_border_color: list[int] = field(default_factory=lambda: [255, 255, 255, 255])
+    header_text_color: list[int] = field(default_factory=lambda: [255, 255, 255, 230])
     color: list[int] = field(default_factory=lambda: [255, 255, 255, 230])
     bg_color: list[int] = field(default_factory=lambda: [64, 64, 64, 255])
     rounded_artwork_border: bool = True
     provider: str = "spotify"
     spotify_volume_enabled: bool = True
     spotify_volume_fill_color: list[int] = field(default_factory=lambda: [66, 66, 66, 255])
+    spotify_volume_border_color: list[int] = field(default_factory=lambda: [255, 255, 255, 255])
     playback_progress_enabled: bool = False
     playback_progress_height: int = 6
     playback_progress_fill_color: list[int] = field(default_factory=lambda: [255, 255, 255, 230])
@@ -270,10 +284,15 @@ class MediaWidgetSettings:
             background_opacity=settings.get("widgets.media.background_opacity", 0.5),
             show_controls=settings.get("widgets.media.show_controls", True),
             show_header_frame=settings.get("widgets.media.show_header_frame", True),
+            show_album=settings.get("widgets.media.show_album", True),
+            show_playback_state=settings.get("widgets.media.show_playback_state", True),
             artwork_size=settings.get("widgets.media.artwork_size", 200),
             margin=settings.get("widgets.media.margin", 30),
             border_color=settings.get("widgets.media.border_color", [128, 128, 128, 255]),
             border_opacity=settings.get("widgets.media.border_opacity", 0.8),
+            header_fill_color=settings.get("widgets.media.header_fill_color", [0, 0, 0, 0]),
+            header_border_color=settings.get("widgets.media.header_border_color", [255, 255, 255, 255]),
+            header_text_color=settings.get("widgets.media.header_text_color", [255, 255, 255, 230]),
             color=settings.get("widgets.media.color", [255, 255, 255, 230]),
             bg_color=settings.get("widgets.media.bg_color", [64, 64, 64, 255]),
             rounded_artwork_border=settings.get("widgets.media.rounded_artwork_border", True),
@@ -282,6 +301,7 @@ class MediaWidgetSettings:
             ),
             spotify_volume_enabled=settings.get("widgets.media.spotify_volume_enabled", True),
             spotify_volume_fill_color=settings.get("widgets.media.spotify_volume_fill_color", [66, 66, 66, 255]),
+            spotify_volume_border_color=settings.get("widgets.media.spotify_volume_border_color", [255, 255, 255, 255]),
             playback_progress_enabled=settings.get("widgets.media.playback_progress_enabled", False),
             playback_progress_height=settings.get("widgets.media.playback_progress_height", 6),
             playback_progress_fill_color=settings.get("widgets.media.playback_progress_fill_color", [255, 255, 255, 230]),
@@ -313,16 +333,22 @@ class MediaWidgetSettings:
             background_opacity=float(_get("background_opacity", 0.5)),
             show_controls=_get("show_controls", True),
             show_header_frame=_get("show_header_frame", True),
+            show_album=_get("show_album", True),
+            show_playback_state=_get("show_playback_state", True),
             artwork_size=int(_get("artwork_size", 200)),
             margin=int(_get("margin", 30)),
             border_color=_get("border_color", [128, 128, 128, 255]),
             border_opacity=float(_get("border_opacity", 0.8)),
+            header_fill_color=_get("header_fill_color", [0, 0, 0, 0]),
+            header_border_color=_get("header_border_color", [255, 255, 255, 255]),
+            header_text_color=_get("header_text_color", [255, 255, 255, 230]),
             color=_get("color", [255, 255, 255, 230]),
             bg_color=_get("bg_color", [64, 64, 64, 255]),
             rounded_artwork_border=_get("rounded_artwork_border", True),
             provider=preserve_provider_setting(_get("provider", "spotify")),
             spotify_volume_enabled=_get("spotify_volume_enabled", True),
             spotify_volume_fill_color=_get("spotify_volume_fill_color", [66, 66, 66, 255]),
+            spotify_volume_border_color=_get("spotify_volume_border_color", [255, 255, 255, 255]),
             playback_progress_enabled=_get("playback_progress_enabled", False),
             playback_progress_height=int(_get("playback_progress_height", 6)),
             playback_progress_fill_color=_get("playback_progress_fill_color", [255, 255, 255, 230]),
@@ -345,16 +371,22 @@ class MediaWidgetSettings:
             f"{prefix}.background_opacity": float(self.background_opacity),
             f"{prefix}.show_controls": self.show_controls,
             f"{prefix}.show_header_frame": self.show_header_frame,
+            f"{prefix}.show_album": self.show_album,
+            f"{prefix}.show_playback_state": self.show_playback_state,
             f"{prefix}.artwork_size": int(self.artwork_size),
             f"{prefix}.margin": int(self.margin),
             f"{prefix}.border_color": self.border_color,
             f"{prefix}.border_opacity": float(self.border_opacity),
+            f"{prefix}.header_fill_color": self.header_fill_color,
+            f"{prefix}.header_border_color": self.header_border_color,
+            f"{prefix}.header_text_color": self.header_text_color,
             f"{prefix}.color": self.color,
             f"{prefix}.bg_color": self.bg_color,
             f"{prefix}.rounded_artwork_border": self.rounded_artwork_border,
             f"{prefix}.provider": self.provider,
             f"{prefix}.spotify_volume_enabled": self.spotify_volume_enabled,
             f"{prefix}.spotify_volume_fill_color": self.spotify_volume_fill_color,
+            f"{prefix}.spotify_volume_border_color": self.spotify_volume_border_color,
             f"{prefix}.playback_progress_enabled": self.playback_progress_enabled,
             f"{prefix}.playback_progress_height": int(self.playback_progress_height),
             f"{prefix}.playback_progress_fill_color": self.playback_progress_fill_color,

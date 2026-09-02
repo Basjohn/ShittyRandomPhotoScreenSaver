@@ -111,6 +111,36 @@ Performance rules:
 
 ---
 
+# 1A. Widget semantic theme-role expansion + shared fade polish
+
+This is post-parity infrastructure work and remains inactive unless explicitly selected by the operator.
+
+## 1A.1 Semantic role inheritance instead of swatch proliferation
+
+Extend the existing `WidgetThemeSpec.colors` semantic-role map rather than giving every decorative literal an always-visible Settings swatch. Target roles include branded-header Fill/Border/Text, separators and decorative outlines, secondary panels, gradients, Media transport surface/border/separators, mute surface/border/icon, app-volume Fill/Track/Outline and equivalent Steam secondary surfaces.
+
+Preferred resolution shape:
+
+```text
+explicit per-widget override (only when intentionally set)
+        ↓ otherwise
+widget/family semantic theme role (when theme supplies it)
+        ↓ otherwise
+shared semantic parent role (text / border / panel / accent / muted)
+        ↓ otherwise
+preserved current visual default
+```
+
+The default/inherit path must reproduce the currently accepted visuals byte-for-pixel-equivalent where practical; adding a role is not permission to recolor shipped defaults. Settings should expose advanced overrides progressively/collapsed or behind an `Inherit` state rather than flooding the normal Widget UI. Do not create a second Media/Steam-local palette system.
+
+## 1A.2 Shared artwork and metadata fade polish
+
+`rendering/quick/qml/ArtworkFadeImage.qml` is already the shared event-driven primitive used by Media, Achievement Pulse and Abandonment Issues artwork. Tune gentleness centrally there before adding family-local animation. Preserve no polling, no provider freshness delay and bounded texture/effect cost.
+
+For Media Title/Artist/Album, prefer a one-shot opacity transition triggered by track identity/metadata change. The authoritative metadata snapshot must update immediately; animation is presentation-only and must never buffer/stale provider truth. If a true old/new crossfade would require a second retained text/image layer, measure the cost and keep the simple fade-through-current-surface path unless the visual improvement justifies it.
+
+---
+
 # 2. Slide — optional effects inside the one canonical Slide transition
 
 **Elastic, Wobble, Flex and Perspective are options inside Slide, not separate transitions.**
@@ -712,9 +742,13 @@ Candidate visual ownership includes:
 - semantic text/accent/selection/runtime-overlay colours that are genuinely widget appearance;
 - Glass/Acrylic tint/material strength once those scene-local materials are physically proven;
 - border colour/opacity/width where already supported;
+- branded-header pill Fill + Border roles (Media/Gmail/Reddit/Achievement Pulse/Abandonment Issues now expose alpha-aware family swatches), with logo/text geometry remaining layout rather than theme data;
+- Media sub-surface roles as they mature: app-volume Fill/Track/Outline plus transport and mute surface/icon colours. Slice 6 exposes app-volume Fill/Outline and records Track/transport/mute as future roles rather than inventing a Media-local theme cascade;
 - shadow visual parameters already exposed by the final widget-style contract;
 - other existing appearance-only values that can round-trip without altering runtime behaviour;
 - optional bounded material parameters that have actually earned their place through visual/performance testing.
+
+Decorative line/border scaling has a reusable retained-presentation primitive from Slice 6: `OverlayWidget.scaleAwareStrokeWidthForScale()`. Future non-Visualizer families should opt decorative strokes into that visible baseline +/-1 px, minimum-1-px contract incrementally after visual validation. **Visualizer is exempt** because its presentation already owns specialised scale-aware line behavior; do not stack a second compensation path onto it.
 
 The Widget Theme palette is the **global/default baseline**, not a destructive replacement for existing family-specific card settings. Existing explicit `widgets.<family>.card.*` swatches/opacity/border values keep higher precedence for that family; a family with no explicit authored value inherits the active Widget Theme role. The retained Context Menu has no family override layer and therefore consumes the Widget Theme palette directly. Editing a family-specific swatch is a family customization and does **not** create Widget Theme `Custom`; editing a Widget-Theme-owned baseline swatch does.
 

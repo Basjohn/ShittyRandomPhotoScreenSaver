@@ -66,6 +66,9 @@ class AbandonmentIssuesPresentationConfig:
     background_opacity: float = 0.3
     border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
     border_opacity: float = 1.0
+    header_fill_color: tuple[int, int, int, int] = (11, 16, 22, 230)
+    header_border_color: tuple[int, int, int, int] = (229, 237, 244, 216)
+    header_text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
     selection_mode: str = "smart_rotation"
     pinned_appid: int | None = None
     minimum_playtime_minutes: int = 15
@@ -144,6 +147,15 @@ class AbandonmentIssuesPresentationConfig:
             ),
             border_opacity=bounded_float(
                 merged_card.get("border_opacity"), 1.0, 0.0, 1.0
+            ),
+            header_fill_color=rgba(
+                merged_card.get("header_fill_color"), (11, 16, 22, 230)
+            ),
+            header_border_color=rgba(
+                merged_card.get("header_border_color"), (229, 237, 244, 216)
+            ),
+            header_text_color=rgba(
+                merged_card.get("header_text_color"), (255, 255, 255, 230)
             ),
             selection_mode=str(
                 merged_card.get("selection_mode", "smart_rotation")
@@ -620,6 +632,22 @@ class AbandonmentIssuesPresentationModel(QObject):
     @Property(float, notify=stateChanged)
     def fontSize(self) -> float:
         return float(self.config.font_size)
+
+    @Property(QColor, notify=stateChanged)
+    def headerFillColor(self) -> QColor:
+        return QColor(*self.config.header_fill_color)
+
+    @Property(QColor, notify=stateChanged)
+    def headerBorderColor(self) -> QColor:
+        return QColor(*self.config.header_border_color)
+
+    @Property(QColor, notify=stateChanged)
+    def headerTextColor(self) -> QColor:
+        return QColor(*self.config.header_text_color)
+
+    @Property(float, notify=stateChanged)
+    def headerBorderWidth(self) -> float:
+        return max(1.0, self.style.card_style.border_width - 3.0)
 
     @Property(QColor, notify=stateChanged)
     def textColor(self) -> QColor:

@@ -168,6 +168,11 @@ def _set_achievement_capsule_color(tab: "WidgetsTab", attr_name: str, color: QCo
     tab._save_settings()
 
 
+def _set_steam_card_color(tab: "WidgetsTab", attr_name: str, color: QColor) -> None:
+    setattr(tab, attr_name, QColor(color))
+    tab._save_settings()
+
+
 def _set_abandonment_accent_color(tab: "WidgetsTab", color: QColor) -> None:
     tab._abandonment_accent_color = QColor(color)
     tab._save_settings()
@@ -997,6 +1002,68 @@ def _build_card_group(
     font_row.addWidget(QLabel("px"))
     font_row.addStretch()
 
+    if key in {"achievement_pulse", "abandonment_issues"}:
+        header_fill_attr = f"_{key}_header_fill_color"
+        header_text_attr = f"_{key}_header_text_color"
+        header_border_attr = f"_{key}_header_border_color"
+        header_fill_fallback = (11, 16, 22, 230)
+        header_text_fallback = (255, 255, 255, 230)
+        header_border_fallback = (229, 237, 244, 216)
+
+        header_fill_row = _aligned_row(appearance_layout, "Header Fill:")
+        header_fill_color = _coerce_rgba_color(
+            tab._widget_default(key, "header_fill_color", header_fill_fallback),
+            header_fill_fallback,
+        )
+        setattr(tab, header_fill_attr, header_fill_color)
+        header_fill_btn = ColorSwatchButton(
+            header_fill_color,
+            title=f"Choose {label} Header Fill Color",
+            show_alpha=True,
+        )
+        header_fill_btn.color_changed.connect(
+            lambda color, attr=header_fill_attr: _set_steam_card_color(tab, attr, color)
+        )
+        setattr(tab, f"{key}_header_fill_color_btn", header_fill_btn)
+        header_fill_row.addWidget(header_fill_btn)
+        header_fill_row.addStretch()
+
+        header_text_row = _aligned_row(appearance_layout, "Header Text:")
+        header_text_color = _coerce_rgba_color(
+            tab._widget_default(key, "header_text_color", header_text_fallback),
+            header_text_fallback,
+        )
+        setattr(tab, header_text_attr, header_text_color)
+        header_text_btn = ColorSwatchButton(
+            header_text_color,
+            title=f"Choose {label} Header Text Color",
+            show_alpha=True,
+        )
+        header_text_btn.color_changed.connect(
+            lambda color, attr=header_text_attr: _set_steam_card_color(tab, attr, color)
+        )
+        setattr(tab, f"{key}_header_text_color_btn", header_text_btn)
+        header_text_row.addWidget(header_text_btn)
+        header_text_row.addStretch()
+
+        header_border_row = _aligned_row(appearance_layout, "Header Border:")
+        header_border_color = _coerce_rgba_color(
+            tab._widget_default(key, "header_border_color", header_border_fallback),
+            header_border_fallback,
+        )
+        setattr(tab, header_border_attr, header_border_color)
+        header_border_btn = ColorSwatchButton(
+            header_border_color,
+            title=f"Choose {label} Header Border Color",
+            show_alpha=True,
+        )
+        header_border_btn.color_changed.connect(
+            lambda color, attr=header_border_attr: _set_steam_card_color(tab, attr, color)
+        )
+        setattr(tab, f"{key}_header_border_color_btn", header_border_btn)
+        header_border_row.addWidget(header_border_btn)
+        header_border_row.addStretch()
+
     if key == "achievement_pulse":
         selection_row = _aligned_row(content_layout, "Game Selection:")
         selection_mode = StyledComboBox()
@@ -1615,6 +1682,37 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             )
         except Exception:
             getattr(tab, f"{key}_font_size").setValue(tab._default_int(key, "font_size", 14))
+        if key in {"achievement_pulse", "abandonment_issues"}:
+            header_fill_fallback = (11, 16, 22, 230)
+            header_text_fallback = (255, 255, 255, 230)
+            header_border_fallback = (229, 237, 244, 216)
+            header_fill = _coerce_rgba_color(
+                config.get(
+                    "header_fill_color",
+                    tab._widget_default(key, "header_fill_color", header_fill_fallback),
+                ),
+                header_fill_fallback,
+            )
+            header_text = _coerce_rgba_color(
+                config.get(
+                    "header_text_color",
+                    tab._widget_default(key, "header_text_color", header_text_fallback),
+                ),
+                header_text_fallback,
+            )
+            header_border = _coerce_rgba_color(
+                config.get(
+                    "header_border_color",
+                    tab._widget_default(key, "header_border_color", header_border_fallback),
+                ),
+                header_border_fallback,
+            )
+            setattr(tab, f"_{key}_header_fill_color", header_fill)
+            setattr(tab, f"_{key}_header_text_color", header_text)
+            setattr(tab, f"_{key}_header_border_color", header_border)
+            getattr(tab, f"{key}_header_fill_color_btn").set_color(header_fill)
+            getattr(tab, f"{key}_header_text_color_btn").set_color(header_text)
+            getattr(tab, f"{key}_header_border_color_btn").set_color(header_border)
         if key == "achievement_pulse":
             _set_achievement_selection_mode(
                 tab.achievement_pulse_selection_mode,
@@ -1828,6 +1926,16 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         "font_family": getattr(tab, f"{key}_font_family").currentFont().family(),
         "font_size": int(getattr(tab, f"{key}_font_size").value()),
     })
+    if key in {"achievement_pulse", "abandonment_issues"}:
+        payload["header_fill_color"] = _rgba_payload(
+            getattr(tab, f"_{key}_header_fill_color")
+        )
+        payload["header_text_color"] = _rgba_payload(
+            getattr(tab, f"_{key}_header_text_color")
+        )
+        payload["header_border_color"] = _rgba_payload(
+            getattr(tab, f"_{key}_header_border_color")
+        )
     if key == "achievement_pulse":
         payload["selection_mode"] = str(tab.achievement_pulse_selection_mode.currentData() or "most_recent")
         custom_appid = int(tab.achievement_pulse_custom_appid.value())

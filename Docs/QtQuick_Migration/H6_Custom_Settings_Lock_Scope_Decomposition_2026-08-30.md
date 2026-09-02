@@ -22,6 +22,8 @@ Examples that CUSTOM itself must not lock:
 
 ```text
 media_show_controls
+media_show_album
+media_show_playback_state
 media_playback_progress_enabled
 media_playback_progress_height
 media_playback_progress_shadow_enabled

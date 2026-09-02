@@ -867,16 +867,6 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     margin_row.addWidget(create_inline_label("px"))
     margin_row.addStretch()
 
-    logo_adjust_row = _aligned_row(appearance_inner, "Header Logo:")
-    tab.gmail_header_logo_px_adjust = QSpinBox()
-    tab.gmail_header_logo_px_adjust.setRange(-12, 24)
-    tab.gmail_header_logo_px_adjust.setSuffix(" px")
-    tab.gmail_header_logo_px_adjust.setValue(tab._default_int('gmail', 'header_logo_px_adjust', 0))
-    tab.gmail_header_logo_px_adjust.setAccelerated(True)
-    tab.gmail_header_logo_px_adjust.valueChanged.connect(tab._save_settings)
-    logo_adjust_row.addWidget(tab.gmail_header_logo_px_adjust)
-    logo_adjust_row.addStretch()
-
     # Boolean toggles
     appearance_inner.addSpacing(8)
 
@@ -1063,6 +1053,41 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     color_row.addWidget(tab.gmail_color_btn)
     color_row.addStretch()
 
+    header_fill_row = _swatch_row(appearance_inner, "Header Fill:")
+    tab.gmail_header_fill_color_btn = ColorSwatchButton(
+        title="Choose Gmail Header Fill Color", show_alpha=True
+    )
+    tab.gmail_header_fill_color_btn.set_color(tab._gmail_header_fill_color)
+    tab.gmail_header_fill_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_gmail_header_fill_color', c), tab._save_settings())
+    )
+    header_fill_row.addWidget(tab.gmail_header_fill_color_btn)
+    header_fill_row.addStretch()
+
+    header_text_row = _swatch_row(appearance_inner, "Header Text:")
+    tab.gmail_header_text_color_btn = ColorSwatchButton(
+        title="Choose Gmail Header Text Color", show_alpha=True
+    )
+    tab.gmail_header_text_color_btn.set_color(
+        getattr(tab, '_gmail_header_text_color', tab._gmail_color)
+    )
+    tab.gmail_header_text_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_gmail_header_text_color', c), tab._save_settings())
+    )
+    header_text_row.addWidget(tab.gmail_header_text_color_btn)
+    header_text_row.addStretch()
+
+    header_border_row = _swatch_row(appearance_inner, "Header Border:")
+    tab.gmail_header_border_color_btn = ColorSwatchButton(
+        title="Choose Gmail Header Border Color", show_alpha=True
+    )
+    tab.gmail_header_border_color_btn.set_color(tab._gmail_header_border_color)
+    tab.gmail_header_border_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_gmail_header_border_color', c), tab._save_settings())
+    )
+    header_border_row.addWidget(tab.gmail_header_border_color_btn)
+    header_border_row.addStretch()
+
     # Background color
     bg_color_row = _swatch_row(appearance_inner, "Background Color:")
     tab.gmail_bg_color_btn = ColorSwatchButton(title="Choose Gmail Background Color")
@@ -1241,7 +1266,7 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
         for key in (
             'enabled', 'position', 'monitor', 'limit', 'refresh_minutes',
             'filter_label', 'account_slot', 'width', 'font_family',
-            'font_size', 'header_logo_px_adjust', 'margin', 'show_sender', 'show_subject',
+            'font_size', 'margin', 'show_sender', 'show_subject',
             'show_envelope_icon', 'show_three_dot_menu', 'show_refresh_spiral',
             'show_unread_count_in_header', 'show_header_border',
             'show_separators', 'show_timestamp', 'date_display_mode',
@@ -1252,7 +1277,7 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
             'border_opacity', 'separator_thickness',
             'boundary_separator_thickness', 'play_sound_on_new_mail',
             'sound_file_path', 'sound_volume_percent', 'color',
-            'bg_color', 'border_color', 'separator_color',
+            'bg_color', 'border_color', 'header_fill_color', 'header_text_color', 'header_border_color', 'separator_color',
             'boundary_separator_color',
         )
     }
@@ -1288,7 +1313,6 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
             tab.gmail_width.setValue(int(width_default))
         tab.gmail_font_combo.setCurrentFont(QFont(tab._config_str('gmail', gmail_config, 'font_family', str(gmail_defaults['font_family']))))
         tab.gmail_font_size.setValue(tab._config_int('gmail', gmail_config, 'font_size', int(gmail_defaults['font_size'])))
-        tab.gmail_header_logo_px_adjust.setValue(tab._config_int('gmail', gmail_config, 'header_logo_px_adjust', int(gmail_defaults['header_logo_px_adjust'])))
         tab.gmail_margin.setValue(tab._config_int('gmail', gmail_config, 'margin', int(gmail_defaults['margin'])))
 
         tab.gmail_show_sender.setChecked(tab._config_bool('gmail', gmail_config, 'show_sender', bool(gmail_defaults['show_sender'])))
@@ -1363,6 +1387,12 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
             tab._gmail_border_color = QColor(*border_color_data)
         except Exception:
             tab._gmail_border_color = QColor(255, 255, 255, 255)
+        header_fill_data = gmail_config.get('header_fill_color', gmail_defaults['header_fill_color'])
+        tab._gmail_header_fill_color = QColor(*header_fill_data)
+        header_text_data = gmail_config.get('header_text_color', gmail_defaults['header_text_color'])
+        tab._gmail_header_text_color = QColor(*header_text_data)
+        header_border_data = gmail_config.get('header_border_color', gmail_defaults['header_border_color'])
+        tab._gmail_header_border_color = QColor(*header_border_data)
         sep_color_data = gmail_config.get('separator_color', gmail_defaults['separator_color'])
         tab._gmail_separator_color = QColor(*sep_color_data)
         bsep_color_data = gmail_config.get('boundary_separator_color', gmail_defaults['boundary_separator_color'])
@@ -1372,6 +1402,9 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
         _apply_color('gmail_boundary_separator_color_btn', '_gmail_boundary_separator_color')
         _apply_color('gmail_bg_color_btn', '_gmail_bg_color')
         _apply_color('gmail_border_color_btn', '_gmail_border_color')
+        _apply_color('gmail_header_fill_color_btn', '_gmail_header_fill_color')
+        _apply_color('gmail_header_text_color_btn', '_gmail_header_text_color')
+        _apply_color('gmail_header_border_color_btn', '_gmail_header_border_color')
 
     _update_gmail_enabled_visibility(tab)
     _update_backend_panels(tab, use_backend=False)
@@ -1392,7 +1425,6 @@ def save_gmail_settings(tab: WidgetsTab) -> dict:
         'width': tab.gmail_width.value(),
         'font_family': tab.gmail_font_combo.currentFont().family(),
         'font_size': tab.gmail_font_size.value(),
-        'header_logo_px_adjust': tab.gmail_header_logo_px_adjust.value(),
         'margin': tab.gmail_margin.value(),
         'show_sender': tab.gmail_show_sender.isChecked(),
         'show_subject': tab.gmail_show_subject.isChecked(),
@@ -1423,6 +1455,12 @@ def save_gmail_settings(tab: WidgetsTab) -> dict:
                      tab._gmail_bg_color.blue(), tab._gmail_bg_color.alpha()],
         'border_color': [tab._gmail_border_color.red(), tab._gmail_border_color.green(),
                          tab._gmail_border_color.blue(), tab._gmail_border_color.alpha()],
+        'header_fill_color': [tab._gmail_header_fill_color.red(), tab._gmail_header_fill_color.green(),
+                              tab._gmail_header_fill_color.blue(), tab._gmail_header_fill_color.alpha()],
+        'header_text_color': [tab._gmail_header_text_color.red(), tab._gmail_header_text_color.green(),
+                              tab._gmail_header_text_color.blue(), tab._gmail_header_text_color.alpha()],
+        'header_border_color': [tab._gmail_header_border_color.red(), tab._gmail_header_border_color.green(),
+                                tab._gmail_header_border_color.blue(), tab._gmail_header_border_color.alpha()],
         'border_opacity': tab.gmail_border_opacity.value() / 100.0,
         'separator_thickness': tab.gmail_separator_thickness.value(),
         'boundary_separator_thickness': tab.gmail_boundary_separator_thickness.value(),

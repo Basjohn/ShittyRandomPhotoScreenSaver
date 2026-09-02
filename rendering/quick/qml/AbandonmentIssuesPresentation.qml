@@ -49,49 +49,35 @@ OverlayWidget {
         scale: abandonmentRoot.contentScale
         transformOrigin: Item.TopLeft
 
-        Rectangle {
+        BrandedHeader {
             id: headerFrame
-            objectName: "abandonmentHeaderFrame"
+            frameObjectName: "abandonmentHeaderFrame"
+            logoObjectName: "abandonmentSteamLogo"
+            textObjectName: "abandonmentHeaderText"
             x: 18.0
             y: 14.0
-            width: 322.0
-            height: 42.0
-            radius: 8.0
-            color: "#e60b1016"
-            border.color: "#d8e5edf4"
-            border.width: 2.0
-
-            Image {
-                objectName: "abandonmentSteamLogo"
-                x: 12.0
-                y: 6.0
-                width: 30.0
-                height: 30.0
-                source: abandonmentRoot.abandonmentModel.logoSource
-                sourceSize.width: 60
-                sourceSize.height: 60
-                fillMode: Image.PreserveAspectFit
-                cache: true
-            }
-
-            ShadowedText {
-                objectName: "abandonmentHeaderText"
-                x: 50.0
-                y: 3.0
-                width: 254.0
-                height: 36.0
-                text: abandonmentRoot.abandonmentModel.headerText
-                color: abandonmentRoot.abandonmentModel.textColor
-                font.family: abandonmentRoot.abandonmentModel.fontFamily
-                font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 1.05
-                font.bold: true
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-                shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
-                shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
-                shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
-                shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
-            }
+            label: abandonmentRoot.abandonmentModel.headerText
+            logoSource: abandonmentRoot.abandonmentModel.logoSource
+            fillColor: abandonmentRoot.abandonmentModel.headerFillColor
+            borderColor: abandonmentRoot.abandonmentModel.headerBorderColor
+            borderWidth: abandonmentRoot.scaleAwareStrokeWidthForScale(
+                abandonmentRoot.abandonmentModel.headerBorderWidth,
+                abandonmentRoot.contentScale
+            )
+            textColor: abandonmentRoot.abandonmentModel.headerTextColor
+            fontFamily: abandonmentRoot.abandonmentModel.fontFamily
+            textShadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+            textShadowColor: abandonmentRoot.abandonmentModel.textShadowColor
+            textShadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
+            textShadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
+            shadowEnabled: abandonmentRoot.cardShadowEnabled
+            shadowColor: Qt.rgba(
+                abandonmentRoot.cardShadowColor.r, abandonmentRoot.cardShadowColor.g,
+                abandonmentRoot.cardShadowColor.b, abandonmentRoot.cardShadowColor.a * 0.45
+            )
+            shadowBlur: Math.max(2.0, Math.min(6.0, abandonmentRoot.cardShadowBlur * 0.25))
+            shadowOffsetX: abandonmentRoot.cardShadowOffsetX * 1.15
+            shadowOffsetY: abandonmentRoot.cardShadowOffsetY * 1.15
         }
 
         Rectangle {

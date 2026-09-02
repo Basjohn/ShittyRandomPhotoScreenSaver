@@ -50,7 +50,6 @@ _STYLE_KEYS = frozenset(
         "show_separators",
         "show_refresh_spiral",
         "margin",
-        "header_logo_px_adjust",
         "bg_color",
         "background_color",
         "bg_opacity",
@@ -179,9 +178,11 @@ class RedditPresentationConfig:
     background_opacity: float = 0.6
     border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
     border_opacity: float = 1.0
+    header_fill_color: tuple[int, int, int, int] = (0, 0, 0, 0)
+    header_border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
+    header_text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
     show_separators: bool = True
     show_refresh_spiral: bool = True
-    header_logo_px_adjust: int = 0
 
     @classmethod
     def from_mapping(
@@ -214,12 +215,18 @@ class RedditPresentationConfig:
             border_opacity=_bounded_float(
                 values.get("border_opacity"), 1.0, 0.0, 1.0
             ),
+            header_fill_color=_rgba(
+                values.get("header_fill_color"), (0, 0, 0, 0)
+            ),
+            header_border_color=_rgba(
+                values.get("header_border_color"), (255, 255, 255, 255)
+            ),
+            header_text_color=_rgba(
+                values.get("header_text_color"), (255, 255, 255, 230)
+            ),
             show_separators=_as_bool(values.get("show_separators"), True),
             show_refresh_spiral=_as_bool(
                 values.get("show_refresh_spiral"), True
-            ),
-            header_logo_px_adjust=_bounded_int(
-                values.get("header_logo_px_adjust"), 0, -128, 128
             ),
         )
 
@@ -679,10 +686,6 @@ class RedditPresentationModel(QObject):
     def ageFontSize(self) -> float:
         return float(max(8, self.config.font_size - 5))
 
-    @Property(float, notify=stateChanged)
-    def headerLogoSize(self) -> float:
-        return float(max(12, int(self.config.font_size * 1.3) + self.config.header_logo_px_adjust))
-
     @Property(QColor, notify=stateChanged)
     def textColor(self) -> QColor:
         return QColor(*self.config.text_color)
@@ -690,6 +693,22 @@ class RedditPresentationModel(QObject):
     @Property(QColor, notify=stateChanged)
     def ageColor(self) -> QColor:
         return QColor(200, 200, 200, 220)
+
+    @Property(QColor, notify=stateChanged)
+    def headerFillColor(self) -> QColor:
+        return QColor(*self.config.header_fill_color)
+
+    @Property(QColor, notify=stateChanged)
+    def headerBorderColor(self) -> QColor:
+        return QColor(*self.config.header_border_color)
+
+    @Property(QColor, notify=stateChanged)
+    def headerTextColor(self) -> QColor:
+        return QColor(*self.config.header_text_color)
+
+    @Property(float, notify=stateChanged)
+    def headerBorderWidth(self) -> float:
+        return max(1.0, self.style.card_style.border_width - 3.0)
 
     @Property(QColor, notify=stateChanged)
     def separatorColor(self) -> QColor:

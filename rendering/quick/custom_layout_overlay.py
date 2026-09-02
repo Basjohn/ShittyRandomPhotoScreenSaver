@@ -54,6 +54,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     _DUPLICATE_ROLE = _WIDGET_ID_ROLE + 5
     _RESIZABLE_ROLE = _WIDGET_ID_ROLE + 6
     _VIEWPORT_RESIZE_ROLE = _WIDGET_ID_ROLE + 7
+    _RESIZE_SCALE_ROLE = _WIDGET_ID_ROLE + 8
 
     def __init__(
         self,
@@ -93,6 +94,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             self._DUPLICATE_ROLE: QByteArray(b"duplicate"),
             self._RESIZABLE_ROLE: QByteArray(b"resizable"),
             self._VIEWPORT_RESIZE_ROLE: QByteArray(b"viewportResizeCapable"),
+            self._RESIZE_SCALE_ROLE: QByteArray(b"resizeScale"),
         }
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # type: ignore[override]
@@ -119,6 +121,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return item.resize_capable
         if role == self._VIEWPORT_RESIZE_ROLE:
             return item.viewport_resize_capable
+        if role == self._RESIZE_SCALE_ROLE:
+            return float(item.resize_scale)
         return None
 
     @Slot()
@@ -324,6 +328,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
                 self._DUPLICATE_ROLE,
                 self._RESIZABLE_ROLE,
                 self._VIEWPORT_RESIZE_ROLE,
+                self._RESIZE_SCALE_ROLE,
             ],
         )
 

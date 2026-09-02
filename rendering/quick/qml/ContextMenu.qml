@@ -114,6 +114,20 @@ Item {
                     width: menuColumn.width
                     height: modelData.kind === "separator" ? 7.0 : 38.0
 
+                    function dismissSubmenuIfPointerLeftPath() {
+                        if (menuRoot.activeSubmenuIndex !== menuRow.index)
+                            return
+                        // One event-turn defer lets a single pointer move transfer hover
+                        // ownership between the parent row and its overlapping submenu.
+                        // This is event-driven grace, not a timer/polling lifetime owner.
+                        Qt.callLater(function() {
+                            if (menuRoot.activeSubmenuIndex === menuRow.index
+                                    && !rowHover.hovered
+                                    && !submenuSurfaceHover.hovered)
+                                menuRoot.activeSubmenuIndex = -1
+                        })
+                    }
+
                     Rectangle {
                         anchors.centerIn: parent
                         width: parent.width - 24.0
@@ -186,8 +200,15 @@ Item {
                             id: rowHover
                             enabled: menuRow.modelData.enabled
                             onHoveredChanged: {
-                                if (hovered && menuRow.modelData.kind === "submenu")
-                                    menuRoot.activeSubmenuIndex = menuRow.index
+                                if (hovered) {
+                                    if (menuRow.modelData.kind === "submenu")
+                                        menuRoot.activeSubmenuIndex = menuRow.index
+                                    else if (menuRoot.activeSubmenuIndex !== -1)
+                                        menuRoot.activeSubmenuIndex = -1
+                                    return
+                                }
+                                if (menuRow.modelData.kind === "submenu")
+                                    menuRow.dismissSubmenuIfPointerLeftPath()
                             }
                         }
 
@@ -234,6 +255,15 @@ Item {
                         visible: menuRow.modelData.kind === "submenu"
                             && menuRoot.activeSubmenuIndex === menuRow.index
                         z: 20
+
+                        HoverHandler {
+                            id: submenuSurfaceHover
+                            enabled: submenuSurface.visible
+                            onHoveredChanged: {
+                                if (!hovered)
+                                    menuRow.dismissSubmenuIfPointerLeftPath()
+                            }
+                        }
 
                         Column {
                             id: submenuColumn

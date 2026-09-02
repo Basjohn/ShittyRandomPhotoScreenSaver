@@ -103,6 +103,14 @@ Item {
             required property bool duplicate
             required property bool resizable
             required property bool viewportResizeCapable
+            required property real resizeScale
+
+            // Gmail/Reddit establish the shared branded-header row at an authored
+            // 32 px centreline (14 px card inset + 18 px half-height).  The edit
+            // overlay lives outside the widget's retained transform, so project
+            // the session-owned absolute CUSTOM scale here to keep the X on that
+            // same row for every widget, including families with no refresh glyph.
+            readonly property real editChromeHeaderCenterY: 32.0 * Math.max(0.05, resizeScale)
 
             objectName: "customLayoutEditFrame-" + widgetId
             x: geometryX
@@ -123,11 +131,17 @@ Item {
                 width: 22
                 height: 22
                 radius: width / 2
-                // Sit just left of a right-anchored header refresh accessory
-                // rather than jammed into the extreme corner. Approximate until
-                // the per-widget refresh glyphs are finalised.
+                // Keep the established right-side slot (immediately left of a
+                // refresh accessory where present), but align its centre to the
+                // shared header/logo/refresh row at the current CUSTOM scale.
                 x: editFrame.width - width - 34
-                y: 8
+                y: Math.max(
+                    1.0,
+                    Math.min(
+                        Math.max(1.0, editFrame.height - height - 1.0),
+                        editFrame.editChromeHeaderCenterY - height / 2.0
+                    )
+                )
                 antialiasing: true
                 color: customLayoutOverlay.closeButtonColor
                 border.width: 1
@@ -170,9 +184,9 @@ Item {
             MouseArea {
                 id: moveArea
                 anchors.fill: parent
-                // Keep the move zone clear of the repositioned close control so
-                // its full circle stays clickable.
-                anchors.topMargin: 32
+                // Keep the move zone clear of the scale-aware header-row close
+                // control so its full circle stays clickable at every size.
+                anchors.topMargin: Math.max(32.0, closeControl.y + closeControl.height + 2.0)
                 cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                 property real pressOffsetX: 0
                 property real pressOffsetY: 0
