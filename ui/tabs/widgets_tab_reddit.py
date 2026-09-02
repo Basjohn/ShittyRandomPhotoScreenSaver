@@ -293,16 +293,6 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_margin_row.addWidget(reddit_margin_px)
     reddit_margin_row.addStretch()
 
-    reddit_logo_row = _aligned_row(shared_layout_layout, "Header Logo:")
-    tab.reddit_header_logo_px_adjust = QSpinBox()
-    tab.reddit_header_logo_px_adjust.setRange(-12, 24)
-    tab.reddit_header_logo_px_adjust.setSuffix(" px")
-    tab.reddit_header_logo_px_adjust.setValue(tab._default_int('reddit', 'header_logo_px_adjust', 0))
-    tab.reddit_header_logo_px_adjust.setAccelerated(True)
-    tab.reddit_header_logo_px_adjust.valueChanged.connect(tab._save_settings)
-    reddit_logo_row.addWidget(tab.reddit_header_logo_px_adjust)
-    reddit_logo_row.addStretch()
-
     # Text color
     reddit_color_row = _swatch_row(appearance_layout, "Text Color:")
     tab.reddit_color_btn = ColorSwatchButton(title="Choose Reddit Text Color")
@@ -312,6 +302,41 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     reddit_color_row.addWidget(tab.reddit_color_btn)
     reddit_color_row.addStretch()
+
+    reddit_header_fill_row = _swatch_row(appearance_layout, "Header Fill:")
+    tab.reddit_header_fill_color_btn = ColorSwatchButton(
+        title="Choose Reddit Header Fill Color", show_alpha=True
+    )
+    tab.reddit_header_fill_color_btn.set_color(tab._reddit_header_fill_color)
+    tab.reddit_header_fill_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_reddit_header_fill_color', c), tab._save_settings())
+    )
+    reddit_header_fill_row.addWidget(tab.reddit_header_fill_color_btn)
+    reddit_header_fill_row.addStretch()
+
+    reddit_header_text_row = _swatch_row(appearance_layout, "Header Text:")
+    tab.reddit_header_text_color_btn = ColorSwatchButton(
+        title="Choose Reddit Header Text Color", show_alpha=True
+    )
+    tab.reddit_header_text_color_btn.set_color(
+        getattr(tab, '_reddit_header_text_color', tab._reddit_color)
+    )
+    tab.reddit_header_text_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_reddit_header_text_color', c), tab._save_settings())
+    )
+    reddit_header_text_row.addWidget(tab.reddit_header_text_color_btn)
+    reddit_header_text_row.addStretch()
+
+    reddit_header_border_row = _swatch_row(appearance_layout, "Header Border:")
+    tab.reddit_header_border_color_btn = ColorSwatchButton(
+        title="Choose Reddit Header Border Color", show_alpha=True
+    )
+    tab.reddit_header_border_color_btn.set_color(tab._reddit_header_border_color)
+    tab.reddit_header_border_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_reddit_header_border_color', c), tab._save_settings())
+    )
+    reddit_header_border_row.addWidget(tab.reddit_header_border_color_btn)
+    reddit_header_border_row.addStretch()
 
     # Background frame
     tab.reddit_show_background = QCheckBox("Show Background Frame")
@@ -518,7 +543,6 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.reddit_font_combo.setCurrentFont(QFont(tab._config_str('reddit', reddit_config, 'font_family', 'Inter')))
     tab.reddit_font_size.setValue(tab._config_int('reddit', reddit_config, 'font_size', 18))
     tab.reddit_margin.setValue(tab._config_int('reddit', reddit_config, 'margin', 30))
-    tab.reddit_header_logo_px_adjust.setValue(tab._config_int('reddit', reddit_config, 'header_logo_px_adjust', 0))
 
     tab.reddit_show_background.setChecked(tab._config_bool('reddit', reddit_config, 'show_background', True))
     tab.reddit_show_separators.setChecked(tab._config_bool('reddit', reddit_config, 'show_separators', True))
@@ -543,9 +567,24 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab._reddit_border_color = QColor(*reddit_border_color_data)
     except Exception:
         tab._reddit_border_color = QColor(255, 255, 255, 255)
+    reddit_header_fill_data = reddit_config.get(
+        'header_fill_color', tab._widget_default('reddit', 'header_fill_color', [0, 0, 0, 0])
+    )
+    tab._reddit_header_fill_color = QColor(*reddit_header_fill_data)
+    reddit_header_text_data = reddit_config.get(
+        'header_text_color', tab._widget_default('reddit', 'header_text_color', [255, 255, 255, 230])
+    )
+    tab._reddit_header_text_color = QColor(*reddit_header_text_data)
+    reddit_header_border_data = reddit_config.get(
+        'header_border_color', tab._widget_default('reddit', 'header_border_color', [255, 255, 255, 255])
+    )
+    tab._reddit_header_border_color = QColor(*reddit_header_border_data)
     _apply_color_to_button('reddit_color_btn', '_reddit_color')
     _apply_color_to_button('reddit_bg_color_btn', '_reddit_bg_color')
     _apply_color_to_button('reddit_border_color_btn', '_reddit_border_color')
+    _apply_color_to_button('reddit_header_fill_color_btn', '_reddit_header_fill_color')
+    _apply_color_to_button('reddit_header_text_color_btn', '_reddit_header_text_color')
+    _apply_color_to_button('reddit_header_border_color_btn', '_reddit_header_border_color')
 
     # Reddit 2
     reddit2_config = widgets.get('reddit2', {})
@@ -579,7 +618,6 @@ def save_reddit_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'font_family': tab.reddit_font_combo.currentFont().family(),
         'font_size': tab.reddit_font_size.value(),
         'margin': tab.reddit_margin.value(),
-        'header_logo_px_adjust': tab.reddit_header_logo_px_adjust.value(),
         'show_background': tab.reddit_show_background.isChecked(),
         'show_separators': tab.reddit_show_separators.isChecked(),
         'show_refresh_spiral': tab.reddit_show_refresh_spiral.isChecked(),
@@ -590,6 +628,12 @@ def save_reddit_settings(tab: WidgetsTab) -> tuple[dict, dict]:
                      tab._reddit_bg_color.blue(), tab._reddit_bg_color.alpha()],
         'border_color': [tab._reddit_border_color.red(), tab._reddit_border_color.green(),
                          tab._reddit_border_color.blue(), tab._reddit_border_color.alpha()],
+        'header_fill_color': [tab._reddit_header_fill_color.red(), tab._reddit_header_fill_color.green(),
+                              tab._reddit_header_fill_color.blue(), tab._reddit_header_fill_color.alpha()],
+        'header_text_color': [tab._reddit_header_text_color.red(), tab._reddit_header_text_color.green(),
+                              tab._reddit_header_text_color.blue(), tab._reddit_header_text_color.alpha()],
+        'header_border_color': [tab._reddit_header_border_color.red(), tab._reddit_header_border_color.green(),
+                                tab._reddit_header_border_color.blue(), tab._reddit_header_border_color.alpha()],
         'border_opacity': tab.reddit_border_opacity.value() / 100.0,
     }
     rmon_text = tab.reddit_monitor_combo.currentText()

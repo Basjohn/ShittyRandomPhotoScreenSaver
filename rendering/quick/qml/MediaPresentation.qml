@@ -30,6 +30,8 @@ OverlayWidget {
     preferredContentWidth: Math.max(
         600.0,
         mediaModel.artworkSize + 18.0 + Math.max(220.0, mediaModel.fontSize * 16.0)
+            + mediaRoot.shellInset,
+        headerFrame.implicitWidth + (appVolumeSlider.visible ? 48.0 : 0.0)
             + mediaRoot.shellInset
     )
     preferredContentHeight: Math.max(220.0, mediaModel.artworkSize + 60.0)
@@ -66,47 +68,30 @@ OverlayWidget {
         anchors.rightMargin: appVolumeSlider.visible ? 48.0 : 0.0
         spacing: 12.0
 
-        Rectangle {
+        BrandedHeader {
             id: headerFrame
-            objectName: "mediaHeaderFrame"
-            width: Math.min(parent.width, headerRow.implicitWidth + 28.0)
-            height: visible ? Math.max(42.0, headerRow.implicitHeight + 12.0) : 0.0
+            frameObjectName: "mediaHeaderFrame"
+            logoObjectName: "mediaHeaderLogo"
+            textObjectName: "mediaHeaderText"
             visible: mediaRoot.mediaModel.showHeaderFrame
-            radius: 11.0
-            color: "#26000000"
-            border.width: 1.0
-            border.color: "#55ffffff"
-
-            Row {
-                id: headerRow
-                anchors.centerIn: parent
-                spacing: 8.0
-
-                Image {
-                    visible: source.toString().length > 0
-                    source: mediaRoot.mediaModel.providerLogoSource
-                    width: 25.0
-                    height: 25.0
-                    sourceSize.width: 50
-                    sourceSize.height: 50
-                    fillMode: Image.PreserveAspectFit
-                    asynchronous: false
-                    cache: true
-                }
-
-                ShadowedText {
-                    text: mediaRoot.mediaModel.providerName
-                    color: mediaRoot.mediaModel.textColor
-                    font.family: mediaRoot.mediaModel.fontFamily
-                    font.pointSize: mediaRoot.mediaModel.fontSize * 0.82
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
-                    shadowEnabled: mediaRoot.mediaModel.textShadowEnabled
-                    shadowColor: mediaRoot.mediaModel.textShadowColor
-                    shadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
-                    shadowOffsetY: mediaRoot.mediaModel.textShadowOffsetY
-                }
-            }
+            width: implicitWidth
+            height: visible ? implicitHeight : 0.0
+            label: mediaRoot.mediaModel.providerName
+            logoSource: mediaRoot.mediaModel.providerLogoSource
+            fillColor: mediaRoot.mediaModel.headerFillColor
+            borderColor: mediaRoot.mediaModel.headerBorderColor
+            borderWidth: mediaRoot.scaleAwareStrokeWidth(mediaRoot.mediaModel.headerBorderWidth)
+            textColor: mediaRoot.mediaModel.headerTextColor
+            fontFamily: mediaRoot.mediaModel.fontFamily
+            textShadowEnabled: mediaRoot.mediaModel.textShadowEnabled
+            textShadowColor: mediaRoot.mediaModel.textShadowColor
+            textShadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
+            textShadowOffsetY: mediaRoot.mediaModel.textShadowOffsetY
+            shadowEnabled: mediaRoot.mediaModel.surfaceShadowEnabled
+            shadowColor: mediaRoot.mediaModel.surfaceShadowColor
+            shadowBlur: mediaRoot.mediaModel.surfaceShadowBlur
+            shadowOffsetX: mediaRoot.mediaModel.surfaceShadowOffsetX * 1.15
+            shadowOffsetY: mediaRoot.mediaModel.surfaceShadowOffsetY * 1.15
         }
 
         Item {
@@ -126,6 +111,7 @@ OverlayWidget {
                 id: metadata
                 objectName: "mediaMetadata"
                 anchors.left: parent.left
+                anchors.leftMargin: 2.0
                 anchors.right: artworkFrame.visible ? artworkFrame.left : parent.right
                 anchors.rightMargin: artworkFrame.visible ? 18.0 : 0.0
                 anchors.verticalCenter: parent.verticalCenter
@@ -144,7 +130,11 @@ OverlayWidget {
                     font.family: mediaRoot.mediaModel.fontFamily
                     font.pointSize: mediaRoot.mediaModel.fontSize * 1.12
                     font.bold: true
-                    wrap: true
+                    wrap: false
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPointSize: 6.0
+                    maximumLineCount: 1
+                    elide: Text.ElideRight
                     shadowEnabled: mediaRoot.mediaModel.textShadowEnabled
                     shadowColor: mediaRoot.mediaModel.textShadowColor
                     shadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
@@ -162,7 +152,11 @@ OverlayWidget {
                     font.family: mediaRoot.mediaModel.fontFamily
                     font.pointSize: mediaRoot.mediaModel.fontSize
                     font.bold: true
-                    wrap: true
+                    wrap: false
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPointSize: 6.0
+                    maximumLineCount: 1
+                    elide: Text.ElideRight
                     shadowEnabled: mediaRoot.mediaModel.textShadowEnabled
                     shadowColor: mediaRoot.mediaModel.textShadowColor
                     shadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
@@ -171,7 +165,7 @@ OverlayWidget {
 
                 ShadowedText {
                     objectName: "mediaAlbum"
-                    visible: text.length > 0
+                    visible: mediaRoot.mediaModel.showAlbum && text.length > 0
                     width: metadata.width
                     height: visible ? implicitHeight : 0.0
                     text: mediaRoot.mediaModel.album
@@ -180,7 +174,11 @@ OverlayWidget {
                     font.family: mediaRoot.mediaModel.fontFamily
                     font.pointSize: mediaRoot.mediaModel.fontSize * 0.82
                     font.italic: true
-                    wrap: true
+                    wrap: false
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPointSize: 6.0
+                    maximumLineCount: 1
+                    elide: Text.ElideRight
                     shadowEnabled: mediaRoot.mediaModel.textShadowEnabled
                     shadowColor: mediaRoot.mediaModel.textShadowColor
                     shadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
@@ -189,7 +187,8 @@ OverlayWidget {
 
                 ShadowedText {
                     objectName: "mediaPlaybackState"
-                    visible: mediaRoot.mediaModel.hasTrack
+                    visible: mediaRoot.mediaModel.showPlaybackState
+                        && mediaRoot.mediaModel.hasTrack
                     width: metadata.width
                     height: visible ? implicitHeight : 0.0
                     text: mediaRoot.mediaModel.playbackState.toUpperCase()
@@ -209,20 +208,52 @@ OverlayWidget {
                 id: artworkFrame
                 objectName: "mediaArtworkFrame"
                 visible: mediaRoot.mediaModel.hasArtwork || mediaArtwork.transitionVisible
-                width: visible ? Math.min(mediaRoot.mediaModel.artworkSize, mainBand.height) : 0.0
-                height: width
+                // Slice 3 keeps the header->seek span as the visual reference but
+                // backs the frame away from both edges.  Height is 15% smaller than
+                // Slice 2; width receives that same reduction plus a further 15%
+                // narrowing so the artwork reads mildly portrait instead of crowding
+                // the metadata/seek region.  PreserveAspectCrop remains authoritative.
+                readonly property real topInColumn: headerFrame.visible
+                    ? headerFrame.y
+                    : mainBand.y
+                readonly property real bottomInColumn: progressBand.visible
+                    ? progressBand.y + progressTrack.y + progressTrack.height
+                    : mainBand.y + mainBand.height
+                readonly property real referenceHeight: Math.max(
+                    1.0, bottomInColumn - topInColumn
+                )
+                readonly property real parityScale: 0.85
+                readonly property real extraWidthScale: 0.85
+                width: visible
+                    ? Math.min(
+                        mediaRoot.mediaModel.artworkSize
+                            * parityScale * extraWidthScale,
+                        mainBand.width
+                    )
+                    : 0.0
+                height: visible ? referenceHeight * parityScale : 0.0
                 anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
+                y: visible
+                    ? topInColumn - mainBand.y + (referenceHeight - height) / 2.0
+                    : 0.0
                 radius: mediaRoot.mediaModel.roundedArtwork ? width / 8.0 : 0.0
                 color: "transparent"
                 clip: false
 
+                // Artwork needs a little more separation than the card-level base
+                // shadow: keep global direction, add 20% displacement, and use one
+                // small cached rectangular blur instead of a broad layer effect.
                 RectangularShadow {
                     anchors.fill: parent
-                    color: "#55000000"
-                    blur: 12.0
+                    visible: mediaRoot.mediaModel.surfaceShadowEnabled
+                    color: mediaRoot.mediaModel.surfaceShadowColor
+                    blur: mediaRoot.mediaModel.surfaceShadowBlur
                     radius: artworkFrame.radius
-                    offset: Qt.vector2d(4.0, 4.0)
+                    spread: 0.0
+                    offset: Qt.vector2d(
+                        mediaRoot.mediaModel.surfaceShadowOffsetX * 1.20,
+                        mediaRoot.mediaModel.surfaceShadowOffsetY * 1.20
+                    )
                     cached: true
                     z: -1
                 }
@@ -231,20 +262,34 @@ OverlayWidget {
                     id: mediaArtwork
                     objectName: "mediaArtwork"
                     anchors.fill: parent
-                    source: mediaRoot.mediaModel.artworkSource.length > 0
-                        ? mediaRoot.mediaModel.artworkSource
-                            + (mediaRoot.mediaModel.roundedArtwork ? "/rounded" : "")
-                        : ""
+                    source: mediaRoot.mediaModel.artworkSource
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     cache: true
+                    // Provider-side smart crop removes baked-in Spotify video
+                    // letterbox bands.  This retained mask then clips the live image
+                    // to the actual non-square frame, preventing dark/transparent
+                    // source corners from escaping outside the rounded border.
+                    layer.enabled: mediaRoot.mediaModel.roundedArtwork
+                    layer.effect: MultiEffect {
+                        maskEnabled: true
+                        maskSource: artworkMask
+                    }
+                }
+
+                Rectangle {
+                    id: artworkMask
+                    anchors.fill: mediaArtwork
+                    radius: artworkFrame.radius
+                    visible: false
+                    layer.enabled: true
                 }
 
                 Rectangle {
                     anchors.fill: parent
                     radius: artworkFrame.radius
                     color: "transparent"
-                    border.width: mediaRoot.mediaModel.artworkBorderWidth
+                    border.width: mediaRoot.scaleAwareStrokeWidth(mediaRoot.mediaModel.artworkBorderWidth)
                     border.color: mediaRoot.mediaModel.artworkBorderColor
                 }
             }
@@ -261,10 +306,12 @@ OverlayWidget {
                 id: progressTrack
                 objectName: "mediaProgressTrack"
                 anchors.left: parent.left
-                anchors.right: parent.right
+                anchors.leftMargin: 2.0
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: Math.max(12.0, parent.width * 0.08)
-                anchors.rightMargin: anchors.leftMargin
+                width: Math.max(
+                    1.0,
+                    (parent.width - 2.0 * Math.max(12.0, parent.width * 0.08)) * 0.75
+                )
                 height: mediaRoot.mediaModel.progressHeight
                 radius: height / 2.0
                 color: Qt.rgba(
@@ -334,8 +381,26 @@ OverlayWidget {
             height: visible ? Math.max(38.0, mediaRoot.mediaModel.fontSize * 2.15) : 0.0
             radius: 12.0
             color: mediaRoot.mediaModel.controlsSurfaceColor
-            border.width: 1.5
+            border.width: mediaRoot.scaleAwareStrokeWidth(1.5)
             border.color: "#55ffffff"
+            clip: false
+
+            // Transport bar uses the same global direction with 15% more
+            // displacement and a deliberately small cached blur.
+            RectangularShadow {
+                anchors.fill: parent
+                visible: mediaRoot.mediaModel.surfaceShadowEnabled
+                color: mediaRoot.mediaModel.surfaceShadowColor
+                blur: mediaRoot.mediaModel.surfaceShadowBlur
+                radius: parent.radius
+                spread: 0.0
+                offset: Qt.vector2d(
+                    mediaRoot.mediaModel.surfaceShadowOffsetX * 1.15,
+                    mediaRoot.mediaModel.surfaceShadowOffsetY * 1.15
+                )
+                cached: true
+                z: -1
+            }
 
             Row {
                 visible: mediaRoot.mediaModel.controlsAvailable
@@ -344,7 +409,7 @@ OverlayWidget {
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
                 anchors.rightMargin: systemMuteButton.visible
-                    ? systemMuteButton.width + 1.0
+                    ? systemMuteButton.width + 4.0
                     : 0.0
 
                 Item {
@@ -450,14 +515,15 @@ OverlayWidget {
                 id: systemMuteButton
                 objectName: "mediaSystemMuteButton"
                 visible: mediaRoot.mediaModel.systemMuteAvailable
-                height: parent.width < 210.0
+                height: (parent.width < 210.0
                     ? Math.min(30.0, parent.height * 0.92)
-                    : Math.min(36.0, parent.height * 0.92)
-                width: parent.width < 210.0
-                    ? Math.min(32.0, height * 1.08)
-                    : Math.min(40.0, height * 1.08)
+                    : Math.min(36.0, parent.height * 0.92)) * 0.75
+                width: (parent.width < 210.0
+                    ? Math.min(32.0, (height / 0.75) * 1.08)
+                    : Math.min(40.0, (height / 0.75) * 1.08)) * 0.75
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.right: parent.right
+                anchors.rightMargin: 4.0
                 radius: Math.max(8.0, Math.min(12.0, height * 0.32))
                 border.width: 1.25
                 border.color: "#41ffffff"
@@ -599,8 +665,26 @@ OverlayWidget {
             anchors.horizontalCenter: parent.horizontalCenter
             radius: width / 2.0
             color: mediaRoot.mediaModel.appVolumeTrackColor
-            border.width: 1.5
+            border.width: mediaRoot.scaleAwareStrokeWidth(1.5)
             border.color: mediaRoot.mediaModel.appVolumeBorderColor
+            clip: false
+
+            // Volume track keeps the same global direction with a subtle 5%
+            // extra displacement and the same small cached blur.
+            RectangularShadow {
+                anchors.fill: parent
+                visible: mediaRoot.mediaModel.surfaceShadowEnabled
+                color: mediaRoot.mediaModel.surfaceShadowColor
+                blur: mediaRoot.mediaModel.surfaceShadowBlur
+                radius: parent.radius
+                spread: 0.0
+                offset: Qt.vector2d(
+                    mediaRoot.mediaModel.surfaceShadowOffsetX * 1.05,
+                    mediaRoot.mediaModel.surfaceShadowOffsetY * 1.05
+                )
+                cached: true
+                z: -1
+            }
 
             Rectangle {
                 objectName: "mediaAppVolumeFill"

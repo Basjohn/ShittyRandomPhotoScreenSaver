@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 import math
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -102,6 +103,38 @@ def _file_source(path: Path) -> str:
     return path.resolve().as_uri() if path.is_file() else ""
 
 
+_TITLE_CASE_WORD_RE = re.compile(r"[^\W_]+(?:['’][^\W_]+)*", re.UNICODE)
+_TITLE_CASE_CONTRACTION_SUFFIXES = frozenset({"d", "ll", "m", "re", "s", "t", "ve"})
+
+
+def _title_case_metadata(value: object) -> str:
+    """Normalize one provider metadata field to stable display title case.
+
+    Runtime/provider truth stays untouched; only the retained presentation snapshot
+    is normalized. Apostrophe contractions remain natural (``DON'T`` -> ``Don't``)
+    while proper-name apostrophe segments still capitalize (``O'NEILL`` ->
+    ``O'Neill``). Hyphen/slash separated words are handled by the regex as
+    independent lexical segments.
+    """
+
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    def _normalize_word(match: re.Match[str]) -> str:
+        word = match.group(0).lower()
+        pieces = re.split(r"(['’])", word)
+        if pieces and pieces[0]:
+            pieces[0] = pieces[0][0].upper() + pieces[0][1:]
+        for index in range(2, len(pieces), 2):
+            segment = pieces[index]
+            if segment and segment not in _TITLE_CASE_CONTRACTION_SUFFIXES:
+                pieces[index] = segment[0].upper() + segment[1:]
+        return "".join(pieces)
+
+    return _TITLE_CASE_WORD_RE.sub(_normalize_word, text)
+
+
 @dataclass(frozen=True)
 class MediaPresentationConfig:
     widget_id: str = "media"
@@ -114,7 +147,12 @@ class MediaPresentationConfig:
     background_opacity: float = 0.3
     border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
     border_opacity: float = 1.0
+    header_fill_color: tuple[int, int, int, int] = (0, 0, 0, 0)
+    header_border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
+    header_text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
     show_header_frame: bool = True
+    show_album: bool = True
+    show_playback_state: bool = True
     artwork_size: int = 250
     rounded_artwork_border: bool = True
     show_controls: bool = True
@@ -126,6 +164,7 @@ class MediaPresentationConfig:
     playback_progress_glow_color: tuple[int, int, int, int] = (255, 255, 255, 180)
     app_volume_enabled: bool = True
     app_volume_fill_color: tuple[int, int, int, int] = (66, 66, 66, 255)
+    app_volume_border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
     system_mute_enabled: bool = False
 
     @classmethod
@@ -146,7 +185,12 @@ class MediaPresentationConfig:
             background_opacity=_bounded_float(values.get("bg_opacity"), 0.3, 0.0, 1.0),
             border_color=_rgba(values.get("border_color"), (255, 255, 255, 255)),
             border_opacity=_bounded_float(values.get("border_opacity"), 1.0, 0.0, 1.0),
+            header_fill_color=_rgba(values.get("header_fill_color"), (0, 0, 0, 0)),
+            header_border_color=_rgba(values.get("header_border_color"), (255, 255, 255, 255)),
+            header_text_color=_rgba(values.get("header_text_color"), (255, 255, 255, 230)),
             show_header_frame=_as_bool(values.get("show_header_frame"), True),
+            show_album=_as_bool(values.get("show_album"), True),
+            show_playback_state=_as_bool(values.get("show_playback_state"), True),
             artwork_size=_bounded_int(values.get("artwork_size"), 250, 48, 512),
             rounded_artwork_border=_as_bool(values.get("rounded_artwork_border"), True),
             show_controls=_as_bool(values.get("show_controls"), True),
@@ -177,6 +221,10 @@ class MediaPresentationConfig:
                 values.get("spotify_volume_fill_color"),
                 (66, 66, 66, 255),
             ),
+            app_volume_border_color=_rgba(
+                values.get("spotify_volume_border_color"),
+                (255, 255, 255, 255),
+            ),
             system_mute_enabled=_as_bool(
                 values.get("mute_button_enabled"), False
             ),
@@ -203,6 +251,11 @@ class MediaPresentationStyle:
     text_shadow_color: QColor
     text_shadow_offset_x: float
     text_shadow_offset_y: float
+    surface_shadow_enabled: bool
+    surface_shadow_color: QColor
+    surface_shadow_blur: float
+    surface_shadow_offset_x: float
+    surface_shadow_offset_y: float
 
     @classmethod
     def project(
@@ -222,6 +275,10 @@ class MediaPresentationStyle:
             ORDINARY_TEXT_SHADOW_BASE[0] + text_extra,
             ORDINARY_TEXT_SHADOW_BASE[1] + text_extra,
         )
+        # Media sub-surfaces share the global card-shadow direction vector. QML
+        # applies the small per-surface displacement multipliers and bounded cached
+        # blur requested for artwork, transport, and app-volume framing.
+        surface_offset = resolve_signed_offset(direction, *ORDINARY_CARD_SHADOW_BASE)
         shadow_rgba = _rgba(shadow_values.get("color"), (0, 0, 0, 255))
         return cls(
             card_style=OverlayCardStyle(
@@ -258,6 +315,18 @@ class MediaPresentationStyle:
             ),
             text_shadow_offset_x=float(text_offset[0]),
             text_shadow_offset_y=float(text_offset[1]),
+            surface_shadow_enabled=_as_bool(shadow_values.get("enabled"), True),
+            surface_shadow_color=_with_alpha(
+                shadow_rgba,
+                _bounded_float(shadow_values.get("frame_opacity"), 0.77, 0, 1)
+                * 0.45,
+            ),
+            surface_shadow_blur=max(
+                2.0,
+                min(6.0, _bounded_float(shadow_values.get("blur_radius"), 18, 0, 128) * 0.25),
+            ),
+            surface_shadow_offset_x=float(surface_offset[0]),
+            surface_shadow_offset_y=float(surface_offset[1]),
         )
 
 
@@ -268,7 +337,7 @@ class MediaPresentationSnapshot:
     revision: int = 0
     provider: str = "spotify"
     has_track: bool = False
-    title: str = "No media playing"
+    title: str = "No Media Playing"
     artist: str = ""
     album: str = ""
     playback_state: str = "unknown"
@@ -414,7 +483,7 @@ class MediaPresentationModel(QObject):
                     config=config,
                     provider=config.provider,
                     has_track=False,
-                    title="No media playing",
+                    title="No Media Playing",
                     artist="",
                     album="",
                     playback_state="unknown",
@@ -596,7 +665,7 @@ class MediaPresentationModel(QObject):
                 revision=revision,
                 provider=provider,
                 has_track=False,
-                title="No media playing",
+                title="No Media Playing",
                 artist="",
                 album="",
                 playback_state="unknown",
@@ -617,9 +686,11 @@ class MediaPresentationModel(QObject):
                 revision=revision,
                 provider=provider,
                 has_track=True,
-                title=str(info.title or "Unknown title"),
-                artist=str(info.artist or info.album_artist or "Unknown artist"),
-                album=str(info.album or ""),
+                title=_title_case_metadata(info.title or "Unknown Title"),
+                artist=_title_case_metadata(
+                    info.artist or info.album_artist or "Unknown Artist"
+                ),
+                album=_title_case_metadata(info.album or ""),
                 playback_state=state,
                 can_play_pause=bool(info.can_play_pause),
                 can_previous=bool(info.can_previous),
@@ -648,7 +719,7 @@ class MediaPresentationModel(QObject):
                 self._snapshot,
                 provider=str(provider or self.config.provider),
                 has_track=False,
-                title="No media playing",
+                title="No Media Playing",
                 artist="",
                 album="",
                 playback_state="unknown",
@@ -932,16 +1003,14 @@ class MediaPresentationModel(QObject):
 
     @Property(QColor, notify=stateChanged)
     def appVolumeBorderColor(self) -> QColor:
-        color = QColor(*self.config.border_color)
-        color.setAlpha(255)
-        return color
+        return QColor(*self.config.app_volume_border_color)
 
     @Property(QColor, notify=stateChanged)
     def appVolumeFillColor(self) -> QColor:
-        color = QColor(*self.config.app_volume_fill_color)
-        if color == QColor(255, 255, 255, 230):
-            color.setAlpha(140)
-        return color
+        # The persisted RGBA swatch is presentation truth.  Do not hide a
+        # special-case alpha transform here; future Widget Themes need the same
+        # role to round-trip exactly through Settings.
+        return QColor(*self.config.app_volume_fill_color)
 
     @Property(bool, notify=stateChanged)
     def systemMuteAvailable(self) -> bool:
@@ -998,11 +1067,40 @@ class MediaPresentationModel(QObject):
         border = self.style.card_style
         if border.border_width <= 0.0 or border.border_color.alpha() <= 0:
             return 0.0
-        return max(1.0, border.border_width + 2.0)
+        return 2.0
+
+    @Property(QColor, notify=stateChanged)
+    def headerFillColor(self) -> QColor:
+        return QColor(*self.config.header_fill_color)
+
+    @Property(QColor, notify=stateChanged)
+    def headerBorderColor(self) -> QColor:
+        return QColor(*self.config.header_border_color)
+
+    @Property(QColor, notify=stateChanged)
+    def headerTextColor(self) -> QColor:
+        return QColor(*self.config.header_text_color)
+
+    @Property(float, notify=stateChanged)
+    def headerBorderWidth(self) -> float:
+        border = self.style.card_style
+        if border.border_width <= 0.0 or border.border_color.alpha() <= 0:
+            return 0.0
+        # Shared branded-header language: a lighter inner frame than the outer card,
+        # matching Gmail's projection without hard-coded translucent white.
+        return max(1.0, border.border_width - 3.0)
 
     @Property(bool, notify=stateChanged)
     def showHeaderFrame(self) -> bool:
         return self.config.show_header_frame
+
+    @Property(bool, notify=stateChanged)
+    def showAlbum(self) -> bool:
+        return self.config.show_album
+
+    @Property(bool, notify=stateChanged)
+    def showPlaybackState(self) -> bool:
+        return self.config.show_playback_state
 
     @Property(bool, notify=stateChanged)
     def controlsAvailable(self) -> bool:
@@ -1029,6 +1127,26 @@ class MediaPresentationModel(QObject):
     @Property(float, notify=stateChanged)
     def textShadowOffsetY(self) -> float:
         return self.style.text_shadow_offset_y
+
+    @Property(bool, notify=stateChanged)
+    def surfaceShadowEnabled(self) -> bool:
+        return self.style.surface_shadow_enabled
+
+    @Property(QColor, notify=stateChanged)
+    def surfaceShadowColor(self) -> QColor:
+        return QColor(self.style.surface_shadow_color)
+
+    @Property(float, notify=stateChanged)
+    def surfaceShadowBlur(self) -> float:
+        return self.style.surface_shadow_blur
+
+    @Property(float, notify=stateChanged)
+    def surfaceShadowOffsetX(self) -> float:
+        return self.style.surface_shadow_offset_x
+
+    @Property(float, notify=stateChanged)
+    def surfaceShadowOffsetY(self) -> float:
+        return self.style.surface_shadow_offset_y
 
 
 class RetainedMediaPresentation:

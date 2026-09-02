@@ -40,49 +40,35 @@ OverlayWidget {
         scale: achievementRoot.contentScale
         transformOrigin: Item.TopLeft
 
-        Rectangle {
+        BrandedHeader {
             id: headerFrame
-            objectName: "achievementHeaderFrame"
+            frameObjectName: "achievementHeaderFrame"
+            logoObjectName: "achievementSteamLogo"
+            textObjectName: "achievementHeaderText"
             x: 18.0
             y: 14.0
-            width: 302.0
-            height: 38.0
-            radius: 8.0
-            color: "#e60b1016"
-            border.color: "#d8e5edf4"
-            border.width: 2.0
-
-            Image {
-                id: steamLogo
-                objectName: "achievementSteamLogo"
-                x: 11.0
-                anchors.verticalCenter: parent.verticalCenter
-                width: 28.0
-                height: 28.0
-                source: achievementRoot.achievementModel.logoSource
-                sourceSize.width: 56
-                sourceSize.height: 56
-                fillMode: Image.PreserveAspectFit
-                cache: true
-            }
-
-            ShadowedText {
-                objectName: "achievementHeaderText"
-                x: 48.0
-                width: parent.width - 61.0
-                height: parent.height
-                text: achievementRoot.achievementModel.headerText
-                color: achievementRoot.achievementModel.textColor
-                font.family: achievementRoot.achievementModel.fontFamily
-                font.pointSize: achievementRoot.achievementModel.fontSize
-                font.bold: true
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-                shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
-                shadowColor: achievementRoot.achievementModel.textShadowColor
-                shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
-                shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
-            }
+            label: achievementRoot.achievementModel.headerText
+            logoSource: achievementRoot.achievementModel.logoSource
+            fillColor: achievementRoot.achievementModel.headerFillColor
+            borderColor: achievementRoot.achievementModel.headerBorderColor
+            borderWidth: achievementRoot.scaleAwareStrokeWidthForScale(
+                achievementRoot.achievementModel.headerBorderWidth,
+                achievementRoot.contentScale
+            )
+            textColor: achievementRoot.achievementModel.headerTextColor
+            fontFamily: achievementRoot.achievementModel.fontFamily
+            textShadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+            textShadowColor: achievementRoot.achievementModel.textShadowColor
+            textShadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
+            textShadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
+            shadowEnabled: achievementRoot.cardShadowEnabled
+            shadowColor: Qt.rgba(
+                achievementRoot.cardShadowColor.r, achievementRoot.cardShadowColor.g,
+                achievementRoot.cardShadowColor.b, achievementRoot.cardShadowColor.a * 0.45
+            )
+            shadowBlur: Math.max(2.0, Math.min(6.0, achievementRoot.cardShadowBlur * 0.25))
+            shadowOffsetX: achievementRoot.cardShadowOffsetX * 1.15
+            shadowOffsetY: achievementRoot.cardShadowOffsetY * 1.15
         }
 
         Rectangle {

@@ -491,6 +491,58 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_color_row.addWidget(tab.media_color_btn)
     media_color_row.addStretch()
 
+    media_header_fill_row = _swatch_row(appearance_layout, "Header Fill:")
+    tab.media_header_fill_color_btn = ColorSwatchButton(
+        title="Choose Media Header Fill Color", show_alpha=True
+    )
+    tab.media_header_fill_color_btn.set_color(tab._media_header_fill_color)
+    tab.media_header_fill_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_media_header_fill_color', c), tab._save_settings())
+    )
+    media_header_fill_row.addWidget(tab.media_header_fill_color_btn)
+    media_header_fill_row.addStretch()
+
+    media_header_text_row = _swatch_row(appearance_layout, "Header Text:")
+    tab.media_header_text_color_btn = ColorSwatchButton(
+        title="Choose Media Header Text Color", show_alpha=True
+    )
+    tab.media_header_text_color_btn.set_color(
+        getattr(tab, '_media_header_text_color', tab._media_color)
+    )
+    tab.media_header_text_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_media_header_text_color', c), tab._save_settings())
+    )
+    media_header_text_row.addWidget(tab.media_header_text_color_btn)
+    media_header_text_row.addStretch()
+
+    media_header_border_row = _swatch_row(appearance_layout, "Header Border:")
+    tab.media_header_border_color_btn = ColorSwatchButton(
+        title="Choose Media Header Border Color", show_alpha=True
+    )
+    tab.media_header_border_color_btn.set_color(tab._media_header_border_color)
+    tab.media_header_border_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_media_header_border_color', c), tab._save_settings())
+    )
+    media_header_border_row.addWidget(tab.media_header_border_color_btn)
+    media_header_border_row.addStretch()
+
+    tab.media_show_album = QCheckBox("Show Album Line")
+    tab.media_show_album.setProperty("circleIndicator", True)
+    tab.media_show_album.setChecked(tab._default_bool('media', 'show_album', True))
+    tab.media_show_album.stateChanged.connect(tab._save_settings)
+    appearance_layout.addWidget(tab.media_show_album)
+
+    tab.media_show_playback_state = QCheckBox("Show Playback State Line")
+    tab.media_show_playback_state.setProperty("circleIndicator", True)
+    tab.media_show_playback_state.setToolTip(
+        "Shows the Playing/Paused state line beneath the track metadata."
+    )
+    tab.media_show_playback_state.setChecked(
+        tab._default_bool('media', 'show_playback_state', True)
+    )
+    tab.media_show_playback_state.stateChanged.connect(tab._save_settings)
+    appearance_layout.addWidget(tab.media_show_playback_state)
+
     tab.media_show_background = QCheckBox("Show Background Frame")
     tab.media_show_background.setProperty("circleIndicator", True)
     tab.media_show_background.setChecked(tab._default_bool('media', 'show_background', True))
@@ -560,13 +612,26 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _update_media_bg_visibility(tab)
 
     media_volume_fill_row = _swatch_row(appearance_layout, "Volume Fill Color:")
-    tab.media_volume_fill_color_btn = ColorSwatchButton(title="Choose Spotify Volume Fill Color")
+    tab.media_volume_fill_color_btn = ColorSwatchButton(
+        title="Choose Spotify Volume Fill Color", show_alpha=True
+    )
     tab.media_volume_fill_color_btn.set_color(getattr(tab, '_media_volume_fill_color', tab._media_color))
     tab.media_volume_fill_color_btn.color_changed.connect(
         lambda c: (setattr(tab, '_media_volume_fill_color', c), tab._save_settings())
     )
     media_volume_fill_row.addWidget(tab.media_volume_fill_color_btn)
     media_volume_fill_row.addStretch()
+
+    media_volume_border_row = _swatch_row(appearance_layout, "Volume Outline:")
+    tab.media_volume_border_color_btn = ColorSwatchButton(
+        title="Choose Spotify Volume Outline Color", show_alpha=True
+    )
+    tab.media_volume_border_color_btn.set_color(tab._media_volume_border_color)
+    tab.media_volume_border_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_media_volume_border_color', c), tab._save_settings())
+    )
+    media_volume_border_row.addWidget(tab.media_volume_border_color_btn)
+    media_volume_border_row.addStretch()
 
     media_artwork_row = _aligned_row(artwork_layout, "Artwork Size:")
     tab.media_artwork_size = QSpinBox()
@@ -589,7 +654,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_rounded_artwork.stateChanged.connect(tab._save_settings)
     artwork_layout.addWidget(tab.media_rounded_artwork)
 
-    tab.media_show_header_frame = QCheckBox("Header Border Around Logo + Title")
+    tab.media_show_header_frame = QCheckBox("Show Header Pill (Logo + Title)")
     tab.media_show_header_frame.setProperty("circleIndicator", True)
     tab.media_show_header_frame.setChecked(
         tab._default_bool('media', 'show_header_frame', True)
@@ -959,6 +1024,10 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     tab.media_artwork_size.setValue(tab._media_artwork_size)
     tab.media_rounded_artwork.setChecked(tab._config_bool('media', media_config, 'rounded_artwork_border', True))
     tab.media_show_header_frame.setChecked(tab._config_bool('media', media_config, 'show_header_frame', True))
+    tab.media_show_album.setChecked(tab._config_bool('media', media_config, 'show_album', True))
+    tab.media_show_playback_state.setChecked(
+        tab._config_bool('media', media_config, 'show_playback_state', True)
+    )
     tab.media_show_controls.setChecked(tab._config_bool('media', media_config, 'show_controls', True))
     tab.media_playback_progress_enabled.setChecked(
         tab._config_bool('media', media_config, 'playback_progress_enabled', False)
@@ -999,12 +1068,34 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     tab.media_border_opacity.setValue(media_border_opacity_pct)
     tab.media_border_opacity_label.setText(f"{media_border_opacity_pct}%")
 
+    header_fill_data = media_config.get(
+        'header_fill_color', tab._widget_default('media', 'header_fill_color', [0, 0, 0, 0])
+    )
+    tab._media_header_fill_color = QColor(*header_fill_data)
+    header_text_data = media_config.get(
+        'header_text_color', tab._widget_default('media', 'header_text_color', [255, 255, 255, 230])
+    )
+    tab._media_header_text_color = QColor(*header_text_data)
+    header_border_data = media_config.get(
+        'header_border_color', tab._widget_default('media', 'header_border_color', [255, 255, 255, 255])
+    )
+    tab._media_header_border_color = QColor(*header_border_data)
+
     volume_fill_data = media_config.get('spotify_volume_fill_color', tab._widget_default('media', 'spotify_volume_fill_color', [66, 66, 66, 255]))
     try:
         tab._media_volume_fill_color = QColor(*volume_fill_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set volume_fill_color=%s", volume_fill_data, exc_info=True)
         tab._media_volume_fill_color = QColor(66, 66, 66, 255)
+    volume_border_data = media_config.get(
+        'spotify_volume_border_color',
+        tab._widget_default('media', 'spotify_volume_border_color', [255, 255, 255, 255]),
+    )
+    try:
+        tab._media_volume_border_color = QColor(*volume_border_data)
+    except Exception:
+        logger.debug("[MEDIA_TAB] Failed to set volume_border_color=%s", volume_border_data, exc_info=True)
+        tab._media_volume_border_color = QColor(255, 255, 255, 255)
     progress_fill_data = media_config.get(
         'playback_progress_fill_color',
         tab._widget_default('media', 'playback_progress_fill_color', [255, 255, 255, 230]),
@@ -1026,7 +1117,11 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     _apply_color_to_button('media_color_btn', '_media_color')
     _apply_color_to_button('media_bg_color_btn', '_media_bg_color')
     _apply_color_to_button('media_border_color_btn', '_media_border_color')
+    _apply_color_to_button('media_header_fill_color_btn', '_media_header_fill_color')
+    _apply_color_to_button('media_header_text_color_btn', '_media_header_text_color')
+    _apply_color_to_button('media_header_border_color_btn', '_media_header_border_color')
     _apply_color_to_button('media_volume_fill_color_btn', '_media_volume_fill_color')
+    _apply_color_to_button('media_volume_border_color_btn', '_media_volume_border_color')
     _apply_color_to_button('media_playback_progress_fill_color_btn', '_media_progress_fill_color')
     _apply_color_to_button('media_playback_progress_glow_color_btn', '_media_progress_glow_color')
 
@@ -1207,15 +1302,21 @@ def save_media_settings(tab: WidgetsTab) -> dict:
         'border_color': [tab._media_border_color.red(), tab._media_border_color.green(),
                          tab._media_border_color.blue(), tab._media_border_color.alpha()],
         'border_opacity': tab.media_border_opacity.value() / 100.0,
+        'header_fill_color': _qcolor_to_list(tab._media_header_fill_color),
+        'header_text_color': _qcolor_to_list(tab._media_header_text_color),
+        'header_border_color': _qcolor_to_list(tab._media_header_border_color),
         'spotify_volume_fill_color': [
             tab._media_volume_fill_color.red(),
             tab._media_volume_fill_color.green(),
             tab._media_volume_fill_color.blue(),
             tab._media_volume_fill_color.alpha(),
         ],
+        'spotify_volume_border_color': _qcolor_to_list(tab._media_volume_border_color),
         'artwork_size': tab.media_artwork_size.value(),
         'rounded_artwork_border': tab.media_rounded_artwork.isChecked(),
         'show_header_frame': tab.media_show_header_frame.isChecked(),
+        'show_album': tab.media_show_album.isChecked(),
+        'show_playback_state': tab.media_show_playback_state.isChecked(),
         'show_controls': tab.media_show_controls.isChecked(),
         'playback_progress_enabled': tab.media_playback_progress_enabled.isChecked(),
         'playback_progress_height': tab.media_playback_progress_height.value(),

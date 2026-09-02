@@ -22,7 +22,10 @@ OverlayWidget {
     // driven. Intrinsic sources only (no width<->preferredWidth feedback). J
     // refines parity.
     preferredContentWidth: Math.max(
-        600.0, headerRow.implicitWidth + 20.0 + redditRoot.shellInset
+        600.0,
+        headerFrame.implicitWidth
+            + (refreshGlyph.visible ? refreshGlyph.width + 10.0 : 0.0)
+            + redditRoot.shellInset
     )
     preferredContentHeight: Math.max(
         60.0, contentColumn.childrenRect.height
@@ -34,85 +37,70 @@ OverlayWidget {
         anchors.fill: parent
         spacing: 4.0
 
-        Rectangle {
-            id: headerFrame
-            objectName: "redditHeaderFrame"
-            width: Math.min(parent.width, headerRow.implicitWidth + 20.0)
-            height: Math.max(36.0, headerRow.implicitHeight + 10.0)
-            radius: 9.0
-            color: redditRoot.redditModel.showBackground ? "#18000000" : "transparent"
-            border.width: redditRoot.redditModel.showBackground ? 1.0 : 0.0
-            border.color: redditRoot.redditModel.separatorColor
+        Item {
+            id: headerArea
+            objectName: "redditHeaderArea"
+            width: parent.width
+            height: headerFrame.implicitHeight
 
-            Row {
-                id: headerRow
-                anchors.centerIn: parent
-                spacing: 8.0
+            BrandedHeader {
+                id: headerFrame
+                frameObjectName: "redditHeaderFrame"
+                logoObjectName: "redditHeaderLogo"
+                textObjectName: "redditSubredditLabel"
+                anchors.left: parent.left
+                label: redditRoot.redditModel.subredditText
+                logoSource: redditRoot.redditModel.logoSource
+                interactionEnabled: redditRoot.redditModel.interactionEnabled
+                fillColor: redditRoot.redditModel.headerFillColor
+                borderColor: redditRoot.redditModel.headerBorderColor
+                borderWidth: redditRoot.scaleAwareStrokeWidth(
+                    redditRoot.redditModel.headerBorderWidth
+                )
+                textColor: redditRoot.redditModel.headerTextColor
+                fontFamily: redditRoot.redditModel.fontFamily
+                textShadowEnabled: redditRoot.redditModel.textShadowEnabled
+                textShadowColor: redditRoot.redditModel.textShadowColor
+                textShadowOffsetX: redditRoot.redditModel.textShadowOffsetX
+                textShadowOffsetY: redditRoot.redditModel.textShadowOffsetY
+                shadowEnabled: redditRoot.cardShadowEnabled
+                shadowColor: Qt.rgba(
+                    redditRoot.cardShadowColor.r, redditRoot.cardShadowColor.g,
+                    redditRoot.cardShadowColor.b, redditRoot.cardShadowColor.a * 0.45
+                )
+                shadowBlur: Math.max(2.0, Math.min(6.0, redditRoot.cardShadowBlur * 0.25))
+                shadowOffsetX: redditRoot.cardShadowOffsetX * 1.15
+                shadowOffsetY: redditRoot.cardShadowOffsetY * 1.15
+                onActivated: redditRoot.openPostRequested(redditRoot.redditModel.subredditUrl)
+            }
 
-                Image {
-                    id: redditLogo
-                    objectName: "redditHeaderLogo"
-                    source: redditRoot.redditModel.logoSource
-                    width: redditRoot.redditModel.headerLogoSize
-                    height: width
-                    sourceSize.width: width * 2.0
-                    sourceSize.height: height * 2.0
-                    fillMode: Image.PreserveAspectFit
-                    asynchronous: false
-                    cache: true
+            // Standardised to the Gmail location: right-anchored, vertically
+            // centred in the full-width header area.
+            ShadowedText {
+                id: refreshGlyph
+                objectName: "redditRefreshGlyph"
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.max(24.0, implicitWidth + 4.0)
+                height: parent.height
+                horizontalAlignment: Text.AlignHCenter
+                visible: redditRoot.redditModel.showRefreshSpiral
+                text: redditRoot.redditModel.refreshing ? "◌" : "↻"
+                opacity: 0.7
+                color: redditRoot.redditModel.textColor
+                font.family: redditRoot.redditModel.fontFamily
+                font.pointSize: redditRoot.redditModel.fontSize
+                font.bold: true
+                verticalAlignment: Text.AlignVCenter
+                shadowEnabled: redditRoot.redditModel.textShadowEnabled
+                shadowColor: redditRoot.redditModel.textShadowColor
+                shadowOffsetX: redditRoot.redditModel.textShadowOffsetX
+                shadowOffsetY: redditRoot.redditModel.textShadowOffsetY
 
-                    TapHandler {
-                        enabled: redditRoot.redditModel.interactionEnabled
-                        acceptedButtons: Qt.LeftButton
-                        onTapped: redditRoot.openPostRequested(
-                            redditRoot.redditModel.subredditUrl
-                        )
-                    }
-                }
-
-                ShadowedText {
-                    id: subredditLabel
-                    objectName: "redditSubredditLabel"
-                    text: redditRoot.redditModel.subredditText
-                    color: "white"
-                    font.family: redditRoot.redditModel.fontFamily
-                    font.pointSize: redditRoot.redditModel.fontSize
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
-                    shadowEnabled: redditRoot.redditModel.textShadowEnabled
-                    shadowColor: redditRoot.redditModel.textShadowColor
-                    shadowOffsetX: redditRoot.redditModel.textShadowOffsetX
-                    shadowOffsetY: redditRoot.redditModel.textShadowOffsetY
-
-                    TapHandler {
-                        enabled: redditRoot.redditModel.interactionEnabled
-                        acceptedButtons: Qt.LeftButton
-                        onTapped: redditRoot.openPostRequested(
-                            redditRoot.redditModel.subredditUrl
-                        )
-                    }
-                }
-
-                ShadowedText {
-                    id: refreshGlyph
-                    objectName: "redditRefreshGlyph"
-                    visible: redditRoot.redditModel.showRefreshSpiral
-                    text: redditRoot.redditModel.refreshing ? "◌" : "↻"
-                    color: redditRoot.redditModel.textColor
-                    font.family: redditRoot.redditModel.fontFamily
-                    font.pointSize: redditRoot.redditModel.fontSize
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
-                    shadowEnabled: redditRoot.redditModel.textShadowEnabled
-                    shadowColor: redditRoot.redditModel.textShadowColor
-                    shadowOffsetX: redditRoot.redditModel.textShadowOffsetX
-                    shadowOffsetY: redditRoot.redditModel.textShadowOffsetY
-
-                    TapHandler {
-                        enabled: redditRoot.redditModel.interactionEnabled
-                        acceptedButtons: Qt.LeftButton
-                        onTapped: redditRoot.refreshRequested()
-                    }
+                TapHandler {
+                    enabled: redditRoot.redditModel.interactionEnabled
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: redditRoot.refreshRequested()
                 }
             }
 

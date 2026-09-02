@@ -119,6 +119,9 @@ class GmailPresentationConfig:
     background_opacity: float = 0.3
     border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
     border_opacity: float = 1.0
+    header_fill_color: tuple[int, int, int, int] = (0, 0, 0, 0)
+    header_border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
+    header_text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
     group_threads: bool = True
     show_sender: bool = True
     show_subject: bool = True
@@ -140,7 +143,6 @@ class GmailPresentationConfig:
     max_subject_words: int = 4
     sender_subject_ratio: int = 35
     date_display_mode: str = "numeric"
-    header_logo_px_adjust: int = 2
     width: int = 600
 
     @classmethod
@@ -155,6 +157,9 @@ class GmailPresentationConfig:
             background_opacity=_bounded_float(values.get("bg_opacity"), 0.3, 0.0, 1.0),
             border_color=_rgba(values.get("border_color"), (255, 255, 255, 255)),
             border_opacity=_bounded_float(values.get("border_opacity"), 1.0, 0.0, 1.0),
+            header_fill_color=_rgba(values.get("header_fill_color"), (0, 0, 0, 0)),
+            header_border_color=_rgba(values.get("header_border_color"), (255, 255, 255, 255)),
+            header_text_color=_rgba(values.get("header_text_color"), (255, 255, 255, 230)),
             group_threads=_as_bool(values.get("group_threads"), True),
             show_sender=_as_bool(values.get("show_sender"), True),
             show_subject=_as_bool(values.get("show_subject"), True),
@@ -180,7 +185,6 @@ class GmailPresentationConfig:
             max_subject_words=_bounded_int(values.get("max_subject_words"), 4, 0, 30),
             sender_subject_ratio=_bounded_int(values.get("sender_subject_ratio"), 35, 10, 90),
             date_display_mode=str(values.get("date_display_mode", "numeric") or "numeric"),
-            header_logo_px_adjust=_bounded_int(values.get("header_logo_px_adjust"), 2, -128, 128),
             width=_bounded_int(values.get("width"), 600, 200, 1200),
         )
 
@@ -639,15 +643,6 @@ class GmailPresentationModel(QObject):
     def timestampFontSize(self) -> float:
         return float(max(8, self.config.font_size - 5))
 
-    @Property(float, notify=stateChanged)
-    def headerFontSize(self) -> float:
-        base = max(6, int(self.config.font_size * 1.2))
-        return float(max(6, base + round(self.config.header_logo_px_adjust / 1.3)))
-
-    @Property(float, notify=stateChanged)
-    def headerLogoSize(self) -> float:
-        return float(max(12, int(self.headerFontSize * 1.3)))
-
     @Property(QColor, notify=stateChanged)
     def textColor(self) -> QColor:
         return QColor(*self.config.text_color)
@@ -729,8 +724,16 @@ class GmailPresentationModel(QObject):
         return self.style.text_shadow_offset_y
 
     @Property(QColor, notify=stateChanged)
+    def headerFillColor(self) -> QColor:
+        return QColor(*self.config.header_fill_color)
+
+    @Property(QColor, notify=stateChanged)
     def headerBorderColor(self) -> QColor:
-        return QColor(self.style.card_style.border_color)
+        return QColor(*self.config.header_border_color)
+
+    @Property(QColor, notify=stateChanged)
+    def headerTextColor(self) -> QColor:
+        return QColor(*self.config.header_text_color)
 
     @Property(float, notify=stateChanged)
     def headerBorderWidth(self) -> float:
@@ -742,7 +745,7 @@ class GmailPresentationModel(QObject):
 
     @Property(float, notify=stateChanged)
     def contentHeight(self) -> float:
-        header_height = max(36.0, self.headerLogoSize + 10.0)
+        header_height = 36.0
         row_height = max(28.0, self.fontSize * 1.65)
         rows = self._row_model.rows
         if self._snapshot.view_state == "ready" and rows:
