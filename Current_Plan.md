@@ -274,9 +274,10 @@ Front-load the mandatory image-oracle parity work (`images/migration/Ideal (PreM
 - [ ] Remove migration-only harness/planning debris only after acceptance evidence exists.
 - [ ] Run final maintained destination + broad suite gates and reconcile docs before J closes.
 
-### Committed J+ card-material checklist — non-blocking for J close
+### Committed J+ Widget Theme + card-material work — non-blocking for J close
 
-- [ ] Implement the committed, non-blocking ordinary-widget **Normal / Glass / Acrylic** card-material slice after mandatory parity is under control, using the shared/lazy Qt Quick design at the bottom of `Docs/QtQuick_Migration/J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md` and `Future_Work.md` section 10. This item must remain tracked until implemented/accepted or explicitly superseded; J may close before it. Default remains Normal/off-cost; do not create per-card capture/blur owners or weaken performance/reactivity contracts.
+- [~] **Design pass complete (2026-09-02):** consolidated, source-grounded execution plan at `Docs/QtQuick_Migration/Widget_Theme_And_Card_Material_Implementation_Plan.md`, reconciled against the durable design (Contracts / Settings_Theme_Architecture / Custom_Style_Implementation / Future_Work §10 / J Parity+ §10) and exact current source. Dark is the guaranteed compiled default. Phase 1 is the semantic + serialization + UX layer (Widget Theme identity/link, `Keep Synced` default ON, Surface Style `Theme Default/Normal/Glass/Acrylic`, `Custom` snapshot in Settings persistence, one `effective_card_material_mode` resolver feeding ordinary cards **and** the Context Menu) shipping Normal-only with zero new render cost; Phases 2–7 add the scene-local shared/lazy Quick blur material, measured, only after Phase 1 is accepted.
+- [ ] Implement Phase 1 per that plan (awaiting the 3 open questions in its §6 before coding). Default remains Normal/off-cost; no per-card capture/blur owners; Glass/Acrylic stay disabled until their material path is admitted.
 
 ## Authority order
 
