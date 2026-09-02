@@ -92,6 +92,27 @@ def _builtin_default_entry() -> WidgetThemeCatalogEntry:
     )
 
 
+_current_widget_theme_catalog = WidgetThemeCatalog(
+    entries=(_builtin_default_entry(),),
+    issues=(),
+)
+
+
+def get_current_widget_theme_catalog() -> WidgetThemeCatalog:
+    """Return the last startup-resolved catalogue, or built-in-only fallback."""
+
+    return _current_widget_theme_catalog
+
+
+def set_current_widget_theme_catalog(catalog: WidgetThemeCatalog) -> None:
+    """Publish the catalogue resolved by startup/Settings authority."""
+
+    if not isinstance(catalog, WidgetThemeCatalog):
+        raise TypeError("catalog must be a WidgetThemeCatalog")
+    global _current_widget_theme_catalog
+    _current_widget_theme_catalog = catalog
+
+
 def build_widget_theme_catalog(
     widget_themes_directory: str | PathLike[str],
 ) -> WidgetThemeCatalog:
@@ -218,6 +239,8 @@ __all__ = [
     "WidgetThemeCatalogIssue",
     "WidgetThemeSelectionResolution",
     "build_widget_theme_catalog",
+    "get_current_widget_theme_catalog",
     "resolve_widget_theme_selection",
+    "set_current_widget_theme_catalog",
     "widget_theme_file_id",
 ]

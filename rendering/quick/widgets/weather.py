@@ -20,7 +20,7 @@ from core.settings.shadow_direction import (
     resolve_signed_offset,
 )
 
-from .theme_projection import resolve_rgba_role
+from .theme_projection import resolve_card_surface_colors, resolve_rgba_role
 
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
@@ -235,7 +235,22 @@ class WeatherPresentationConfig:
             values = {}
         merged = dict(defaults)
         merged.update(values)
-        return cls.from_mapping(merged)
+        config = cls.from_mapping(merged)
+        card_background, card_border = resolve_card_surface_colors(
+            values=values,
+            defaults=defaults,
+            background_color=config.background_color,
+            background_opacity=config.background_opacity,
+            border_color=config.border_color,
+            border_opacity=config.border_opacity,
+        )
+        return replace(
+            config,
+            background_color=card_background,
+            background_opacity=1.0,
+            border_color=card_border,
+            border_opacity=1.0,
+        )
 
 
 @dataclass(frozen=True)

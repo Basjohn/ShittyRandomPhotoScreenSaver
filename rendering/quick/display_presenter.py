@@ -30,6 +30,12 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from core.logging.logger import get_logger
+from rendering.widget_descriptors import is_global_custom_layout_mode_selected
+from rendering.widget_stacking import (
+    DisplayStackObstacle,
+    DisplayStackParticipant,
+    build_display_stack_plan,
+)
 
 from .widgets.family_binder import (
     OrdinaryFamilyAdapter,
@@ -59,6 +65,18 @@ class QuickDisplayPresenter:
         self._binder: OrdinaryFamilyPresentationBinder | None = None
         self._geometry_bindings: list[tuple[str, OverlayGeometryBinding]] = []
         self._display_bounds: OverlayWidgetGeometry | None = None
+        self._widgets_config: Mapping[str, object] = {}
+        self._stacking_enabled = False
+        self._authored_layout_enabled = True
+        self._stack_order: list[str] = []
+        self._base_geometries: dict[str, OverlayWidgetGeometry] = {}
+        self._geometry_sinks: dict[str, Callable[[OverlayWidgetGeometry], None]] = {}
+        self._custom_widget_ids: set[str] = set()
+        self._external_stack_obstacles: tuple[DisplayStackObstacle, ...] = ()
+        self._fixed_stack_widget_ids: set[str] = set()
+        self._layout_observer: Callable[[str, OverlayWidgetGeometry], None] | None = None
+        self._layout_suspended = 0
+        self._layout_reflow_active = False
         self._bound_once = False
         self._retired = False
 
@@ -69,6 +87,12 @@ class QuickDisplayPresenter:
     @property
     def bound_widget_ids(self) -> tuple[str, ...]:
         return tuple(widget_id for widget_id, _binding in self._geometry_bindings)
+
+    @property
+    def authored_layout_enabled(self) -> bool:
+        """Whether ordinary authored stacking/adjacency may currently project."""
+
+        return bool(self._authored_layout_enabled and not self._retired)
 
     def geometry_for(self, widget_id: str) -> OverlayWidgetGeometry | None:
         """Return the current Python-authored retained outer rectangle.
@@ -87,6 +111,11 @@ class QuickDisplayPresenter:
             if bound_id == widget_id:
                 return binding.current_geometry
         return None
+
+    def authored_geometry_for(self, widget_id: str) -> OverlayWidgetGeometry | None:
+        """Return the unstacked authored rectangle for one ordinary widget."""
+
+        return self._base_geometries.get(str(widget_id))
 
     def presentation_for_widget_id(self, widget_id: str) -> object | None:
         """Return one retained family presentation without exposing the host."""
@@ -141,6 +170,14 @@ class QuickDisplayPresenter:
 
         config: Mapping[str, object] = (
             widgets_config if isinstance(widgets_config, Mapping) else {}
+        )
+        self._widgets_config = config
+        global_config = config.get("global", {})
+        if not isinstance(global_config, Mapping):
+            global_config = {}
+        self._stacking_enabled = bool(global_config.get("stacking_enabled", False))
+        self._authored_layout_enabled = not is_global_custom_layout_mode_selected(
+            config
         )
         resolve_committed = committed_rect_resolver or (lambda _widget_id: None)
         resolve_variant_state = committed_variant_state_resolver or (
@@ -200,10 +237,22 @@ class QuickDisplayPresenter:
                 if callable(family_geometry_sink)
                 else overlay.set_geometry
             )
+            self._geometry_sinks[widget_id] = geometry_sink
+            self._stack_order.append(widget_id)
+
+            values = config.get(widget_id, {})
+            if not isinstance(values, Mapping):
+                values = {}
+            is_custom = str(values.get("position", "")).strip().lower() == "custom"
+            if is_custom or policy.has_committed_rect:
+                self._custom_widget_ids.add(widget_id)
+
             binding = OverlayGeometryBinding(
                 policy=policy,
                 display_bounds=display_bounds,
-                geometry_sink=geometry_sink,
+                geometry_sink=lambda geometry, wid=widget_id: self._apply_binding_geometry(
+                    wid, geometry
+                ),
             )
 
             # Clock keeps independent committed analogue/digital rect + font-scale
@@ -233,7 +282,217 @@ class QuickDisplayPresenter:
             connect_overlay_preferred_size(overlay.item, binding)
             self._geometry_bindings.append((widget_id, binding))
 
+        if self._stacking_enabled and self._authored_layout_enabled:
+            self._reflow_non_custom_layout()
         return built
+
+    def set_authored_layout_enabled(
+        self,
+        enabled: bool,
+        *,
+        restore_base: bool = True,
+        reflow: bool = True,
+    ) -> bool:
+        """Enable/disable the whole authored-layout subsystem at an event edge.
+
+        CUSTOM is global.  Entering the retained edit transaction disables both
+        stacking and ordinary relationship callbacks for this presenter, and a
+        persisted/effective CUSTOM route starts the generation disabled.  No
+        timer or cadence owner is involved.
+
+        When disabling from authored mode, optionally restore each retained
+        ordinary family to its unstacked base rectangle before CUSTOM captures
+        the working session.  Re-enabling after Cancel performs one bounded
+        deterministic reflow.
+        """
+
+        if self._retired:
+            return False
+        target = bool(enabled)
+        changed = target != self._authored_layout_enabled
+        self._authored_layout_enabled = target
+
+        if not target:
+            if restore_base:
+                self._layout_suspended += 1
+                try:
+                    for widget_id in self._stack_order:
+                        geometry = self._base_geometries.get(widget_id)
+                        sink = self._geometry_sinks.get(widget_id)
+                        if geometry is not None and sink is not None:
+                            sink(geometry)
+                finally:
+                    self._layout_suspended = max(0, self._layout_suspended - 1)
+            return changed
+
+        if reflow and self._stacking_enabled:
+            self._reflow_non_custom_layout()
+        return changed
+
+    def set_layout_observer(
+        self, observer: Callable[[str, OverlayWidgetGeometry], None] | None
+    ) -> None:
+        """Install one generation-local event observer for authored geometry changes."""
+
+        self._layout_observer = observer if callable(observer) else None
+
+    def set_external_stack_obstacles(
+        self,
+        obstacles: Sequence[DisplayStackObstacle] | None,
+        *,
+        fixed_widget_ids: Sequence[str] | None = None,
+        reflow: bool = True,
+    ) -> None:
+        """Replace fixed ordinary-layout obstacles and reflow once.
+
+        This is a presentation-only seam for stronger ordinary relationships
+        such as the non-CUSTOM Media+Visualizer block. CUSTOM items are never
+        represented here. There is no timer/poller; callers update the snapshot
+        only when the authored layout relationship itself changes.
+        """
+
+        if self._retired:
+            return
+        self._external_stack_obstacles = tuple(obstacles or ())
+        self._fixed_stack_widget_ids = {str(value) for value in (fixed_widget_ids or ())}
+        if not reflow or not self._authored_layout_enabled:
+            return
+        for widget_id in self._fixed_stack_widget_ids:
+            if widget_id in self._custom_widget_ids:
+                continue
+            base = self._base_geometries.get(widget_id)
+            sink = self._geometry_sinks.get(widget_id)
+            if base is not None and sink is not None:
+                sink(base)
+        if self._stacking_enabled:
+            self._reflow_non_custom_layout()
+
+    def _apply_binding_geometry(
+        self, widget_id: str, geometry: OverlayWidgetGeometry
+    ) -> None:
+        """Record one binding's authored rect, then project ordinary stacking."""
+
+        if self._retired:
+            return
+        self._base_geometries[widget_id] = geometry
+        observer = self._layout_observer if self._authored_layout_enabled else None
+        if observer is not None:
+            try:
+                observer(widget_id, geometry)
+            except Exception:
+                logger.warning(
+                    "[DISPLAY_PRESENTER] Authored-layout observer failed for %s",
+                    widget_id,
+                    exc_info=True,
+                )
+        sink = self._geometry_sinks.get(widget_id)
+        if sink is None:
+            return
+        if (
+            widget_id in self._custom_widget_ids
+            or widget_id in self._fixed_stack_widget_ids
+            or not self._stacking_enabled
+            or not self._authored_layout_enabled
+        ):
+            sink(geometry)
+            if (
+                self._authored_layout_enabled
+                and self._stacking_enabled
+                and widget_id in self._fixed_stack_widget_ids
+                and self._layout_suspended == 0
+            ):
+                self._reflow_non_custom_layout()
+            return
+        if self._layout_suspended > 0 or self._layout_reflow_active:
+            return
+        self._reflow_non_custom_layout()
+
+    def _reflow_non_custom_layout(self) -> None:
+        """Run one deterministic display-wide ordinary collision pass.
+
+        CUSTOM widgets are deliberately absent from both participants and
+        obstacles. The pass is event-driven by preferred-size/topology/layout
+        relationship changes and owns no cadence.
+        """
+
+        if (
+            self._retired
+            or not self._stacking_enabled
+            or not self._authored_layout_enabled
+            or self._display_bounds is None
+            or self._layout_reflow_active
+        ):
+            return
+        participants: list[DisplayStackParticipant] = []
+        for order, widget_id in enumerate(self._stack_order):
+            if (
+                widget_id in self._custom_widget_ids
+                or widget_id in self._fixed_stack_widget_ids
+            ):
+                continue
+            geometry = self._base_geometries.get(widget_id)
+            if geometry is None:
+                continue
+            values = self._widgets_config.get(widget_id, {})
+            if not isinstance(values, Mapping):
+                values = {}
+            binding = next(
+                (bound for bound_id, bound in self._geometry_bindings if bound_id == widget_id),
+                None,
+            )
+            margin = 30
+            if binding is not None:
+                margin = int(round(float(binding.policy.margin)))
+            participants.append(
+                DisplayStackParticipant(
+                    key=widget_id,
+                    position_key=str(
+                        values.get(
+                            "position",
+                            binding.policy.anchor.value if binding is not None else "top_right",
+                        )
+                    ),
+                    base_x=int(round(geometry.x - self._display_bounds.x)),
+                    base_y=int(round(geometry.y - self._display_bounds.y)),
+                    width=max(1, int(round(geometry.width))),
+                    height=max(1, int(round(geometry.height))),
+                    order=order,
+                    margin=max(0, margin),
+                )
+            )
+
+        if not participants:
+            return
+        plan = build_display_stack_plan(
+            participants,
+            obstacles=self._external_stack_obstacles,
+            container_width=max(1, int(round(self._display_bounds.width))),
+            container_height=max(1, int(round(self._display_bounds.height))),
+            spacing=10,
+        )
+        self._layout_reflow_active = True
+        try:
+            for participant in participants:
+                base = self._base_geometries.get(participant.key)
+                sink = self._geometry_sinks.get(participant.key)
+                placement = plan.placements.get(participant.key)
+                if base is None or sink is None or placement is None:
+                    continue
+                sink(
+                    OverlayWidgetGeometry(
+                        self._display_bounds.x + float(placement.desired_x),
+                        self._display_bounds.y + float(placement.desired_y),
+                        base.width,
+                        base.height,
+                    )
+                )
+        finally:
+            self._layout_reflow_active = False
+        if not plan.all_fit:
+            logger.warning(
+                "[WIDGET_STACKING] Display is overfull; unresolved=%s",
+                ",".join(plan.unresolved),
+            )
 
     def set_display_bounds(self, display_bounds: OverlayWidgetGeometry) -> None:
         """Re-anchor every content-anchored family for a new display rectangle.
@@ -244,8 +503,14 @@ class QuickDisplayPresenter:
         if self._retired:
             return
         self._display_bounds = display_bounds
-        for _widget_id, binding in self._geometry_bindings:
-            binding.set_display_bounds(display_bounds)
+        self._layout_suspended += 1
+        try:
+            for _widget_id, binding in self._geometry_bindings:
+                binding.set_display_bounds(display_bounds)
+        finally:
+            self._layout_suspended = max(0, self._layout_suspended - 1)
+        if self._stacking_enabled and self._authored_layout_enabled:
+            self._reflow_non_custom_layout()
 
     def retire(self) -> None:
         """Retire every placed family exactly once (terminal for this generation)."""
@@ -256,6 +521,15 @@ class QuickDisplayPresenter:
         for _widget_id, binding in self._geometry_bindings:
             binding.retire()
         self._geometry_bindings = []
+        self._widgets_config = {}
+        self._authored_layout_enabled = False
+        self._stack_order = []
+        self._base_geometries = {}
+        self._geometry_sinks = {}
+        self._custom_widget_ids = set()
+        self._external_stack_obstacles = ()
+        self._fixed_stack_widget_ids = set()
+        self._layout_observer = None
         binder = self._binder
         self._binder = None
         if binder is not None:

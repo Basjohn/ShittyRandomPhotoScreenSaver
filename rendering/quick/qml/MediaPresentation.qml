@@ -13,12 +13,14 @@ OverlayWidget {
     uniformScaleTransform: true
 
     required property var mediaModel
+    property bool volumeWheelEnabled: true
     semanticDoubleClickEnabled: true
     signal refreshRequested()
     signal playPauseRequested()
     signal previousRequested()
     signal nextRequested()
     signal appVolumeLevelRequested(real level)
+    signal appVolumeStepRequested(int direction)
     signal systemMuteToggleRequested()
     signal seekFractionRequested(real fraction)
 
@@ -60,6 +62,23 @@ OverlayWidget {
     TapHandler {
         acceptedButtons: Qt.LeftButton
         onDoubleTapped: mediaRoot.refreshRequested()
+    }
+
+    // One event-driven wheel admission for the full Media footprint, including
+    // the external volume rail. It reuses the existing app-volume runtime owner;
+    // no polling/cadence is introduced. Python explicitly disables this owner
+    // for the whole CUSTOM edit session so resize wheel has sole ownership.
+    WheelHandler {
+        target: null
+        enabled: mediaRoot.volumeWheelEnabled
+            && mediaRoot.mediaModel.interactionEnabled
+            && mediaRoot.mediaModel.appVolumeAvailable
+        onWheel: function(wheel) {
+            if (wheel.angleDelta.y === 0)
+                return
+            mediaRoot.appVolumeStepRequested(wheel.angleDelta.y > 0 ? 1 : -1)
+            wheel.accepted = true
+        }
     }
 
     Column {
@@ -661,15 +680,6 @@ OverlayWidget {
                                 mediaRoot.appVolumeLevelAt(mouse.y, height)
                             )
                         }
-                    }
-                    onWheel: function(wheel) {
-                        if (wheel.angleDelta.y === 0)
-                            return
-                        var direction = wheel.angleDelta.y > 0 ? 1.0 : -1.0
-                        mediaRoot.appVolumeLevelRequested(
-                            mediaRoot.mediaModel.appVolumeLevel + direction * 0.05
-                        )
-                        wheel.accepted = true
                     }
                 }
             }

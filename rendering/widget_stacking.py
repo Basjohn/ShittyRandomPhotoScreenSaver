@@ -319,3 +319,332 @@ def _resolve_middle_start(
         return best_start
     largest = max(segments, key=lambda item: item[1] - item[0], default=(authored_start, authored_start))
     return largest[0]
+
+
+@dataclass(frozen=True)
+class DisplayStackParticipant:
+    """One ordinary authored widget participating in display-wide collision packing."""
+
+    key: str
+    position_key: str
+    base_x: int
+    base_y: int
+    width: int
+    height: int
+    order: int
+    margin: int = 30
+
+
+@dataclass(frozen=True)
+class DisplayStackObstacle:
+    """One fixed rectangle excluded from display-wide collision packing."""
+
+    key: str
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+@dataclass(frozen=True)
+class DisplayStackPlacement:
+    """Resolved display-wide placement for one ordinary widget."""
+
+    desired_x: int
+    desired_y: int
+    offset_x: int
+    offset_y: int
+    slot: str
+
+
+@dataclass(frozen=True)
+class DisplayStackPlan:
+    """Resolved display-wide collision-free placement pass."""
+
+    placements: Dict[str, DisplayStackPlacement]
+    all_fit: bool
+    unresolved: tuple[str, ...]
+
+
+_SLOT_COORDS: dict[str, tuple[int, int]] = {
+    "top_left": (0, 0),
+    "middle_left": (0, 1),
+    "bottom_left": (0, 2),
+    "top_center": (1, 0),
+    "center": (1, 1),
+    "middle_center": (1, 1),
+    "bottom_center": (1, 2),
+    "top_right": (2, 0),
+    "middle_right": (2, 1),
+    "bottom_right": (2, 2),
+}
+_CANONICAL_SLOTS: tuple[str, ...] = (
+    "top_left",
+    "middle_left",
+    "bottom_left",
+    "top_center",
+    "center",
+    "bottom_center",
+    "top_right",
+    "middle_right",
+    "bottom_right",
+)
+
+
+def _normalize_slot(position_key: str) -> str:
+    token = str(position_key or "").strip().lower().replace(" ", "_")
+    if token == "middle_center":
+        return "center"
+    return token if token in _SLOT_COORDS else "top_right"
+
+
+def _slot_preference(position_key: str) -> tuple[str, ...]:
+    """Return deterministic spill order, preserving the authored column first."""
+
+    authored = _normalize_slot(position_key)
+    ax, ay = _SLOT_COORDS[authored]
+
+    def score(slot: str) -> tuple[int, int, int, int, str]:
+        sx, sy = _SLOT_COORDS[slot]
+        horizontal = abs(sx - ax)
+        vertical = abs(sy - ay)
+        # Staying in the authored column is deliberately cheaper than moving to
+        # another column. This gives Top Right -> Middle Right -> Bottom Right
+        # before spilling toward centre/left while remaining deterministic.
+        return (
+            horizontal * 3 + vertical,
+            horizontal,
+            vertical,
+            sy,
+            slot,
+        )
+
+    return tuple(sorted(_CANONICAL_SLOTS, key=score))
+
+
+def _slot_xy(
+    slot: str,
+    *,
+    width: int,
+    height: int,
+    container_width: int,
+    container_height: int,
+    margin: int,
+) -> tuple[int, int]:
+    sx, sy = _SLOT_COORDS[_normalize_slot(slot)]
+    if sx == 0:
+        x = margin
+    elif sx == 2:
+        x = container_width - margin - width
+    else:
+        x = (container_width - width) // 2
+
+    if sy == 0:
+        y = margin
+    elif sy == 2:
+        y = container_height - margin - height
+    else:
+        y = (container_height - height) // 2
+    return int(x), int(y)
+
+
+def _rects_conflict(
+    a: tuple[int, int, int, int],
+    b: tuple[int, int, int, int],
+    spacing: int,
+) -> bool:
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    return not (
+        ax + aw + spacing <= bx
+        or bx + bw + spacing <= ax
+        or ay + ah + spacing <= by
+        or by + bh + spacing <= ay
+    )
+
+
+def _rect_fits(
+    rect: tuple[int, int, int, int],
+    *,
+    container_width: int,
+    container_height: int,
+    margin: int,
+) -> bool:
+    x, y, width, height = rect
+    return (
+        x >= margin
+        and y >= margin
+        and x + width <= container_width - margin
+        and y + height <= container_height - margin
+    )
+
+
+def _free_edge_candidates(
+    participant: DisplayStackParticipant,
+    occupied: list[tuple[int, int, int, int]],
+    *,
+    container_width: int,
+    container_height: int,
+    spacing: int,
+) -> list[tuple[int, int, str]]:
+    """Generate a bounded set of gap candidates from existing rectangle edges."""
+
+    width = max(1, int(participant.width))
+    height = max(1, int(participant.height))
+    margin = max(0, int(participant.margin))
+    xs = {
+        margin,
+        max(margin, (container_width - width) // 2),
+        max(margin, container_width - margin - width),
+    }
+    ys = {
+        margin,
+        max(margin, (container_height - height) // 2),
+        max(margin, container_height - margin - height),
+    }
+    for x, y, other_width, other_height in occupied:
+        xs.update(
+            {
+                x,
+                x + other_width + spacing,
+                x - width - spacing,
+            }
+        )
+        ys.update(
+            {
+                y,
+                y + other_height + spacing,
+                y - height - spacing,
+            }
+        )
+
+    candidates: list[tuple[int, int, str]] = []
+    for x in sorted(xs):
+        for y in sorted(ys):
+            rect = (int(x), int(y), width, height)
+            if not _rect_fits(
+                rect,
+                container_width=container_width,
+                container_height=container_height,
+                margin=margin,
+            ):
+                continue
+            candidates.append((int(x), int(y), "free"))
+    candidates.sort(
+        key=lambda candidate: (
+            abs(candidate[0] - int(participant.base_x))
+            + abs(candidate[1] - int(participant.base_y)),
+            candidate[1],
+            candidate[0],
+        )
+    )
+    return candidates
+
+
+def build_display_stack_plan(
+    participants: Iterable[DisplayStackParticipant],
+    *,
+    obstacles: Iterable[DisplayStackObstacle] | None = None,
+    container_width: int,
+    container_height: int,
+    spacing: int = 10,
+) -> DisplayStackPlan:
+    """Pack ordinary authored widgets across the full display without polling.
+
+    The pass is intentionally small and deterministic. Each widget first tries
+    its authored canonical slot, then nearby canonical slots (same column before
+    cross-column spill), then a bounded set of edge-derived free-space
+    candidates. Explicit CUSTOM widgets belong outside this function entirely.
+
+    If no collision-free rectangle exists, the authored rectangle is retained
+    and the widget is reported in ``unresolved``; callers can log/diagnose a
+    genuinely overfull display without adding a background solver.
+    """
+
+    width_limit = max(1, int(container_width))
+    height_limit = max(1, int(container_height))
+    spacing_px = max(0, int(spacing))
+    fixed: list[tuple[int, int, int, int]] = []
+    for obstacle in obstacles or ():
+        fixed.append(
+            (
+                int(obstacle.x),
+                int(obstacle.y),
+                max(1, int(obstacle.width)),
+                max(1, int(obstacle.height)),
+            )
+        )
+
+    placements: Dict[str, DisplayStackPlacement] = {}
+    unresolved: list[str] = []
+    occupied = list(fixed)
+    ordered = sorted(participants, key=lambda item: (int(item.order), str(item.key)))
+
+    for participant in ordered:
+        p_width = max(1, int(participant.width))
+        p_height = max(1, int(participant.height))
+        margin = max(0, int(participant.margin))
+        candidates: list[tuple[int, int, str]] = []
+        for slot in _slot_preference(participant.position_key):
+            x, y = _slot_xy(
+                slot,
+                width=p_width,
+                height=p_height,
+                container_width=width_limit,
+                container_height=height_limit,
+                margin=margin,
+            )
+            candidates.append((x, y, slot))
+        candidates.extend(
+            _free_edge_candidates(
+                participant,
+                occupied,
+                container_width=width_limit,
+                container_height=height_limit,
+                spacing=spacing_px,
+            )
+        )
+
+        chosen: tuple[int, int, str] | None = None
+        seen: set[tuple[int, int]] = set()
+        for x, y, slot in candidates:
+            xy = (int(x), int(y))
+            if xy in seen:
+                continue
+            seen.add(xy)
+            rect = (xy[0], xy[1], p_width, p_height)
+            if not _rect_fits(
+                rect,
+                container_width=width_limit,
+                container_height=height_limit,
+                margin=margin,
+            ):
+                continue
+            if any(_rects_conflict(rect, other, spacing_px) for other in occupied):
+                continue
+            chosen = (xy[0], xy[1], slot)
+            break
+
+        if chosen is None:
+            chosen = (
+                int(participant.base_x),
+                int(participant.base_y),
+                _normalize_slot(participant.position_key),
+            )
+            unresolved.append(str(participant.key))
+
+        x, y, slot = chosen
+        placements[str(participant.key)] = DisplayStackPlacement(
+            desired_x=x,
+            desired_y=y,
+            offset_x=x - int(participant.base_x),
+            offset_y=y - int(participant.base_y),
+            slot=slot,
+        )
+        occupied.append((x, y, p_width, p_height))
+
+    return DisplayStackPlan(
+        placements=placements,
+        all_fit=not unresolved,
+        unresolved=tuple(unresolved),
+    )

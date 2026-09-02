@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
 from .theme_projection import (
     configured_rgba_override,
+    resolve_card_surface_colors,
     resolve_header_colors,
     resolve_rgba_role,
 )
@@ -328,9 +329,21 @@ class MediaPresentationConfig:
             current, defaults if isinstance(defaults, Mapping) else {},
             "playback_progress_glow_color", config.playback_progress_glow_color,
         )
+        card_background, card_border = resolve_card_surface_colors(
+            values=current,
+            defaults=defaults if isinstance(defaults, Mapping) else {},
+            background_color=config.background_color,
+            background_opacity=config.background_opacity,
+            border_color=config.border_color,
+            border_opacity=config.border_opacity,
+        )
 
         return replace(
             config,
+            background_color=card_background,
+            background_opacity=1.0,
+            border_color=card_border,
+            border_opacity=1.0,
             header_fill_color=header_fill,
             header_border_color=header_border,
             header_text_color=header_text,
@@ -1369,6 +1382,9 @@ class RetainedMediaPresentation:
         volume = getattr(self._retained.item, "appVolumeLevelRequested", None)
         if volume is not None and hasattr(volume, "connect"):
             volume.connect(self._handle_app_volume_requested)
+        volume_step = getattr(self._retained.item, "appVolumeStepRequested", None)
+        if volume_step is not None and hasattr(volume_step, "connect"):
+            volume_step.connect(self._handle_app_volume_step_requested)
         mute = getattr(self._retained.item, "systemMuteToggleRequested", None)
         if mute is not None and hasattr(mute, "connect"):
             mute.connect(self._handle_system_mute_requested)
@@ -1449,6 +1465,11 @@ class RetainedMediaPresentation:
         if not self._model.interactionEnabled:
             return False
         return self._model.request_app_volume(level)
+
+    def _handle_app_volume_step_requested(self, direction: int) -> bool:
+        if not self._model.interactionEnabled:
+            return False
+        return self._model.request_app_volume_step(int(direction))
 
     def _handle_seek_requested(self, fraction: float) -> bool:
         if not self._model.interactionEnabled:

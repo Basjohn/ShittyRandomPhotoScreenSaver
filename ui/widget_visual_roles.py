@@ -224,6 +224,39 @@ def resolve_widget_visual_color(
     )
 
 
+
+def materialize_theme_owned_optional_colors(
+    theme: WidgetThemeSpec,
+) -> dict[str, Rgba]:
+    """Freeze only optional colours already resolved by the theme cascade.
+
+    ``Custom`` creation must snapshot inherited *theme-owned* optional roles so a
+    later edit to a semantic parent cannot mutate the user's saved appearance.
+    Family-local ``local.*`` terminals deliberately remain outside the theme: if
+    an optional role currently reaches only a presentation-local fallback, this
+    helper leaves it sparse rather than serialising family pixels into the shared
+    Widget Theme.
+    """
+
+    if not isinstance(theme, WidgetThemeSpec):
+        raise TypeError("theme must be a WidgetThemeSpec")
+
+    frozen: dict[str, Rgba] = {}
+    for requested in WIDGET_THEME_OPTIONAL_COLOR_ROLES:
+        current = requested
+        seen: set[str] = set()
+        while current and current not in seen:
+            seen.add(current)
+            themed = theme.colors.get(current)
+            if themed is not None:
+                frozen[requested] = themed
+                break
+            parent = WIDGET_VISUAL_ROLE_PARENTS.get(current, "")
+            if parent.startswith("local."):
+                break
+            current = parent
+    return frozen
+
 def materialize_widget_theme_colors(
     theme: WidgetThemeSpec,
     *,
@@ -262,6 +295,7 @@ __all__ = [
     "WIDGET_THEME_OPTIONAL_COLOR_ROLES",
     "WIDGET_VISUAL_ROLE_PARENTS",
     "is_known_widget_theme_color_role",
+    "materialize_theme_owned_optional_colors",
     "materialize_widget_theme_colors",
     "resolve_widget_visual_color",
 ]

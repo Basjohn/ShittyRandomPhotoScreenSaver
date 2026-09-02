@@ -81,6 +81,7 @@ class VisualizerSceneTransfer:
     active: bool
     double_click_admission: Any | None
     middle_click_admission: Any | None
+    volume_wheel_handler: Any | None
 
 
 class QuickSceneFactory(QObject):
@@ -331,6 +332,7 @@ class QuickSceneController(QObject):
         self._visualizer_bridge: VisualizerSnapshotBridge | None = None
         self._visualizer_double_click_admission: Any | None = None
         self._visualizer_middle_click_admission: Any | None = None
+        self._visualizer_volume_wheel_handler: Any | None = None
         self._visualizer_telemetry = VisualizerRenderNodeTelemetry()
         self._last_transition_run_id = 0
         # --perf HUD is deliberately passive: frameSwapped is already emitted
@@ -598,6 +600,11 @@ class QuickSceneController(QObject):
         self._custom_layout_display_identity = identity
         self._custom_layout_display_origin = QPoint(display_origin or QPoint())
         self._custom_layout_session = session
+        media_overlay = self.ordinary_widget_host.presentation_for_model_identity("media")
+        if media_overlay is not None:
+            media_overlay.item.setProperty("volumeWheelEnabled", False)
+        if self._visualizer_root is not None:
+            self._visualizer_root.setProperty("volumeWheelEnabled", False)
         current_visualizer = (
             None if self._visualizer_item is None else self._visualizer_item.presentation
         )
@@ -646,8 +653,12 @@ class QuickSceneController(QObject):
             presentation = host.presentation_for_model_identity(model_identity)
             if presentation is not None:
                 presentation.set_working_visible(True)
+        media_overlay = host.presentation_for_model_identity("media")
+        if media_overlay is not None:
+            media_overlay.item.setProperty("volumeWheelEnabled", True)
         if self._visualizer_root is not None:
             self._visualizer_root.setProperty("customLayoutWorkingVisible", True)
+            self._visualizer_root.setProperty("volumeWheelEnabled", True)
         self.custom_layout_overlay.clear_session()
         if self._visualizer_item is not None:
             self._visualizer_item.set_custom_layout_presentation_authority(False)
@@ -951,6 +962,23 @@ class QuickSceneController(QObject):
 
         self._visualizer_middle_click_admission = admission
 
+    def set_visualizer_volume_wheel_handler(self, handler: Any | None) -> None:
+        """Register one event-bound app-volume route for the retained Visualizer."""
+
+        if handler is not None and not callable(handler):
+            raise TypeError("visualizer volume wheel handler must be callable or None")
+        self._visualizer_volume_wheel_handler = handler
+
+    def _handle_visualizer_app_volume_step(self, direction: int) -> bool:
+        handler = self._visualizer_volume_wheel_handler
+        if handler is None or self._custom_layout_session is not None:
+            return False
+        try:
+            return bool(handler(int(direction)))
+        except Exception:
+            logger.exception("[VISUALIZER_INPUT] App-volume wheel route failed")
+            return False
+
     def visualizer_contains_scene_position(self, scene_position: Any) -> bool:
         """Return whether the live retained visualizer owns this scene point."""
 
@@ -1003,6 +1031,7 @@ class QuickSceneController(QObject):
             active=bool(root.property("presentationActive")),
             double_click_admission=self._visualizer_double_click_admission,
             middle_click_admission=self._visualizer_middle_click_admission,
+            volume_wheel_handler=self._visualizer_volume_wheel_handler,
         )
         root.setProperty("customLayoutWorkingVisible", False)
         root.setProperty("presentationActive", False)
@@ -1018,6 +1047,7 @@ class QuickSceneController(QObject):
         self._visualizer_bridge = None
         self._visualizer_double_click_admission = None
         self._visualizer_middle_click_admission = None
+        self._visualizer_volume_wheel_handler = None
         self._custom_layout_visualizer_baseline = None
         return transfer
 
@@ -1045,6 +1075,7 @@ class QuickSceneController(QObject):
         self.set_visualizer_middle_click_admission(
             transfer.middle_click_admission
         )
+        self.set_visualizer_volume_wheel_handler(transfer.volume_wheel_handler)
 
     def _display_device_pixel_ratio(self) -> float:
         ratio = float(self._window.devicePixelRatio())
@@ -1301,6 +1332,10 @@ class QuickSceneController(QObject):
             "startupRevealOpacity",
             self._visualizer_startup_reveal_opacity,
         )
+        root.setProperty("volumeWheelEnabled", self._custom_layout_session is None)
+        volume_step_signal = getattr(root, "appVolumeStepRequested", None)
+        if volume_step_signal is not None and hasattr(volume_step_signal, "connect"):
+            volume_step_signal.connect(self._handle_visualizer_app_volume_step)
         self._visualizer_content_host = content_host
         self._visualizer_item = item
         root.setProperty("perfHudEnabled", self._perf_hud_enabled)

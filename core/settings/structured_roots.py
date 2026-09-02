@@ -14,6 +14,7 @@ STRUCTURED_SETTINGS_ROOTS = frozenset(
         "ui",
         "visualizer_custom_presets",
         "widgets",
+        "widget_theme",
     }
 )
 

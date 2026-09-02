@@ -307,4 +307,12 @@ restores the old committed value, and ending CUSTOM removes only the override. I
 variant. Save/Cancel and layout slots preserve ordinary ON/OFF semantics without crossing capability activation.
 Cross-display transfer has one live retained pixel owner and preserves logical runtime/model identity.
 
+CUSTOM layout admission is global. As soon as any effective family route is `Custom`, or the live Edit Layout
+transaction starts, generic authored stacking and the stronger ordinary Media/Visualizer adjacency owner are dormant
+for the whole retained layout. Number-key layout-slot loads quiesce the same subsystem before their fenced runtime
+rebuild. No CUSTOM family participates as a movable card *or* obstacle because the planner is not invoked at all in
+that mode. An uncommitted Visualizer falls back to Media's plain authored anchor while dormant; adjacency is restored
+only after returning to a globally non-CUSTOM generation/session. This switch is event-bound and must never gain a
+recurring timer, polling loop, render callback, or worker.
+
 Ordinary uniform CUSTOM scale is absolute against stable authored/preferred geometry with a shared 40% floor; re-entering CUSTOM must not compound shrink. Reddit/Reddit2, Media and Gmail use whole-card retained uniform scaling. Media's preferred width may include a scene-local accessory extent; that extent scales as part of the same authored root while the card keeps its own authored width, so external app volume does not become a second geometry owner. Gmail model width is already outer width; its row-derived preferred height alone receives shell inset. Visualizer is intentionally separate: `uniform_visual_scale` and `viewport_extent` remain independent intents.

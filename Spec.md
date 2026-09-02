@@ -179,6 +179,13 @@ deactivation. Save/Enter commits; Cancel restores pre-edit geometry/instances/en
 Layout slots save/load ordinary visible-layout state, including ordinary ON/OFF, but never capability activation or
 provider/account/source settings.
 
+CUSTOM is a **global layout mode**. If any effective widget route is `Custom`, ordinary authored stacking and the
+non-CUSTOM Media/Visualizer adjacency projection are disabled for the entire retained layout, not selectively per
+widget. The same subsystem switch is asserted before live Edit Layout captures geometry and before number-key layout
+slot loads rebuild the runtime. While dormant, ordinary cards use base/committed rectangles and overlap is legal; an
+uncommitted Visualizer uses Media's plain authored slot rather than the ordinary adjacent displacement. Cancel restores
+authored packing only when no effective route remains `Custom`. This boundary is event-driven and owns no cadence.
+
 ## Visualizer geometry
 
 `VisualizerLogicalRuntime` remains sole mode-general authored visualizer clock. Quick presentation does not own

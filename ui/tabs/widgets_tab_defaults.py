@@ -5,10 +5,11 @@ import weakref
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPointF, QSignalBlocker, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -35,13 +36,22 @@ from core.logging.logger import get_logger
 from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
 from ui.flow_layout import FlowContainer
-from ui.styled_popup import StyledPopup
+from ui.styled_popup import ColorSwatchButton, StyledPopup
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
     add_aligned_row,
     build_bucket_toggle,
     style_group_box,
 )
+from ui.settings_theme_catalog import read_persisted_theme_id
+from ui.settings_theme_spec import Rgba
+from ui.widget_theme_runtime import WidgetThemeState, begin_theme_owned_edit
+from ui.widget_theme_selection import (
+    activate_widget_theme_state,
+    read_widget_theme_state,
+    resolve_widget_theme_state,
+)
+from ui.widget_visual_roles import materialize_theme_owned_optional_colors
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -50,6 +60,102 @@ logger = get_logger(__name__)
 
 _SHADOW_SPIN_CONTROL_WIDTH = 220
 _SHADOW_SPIN_SHADOW_PAD = 10
+
+
+def _rgba_to_qcolor(color: Rgba) -> QColor:
+    return QColor(color.r, color.g, color.b, color.a)
+
+
+def _qcolor_to_rgba(color: QColor) -> Rgba:
+    return Rgba(color.red(), color.green(), color.blue(), color.alpha())
+
+
+def _resolved_widget_theme_for_tab(tab: "WidgetsTab"):
+    state = read_widget_theme_state(tab._settings)
+    resolved = resolve_widget_theme_state(
+        state,
+        settings_theme_id=read_persisted_theme_id(tab._settings),
+    )
+    return state, resolved
+
+
+def _sync_general_widget_theme_controls(tab: "WidgetsTab") -> None:
+    """Project the persisted shared Widget Theme into the General controls."""
+
+    surface_btn = getattr(tab, "widget_card_surface_btn", None)
+    border_btn = getattr(tab, "widget_card_border_btn", None)
+    style_combo = getattr(tab, "widget_surface_style_combo", None)
+    if surface_btn is None and border_btn is None and style_combo is None:
+        return
+    state, resolved = _resolved_widget_theme_for_tab(tab)
+    if surface_btn is not None:
+        surface_btn.set_color(_rgba_to_qcolor(resolved.theme.color("card.background")))
+    if border_btn is not None:
+        border_btn.set_color(_rgba_to_qcolor(resolved.theme.color("card.border")))
+    if style_combo is not None:
+        blocker = QSignalBlocker(style_combo)
+        try:
+            index = style_combo.findData(state.card_material_override)
+            style_combo.setCurrentIndex(index if index >= 0 else 0)
+        finally:
+            del blocker
+
+
+def _edit_shared_widget_theme_color(
+    tab: "WidgetsTab", token: str, color: QColor
+) -> None:
+    """Turn a shared Card Surface/Border edit into the Settings-persisted Custom theme."""
+
+    if getattr(tab, "_loading", False):
+        return
+    state, resolved = _resolved_widget_theme_for_tab(tab)
+    snapshot, next_state = begin_theme_owned_edit(
+        state,
+        resolved.theme,
+        token,
+        _qcolor_to_rgba(color),
+        resolved_optional_colors=materialize_theme_owned_optional_colors(resolved.theme),
+    )
+    # ``activate_widget_theme_state`` is the single persistence + process-snapshot
+    # boundary. Retained presentations are recreated by the existing Settings
+    # lifecycle; no live polling/subscription owner is introduced here.
+    activate_widget_theme_state(
+        tab._settings,
+        next_state,
+        settings_theme_id=read_persisted_theme_id(tab._settings),
+    )
+    # Reflect the exact Custom snapshot rather than trusting picker conversion.
+    if token == "card.background":
+        tab.widget_card_surface_btn.set_color(_rgba_to_qcolor(snapshot.color(token)))
+    elif token == "card.border":
+        tab.widget_card_border_btn.set_color(_rgba_to_qcolor(snapshot.color(token)))
+
+
+def _on_widget_surface_style_changed(tab: "WidgetsTab", _index: int) -> None:
+    """Persist the orthogonal material override without creating Custom."""
+
+    if getattr(tab, "_loading", False):
+        return
+    combo = getattr(tab, "widget_surface_style_combo", None)
+    if combo is None:
+        return
+    override = str(combo.currentData() or "theme").strip().lower()
+    if override not in {"theme", "normal", "glass", "acrylic"}:
+        override = "theme"
+    state = read_widget_theme_state(tab._settings)
+    if override == state.card_material_override:
+        return
+    next_state = WidgetThemeState(
+        selected_id=state.selected_id,
+        keep_synced=state.keep_synced,
+        card_material_override=override,
+        custom_payload=state.custom_payload,
+    )
+    activate_widget_theme_state(
+        tab._settings,
+        next_state,
+        settings_theme_id=read_persisted_theme_id(tab._settings),
+    )
 
 def _finalize_bucket_body(toggle, body: QWidget) -> None:
     expanded = bool(toggle.isChecked())
@@ -548,6 +654,72 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     row.addStretch()
     layout_settings_layout.addLayout(row)
 
+    surface_row, _ = add_aligned_row(
+        appearance_layout,
+        "Card Surface:",
+        label_width=label_width,
+        wrap=False,
+    )
+    tab.widget_card_surface_btn = ColorSwatchButton(
+        title="Choose Shared Widget Card Surface",
+        show_alpha=True,
+    )
+    tab.widget_card_surface_btn.setToolTip(
+        "Shared Widget Theme card surface. Editing it creates/updates the Settings-persisted Custom Widget Theme and applies across widget families unless that family has an explicit override."
+    )
+    tab.widget_card_surface_btn.color_changed.connect(
+        lambda color, owner=tab: _edit_shared_widget_theme_color(owner, "card.background", color)
+    )
+    surface_row.addWidget(tab.widget_card_surface_btn)
+    surface_row.addStretch()
+
+    card_border_row, _ = add_aligned_row(
+        appearance_layout,
+        "Card Border:",
+        label_width=label_width,
+        wrap=False,
+    )
+    tab.widget_card_border_btn = ColorSwatchButton(
+        title="Choose Shared Widget Card Border",
+        show_alpha=True,
+    )
+    tab.widget_card_border_btn.setToolTip(
+        "Shared Widget Theme card border colour/alpha. Explicit family overrides remain higher precedence."
+    )
+    tab.widget_card_border_btn.color_changed.connect(
+        lambda color, owner=tab: _edit_shared_widget_theme_color(owner, "card.border", color)
+    )
+    card_border_row.addWidget(tab.widget_card_border_btn)
+    card_border_row.addStretch()
+
+    material_row, _ = add_aligned_row(
+        appearance_layout,
+        "Surface Style:",
+        label_width=label_width,
+        wrap=False,
+    )
+    tab.widget_surface_style_combo = QComboBox()
+    tab.widget_surface_style_combo.addItem("Theme Default", "theme")
+    tab.widget_surface_style_combo.addItem("Normal", "normal")
+    tab.widget_surface_style_combo.addItem("Glass", "glass")
+    tab.widget_surface_style_combo.addItem("Acrylic", "acrylic")
+    tab.widget_surface_style_combo.setToolTip(
+        "Material is independent of Widget Theme colours. Glass and Acrylic are reserved but disabled until the shared retained material renderer is admitted."
+    )
+    combo_model = tab.widget_surface_style_combo.model()
+    if hasattr(combo_model, "item"):
+        for disabled_index in (2, 3):
+            item = combo_model.item(disabled_index)
+            if item is not None:
+                item.setEnabled(False)
+    tab.widget_surface_style_combo.currentIndexChanged.connect(
+        lambda index, owner=tab: _on_widget_surface_style_changed(owner, index)
+    )
+    material_row.addWidget(tab.widget_surface_style_combo)
+    material_row.addStretch()
+
+    _sync_general_widget_theme_controls(tab)
+
     border_row, _ = add_aligned_row(
         appearance_layout,
         "Card Border Width:",
@@ -637,6 +809,8 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]) -> None:
     """Load General-section controls from the widgets config mapping."""
 
+    _sync_general_widget_theme_controls(tab)
+
     shadows_config = widgets_config.get("shadows", {}) if isinstance(widgets_config, Mapping) else {}
     if isinstance(shadows_config, Mapping):
         tab.widget_shadows_enabled.setChecked(tab._config_bool("shadows", shadows_config, "enabled", True))
@@ -677,7 +851,7 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
         )
 
     global_cfg = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
-    border_width = tab._config_int("global", global_cfg, "card_border_width_px", 3)
+    border_width = tab._config_int("global", global_cfg, "card_border_width_px", 4)
     border_width = max(0, min(12, border_width))
     stacking_enabled = tab._config_bool("global", global_cfg, "stacking_enabled", False)
     tab._global_card_border_width = border_width
@@ -725,7 +899,7 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
     selected_direction = getattr(tab, "_selected_shadow_direction", DEFAULT_SHADOW_DIRECTION)
     shadows_config["direction"] = resolve_shadow_direction(selected_direction).value
 
-    border_width = getattr(tab, "_global_card_border_width", tab._widget_default("global", "card_border_width_px", 3))
+    border_width = getattr(tab, "_global_card_border_width", tab._widget_default("global", "card_border_width_px", 4))
     global_config = {
         "card_border_width_px": int(border_width),
         "stacking_enabled": tab.widget_stacking_enabled.isChecked(),
