@@ -42,7 +42,7 @@ The semantic/state-machine foundation is present and merged into the R-76 author
 
 Claude's focused Phase-1a gate was 24/24 green.
 
-### Slice 8 semantic-role foundation — implemented, runtime/UI adoption still partial
+### Slice 8+ semantic-role foundation — usable wave implemented, physical review still open
 
 The palette vocabulary is now schema-v2 and supports **sparse optional visual roles**
 without making every new decorative role mandatory in every `.srwtheme`. The strict
@@ -71,11 +71,7 @@ Shared fades are also centralized: `ArtworkFadeImage.qml` uses gentler event-dri
 `200 ms` out / `340 ms` in timing, and `MediaMetadataColumn.qml` performs a presentation-
 only old->new metadata crossfade while model/provider truth updates immediately.
 
-Focused semantic-role tests are green `13/13` when run through the Qt-free package shim
-required by this environment. PySide6 is not installed here, so no Quick physical
-acceptance is claimed. **Phase 1b still owns persistence/UI and setting the selected
-active Widget Theme before retained presentation construction; Phase 1c still owns the
-complete generation snapshot/card-material adoption.**
+The semantic wave is now broad enough for named Widget themes to be useful without pretending every decorative pixel is theme-owned: card surface/border/text, branded headers, Media controls/progress/volume, Gmail sender/read/timestamp hierarchy, Reddit age metadata, Steam secondary surfaces/metrics/artwork, and Context Menu are semantic consumers. Remaining editor/debug/legibility/shadow/fallback literals stay local until physical theme review proves they deserve public semantic vocabulary. PySide6 is not installed in the checkpoint environment, so Quick physical acceptance is still not claimed.
 
 ### Slice 9 bounded override UI + Media accessory — implemented, physical validation pending
 
@@ -94,8 +90,7 @@ Steam header-size parity was also corrected at the asset boundary: both Steam fa
 - ordinary family `OverlayCardStyle` projections and retained Context Menu;
 - the existing per-widget card settings under `widgets.<family>.card.*`.
 
-The current `ui/settings_theme_paths.py` packaged-path placeholder is temporary.
-The durable shared root is:
+The packaged-path placeholder is retired. `ui/settings_theme_paths.py` now owns the durable shared root:
 
 ```text
 installed/frozen: %ProgramData%\SRPSS\themes
@@ -104,7 +99,7 @@ source/dev:       <repo>\themes
                   <repo>\themes\widgets
 ```
 
-One active root only; no ProgramData+repo merged catalogue.
+The normal and Media Center ISS scripts seed/clean-replace the ProgramData theme tree just like curated visualizer presets; both Nuitka builds already bundle `themes=themes`. Frozen runtime reads the ProgramData catalogue only rather than merging it with onefile/app-local copies. One active root only.
 
 ## 2. The model — two orthogonal axes
 
@@ -191,9 +186,9 @@ Sparse override UI should be exposed selectively and collapsed, not generated me
 
 The resolver must also preserve **distinct local defaults under a shared parent**. Example: both `media.volume.fill` and `media.progress.fill` may inherit a theme-authored `widget.accent`, but when the selected theme does not author that parent the default volume fill remains its own muted gray/alpha and the seek/progress fill remains its own white/alpha. Do not populate a specialized role's `local.*` terminal from a sibling role merely because they share a semantic parent. Focused tests cover this regression.
 
-## 4. Phase 1b — persistence + UI
+## 4. Phase 1b — persistence + UI — source-complete, validation pending
 
-Land the Settings model/keys:
+The Settings model now persists:
 
 ```text
 widget_theme.selected_id
@@ -202,59 +197,53 @@ widget_theme.card_material_override = theme
 widget_theme.custom
 ```
 
-Then populate:
+The Themes tab exposes a themed checkable `Linked to Settings Theme` / `Independent Widget Theme` control and Widget Theme selector. `Widgets -> General -> Appearance` owns Card Surface, Card Border and Surface Style **once for all widget families**. Surface Style is `Theme Default | Normal | Glass | Acrylic` through the Settings-themed `StyledComboBox`; changing it never creates Custom. Editing Widget-Theme-owned Card Surface/Border freezes the full resolved named palette into Settings-owned Custom and disables linking. Lazy Settings tabs refresh through event/navigation boundaries, not polling.
 
-- Themes tab -> Widget Themes selector + Keep Synced;
-- Widgets -> General -> Appearance -> Surface Style;
-- Theme Default/Normal usable on the current Normal renderer;
-- Glass/Acrylic visible but disabled until the material path is admitted.
+The curated mirror generator now produces one deterministic `.srwtheme` for every Settings `.srtheme` (50/50 at the 2026-09-02 checkpoint) with explicit stable `linked_settings_theme_id` metadata. Runtime linking never depends on display-name matching.
 
-Do not hide colour swatches merely because a named Widget Theme is selected.
+## 5. Phase 1c — retained runtime palette/material snapshot — source-complete, validation pending
 
-## 5. Phase 1c — retained runtime palette/material snapshot
+At generation/configuration authority the selected Widget Theme and effective material are resolved before retained presentation construction. The active semantic palette is process-local construction state, not a per-frame/settings poller. Ordinary family card values follow:
 
-At generation/configuration authority:
+```text
+intentional family override -> Widget Theme baseline -> preserved local/default pixel
+```
 
-1. resolve/set the selected active Widget Theme once before retained presentation construction;
-2. resolve `effective_card_material_mode` once;
-3. retain the global Widget Theme palette as the family fallback;
-4. resolve each family card style with explicit family values above that baseline;
-5. retain the Slice-8 semantic visual-role cascade for specialized surfaces rather than rebuilding family-local fallbacks;
-6. keep the already-wired Context Menu direct palette projection generation-scoped and refresh it only through the admitted theme-generation path;
-7. keep effective material `normal` in this phase.
+Visualizer consumes the shared card-shell baseline without changing DSP/viewport/reactivity authority. Context Menu consumes the generation-scoped Widget Theme palette directly. Default Dark's shared card values were reconciled to the accepted ordinary-family pixels before default-valued family settings became implicit Inherit, preventing the migration itself from recolouring shipped cards.
 
-No per-tick Settings reads, theme catalogue reads, timers, capture or blur work.
+Current automated/source acceptance covers fallback/catalogue/link/Custom/material precedence and family inheritance. Real Qt/QML pixels still require the user-environment destination gate and physical review.
 
-Acceptance includes explicit tests for:
+## 6. Phases 2–7 — shared scene-local Glass/Acrylic — source-complete, performance acceptance open
 
-- Default Dark with zero files;
-- invalid file / corrupt Custom whole fallback;
-- Keep Synced identity behavior and explicit material-override survival;
-- named theme -> Custom + auto-unsync for theme-owned edits;
-- family swatch override winning over theme baseline without creating Custom;
-- family with no explicit override inheriting the active Widget Theme role;
-- Context Menu direct global Widget Theme inheritance;
-- Surface Style change not creating Custom;
-- zero new steady-state cadence/render work.
+The current implementation is deliberately one **display-scoped** material facility:
 
-## 6. Phases 2–7 — scene-local material, after Phase 1 acceptance
+```text
+0 Glass/Acrylic consumers
+    -> Loader inactive; no material ShaderEffectSource/MultiEffect
 
-2. Prototype one per-display reduced-resolution background-only Quick source + one
-   shared bounded blur, consumed by one test card.
-3. Prove transition/CUSTOM geometry and temporal correctness from the same frame
-   state before widening coverage.
-4. Add the Glass card-local recipe and measure.
-5. Add Acrylic through the same shared backdrop with stronger cheap local treatment;
-   then enable Glass/Acrylic through the existing resolver.
-6. Only if measured Quick capture/effect cost is unacceptable, consider producing
-   the shared backdrop beside `BackgroundRenderNode` from the same frame state.
-7. Retire shared resources when the last Glass/Acrylic consumer disappears so Normal
-   returns to current cost.
+>=1 material consumer on a display
+    -> one background-only ShaderEffectSource
+       - live only while material is visible
+       - recursive = false
+       - 0.25 texture-size scale
+    -> one shared MultiEffect blur + display-wide material mask
+    -> ordinary cards / Visualizer / Context Menu contribute cheap masks + local tint only
+```
 
-Hard rules: one lazy shared per-display backdrop/blur (or tiny measured tier set), no
-per-card capture/FBO/blur, no Python readback/CPU blur, no second QQuickWindow, no
-Settings HWND AccentPolicy on runtime Quick cards, and Context Menu reuses the same
-scene-local material authority.
+Glass and Acrylic share the blurred backdrop and differ primarily in cheap local tint/material strength. No card owns a capture/FBO/blur, no second QQuickWindow exists, Settings HWND AccentPolicy is not reused, and no timer/poller/worker was added.
+
+This is **bounded architecture, not proof of zero cost**. Qt documents blur as one of `MultiEffect`'s heavier effects and `ShaderEffectSource` as an extra FBO/memory cost. Acceptance therefore requires Normal-vs-Glass-vs-Acrylic measurement on 1/2/N displays and relevant DPRs: full-scene GPU/frame tails, offscreen/capture cost, texture memory, batching/overdraw impact, transition coherence and resource plateau. If the shared pass misses the envelope, optimize its resolution/bounds/shader strategy before considering any structural widening. Never solve it by creating per-card effects or reducing authored widget/Visualizer cadence.
+
+## 6A. Deployment/resource contract
+
+Runtime themes and runtime branding use filesystem assets, while Settings GUI micro-assets remain QRC resources:
+
+- `ui/resources/assets.qrc` + generated `assets_rc.py`: embedded Settings fonts/icons (`:/ui/assets/...`);
+- raw `images/`: runtime branded/widget imagery such as the cropped Steam logo;
+- `%ProgramData%\SRPSS\themes`: installed Settings themes plus `widgets/*.srwtheme`;
+- `%ProgramData%\SRPSS\presets`: installed curated visualizer presets.
+
+Both QRC and raw asset lanes remain intentional. A missing `Steam_Logo_Cropped.png` cannot be repaired by regenerating QRC; the raw `images/` directory must be present in source/build packaging. When `assets.qrc` changes, regenerate `assets_rc.py` through `tools/regen_qrc.py`.
 
 ## 7. Settled design questions
 

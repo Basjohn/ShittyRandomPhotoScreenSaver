@@ -31,6 +31,7 @@ from typing import Any
 
 from core.logging.logger import get_logger
 from rendering.widget_descriptors import is_global_custom_layout_mode_selected
+from ui.widget_theme_active import get_active_widget_material_mode
 from rendering.widget_stacking import (
     DisplayStackObstacle,
     DisplayStackParticipant,
@@ -183,7 +184,9 @@ class QuickDisplayPresenter:
         resolve_variant_state = committed_variant_state_resolver or (
             lambda _widget_id, _variant: None
         )
-        host = self._runtime.scene_controller.ordinary_widget_host
+        scene_controller = self._runtime.scene_controller
+        scene_controller.set_card_material_mode(get_active_widget_material_mode())
+        host = scene_controller.ordinary_widget_host
         manager = self._runtime.widget_runtime_manager
         display_signature = str(self._runtime.display_identity.screen_key)
 

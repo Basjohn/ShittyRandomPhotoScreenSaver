@@ -113,7 +113,7 @@ Performance rules:
 
 # 1A. Widget semantic theme-role expansion + shared fade polish
 
-**Slice-8 first wave is now implemented and awaiting physical validation / later live Widget Theme UI adoption.** Continue this as shared infrastructure work, not as permission to reopen accepted family geometry.
+**The Slice-8 semantic foundation plus the 2026-09-02 named Widget Theme/catalogue/link wave are implemented and awaiting physical validation.** Continue remaining literal adoption only where it improves the mature shared vocabulary; do not reopen accepted family geometry or create swatches merely because a literal exists.
 
 ## 1A.1 Semantic role inheritance instead of swatch proliferation
 
@@ -133,7 +133,7 @@ preserved current visual default
 
 The default/inherit path must reproduce the currently accepted visuals byte-for-pixel-equivalent where practical; adding a role is not permission to recolor shipped defaults. Settings should expose advanced overrides progressively/collapsed or behind an `Inherit` state rather than flooding the normal Widget UI. Do not create a second Media/Steam-local palette system.
 
-**Landed Slice-8 foundation:** `ui/widget_visual_roles.py` owns exactly this cascade; schema-v2 themes admit sparse optional roles; `local.*` terminals never serialize. First consumers include all shared branded headers, Media transport/mute/volume/progress, Gmail action/separators, Reddit/Weather/Clock separators, Steam info/tooltip/artwork/gradients/metrics and the retained Context Menu palette. Context Menu Default Dark was reconciled to its accepted current pixels before semantic projection. Remaining work is to continue migrating meaningful decorative literals incrementally and wire the selected active Widget Theme through Phase 1b/1c, not to invent another resolver.
+**Landed foundation:** `ui/widget_visual_roles.py` owns exactly this cascade; schema-v2 themes admit sparse optional roles; `local.*` terminals never serialize. Consumers include all shared branded headers, Media transport/mute/volume/progress, Gmail action/separators, Reddit/Weather/Clock separators, Steam info/tooltip/artwork/gradients/metrics and the retained Context Menu palette. Named Widget Theme selection/linking and the 50-theme mirror pack are now wired at the construction authority. Remaining work is physical theme review plus incremental adoption of any genuinely meaningful decorative literals, not another resolver or blanket swatch expansion.
 
 ## 1A.2 Shared artwork and metadata fade polish
 
@@ -523,7 +523,7 @@ their first prototypes are abandoned. Their intended identities should not colla
 
 Late J+ execution/admission checklist: `Docs/QtQuick_Migration/J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md`, section **10. Committed non-blocking J+ work — ordinary-widget Glass / Acrylic cards**.
 
-**Status: committed J+ work, non-blocking for J close. It remains tracked until implemented/accepted or explicitly superseded. The ordinary translucent card
+**Status: shared/lazy source path implemented 2026-09-02; Qt/physical/performance acceptance remains open. The ordinary translucent card
 is the baseline and must remain the default.** This feature is not migration parity and must not turn
 every ordinary widget into an effect-bearing card simply because Qt Quick makes that possible.
 
@@ -598,8 +598,7 @@ Widget Theme solely to unlock existing colour controls.
 
 `normal` remains the product/UI name for the current cheap translucent `OverlayCard` path. Do not expose separate
 `Enable Glass` / `Enable Acrylic` toggles: invalid simultaneous states must be impossible by construction. Existing/Dark
-Widget Theme recommends `normal`. Until Glass/Acrylic have passed the shared/lazy material admission gates, those explicit
-choices remain unavailable even if the future theme schema can name their defaults.
+Widget Theme recommends `normal`. Glass/Acrylic are now exposed through the shared lazy per-display implementation; they remain **unaccepted** until Qt/physical/performance validation proves the material path on real displays.
 
 Glass and Acrylic are **Qt Quick scene-local materials**. They are not Windows native backdrop modes and
 must not use the Settings HWND implementation (`SetWindowCompositionAttribute`, AccentPolicy state 3/4)
@@ -808,8 +807,7 @@ Widget Themes do **not** own widget activation, ordinary ON/OFF, provider/accoun
 refresh cadence or runtime business logic.
 
 Default/Dark Widget Theme recommends `default_card_material_mode = normal` and reproduces the existing simple card
-appearance as closely as practical. Glass/Acrylic remain opt-in and **must not become selectable merely because the file
-schema can name them**; the shared/lazy Qt Quick material path needs runtime visual/performance proof first.
+appearance as closely as practical. Glass/Acrylic remain opt-in and **must not be treated as accepted/stable merely because the file schema can name them**. They are now selectable specifically so the shared/lazy Qt Quick material path can receive runtime visual/performance proof before acceptance.
 
 ### Settings Theme <-> Widget Theme mirroring / Keep Synced
 
@@ -890,8 +888,12 @@ Storage/discovery rules:
 - a missing external directory must degrade to the appropriate compiled/default-safe theme behavior, not a hidden second
   mutable theme root.
 
-The live `ui/settings_theme_paths.py` placeholder is known temporary wiring. When Widget Themes land, replace/centralize
-that stub with the durable shared theme-root resolver rather than cloning another Widget-only path stub.
+The durable shared resolver now lives in `ui/settings_theme_paths.py`: source/dev uses `<repo-root>/themes`, while
+frozen/installed SRPSS uses `%ProgramData%\SRPSS\themes`. `ui/widget_theme_paths.py` derives only the `widgets/` child.
+The normal and Media Center installers seed/clean-replace that ProgramData tree from the curated pack, mirroring the
+visualizer-preset deployment model. Do not reintroduce a build-replace placeholder, merge ProgramData with a onefile
+extraction/app-local catalogue at runtime, or create a second Widget-only root. Installed/frozen acceptance must still
+prove both installer paths and 50/50 Settings<->Widget catalogue presence.
 
 ## 10.8 Performance / acceptance gates
 
@@ -930,5 +932,5 @@ coherence and bounded-cost rules are not.
 Ideas put in this box are to be added to work asap but at a lower priotiy than future cleanup or current plan work, unless existing in those as well.
 ############
 1. Add two options in the Interaction Pill for Display. "Widget Glow on Hover" "Widget Glow On Click" with a shared swatch colour selector. These will cause a small pulse in glow effect when triggered in relation to the cursor halo and pulse out when hover leaves or click leaves. This must not introduce timers or any thread contention/starvation.
-2. Finish the already-reserved Widget Themes pill in the landed Themes tab. Reuse the mature existing widget visual vocabulary rather than inventing parallel presentation controls, but preserve precedence: Widget Theme card roles are global/default baselines and explicit `widgets.<family>.card.*` values remain higher-precedence family overrides; Context Menu consumes the Widget Theme palette directly. Widget Themes use `.srwtheme` files and never own widget activation/ordinary ON/OFF, provider/account/source state, geometry, refresh cadence or runtime business logic. Add `Keep Synced` default ON: each Settings GUI theme has an explicitly linked mirrored Widget Theme; sync OFF permits independent pairings. Manual edits to any Widget Theme-owned visual value silently snapshot the full currently resolved named theme into user-owned `Custom`, apply the edit there, switch Widget Theme to `Custom`, and turn Keep Synced OFF; never mutate the source `.srwtheme` or build hidden per-property inheritance overrides. Keep **surface material orthogonal to theme identity**: `.srwtheme` stores `default_card_material_mode`, while `Settings -> Widgets -> General -> Appearance -> Surface Style` exposes `Theme Default / Normal / Glass / Acrylic` and persists a separate override. `Theme Default` follows the selected Widget Theme; an explicit mode overrides only material while retaining theme colours and does **not** create Custom or unsync. Runtime Context Menu follows the same Widget Theme palette + effective material resolution. The existing/Dark Widget Theme recommends Normal/current cheap translucent cards. The committed Glass/Acrylic modes remain blocked on the shared/lazy Qt Quick material contract in section 10 and require runtime visual/performance proof before becoming selectable.
+2. Finish/accept the already-landed Widget Themes vertical slice. The shared semantic resolver, 50 mirrored `.srwtheme` catalogue, explicit Settings<->Widget link metadata, themed Linked/Independent control, Custom snapshot behavior, orthogonal Surface Style control, and one-lazy-shared-per-display Glass/Acrylic source path now exist. Preserve precedence: Widget Theme card roles are global/default baselines and explicit `widgets.<family>.card.*` values remain higher-precedence family overrides; Context Menu consumes Widget Theme semantics directly. Widget Themes never own activation/ordinary ON/OFF, provider/account/source state, geometry, refresh cadence or runtime business logic. Glass/Acrylic are deliberately selectable now for real Qt visual/performance proof, but remain **unaccepted** until that proof is green; Normal must keep the shared material loader dormant. Continue semantic migration only where physical theme review exposes a meaningful uncovered visual, rather than serializing `local.*` or blanket-theming debug/editor/shadow primitives.
 3. [LOW] Give more SettingsGUI sections Flowcontainers where it would benefit well aligned space usage.

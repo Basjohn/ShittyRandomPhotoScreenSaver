@@ -129,7 +129,8 @@ Additional high-confidence source/tool residue to prove then remove in bounded I
 - orphan `rendering/quick/qml/CursorHalo.qml` if exact caller search remains empty; native `QCursor` is the permanent Halo pixel owner;
 - Media process-probe helpers retired by event ownership (`is_app_process_running`, `_win_*_process_exists`, provider-process-name helpers) if exact caller search confirms no non-polling consumer;
 - old GL/compositor/visualizer presenter aliases/adapters/comments/spikes whose production callers disappeared with H;
-- temporary `h-destination` runner alias after exact script/doc caller proof shows all automation has moved to `destination`.
+- temporary `h-destination` runner alias after exact script/doc caller proof shows all automation has moved to `destination`;
+- caller-dead pre-Qt-Quick `GCController` / `get_gc_controller()` compatibility facade in `core/performance/frame_budget.py` once the complete test/tool caller audit confirms only `RuntimeGCPolicy` remains as the RUN-lifetime owner. Do **not** combine that cleanup with collector retuning; GC policy changes belong to the measured late-J optimization tranche.
 
 Do not classify rare deep GC pauses as deletion cleanup. R-71 carries that evidence to late J performance work, and `Docs/Guardrails/Performance_Optimization_Contract.md` governs that work. Future cleanup must target proven ownership/growth/useless work; stable RSS/VRAM/thread/handle/cache counts are not deletion targets merely because they look large, and no cleanup may sacrifice Visualizer reactivity/freshness/cadence.
 

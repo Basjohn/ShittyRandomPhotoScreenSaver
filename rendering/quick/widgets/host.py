@@ -100,10 +100,12 @@ class RetainedOverlayWidget:
         item: QQuickItem,
         *,
         shadow_item: QQuickItem | None = None,
+        material_mask_item: QQuickItem | None = None,
         model_identity: str | None = None,
     ) -> None:
         self._item: QQuickItem | None = item
         self._shadow_item: QQuickItem | None = shadow_item
+        self._material_mask_item: QQuickItem | None = material_mask_item
         self._model_identity = str(model_identity or "").strip()
         self._host: OrdinaryWidgetPresentationHost | None = None
         self._retirement_callbacks: list[Callable[[], None]] = []
@@ -128,6 +130,12 @@ class RetainedOverlayWidget:
         """Return the display-level shadow underlay, when production owns one."""
 
         return self._shadow_item
+
+    @property
+    def material_mask_item(self) -> QQuickItem | None:
+        """Return the cheap shared-backdrop mask geometry, when material is active."""
+
+        return self._material_mask_item
 
     @property
     def model_identity(self) -> str:
@@ -212,8 +220,10 @@ class RetainedOverlayWidget:
     def _retire(self) -> None:
         item = self._item
         shadow_item = self._shadow_item
+        material_mask_item = self._material_mask_item
         self._item = None
         self._shadow_item = None
+        self._material_mask_item = None
         self._host = None
         callbacks = self._retirement_callbacks
         self._retirement_callbacks = []
@@ -228,6 +238,11 @@ class RetainedOverlayWidget:
             shadow_item.setParentItem(None)
             shadow_item.setParent(None)
             shadow_item.deleteLater()
+        if material_mask_item is not None:
+            material_mask_item.setProperty("sourceWidget", None)
+            material_mask_item.setParentItem(None)
+            material_mask_item.setParent(None)
+            material_mask_item.deleteLater()
         if item is not None:
             # Detach from the scene graph before queuing deletion so retiring one
             # widget never depends on the display generation still being live.
@@ -252,6 +267,11 @@ class OrdinaryWidgetPresentationHost:
             [Mapping[str, object], QQmlContext], QQuickItem
         ]
         | None = None,
+        material_mask_host_item: QQuickItem | None = None,
+        create_material_mask_item: Callable[
+            [Mapping[str, object], QQmlContext], QQuickItem
+        ]
+        | None = None,
         create_family_item: Callable[
             [str, Mapping[str, object], QQmlContext], QQuickItem
         ]
@@ -259,13 +279,20 @@ class OrdinaryWidgetPresentationHost:
     ) -> None:
         self._host_item: QQuickItem | None = host_item
         self._shadow_host_item: QQuickItem | None = shadow_host_item
+        self._material_mask_host_item: QQuickItem | None = material_mask_host_item
         self._context: QQmlContext | None = context
         self._create_overlay_item = create_overlay_item
         self._create_shadow_item = create_shadow_item
+        self._create_material_mask_item = create_material_mask_item
         self._create_family_item = create_family_item
+        self._card_material_mode = "normal"
         if (shadow_host_item is None) != (create_shadow_item is None):
             raise RuntimeError(
                 "ordinary-widget shadow underlay requires both host and factory"
+            )
+        if (material_mask_host_item is None) != (create_material_mask_item is None):
+            raise RuntimeError(
+                "ordinary-widget material mask requires both host and factory"
             )
         self._live: list[RetainedOverlayWidget] = []
         self._by_model_identity: dict[str, RetainedOverlayWidget] = {}
@@ -284,6 +311,68 @@ class OrdinaryWidgetPresentationHost:
     @property
     def live_count(self) -> int:
         return len(self._live)
+
+    @property
+    def card_material_mode(self) -> str:
+        return self._card_material_mode
+
+    def set_card_material_mode(self, mode: str) -> bool:
+        """Project one generation-scoped material and lazily own mask geometry.
+
+        Normal retires every material mask so the ordinary path has no extra
+        per-card material item. Glass/Acrylic create only cheap rounded mask
+        geometry; the one capture/blur owner remains display-scoped QML.
+        """
+
+        normalized = str(mode or "normal").strip().lower()
+        if normalized not in {"normal", "glass", "acrylic"}:
+            normalized = "normal"
+        changed = normalized != self._card_material_mode
+        self._card_material_mode = normalized
+        for widget in tuple(self._live):
+            try:
+                widget.item.setProperty("cardMaterialMode", normalized)
+                if normalized == "normal":
+                    self._retire_material_mask(widget)
+                else:
+                    self._ensure_material_mask(widget)
+            except (RuntimeError, TypeError, ValueError):
+                continue
+        return changed
+
+    def _ensure_material_mask(self, widget: RetainedOverlayWidget) -> None:
+        if widget.material_mask_item is not None or self._card_material_mode == "normal":
+            return
+        # A family with its card shell/background explicitly disabled is not a
+        # material consumer. Do not even create its cheap mask: otherwise an
+        # invisible shape would keep the shared per-display backdrop Loader alive.
+        try:
+            if not bool(widget.item.property("cardShellEnabled")):
+                return
+        except (RuntimeError, TypeError):
+            return
+        host_item = self._material_mask_host_item
+        creator = self._create_material_mask_item
+        context = self._context
+        if host_item is None or creator is None or context is None:
+            return
+        mask = creator({"sourceWidget": widget.item}, context)
+        if not isinstance(mask, QQuickItem):
+            raise RuntimeError("ordinary-widget material-mask factory did not create a QQuickItem")
+        mask.setParentItem(host_item)
+        mask.setParent(host_item)
+        widget._material_mask_item = mask
+
+    @staticmethod
+    def _retire_material_mask(widget: RetainedOverlayWidget) -> None:
+        mask = widget.material_mask_item
+        if mask is None:
+            return
+        widget._material_mask_item = None
+        mask.setProperty("sourceWidget", None)
+        mask.setParentItem(None)
+        mask.setParent(None)
+        mask.deleteLater()
 
     def create_widget(
         self,
@@ -445,21 +534,40 @@ class OrdinaryWidgetPresentationHost:
                 item.deleteLater()
                 raise
 
+        if not item.setProperty("cardMaterialMode", self._card_material_mode):
+            if shadow_item is not None:
+                shadow_item.setProperty("sourceWidget", None)
+                shadow_item.setParentItem(None)
+                shadow_item.setParent(None)
+                shadow_item.deleteLater()
+            item.setParentItem(None)
+            item.setParent(None)
+            item.deleteLater()
+            raise RuntimeError("OverlayWidget.qml rejected cardMaterialMode projection")
         widget = RetainedOverlayWidget(
             item,
             shadow_item=shadow_item,
             model_identity=normalized_identity or None,
         )
+        if geometry is not None:
+            widget.set_geometry(geometry)
+        # Project the real shell state before material admission. A background-off
+        # family must never transiently register as a Glass/Acrylic consumer merely
+        # because OverlayWidget.qml defaults cardShellEnabled to true.
+        if card_style is not None:
+            widget.set_card_style(card_style)
+        try:
+            if self._card_material_mode != "normal":
+                self._ensure_material_mask(widget)
+        except Exception:
+            widget._retire()
+            raise
         widget._host = self
         self._live.append(widget)
         if normalized_identity:
             self._by_model_identity[normalized_identity] = widget
-        if geometry is not None:
-            widget.set_geometry(geometry)
         # ``fade_opacity`` was deliberately projected before scene admission
         # above. Later lifecycle changes continue through RetainedOverlayWidget.
-        if card_style is not None:
-            widget.set_card_style(card_style)
         return widget
 
     def registered_image_provider(self, provider_id: str):
@@ -592,8 +700,11 @@ class OrdinaryWidgetPresentationHost:
 
         item = widget.item
         shadow_item = widget.shadow_item
+        material_mask_item = widget.material_mask_item
         source_shadow_host = self._shadow_host_item
         target_shadow_host = target._shadow_host_item
+        source_material_mask_host = self._material_mask_host_item
+        target_material_mask_host = target._material_mask_host_item
         if (source_shadow_host is None) != (target_shadow_host is None):
             raise RuntimeError(
                 "cannot transfer between incompatible ordinary shadow topologies"
@@ -602,6 +713,14 @@ class OrdinaryWidgetPresentationHost:
             source_shadow_host is None or target_shadow_host is None
         ):
             raise RuntimeError("retained ordinary shadow has no transfer host")
+        if (source_material_mask_host is None) != (target_material_mask_host is None):
+            raise RuntimeError(
+                "cannot transfer between incompatible material-mask topologies"
+            )
+        if material_mask_item is not None and (
+            source_material_mask_host is None or target_material_mask_host is None
+        ):
+            raise RuntimeError("retained ordinary material mask has no transfer host")
         if target._input_state is not None:
             widget._apply_input_state(target._input_state)
         try:
@@ -610,12 +729,18 @@ class OrdinaryWidgetPresentationHost:
             if shadow_item is not None and target_shadow_host is not None:
                 shadow_item.setParentItem(target_shadow_host)
                 shadow_item.setParent(target_shadow_host)
+            if material_mask_item is not None and target_material_mask_host is not None:
+                material_mask_item.setParentItem(target_material_mask_host)
+                material_mask_item.setParent(target_material_mask_host)
         except Exception:
             item.setParentItem(source_item)
             item.setParent(source_item)
             if shadow_item is not None and source_shadow_host is not None:
                 shadow_item.setParentItem(source_shadow_host)
                 shadow_item.setParent(source_shadow_host)
+            if material_mask_item is not None and source_material_mask_host is not None:
+                material_mask_item.setParentItem(source_material_mask_host)
+                material_mask_item.setParent(source_material_mask_host)
             raise
         self._live.remove(widget)
         if identity:
@@ -624,6 +749,11 @@ class OrdinaryWidgetPresentationHost:
         if identity:
             target._by_model_identity[identity] = widget
         widget._host = target
+        widget.item.setProperty("cardMaterialMode", target._card_material_mode)
+        if target._card_material_mode == "normal":
+            target._retire_material_mask(widget)
+        elif widget.material_mask_item is None:
+            target._ensure_material_mask(widget)
         return True
 
     def retire_all(self) -> None:
@@ -636,8 +766,11 @@ class OrdinaryWidgetPresentationHost:
         self._retired = True
         self._host_item = None
         self._shadow_host_item = None
+        self._material_mask_host_item = None
         self._context = None
+        self._create_overlay_item = None
         self._create_shadow_item = None
+        self._create_material_mask_item = None
         self._create_family_item = None
         for widget in live:
             widget._retire()

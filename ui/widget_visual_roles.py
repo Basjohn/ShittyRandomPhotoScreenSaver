@@ -57,12 +57,18 @@ WIDGET_VISUAL_ROLE_PARENTS: Mapping[str, str] = {
     "weather.separator": "widget.separator",
     "gmail.separator": "widget.separator",
     "gmail.boundary_separator": "widget.separator",
+    "gmail.sender": "widget.muted",
+    "gmail.read_sender": "gmail.sender",
+    "gmail.read_subject": "widget.muted",
+    "gmail.timestamp": "gmail.read_sender",
     "gmail.action.surface": "widget.panel",
     "gmail.action.border": "widget.outline",
     "gmail.action.hover": "widget.panel.alt",
     "gmail.action.text": "widget.icon",
     "reddit.separator": "widget.separator",
     "reddit2.separator": "reddit.separator",
+    "reddit.age": "widget.muted",
+    "reddit2.age": "reddit.age",
 
     # Branded-header family specialization.
     "media.header.fill": "header.fill",

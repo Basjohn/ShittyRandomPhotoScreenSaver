@@ -171,6 +171,27 @@ def resolve_card_surface_colors(
     )
     return background.as_tuple(), border.as_tuple()
 
+
+def resolve_primary_text_color(
+    *,
+    values: Mapping[str, object],
+    defaults: Mapping[str, object],
+    text_color: RgbaTuple,
+    key: str = "color",
+) -> RgbaTuple:
+    """Resolve the shared primary Widget text baseline with override precedence.
+
+    Canonical/default-valued family text swatches are the implicit ``Inherit``
+    state, just like Card Surface/Border. A genuinely authored family colour stays
+    explicit; otherwise the Widget Theme's core ``card.text`` role supplies the
+    common body-text colour.
+    """
+
+    explicit = configured_rgba_override(values, defaults, key, text_color)
+    if explicit is not None:
+        return explicit.as_tuple()
+    return get_active_widget_theme().color("card.text").as_tuple()
+
 def resolve_rgba_role(
     role: str,
     *,
@@ -260,5 +281,6 @@ __all__ = [
     "configured_rgba_override",
     "resolve_card_surface_colors",
     "resolve_header_colors",
+    "resolve_primary_text_color",
     "resolve_rgba_role",
 ]

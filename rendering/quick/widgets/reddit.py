@@ -30,7 +30,12 @@ from core.settings.shadow_direction import (
     resolve_signed_offset,
 )
 
-from .theme_projection import resolve_card_surface_colors, resolve_header_colors, resolve_rgba_role
+from .theme_projection import (
+    resolve_card_surface_colors,
+    resolve_header_colors,
+    resolve_primary_text_color,
+    resolve_rgba_role,
+)
 
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
@@ -281,8 +286,14 @@ class RedditPresentationConfig:
             border_color=config.border_color,
             border_opacity=config.border_opacity,
         )
+        text_color = resolve_primary_text_color(
+            values=merged,
+            defaults=effective_defaults,
+            text_color=config.text_color,
+        )
         return replace(
             config,
+            text_color=text_color,
             background_color=card_background,
             background_opacity=1.0,
             border_color=card_border,
@@ -723,7 +734,12 @@ class RedditPresentationModel(QObject):
 
     @Property(QColor, notify=stateChanged)
     def ageColor(self) -> QColor:
-        return QColor(200, 200, 200, 220)
+        fallback = (200, 200, 200, 220)
+        return QColor(*resolve_rgba_role(
+            f"{self.config.widget_id}.age",
+            local_roles={"local.muted": fallback},
+            fallback=fallback,
+        ))
 
     @Property(QColor, notify=stateChanged)
     def headerFillColor(self) -> QColor:

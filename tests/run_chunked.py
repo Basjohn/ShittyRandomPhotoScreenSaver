@@ -98,6 +98,9 @@ DESTINATION_PROFILE = (
     "test_media_external_volume_contract.py",
     "test_widget_stacking_display_plan.py",
     "test_quick_authored_layout_mode_contract.py",
+    "test_widget_theme_mirror_pack.py",
+    "test_widget_theme_link_and_asset_contract.py",
+    "test_widget_material_shared_contract.py",
     "test_reddit_exit_logic.py::TestContextMenuClickThroughSuppression::test_menu_action_arms_pointer_guard_and_reddit_open_is_refused",
     # Permanent post-H performance/freshness contracts. These are deliberately
     # phase-neutral: I/J must not regain green by weakening reaction cadence,

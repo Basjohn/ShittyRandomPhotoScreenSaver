@@ -23,7 +23,11 @@ from core.settings.shadow_direction import (
 )
 from widgets.clock_ticker import GlobalClockTicker, get_global_clock_ticker
 
-from .theme_projection import resolve_card_surface_colors, resolve_rgba_role
+from .theme_projection import (
+    resolve_card_surface_colors,
+    resolve_primary_text_color,
+    resolve_rgba_role,
+)
 
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
@@ -291,7 +295,7 @@ class ClockPresentationConfig:
         style_defaults_source = canonical if normalized_id == "clock" else base_canonical
         style_defaults = {
             key: style_defaults_source.get(key)
-            for key in ("bg_color", "bg_opacity", "border_color", "border_opacity")
+            for key in ("color", "bg_color", "bg_opacity", "border_color", "border_opacity")
             if key in style_defaults_source
         }
         card_background, card_border = resolve_card_surface_colors(
@@ -302,8 +306,14 @@ class ClockPresentationConfig:
             border_color=config.border_color,
             border_opacity=config.border_opacity,
         )
+        text_color = resolve_primary_text_color(
+            values=projected,
+            defaults=style_defaults,
+            text_color=config.text_color,
+        )
         return replace(
             config,
+            text_color=text_color,
             background_color=card_background,
             background_opacity=1.0,
             border_color=card_border,
