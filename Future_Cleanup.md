@@ -124,6 +124,8 @@ Other stale-owner rows in `Docs/TestSuite.md` are **candidates**, not a bulk-del
 
 Additional high-confidence source/tool residue to prove then remove in bounded I slices:
 
+**2026-09-02 R-77 coordinated QWidget/runtime residue slice:** the first raw-quarantine attempt against R-76 physically proved these modules were **not independently caller-dead**: startup still traversed compatibility imports through the old tick/mode/fade/capture seams. The valid cleanup rewrites/re-homes those callers and surviving neutral semantics first, then retires the obsolete files in the same checkpoint. The current immutable logical capture seam is `logical_frame_capture.py`; `tick_pipeline.py` is logical-only; Settings-only QtWidgets imports are lazy; `SpotifyVisualizerAudioWorker` accepts `QObject`, not `QWidget`; and the old compositor GL manager chain is removed while retained Quick transition shader modules remain. Never apply the deletion manifest to an older caller graph. Keep this `[~]` until the normal destination/startup/runtime suite validates the coordinated checkpoint.
+
 - orphan `rendering/quick/qml/CursorHalo.qml` if exact caller search remains empty; native `QCursor` is the permanent Halo pixel owner;
 - Media process-probe helpers retired by event ownership (`is_app_process_running`, `_win_*_process_exists`, provider-process-name helpers) if exact caller search confirms no non-polling consumer;
 - old GL/compositor/visualizer presenter aliases/adapters/comments/spikes whose production callers disappeared with H;

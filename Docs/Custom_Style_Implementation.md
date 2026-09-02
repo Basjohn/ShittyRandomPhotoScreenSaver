@@ -31,6 +31,8 @@ Theme colours. Keep Synced never clears an explicit surface override. Do not sol
 manufacturing a fake `Custom` theme solely to unlock them, or by adding a second `Override Theme Background` checkbox—the
 `Theme Default` Surface Style entry is the inheritance/no-override state.
 
+Widget Theme card roles are fallback/global defaults underneath existing explicit per-widget card controls. Resolve an ordinary family card role as `explicit widgets.<family>.card.* value -> Widget Theme baseline`. This preserves mature family customisation when switching themes. The Context Menu is direct/global because it has no family card override. Per-family edits remain family-specific and do not trigger the Widget Theme Custom/unsync transition.
+
 Manual edits to a **Widget Theme-owned** swatch/border/shadow/other visual value use one explicit ownership transition:
 snapshot the complete currently resolved named Widget Theme into user-owned `Custom`, apply the edit to that snapshot,
 switch the Widget Theme selector to `Custom`, and automatically turn `Keep Synced` OFF. This should be near-silent (no

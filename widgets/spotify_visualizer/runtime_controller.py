@@ -1,13 +1,12 @@
 """Presentation-neutral visualizer runtime ownership.
 
-The legacy QWidget remains the current production presentation adapter until
-the Qt Quick cutover. This owner contains the state that must survive that
-pixel-boundary change: mode/settings/playback identity, the shared source
-handle, and the sole authored logical runtime/latest-state mailbox.
+Retained Qt Quick is the production presentation owner.  This controller owns
+the mode/settings/playback identity, shared source handle, sole authored logical
+runtime/latest-state mailbox, and immutable render bridge beneath that pixel
+boundary.
 
 This module deliberately imports no QWidget, QQuickItem, QPainter, OpenGL, or
-legacy compositor code. A future Quick presentation can own this controller
-without constructing a hidden QWidget.
+retired compositor/presenter code.
 """
 
 from __future__ import annotations
@@ -105,7 +104,7 @@ class VisualizerRuntimeController:
         self._render_bridge = VisualizerSnapshotBridge()
         # The presentation-neutral destination owner for this generation's
         # authored per-tick logical state. The authored logical step advances
-        # against this host so no QWidget/legacy presenter is required. One per
+        # against this host so no retired presenter is required. One per
         # controller; the shared engine/source/logical runtime stay singular here.
         from widgets.spotify_visualizer.logical_tick_state import (
             VisualizerLogicalTickState,
@@ -344,7 +343,7 @@ class VisualizerRuntimeController:
         return self._logical_mailbox
 
     def replace_logical_mailbox(self, mailbox: LatestStateMailbox) -> None:
-        """Install an empty mailbox for a legacy harness before runtime start."""
+        """Install an empty mailbox for a diagnostic harness before runtime start."""
 
         with self._lock:
             runtime = self._logical_runtime
@@ -522,11 +521,11 @@ class VisualizerRuntimeController:
         self,
         runtime: VisualizerLogicalRuntime | None,
     ) -> None:
-        """Adopt a preconstructed runtime used by legacy diagnostics.
+        """Adopt a preconstructed runtime used by diagnostic harnesses.
 
         Production starts through :meth:`start_logical_runtime`; this narrow
-        seam keeps existing production-shaped diagnostic tools working without
-        giving presentation code ownership of the runtime lifecycle.
+        seam keeps production-shaped diagnostics working without giving
+        presentation code ownership of the runtime lifecycle.
         """
 
         with self._lock:

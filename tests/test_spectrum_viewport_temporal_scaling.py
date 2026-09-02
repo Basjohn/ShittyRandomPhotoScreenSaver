@@ -24,16 +24,11 @@ _install_inert_package(
     ROOT / "widgets" / "spotify_visualizer",
 )
 
-from types import SimpleNamespace
-
 from widgets.spotify_visualizer.spectrum_frame_runtime import SpectrumFrameRuntime
 from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
     canonical_spectrum_solid_hysteresis_segments,
     compute_spectrum_height_scale,
     spectrum_bar_to_boosted,
-)
-from widgets.spotify_visualizer.spectrum_presentation_smoothing import (
-    _viewport_smoothing_multiplier,
 )
 from widgets.spotify_visualizer.spectrum_temporal_contract import (
     spectrum_vertical_temporal_ratio,
@@ -91,20 +86,13 @@ def test_vertical_temporal_ratio_is_canonical_exact_and_tall_only() -> None:
 
 
 
-def test_compatibility_helper_no_longer_slows_wide_viewports() -> None:
-    canonical = SimpleNamespace(
-        runtime_controller=SimpleNamespace(presentation_viewport_extent=(420.0, 280.0))
-    )
-    wide = SimpleNamespace(
-        runtime_controller=SimpleNamespace(presentation_viewport_extent=(840.0, 280.0))
-    )
-    tall = SimpleNamespace(
-        runtime_controller=SimpleNamespace(presentation_viewport_extent=(420.0, 560.0))
-    )
+def test_retired_compatibility_smoothing_helper_is_absent_after_r77() -> None:
+    # R-76 moved viewport treatment to the live Quick frame runtime. R-77 then
+    # retired the old QWidget/present-loop helper entirely, so it must not return
+    # as a second smoothing owner.
+    helper = ROOT / "widgets" / "spotify_visualizer" / "spectrum_presentation_smoothing.py"
+    assert not helper.exists()
 
-    assert _viewport_smoothing_multiplier(canonical) == pytest.approx(1.0)
-    assert _viewport_smoothing_multiplier(wide) == pytest.approx(1.0)
-    assert _viewport_smoothing_multiplier(tall) == pytest.approx(548.0 / 268.0)
 
 def test_tall_smoothing_reduces_pixel_jump_growth_without_flattening_reaction() -> None:
     dt = 1.0 / 90.0

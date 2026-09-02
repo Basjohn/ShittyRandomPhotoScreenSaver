@@ -19,8 +19,8 @@ The shared owner contains no QWidget/QPixmap/layout/transition code.  It owns:
 * one source-resolution QImage decode per accepted artwork identity;
 * first-active/last-active and last-attached consumer accounting.
 
-Each presenter continues to own QPixmap creation, DPR/logical scaling/cropping,
-transition deferral, fades, geometry, progress quantization and control feedback.
+Retained Quick presentation owns DPR/logical scaling/cropping, transition
+deferral, fades, geometry, progress quantization and control feedback.
 """
 from __future__ import annotations
 

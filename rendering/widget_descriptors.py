@@ -10,10 +10,13 @@ from dataclasses import dataclass
 from functools import lru_cache
 from importlib import import_module
 import os
-from typing import Any, Callable, Dict, Mapping
+from typing import Any, Callable, Dict, Mapping, TYPE_CHECKING
 
 from core.dev_gates import gate_signature, is_named_gate_enabled
-from PySide6.QtWidgets import QButtonGroup, QPushButton
+
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QButtonGroup, QPushButton
+
 from core.settings.defaults import get_default_settings
 from core.settings.widget_family_catalog import (
     WIDGET_FAMILY_DESCRIPTORS,  # noqa: F401 - compatibility re-export
@@ -713,6 +716,10 @@ def build_widget_section_buttons(
     descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
 ) -> tuple[QPushButton, ...]:
     """Create descriptor-owned WidgetsTab section buttons."""
+
+    # Settings GUI only.  Keep QtWidgets out of the production runtime import
+    # graph; the screensaver consumes this module's neutral descriptors.
+    from PySide6.QtWidgets import QPushButton
 
     descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
     buttons: list[QPushButton] = []

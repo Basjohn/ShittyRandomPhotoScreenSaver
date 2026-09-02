@@ -18,7 +18,6 @@ import threading
 import time
 
 from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.process import ProcessSupervisor
@@ -167,7 +166,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         self,
         bar_count: int = 32,
         buffer: Optional[TripleBuffer[_AudioFrame]] = None,
-        parent: Optional[QWidget] = None,
+        parent: Optional[QObject] = None,
         process_supervisor: Optional[ProcessSupervisor] = None,
     ) -> None:
         super().__init__(parent)

@@ -1,9 +1,9 @@
-"""Centralised keyword→attribute mapping for SpotifyVisualizerWidget settings.
+"""Visualizer configuration mapping for the retained Quick architecture.
 
-Extracted from ``spotify_visualizer_widget.apply_vis_mode_config`` to reduce
-the main widget file below the 1500-line monolith threshold.  The public
-function ``apply_vis_mode_kwargs`` takes the widget instance and a kwargs dict
-and writes validated values into the widget's per-mode attributes.
+Authored-logical settings are applied to controller-owned logical state and
+pure renderer styling to ``VisualizerPresentationState``. Source/BeatEngine
+configuration is owned separately by ``source_config_applier``. This module
+contains no retired QWidget catch-all configuration authority.
 """
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ def _normalize_lane_strengths(value: Any, defaults: Dict[str, float]) -> Dict[st
 
 def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     """Apply ONLY the authored logical config to a presentation-neutral host
-    (``VisualizerLogicalTickState`` or the legacy widget that delegates to it).
+    (normally ``VisualizerLogicalTickState``).
 
     This is the single authority for the logical portion of the per-mode
     settings apply. "Logical" here is classified by the actual consumer, not by
@@ -96,7 +96,7 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     ``*FrameRuntime.resolve`` and the DevCurve inputs consumed by the DevCurve
     logical field solve). Pure renderer/chrome/style values (bar/line/glow
     colours, glow sizing, card radius, rainbow styling) stay presentation-owned
-    in ``apply_vis_mode_kwargs``.
+    in ``apply_presentation_vis_mode_kwargs``.
     """
 
     if 'sine_heartbeat' in kwargs:
@@ -351,13 +351,12 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
     This is the single authority for the presentation (styling) portion of the
     per-mode settings apply: bar/line/glow colours, glow sizing/reactivity,
     per-line styling, ghost-line toggles, rainbow styling and Bubble renderer
-    colours - exactly the fields the legacy adapter reads when composing the
-    immutable renderer parameters. Authored logical inputs flow through
-    ``apply_logical_vis_mode_kwargs``; engine/technical config and card-growth
-    stay in ``apply_vis_mode_kwargs`` (they need the widget's engine).
+    colours - exactly the fields current immutable logical-frame capture reads
+    when composing renderer parameters. Authored logical inputs flow through
+    ``apply_logical_vis_mode_kwargs``; BeatEngine/source and technical config
+    have separate controller-owned appliers.
 
-    ``host`` is the ``VisualizerPresentationState`` (widget-free path) or the
-    legacy widget, whose presentation fields delegate to that same state.
+    ``host`` is normally the controller-owned ``VisualizerPresentationState``.
     """
 
     # --- Oscilloscope styling ----------------------------------------
@@ -553,149 +552,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         host._bubble_tail_opacity = max(0.0, min(0.85, float(kwargs['bubble_tail_opacity'])))
 
 
-def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
-    """Apply per-mode keyword settings to *widget*.
-
-    Each key is checked in *kwargs*; if present the value is validated,
-    clamped, and written to the corresponding ``widget._*`` attribute. Authored
-    logical inputs go through ``apply_logical_vis_mode_kwargs``; pure renderer
-    styling through ``apply_presentation_vis_mode_kwargs`` (both delegate to the
-    controller-owned neutral state); engine/technical config and card-growth are
-    applied here directly because they need the widget's engine.
-    """
-
-    apply_logical_vis_mode_kwargs(widget, kwargs)
-    apply_presentation_vis_mode_kwargs(widget, kwargs)
-
-    # NOTE: pure renderer/presentation-only styling is applied above through
-    # apply_presentation_vis_mode_kwargs (the single presentation authority).
-    # Only engine/technical config (needs the widget's engine), card-height
-    # growth and Bubble simulation/layout controls remain here.
-
-    # --- Spectrum engine / technical config ---------------------------
-    if 'spectrum_mirrored' in kwargs:
-        _new_mirrored = bool(kwargs['spectrum_mirrored'])
-        if _new_mirrored != getattr(widget, '_spectrum_mirrored', True):
-            widget._spectrum_mirrored = _new_mirrored
-            try:
-                from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
-                engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
-                if engine is not None:
-                    engine.set_spectrum_mirrored(_new_mirrored)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to propagate spectrum mirrored", exc_info=True)
-    if 'spectrum_shape_nodes' in kwargs:
-        _nodes = kwargs['spectrum_shape_nodes']
-        if isinstance(_nodes, list) and len(_nodes) >= 1:
-            widget._spectrum_shape_nodes = _nodes
-            try:
-                from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
-                engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
-                if engine is not None:
-                    engine.set_spectrum_shape_nodes(_nodes)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to propagate spectrum shape nodes", exc_info=True)
-
-    # --- Spectrum notch positions -------------------------------------
-    _notch_dirty = False
-    if 'spectrum_notch_positions_mirrored' in kwargs:
-        _npos = kwargs['spectrum_notch_positions_mirrored']
-        if isinstance(_npos, list) and len(_npos) >= 2:
-            widget._spectrum_notch_positions_mirrored = _npos
-            _notch_dirty = True
-    if 'spectrum_notch_positions_linear' in kwargs:
-        _npos = kwargs['spectrum_notch_positions_linear']
-        if isinstance(_npos, list) and len(_npos) >= 2:
-            widget._spectrum_notch_positions_linear = _npos
-            _notch_dirty = True
-    if _notch_dirty:
-        _active = (widget._spectrum_notch_positions_mirrored
-                   if getattr(widget, '_spectrum_mirrored', True)
-                   else widget._spectrum_notch_positions_linear)
-        try:
-            from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
-            engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
-            if engine is not None:
-                engine.set_notch_positions(_active)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to propagate notch positions to engine", exc_info=True)
-
-    # --- Spectrum shaping parameters ----------------------------------
-    _shape_dirty = False
-    for _shape_key, _shape_attr, _shape_lo, _shape_hi in (
-        ('spectrum_wave_amplitude', '_spectrum_wave_amplitude', 0.0, 1.0),
-        ('spectrum_profile_floor', '_spectrum_profile_floor', 0.05, 0.30),
-    ):
-        if _shape_key in kwargs:
-            val = max(_shape_lo, min(_shape_hi, float(kwargs[_shape_key])))
-            if val != getattr(widget, _shape_attr, None):
-                setattr(widget, _shape_attr, val)
-                _shape_dirty = True
-    if 'spectrum_lane_strengths_mirrored' in kwargs:
-        _normalized = _normalize_lane_strengths(
-            kwargs['spectrum_lane_strengths_mirrored'],
-            _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED,
-        )
-        if _normalized is not None and _normalized != getattr(widget, '_spectrum_lane_strengths_mirrored', None):
-            widget._spectrum_lane_strengths_mirrored = _normalized
-            _shape_dirty = True
-    if 'spectrum_lane_strengths_linear' in kwargs:
-        _normalized = _normalize_lane_strengths(
-            kwargs['spectrum_lane_strengths_linear'],
-            _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR,
-        )
-        if _normalized is not None and _normalized != getattr(widget, '_spectrum_lane_strengths_linear', None):
-            widget._spectrum_lane_strengths_linear = _normalized
-            _shape_dirty = True
-    if _shape_dirty:
-        try:
-            from widgets.spotify_visualizer.bar_computation import SpectrumShapeConfig
-            from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
-            engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
-            if engine is not None:
-                engine.set_spectrum_shape_config(SpectrumShapeConfig(
-                    lane_strengths_mirrored=dict(widget._spectrum_lane_strengths_mirrored),
-                    lane_strengths_linear=dict(widget._spectrum_lane_strengths_linear),
-                    wave_amplitude=widget._spectrum_wave_amplitude,
-                    profile_floor=widget._spectrum_profile_floor,
-                ))
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to propagate spectrum shape config", exc_info=True)
-
-    # --- Spectrum drop speed ------------------------------------------
-    if 'spectrum_drop_speed' in kwargs:
-        widget._spectrum_drop_speed = max(0.5, min(3.0, float(kwargs['spectrum_drop_speed'])))
-        try:
-            from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
-            engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
-            if engine is not None:
-                engine.set_drop_speed(widget._spectrum_drop_speed)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to propagate drop speed to engine", exc_info=True)
-
-    # --- Height growth factors ----------------------------------------
-    if 'spectrum_growth' in kwargs:
-        widget._spectrum_growth = max(0.5, min(5.0, float(kwargs['spectrum_growth'])))
-    if 'osc_growth' in kwargs:
-        widget._osc_growth = max(0.5, min(5.0, float(kwargs['osc_growth'])))
-    if 'devcurve_growth' in kwargs:
-        widget._devcurve_growth = max(1.0, min(5.0, float(kwargs['devcurve_growth'])))
-    # --- Sine wave card-height growth ---------------------------------
-    if 'sine_wave_growth' in kwargs:
-        widget._sine_wave_growth = max(0.5, min(5.0, float(kwargs['sine_wave_growth'])))
-
-    # --- Bubble simulation / layout controls (widget-owned) -----------
-    if 'bubble_group_drift' in kwargs:
-        widget._bubble_group_drift = bool(kwargs['bubble_group_drift'])
-    if 'bubble_collision_pop_mode' in kwargs:
-        mode = str(kwargs['bubble_collision_pop_mode']).strip().lower()
-        if mode not in {"off", "one", "all"}:
-            mode = "off"
-        widget._bubble_collision_pop_mode = mode
-    if 'bubble_big_visual_smoothing' in kwargs:
-        widget._bubble_big_visual_smoothing = max(0.0, min(1.0, float(kwargs['bubble_big_visual_smoothing'])))
-    if 'bubble_growth' in kwargs:
-        widget._bubble_growth = max(1.0, min(5.0, float(kwargs['bubble_growth'])))
 
 
 def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> None:
@@ -735,70 +591,10 @@ def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> No
     extra['sine_displacement'] = getattr(pres, '_sine_displacement', 0.0)
 
 
-def _build_shared_visualizer_extras(widget: Any) -> Dict[str, Any]:
-    """Return cross-mode visual extras that all GPU paths understand."""
-    extra: Dict[str, Any] = {}
-    _populate_shared_visualizer_extras(extra, widget)
-    return extra
 
 
-def _resolve_continuous_energy_bands(widget: Any, mode_str: str, engine: Any):
-    return engine.get_energy_bands()
 
 
-def _populate_engine_signal_snapshot(extra: Dict[str, Any], widget: Any, mode_str: str, engine: Any) -> None:
-    """Attach waveform, continuous energy, transient bus, and mode-local event edges."""
-    if engine is None:
-        return
-
-    try:
-        extra['activation_id'] = engine.get_activation_id()
-    except Exception:
-        extra['activation_id'] = None
-    try:
-        extra['engine_generation'] = engine.get_generation_id()
-    except Exception:
-        extra['engine_generation'] = None
-    try:
-        extra['latest_frame_generation'] = engine.get_latest_generation_with_frame()
-    except Exception:
-        extra['latest_frame_generation'] = None
-    try:
-        extra['latest_waveform_generation'] = engine.get_latest_generation_with_waveform()
-    except Exception:
-        extra['latest_waveform_generation'] = None
-
-    extra['waveform'] = engine.get_waveform()
-    try:
-        extra['waveform_count'] = engine.get_waveform_count()
-    except Exception:
-        extra['waveform_count'] = len(extra['waveform'])
-
-    extra['energy_bands'] = _resolve_continuous_energy_bands(widget, mode_str, engine)
-    extra['transient_energy'] = engine.get_transient_energy_bands()
-    try:
-        floor_snapshot = engine.get_floor_snapshot()
-    except Exception:
-        floor_snapshot = None
-    if floor_snapshot is not None:
-        extra['floor_snapshot'] = floor_snapshot
-
-    try:
-        scheduler = engine.get_event_scheduler()
-    except Exception:
-        scheduler = None
-    if scheduler is None:
-        return
-
-    if mode_str in {'sine_wave', 'oscilloscope'}:
-        kick_evt = scheduler.peek_latest('kick', max_age_s=0.16)
-        snare_evt = scheduler.peek_latest('snare', max_age_s=0.20)
-        extra['line_kick_event_strength'] = (
-            float(getattr(kick_evt, 'strength', 0.0)) if kick_evt is not None else 0.0
-        )
-        extra['line_snare_event_strength'] = (
-            float(getattr(snare_evt, 'strength', 0.0)) if snare_evt is not None else 0.0
-        )
 
 
 def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_sine: bool) -> None:
@@ -907,174 +703,7 @@ def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['bubble_count'] = getattr(widget, '_bubble_count', 0)
 
 
-def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict[str, Any]:
-    """Build the mode-local GPU extras payload for the compositor overlay."""
-    if mode_str == 'spectrum':
-        extra = getattr(widget, '_spectrum_gpu_push_extras', None)
-        if not isinstance(extra, dict):
-            extra = {}
-            widget._spectrum_gpu_push_extras = extra
-        extra.clear()
-        _populate_shared_visualizer_extras(extra, widget)
-        _populate_engine_signal_snapshot(extra, widget, mode_str, engine)
-        return extra
-
-    extra = _build_shared_visualizer_extras(widget)
-    _populate_engine_signal_snapshot(extra, widget, mode_str, engine)
-    if mode_str in {'sine_wave', 'oscilloscope'}:
-        _append_line_mode_visual_extras(extra, widget, is_sine=(mode_str == 'sine_wave'))
-    elif mode_str == 'bubble':
-        _append_bubble_visual_extras(extra, widget)
-    elif mode_str == 'devcurve':
-        _append_devcurve_visual_extras(extra, widget)
-    return extra
 
 
-def _append_devcurve_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
-    """Attach GL-safe Dev Curve extras for the compositor overlay."""
-    extra['devcurve_base_level'] = float(getattr(widget, '_devcurve_base_level', 0.58))
-    extra['devcurve_sample_count'] = int(getattr(widget, '_devcurve_sample_count', 96))
-    extra['devcurve_curve_bass'] = list(getattr(widget, '_devcurve_curve_bass', []))
-    extra['devcurve_curve_vocals'] = list(getattr(widget, '_devcurve_curve_vocals', []))
-    extra['devcurve_curve_mids'] = list(getattr(widget, '_devcurve_curve_mids', []))
-    extra['devcurve_curve_transients'] = list(getattr(widget, '_devcurve_curve_transients', []))
-    extra['devcurve_layer_bass_color'] = getattr(widget, '_devcurve_layer_bass_color', None)
-    extra['devcurve_layer_vocals_color'] = getattr(widget, '_devcurve_layer_vocals_color', None)
-    extra['devcurve_layer_mids_color'] = getattr(widget, '_devcurve_layer_mids_color', None)
-    extra['devcurve_layer_transients_color'] = getattr(widget, '_devcurve_layer_transients_color', None)
-    extra['devcurve_layer_bass_outline_color'] = getattr(widget, '_devcurve_layer_bass_outline_color', None)
-    extra['devcurve_layer_vocals_outline_color'] = getattr(widget, '_devcurve_layer_vocals_outline_color', None)
-    extra['devcurve_layer_mids_outline_color'] = getattr(widget, '_devcurve_layer_mids_outline_color', None)
-    extra['devcurve_layer_transients_outline_color'] = getattr(widget, '_devcurve_layer_transients_outline_color', None)
-    extra['devcurve_layer_bass_outline_width'] = float(getattr(widget, '_devcurve_layer_bass_outline_width', 0.006))
-    extra['devcurve_layer_vocals_outline_width'] = float(getattr(widget, '_devcurve_layer_vocals_outline_width', 0.006))
-    extra['devcurve_layer_mids_outline_width'] = float(getattr(widget, '_devcurve_layer_mids_outline_width', 0.006))
-    extra['devcurve_layer_transients_outline_width'] = float(getattr(widget, '_devcurve_layer_transients_outline_width', 0.006))
-    extra['devcurve_layer_bass_alpha'] = float(getattr(widget, '_devcurve_layer_bass_alpha', 0.55))
-    extra['devcurve_layer_vocals_alpha'] = float(getattr(widget, '_devcurve_layer_vocals_alpha', 0.42))
-    extra['devcurve_layer_mids_alpha'] = float(getattr(widget, '_devcurve_layer_mids_alpha', 0.46))
-    extra['devcurve_layer_transients_alpha'] = float(getattr(widget, '_devcurve_layer_transients_alpha', 0.66))
-    extra['devcurve_layer_bass_enabled'] = bool(getattr(widget, '_devcurve_layer_bass_enabled', True))
-    extra['devcurve_layer_vocals_enabled'] = bool(getattr(widget, '_devcurve_layer_vocals_enabled', True))
-    extra['devcurve_layer_mids_enabled'] = bool(getattr(widget, '_devcurve_layer_mids_enabled', True))
-    extra['devcurve_layer_transients_enabled'] = bool(getattr(widget, '_devcurve_layer_transients_enabled', True))
-    extra['devcurve_layer_bass_order'] = int(getattr(widget, '_devcurve_layer_bass_order', 1))
-    extra['devcurve_layer_vocals_order'] = int(getattr(widget, '_devcurve_layer_vocals_order', 2))
-    extra['devcurve_layer_mids_order'] = int(getattr(widget, '_devcurve_layer_mids_order', 3))
-    extra['devcurve_layer_transients_order'] = int(getattr(widget, '_devcurve_layer_transients_order', 4))
-    extra['devcurve_ghosting_enabled'] = bool(getattr(widget, '_devcurve_ghosting_enabled', False))
-    extra['devcurve_ghost_alpha'] = float(getattr(widget, '_devcurve_ghost_alpha', 0.0))
-    extra['devcurve_ghost_decay'] = float(getattr(widget, '_devcurve_ghost_decay', 0.4))
-    extra['devcurve_foreground_layer_id'] = int(getattr(widget, '_devcurve_foreground_layer_id', -1))
-    extra['devcurve_foreground_shadow_enabled'] = bool(getattr(widget, '_devcurve_foreground_shadow_enabled', False))
-    extra['devcurve_foreground_shadow_alpha'] = float(getattr(widget, '_devcurve_foreground_shadow_alpha', 0.36))
-    extra['devcurve_foreground_shadow_darken'] = float(getattr(widget, '_devcurve_foreground_shadow_darken', 0.42))
-    extra['devcurve_foreground_shadow_offset'] = float(getattr(widget, '_devcurve_foreground_shadow_offset', 0.10))
-    extra['devcurve_foreground_specular_enabled'] = bool(getattr(widget, '_devcurve_foreground_specular_enabled', False))
-    specular_activity = max(0.0, min(1.0, float(getattr(widget, '_devcurve_specular_activity_alpha', 1.0))))
-    extra['devcurve_foreground_specular_alpha'] = (
-        float(getattr(widget, '_devcurve_foreground_specular_alpha', 0.78))
-        * specular_activity
-    )
-    extra['devcurve_foreground_specular_width'] = float(getattr(widget, '_devcurve_foreground_specular_width', 0.022))
-    extra['devcurve_foreground_specular_offset'] = float(getattr(widget, '_devcurve_foreground_specular_offset', 0.028))
-    extra['devcurve_foreground_specular_crest_bias'] = float(getattr(widget, '_devcurve_foreground_specular_crest_bias', 1.05))
-    _slot0 = getattr(widget, '_devcurve_specular_slot0', [0.0, 0.0, 0.0])
-    _slot1 = getattr(widget, '_devcurve_specular_slot1', [0.0, 0.0, 0.0])
-    _slot2 = getattr(widget, '_devcurve_specular_slot2', [0.0, 0.0, 0.0])
-    extra['devcurve_specular_slot0'] = [
-        max(-1.5, min(2.5, float(_slot0[0] if isinstance(_slot0, (list, tuple)) and len(_slot0) > 0 else 0.0))),
-        max(0.0, min(1.0, float(_slot0[1] if isinstance(_slot0, (list, tuple)) and len(_slot0) > 1 else 0.0))),
-        max(0.0, min(1.0, float(_slot0[2] if isinstance(_slot0, (list, tuple)) and len(_slot0) > 2 else 0.0))),
-        max(0.0, min(1.0, float(_slot0[3] if isinstance(_slot0, (list, tuple)) and len(_slot0) > 3 else 0.0))),
-    ]
-    extra['devcurve_specular_slot1'] = [
-        max(-1.5, min(2.5, float(_slot1[0] if isinstance(_slot1, (list, tuple)) and len(_slot1) > 0 else 0.0))),
-        max(0.0, min(1.0, float(_slot1[1] if isinstance(_slot1, (list, tuple)) and len(_slot1) > 1 else 0.0))),
-        max(0.0, min(1.0, float(_slot1[2] if isinstance(_slot1, (list, tuple)) and len(_slot1) > 2 else 0.0))),
-        max(0.0, min(1.0, float(_slot1[3] if isinstance(_slot1, (list, tuple)) and len(_slot1) > 3 else 0.0))),
-    ]
-    extra['devcurve_specular_slot2'] = [
-        max(-1.5, min(2.5, float(_slot2[0] if isinstance(_slot2, (list, tuple)) and len(_slot2) > 0 else 0.0))),
-        max(0.0, min(1.0, float(_slot2[1] if isinstance(_slot2, (list, tuple)) and len(_slot2) > 1 else 0.0))),
-        max(0.0, min(1.0, float(_slot2[2] if isinstance(_slot2, (list, tuple)) and len(_slot2) > 2 else 0.0))),
-        max(0.0, min(1.0, float(_slot2[3] if isinstance(_slot2, (list, tuple)) and len(_slot2) > 3 else 0.0))),
-    ]
 
 
-def replay_engine_config(widget: Any, engine: Any) -> None:
-    """Ensure the shared engine reflects the authoritative config for current mode.
-
-    Reads the authoritative per-mode technical config from settings/presets
-    and replays it to the engine, audio worker, and GL overlay so that all
-    subsystems stay in sync after a reset or mode switch.
-    """
-    if engine is None:
-        return
-
-    config = widget._get_mode_technical_config(widget._vis_mode)
-    if config is None:
-        logger.debug("[SPOTIFY_VIS] No technical config available for mode=%s, skipping replay", widget._vis_mode.name)
-        return
-
-    dynamic_floor = bool(config.get("dynamic_floor", True))
-    manual_floor = float(config.get("manual_floor", 0.12))
-    adaptive = bool(config.get("adaptive_sensitivity", True))
-    sensitivity = float(config.get("sensitivity", 1.0))
-    audio_block_size = int(config.get("audio_block_size", 0) or 0)
-    dynamic_range_enabled = bool(config.get("dynamic_range_enabled", False))
-    energy_boost = widget._compute_energy_boost(dynamic_range_enabled)
-    agc_strength = max(0.0, min(1.0, float(config.get("agc_strength", 0.5))))
-    input_gain = max(0.05, min(2.0, float(config.get("input_gain", 1.0))))
-
-    kick_lane_gain = max(0.0, min(2.0, float(config.get("kick_lane_gain", 1.0))))
-    transient_pulse_gain = max(0.0, min(3.0, float(config.get("transient_pulse_gain", 1.5))))
-    transient_clamp = max(0.0, min(3.0, float(config.get("transient_clamp", 1.5))))
-    spectrum_lane_transient_mix = max(0.0, min(1.0, float(config.get("spectrum_lane_transient_mix", 0.65))))
-    bubble_transient_mix_bass = max(0.0, min(1.0, float(config.get("bubble_transient_mix_bass", 0.75))))
-    bubble_transient_mix_vocal = max(0.0, min(1.0, float(config.get("bubble_transient_mix_vocal", 0.25))))
-    sine_wave_transient_width_mix = max(0.0, min(1.0, float(config.get("sine_wave_transient_width_mix", 0.4))))
-    osc_transient_width_mix = max(0.0, min(1.0, float(config.get("oscilloscope_transient_width_mix", 0.35))))
-
-    widget._use_raw_energy = False
-    widget._kick_lane_gain = kick_lane_gain
-    widget._transient_pulse_gain = transient_pulse_gain
-    widget._transient_clamp = transient_clamp
-    widget._spectrum_lane_transient_mix = spectrum_lane_transient_mix
-    widget._bubble_transient_mix_bass = bubble_transient_mix_bass
-    widget._bubble_transient_mix_vocal = bubble_transient_mix_vocal
-    widget._sine_wave_transient_width_mix = sine_wave_transient_width_mix
-    widget._osc_transient_width_mix = osc_transient_width_mix
-
-    widget.apply_floor_config(dynamic_floor, manual_floor)
-    widget.apply_sensitivity_config(adaptive, sensitivity)
-    widget._apply_audio_block_size(audio_block_size)
-    widget._apply_energy_boost(energy_boost)
-    widget._apply_agc_strength(agc_strength)
-    widget._apply_input_gain(input_gain)
-
-    if engine is not None:
-        set_transient_lane = getattr(engine, 'set_transient_lane_config', None)
-        if not callable(set_transient_lane):
-            raise RuntimeError("visualizer BeatEngine has no transient-lane config authority")
-        set_transient_lane(kick_lane_gain, spectrum_lane_transient_mix)
-
-    parent = widget.parent()
-    overlay = getattr(parent, '_spotify_bars_overlay', None) if parent else None
-    if overlay is not None:
-        try:
-            overlay._transient_pulse_gain = transient_pulse_gain
-            overlay._transient_clamp = transient_clamp
-            overlay._sine_wave_transient_width_mix = sine_wave_transient_width_mix
-            overlay._osc_transient_width_mix = osc_transient_width_mix
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to replay transient config to GL overlay", exc_info=True)
-
-    logger.debug("[SPOTIFY_VIS] Replayed authoritative config for mode=%s", widget._vis_mode.name)
-    try:
-        _active_notches = (widget._spectrum_notch_positions_mirrored
-                           if widget._spectrum_mirrored
-                           else widget._spectrum_notch_positions_linear)
-        engine.set_notch_positions(_active_notches)
-    except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to replay notch positions config", exc_info=True)

@@ -3,7 +3,7 @@
 The Windows endpoint object is acquired lazily on the UI/runtime thread.  One
 owner per runtime generation coordinates availability, mute state, semantic
 toggle/system-volume actions and the 30-second poll cadence.  Per-display
-services are leases; the temporary QWidget only paints and supplies feedback.
+services are leases; retained Quick only presents pixels and supplies feedback.
 """
 from __future__ import annotations
 

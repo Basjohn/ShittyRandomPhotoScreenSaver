@@ -145,9 +145,9 @@ class AbandonmentRuntimeService:
             generation is not None and generation != self._runtime_generation
         )
         if generation_changed:
-            # A registry-owned service may outlive one QWidget presenter.  A new
-            # display generation must never admit work submitted for the old
-            # presenter, even when the same service object is rebound.
+            # A registry-owned service may outlive one retained presentation
+            # consumer. A new display generation must never admit work submitted
+            # for the previous generation, even when the service is rebound.
             if self._running:
                 self.stop()
             else:

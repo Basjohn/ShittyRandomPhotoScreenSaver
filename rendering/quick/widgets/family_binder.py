@@ -93,7 +93,7 @@ def _attach_runtime_service(
     A widget id with no registered service spec needs no service and passes. A
     widget id that requires a service must receive one: a ``None`` result is a
     hard build/injection failure and the instance must not present on a
-    QWidget-owned or serviceless fallback.
+    retired presenter-owned or serviceless fallback.
     """
 
     if not runtime_manager.has_runtime_service(widget_id):

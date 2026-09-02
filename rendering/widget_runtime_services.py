@@ -10,7 +10,7 @@ retire that service. The owner drives those specs generically.
 E1 slice 2 introduced the first entry: the branded Reddit widget's post
 provider. Phase F5 completes that ownership as one per-member Reddit runtime
 service owning provider/cache/cadence/fetch/generation state independently of
-either the temporary QWidget presenter or retained Quick presentation.
+retained Quick presentation.
 
 E1 slice 3 adds the per-instance Weather runtime-data service. It owns provider
 fetch/cache/refresh/retry/request-generation lifetime for the retained Weather
@@ -26,8 +26,8 @@ artwork service. Progress and Friend Pulse remain unregistered and source-inert.
 
 E1 slice 6 adds one Media lease per display. Leases in the same runtime
 generation join one family-shared owner for controller/provider, polling,
-accepted state and source-resolution artwork decode; QWidget presenters retain
-only their per-display projection and QPixmap/DPR work.
+accepted state and source-resolution artwork decode; retained Quick presenters
+own only their per-display projection and image/DPR work.
 
 E1 slice 7 adds one Gmail lease per display. Leases in the same runtime
 generation join one Gmail-specific shared owner for backend bootstrap

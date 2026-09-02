@@ -59,6 +59,8 @@ resolver
 `Theme Default` is the default/no-override state. An explicit Normal/Glass/Acrylic selection overrides material only and
 retains the selected Widget Theme's colours; it does not mutate/dirty the theme or alter `Keep Synced`.
 
+**Widget Theme palette precedence:** Widget Theme card colours are global/default baseline values. Explicit existing `widgets.<family>.card.*` values remain higher-precedence family overrides; they are not silently reclassified as theme state. The Context Menu has no family override layer and takes Widget Theme palette values directly. A per-family swatch edit therefore does not create Widget Theme `Custom`; editing a Widget-Theme-owned baseline value does.
+
 Manual editing of any Widget Theme-owned visual value has one separate deterministic contract: snapshot the complete
 currently resolved named Widget Theme into user-owned `Custom`, apply the edit to that snapshot, select `Custom`, and turn
 `Keep Synced` OFF. The installed/shipped `.srwtheme` remains immutable and all unedited resolved values survive the

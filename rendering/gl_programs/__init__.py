@@ -1,8 +1,8 @@
-"""Lazy public exports for built-in GL shader helpers.
+"""Lazy public exports for the shared transition shader helpers.
 
-Transition catalog imports must not import every implementation module. The
-legacy compositor can continue using these public names, but each helper is
-loaded only when that exact attribute is requested.
+Retained Quick transition implementations import the concrete shader modules
+directly. These aliases remain presentation-neutral convenience exports only;
+no compositor cache/geometry/texture manager is exposed here.
 """
 
 from __future__ import annotations
@@ -53,14 +53,6 @@ _LAZY_EXPORTS = {
         "rendering.gl_programs.raindrops_program",
         "raindrops_program",
     ),
-    "GLProgramCache": (
-        "rendering.gl_programs.program_cache",
-        "GLProgramCache",
-    ),
-    "GLGeometryManager": (
-        "rendering.gl_programs.geometry_manager",
-        "GLGeometryManager",
-    ),
 }
 
 __all__ = list(_LAZY_EXPORTS)
@@ -90,8 +82,6 @@ if TYPE_CHECKING:
     from .crossfade_program import crossfade_program as crossfade_program
     from .diffuse_program import DiffuseProgram as DiffuseProgram
     from .diffuse_program import diffuse_program as diffuse_program
-    from .geometry_manager import GLGeometryManager as GLGeometryManager
-    from .program_cache import GLProgramCache as GLProgramCache
     from .raindrops_program import RaindropsProgram as RaindropsProgram
     from .raindrops_program import raindrops_program as raindrops_program
     from .slide_program import SlideProgram as SlideProgram

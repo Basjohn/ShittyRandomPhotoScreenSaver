@@ -375,8 +375,8 @@ def apply_transition_menu_selection(
 ) -> bool:
     """Apply one admitted context-menu transition choice in-place.
 
-    This is the presentation-neutral mutation shared by the retiring QWidget
-    menu and the retained Quick menu. Unknown or deactivated concrete choices
+    This is the presentation-neutral mutation used by the retained Quick menu.
+    Unknown or deactivated concrete choices
     fail closed without changing Settings. Random remains the single
     ``random_always`` authority and never preserves a stale prepared choice.
     """

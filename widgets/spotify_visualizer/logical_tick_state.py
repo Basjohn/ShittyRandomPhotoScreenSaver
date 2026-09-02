@@ -3,7 +3,7 @@
 The authored per-tick logical computation historically ran against a large set
 of live ``SpotifyVisualizerWidget`` fields. This object is the destination owner
 for that per-tick logical state so ``VisualizerLogicalRuntime`` can advance
-without a ``QWidget``/legacy presenter argument, per the H visualizer runtime
+without a retired QWidget presenter argument, per the H visualizer runtime
 ownership correction.
 
 Design:
@@ -224,18 +224,20 @@ class VisualizerLogicalTickState:
     # Logical hooks: thin delegators to existing neutral module functions #
     # ------------------------------------------------------------------ #
     def _check_mode_teardown_ready(self, engine: Any, now_ts: float) -> bool:
-        from widgets.spotify_visualizer.mode_transition import (
-            evaluate_mode_teardown_ready,
-        )
+        """Quick mode-transition readiness is owned by QuickDisplayVisualizerOwner.
 
-        return evaluate_mode_teardown_ready(self, engine, now_ts)
+        The retired QWidget presenter used a second teardown/reveal state machine
+        here.  Retained Quick waits on the controller's fresh-engine fence in its
+        owner and never asks the logical tick to mutate presentation state.
+        """
+
+        del engine, now_ts
+        return False
 
     def _on_first_frame_after_cold_start(self) -> None:
-        from widgets.spotify_visualizer.mode_transition import (
-            on_first_frame_after_cold_start,
-        )
+        """Acknowledge fresh logical source state without QWidget shadow work."""
 
-        on_first_frame_after_cold_start(self)
+        self._waiting_for_fresh_frame = False
 
     def _log_tick_spike(self, dt: float, transition_ctx: dict[str, Any]) -> None:
         from widgets.spotify_visualizer.tick_helpers import log_tick_spike

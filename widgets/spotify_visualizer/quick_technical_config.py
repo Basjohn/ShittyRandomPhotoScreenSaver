@@ -1,6 +1,6 @@
 """Presentation-neutral technical configuration for the Quick visualizer owner.
 
-This is the destination counterpart of the legacy QWidget technical apply.  It
+This is the retained Quick counterpart of the retired QWidget technical apply. It
 accepts an already-resolved per-mode technical mapping and applies each value to
 its actual owner:
 
@@ -8,8 +8,8 @@ its actual owner:
 - VisualizerRuntimeController: bar-count authority.
 - VisualizerLogicalTickState: values consumed by authored logical evolution.
 
-It does not resolve SettingsManager/presets, touch QWidget geometry/GPU caches,
-or mirror state into the legacy compositor overlay.
+It does not resolve SettingsManager/presets, touch presentation geometry/GPU
+caches, or mirror state into any retired compositor/presenter.
 """
 
 from __future__ import annotations

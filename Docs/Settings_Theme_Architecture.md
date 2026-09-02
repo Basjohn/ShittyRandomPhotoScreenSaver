@@ -88,6 +88,8 @@ Resolution rules:
    `%ProgramData%\SRPSS\themes\widgets\Custom.srwtheme`;
 8. compiled Default Dark remains the unconditional Settings fallback even if the external directory is absent/invalid.
 
+Widget Theme palette roles are runtime **baseline/defaults** rather than a writer that erases existing per-family `widgets.<family>.card.*` settings. Explicit family card values win for that family; the Context Menu consumes Widget Theme values directly because it has no family layer. This precedence is independent of the shared filesystem root.
+
 Widget Theme implementation should follow the same one-root principle and keep its own built-in/default-safe behavior as
 defined by the Widget Theme contract. Theme selection IDs remain portable and must not encode absolute ProgramData/repo
 paths. A real `.srwtheme` file is produced only by explicit import/export/authoring flow, not as a side effect of changing

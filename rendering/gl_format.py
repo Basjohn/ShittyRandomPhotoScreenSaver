@@ -121,29 +121,6 @@ def read_surface_preferences(
     return preferences
 
 
-def _infer_settings_manager(widget) -> Optional["SettingsManager"]:
-    """Attempt to locate a SettingsManager attached to widget ancestry."""
-    try:
-        candidate = getattr(widget, "settings_manager", None)
-        if candidate is not None:
-            return candidate
-        parent_getter = getattr(widget, "parent", None)
-        if callable(parent_getter):
-            parent = parent_getter()
-        else:
-            parent = None
-        depth = 0
-        while parent is not None and depth < 5:
-            candidate = getattr(parent, "settings_manager", None)
-            if candidate is not None:
-                return candidate
-            parent_getter = getattr(parent, "parent", None)
-            parent = parent_getter() if callable(parent_getter) else None
-            depth += 1
-    except Exception as e:
-        logger.debug("[GL FORMAT] Failed to infer SettingsManager from widget ancestry: %s", e, exc_info=True)
-        return None
-    return None
 
 
 def build_surface_format(
@@ -203,18 +180,3 @@ def build_surface_format(
     return fmt, prefs
 
 
-def apply_widget_surface_format(
-    widget,
-    settings_manager: Optional["SettingsManager"] = None,
-    *,
-    reason: str = "",
-) -> SurfacePreferences:
-    """Apply a surface format to the given QOpenGLWidget-derived widget."""
-    if settings_manager is None:
-        settings_manager = _infer_settings_manager(widget)
-    fmt, prefs = build_surface_format(settings_manager, reason=reason)
-    try:
-        widget.setFormat(fmt)
-    except Exception as exc:
-        logger.warning("[GL FORMAT] Failed to apply format (%s): %s", reason or "", exc)
-    return prefs

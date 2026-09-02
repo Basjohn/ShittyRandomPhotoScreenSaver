@@ -162,7 +162,7 @@ class WidgetRuntimeManager:
 
         When True, the creation path must FAIL CLOSED if
         :meth:`ensure_widget_service` returns None (build/injection failure):
-        the widget must not be left running on a QWidget-owned fallback.
+        the family must not be left running on a retired presenter-owned fallback.
         """
         from rendering.widget_runtime_services import get_runtime_service_spec
 
@@ -187,7 +187,7 @@ class WidgetRuntimeManager:
         spec OR when build/injection fails. A caller that required a service
         (see :meth:`has_runtime_service`) must treat ``None`` as a hard failure
         and fail closed — a failed build/injection never leaves an owned service
-        behind, so the widget cannot silently run on a QWidget-owned default.
+        behind, so the family cannot silently run on a retired presenter-owned default.
         """
         if self._retired:
             return None

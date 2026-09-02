@@ -6,8 +6,7 @@ and manual cadence, blocked-gate persistence, request generations and clean
 retirement.  It deliberately knows nothing about QWidget/QML geometry, paint
 caches, hit regions, spinners or transition effects.
 
-Consumers implement the small callback protocol used by both the temporary
-QWidget presenter and the retained Quick model:
+Retained Quick consumers implement this small callback protocol:
 
 * ``is_reddit_consumer_alive()``
 * ``on_reddit_runtime_posts(posts, *, from_cache, source_id, attempted_sources)``
