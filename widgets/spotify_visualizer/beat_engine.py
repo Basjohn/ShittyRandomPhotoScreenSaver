@@ -854,7 +854,20 @@ class _SpotifyBeatEngine(QObject):
             # pending source instead of submitting a second lane packet. The
             # handoff below atomically transfers that logical slot to the next
             # newest source (or releases it when none exists).
-            self._launch_pending_analysis_frame(releasing_active_slot=True)
+            #
+            # R-71 fencing exception: when a same-activation cancellation
+            # boundary bumped the gate token, a newer same-activation owner may
+            # already hold the single in-flight slot. This stale callback must
+            # then NOT release it, or a second concurrent FFT could be scheduled.
+            # An activation replacement (mode switch/reset) is different: the old
+            # activation is genuinely done, so its callback still releases its own
+            # slot and the fresh activation schedules from scratch.
+            superseded_same_activation = (
+                payload.activation_id == self._activation_id
+                and payload.gate_token != self._compute_gate_token
+            )
+            if not superseded_same_activation:
+                self._launch_pending_analysis_frame(releasing_active_slot=True)
 
     def _schedule_compute_bars_task(
         self, samples: object, *, capture_ts: float = 0.0
