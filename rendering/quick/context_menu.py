@@ -13,6 +13,9 @@ from core.settings.shadow_direction import (
     resolve_directional_extensions,
     resolve_signed_offset,
 )
+from ui.settings_theme_spec import Rgba
+from ui.widget_theme_active import get_active_widget_theme
+from ui.widget_visual_roles import resolve_widget_visual_color
 
 
 _CONTEXT_MENU_SHADOW_BASE = (4.0, 4.0)
@@ -104,6 +107,82 @@ def project_quick_context_menu_shadow(
         extend_top=float(top),
         extend_right=float(right),
         extend_bottom=float(bottom),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class QuickContextMenuPaletteStyle:
+    """Generation-scoped semantic palette for the retained Context Menu."""
+
+    menu_surface: tuple[int, int, int, int]
+    menu_border: tuple[int, int, int, int]
+    menu_text: tuple[int, int, int, int]
+    menu_selected_surface: tuple[int, int, int, int]
+    menu_separator: tuple[int, int, int, int]
+    menu_indicator_border: tuple[int, int, int, int]
+    menu_indicator_fill: tuple[int, int, int, int]
+    menu_arrow: tuple[int, int, int, int]
+    submenu_surface: tuple[int, int, int, int]
+    submenu_border: tuple[int, int, int, int]
+    submenu_text: tuple[int, int, int, int]
+    submenu_selected_surface: tuple[int, int, int, int]
+    submenu_checked_text: tuple[int, int, int, int]
+    submenu_checked_surface: tuple[int, int, int, int]
+    submenu_indicator_border: tuple[int, int, int, int]
+    submenu_indicator_fill: tuple[int, int, int, int]
+
+
+def project_quick_context_menu_palette() -> QuickContextMenuPaletteStyle:
+    """Resolve the active Widget Theme once for one display generation.
+
+    The Context Menu has no per-family override layer, so its palette consumes the
+    active Widget Theme directly. Default Dark materializes the physically accepted
+    current menu pixels, while sparse schema-v2 detail roles inherit through the
+    shared semantic role graph. No Settings or catalogue read occurs here.
+    """
+
+    theme = get_active_widget_theme()
+
+    def resolved(role: str, fallback: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+        return resolve_widget_visual_color(
+            theme,
+            role,
+            fallback=Rgba(*fallback),
+        ).color.as_tuple()
+
+    return QuickContextMenuPaletteStyle(
+        menu_surface=resolved("context.menu.surface", (27, 29, 36, 242)),
+        menu_border=resolved("context.menu.border", (216, 243, 255, 255)),
+        menu_text=resolved("context.menu.text", (246, 248, 255, 255)),
+        menu_selected_surface=resolved(
+            "context.menu.selected_surface", (119, 185, 232, 79)
+        ),
+        menu_separator=resolved("context.menu.separator", (89, 119, 138, 255)),
+        menu_indicator_border=resolved(
+            "context.menu.indicator.border", (185, 234, 255, 255)
+        ),
+        menu_indicator_fill=resolved(
+            "context.menu.indicator.fill", (130, 205, 255, 255)
+        ),
+        menu_arrow=resolved("context.menu.arrow", (216, 243, 255, 255)),
+        submenu_surface=resolved("context.submenu.surface", (27, 29, 36, 242)),
+        submenu_border=resolved("context.submenu.border", (216, 243, 255, 255)),
+        submenu_text=resolved("context.submenu.text", (246, 248, 255, 255)),
+        submenu_selected_surface=resolved(
+            "context.submenu.selected_surface", (119, 185, 232, 79)
+        ),
+        submenu_checked_text=resolved(
+            "context.submenu.checked_text", (185, 234, 255, 255)
+        ),
+        submenu_checked_surface=resolved(
+            "context.submenu.checked_surface", (78, 113, 139, 51)
+        ),
+        submenu_indicator_border=resolved(
+            "context.submenu.indicator.border", (185, 234, 255, 255)
+        ),
+        submenu_indicator_fill=resolved(
+            "context.submenu.indicator.fill", (130, 205, 255, 255)
+        ),
     )
 
 
@@ -419,9 +498,11 @@ def enforce_single_visible_context_menu(
 
 __all__ = [
     "QuickContextMenuEntry",
+    "QuickContextMenuPaletteStyle",
     "QuickContextMenuShadowStyle",
     "QuickContextMenuModel",
     "build_quick_context_menu_entries",
     "enforce_single_visible_context_menu",
+    "project_quick_context_menu_palette",
     "project_quick_context_menu_shadow",
 ]

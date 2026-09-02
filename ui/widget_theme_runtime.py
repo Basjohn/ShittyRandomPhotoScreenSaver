@@ -30,8 +30,13 @@ from ui.widget_theme_catalog import (
 from ui.widget_theme_io import widget_theme_from_payload, widget_theme_to_payload
 from ui.widget_theme_spec import (
     DEFAULT_DARK_WIDGET_THEME,
+    WIDGET_THEME_CORE_COLOR_ROLES,
     WidgetThemeSpec,
     resolve_effective_card_material_mode,
+)
+from ui.widget_visual_roles import (
+    WIDGET_THEME_OPTIONAL_COLOR_ROLES,
+    materialize_widget_theme_colors,
 )
 
 
@@ -168,12 +173,14 @@ def to_custom_snapshot(theme: WidgetThemeSpec) -> WidgetThemeSpec:
 def with_color(theme: WidgetThemeSpec, token: str, color: Rgba) -> WidgetThemeSpec:
     """Return a copy of ``theme`` with one semantic colour role replaced.
 
-    Editing a theme-owned value is what drives the named-theme -> Custom transition;
-    the caller snapshots the full resolved theme, applies the edit here, selects
-    Custom and turns Keep Synced OFF. Unedited roles are preserved exactly.
+    Editing a theme-owned value is what drives the named-theme -> Custom transition.
+    Schema-v2 themes may be sparse for specialized roles, so editing a known role
+    may add that explicit role to the Custom snapshot. Unedited theme roles remain
+    untouched; family-local overrides stay outside the Widget Theme bundle.
     """
 
-    if token not in theme.colors:
+    known = set(DEFAULT_DARK_WIDGET_THEME.colors) | set(WIDGET_THEME_OPTIONAL_COLOR_ROLES)
+    if token not in known:
         raise KeyError(f"Unknown Widget theme colour token: {token}")
     if not isinstance(color, Rgba):
         raise TypeError("color must be an Rgba value")
@@ -187,17 +194,36 @@ def begin_theme_owned_edit(
     active_theme: WidgetThemeSpec,
     token: str,
     color: Rgba,
+    *,
+    resolved_optional_colors: Mapping[str, Rgba] | None = None,
 ) -> tuple[WidgetThemeSpec, WidgetThemeState]:
     """Perform the theme-owned-edit ownership transition.
 
-    Snapshot the full currently-resolved theme into user-owned Custom, apply the
-    edit to that snapshot, and return the new Custom spec plus the new persisted
-    state (selection = Custom, Keep Synced OFF). The existing Surface Style override
-    is preserved unchanged — a theme-owned edit never alters material ownership. The
-    shipped ``.srwtheme`` is never mutated.
+    Snapshot the currently resolved Widget Theme into user-owned Custom, apply the
+    edit, and return the new persisted state (selection = Custom, Keep Synced OFF).
+    ``resolved_optional_colors`` is the presentation/configuration authority's
+    current concrete value for sparse specialized roles. Phase-1b UI wiring must
+    supply that map when creating Custom so an inherited role is frozen rather than
+    silently changing if a later parent/default changes. The optional argument keeps
+    legacy/core-only callers source-compatible until that UI lands.
+
+    Surface Style remains orthogonal and the shipped ``.srwtheme`` is never mutated.
     """
 
-    snapshot = with_color(to_custom_snapshot(active_theme), token, color)
+    custom_base = to_custom_snapshot(active_theme)
+    if resolved_optional_colors:
+        custom_base = replace(
+            custom_base,
+            colors=materialize_widget_theme_colors(
+                active_theme,
+                core_roles={
+                    role: DEFAULT_DARK_WIDGET_THEME.colors[role]
+                    for role in WIDGET_THEME_CORE_COLOR_ROLES
+                },
+                optional_fallbacks=resolved_optional_colors,
+            ),
+        )
+    snapshot = with_color(custom_base, token, color)
     state = WidgetThemeState(
         selected_id=CUSTOM_WIDGET_THEME_ID,
         keep_synced=False,

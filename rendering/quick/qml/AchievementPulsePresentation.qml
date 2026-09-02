@@ -80,15 +80,17 @@ OverlayWidget {
             width: 18.0
             height: 18.0
             radius: 9.0
-            color: "#e6f0902d"
-            border.color: "#dcffe6b4"
-            border.width: 1.0
+            color: achievementRoot.achievementModel.steamInfoSurfaceColor
+            border.color: achievementRoot.achievementModel.steamInfoBorderColor
+            border.width: achievementRoot.scaleAwareStrokeWidthForScale(
+                1.0, achievementRoot.contentScale
+            )
             z: 4
 
             Text {
                 anchors.fill: parent
                 text: "i"
-                color: "white"
+                color: achievementRoot.achievementModel.steamInfoTextColor
                 font.family: achievementRoot.achievementModel.fontFamily
                 font.pixelSize: 12.0
                 font.bold: true
@@ -119,9 +121,11 @@ OverlayWidget {
             width: 276.0
             height: infoTipText.implicitHeight + 14.0
             radius: 6.0
-            color: "#ff2b2b2b"
-            border.color: "#c89a9a9a"
-            border.width: 1.0
+            color: achievementRoot.achievementModel.steamTooltipSurfaceColor
+            border.color: achievementRoot.achievementModel.steamTooltipBorderColor
+            border.width: achievementRoot.scaleAwareStrokeWidthForScale(
+                1.0, achievementRoot.contentScale
+            )
             z: 10
 
             Text {
@@ -129,7 +133,7 @@ OverlayWidget {
                 anchors.fill: parent
                 anchors.margins: 7.0
                 text: achievementRoot.achievementModel.connectionInfoTooltip
-                color: "white"
+                color: achievementRoot.achievementModel.steamTooltipTextColor
                 font.family: achievementRoot.achievementModel.fontFamily
                 font.pixelSize: 12.0
                 wrapMode: Text.WordWrap
@@ -180,11 +184,13 @@ OverlayWidget {
                     id: artworkBackground
                     anchors.fill: parent
                     radius: 7.0
-                    border.color: "#afffffff"
-                    border.width: 2.0
+                    border.color: achievementRoot.achievementModel.steamArtworkBorderColor
+                    border.width: achievementRoot.scaleAwareStrokeWidthForScale(
+                        2.0, achievementRoot.contentScale
+                    )
                     gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#ff69737c" }
-                        GradientStop { position: 1.0; color: "#ff171b20" }
+                        GradientStop { position: 0.0; color: achievementRoot.achievementModel.steamArtworkGradientStartColor }
+                        GradientStop { position: 1.0; color: achievementRoot.achievementModel.steamArtworkGradientEndColor }
                     }
                 }
 
@@ -308,9 +314,11 @@ OverlayWidget {
                     id: latestArtworkBackground
                     anchors.fill: parent
                     radius: 7.0
-                    color: "#e60c0f14"
-                    border.color: "#afffffff"
-                    border.width: 1.0
+                    color: achievementRoot.achievementModel.steamArtworkSurfaceColor
+                    border.color: achievementRoot.achievementModel.steamArtworkBorderColor
+                    border.width: achievementRoot.scaleAwareStrokeWidthForScale(
+                        1.0, achievementRoot.contentScale
+                    )
                 }
 
                 ArtworkFadeImage {

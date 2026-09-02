@@ -30,6 +30,8 @@ from core.settings.shadow_direction import (
     resolve_signed_offset,
 )
 
+from .theme_projection import resolve_header_colors, resolve_rgba_role
+
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
     ORDINARY_TEXT_SHADOW_BASE,
@@ -250,6 +252,7 @@ class RedditPresentationConfig:
             member = {}
         merged = dict(default_member)
         merged.update(member)
+        effective_defaults = dict(default_member)
         if widget_id == "reddit2":
             base_default = defaults.get("reddit", {}) if isinstance(defaults, Mapping) else {}
             base_member = widgets.get("reddit", {}) if isinstance(widgets, Mapping) else {}
@@ -257,9 +260,25 @@ class RedditPresentationConfig:
             if isinstance(base_member, Mapping):
                 base.update(base_member)
             for key in _STYLE_KEYS:
+                if key not in effective_defaults and isinstance(base_default, Mapping) and key in base_default:
+                    effective_defaults[key] = base_default[key]
                 if key not in member and key in base:
                     merged[key] = base[key]
-        return cls.from_mapping(merged, widget_id=widget_id)
+        config = cls.from_mapping(merged, widget_id=widget_id)
+        header_fill, header_border, header_text = resolve_header_colors(
+            widget_id,
+            values=merged,
+            defaults=effective_defaults,
+            fill=config.header_fill_color,
+            border=config.header_border_color,
+            text=config.header_text_color,
+        )
+        return replace(
+            config,
+            header_fill_color=header_fill,
+            header_border_color=header_border,
+            header_text_color=header_text,
+        )
 
 
 @dataclass(frozen=True)
@@ -716,7 +735,13 @@ class RedditPresentationModel(QObject):
         if color.alpha() <= 0:
             color = QColor(*self.config.text_color)
             color.setAlpha(max(0, min(255, int(color.alpha() * 0.4))))
-        return color
+        fallback = (color.red(), color.green(), color.blue(), color.alpha())
+        resolved = resolve_rgba_role(
+            f"{self.config.widget_id}.separator",
+            local_roles={"local.separator": fallback},
+            fallback=fallback,
+        )
+        return QColor(*resolved)
 
     @Property(bool, notify=stateChanged)
     def showSeparators(self) -> bool:

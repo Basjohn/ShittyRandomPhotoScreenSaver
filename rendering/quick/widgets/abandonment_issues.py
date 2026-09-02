@@ -8,7 +8,7 @@ state, semantic action admission and presentation-only configuration.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -40,19 +40,22 @@ from .host import (
     OverlayWidgetGeometry,
     RetainedOverlayWidget,
 )
+from .theme_projection import resolve_header_colors
 from .steam_common import (
     SteamCardFieldListModel,
+    SteamSemanticPalette,
     accepted_local_image_source,
     as_bool,
     bounded_float,
     bounded_int,
     optional_appid,
     project_steam_card_style,
+    project_steam_semantic_palette,
     rgba,
 )
 
 
-_STEAM_LOGO = Path(__file__).resolve().parents[3] / "images" / "Steam_Logo.png"
+_STEAM_LOGO = Path(__file__).resolve().parents[3] / "images" / "Steam_Logo_Cropped.png"
 _FIELD_DEFAULTS = tuple(ABANDONMENT_FIELD_DEFAULTS.items())
 
 
@@ -69,6 +72,7 @@ class AbandonmentIssuesPresentationConfig:
     header_fill_color: tuple[int, int, int, int] = (11, 16, 22, 230)
     header_border_color: tuple[int, int, int, int] = (229, 237, 244, 216)
     header_text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
+    semantic_palette: SteamSemanticPalette = field(default_factory=SteamSemanticPalette)
     selection_mode: str = "smart_rotation"
     pinned_appid: int | None = None
     minimum_playtime_minutes: int = 15
@@ -124,7 +128,7 @@ class AbandonmentIssuesPresentationConfig:
             )
             for field_id, default in _FIELD_DEFAULTS
         )
-        return cls(
+        config = cls(
             font_family=str(merged_card.get("font_family", "Inter") or "Inter"),
             font_size=bounded_int(merged_card.get("font_size"), 14, 8, 96),
             text_color=rgba(
@@ -216,6 +220,37 @@ class AbandonmentIssuesPresentationConfig:
             show_connection_info_icon=as_bool(
                 merged_shared.get("show_connection_info_icon"), True
             ),
+        )
+        header_fill, header_border, header_text = resolve_header_colors(
+            "abandonment_issues",
+            values=card if isinstance(card, Mapping) else {},
+            defaults=default_card if isinstance(default_card, Mapping) else {},
+            fill=config.header_fill_color,
+            border=config.header_border_color,
+            text=config.header_text_color,
+        )
+        accent_r, accent_g, accent_b, _ = config.accent_color
+        semantic_palette = project_steam_semantic_palette(
+            fallback=SteamSemanticPalette(
+                info_text=(30, 20, 10, 230),
+                artwork_surface=(20, 21, 24, 190),
+                artwork_border=(accent_r, accent_g, accent_b, 199),
+                artwork_stripe=(255, 255, 255, 38),
+                artwork_gradient_start=(accent_r, accent_g, accent_b, 79),
+                artwork_gradient_middle=(72, 48, 32, 150),
+                artwork_gradient_end=(18, 20, 23, 205),
+                metric_surface=(accent_r, accent_g, accent_b, 69),
+                metric_border=(accent_r, accent_g, accent_b, 199),
+                metric_inner_border=(accent_r, accent_g, accent_b, 99),
+                metric_separator=(accent_r, accent_g, accent_b, 110),
+            )
+        )
+        return replace(
+            config,
+            header_fill_color=header_fill,
+            header_border_color=header_border,
+            header_text_color=header_text,
+            semantic_palette=semantic_palette,
         )
 
     @property
@@ -624,6 +659,70 @@ class AbandonmentIssuesPresentationModel(QObject):
     @Property(float, notify=stateChanged)
     def artworkSize(self) -> float:
         return float(self.config.artwork_size)
+
+    @Property(QColor, notify=stateChanged)
+    def steamInfoSurfaceColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.info_surface)
+
+    @Property(QColor, notify=stateChanged)
+    def steamInfoBorderColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.info_border)
+
+    @Property(QColor, notify=stateChanged)
+    def steamInfoTextColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.info_text)
+
+    @Property(QColor, notify=stateChanged)
+    def steamTooltipSurfaceColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.tooltip_surface)
+
+    @Property(QColor, notify=stateChanged)
+    def steamTooltipBorderColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.tooltip_border)
+
+    @Property(QColor, notify=stateChanged)
+    def steamTooltipTextColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.tooltip_text)
+
+    @Property(QColor, notify=stateChanged)
+    def steamArtworkSurfaceColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.artwork_surface)
+
+    @Property(QColor, notify=stateChanged)
+    def steamArtworkBorderColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.artwork_border)
+
+    @Property(QColor, notify=stateChanged)
+    def steamArtworkStripeColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.artwork_stripe)
+
+    @Property(QColor, notify=stateChanged)
+    def steamArtworkGradientStartColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.artwork_gradient_start)
+
+    @Property(QColor, notify=stateChanged)
+    def steamArtworkGradientMiddleColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.artwork_gradient_middle)
+
+    @Property(QColor, notify=stateChanged)
+    def steamArtworkGradientEndColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.artwork_gradient_end)
+
+    @Property(QColor, notify=stateChanged)
+    def steamMetricSurfaceColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.metric_surface)
+
+    @Property(QColor, notify=stateChanged)
+    def steamMetricBorderColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.metric_border)
+
+    @Property(QColor, notify=stateChanged)
+    def steamMetricInnerBorderColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.metric_inner_border)
+
+    @Property(QColor, notify=stateChanged)
+    def steamMetricSeparatorColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.metric_separator)
 
     @Property(str, notify=stateChanged)
     def fontFamily(self) -> str:

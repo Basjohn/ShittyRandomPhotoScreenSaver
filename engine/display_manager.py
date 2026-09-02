@@ -595,10 +595,18 @@ class DisplayManager(QObject):
         # The retained context menu is a runtime-scene overlay, so its shadow
         # follows the canonical widget Card shadow contract for this generation.
         # This is one owner-time projection, not a menu-open poll/settings read.
-        from rendering.quick.context_menu import project_quick_context_menu_shadow
+        from rendering.quick.context_menu import (
+            project_quick_context_menu_palette,
+            project_quick_context_menu_shadow,
+        )
 
         unit.runtime.scene_controller.apply_context_menu_shadow_style(
             project_quick_context_menu_shadow(self._shadow_values_snapshot)
+        )
+        # Context Menu has no family swatches; consume the active Widget Theme
+        # directly once per display generation, alongside the shadow snapshot.
+        unit.runtime.scene_controller.apply_context_menu_palette_style(
+            project_quick_context_menu_palette()
         )
 
     def _quick_context_transition_state(

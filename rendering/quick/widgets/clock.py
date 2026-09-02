@@ -23,6 +23,8 @@ from core.settings.shadow_direction import (
 )
 from widgets.clock_ticker import GlobalClockTicker, get_global_clock_ticker
 
+from .theme_projection import resolve_rgba_role
+
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
     ORDINARY_TEXT_SHADOW_BASE,
@@ -710,7 +712,13 @@ class ClockPresentationModel(QObject):
     def separatorColor(self) -> QColor:
         color = QColor(*self._snapshot.config.text_color)
         color.setAlpha(max(0, min(255, int(round(color.alpha() * 0.80)))))
-        return color
+        fallback = (color.red(), color.green(), color.blue(), color.alpha())
+        resolved = resolve_rgba_role(
+            "clock.separator",
+            local_roles={"local.separator": fallback},
+            fallback=fallback,
+        )
+        return QColor(*resolved)
 
     @Property(float, notify=stateChanged)
     def hourAngle(self) -> float:

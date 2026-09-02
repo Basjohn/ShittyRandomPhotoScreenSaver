@@ -20,6 +20,8 @@ from core.settings.shadow_direction import (
     resolve_signed_offset,
 )
 
+from .theme_projection import resolve_rgba_role
+
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
     ORDINARY_TEXT_SHADOW_BASE,
@@ -672,7 +674,13 @@ class WeatherPresentationModel(QObject):
     def separatorColor(self) -> QColor:
         color = QColor(*self.config.text_color)
         color.setAlpha(max(0, min(255, int(round(color.alpha() * 0.55)))))
-        return color
+        fallback = (color.red(), color.green(), color.blue(), color.alpha())
+        resolved = resolve_rgba_role(
+            "weather.separator",
+            local_roles={"local.separator": fallback},
+            fallback=fallback,
+        )
+        return QColor(*resolved)
 
 
 class RetainedWeatherPresentation:

@@ -154,8 +154,8 @@ OverlayWidget {
 
                     Separator {
                         width: parent.width
-                        height: 1.0
-                        thickness: 1.0
+                        height: weatherRoot.scaleAwareStrokeWidth(1.0)
+                        thickness: weatherRoot.scaleAwareStrokeWidth(1.0)
                         lineColor: weatherRoot.weatherModel.separatorColor
                     }
 
@@ -237,8 +237,8 @@ OverlayWidget {
 
                     Separator {
                         width: parent.width
-                        height: 1.0
-                        thickness: 1.0
+                        height: weatherRoot.scaleAwareStrokeWidth(1.0)
+                        thickness: weatherRoot.scaleAwareStrokeWidth(1.0)
                         lineColor: weatherRoot.weatherModel.separatorColor
                     }
 

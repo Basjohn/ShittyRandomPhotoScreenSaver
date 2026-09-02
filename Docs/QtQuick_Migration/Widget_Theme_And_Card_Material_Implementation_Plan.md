@@ -40,8 +40,50 @@ The semantic/state-machine foundation is present and merged into the R-76 author
   material resolution;
 - `tests/test_widget_theme.py` — focused resolver/IO/catalogue/Custom contract.
 
-Claude's focused Phase-1a gate was 24/24 green. This reconciliation environment can
-run the pure tests but cannot claim PySide/Quick runtime acceptance.
+Claude's focused Phase-1a gate was 24/24 green.
+
+### Slice 8 semantic-role foundation — implemented, runtime/UI adoption still partial
+
+The palette vocabulary is now schema-v2 and supports **sparse optional visual roles**
+without making every new decorative role mandatory in every `.srwtheme`. The strict
+whole-or-reject core card/context role set is now named separately from compiled
+Default Dark, allowing Default Dark to materialize optional roles needed to preserve
+accepted current pixels while old schema-v1 core-only themes still migrate in memory.
+
+One Qt-free resolver owns the cascade:
+
+```text
+intentional per-widget override
+    -> exact family/widget theme role
+    -> shared semantic parent role
+    -> local/current semantic role (`local.*`, never serialized)
+    -> preserved current fallback
+```
+
+The first retained consumers are wired at construction/generation boundaries: shared
+branded headers; Media transport/mute/volume/progress; Gmail/Reddit/Weather/Clock
+separators and Gmail action popup; Steam info/tooltip/artwork/gradient/metric surfaces;
+and the retained Context Menu palette. Context Menu Default Dark was reconciled to the
+accepted current QML pixels **before** replacing those literals with one per-generation
+projection, so semantic ownership does not itself recolour the shipped default.
+
+Shared fades are also centralized: `ArtworkFadeImage.qml` uses gentler event-driven
+`200 ms` out / `340 ms` in timing, and `MediaMetadataColumn.qml` performs a presentation-
+only old->new metadata crossfade while model/provider truth updates immediately.
+
+Focused semantic-role tests are green `13/13` when run through the Qt-free package shim
+required by this environment. PySide6 is not installed here, so no Quick physical
+acceptance is claimed. **Phase 1b still owns persistence/UI and setting the selected
+active Widget Theme before retained presentation construction; Phase 1c still owns the
+complete generation snapshot/card-material adoption.**
+
+### Slice 9 bounded override UI + Media accessory — implemented, physical validation pending
+
+Media now exercises the intended selective-override model rather than adding role-generated Settings clutter. Its controls are decomposed into collapsed `Header Appearance`, `Seek Bar`, and `Volume Control` buckets. Volume exposes Track/Fill/Outline; Seek exposes Track/Fill/Shadow/Glow; Header retains Fill/Border/Text. These persisted family swatches remain alpha-aware and become explicit semantic overrides only when they differ from canonical defaults.
+
+The app-volume presentation is now an external scene-local right accessory lane using shared `OverlayWidget.rightAccessoryExtent/rightAccessoryContent`. The Media card retains/reclaims its accepted ordinary content width, the accessory remains inside the same retained root/lifecycle/uniform CUSTOM transform, and the global ordinary-card shadow excludes the accessory width. No second card/model/provider/service/poller or independent geometry authority is introduced. The Slice-8 white volume-fill regression is corrected by restoring the volume role's own local default instead of borrowing the seek/progress accent.
+
+Steam header-size parity was also corrected at the asset boundary: both Steam families consume a tightly alpha-cropped derivative of the supplied padded Steam logo while retaining the same shared 25 px `BrandedHeader` logo box. There is no Steam-only header scale exception.
 
 ### Existing source to reuse, not fork
 
@@ -132,6 +174,23 @@ This resolves Claude's pre-1c design question in favour of **theme defaults with
 explicit per-widget overrides winning**. Do not ship a temporary 1c that globally
 stomps those values and promises later reconciliation.
 
+### 3A. Sparse semantic roles / GUI inheritance contract
+
+Do not turn the expanded role vocabulary into dozens of permanent top-level swatches.
+Specialized roles are optional and inherit. The normal/default state is effectively
+**Inherit**. Existing family swatches participate as explicit overrides only when their
+stored value differs from the canonical family default; default-valued persisted fields
+therefore do not block a Widget Theme from styling that role.
+
+`local.*` roles are presentation context only. They supply the accepted current widget
+text/surface/border/accent/gradient value to the resolver when neither the selected theme
+nor a semantic parent specifies something more precise. They must never be serialized
+into `.srwtheme`, Custom snapshots, or Settings.
+
+Sparse override UI should be exposed selectively and collapsed, not generated mechanically from the role graph. A named theme may define only broad roles (`widget.panel`, `widget.separator`, `widget.accent`) or exact roles (`media.transport.surface`, `steam.artwork.gradient.start`). Slice 9 is the first concrete family-override UX: Media keeps its high-value `Header Appearance`, `Seek Bar`, and `Volume Control` swatches as explicit family controls, while lower-level transport/mute/panel/icon roles remain inherited. These default-valued swatches are the implicit `Inherit` state; changing one intentionally promotes only that family role to the explicit override layer and does not create Widget Theme `Custom`. New widgets should consume the same resolver rather than inventing a family-local fallback/theme stack.
+
+The resolver must also preserve **distinct local defaults under a shared parent**. Example: both `media.volume.fill` and `media.progress.fill` may inherit a theme-authored `widget.accent`, but when the selected theme does not author that parent the default volume fill remains its own muted gray/alpha and the seek/progress fill remains its own white/alpha. Do not populate a specialized role's `local.*` terminal from a sibling role merely because they share a semantic parent. Focused tests cover this regression.
+
 ## 4. Phase 1b — persistence + UI
 
 Land the Settings model/keys:
@@ -156,12 +215,13 @@ Do not hide colour swatches merely because a named Widget Theme is selected.
 
 At generation/configuration authority:
 
-1. resolve active Widget Theme once;
+1. resolve/set the selected active Widget Theme once before retained presentation construction;
 2. resolve `effective_card_material_mode` once;
 3. retain the global Widget Theme palette as the family fallback;
 4. resolve each family card style with explicit family values above that baseline;
-5. feed the Context Menu directly from Widget Theme palette;
-6. keep effective material `normal` in this phase.
+5. retain the Slice-8 semantic visual-role cascade for specialized surfaces rather than rebuilding family-local fallbacks;
+6. keep the already-wired Context Menu direct palette projection generation-scoped and refresh it only through the admitted theme-generation path;
+7. keep effective material `normal` in this phase.
 
 No per-tick Settings reads, theme catalogue reads, timers, capture or blur work.
 

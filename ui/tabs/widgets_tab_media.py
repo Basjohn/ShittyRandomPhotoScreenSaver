@@ -173,21 +173,23 @@ def _update_media_bg_visibility(tab) -> None:
 
 
 def _update_media_progress_controls(tab) -> None:
-    """Gate progress styling behind both transport and progress toggles."""
+    """Gate seek-bar styling behind the seek-bar toggle only."""
 
-    transport_enabled = bool(
-        getattr(tab, "media_show_controls", None)
-        and tab.media_show_controls.isChecked()
-    )
     progress_toggle = getattr(tab, "media_playback_progress_enabled", None)
-    if progress_toggle is not None:
-        progress_toggle.setEnabled(transport_enabled)
     options = getattr(tab, "_media_progress_options_container", None)
     if options is not None:
         options.setEnabled(
-            transport_enabled
-            and progress_toggle is not None
+            progress_toggle is not None
             and progress_toggle.isChecked()
+        )
+    shadow_color = getattr(tab, "media_playback_progress_shadow_color_btn", None)
+    shadow_toggle = getattr(tab, "media_playback_progress_shadow_enabled", None)
+    if shadow_color is not None:
+        shadow_color.setEnabled(
+            options is not None
+            and options.isEnabled()
+            and shadow_toggle is not None
+            and shadow_toggle.isChecked()
         )
     glow_color = getattr(tab, "media_playback_progress_glow_color_btn", None)
     glow_toggle = getattr(tab, "media_playback_progress_glow_enabled", None)
@@ -356,18 +358,39 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         on_toggle=lambda checked: tab.set_widget_bucket_state("media", "appearance", checked),
         defer_initial_visibility=True,
     )
+    header_toggle, header_body, header_layout = build_bucket_toggle(
+        _media_ctrl_layout,
+        "Header Appearance",
+        expanded=tab.get_widget_bucket_state("media", "header_appearance", default=False),
+        on_toggle=lambda checked: tab.set_widget_bucket_state("media", "header_appearance", checked),
+        defer_initial_visibility=True,
+    )
     artwork_toggle, artwork_body, artwork_layout = build_bucket_toggle(
         _media_ctrl_layout,
-        "Artwork & Header",
+        "Artwork",
         expanded=tab.get_widget_bucket_state("media", "artwork_header", default=False),
         on_toggle=lambda checked: tab.set_widget_bucket_state("media", "artwork_header", checked),
         defer_initial_visibility=True,
     )
     controls_toggle, controls_body, controls_layout = build_bucket_toggle(
         _media_ctrl_layout,
-        "Transport & Volume",
+        "Transport Controls",
         expanded=tab.get_widget_bucket_state("media", "controls", default=False),
         on_toggle=lambda checked: tab.set_widget_bucket_state("media", "controls", checked),
+        defer_initial_visibility=True,
+    )
+    seek_toggle, seek_body, seek_layout = build_bucket_toggle(
+        _media_ctrl_layout,
+        "Seek Bar",
+        expanded=tab.get_widget_bucket_state("media", "seek_bar", default=False),
+        on_toggle=lambda checked: tab.set_widget_bucket_state("media", "seek_bar", checked),
+        defer_initial_visibility=True,
+    )
+    volume_toggle, volume_body, volume_layout = build_bucket_toggle(
+        _media_ctrl_layout,
+        "Volume Control",
+        expanded=tab.get_widget_bucket_state("media", "volume_control", default=False),
+        on_toggle=lambda checked: tab.set_widget_bucket_state("media", "volume_control", checked),
         defer_initial_visibility=True,
     )
     # Provider toggle row
@@ -491,7 +514,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_color_row.addWidget(tab.media_color_btn)
     media_color_row.addStretch()
 
-    media_header_fill_row = _swatch_row(appearance_layout, "Header Fill:")
+    media_header_fill_row = _swatch_row(header_layout, "Header Fill:")
     tab.media_header_fill_color_btn = ColorSwatchButton(
         title="Choose Media Header Fill Color", show_alpha=True
     )
@@ -502,7 +525,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_header_fill_row.addWidget(tab.media_header_fill_color_btn)
     media_header_fill_row.addStretch()
 
-    media_header_text_row = _swatch_row(appearance_layout, "Header Text:")
+    media_header_text_row = _swatch_row(header_layout, "Header Text:")
     tab.media_header_text_color_btn = ColorSwatchButton(
         title="Choose Media Header Text Color", show_alpha=True
     )
@@ -515,7 +538,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_header_text_row.addWidget(tab.media_header_text_color_btn)
     media_header_text_row.addStretch()
 
-    media_header_border_row = _swatch_row(appearance_layout, "Header Border:")
+    media_header_border_row = _swatch_row(header_layout, "Header Border:")
     tab.media_header_border_color_btn = ColorSwatchButton(
         title="Choose Media Header Border Color", show_alpha=True
     )
@@ -611,7 +634,20 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_show_background.stateChanged.connect(lambda: _update_media_bg_visibility(tab))
     _update_media_bg_visibility(tab)
 
-    media_volume_fill_row = _swatch_row(appearance_layout, "Volume Fill Color:")
+    media_volume_track_row = _swatch_row(volume_layout, "Track Color:")
+    tab.media_volume_track_color_btn = ColorSwatchButton(
+        title="Choose App Volume Track Color", show_alpha=True
+    )
+    tab.media_volume_track_color_btn.set_color(
+        getattr(tab, '_media_volume_track_color', QColor(35, 35, 35, 255))
+    )
+    tab.media_volume_track_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_media_volume_track_color', c), tab._save_settings())
+    )
+    media_volume_track_row.addWidget(tab.media_volume_track_color_btn)
+    media_volume_track_row.addStretch()
+
+    media_volume_fill_row = _swatch_row(volume_layout, "Fill Color:")
     tab.media_volume_fill_color_btn = ColorSwatchButton(
         title="Choose Spotify Volume Fill Color", show_alpha=True
     )
@@ -622,7 +658,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_volume_fill_row.addWidget(tab.media_volume_fill_color_btn)
     media_volume_fill_row.addStretch()
 
-    media_volume_border_row = _swatch_row(appearance_layout, "Volume Outline:")
+    media_volume_border_row = _swatch_row(volume_layout, "Outline Color:")
     tab.media_volume_border_color_btn = ColorSwatchButton(
         title="Choose Spotify Volume Outline Color", show_alpha=True
     )
@@ -660,7 +696,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         tab._default_bool('media', 'show_header_frame', True)
     )
     tab.media_show_header_frame.stateChanged.connect(tab._save_settings)
-    artwork_layout.addWidget(tab.media_show_header_frame)
+    header_layout.insertWidget(0, tab.media_show_header_frame)
 
     tab.media_show_controls = QCheckBox("Show Transport Controls")
     tab.media_show_controls.setProperty("circleIndicator", True)
@@ -668,7 +704,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         tab._default_bool('media', 'show_controls', True)
     )
     tab.media_show_controls.stateChanged.connect(tab._save_settings)
-    tab.media_show_controls.stateChanged.connect(lambda: _update_media_progress_controls(tab))
     controls_layout.addWidget(tab.media_show_controls)
 
     tab.media_playback_progress_enabled = QCheckBox("Show Playback Progress Bar")
@@ -677,14 +712,14 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         tab._default_bool('media', 'playback_progress_enabled', False)
     )
     tab.media_playback_progress_enabled.setToolTip(
-        "Draws a pill progress bar above the transport keys using the existing GSMTC poll. "
-        "It adds no timer, animation, or independent media request."
+        "Draws the interactive playback/seek pill from the existing Media runtime snapshot. "
+        "It adds no timer, polling cadence, or independent media request."
     )
     tab.media_playback_progress_enabled.stateChanged.connect(tab._save_settings)
     tab.media_playback_progress_enabled.stateChanged.connect(
         lambda: _update_media_progress_controls(tab)
     )
-    controls_layout.addWidget(tab.media_playback_progress_enabled)
+    seek_layout.addWidget(tab.media_playback_progress_enabled)
 
     tab._media_progress_options_container = QWidget()
     progress_options_layout = QVBoxLayout(tab._media_progress_options_container)
@@ -702,9 +737,25 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     progress_height_row.addWidget(_inline_label("px"))
     progress_height_row.addStretch()
 
+    progress_track_row = _swatch_row(progress_options_layout, "Track Color:")
+    tab.media_playback_progress_track_color_btn = ColorSwatchButton(
+        title="Choose Media Seek Track Color", show_alpha=True
+    )
+    tab.media_playback_progress_track_color_btn.set_color(
+        getattr(tab, '_media_progress_track_color', QColor(255, 255, 255, 74))
+    )
+    tab.media_playback_progress_track_color_btn.color_changed.connect(
+        lambda color: (
+            setattr(tab, '_media_progress_track_color', color),
+            tab._save_settings(),
+        )
+    )
+    progress_track_row.addWidget(tab.media_playback_progress_track_color_btn)
+    progress_track_row.addStretch()
+
     progress_fill_row = _swatch_row(progress_options_layout, "Fill Color:")
     tab.media_playback_progress_fill_color_btn = ColorSwatchButton(
-        title="Choose Media Playback Progress Fill Color"
+        title="Choose Media Playback Progress Fill Color", show_alpha=True
     )
     tab.media_playback_progress_fill_color_btn.set_color(tab._media_progress_fill_color)
     tab.media_playback_progress_fill_color_btn.color_changed.connect(
@@ -722,7 +773,26 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         tab._default_bool('media', 'playback_progress_shadow_enabled', False)
     )
     tab.media_playback_progress_shadow_enabled.stateChanged.connect(tab._save_settings)
+    tab.media_playback_progress_shadow_enabled.stateChanged.connect(
+        lambda: _update_media_progress_controls(tab)
+    )
     progress_options_layout.addWidget(tab.media_playback_progress_shadow_enabled)
+
+    progress_shadow_row = _swatch_row(progress_options_layout, "Shadow Color:")
+    tab.media_playback_progress_shadow_color_btn = ColorSwatchButton(
+        title="Choose Media Seek Shadow Color", show_alpha=True
+    )
+    tab.media_playback_progress_shadow_color_btn.set_color(
+        getattr(tab, '_media_progress_shadow_color', QColor(0, 0, 0, 102))
+    )
+    tab.media_playback_progress_shadow_color_btn.color_changed.connect(
+        lambda color: (
+            setattr(tab, '_media_progress_shadow_color', color),
+            tab._save_settings(),
+        )
+    )
+    progress_shadow_row.addWidget(tab.media_playback_progress_shadow_color_btn)
+    progress_shadow_row.addStretch()
 
     tab.media_playback_progress_glow_enabled = QCheckBox("Progress Bar Glow")
     tab.media_playback_progress_glow_enabled.setProperty("circleIndicator", True)
@@ -737,7 +807,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     progress_glow_row = _swatch_row(progress_options_layout, "Glow Color:")
     tab.media_playback_progress_glow_color_btn = ColorSwatchButton(
-        title="Choose Media Playback Progress Glow Color"
+        title="Choose Media Playback Progress Glow Color", show_alpha=True
     )
     tab.media_playback_progress_glow_color_btn.set_color(tab._media_progress_glow_color)
     tab.media_playback_progress_glow_color_btn.color_changed.connect(
@@ -748,7 +818,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     progress_glow_row.addWidget(tab.media_playback_progress_glow_color_btn)
     progress_glow_row.addStretch()
-    controls_layout.addWidget(tab._media_progress_options_container)
+    seek_layout.addWidget(tab._media_progress_options_container)
     _update_media_progress_controls(tab)
 
     tab.media_spotify_volume_enabled = QCheckBox("Enable App Volume Slider")
@@ -761,7 +831,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         tab._default_bool('media', 'spotify_volume_enabled', True)
     )
     tab.media_spotify_volume_enabled.stateChanged.connect(tab._save_settings)
-    controls_layout.addWidget(tab.media_spotify_volume_enabled)
+    volume_layout.addWidget(tab.media_spotify_volume_enabled)
 
     tab.media_mute_button_enabled = QCheckBox("Enable System Mute Button")
     tab.media_mute_button_enabled.setProperty("circleIndicator", True)
@@ -778,8 +848,11 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     for toggle, body in (
         (provider_toggle, provider_body),
         (appearance_toggle, appearance_body),
+        (header_toggle, header_body),
         (artwork_toggle, artwork_body),
         (controls_toggle, controls_body),
+        (seek_toggle, seek_body),
+        (volume_toggle, volume_body),
     ):
         _finalize_bucket_body(toggle, body)
 
@@ -1081,12 +1154,24 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     )
     tab._media_header_border_color = QColor(*header_border_data)
 
-    volume_fill_data = media_config.get('spotify_volume_fill_color', tab._widget_default('media', 'spotify_volume_fill_color', [66, 66, 66, 255]))
+    volume_track_data = media_config.get(
+        'spotify_volume_track_color',
+        tab._widget_default('media', 'spotify_volume_track_color', [35, 35, 35, 255]),
+    )
+    try:
+        tab._media_volume_track_color = QColor(*volume_track_data)
+    except Exception:
+        logger.debug("[MEDIA_TAB] Failed to set volume_track_color=%s", volume_track_data, exc_info=True)
+        tab._media_volume_track_color = QColor(35, 35, 35, 255)
+    volume_fill_data = media_config.get(
+        'spotify_volume_fill_color',
+        tab._widget_default('media', 'spotify_volume_fill_color', [79, 79, 79, 150]),
+    )
     try:
         tab._media_volume_fill_color = QColor(*volume_fill_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set volume_fill_color=%s", volume_fill_data, exc_info=True)
-        tab._media_volume_fill_color = QColor(66, 66, 66, 255)
+        tab._media_volume_fill_color = QColor(79, 79, 79, 150)
     volume_border_data = media_config.get(
         'spotify_volume_border_color',
         tab._widget_default('media', 'spotify_volume_border_color', [255, 255, 255, 255]),
@@ -1096,6 +1181,15 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set volume_border_color=%s", volume_border_data, exc_info=True)
         tab._media_volume_border_color = QColor(255, 255, 255, 255)
+    progress_track_data = media_config.get(
+        'playback_progress_track_color',
+        tab._widget_default('media', 'playback_progress_track_color', [255, 255, 255, 74]),
+    )
+    try:
+        tab._media_progress_track_color = QColor(*progress_track_data)
+    except Exception:
+        logger.debug("[MEDIA_TAB] Failed to set progress track color=%s", progress_track_data, exc_info=True)
+        tab._media_progress_track_color = QColor(255, 255, 255, 74)
     progress_fill_data = media_config.get(
         'playback_progress_fill_color',
         tab._widget_default('media', 'playback_progress_fill_color', [255, 255, 255, 230]),
@@ -1105,6 +1199,15 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set progress fill color=%s", progress_fill_data, exc_info=True)
         tab._media_progress_fill_color = QColor(255, 255, 255, 230)
+    progress_shadow_data = media_config.get(
+        'playback_progress_shadow_color',
+        tab._widget_default('media', 'playback_progress_shadow_color', [0, 0, 0, 102]),
+    )
+    try:
+        tab._media_progress_shadow_color = QColor(*progress_shadow_data)
+    except Exception:
+        logger.debug("[MEDIA_TAB] Failed to set progress shadow color=%s", progress_shadow_data, exc_info=True)
+        tab._media_progress_shadow_color = QColor(0, 0, 0, 102)
     progress_glow_data = media_config.get(
         'playback_progress_glow_color',
         tab._widget_default('media', 'playback_progress_glow_color', [255, 255, 255, 180]),
@@ -1120,9 +1223,12 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     _apply_color_to_button('media_header_fill_color_btn', '_media_header_fill_color')
     _apply_color_to_button('media_header_text_color_btn', '_media_header_text_color')
     _apply_color_to_button('media_header_border_color_btn', '_media_header_border_color')
+    _apply_color_to_button('media_volume_track_color_btn', '_media_volume_track_color')
     _apply_color_to_button('media_volume_fill_color_btn', '_media_volume_fill_color')
     _apply_color_to_button('media_volume_border_color_btn', '_media_volume_border_color')
+    _apply_color_to_button('media_playback_progress_track_color_btn', '_media_progress_track_color')
     _apply_color_to_button('media_playback_progress_fill_color_btn', '_media_progress_fill_color')
+    _apply_color_to_button('media_playback_progress_shadow_color_btn', '_media_progress_shadow_color')
     _apply_color_to_button('media_playback_progress_glow_color_btn', '_media_progress_glow_color')
 
     m_monitor_sel = media_config.get('monitor', tab._widget_default('media', 'monitor', 'ALL'))
@@ -1305,6 +1411,7 @@ def save_media_settings(tab: WidgetsTab) -> dict:
         'header_fill_color': _qcolor_to_list(tab._media_header_fill_color),
         'header_text_color': _qcolor_to_list(tab._media_header_text_color),
         'header_border_color': _qcolor_to_list(tab._media_header_border_color),
+        'spotify_volume_track_color': _qcolor_to_list(tab._media_volume_track_color),
         'spotify_volume_fill_color': [
             tab._media_volume_fill_color.red(),
             tab._media_volume_fill_color.green(),
@@ -1320,7 +1427,9 @@ def save_media_settings(tab: WidgetsTab) -> dict:
         'show_controls': tab.media_show_controls.isChecked(),
         'playback_progress_enabled': tab.media_playback_progress_enabled.isChecked(),
         'playback_progress_height': tab.media_playback_progress_height.value(),
+        'playback_progress_track_color': _qcolor_to_list(tab._media_progress_track_color),
         'playback_progress_fill_color': _qcolor_to_list(tab._media_progress_fill_color),
+        'playback_progress_shadow_color': _qcolor_to_list(tab._media_progress_shadow_color),
         'playback_progress_shadow_enabled': tab.media_playback_progress_shadow_enabled.isChecked(),
         'playback_progress_glow_enabled': tab.media_playback_progress_glow_enabled.isChecked(),
         'playback_progress_glow_color': _qcolor_to_list(tab._media_progress_glow_color),

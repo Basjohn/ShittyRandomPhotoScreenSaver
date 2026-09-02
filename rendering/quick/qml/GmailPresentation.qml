@@ -247,7 +247,9 @@ OverlayWidget {
                     objectName: "gmailBoundary_" + messageRow.index
                     anchors.top: parent.top
                     width: parent.width
-                    height: visible ? gmailRoot.gmailModel.boundarySeparatorThickness : 0.0
+                    height: visible ? gmailRoot.scaleAwareStrokeWidth(
+                        gmailRoot.gmailModel.boundarySeparatorThickness
+                    ) : 0.0
                     visible: gmailRoot.gmailModel.showSeparators
                         && messageRow.boundaryBefore
                     color: gmailRoot.gmailModel.boundarySeparatorColor
@@ -412,7 +414,9 @@ OverlayWidget {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
-                    height: visible ? gmailRoot.gmailModel.separatorThickness : 0.0
+                    height: visible ? gmailRoot.scaleAwareStrokeWidth(
+                        gmailRoot.gmailModel.separatorThickness
+                    ) : 0.0
                     color: gmailRoot.gmailModel.separatorColor
                 }
             }
@@ -444,9 +448,9 @@ OverlayWidget {
         width: Math.min(190.0, parent.width)
         height: popupColumn.implicitHeight + 8.0
         radius: 6.0
-        color: "#ff2b2b2b"
-        border.width: 2.0
-        border.color: "#c89a9a9a"
+        color: gmailRoot.gmailModel.actionPopupSurfaceColor
+        border.width: gmailRoot.scaleAwareStrokeWidth(2.0)
+        border.color: gmailRoot.gmailModel.actionPopupBorderColor
         z: 100
 
         function actions() {
@@ -478,7 +482,8 @@ OverlayWidget {
                     width: popupColumn.width
                     height: Math.max(30.0, gmailRoot.gmailModel.fontSize * 1.8)
                     radius: 3.0
-                    color: actionHover.hovered ? "#dc3e3e3e" : "transparent"
+                    color: actionHover.hovered
+                        ? gmailRoot.gmailModel.actionPopupHoverColor : "transparent"
 
                     Row {
                         anchors.fill: parent
@@ -510,7 +515,7 @@ OverlayWidget {
                                 if (popupAction.modelData === "spam") return "Mark as Spam"
                                 return "Delete"
                             }
-                            color: "#ffffffff"
+                            color: gmailRoot.gmailModel.actionPopupTextColor
                             font.family: gmailRoot.gmailModel.fontFamily
                             font.pixelSize: 12.0
                             verticalAlignment: Text.AlignVCenter

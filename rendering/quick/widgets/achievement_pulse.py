@@ -8,7 +8,7 @@ accepted state into stable Qt models and presentation-only style/config values.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -48,19 +48,22 @@ from .host import (
     OverlayWidgetGeometry,
     RetainedOverlayWidget,
 )
+from .theme_projection import resolve_header_colors
 from .steam_common import (
     SteamCardFieldListModel,
+    SteamSemanticPalette,
     accepted_local_image_source,
     as_bool as _as_bool,
     bounded_float as _bounded_float,
     bounded_int as _bounded_int,
     optional_appid as _optional_appid,
     project_steam_card_style,
+    project_steam_semantic_palette,
     rgba as _rgba,
 )
 
 
-_STEAM_LOGO = Path(__file__).resolve().parents[3] / "images" / "Steam_Logo.png"
+_STEAM_LOGO = Path(__file__).resolve().parents[3] / "images" / "Steam_Logo_Cropped.png"
 _FIELD_DEFAULTS: tuple[tuple[str, bool], ...] = (
     ("total", True),
     ("latest", True),
@@ -84,6 +87,7 @@ class AchievementPulsePresentationConfig:
     header_fill_color: tuple[int, int, int, int] = (11, 16, 22, 230)
     header_border_color: tuple[int, int, int, int] = (229, 237, 244, 216)
     header_text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
+    semantic_palette: SteamSemanticPalette = field(default_factory=SteamSemanticPalette)
     selection_mode: str = "most_recent"
     custom_appid: int | None = None
     field_visibility: tuple[tuple[str, bool], ...] = _FIELD_DEFAULTS
@@ -135,7 +139,7 @@ class AchievementPulsePresentationConfig:
             )
             for field_id, default in _FIELD_DEFAULTS
         )
-        return cls(
+        config = cls(
             font_family=str(merged_card.get("font_family", "Inter") or "Inter"),
             font_size=_bounded_int(merged_card.get("font_size"), 14, 8, 96),
             text_color=_rgba(
@@ -211,6 +215,30 @@ class AchievementPulsePresentationConfig:
             show_connection_info_icon=_as_bool(
                 merged_shared.get("show_connection_info_icon"), True
             ),
+        )
+        header_fill, header_border, header_text = resolve_header_colors(
+            "achievement_pulse",
+            values=card if isinstance(card, Mapping) else {},
+            defaults=default_card if isinstance(default_card, Mapping) else {},
+            fill=config.header_fill_color,
+            border=config.header_border_color,
+            text=config.header_text_color,
+        )
+        semantic_palette = project_steam_semantic_palette(
+            fallback=SteamSemanticPalette(
+                artwork_surface=(12, 15, 20, 230),
+                artwork_border=(255, 255, 255, 175),
+                artwork_gradient_start=(105, 115, 124, 255),
+                artwork_gradient_middle=(105, 115, 124, 255),
+                artwork_gradient_end=(23, 27, 32, 255),
+            )
+        )
+        return replace(
+            config,
+            header_fill_color=header_fill,
+            header_border_color=header_border,
+            header_text_color=header_text,
+            semantic_palette=semantic_palette,
         )
 
     @property
@@ -680,6 +708,46 @@ class AchievementPulsePresentationModel(QObject):
     @Property(QColor, notify=stateChanged)
     def capsuleBorderColor(self) -> QColor:
         return QColor(*self.config.capsule_border_color)
+
+    @Property(QColor, notify=stateChanged)
+    def steamInfoSurfaceColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.info_surface)
+
+    @Property(QColor, notify=stateChanged)
+    def steamInfoBorderColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.info_border)
+
+    @Property(QColor, notify=stateChanged)
+    def steamInfoTextColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.info_text)
+
+    @Property(QColor, notify=stateChanged)
+    def steamTooltipSurfaceColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.tooltip_surface)
+
+    @Property(QColor, notify=stateChanged)
+    def steamTooltipBorderColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.tooltip_border)
+
+    @Property(QColor, notify=stateChanged)
+    def steamTooltipTextColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.tooltip_text)
+
+    @Property(QColor, notify=stateChanged)
+    def steamArtworkSurfaceColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.artwork_surface)
+
+    @Property(QColor, notify=stateChanged)
+    def steamArtworkBorderColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.artwork_border)
+
+    @Property(QColor, notify=stateChanged)
+    def steamArtworkGradientStartColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.artwork_gradient_start)
+
+    @Property(QColor, notify=stateChanged)
+    def steamArtworkGradientEndColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.artwork_gradient_end)
 
     @Property(str, notify=stateChanged)
     def fontFamily(self) -> str:
