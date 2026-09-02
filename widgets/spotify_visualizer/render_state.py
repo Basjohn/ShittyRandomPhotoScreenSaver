@@ -583,25 +583,12 @@ class ResolvedVisualizerPresentation:
     baseline_aspect_ratio: float
     uniform_visual_scale: float
     viewport_extent: SizeTuple
-    # Fade authority. There is exactly ONE authored temporal fade authority for
-    # the whole visualizer presentation (the single animation/progress owned by
-    # ``presentation_fade`` — see that module's "one animation, one progress
-    # scalar" contract). ``scene_fade`` and ``content_fade`` are two DERIVED
-    # per-layer values of that single authority, mirroring the legacy
-    # scene-fade (card) / gpu-fade (bars) split:
-    #   * ``scene_fade``   -> the presentation-root/card opacity
-    #                         (``scene_controller`` applies it via
-    #                         ``root.setOpacity``);
-    #   * ``content_fade`` -> the GL content opacity fed to shader ``u_fade`` by
-    #                         every mode renderer. It is the Quick-era successor
-    #                         of the authored bars-stagger fade
-    #                         (``presentation_fade.bars_fade_from_progress``),
-    #                         i.e. content arrives after the card is established.
-    # content_fade is therefore a distinct LAYER value, NOT a second clock. It
-    # must always be a pure function of the same fade progress as scene_fade;
-    # never drive it from an independent animation/timer, and never treat it as a
-    # permanent second fade authority. Pre-cutover the Quick publisher leaves it
-    # at 1.0 because the live fade animation is not yet wired into this path.
+    # Quick fade layers. ``scene_fade`` is the owner-authored visualizer scene
+    # reveal resolved by ``QuickDisplayVisualizerOwner``. ``content_fade`` is
+    # the renderer-side layer used for mode-transition/content attenuation and
+    # is multiplied at the retained render seam by inherited Quick opacity
+    # (including scene/startup reveal). Neither field owns a timer or cadence;
+    # no QWidget/presentation-fade side channel exists.
     current_aspect_ratio: float
     scene_fade: float
     content_fade: float

@@ -1,8 +1,9 @@
 """Semantic runtime Widget Theme specification.
 
-A Widget Theme is a named visual bundle applied to the retained Qt Quick runtime
-surfaces (ordinary widget cards and the retained Context Menu), plus a recommended
-card **surface material**. It is the runtime-scene counterpart of the QWidget
+A Widget Theme is a named visual bundle supplying the retained Qt Quick runtime's
+global/default card palette and the Context Menu palette, plus a recommended card
+**surface material**. Explicit per-widget card swatches remain higher-precedence
+family overrides; the Context Menu has no family override layer. It is the runtime-scene counterpart of the QWidget
 Settings theme (`ui/settings_theme_spec.py`) and deliberately mirrors that module's
 shape (frozen dataclass, schema version, semantic role maps, compiled Default Dark)
 so the two theme systems share one mental model and one file root.
@@ -76,10 +77,10 @@ class WidgetThemeSpec:
     ``linked_settings_theme_id`` names the Settings theme this Widget Theme mirrors
     for ``Keep Synced``; ``None`` means unlinked.
 
-    ``colors`` is a semantic role map (mirroring ``SettingsThemeSpec.colors``) for
-    the runtime surfaces this theme paints. Phase 1 ships the palette schema and
-    Default Dark values; the runtime *wiring* of these roles onto cards/menu is a
-    later slice and must not add render cost.
+    ``colors`` is a semantic role map (mirroring ``SettingsThemeSpec.colors``).
+    Card roles are global defaults beneath explicit ``widgets.<family>.card.*``
+    settings; Context Menu roles are direct/global because it has no family layer.
+    Phase 1 ships the schema/Default Dark values before retained runtime wiring.
     """
 
     theme_id: str
@@ -147,7 +148,7 @@ class WidgetThemeSpec:
 # no external .srwtheme exists. Default Dark recommends the cheap ``normal`` card
 # material and links to the compiled Default Dark Settings theme.
 #
-# Card defaults mirror OverlayCardStyle; Context Menu roles mirror the Settings
+# Card baseline defaults mirror OverlayCardStyle; Context Menu roles mirror the Settings
 # theme ``context.*`` values so the menu can later inherit the Widget Theme rather
 # than the QWidget Settings theme.
 

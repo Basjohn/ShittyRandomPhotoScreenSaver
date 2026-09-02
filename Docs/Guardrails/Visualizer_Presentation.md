@@ -1,6 +1,6 @@
 # Visualizer Presentation Guardrails
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 Read for visualizer cadence, source freshness, render state, fade/readiness, shell/clip policy,
 geometry, and presentation work.
@@ -260,6 +260,40 @@ the new extent, Cancel restores the old committed extent, and ending CUSTOM remo
 and authored render radius remains a fraction of actual card height rather than being divided by domain height. Velocity,
 collision and BTF semantics stay coherent: collision/spawn radii and collision-only gap/correction distances multiply by
 `domain_h` when mapped back into the expanded world, with an exact canonical 1x1 no-op. Geometry never becomes a clock.
+
+## 9A. Extreme viewport scaling contract — axis, amplitude and time are separate
+
+Edge resizing changes `viewport_extent`; it does **not** grant permission to apply one generic "large viewport" multiplier to every reaction. For every mode/effect, identify all five quantities separately:
+
+```text
+1. authored logical/normalized response
+2. viewport/world geometry (width and height independently)
+3. uniform visual scale (stroke/radius/pixel-like authored size)
+4. temporal response (smoothing, decay, hysteresis, travel rate)
+5. final physical-pixel displacement/velocity
+```
+
+A bigger physical displacement is not automatically a bug. Wide/tall CUSTOM viewports are allowed to make authored normalized motion occupy more pixels. Compensation is justified only for a **proven presentation-temporal failure** (aliasing/flicker/rate-zone change/etc.), and then only on the axis and channel that causes it. Never compensate twice by changing both source magnitude and presentation timing.
+
+Axis rules:
+
+- a Y-only effect may use viewport **height** when a proven temporal correction is required; width alone must not alter it;
+- an X-only effect may use viewport **width** when a proven temporal correction is required; height alone must not alter it;
+- an isotropic 2-D effect may use both axes only when its actual geometry requires both; do not casually use `max(width_ratio, height_ratio)` as a generic "large viewport" proxy;
+- stroke widths, glow radii and other pixel-like authored sizes normally follow `uniform_visual_scale`, not edge-expanded viewport extent;
+- BeatEngine/DSP/source magnitude is upstream authored signal and must not be attenuated to hide a renderer/presentation scaling defect.
+
+Current five-mode audit (2026-09-02):
+
+| Mode | Edge-expanded geometry | Temporal/scaling status | Guardrail |
+| --- | --- | --- | --- |
+| **Spectrum** | Bars fill the current vertical field; width changes bar distribution/width, height changes bar travel distance and renderer segment density. | **R-76 proven/fixed:** live Quick visual smoothing scales from expanded vertical bar-field height only; continuous-bar hysteresis uses one canonical internal temporal segment domain. | Width alone must not slow bars. Do not also change BeatEngine, `0.55` transfer, height boost or peak lifetime without separate evidence. |
+| **Bubble** | Logical world expands independently on X/Y; positions/trails/collisions project through that world while heads stay circular and renderer head response remains authored. | R-69/BTF already cover viewport projection. No new temporal multiplier is admitted by this audit. | Never globally compress head/Ghost radius, motion or amplitude because the viewport is large. Ripple-wake correction is a narrowly separate presentation footprint contract. |
+| **Oscilloscope** | Waveform X spans the current width; waveform amplitude/line placement uses the current vertical field. Vertical line-spacing control scales with height; line/glow thickness follows uniform scale. | 60/120 ms energy filtering and waveform blend remain authored/viewport-neutral. Continuous antialiased curves naturally traverse more pixels in a taller card; no source-proven flicker seam was found. | Do not pre-emptively slow/attenuate the waveform for tall cards. If physical tall-only strobing is observed, trace Y displacement first and apply at most one height-local presentation correction. |
+| **Sine** | Wave/amplitude is normalized into current height; phase/travel spans current width; vertical line spacing scales with height; line/glow thickness follows uniform scale. | Reactivity/envelopes are viewport-neutral. Extreme width therefore increases physical X travel per normalized phase and extreme height increases physical Y displacement, but current source contains no discrete viewport-dependent rate switch analogous to Spectrum. | Treat extreme-wide X travel and extreme-tall Y motion as **watchpoints**, not bugs. Any future fix must target the implicated axis/channel, never generic source sensitivity. |
+| **DevCurve** | Four normalized curves fill the content rect. Quick explicitly rebases pixel-like outline/specular geometry with baseline/current normalized scales. | Solver energy smoothing/slope limits and foreground/specular travel are normalized-domain. Extreme width can increase physical X travel speed and extreme height can increase physical Y displacement, but no viewport-dependent temporal branch/reset was found. | Watch physical X travel/specular speed at very wide extents. Preserve the existing normalized-scale renderer correction; do not globally retune solver energy/amplitude. |
+
+The audit conclusion is deliberately conservative: **Spectrum is the only additional source-proven temporal scaling bug in this pass.** Oscilloscope/Sine/DevCurve have plausible physical-pixel scaling watchpoints, but changing them without operator evidence would risk repeating the R-69 over-compensation failure. When a new extreme-aspect symptom appears, compare canonical / wide-only / tall-only / wide+tall using the same recorded logical input before tuning anything.
 
 ## 10. Readiness
 

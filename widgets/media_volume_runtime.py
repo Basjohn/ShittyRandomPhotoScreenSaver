@@ -3,7 +3,7 @@
 ``MediaVolumeRuntimeService`` is a per-display lease.  Production leases in
 one runtime generation join a single owner for the Core Audio controller,
 accepted provider/process target, read/write generations, optimistic level and
-write debounce.  The temporary QWidget remains a presentation/input consumer.
+write debounce. Retained Quick remains the presentation/input consumer.
 """
 from __future__ import annotations
 

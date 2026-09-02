@@ -4,9 +4,6 @@ This package contains the refactored Spotify visualizer components:
 - audio_worker: Audio capture and FFT processing
 - beat_engine: Shared beat engine with smoothing
 
-Note: SpotifyVisualizerWidget is still at widgets/spotify_visualizer_widget.py
-and has not been moved into this package yet.
-
 Usage:
     from widgets.spotify_visualizer import get_shared_spotify_beat_engine
 """

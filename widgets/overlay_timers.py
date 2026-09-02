@@ -1,15 +1,8 @@
-"""Centralised helpers for overlay widget timers.
+"""Centralised recurring-timer helpers for retained runtime services.
 
-This module standardises how overlay widgets (clock, weather, media,
-Reddit, Spotify visualiser, etc.) create and manage recurring timers.
-
-Goals:
-- Prefer ThreadManager.schedule_recurring for UI-thread timers so timing
-  is centralised and timers are auto-registered with ResourceManager.
-- Provide a small, duck-typed API that widgets can call without needing
-  direct imports of ThreadManager / ResourceManager.
-- Keep behaviour identical to the existing per-widget QTimer code paths
-  while reducing boilerplate and the risk of orphaned timers.
+Weather, Media, Gmail and Steam services use the shared ``ThreadManager``
+recurring scheduler through this thin QObject-facing handle. There is no
+widget-local fallback: missing scheduler ownership is a loud runtime error.
 """
 from __future__ import annotations
 
@@ -72,9 +65,8 @@ class OverlayTimerHandle:
 def _get_thread_manager_for(widget: QObject) -> Optional[Any]:
     """Best-effort lookup of the shared ThreadManager for a widget.
 
-    We first look for ``_thread_manager`` on the widget itself, then on
-    its parent. This mirrors the pattern used by existing widgets where
-    DisplayWidget injects a ThreadManager instance.
+    We first look for ``_thread_manager`` on the QObject itself, then on
+    its parent. Retained model/service consumers may expose either shape.
     """
 
     try:
@@ -110,13 +102,11 @@ def create_overlay_timer(
 ) -> OverlayTimerHandle:
     """Create a recurring UI timer for an overlay widget.
 
-    When a ThreadManager is available on the widget (or its parent), we
-    use ``schedule_recurring`` so the timer participates in centralised
-    timing and ResourceManager tracking. Otherwise we fall back to a
-    widget-local QTimer parented to ``widget``.
+    The target (or its parent) must expose the shared ``ThreadManager``;
+    ``schedule_recurring`` is the only accepted recurring-timer authority.
 
     Args:
-        widget: Target widget (typically an overlay QLabel/QWidget).
+        widget: Target QObject/runtime consumer that owns timer lifetime.
         interval_ms: Interval in milliseconds.
         callback: Zero-arg callable invoked each tick.
         description: Optional description for diagnostics.

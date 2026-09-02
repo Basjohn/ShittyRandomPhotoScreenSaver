@@ -21,8 +21,8 @@ perform the middle operation on the GUI/Quick synchronization side.
    presentation.
 
 It owns no clock, cadence, timer, queue or paint acknowledgement: it takes the
-latest state and returns. It never reads QWidget/QObject presentation state and
-never calls the legacy ``present_tick``.
+latest state and returns. It never reads QWidget/QObject presentation state or
+invokes a second presentation owner.
 """
 
 from __future__ import annotations

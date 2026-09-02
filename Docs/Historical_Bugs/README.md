@@ -152,3 +152,5 @@ duplicate standalone records are intentionally absent.
 The standalone split is complete. `Docs/Historical_Bugs.md` is navigation/status only, not a fallback
 store for unsplit incident bodies.
 
+
+- [R-77 — Post-Phase-I QWidget/runtime residue required coordinated retirement](R-77_Post_Phase_I_QWidget_Runtime_Residue_Required_Coordinated_Retirement.md)

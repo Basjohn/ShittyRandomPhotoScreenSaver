@@ -28,6 +28,7 @@ No other R-series record is current implementation sequencing. Current migration
 
 ## Standalone R Records
 
+- [R-77 — Post-Phase-I QWidget/runtime residue required coordinated retirement](Historical_Bugs/R-77_Post_Phase_I_QWidget_Runtime_Residue_Required_Coordinated_Retirement.md)
 - [R-74 — Quick Card Shadows Could Overpaint Sibling Widget Content](Historical_Bugs/R-74_Quick_Card_Shadow_Sibling_Subtree_Overpaint.md) — **IMPLEMENTED / AWAITING VALIDATION**. Production ordinary shadows now live in one display underlay below all ordinary cards.
 - [R-76 — Spectrum viewport temporal scaling axis / solid-domain migration seam](Historical_Bugs/R-76_Spectrum_Viewport_Temporal_Scaling_Axis_And_Solid_Domain.md)
 - [R-73 — Quick Card-Shadow Extra Offset Translation And Visualizer Omission](Historical_Bugs/R-73_Quick_Card_Shadow_Extra_Offset_Translation_And_Visualizer_Omission.md)

@@ -1,6 +1,6 @@
 """Qt Quick production presentation package.
 
-The legacy QWidget presenter remains the production path until the explicit
+Retained Qt Quick is the production presentation path after the explicit
 cutover phase.  Modules in this package own the replacement Quick presentation
 architecture as it lands slice by slice.
 """

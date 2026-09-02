@@ -1,10 +1,9 @@
-"""Spotify Visualizer Tick Pipeline — extracted from spotify_visualizer_widget.py.
+"""Spotify Visualizer authored logical tick pipeline.
 
-Contains the core _on_tick logic, heartbeat transient detection, bubble
-simulation dispatch, and GPU frame push.  All functions accept the widget
-instance as the first parameter to preserve the original interface.
-
-Phase 2 of the Visualizer Architecture Split.
+The sole logical runtime advances source-derived mode state here and publishes
+immutable ``VisualizerLogicalFrame`` snapshots.  Retained Qt Quick owns all
+presentation, geometry and GL commit work; this module owns no QWidget/painter
+or presentation cadence.
 """
 from __future__ import annotations
 
@@ -14,8 +13,6 @@ import time
 from collections.abc import Sequence
 from typing import Any, Optional
 
-from PySide6.QtCore import QRect
-from shiboken6 import Shiboken
 
 from core.logging.logger import (
     get_logger,
@@ -24,7 +21,7 @@ from core.logging.logger import (
     is_viz_logging_enabled,
 )
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
-from widgets.spotify_visualizer import mode_capabilities, mode_transition
+from widgets.spotify_visualizer import mode_capabilities
 from widgets.spotify_visualizer.logical_runtime import coerce_identity
 from widgets.spotify_visualizer.reactivity_diagnostics import (
     maybe_log_logical_publication,
@@ -35,10 +32,6 @@ from widgets.spotify_visualizer.render_state import (
     VisualizerLogicalFrame,
     VisualizerProtectedEdge,
     VisualizerTransientState,
-)
-from widgets.spotify_visualizer.spectrum_presentation_smoothing import (
-    reset_widget_spectrum_presentation_smoothing,
-    resolve_widget_spectrum_presentation,
 )
 
 logger = get_logger(__name__)
@@ -994,8 +987,9 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         widget._bubble_geometry_diag_burst_remaining = burst_remaining
         widget._bubble_geometry_diag_last_playing = playing
 
-    # Temporary old-presenter mirror. The immutable controller-owned result is
-    # authoritative; no Quick renderer reads these QWidget adapter fields.
+    # Compatibility mirror for logical-state consumers. The immutable
+    # controller-owned result is authoritative; retained Quick does not read
+    # these mutable mirror fields.
     widget._bubble_pos_data = list(resolved.positions)
     widget._bubble_extra_data = list(resolved.extras)
     widget._bubble_trail_data = list(resolved.trails)
@@ -1196,328 +1190,12 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
 # GPU frame push
 # ------------------------------------------------------------------
 
-def push_gpu_frame(
-    widget: Any,
-    parent: Any,
-    now_ts: float,
-    changed: bool,
-    first_frame: bool,
-) -> bool:
-    """Push a visualizer frame to the GPU overlay if available.
-
-    Returns True if GPU rendering was used.
-    """
-    if parent is None or not hasattr(parent, "push_spotify_visualizer_frame"):
-        return False
-
-    mode_str = widget._vis_mode_str
-    if mode_str == "spectrum":
-        presentation_bars, presentation_changed = resolve_widget_spectrum_presentation(
-            widget,
-            widget._display_bars,
-            now_ts=now_ts,
-            first_frame=first_frame,
-        )
-        changed = changed or presentation_changed
-    else:
-        presentation_bars = list(widget._display_bars)
-        reset_widget_spectrum_presentation_smoothing(widget)
-
-    try:
-        resolve_gpu_target_rect = getattr(widget, "_resolve_gpu_target_rect", None)
-        if callable(resolve_gpu_target_rect):
-            current_geom = resolve_gpu_target_rect()
-        else:
-            current_geom = widget.geometry()
-    except Exception as e:
-        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        current_geom = None
-    last_geom = widget._last_gpu_geom
-    geom_changed = last_geom is None or (current_geom is not None and current_geom != last_geom)
-
-    # ONE fade authority, TWO published consumers of the same progress:
-    # the authored card pixels use the progress directly, the visualizer
-    # shader applies the authored stagger to that same progress. They are
-    # resolved and published together so no layer can drift onto a second
-    # curve or a QWidget opacity side-channel.
-    scene_fade = widget._get_scene_fade_factor(now_ts)
-    bars_fade = widget._get_gpu_fade_factor(now_ts)
-    # Apply mode-transition crossfade (1.0 when idle, 0→1 during switch).
-    #
-    # It multiplies the SHADER only. The authored card has always faded on
-    # its own reveal curve alone - that is what the QWidget opacity effect
-    # used to do - and stacking the crossfade on top of it made a mode
-    # switch look dead for most of the transition.
-    transition_fade = widget._mode_transition_fade_factor(now_ts)
-    bars_fade *= transition_fade
-    prev_fade = widget._last_gpu_fade_sent
-    prev_bars_fade = float(getattr(widget, "_last_gpu_bars_fade_sent", -1.0))
-    widget._last_gpu_fade_sent = scene_fade
-    widget._last_gpu_bars_fade_sent = bars_fade
-    # The bars curve moves faster than the scene curve inside its window, so
-    # a bars-only delta must still count as a change worth publishing.
-    fade_changed = (
-        prev_fade < 0.0
-        or abs(scene_fade - prev_fade) >= 0.01
-        or prev_bars_fade < 0.0
-        or abs(bars_fade - prev_bars_fade) >= 0.01
-    )
-    need_card_update = fade_changed
-
-    transitioning = widget._mode_transition_phase != 0
-    # Animated modes must push every tick because their visuals change
-    # continuously independent of bar data.
-    animated_mode = (widget._vis_mode_str != 'spectrum') or getattr(widget, '_rainbow_enabled', False)
-    should_push = changed or fade_changed or first_frame or geom_changed or transitioning or animated_mode
-    if not should_push:
-        return False
-
-    _gpu_push_start = time.time()
-    from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
-    extra = build_gpu_push_extra_kwargs(widget, mode_str, widget._engine)
-
-    first_frame_probe_key = None
-    primer_problems: list[str] = []
-    if first_frame:
-        first_frame_probe_key = (
-            str(mode_str or "unknown"),
-            int(getattr(widget, "_display_bars_source_generation", -1) or -1),
-            int(getattr(widget, "_display_bars_source_activation", -1) or -1),
-            int(getattr(widget, "_pending_engine_generation", -1) or -1),
-            int(getattr(widget, "_pending_engine_activation_id", -1) or -1),
-            int(getattr(widget, "_bar_count", 0) or 0),
-        )
-        if getattr(widget, "_first_overlay_push_probe_key", None) != first_frame_probe_key:
-            log_render = getattr(widget, "_log_active_render_state_snapshot", None)
-            if callable(log_render):
-                try:
-                    log_render(reason="before_first_overlay_push")
-                except Exception:
-                    logger.debug("[SPOTIFY_VIS] Failed to log render state before first overlay push", exc_info=True)
-            widget._first_overlay_push_probe_key = first_frame_probe_key
-        primer_problems = _collect_first_frame_primer_problems(widget, parent, mode_str)
-        if primer_problems and is_viz_logging_enabled():
-            logger.info(
-                "[SPOTIFY_VIS][FIRST_FRAME_PRIMER] mode=%s problems=%s",
-                mode_str,
-                ",".join(primer_problems),
-            )
-
-    if (
-        mode_str == 'sine_wave'
-        and is_viz_diagnostics_enabled()
-    ):
-        crawl_now = time.time()
-        if crawl_now - widget._crawl_last_log_ts >= 0.75:
-            eb = extra.get('energy_bands')
-            mid_val = float(getattr(eb, 'mid', 0.0)) if eb is not None else 0.0
-            high_val = float(getattr(eb, 'high', 0.0)) if eb is not None else 0.0
-            crawl_drive = max(0.0, min(1.2, mid_val * 0.65 + high_val * 0.35))
-            logger.debug(
-                (
-                    "[SPOTIFY_VIS][SINE][CRAWL] slider=%.2f mid=%.3f "
-                    "high=%.3f drive=%.3f playing=%s"
-                ),
-                float(getattr(widget, '_sine_crawl_amount', 0.0)),
-                mid_val,
-                high_val,
-                crawl_drive,
-                widget._spotify_playing,
-            )
-            widget._crawl_last_log_ts = crawl_now
-
-    border_width_px = float(widget._border_width)
-
-    effective_fade = 0.0 if primer_problems else scene_fade
-    effective_bars_fade = 0.0 if primer_problems else bars_fade
-
-    used_gpu = parent.push_spotify_visualizer_frame(
-        bars=presentation_bars,
-        bar_count=widget._bar_count,
-        segments=widget._dynamic_bar_segments(),
-        fill_color=widget._bar_fill_color,
-        border_color=widget._bar_border_color,
-        fade=effective_fade,
-        bars_fade=effective_bars_fade,
-        playing=widget._spotify_playing,
-        ghosting_enabled=widget._ghosting_enabled,
-        ghost_alpha=widget._ghost_alpha,
-        ghost_decay=widget._ghost_decay_rate,
-        vis_mode=mode_str,
-        single_piece=widget._spectrum_single_piece,
-        slanted=False,
-        border_radius=widget._spectrum_border_radius,
-        border_width_px=border_width_px,
-        **extra,
-    )
-    _gpu_push_elapsed = (time.time() - _gpu_push_start) * 1000.0
-    if _gpu_push_elapsed > 20.0 and is_perf_metrics_enabled():
-        logger.warning("[PERF] [SPOTIFY_VIS] Slow GPU push: %.2fms", _gpu_push_elapsed)
-
-    if first_frame and used_gpu and not primer_problems:
-        log_render = getattr(widget, "_log_active_render_state_snapshot", None)
-        if callable(log_render):
-            try:
-                log_render(reason="after_first_overlay_push")
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to log render state after first overlay push", exc_info=True)
-        _warn_on_first_frame_guard_mismatch(widget, parent)
-
-    if used_gpu:
-        try:
-            if current_geom is None:
-                resolve_gpu_target_rect = getattr(widget, "_resolve_gpu_target_rect", None)
-                if callable(resolve_gpu_target_rect):
-                    current_geom = resolve_gpu_target_rect()
-                else:
-                    current_geom = widget.geometry()
-            widget._last_gpu_geom = QRect(current_geom)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            widget._last_gpu_geom = None
-        # Card/background/shadow still repaint via stylesheet
-        if need_card_update:
-            widget.update()
-        if not primer_problems:
-            widget._has_pushed_first_frame = True
-            widget._first_overlay_push_probe_key = None
-            widget._on_first_frame_after_cold_start()
-    return used_gpu
 
 
-def presentation_owned_idle_is_active(widget: Any, mode: Any = None) -> bool:
-    """True when the visible scene is presentation-owned and needs no source.
-
-    `presentation_ready` and `reactive_source_ready` are different questions.
-    Paused Spectrum is the mixed state that forced the distinction: its card and
-    static baseline are built entirely by presentation, while real bars still
-    require a fresh current-activation source frame that cannot arrive while
-    capture is paused.
-
-    Treating absent source identity as a presentation blocker in that state is
-    what forced effective fade to zero and refused the first-frame handoff, so
-    the card stayed invisible until Play.
-    """
-
-    mode_key = mode_capabilities.mode_key(
-        mode if mode is not None else getattr(widget, "_vis_mode_str", "")
-    )
-    if bool(getattr(widget, "_spotify_playing", False)):
-        return False
-    return (
-        mode_capabilities.allows_idle_reveal(mode_key)
-        and mode_capabilities.has_presentation_owned_idle_scene(mode_key)
-    )
 
 
-def _collect_first_frame_primer_problems(widget: Any, parent: Any, mode: str) -> list[str]:
-    """Return stale pre-push overlay state that requires a hidden priming push."""
-    overlay = getattr(parent, "_spotify_bars_overlay", None) if parent is not None else None
-    if overlay is None:
-        return []
-
-    problems: list[str] = []
-    mode_key = str(mode or "unknown").lower()
-    overlay_mode = str(getattr(overlay, "_vis_mode", "") or "").lower()
-    overlay_activation = getattr(overlay, "_activation_id", None)
-    overlay_generation = getattr(overlay, "_engine_generation", None)
-    display_source_generation = int(getattr(widget, "_display_bars_source_generation", -1) or -1)
-    display_source_activation = int(getattr(widget, "_display_bars_source_activation", -1) or -1)
-    # Source authority is still required for reactive playback, but a
-    # presentation-owned idle scene is not waiting on it to become visible.
-    requires_authoritative_source = (
-        _mode_requires_authoritative_first_source(mode_key)
-        and not presentation_owned_idle_is_active(widget, mode_key)
-    )
-
-    if overlay_mode and overlay_mode != mode_key:
-        problems.append("overlay_mode_stale")
-
-    pending_mode_resets = getattr(overlay, "_pending_mode_resets", None)
-    if pending_mode_resets and mode_key in set(pending_mode_resets):
-        problems.append("overlay_pending_mode_reset")
-
-    if requires_authoritative_source and display_source_generation < 0:
-        problems.append("display_source_generation_missing")
-    if requires_authoritative_source and display_source_activation < 0:
-        problems.append("display_source_activation_missing")
-    if display_source_generation >= 0 and overlay_generation != display_source_generation:
-        problems.append("overlay_generation_stale")
-    if display_source_activation >= 0 and overlay_activation != display_source_activation:
-        problems.append("overlay_activation_stale")
-
-    return problems
 
 
-def _warn_on_first_frame_guard_mismatch(widget: Any, parent: Any) -> None:
-    """Emit an explicit warning when first-push guardrail state looks wrong."""
-    overlay = getattr(parent, "_spotify_bars_overlay", None) if parent is not None else None
-    overlay_activation = getattr(overlay, "_activation_id", None) if overlay is not None else None
-    overlay_generation = getattr(overlay, "_engine_generation", None) if overlay is not None else None
-    display_source_generation = int(getattr(widget, "_display_bars_source_generation", -1) or -1)
-    display_source_activation = int(getattr(widget, "_display_bars_source_activation", -1) or -1)
-    waiting_engine = bool(getattr(widget, "_waiting_for_fresh_engine_frame", False))
-    waiting_frame = bool(getattr(widget, "_waiting_for_fresh_frame", False))
-    mode = str(getattr(widget, "_vis_mode_str", "unknown") or "unknown")
-    requires_authoritative_source = (
-        _mode_requires_authoritative_first_source(mode)
-        and not presentation_owned_idle_is_active(widget, mode)
-    )
-    try:
-        display_max = max(getattr(widget, "_display_bars", []) or [0.0])
-    except Exception:
-        display_max = 0.0
-    staged_zero_data = (
-        display_max <= 0.01
-        and display_source_generation < 0
-        and not waiting_engine
-        and not requires_authoritative_source
-    )
-
-    if staged_zero_data:
-        return
-
-    problems: list[str] = []
-    if waiting_engine:
-        problems.append("waiting_engine_after_push")
-    if requires_authoritative_source and display_source_generation < 0:
-        problems.append("display_missing_source_generation")
-    if requires_authoritative_source and display_source_activation < 0:
-        problems.append("display_missing_source_activation")
-    if display_max > 0.01 and display_source_generation < 0:
-        problems.append("display_missing_source_generation")
-    if display_source_generation >= 0 and overlay_generation != display_source_generation:
-        problems.append("overlay_generation_mismatch")
-    if display_source_activation >= 0 and overlay_activation != display_source_activation:
-        problems.append("overlay_activation_mismatch")
-    if (
-        waiting_frame
-        and (
-            waiting_engine
-            or display_source_generation < 0
-            or overlay_generation != display_source_generation
-            or overlay_activation != display_source_activation
-        )
-    ):
-        problems.append("waiting_frame_after_push")
-
-    if not problems:
-        return
-
-    logger.warning(
-        "[!!!!][SPOTIFY_VIS][FIRST_FRAME_GUARD] mode=%s problems=%s display_max=%.3f "
-        "display_source_generation=%s display_source_activation=%s "
-        "overlay_generation=%s overlay_activation=%s waiting_engine=%s waiting_frame=%s",
-        mode,
-        ",".join(problems),
-        display_max,
-        display_source_generation,
-        display_source_activation,
-        overlay_generation,
-        overlay_activation,
-        waiting_engine,
-        waiting_frame,
-    )
 
 
 # ------------------------------------------------------------------
@@ -1673,129 +1351,12 @@ def log_audio_latency_metrics(
 # Main tick entry point
 # ------------------------------------------------------------------
 
-def on_tick(widget: Any) -> None:
-    """Run one logical step and present it on the GUI thread.
-
-    Retained for the GUI-driven paths that still call the whole tick directly
-    (tests, replay harnesses, and any runtime without a logical thread). The
-    logical runtime calls `logical_tick()` and the GUI presents through
-    `present_tick()`.
-    """
-
-    if logical_tick(widget) is None:
-        return
-    present_tick(widget)
 
 
-def present_tick(widget: Any) -> bool:
-    """GUI-thread half: turn the freshest logical frame into a pushed frame.
-
-    Owns everything the logical thread must not touch - widget geometry, the
-    presentation fade, card pixels and the compositor publish.
-    """
-
-    if not Shiboken.isValid(widget):
-        return False
-    frame = widget._logical_mailbox.take() if getattr(widget, "_logical_mailbox", None) else None
-    if frame is None:
-        return False
-    payload = frame.state
-    if not isinstance(payload, VisualizerLogicalFrame):
-        logger.error(
-            "[SPOTIFY_VIS] Rejected non-immutable logical publication: %s",
-            type(payload).__name__,
-        )
-        return False
-    generation = coerce_identity(getattr(widget, "_runtime_generation", None))
-    if (
-        int(frame.generation) != payload.runtime_generation
-        or int(frame.activation_id) != payload.activation_id
-    ):
-        return False
-    if generation >= 0 and payload.runtime_generation != generation:
-        # A retired generation's frame must never be presented. `coerce_identity`
-        # keeps a valid generation 0 as 0 so this fence stays armed for the first
-        # generation instead of being disabled by a -1 sentinel.
-        return False
-
-    engine = getattr(widget, "_engine", None)
-    current_engine_generation = coerce_identity(
-        getattr(widget, "_last_engine_generation_seen", None)
-    )
-    current_activation = coerce_identity(
-        getattr(widget, "_last_engine_activation_seen", None)
-    )
-    if engine is not None:
-        try:
-            current_engine_generation = coerce_identity(engine.get_generation_id())
-            current_activation = coerce_identity(engine.get_activation_id())
-        except Exception:
-            pass
-    if (
-        current_engine_generation >= 0
-        and payload.engine_generation != current_engine_generation
-    ):
-        return False
-    if current_activation >= 0 and payload.activation_id != current_activation:
-        return False
-    controller = getattr(widget, "runtime_controller", None)
-    current_mode = (
-        controller.mode_id
-        if controller is not None
-        else mode_capabilities.widget_mode_key(widget)
-    )
-    if payload.mode_id != current_mode:
-        return False
-
-    if payload.mode_reveal_ready:
-        # The logical half decided; the GUI half performs the reveal.
-        mode_transition.execute_mode_reveal(widget, payload.logical_timestamp)
-    if not payload.present_frame:
-        return False
-    parent = widget.parent()
-    first_frame = not widget._has_pushed_first_frame
-    return bool(
-        push_gpu_frame(
-            widget,
-            parent,
-            payload.logical_timestamp,
-            payload.changed,
-            first_frame,
-        )
-    )
 
 
-def request_logical_present(widget: Any) -> None:
-    """Ask the GUI thread to present the freshest logical frame.
-
-    Single-pending on purpose: while one present is outstanding, further logical
-    steps replace the mailbox slot instead of queueing another callback. A GUI
-    stall costs presentation freshness and never builds a backlog, and the
-    simulation keeps its own cadence regardless - which is the point of moving
-    cadence off the event loop.
-    """
-
-    if getattr(widget, "_logical_present_pending", False):
-        return
-    manager = getattr(widget, "_thread_manager", None)
-    if manager is None:
-        return
-    widget._logical_present_pending = True
-    try:
-        manager.run_on_ui_thread(present_logical_frame, widget)
-    except Exception:
-        widget._logical_present_pending = False
-        logger.debug("[SPOTIFY_VIS] Failed to request logical present", exc_info=True)
 
 
-def present_logical_frame(widget: Any) -> None:
-    """GUI-thread presentation of the freshest published logical frame."""
-
-    widget._logical_present_pending = False
-    try:
-        present_tick(widget)
-    except Exception:
-        logger.debug("[SPOTIFY_VIS] Logical present failed", exc_info=True)
 
 
 def _publish_logical_state(
@@ -1807,18 +1368,19 @@ def _publish_logical_state(
     present_frame: bool = True,
     protected_edges: Sequence[VisualizerProtectedEdge] = (),
 ) -> Optional[VisualizerLogicalFrame]:
-    """Publish one immutable logical result for the presentation half.
+    """Publish one immutable logical result for retained Quick synchronization.
 
-    Latest-wins: a GUI thread that cannot keep up loses freshness rather than
-    accumulating a backlog, and the simulation keeps its own cadence regardless.
-    A capture overtaken by mode replacement is an expected no-publication result.
+    Latest-wins: a presentation opportunity that cannot keep up loses freshness
+    rather than accumulating a backlog, while authored simulation keeps its own
+    cadence. A capture overtaken by mode replacement is an expected no-publication
+    result.
     """
 
-    from widgets.spotify_visualizer.legacy_render_snapshot_adapter import (
-        capture_legacy_visualizer_logical_frame,
+    from widgets.spotify_visualizer.logical_frame_capture import (
+        capture_visualizer_logical_frame,
     )
 
-    payload = capture_legacy_visualizer_logical_frame(
+    payload = capture_visualizer_logical_frame(
         widget,
         now_ts=now_ts,
         changed=changed,
@@ -1843,19 +1405,14 @@ def _publish_logical_state(
             logical=payload,
             revision=revision,
         )
-    if getattr(widget, "_logical_runtime", None) is not None:
-        # Only a thread-owned cadence needs marshalling; the GUI-driven path
-        # presents synchronously in `on_tick()`.
-        request_logical_present(widget)
     return payload
 
 
 def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
-    """Plain-data half: advance the simulation and publish the latest state.
+    """Advance authored logical state and publish the latest immutable frame.
 
-    Safe to run off the GUI thread. It must not read widget geometry, touch
-    QPixmap/GL state, or call `QWidget.update()`; `present_tick()` owns all of
-    that.
+    Safe to run off the GUI thread. It must not read presentation geometry,
+    touch QPixmap/GL state, or perform any retained Quick scene mutation.
     """
 
     _tick_entry_ts = time.time()
@@ -1901,19 +1458,17 @@ def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
     # Consume bars from engine
     changed, _any_nonzero = consume_engine_bars(widget, now_ts)
     _record_tick_phase("engine_consume")
-    # Let paused mode transitions progress even when fresh-engine wait short-circuits.
-    # Readiness only. The reveal itself mutates QWidget/QPixmap state and is
-    # executed by the presentation half, which is what makes this step safe to
-    # own off the GUI thread.
+    # Preserve logical transition-readiness shape even when fresh-engine wait
+    # short-circuits. Retained Quick owns the actual transition/reveal state.
     mode_reveal_ready = bool(widget._check_mode_teardown_ready(widget._engine, now_ts))
     _record_tick_phase("teardown_check")
     # If consume returned (False, False) while waiting for fresh engine frame, bail.
     #
     # A mode whose idle scene is presentation-owned is the exception: it needs no
-    # source frame to draw anything, and `push_gpu_frame()` downstream is the
-    # only normal call site that builds that scene. Returning here meant paused
-    # Spectrum said "my idle needs no source" and "do not run my idle until
-    # source arrives" at the same time, which is why its card stayed blank.
+    # source frame to produce its logical resting scene. The immutable capture
+    # downstream builds that state, so returning here would make paused Spectrum
+    # simultaneously say "my idle needs no source" and "do not publish my idle
+    # until source arrives".
     #
     # The wait itself is deliberately preserved: it still gates reactive source
     # authority when playback resumes.

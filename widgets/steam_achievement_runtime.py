@@ -5,7 +5,7 @@ load, source/manual refresh, request admission, semantic model, decoded app/icon
 artwork state and retirement. Existing ``core.steam`` cache locks, request
 coalescing, backoff, credentials, backend and asset helpers remain authoritative.
 
-The temporary QWidget consumer owns only geometry, QPainter pixels, fade and
+Retained Quick consumers own only presentation geometry/pixels/fade and
 transition deferral, hit routing, styles/logo and DPR-specific scaled-image
 caches. No recurring cadence is introduced for Achievement Pulse.
 """

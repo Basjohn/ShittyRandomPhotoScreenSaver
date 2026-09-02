@@ -1,6 +1,6 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 ## Current checkpoint
 
@@ -49,6 +49,7 @@ This is the high-visibility owner for bounded parity/polish issues being worked 
 - [~] **Reddit edit chrome / stale-envelope geometry seam — AWAITING VALIDATION.** Audit found a real H9 geometry seam rather than oversized handle primitives: uniform-transform Reddit/Reddit2 could render a correctly centred card inside an old aspect-mismatched committed outer rect while CUSTOM outlined/resized the invisible letterbox envelope. Admission now canonicalizes the session/edit rectangle to the actual visible retained-card bounds at the same centre/scale; Save retires only dead geometry and Cancel leaves visible pixels unchanged. The unused `custom_layout_runtime_vertical_content_resize` descriptor flag was removed because it falsely advertised a retired runtime geometry contract. Validate Reddit + Reddit2 handles and corner/wheel scale; if bars remain tall, capture the frame/card mismatch rather than changing handle primitives blindly.
 - [ ] **Reddit ordinary/non-CUSTOM content contract.** Ordinary adjustment/resize interaction must preserve Reddit's newest-message cycling/content behavior rather than accidentally mutating geometry; audit Reddit and Reddit2 together.
 - [~] **Spectrum extreme-viewport temporal scaling — IMPLEMENTED / AWAITING PHYSICAL VALIDATION (R-76).** Post-cutover audit found the accepted large-viewport smoothing rule stranded in the retired QWidget-era helper while the live Quick `SpectrumFrameRuntime` used one viewport-blind time constant. The old helper also incorrectly used the larger of width/height, so an extreme-wide card could be slowed even though Spectrum bar motion is vertical. Live Quick now scales only the existing presentation one-pole by expanded **vertical bar-field height** (canonical/wide remain exact), and solid-bar hysteresis keeps a canonical internal segment domain instead of retuning/resetting its rate zones as viewport height changes. BeatEngine/DSP smoothing, 0.55 upload transfer, height/amplitude boost, cadence, renderer segment geometry and source magnitude are untouched. Source-only viewport temporal profile GREEN `6/6`; physically validate canonical + extreme-wide + extreme-tall in continuous and segmented modes before `[x]`.
+- [x] **Cross-mode extreme-viewport source audit (assessment only).** Bubble, Oscilloscope, Sine and DevCurve were traced by authored axis -> viewport geometry -> temporal state -> physical pixel transfer. No second source-proven scaling bug was found. Sine extreme-wide X travel / extreme-tall Y motion and DevCurve extreme-wide normalized travel remain explicit physical watchpoints; do not tune them without operator evidence. Canonical contract/table lives in `Docs/Guardrails/Visualizer_Presentation.md` §9A and the 2026-09-02 audit doc.
 
 ## H closure summary
 
@@ -211,10 +212,10 @@ After exact caller search:
 
 - [x] Delete orphan `rendering/quick/qml/CursorHalo.qml` — removed 2026-09-01 after proving no `.py`/`.qml`/`.qrc`/`qmldir` reference (only docs/history mention it).
 - [x] Remove caller-dead Media process-probe helpers retired by event ownership — none remain; `psutil` survives only in the two KEEP out-of-process sampler tools.
-- [ ] Remove old physical-presenter/compositor aliases/adapters/comments/spikes that no longer have a production caller.
+- [~] **R-77 coordinated QWidget/compositor residue retirement — IMPLEMENTED / AWAITING DESTINATION + PHYSICAL VALIDATION.** The first raw-quarantine attempt proved the 25 files were not independently removable from R-76 because startup still crossed compatibility imports. The superseding slice rewrites/re-homes every surviving caller first (logical frame capture, logical-only tick pipeline, neutral QObject/type seams), then retires the 25 obsolete modules in the same checkpoint. Source-only cleanup gate is GREEN; the included GUI `deletelater` utility is reversible and must be run only after installing the replacement callers. See R-77 + I2 manifest.
 - [x] Reconcile regeneration/default tools against current Settings/Quick schema; audit completed 2026-09-01 and current atomic/schema-derived pipeline is protected.
 - [ ] Preserve neutral transition registry/settings/math/shaders and neutral visualizer DSP/logical algorithms used by Quick.
-- [ ] Re-run exact caller/import searches after each residue batch so deletion does not create hidden compatibility fallback pressure.
+- [~] Re-run exact caller/import searches after each residue batch so deletion does not create hidden compatibility fallback pressure. R-77 exact production-name/import sweep is GREEN after coordinated rewrite; destination/startup validation remains required.
 
 `Future_Cleanup.md` owns the detailed deletion ledger.
 
@@ -276,8 +277,11 @@ Front-load the mandatory image-oracle parity work (`images/migration/Ideal (PreM
 
 ### Committed J+ Widget Theme + card-material work — non-blocking for J close
 
-- [~] **Design pass complete (2026-09-02):** consolidated, source-grounded execution plan at `Docs/QtQuick_Migration/Widget_Theme_And_Card_Material_Implementation_Plan.md`, reconciled against the durable design (Contracts / Settings_Theme_Architecture / Custom_Style_Implementation / Future_Work §10 / J Parity+ §10) and exact current source. Dark is the guaranteed compiled default. Phase 1 is the semantic + serialization + UX layer (Widget Theme identity/link, `Keep Synced` default ON, Surface Style `Theme Default/Normal/Glass/Acrylic`, `Custom` snapshot in Settings persistence, one `effective_card_material_mode` resolver feeding ordinary cards **and** the Context Menu) shipping Normal-only with zero new render cost; Phases 2–7 add the scene-local shared/lazy Quick blur material, measured, only after Phase 1 is accepted.
-- [ ] Implement Phase 1 per that plan (awaiting the 3 open questions in its §6 before coding). Default remains Normal/off-cost; no per-card capture/blur owners; Glass/Acrylic stay disabled until their material path is admitted.
+- [x] **Design questions resolved / Phase 1a merged (Claude `f0564449`).** Compiled Default Dark is unconditional fallback; `.srwtheme` IO/catalogue/resolver + Keep Synced/Custom/material state machine are present. `Custom` remains Settings data, not a theme file.
+- [x] **Palette precedence resolved:** Widget Theme card roles are global/default baseline values; explicit existing `widgets.<family>.card.*` values win for that family. Per-family swatch edits remain family-specific and do not create Widget Theme `Custom`. Context Menu has no family override layer and consumes Widget Theme palette directly.
+- [ ] Implement Phase 1b persistence + Themes/Widgets UI per `Docs/QtQuick_Migration/Widget_Theme_And_Card_Material_Implementation_Plan.md`.
+- [ ] Implement Phase 1c retained palette/material snapshot with the baseline->family-override precedence above. Keep render path Normal-only; Glass/Acrylic remain disabled until the shared/lazy Quick material path is admitted.
+- [ ] Phases 2–7: measured one-shared-per-display Glass/Acrylic material path; no per-card capture/blur owner, second window, or Settings HWND backdrop reuse.
 
 ## Authority order
 
