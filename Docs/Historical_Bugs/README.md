@@ -115,6 +115,7 @@ duplicate standalone records are intentionally absent.
 
 - [R-74 — Quick Card Shadows Could Overpaint Sibling Widget Content](R-74_Quick_Card_Shadow_Sibling_Subtree_Overpaint.md)
 - [R-75 — A Superseded Compute Callback Could Release A Held Serial-Lane Slot](R-75_Superseded_Compute_Callback_Released_Held_Serial_Lane_Slot.md)
+- [R-76 — Spectrum viewport temporal scaling axis / solid-domain migration seam](R-76_Spectrum_Viewport_Temporal_Scaling_Axis_And_Solid_Domain.md)
 
 ## U Records
 

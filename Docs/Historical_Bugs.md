@@ -29,6 +29,7 @@ No other R-series record is current implementation sequencing. Current migration
 ## Standalone R Records
 
 - [R-74 — Quick Card Shadows Could Overpaint Sibling Widget Content](Historical_Bugs/R-74_Quick_Card_Shadow_Sibling_Subtree_Overpaint.md) — **IMPLEMENTED / AWAITING VALIDATION**. Production ordinary shadows now live in one display underlay below all ordinary cards.
+- [R-76 — Spectrum viewport temporal scaling axis / solid-domain migration seam](Historical_Bugs/R-76_Spectrum_Viewport_Temporal_Scaling_Axis_And_Solid_Domain.md)
 - [R-73 — Quick Card-Shadow Extra Offset Translation And Visualizer Omission](Historical_Bugs/R-73_Quick_Card_Shadow_Extra_Offset_Translation_And_Visualizer_Omission.md)
 - [R-72 — Production Shutdown Imported A Dead Performance Parser](Historical_Bugs/R-72_Production_Shutdown_Imported_Dead_Perf_Parser.md)
 - [R-71 — Visualizer Audio Per-Frame Task And DSP-State Allocation Drove GC Pressure](Historical_Bugs/R-71_Visualizer_Audio_Per_Frame_Task_And_DSP_State_Allocation.md)

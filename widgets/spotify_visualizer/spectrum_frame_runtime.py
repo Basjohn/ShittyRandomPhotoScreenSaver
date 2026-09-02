@@ -13,19 +13,18 @@ from widgets.spotify_visualizer.frame_runtime_lifecycle import (
 from widgets.spotify_visualizer.render_state import (
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
 )
-from widgets.spotify_visualizer.spectrum_presentation_smoothing import (
+from widgets.spotify_visualizer.spectrum_temporal_contract import (
+    SPECTRUM_SETTLED_EPSILON,
+    SPECTRUM_STALL_SNAP_SECONDS,
     idle_spectrum_baseline,
+    spectrum_visual_alpha,
 )
 from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
     apply_spectrum_solid_hysteresis,
+    canonical_spectrum_solid_hysteresis_segments,
     reset_spectrum_solid_hysteresis_state,
 )
 
-
-_MIN_TIME_CONSTANT_SECONDS = 0.002
-_MAX_TIME_CONSTANT_SECONDS = 0.014
-_STALL_SNAP_SECONDS = 0.100
-_SETTLED_EPSILON = 1.0e-4
 
 
 def _clamp01(value: object) -> float:
@@ -47,7 +46,7 @@ def _normalise_bars(values: Sequence[object], count: int) -> list[float]:
 
 def _changed(previous: Sequence[float], current: Sequence[float]) -> bool:
     return len(previous) != len(current) or any(
-        abs(float(before) - float(after)) > _SETTLED_EPSILON
+        abs(float(before) - float(after)) > SPECTRUM_SETTLED_EPSILON
         for before, after in zip(previous, current)
     )
 
@@ -164,19 +163,25 @@ class SpectrumFrameRuntime(RetirableFrameRuntime):
                 or self._presentation_identity != presentation_identity
                 or len(previous_bars) != len(values)
                 or dt <= 0.0
-                or dt >= _STALL_SNAP_SECONDS
+                or dt >= SPECTRUM_STALL_SNAP_SECONDS
             )
             if reset_boundary:
                 resolved_bars = values
             else:
-                time_constant = _MIN_TIME_CONSTANT_SECONDS + (
-                    _MAX_TIME_CONSTANT_SECONDS - _MIN_TIME_CONSTANT_SECONDS
-                ) * strength
-                alpha = 1.0 - math.exp(-dt / max(time_constant, 1.0e-6))
+                # Spectrum motion is vertical.  Preserve canonical/wide
+                # temporal behaviour exactly, but lengthen the existing
+                # presentation-only one-pole on tall viewport extents so the
+                # same normalized source step does not become a proportionally
+                # larger screen-pixel jump.  This is not source/DSP smoothing.
+                alpha = spectrum_visual_alpha(
+                    dt,
+                    strength,
+                    viewport_height=viewport_height,
+                )
                 resolved_bars = []
                 for prior, target in zip(previous_bars, values):
                     next_value = prior + (target - prior) * alpha
-                    if abs(target - next_value) <= _SETTLED_EPSILON:
+                    if abs(target - next_value) <= SPECTRUM_SETTLED_EPSILON:
                         next_value = target
                     resolved_bars.append(next_value)
 
@@ -185,10 +190,16 @@ class SpectrumFrameRuntime(RetirableFrameRuntime):
         self._presentation_identity = presentation_identity
 
         if single_piece and resolved_bars:
+            # Solid-bar hysteresis is authored temporal state, not renderer
+            # geometry.  Its old segment domain tracked viewport height, so a
+            # tall resize changed rate zones/reset state even though the source
+            # signal was identical.  Keep that internal domain canonical; the
+            # Quick renderer remains free to choose its own height-derived
+            # segment count for segmented presentation.
             resolved_bars = apply_spectrum_solid_hysteresis(
                 self,
                 resolved_bars,
-                segments=max(1, int(segments)),
+                segments=canonical_spectrum_solid_hysteresis_segments(),
                 render_height=max(1.0, float(viewport_height)),
                 now_ts=timestamp,
             )
