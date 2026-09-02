@@ -327,13 +327,16 @@ def test_image_change_admission_is_transactional_and_never_snaps_active_transiti
     assert 'cancel(reason="image-replacement")' not in present
     assert "still owns an active Quick transition" in present
     source_none_start = present.index("if source is None:")
-    source_none_end = present.index("spec = self._resolve_quick_transition_batch_spec()", source_none_start)
+    # The one-session startup desktop->wallpaper crossfade made the transition
+    # spec a conditional, so anchor on the block that follows the source-none
+    # direct-publish path rather than the old single-line resolve call.
+    source_none_end = present.index("startup_desktop_transition = (", source_none_start)
     source_none = present[source_none_start:source_none_end]
     assert source_none.index("_finish_quick_transition_batch_if_complete()") < source_none.index(
         "_on_image_displayed(screen_index, image_path)"
     )
 
-    spec_start = present.index("spec = self._resolve_quick_transition_batch_spec()")
+    spec_start = present.index("startup_desktop_transition = (")
     spec_end = present.index("request = spec.build_request", spec_start)
     spec_block = present[spec_start:spec_end]
     assert "destination withheld" in spec_block

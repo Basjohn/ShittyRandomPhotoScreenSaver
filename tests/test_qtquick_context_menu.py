@@ -361,9 +361,13 @@ def test_quick_context_menu_has_no_settings_or_qwidget_authority() -> None:
     qml = (root / "rendering" / "quick" / "qml" / "ContextMenu.qml").read_text(
         encoding="utf-8"
     )
+    # Strip QML line comments so documentation about what the menu must NOT do
+    # (e.g. "never direct QWidget theme ownership") is not mistaken for real
+    # authority; only actual QML code/imports/types must be free of these.
+    qml_code = "\n".join(line.split("//", 1)[0] for line in qml.splitlines())
     for forbidden in ("QWidget", "QMenu", "QAction", "SettingsManager"):
         assert forbidden not in source
-        assert forbidden not in qml
+        assert forbidden not in qml_code
     assert "requestAction(" in qml
     assert "MouseArea" in qml
     assert "Window {" not in qml
