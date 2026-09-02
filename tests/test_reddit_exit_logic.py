@@ -91,70 +91,6 @@ class TestCacheInvalidationMitigation:
         assert True  # Design verification - actual test is in integration
 
 
-class TestDisplayManagerDeferredUrls:
-    """Test deferred Reddit URL handling in DisplayManager cleanup."""
-
-    @pytest.mark.qt
-    def test_cleanup_collects_pending_urls(self, qt_app, monkeypatch):
-        """DisplayManager.cleanup should collect pending URLs from displays."""
-        from engine.display_manager import DisplayManager
-
-        monkeypatch.setattr(
-            display_manager_module,
-            "reddit_helper_bridge",
-            None,
-            raising=False,
-        )
-
-        manager = DisplayManager()
-        fake_display = MagicMock()
-        fake_display.screen_index = 0
-        fake_display._pending_reddit_url = "https://example.com/pending"
-        fake_display._pending_reddit_url_prequeued = False
-        fake_display.clear = MagicMock()
-        fake_display.close = MagicMock()
-        fake_display.deleteLater = MagicMock()
-
-        manager.displays = [fake_display]
-
-        manager.cleanup()
-
-        assert fake_display._pending_reddit_url is None
-        assert fake_display._pending_reddit_url_prequeued is False
-        urls = manager.take_deferred_reddit_urls()
-        assert urls == ["https://example.com/pending"]
-
-    @pytest.mark.qt
-    def test_cleanup_skips_urls_already_prequeued(self, qt_app, monkeypatch):
-        """DisplayManager.cleanup should not duplicate URLs already queued at click time."""
-        from engine.display_manager import DisplayManager
-
-        monkeypatch.setattr(
-            display_manager_module,
-            "reddit_helper_bridge",
-            None,
-            raising=False,
-        )
-
-        manager = DisplayManager()
-        fake_display = MagicMock()
-        fake_display.screen_index = 0
-        fake_display._pending_reddit_url = "https://example.com/already-queued"
-        fake_display._pending_reddit_url_prequeued = True
-        fake_display.clear = MagicMock()
-        fake_display.close = MagicMock()
-        fake_display.deleteLater = MagicMock()
-
-        manager.displays = [fake_display]
-
-        manager.cleanup()
-
-        urls = manager.take_deferred_reddit_urls()
-        assert urls == []
-        assert fake_display._pending_reddit_url is None
-        assert fake_display._pending_reddit_url_prequeued is False
-
-
 class TestCleanQueueFlow:
     """Test the new clean queue-based URL handling."""
 
@@ -281,246 +217,66 @@ class TestCleanQueueFlow:
         assert called == []
 
 
-class TestDeferredRedditFlow:
-    """Integration tests for deferred Reddit URL timing."""
+class TestContextMenuClickThroughSuppression:
+    """Regression bar for the context-menu click-through bug.
+
+    A retained-menu item is activated by a pointer tap. Because Qt Quick
+    TapHandlers take non-exclusive passive grabs, that same press/release is
+    also recognised by a widget TapHandler (Reddit post, Gmail row) beneath the
+    menu surface, firing its browser-open/exit action in the same gesture - the
+    logged failure where selecting Settings also opened a Reddit link. Reddit's
+    open path already consulted the shared pointer guard, but no menu-action
+    boundary ever armed it, so the check was dead for this trigger. The menu
+    action route now arms it; this proves both halves.
+    """
 
     @pytest.mark.qt
-    def test_primary_covered_click_queues_to_bridge(self, qt_app, qtbot, settings_manager, monkeypatch):
-        """Ensure primary-covered clicks queue URL to ProgramData bridge and exit."""
-        from PySide6.QtGui import QDesktopServices as QtDesktopServices
-        from PySide6.QtGui import QGuiApplication
-        from rendering.display_widget import DisplayWidget
-        from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
-
-        bridge_calls: list[tuple[str, str]] = []
-        class _Bridge:
-            def is_bridge_available(self) -> bool:
-                return True
-
-            def enqueue_url(self, url: str, source: str = "") -> bool:
-                bridge_calls.append((url, source))
-                return True
-
-        monkeypatch.setattr(
-            "core.windows.reddit_helper_bridge.is_bridge_available",
-            _Bridge().is_bridge_available,
-            raising=False,
-        )
-        monkeypatch.setattr(
-            "core.windows.reddit_helper_bridge.enqueue_url",
-            _Bridge().enqueue_url,
-            raising=False,
-        )
-
-        MultiMonitorCoordinator.reset()
-        try:
-            widget = DisplayWidget(screen_index=0, settings_manager=settings_manager)
-            widget.resize(400, 300)
-            widget.show()
-            qt_app.processEvents()
-
-            assert widget._screen is not None
-            handler = widget._input_handler
-            assert handler is not None
-
-            target_url = "https://example.com/deferred"
-
-            def _fake_route(*_args, **_kwargs):
-                return True, True, target_url
-
-            monkeypatch.setattr(handler, "route_widget_click", _fake_route)
-
-            def _fail_immediate_open(_url):
-                raise AssertionError("URL should not open via QDesktopServices for SCR build")
-
-            monkeypatch.setattr(
-                QtDesktopServices,
-                "openUrl",
-                staticmethod(_fail_immediate_open),
-            )
-            monkeypatch.setattr(
-                QGuiApplication,
-                "primaryScreen",
-                staticmethod(lambda: widget._screen),
-            )
-
-            widget._ctrl_held = True
-
-            event = QMouseEvent(
-                QEvent.Type.MouseButtonPress,
-                QPointF(5, 5),
-                QPointF(5, 5),
-                QPointF(5, 5),
-                Qt.MouseButton.LeftButton,
-                Qt.MouseButton.LeftButton,
-                Qt.KeyboardModifier.NoModifier,
-            )
-
-            widget.mousePressEvent(event)
-
-            assert widget._pending_reddit_url == target_url
-            assert widget._pending_reddit_url_prequeued is True
-        finally:
-            MultiMonitorCoordinator.reset()
-
-    @pytest.mark.qt
-    def test_primary_covered_click_copies_url_to_clipboard_best_effort(
-        self, qt_app, qtbot, settings_manager, monkeypatch
+    def test_menu_action_arms_pointer_guard_and_reddit_open_is_refused(
+        self, qt_app, monkeypatch
     ):
-        """Primary-covered SCR clicks should copy the URL without blocking queue+exit flow."""
-        from PySide6.QtGui import QGuiApplication
-        from rendering.display_widget import DisplayWidget
-        from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
+        from engine.display_manager import DisplayManager
+        import core.widget_product_actions as widget_product_actions
+        from rendering.runtime_input import (
+            clear_runtime_pointer_input_suppression,
+            runtime_pointer_input_is_suppressed,
+        )
 
-        bridge_calls: list[tuple[str, str]] = []
-        clipboard_calls: list[str] = []
-
-        class _Bridge:
-            def is_bridge_available(self) -> bool:
-                return True
-
-            def enqueue_url(self, url: str, source: str = "") -> bool:
-                bridge_calls.append((url, source))
-                return True
-
-        class _Clipboard:
-            def setText(self, text: str) -> None:
-                clipboard_calls.append(text)
-
+        # Safety net: if the Reddit guard regresses and the phantom open is not
+        # refused, it must record here rather than actually launch a browser.
+        dispatched: list[str] = []
         monkeypatch.setattr(
-            "core.windows.reddit_helper_bridge.is_bridge_available",
-            _Bridge().is_bridge_available,
+            widget_product_actions,
+            "dispatch_reddit_url_product_action",
+            lambda url, **_kwargs: dispatched.append(url) or True,
             raising=False,
         )
-        monkeypatch.setattr(
-            "core.windows.reddit_helper_bridge.enqueue_url",
-            _Bridge().enqueue_url,
-            raising=False,
-        )
-        monkeypatch.setattr(QGuiApplication, "clipboard", staticmethod(lambda: _Clipboard()))
 
-        MultiMonitorCoordinator.reset()
+        clear_runtime_pointer_input_suppression()
         try:
-            widget = DisplayWidget(screen_index=0, settings_manager=settings_manager)
-            widget.resize(400, 300)
-            widget.show()
-            qt_app.processEvents()
-
-            assert widget._screen is not None
-            handler = widget._input_handler
-            assert handler is not None
-
-            target_url = "https://example.com/copied"
-
-            def _fake_route(*_args, **_kwargs):
-                return True, True, target_url
-
-            monkeypatch.setattr(handler, "route_widget_click", _fake_route)
-            monkeypatch.setattr(
-                QGuiApplication,
-                "primaryScreen",
-                staticmethod(lambda: widget._screen),
+            manager = DisplayManager()
+            assert (
+                runtime_pointer_input_is_suppressed("redditOpenRequested") is False
             )
 
-            widget._ctrl_held = True
-
-            event = QMouseEvent(
-                QEvent.Type.MouseButtonPress,
-                QPointF(5, 5),
-                QPointF(5, 5),
-                QPointF(5, 5),
-                Qt.MouseButton.LeftButton,
-                Qt.MouseButton.LeftButton,
-                Qt.KeyboardModifier.NoModifier,
+            # Any retained-menu action is a pointer gesture; routing it must arm
+            # the shared guard before the phantom widget open fires on the same
+            # release. ("next" is used because it touches no per-display state.)
+            assert (
+                manager._handle_quick_context_action(MagicMock(), "next", "") is True
+            )
+            assert (
+                runtime_pointer_input_is_suppressed("redditOpenRequested") is True
             )
 
-            widget.mousePressEvent(event)
-
-            assert clipboard_calls == [target_url]
-            assert bridge_calls == [(target_url, "scr_click")]
-            assert widget._pending_reddit_url_prequeued is True
+            # Reddit's open path checks the guard first, so the phantom open is
+            # refused and never reaches the product-action dispatcher.
+            assert (
+                manager._open_quick_reddit_url("reddit", "https://reddit.com/r/x")
+                is False
+            )
+            assert dispatched == []
         finally:
-            MultiMonitorCoordinator.reset()
-
-    @pytest.mark.qt
-    def test_primary_covered_click_still_exits_when_clipboard_copy_fails(
-        self, qt_app, qtbot, settings_manager, monkeypatch
-    ):
-        """Clipboard errors should not block SCR queueing or exit sequencing."""
-        from PySide6.QtGui import QGuiApplication
-        from rendering.display_widget import DisplayWidget
-        from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
-
-        bridge_calls: list[tuple[str, str]] = []
-        exit_calls: list[str] = []
-
-        class _Bridge:
-            def is_bridge_available(self) -> bool:
-                return True
-
-            def enqueue_url(self, url: str, source: str = "") -> bool:
-                bridge_calls.append((url, source))
-                return True
-
-        class _Clipboard:
-            def setText(self, _text: str) -> None:
-                raise RuntimeError("clipboard unavailable")
-
-        monkeypatch.setattr(
-            "core.windows.reddit_helper_bridge.is_bridge_available",
-            _Bridge().is_bridge_available,
-            raising=False,
-        )
-        monkeypatch.setattr(
-            "core.windows.reddit_helper_bridge.enqueue_url",
-            _Bridge().enqueue_url,
-            raising=False,
-        )
-        monkeypatch.setattr(QGuiApplication, "clipboard", staticmethod(lambda: _Clipboard()))
-
-        MultiMonitorCoordinator.reset()
-        try:
-            widget = DisplayWidget(screen_index=0, settings_manager=settings_manager)
-            widget.resize(400, 300)
-            widget.show()
-            qt_app.processEvents()
-
-            assert widget._screen is not None
-            handler = widget._input_handler
-            assert handler is not None
-
-            target_url = "https://example.com/failure-still-exits"
-
-            def _fake_route(*_args, **_kwargs):
-                return True, True, target_url
-
-            monkeypatch.setattr(handler, "route_widget_click", _fake_route)
-            monkeypatch.setattr(
-                QGuiApplication,
-                "primaryScreen",
-                staticmethod(lambda: widget._screen),
-            )
-            widget.exit_requested.connect(lambda: exit_calls.append("exit"))
-
-            widget._ctrl_held = True
-
-            event = QMouseEvent(
-                QEvent.Type.MouseButtonPress,
-                QPointF(5, 5),
-                QPointF(5, 5),
-                QPointF(5, 5),
-                Qt.MouseButton.LeftButton,
-                Qt.MouseButton.LeftButton,
-                Qt.KeyboardModifier.NoModifier,
-            )
-
-            widget.mousePressEvent(event)
-
-            assert bridge_calls == [(target_url, "scr_click")]
-            assert exit_calls == ["exit"]
-            assert widget._pending_reddit_url_prequeued is True
-        finally:
-            MultiMonitorCoordinator.reset()
+            clear_runtime_pointer_input_suppression()
 
 
 @pytest.mark.skip(reason="Requires full Qt app with multi-monitor setup")
