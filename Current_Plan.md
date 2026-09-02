@@ -164,7 +164,7 @@ python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 9
 ```
 
 - [x] **Destination gate GREEN — 98/98 (2026-09-01).** All 21 classified reds reconciled without restoring any retired owner: visualizer engine stubs (`set_transient_lane_config`); the Ctrl/interaction provider-injection cluster rewired to the event-driven `SharedCtrlCoordinator` publish/subscribe + `interaction_mode_enabled` model (R6/§4.5); source-text/data-shape assertions realigned to current source (R-63 single-edge overscan, `cursor_controller.close` teardown, `_custom_resize_scale` size payload, the startup-crossfade `_present_quick_image` anchor, the ContextMenu QWidget-in-comment guard); two transition-admission tests rewritten to the R7 transactional contract (reject-not-snap; a broadcast second image starts per-screen routed transitions); `retained_model_lifetime` family items given a real QML component; and the startup-reveal tests moved onto a GUI `QApplication`. **One red was a genuine current-source defect, not drift:** a superseded compute callback could release a serial-lane slot a newer same-activation owner held — fixed in `widgets/spotify_visualizer/beat_engine.py` with an activation-aware guard (strengthens R-71 fencing). Multi-file `pytest` cross-contaminates Qt teardown — always classify reds with the per-target-isolated `destination` runner.
-  - [ ] Write a historical-bug record for the R-71 superseded-callback slot-release fix.
+  - [x] Historical-bug record written: `Docs/Historical_Bugs/R-75_Superseded_Compute_Callback_Released_Held_Serial_Lane_Slot.md`.
 
 ### Immediate manual deletions
 
