@@ -151,7 +151,7 @@ The full test pack exposed additional current-authority drift that is also repai
 - `test_qtquick_h9_uniform_resize.py` includes Gmail in the whole-card uniform-transform family;
 - `test_qtquick_gmail_presentation.py` pins truthful asymmetric preferred-size semantics;
 - `test_visualizer_viewport_scaling_contracts.py` pins the R-69 golden prohibition on second viewport compression of Bubble head/Ghost state;
-- `test_spectrum_presentation_smoothing.py` pins large-width/height smoothing via the larger axis without a second cadence;
+- `test_spectrum_presentation_smoothing.py` remains historical/compatibility coverage; R-76 supersedes its old larger-axis rule with height-only temporal scaling, and `test_spectrum_viewport_temporal_scaling.py` pins the live Quick owner without a second cadence;
 - `test_runtime_perf_policy_contracts.py` pins the R-63 no-hardcoded-monitor rule while preserving the non-exact-cover principle.
 
 `tests/run_chunked.py` now exposes canonical `destination` and includes the surviving permanent R4-R7/Media/audio/freshness targets that were missing from the old H list. At closure it contains **95 unique targets**, all present in the supplied complete test tree. Do not publish an aggregate pass count until this exact profile runs in the real PySide6/OpenGL environment.
@@ -290,7 +290,8 @@ Changed/current permanent contracts in the closure patch:
 | `tests/test_qtquick_visualizer_item.py` | Current presentation mismatch fencing + R-68 active-CUSTOM presentation rebase. |
 | `tests/test_visualizer_viewport_scaling_contracts.py` | R4/R5 viewport projection plus R-69 golden Bubble head/Ghost no-second-compression guard. |
 | `tests/test_bubble_viewport_reflow.py` | Current card-relative radius / expanded collision-world invariant. |
-| `tests/test_spectrum_presentation_smoothing.py` | Wide/tall smoothing scales by the larger axis, capped, without adding cadence/timer ownership. |
+| `tests/test_spectrum_presentation_smoothing.py` | Compatibility/history-facing Spectrum smoothing path; R-76 requires height-only scaling (wide canonical-height is unchanged) and no independent cadence. |
+| `tests/test_spectrum_viewport_temporal_scaling.py` | **R-76 live Quick contract:** canonical/wide exact temporal response, tall-only bar-field compensation, bounded physical jump growth, and viewport-invariant solid hysteresis domain. |
 | `tests/test_qtquick_h9_uniform_resize.py` | Reddit/Reddit2/Media/Gmail whole-card transform and Visualizer isolation. |
 | `tests/test_qtquick_gmail_presentation.py` | Gmail outer-width vs row-height+shell-inset baseline truth. |
 | `tests/test_runtime_perf_policy_contracts.py` | R6/R7/R-63 source bars; no hard-coded current monitor geometry. |

@@ -11,6 +11,10 @@ from __future__ import annotations
 import math
 from typing import Any, List, Sequence
 
+from widgets.spotify_visualizer.render_state import (
+    CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
+)
+
 _SPECTRUM_BASE_HEIGHT = 80.0
 # Historical GL presentation multiplied authored bars/peaks by this amount at
 # the final shader-upload seam.  Keep it public so retained Quick presentation
@@ -32,6 +36,20 @@ _SPECTRUM_NORMAL_FALL_HZ = 24.0
 _SPECTRUM_FAST_RISE_HZ = 90.0
 _SPECTRUM_FAST_FALL_HZ = 84.0
 _SPECTRUM_SNAP_EPSILON_SEG = 0.025
+
+
+def canonical_spectrum_solid_hysteresis_segments() -> int:
+    """Return Spectrum solid-bar easing's viewport-invariant segment domain.
+
+    The solid renderer is continuous; these segments are only an internal
+    temporal coordinate for boundary hysteresis.  Derive the value from the
+    canonical viewport once instead of retuning/resetting the temporal filter
+    when CUSTOM height changes.
+    """
+
+    baseline_height = float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1])
+    inner_height = max(0.0, baseline_height - 12.0)
+    return max(8, min(64, int(inner_height // 5.0)))
 
 
 def _clamp01(value: float) -> float:

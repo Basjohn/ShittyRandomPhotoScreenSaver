@@ -135,7 +135,7 @@ The complete supplied test tree was audited. Current production contracts were r
 - retained DSP state and config/reset fencing;
 - R-68 CUSTOM Visualizer presentation-authority rebase;
 - R-69 Bubble head/Ghost viewport golden contract;
-- large-width/height Spectrum presentation smoothing without a new cadence;
+- large-width/height Spectrum presentation smoothing without a new cadence (**historical H wording; post-H R-76 supersedes the larger-axis interpretation with live-Quick height-only temporal scaling**);
 - Gmail membership in the uniform-transform family and truthful preferred width/height;
 - R-63 no-hardcoded-display geometry guard;
 - current image-origin signature.
