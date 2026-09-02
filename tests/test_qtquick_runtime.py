@@ -51,10 +51,12 @@ def test_runtime_is_a_narrow_qobject_owner_with_queued_window_retirement():
     assert close_calls == [
         "self.context_menu_model.close",
         "self.auxiliary_controller.close",
+        "self.cursor_controller.close",
         "self.transition_controller.close",
         "self.frame_pacer.close",
         "self.context_menu_model.close",
         "self.auxiliary_controller.close",
+        "self.cursor_controller.close",
     ]
     assert source.index("self.transition_controller.close()") < source.index(
         "self.frame_pacer.close()"
