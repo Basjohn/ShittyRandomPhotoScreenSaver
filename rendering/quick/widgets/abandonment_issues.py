@@ -40,7 +40,13 @@ from .host import (
     OverlayWidgetGeometry,
     RetainedOverlayWidget,
 )
-from .theme_projection import resolve_card_surface_colors, resolve_header_colors
+from .theme_projection import (
+    configured_rgba_override,
+    resolve_card_surface_colors,
+    resolve_header_colors,
+    resolve_primary_text_color,
+    resolve_rgba_role,
+)
 from .steam_common import (
     SteamCardFieldListModel,
     SteamSemanticPalette,
@@ -229,7 +235,19 @@ class AbandonmentIssuesPresentationConfig:
             border=config.header_border_color,
             text=config.header_text_color,
         )
-        accent_r, accent_g, accent_b, _ = config.accent_color
+        accent_override = configured_rgba_override(
+            card if isinstance(card, Mapping) else {},
+            default_card if isinstance(default_card, Mapping) else {},
+            "accent_color",
+            config.accent_color,
+        )
+        accent_color = resolve_rgba_role(
+            "widget.accent",
+            local_roles={"local.accent": config.accent_color},
+            fallback=config.accent_color,
+            explicit=accent_override,
+        )
+        accent_r, accent_g, accent_b, _ = accent_color
         semantic_palette = project_steam_semantic_palette(
             fallback=SteamSemanticPalette(
                 info_text=(30, 20, 10, 230),
@@ -253,8 +271,15 @@ class AbandonmentIssuesPresentationConfig:
             border_color=config.border_color,
             border_opacity=config.border_opacity,
         )
+        text_color = resolve_primary_text_color(
+            values=card if isinstance(card, Mapping) else {},
+            defaults=default_card if isinstance(default_card, Mapping) else {},
+            text_color=config.text_color,
+        )
         return replace(
             config,
+            text_color=text_color,
+            accent_color=accent_color,
             background_color=card_background,
             background_opacity=1.0,
             border_color=card_border,

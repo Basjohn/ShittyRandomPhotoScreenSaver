@@ -49,6 +49,8 @@ Source: ".\reddit_helper_task_template.xml"; Flags: dontcopy
 
 ; Curated visualizer presets and sounds.
 Source: ".\..\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Curated Settings + Widget themes share one ProgramData root.
+Source: ".\..\themes\*"; DestDir: "{commonappdata}\SRPSS\themes"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: ".\..\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 
 [Dirs]
@@ -57,6 +59,7 @@ Source: ".\..\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; F
 Name: "{commonappdata}\SRPSS"
 Name: "{commonappdata}\SRPSS\helper"; Permissions: users-readexec
 Name: "{commonappdata}\SRPSS\presets"
+Name: "{commonappdata}\SRPSS\themes"
 Name: "{commonappdata}\SRPSS\sounds"
 Name: "{commonappdata}\SRPSS\url_queue"; Permissions: users-modify
 Name: "{commonappdata}\SRPSS\logs"; Permissions: users-modify
@@ -70,6 +73,7 @@ Type: files; Name: "{sys}\\ShittyRandomPhotoScreenSaver.scr"
 
 ; Clean-replace shipped data and helper bundle.
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
+Type: filesandordirs; Name: "{commonappdata}\SRPSS\themes"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\helper"
 Type: files; Name: "{commonappdata}\SRPSS\sounds\tutuogg.ogg"
 

@@ -51,6 +51,8 @@ Source: "..\release\media_center\*"; DestDir: "{app}"; Flags: recursesubdirs cre
 Source: "..\release\media_center\presets\visualizer_modes\*"; DestDir: "{app}\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
 ; Active curated preset tree shared with SCR/NORMAL builds.
 Source: "..\release\media_center\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Active curated Settings + Widget theme tree shared with SCR/NORMAL builds.
+Source: "..\release\media_center\themes\*"; DestDir: "{commonappdata}\SRPSS\themes"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "..\release\media_center\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 ; Include the EXE itself (for convenience when browsing install dir)
 Source: "..\release\media_center\SRPSS_Media_Center.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -74,5 +76,6 @@ Type: filesandordirs; Name: "{app}"
 ; stale/renamed files never linger across upgrades.
 Type: filesandordirs; Name: "{app}\presets\visualizer_modes"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
+Type: filesandordirs; Name: "{commonappdata}\SRPSS\themes"
 Type: files; Name: "{commonappdata}\SRPSS\sounds\tutuogg.ogg"
 

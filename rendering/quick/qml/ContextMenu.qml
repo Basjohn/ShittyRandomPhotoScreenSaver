@@ -31,6 +31,19 @@ Item {
     property color submenuCheckedSurfaceColor: "#334e718b"
     property color submenuIndicatorBorderColor: "#b9eaff"
     property color submenuIndicatorFillColor: "#82cdff"
+    property string materialMode: "normal"
+
+    function materialSurfaceTint(baseColor) {
+        if (materialMode === "glass") {
+            const alpha = Math.max(0.10, Math.min(0.36, baseColor.a * 0.75))
+            return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, alpha)
+        }
+        if (materialMode === "acrylic") {
+            const alpha = Math.max(0.25, Math.min(0.68, baseColor.a))
+            return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, alpha)
+        }
+        return baseColor
+    }
 
     readonly property real shadowBaseLeft: Math.max(0.0, -shadowOffsetX)
     readonly property real shadowBaseTop: Math.max(0.0, -shadowOffsetY)
@@ -39,6 +52,34 @@ Item {
     property int activeSubmenuIndex: -1
     readonly property real menuWidth: 292.0
     readonly property real menuHeight: menuColumn.implicitHeight + 16.0
+    readonly property real materialSurfaceX: menuSurface.x
+    readonly property real materialSurfaceY: menuSurface.y
+    readonly property real materialSurfaceWidth: menuSurface.width
+    readonly property real materialSurfaceHeight: menuSurface.height
+    readonly property real materialSurfaceRadius: menuSurface.radius
+    readonly property var activeSubmenuRow: activeSubmenuIndex >= 0
+        ? menuRepeater.itemAt(activeSubmenuIndex)
+        : null
+    readonly property var activeSubmenuSurface: activeSubmenuRow
+        ? activeSubmenuRow.materialSubmenuSurface
+        : null
+    readonly property bool materialSubmenuVisible: !!activeSubmenuSurface
+        && activeSubmenuSurface.visible
+    readonly property real materialSubmenuX: activeSubmenuSurface
+        ? menuSurface.x + menuColumn.x + activeSubmenuRow.x + activeSubmenuSurface.x
+        : 0.0
+    readonly property real materialSubmenuY: activeSubmenuSurface
+        ? menuSurface.y + menuColumn.y + activeSubmenuRow.y + activeSubmenuSurface.y
+        : 0.0
+    readonly property real materialSubmenuWidth: activeSubmenuSurface
+        ? activeSubmenuSurface.width
+        : 0.0
+    readonly property real materialSubmenuHeight: activeSubmenuSurface
+        ? activeSubmenuSurface.height
+        : 0.0
+    readonly property real materialSubmenuRadius: activeSubmenuSurface
+        ? activeSubmenuSurface.radius
+        : 0.0
 
     anchors.fill: parent
     visible: contextMenuModel !== null && contextMenuModel.menuVisible
@@ -105,7 +146,7 @@ Item {
                 menuRoot.height - height - 4.0
             )
         )
-        color: menuRoot.surfaceColor
+        color: menuRoot.materialSurfaceTint(menuRoot.surfaceColor)
         radius: 10.0
         border.color: menuRoot.borderColor
         border.width: 3.0
@@ -117,6 +158,7 @@ Item {
             width: parent.width - 12.0
 
             Repeater {
+                id: menuRepeater
                 model: menuRoot.contextMenuModel
                     ? menuRoot.contextMenuModel.entries
                     : []
@@ -125,6 +167,7 @@ Item {
                     id: menuRow
                     required property var modelData
                     required property int index
+                    property alias materialSubmenuSurface: submenuSurface
                     width: menuColumn.width
                     height: modelData.kind === "separator" ? 7.0 : 38.0
 
@@ -262,7 +305,7 @@ Item {
                         )
                         width: 244.0
                         height: submenuColumn.implicitHeight + 12.0
-                        color: menuRoot.submenuSurfaceColor
+                        color: menuRoot.materialSurfaceTint(menuRoot.submenuSurfaceColor)
                         radius: 8.0
                         border.color: menuRoot.submenuBorderColor
                         border.width: 3.0

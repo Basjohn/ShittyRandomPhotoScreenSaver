@@ -48,7 +48,13 @@ from .host import (
     OverlayWidgetGeometry,
     RetainedOverlayWidget,
 )
-from .theme_projection import resolve_card_surface_colors, resolve_header_colors
+from .theme_projection import (
+    configured_rgba_override,
+    resolve_card_surface_colors,
+    resolve_header_colors,
+    resolve_primary_text_color,
+    resolve_rgba_role,
+)
 from .steam_common import (
     SteamCardFieldListModel,
     SteamSemanticPalette,
@@ -241,8 +247,40 @@ class AchievementPulsePresentationConfig:
             border_color=config.border_color,
             border_opacity=config.border_opacity,
         )
+        text_color = resolve_primary_text_color(
+            values=card if isinstance(card, Mapping) else {},
+            defaults=default_card if isinstance(default_card, Mapping) else {},
+            text_color=config.text_color,
+        )
+        capsule_fill_override = configured_rgba_override(
+            card if isinstance(card, Mapping) else {},
+            default_card if isinstance(default_card, Mapping) else {},
+            "capsule_fill_color",
+            config.capsule_fill_color,
+        )
+        capsule_border_override = configured_rgba_override(
+            card if isinstance(card, Mapping) else {},
+            default_card if isinstance(default_card, Mapping) else {},
+            "capsule_border_color",
+            config.capsule_border_color,
+        )
+        capsule_fill = resolve_rgba_role(
+            "steam.metric.surface",
+            local_roles={"local.surface.alt": config.capsule_fill_color},
+            fallback=config.capsule_fill_color,
+            explicit=capsule_fill_override,
+        )
+        capsule_border = resolve_rgba_role(
+            "steam.metric.border",
+            local_roles={"local.border": config.capsule_border_color},
+            fallback=config.capsule_border_color,
+            explicit=capsule_border_override,
+        )
         return replace(
             config,
+            text_color=text_color,
+            capsule_fill_color=capsule_fill,
+            capsule_border_color=capsule_border,
             background_color=card_background,
             background_opacity=1.0,
             border_color=card_border,

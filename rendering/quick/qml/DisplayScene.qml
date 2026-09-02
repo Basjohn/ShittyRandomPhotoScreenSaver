@@ -1,5 +1,6 @@
 import QtQuick
 
+
 Item {
     id: displayScene
     objectName: "displaySceneRoot"
@@ -10,6 +11,11 @@ Item {
     property real dimmingOpacity: 0.0
     property real pixelShiftX: 0.0
     property real pixelShiftY: 0.0
+    // One renderer-facing material enum for the entire retained display generation.
+    // Normal keeps the expensive material Loader dormant; Glass/Acrylic share one
+    // lazy display-wide capture/blur and differ only in cheap local tint.
+    property string cardMaterialMode: "normal"
+    property var materialBackdropSourceItem: null
     property var contextMenuModel: null
     property bool contextMenuShadowEnabled: true
     property color contextMenuShadowColor: "#c4000000"
@@ -39,17 +45,123 @@ Item {
     property bool perfHudEnabled: false
     property string perfHudText: ""
 
-    Rectangle {
-        id: backgroundDimming
-        objectName: "backgroundDimming"
+    // The custom BackgroundRenderItem is parented into this host by Python.
+    // Dimming lives in the same below-widgets presentation so the material
+    // capture sees the exact displayed backdrop rather than an undimmed clone.
+    Item {
+        id: backgroundPresentationHost
+        objectName: "backgroundPresentationHost"
         anchors.fill: parent
-        color: "black"
-        opacity: displayScene.dimmingEnabled
-            ? Math.max(0.0, Math.min(1.0, displayScene.dimmingOpacity))
-            : 0.0
-        visible: opacity > 0.0
+        z: 0
+
+        Rectangle {
+            id: backgroundDimming
+            objectName: "backgroundDimming"
+            anchors.fill: parent
+            color: "black"
+            opacity: displayScene.dimmingEnabled
+                ? Math.max(0.0, Math.min(1.0, displayScene.dimmingOpacity))
+                : 0.0
+            visible: opacity > 0.0
+            enabled: false
+            z: 1
+        }
+    }
+
+    // One full-display alpha mask shared by every Glass/Acrylic consumer. The
+    // ordinary child host receives cheap rounded geometry items from Python.
+    // Visualizer/Context Menu contribute declarative masks because they are not
+    // ordinary-family host children. The mask itself is a single layer/FBO per
+    // display and is only enabled when the material renderer is active.
+    Item {
+        id: cardMaterialMaskSource
+        objectName: "cardMaterialMaskSource"
+        anchors.fill: parent
+        visible: false
         enabled: false
-        z: 1
+        layer.enabled: cardMaterialBackdropLoader.active
+        layer.smooth: true
+        z: 2
+
+        Item {
+            id: ordinaryCardMaterialMaskHost
+            objectName: "ordinaryCardMaterialMaskHost"
+            anchors.fill: parent
+            x: displayScene.pixelShiftX
+            y: displayScene.pixelShiftY
+        }
+
+        Rectangle {
+            id: visualizerCardMaterialMask
+            color: "white"
+            x: visualizerPresentationLoader.x + displayScene.pixelShiftX
+            y: visualizerPresentationLoader.y + displayScene.pixelShiftY
+            width: visualizerPresentationLoader.width
+            height: visualizerPresentationLoader.height
+            radius: visualizerPresentationLoader.item
+                ? Number(visualizerPresentationLoader.item.cardCornerRadius)
+                : 0.0
+            visible: displayScene.cardMaterialMode !== "normal"
+                && visualizerPresentationLoader.active
+                && visualizerPresentationLoader.item !== null
+                && visualizerPresentationLoader.item.visible
+                && visualizerPresentationLoader.item.cardShellEnabled
+            enabled: false
+        }
+
+        Rectangle {
+            id: contextMenuMaterialMask
+            color: "white"
+            x: retainedContextMenu.materialSurfaceX
+            y: retainedContextMenu.materialSurfaceY
+            width: retainedContextMenu.materialSurfaceWidth
+            height: retainedContextMenu.materialSurfaceHeight
+            radius: retainedContextMenu.materialSurfaceRadius
+            visible: displayScene.cardMaterialMode !== "normal"
+                && retainedContextMenu.visible
+            enabled: false
+        }
+
+        Rectangle {
+            id: contextSubmenuMaterialMask
+            color: "white"
+            x: retainedContextMenu.materialSubmenuX
+            y: retainedContextMenu.materialSubmenuY
+            width: retainedContextMenu.materialSubmenuWidth
+            height: retainedContextMenu.materialSubmenuHeight
+            radius: retainedContextMenu.materialSubmenuRadius
+            visible: displayScene.cardMaterialMode !== "normal"
+                && retainedContextMenu.materialSubmenuVisible
+            enabled: false
+        }
+    }
+
+    readonly property bool cardMaterialBackdropNeeded:
+        cardMaterialMode !== "normal"
+        && (ordinaryCardMaterialMaskHost.children.length > 0
+            || visualizerCardMaterialMask.visible
+            || contextMenuMaterialMask.visible
+            || contextSubmenuMaterialMask.visible)
+
+    Loader {
+        id: cardMaterialBackdropLoader
+        objectName: "cardMaterialBackdropLoader"
+        anchors.fill: parent
+        active: displayScene.cardMaterialBackdropNeeded
+        asynchronous: false
+        source: "CardMaterialBackdrop.qml"
+        z: 3
+        onLoaded: {
+            item.sourceItem = Qt.binding(function() {
+                return displayScene.materialBackdropSourceItem
+            })
+            item.maskSource = Qt.binding(function() {
+                return cardMaterialMaskSource
+            })
+            item.materialMode = Qt.binding(function() {
+                return displayScene.cardMaterialMode
+            })
+        }
     }
 
     Item {
@@ -129,6 +241,7 @@ Item {
         submenuCheckedSurfaceColor: displayScene.contextSubmenuCheckedSurfaceColor
         submenuIndicatorBorderColor: displayScene.contextSubmenuIndicatorBorderColor
         submenuIndicatorFillColor: displayScene.contextSubmenuIndicatorFillColor
+        materialMode: displayScene.cardMaterialMode
         z: 300
     }
 

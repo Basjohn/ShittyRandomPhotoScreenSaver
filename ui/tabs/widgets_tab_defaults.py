@@ -9,7 +9,6 @@ from PySide6.QtCore import QPointF, QSignalBlocker, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -36,6 +35,7 @@ from core.logging.logger import get_logger
 from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
 from ui.flow_layout import FlowContainer
+from ui.widgets import StyledComboBox
 from ui.styled_popup import ColorSwatchButton, StyledPopup
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
@@ -45,6 +45,7 @@ from ui.tabs.shared_styles import (
 )
 from ui.settings_theme_catalog import read_persisted_theme_id
 from ui.settings_theme_spec import Rgba
+from ui.widget_theme_active import subscribe_widget_theme
 from ui.widget_theme_runtime import WidgetThemeState, begin_theme_owned_edit
 from ui.widget_theme_selection import (
     activate_widget_theme_state,
@@ -99,6 +100,43 @@ def _sync_general_widget_theme_controls(tab: "WidgetsTab") -> None:
             style_combo.setCurrentIndex(index if index >= 0 else 0)
         finally:
             del blocker
+
+
+def _bind_general_widget_theme_controls(tab: "WidgetsTab") -> None:
+    """Keep the two shared swatches current across lazy Settings-tab navigation.
+
+    This is a Settings-UI event subscription only. Retained presentations still
+    consume one construction-time theme snapshot and own no live theme cadence.
+    The callback uses the already-published theme directly instead of rereading
+    persistence, so the publish-before-persist transaction used by Custom edits
+    cannot transiently repaint the swatches from stale Settings data.
+    """
+
+    if getattr(tab, "_widget_theme_controls_unsubscribe", None) is not None:
+        return
+    tab_ref = weakref.ref(tab)
+
+    def _theme_changed(theme) -> None:
+        owner = tab_ref()
+        if owner is None:
+            return
+        surface_btn = getattr(owner, "widget_card_surface_btn", None)
+        border_btn = getattr(owner, "widget_card_border_btn", None)
+        if surface_btn is not None:
+            surface_btn.set_color(_rgba_to_qcolor(theme.color("card.background")))
+        if border_btn is not None:
+            border_btn.set_color(_rgba_to_qcolor(theme.color("card.border")))
+
+    unsubscribe = subscribe_widget_theme(_theme_changed, call_immediately=True)
+    tab._widget_theme_controls_unsubscribe = unsubscribe
+
+    def _unsubscribe(_obj=None) -> None:
+        callback = getattr(tab, "_widget_theme_controls_unsubscribe", None)
+        tab._widget_theme_controls_unsubscribe = None
+        if callable(callback):
+            callback()
+
+    tab.destroyed.connect(_unsubscribe)
 
 
 def _edit_shared_widget_theme_color(
@@ -698,20 +736,14 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         label_width=label_width,
         wrap=False,
     )
-    tab.widget_surface_style_combo = QComboBox()
+    tab.widget_surface_style_combo = StyledComboBox()
     tab.widget_surface_style_combo.addItem("Theme Default", "theme")
     tab.widget_surface_style_combo.addItem("Normal", "normal")
     tab.widget_surface_style_combo.addItem("Glass", "glass")
     tab.widget_surface_style_combo.addItem("Acrylic", "acrylic")
     tab.widget_surface_style_combo.setToolTip(
-        "Material is independent of Widget Theme colours. Glass and Acrylic are reserved but disabled until the shared retained material renderer is admitted."
+        "Material is independent of Widget Theme colours. Theme Default follows the selected Widget Theme recommendation; an explicit choice overrides material only."
     )
-    combo_model = tab.widget_surface_style_combo.model()
-    if hasattr(combo_model, "item"):
-        for disabled_index in (2, 3):
-            item = combo_model.item(disabled_index)
-            if item is not None:
-                item.setEnabled(False)
     tab.widget_surface_style_combo.currentIndexChanged.connect(
         lambda index, owner=tab: _on_widget_surface_style_changed(owner, index)
     )
@@ -719,6 +751,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     material_row.addStretch()
 
     _sync_general_widget_theme_controls(tab)
+    _bind_general_widget_theme_controls(tab)
 
     border_row, _ = add_aligned_row(
         appearance_layout,

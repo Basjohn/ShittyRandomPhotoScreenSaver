@@ -14,6 +14,18 @@ Item {
     property bool cardShellEnabled: true
     property color cardBackgroundColor: "#4c232323"
     property color cardBorderColor: "#ffffffff"
+    property string cardMaterialMode: "normal"
+    readonly property color cardMaterialBackgroundColor: {
+        if (cardMaterialMode === "glass") {
+            const alpha = Math.max(0.10, Math.min(0.36, cardBackgroundColor.a * 0.75))
+            return Qt.rgba(cardBackgroundColor.r, cardBackgroundColor.g, cardBackgroundColor.b, alpha)
+        }
+        if (cardMaterialMode === "acrylic") {
+            const alpha = Math.max(0.25, Math.min(0.68, cardBackgroundColor.a))
+            return Qt.rgba(cardBackgroundColor.r, cardBackgroundColor.g, cardBackgroundColor.b, alpha)
+        }
+        return cardBackgroundColor
+    }
     property real cardBorderWidth: 4.0
     property real cardCornerRadius: 8.0
     property bool cardShadowEnabled: true
@@ -88,7 +100,7 @@ Item {
         objectName: "visualizerCardBackground"
         anchors.fill: parent
         visible: visualizerPresentationRoot.cardShellEnabled
-        color: visualizerPresentationRoot.cardBackgroundColor
+        color: visualizerPresentationRoot.cardMaterialBackgroundColor
         radius: visualizerPresentationRoot.cardCornerRadius
         z: 1
     }

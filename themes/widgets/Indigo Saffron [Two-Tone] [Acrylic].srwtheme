@@ -1,0 +1,244 @@
+{
+  "format": "srpss.widget-theme",
+  "schema_version": 2,
+  "theme_id": "mirror:file:Indigo Saffron [Two-Tone] [Acrylic].srtheme",
+  "name": "Indigo Saffron [Two-Tone] [Acrylic]",
+  "default_card_material_mode": "acrylic",
+  "linked_settings_theme_id": "file:Indigo Saffron [Two-Tone] [Acrylic].srtheme",
+  "colors": {
+    "card.background": [
+      31,
+      40,
+      65,
+      112
+    ],
+    "card.border": [
+      226,
+      192,
+      108,
+      255
+    ],
+    "card.text": [
+      239,
+      240,
+      247,
+      255
+    ],
+    "context.menu.surface": [
+      16,
+      21,
+      35,
+      215
+    ],
+    "context.menu.border": [
+      226,
+      192,
+      108,
+      230
+    ],
+    "context.menu.text": [
+      239,
+      240,
+      247,
+      255
+    ],
+    "context.menu.selected_surface": [
+      133,
+      104,
+      33,
+      224
+    ],
+    "context.menu.disabled_text": [
+      109,
+      118,
+      137,
+      160
+    ],
+    "context.menu.separator": [
+      226,
+      192,
+      108,
+      165
+    ],
+    "context.submenu.surface": [
+      16,
+      21,
+      35,
+      215
+    ],
+    "context.submenu.border": [
+      226,
+      192,
+      108,
+      230
+    ],
+    "context.submenu.text": [
+      239,
+      240,
+      247,
+      255
+    ],
+    "context.submenu.selected_surface": [
+      133,
+      104,
+      33,
+      224
+    ],
+    "context.submenu.checked_text": [
+      239,
+      240,
+      247,
+      255
+    ],
+    "context.submenu.checked_surface": [
+      133,
+      104,
+      33,
+      224
+    ],
+    "header.fill": [
+      133,
+      104,
+      33,
+      230
+    ],
+    "header.border": [
+      226,
+      192,
+      108,
+      255
+    ],
+    "header.text": [
+      239,
+      240,
+      247,
+      255
+    ],
+    "widget.panel": [
+      31,
+      40,
+      65,
+      255
+    ],
+    "widget.panel.alt": [
+      31,
+      40,
+      65,
+      100
+    ],
+    "widget.outline": [
+      226,
+      192,
+      108,
+      255
+    ],
+    "widget.separator": [
+      226,
+      192,
+      108,
+      165
+    ],
+    "widget.icon": [
+      239,
+      240,
+      247,
+      255
+    ],
+    "widget.muted": [
+      191,
+      200,
+      214,
+      255
+    ],
+    "widget.accent": [
+      145,
+      154,
+      193,
+      215
+    ],
+    "widget.gradient.start": [
+      16,
+      21,
+      35,
+      242
+    ],
+    "widget.gradient.middle": [
+      31,
+      40,
+      65,
+      217
+    ],
+    "widget.gradient.end": [
+      91,
+      73,
+      27,
+      179
+    ],
+    "gmail.sender": [
+      191,
+      200,
+      214,
+      255
+    ],
+    "gmail.read_sender": [
+      191,
+      200,
+      214,
+      219
+    ],
+    "gmail.read_subject": [
+      239,
+      240,
+      247,
+      230
+    ],
+    "gmail.timestamp": [
+      191,
+      200,
+      214,
+      194
+    ],
+    "reddit.age": [
+      191,
+      200,
+      214,
+      219
+    ],
+    "reddit2.age": [
+      191,
+      200,
+      214,
+      219
+    ],
+    "context.menu.indicator.border": [
+      239,
+      240,
+      247,
+      255
+    ],
+    "context.menu.indicator.fill": [
+      145,
+      154,
+      193,
+      215
+    ],
+    "context.menu.arrow": [
+      226,
+      192,
+      108,
+      230
+    ],
+    "context.submenu.indicator.border": [
+      239,
+      240,
+      247,
+      255
+    ],
+    "context.submenu.indicator.fill": [
+      145,
+      154,
+      193,
+      215
+    ]
+  }
+}

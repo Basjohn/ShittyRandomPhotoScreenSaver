@@ -14,6 +14,22 @@ Item {
     property bool shellEnabled: true
     property color backgroundColor: "#b3101010"
     property color borderColor: "#e6ffffff"
+    property string materialMode: "normal"
+
+    // Glass/Acrylic reveal the ONE shared blurred display backdrop underneath
+    // this card.  The card itself owns only a cheap tint; no effect/capture is
+    // instantiated here. Normal preserves the authored RGBA exactly.
+    readonly property color materialBackgroundColor: {
+        if (materialMode === "glass") {
+            const alpha = Math.max(0.10, Math.min(0.36, backgroundColor.a * 0.75))
+            return Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, alpha)
+        }
+        if (materialMode === "acrylic") {
+            const alpha = Math.max(0.25, Math.min(0.68, backgroundColor.a))
+            return Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, alpha)
+        }
+        return backgroundColor
+    }
     property real borderWidth: 2.0
     property real cornerRadius: 8.0
     property real padding: 8.0
@@ -88,7 +104,7 @@ Item {
         objectName: "overlayCardBackground"
         anchors.fill: parent
         visible: card.shellEnabled
-        color: card.backgroundColor
+        color: card.materialBackgroundColor
         radius: card.cornerRadius
         border.color: card.borderColor
         border.width: card.borderWidth

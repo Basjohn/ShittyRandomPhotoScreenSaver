@@ -185,7 +185,7 @@ _DEFAULT_DARK_WIDGET_COLORS: dict[str, Rgba] = {
     # shared Widget Theme owns RGBA directly.
     "card.background": Rgba(35, 35, 35, 76),
     "card.border": Rgba(255, 255, 255, 255),
-    "card.text": Rgba(255, 255, 255, 255),
+    "card.text": Rgba(255, 255, 255, 230),
 
     # Retained runtime Context Menu. These values intentionally mirror the
     # physically accepted current QML pixels; semantic ownership must not recolour
@@ -220,7 +220,7 @@ DEFAULT_DARK_WIDGET_THEME = WidgetThemeSpec(
     theme_id=DEFAULT_DARK_WIDGET_THEME_ID,
     name="Default Dark",
     default_card_material_mode="normal",
-    linked_settings_theme_id="default_dark",
+    linked_settings_theme_id="builtin:default-dark",
     colors=_DEFAULT_DARK_WIDGET_COLORS,
 )
 

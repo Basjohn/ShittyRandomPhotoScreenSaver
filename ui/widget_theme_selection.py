@@ -140,9 +140,9 @@ def activate_widget_theme_state(
 ) -> ResolvedWidgetTheme:
     """Resolve + publish one configuration snapshot.
 
-    Phase 1 keeps the renderer Normal-only.  Glass/Acrylic preferences remain
-    persisted/resolved data but are deliberately not admitted to the retained
-    renderer until the shared scene-local material path exists.
+    The retained renderer consumes exactly one already-resolved material enum.
+    Normal keeps the shared material Loader dormant; Glass/Acrylic use the one
+    lazy per-display backdrop authority and never create per-card capture owners.
     """
 
     resolved = resolve_widget_theme_state(
@@ -150,7 +150,10 @@ def activate_widget_theme_state(
         catalog=catalog,
         settings_theme_id=settings_theme_id,
     )
-    set_active_widget_theme(resolved.theme, material_mode="normal")
+    set_active_widget_theme(
+        resolved.theme,
+        material_mode=resolved.effective_card_material_mode,
+    )
     if persist:
         persist_widget_theme_state(settings, state)
     return resolved

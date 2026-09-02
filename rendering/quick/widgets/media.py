@@ -31,6 +31,7 @@ from .theme_projection import (
     configured_rgba_override,
     resolve_card_surface_colors,
     resolve_header_colors,
+    resolve_primary_text_color,
     resolve_rgba_role,
 )
 
@@ -337,9 +338,16 @@ class MediaPresentationConfig:
             border_color=config.border_color,
             border_opacity=config.border_opacity,
         )
+        text_color = resolve_primary_text_color(
+            values=current,
+            defaults=defaults if isinstance(defaults, Mapping) else {},
+            text_color=config.text_color,
+        )
+        local_common["local.text"] = text_color
 
         return replace(
             config,
+            text_color=text_color,
             background_color=card_background,
             background_opacity=1.0,
             border_color=card_border,

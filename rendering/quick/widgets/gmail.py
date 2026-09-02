@@ -27,6 +27,7 @@ from rendering.quick.widgets.theme_projection import (
     configured_rgba_override,
     resolve_card_surface_colors,
     resolve_header_colors,
+    resolve_primary_text_color,
     resolve_rgba_role,
 )
 from widgets.gmail_components import (
@@ -239,8 +240,15 @@ class GmailPresentationConfig:
             border_color=config.border_color,
             border_opacity=config.border_opacity,
         )
+        text_color = resolve_primary_text_color(
+            values=current,
+            defaults=defaults if isinstance(defaults, Mapping) else {},
+            text_color=config.text_color,
+        )
+        separator_local["local.text"] = text_color
         return replace(
             config,
+            text_color=text_color,
             background_color=card_background,
             background_opacity=1.0,
             border_color=card_border,
@@ -739,19 +747,31 @@ class GmailPresentationModel(QObject):
 
     @Property(QColor, notify=stateChanged)
     def senderColor(self) -> QColor:
-        return QColor(200, 200, 200, 255)
+        fallback = (200, 200, 200, 255)
+        return QColor(*resolve_rgba_role(
+            "gmail.sender", local_roles={"local.muted": fallback}, fallback=fallback
+        ))
 
     @Property(QColor, notify=stateChanged)
     def readSenderColor(self) -> QColor:
-        return QColor(180, 180, 180, 220)
+        fallback = (180, 180, 180, 220)
+        return QColor(*resolve_rgba_role(
+            "gmail.read_sender", local_roles={"local.muted": fallback}, fallback=fallback
+        ))
 
     @Property(QColor, notify=stateChanged)
     def readSubjectColor(self) -> QColor:
-        return QColor(220, 220, 220, 230)
+        fallback = (220, 220, 220, 230)
+        return QColor(*resolve_rgba_role(
+            "gmail.read_subject", local_roles={"local.muted": fallback}, fallback=fallback
+        ))
 
     @Property(QColor, notify=stateChanged)
     def timestampColor(self) -> QColor:
-        return QColor(180, 180, 180, 200)
+        fallback = (180, 180, 180, 200)
+        return QColor(*resolve_rgba_role(
+            "gmail.timestamp", local_roles={"local.muted": fallback}, fallback=fallback
+        ))
 
     @Property(QColor, notify=stateChanged)
     def separatorColor(self) -> QColor:

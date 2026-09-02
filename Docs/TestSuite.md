@@ -156,6 +156,16 @@ The full test pack exposed additional current-authority drift that is also repai
 
 `tests/run_chunked.py` now exposes canonical `destination` and includes the surviving permanent R4-R7/Media/audio/freshness targets that were missing from the old H list. At closure it contains **95 unique targets**, all present in the supplied complete test tree. Do not publish an aggregate pass count until this exact profile runs in the real PySide6/OpenGL environment.
 
+### 2026-09-02 J+ Widget-theme/material/resource contract additions
+
+The maintained `destination` profile also includes the current J+ source contracts:
+
+- `test_widget_theme_mirror_pack.py` — one explicit `.srwtheme` mirror per Settings theme and stable link metadata;
+- `test_widget_material_shared_contract.py` — themed Surface Style control, Normal dormancy, one shared material capture/blur authority rather than per-card effects, and admitted primary/secondary semantic consumers;
+- `test_widget_theme_link_and_asset_contract.py` — link/unlink identity persistence, lazy Settings-page coherence without polling, the mixed static-asset packaging contract (`assets.qrc`/`assets_rc.py` for embedded Settings UI resources, raw `images/` for runtime branded/widget imagery), and frozen theme deployment authority (`%ProgramData%\SRPSS\themes` + installer seed/clean-replace).
+
+These source contracts can run without Qt. Actual Glass/Acrylic pixels, retained theme application, link UI behavior and frozen-build asset availability remain physical/PySide6 acceptance work and must not be marked closed from source-only green.
+
 ## 4. Permanent architecture gates
 
 ### 4.1 Transitions

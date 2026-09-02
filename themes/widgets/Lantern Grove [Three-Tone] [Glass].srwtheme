@@ -1,0 +1,244 @@
+{
+  "format": "srpss.widget-theme",
+  "schema_version": 2,
+  "theme_id": "mirror:file:Lantern Grove [Three-Tone] [Glass].srtheme",
+  "name": "Lantern Grove [Three-Tone] [Glass]",
+  "default_card_material_mode": "glass",
+  "linked_settings_theme_id": "file:Lantern Grove [Three-Tone] [Glass].srtheme",
+  "colors": {
+    "card.background": [
+      30,
+      44,
+      40,
+      112
+    ],
+    "card.border": [
+      208,
+      176,
+      123,
+      255
+    ],
+    "card.text": [
+      238,
+      241,
+      243,
+      255
+    ],
+    "context.menu.surface": [
+      16,
+      23,
+      22,
+      215
+    ],
+    "context.menu.border": [
+      208,
+      176,
+      123,
+      230
+    ],
+    "context.menu.text": [
+      238,
+      241,
+      243,
+      255
+    ],
+    "context.menu.selected_surface": [
+      118,
+      91,
+      46,
+      224
+    ],
+    "context.menu.disabled_text": [
+      109,
+      120,
+      128,
+      160
+    ],
+    "context.menu.separator": [
+      208,
+      176,
+      123,
+      165
+    ],
+    "context.submenu.surface": [
+      16,
+      23,
+      22,
+      215
+    ],
+    "context.submenu.border": [
+      208,
+      176,
+      123,
+      230
+    ],
+    "context.submenu.text": [
+      238,
+      241,
+      243,
+      255
+    ],
+    "context.submenu.selected_surface": [
+      118,
+      91,
+      46,
+      224
+    ],
+    "context.submenu.checked_text": [
+      238,
+      241,
+      243,
+      255
+    ],
+    "context.submenu.checked_surface": [
+      118,
+      91,
+      46,
+      224
+    ],
+    "header.fill": [
+      118,
+      91,
+      46,
+      230
+    ],
+    "header.border": [
+      208,
+      176,
+      123,
+      255
+    ],
+    "header.text": [
+      238,
+      241,
+      243,
+      255
+    ],
+    "widget.panel": [
+      30,
+      44,
+      40,
+      255
+    ],
+    "widget.panel.alt": [
+      30,
+      44,
+      40,
+      100
+    ],
+    "widget.outline": [
+      208,
+      176,
+      123,
+      255
+    ],
+    "widget.separator": [
+      208,
+      176,
+      123,
+      165
+    ],
+    "widget.icon": [
+      238,
+      241,
+      243,
+      255
+    ],
+    "widget.muted": [
+      191,
+      202,
+      206,
+      255
+    ],
+    "widget.accent": [
+      169,
+      86,
+      77,
+      215
+    ],
+    "widget.gradient.start": [
+      16,
+      23,
+      22,
+      242
+    ],
+    "widget.gradient.middle": [
+      30,
+      44,
+      40,
+      217
+    ],
+    "widget.gradient.end": [
+      81,
+      64,
+      36,
+      179
+    ],
+    "gmail.sender": [
+      191,
+      202,
+      206,
+      255
+    ],
+    "gmail.read_sender": [
+      191,
+      202,
+      206,
+      219
+    ],
+    "gmail.read_subject": [
+      238,
+      241,
+      243,
+      230
+    ],
+    "gmail.timestamp": [
+      191,
+      202,
+      206,
+      194
+    ],
+    "reddit.age": [
+      191,
+      202,
+      206,
+      219
+    ],
+    "reddit2.age": [
+      191,
+      202,
+      206,
+      219
+    ],
+    "context.menu.indicator.border": [
+      238,
+      241,
+      243,
+      255
+    ],
+    "context.menu.indicator.fill": [
+      169,
+      86,
+      77,
+      215
+    ],
+    "context.menu.arrow": [
+      208,
+      176,
+      123,
+      230
+    ],
+    "context.submenu.indicator.border": [
+      238,
+      241,
+      243,
+      255
+    ],
+    "context.submenu.indicator.fill": [
+      169,
+      86,
+      77,
+      215
+    ]
+  }
+}

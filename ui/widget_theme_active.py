@@ -27,9 +27,9 @@ def get_active_widget_theme() -> WidgetThemeSpec:
 def get_active_widget_material_mode() -> str:
     """Return the admitted renderer-facing material for this generation.
 
-    Phase 1 keeps the retained renderer Normal-only even when a theme file
-    recommends Glass/Acrylic.  This process-local snapshot prevents a theme
-    recommendation from looking live before the shared material path exists.
+    This is a process-local configuration snapshot, not a polling/live-render
+    authority. The display scene decides lazily whether any material resources
+    are needed; Normal therefore creates no capture/blur path.
     """
 
     return _active_material_mode

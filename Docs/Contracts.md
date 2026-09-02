@@ -86,10 +86,12 @@ source/dev:       <repo-root>\themes
 ```
 
 Path resolution belongs to startup/build authority. Catalogues receive the resolved directory; they do not encode install
-paths into theme identity. Do not merge ProgramData and repository/bundled theme roots into one live catalogue. A
-repository/bundled tree may bootstrap the stable ProgramData tree, following the same one-active-root principle as other
-curated SRPSS assets. ProgramData theme files are catalogue assets, not the persistence location for automatic Custom
-state; `Custom` belongs to Settings persistence.
+paths into theme identity. Source/dev reads `<repo-root>/themes`; frozen/installed runtime reads only
+`%ProgramData%\SRPSS\themes`, with Widget Themes under its `widgets/` child. The normal and Media Center installers own
+seeding/clean-replacing that curated ProgramData tree, just as they do the shared visualizer preset tree. Do not merge
+ProgramData and repository/onefile/app-local theme roots into one live catalogue or add a runtime bootstrap fallback.
+ProgramData theme files are catalogue assets, not the persistence location for automatic Custom state; `Custom` belongs
+to Settings persistence.
 
 The retained Context Menu follows the selected Widget Theme palette plus the same resolved **effective** runtime material
 because it lives in the Quick display scene; it never consumes the Settings QWidget theme/AccentPolicy backdrop directly.

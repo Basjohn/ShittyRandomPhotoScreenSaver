@@ -6,12 +6,12 @@ directory before Settings construction.
 
 Internal navigation:
 - Setting Themes: landing page and live .srtheme selection.
-- Widget Themes: intentionally empty future surface.
+- Widget Themes: linked or independent runtime Widget Theme selection.
 """
 from __future__ import annotations
 from typing import Optional
 from PySide6.QtCore import QSignalBlocker, QSize, Qt
-from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QGroupBox, QLabel, QListWidget,
+from PySide6.QtWidgets import (QButtonGroup, QGroupBox, QLabel, QListWidget,
     QListWidgetItem, QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
@@ -26,6 +26,7 @@ from ui.widget_theme_selection import (
     activate_widget_theme_state,
     persist_widget_theme_state,
     read_widget_theme_state,
+    resolve_widget_theme_state,
     synced_widget_theme_id_for_settings,
 )
 from ui.tabs import shared_styles
@@ -55,7 +56,7 @@ class _ThemePillButton(QPushButton):
 
 
 class ThemesTab(QWidget):
-    """Settings theme catalogue with reserved future Widget Themes surface."""
+    """Settings and runtime Widget theme catalogues with explicit linking."""
     def __init__(self, settings: SettingsManager, parent: Optional[QWidget]=None, *,
                  catalog: SettingsThemeCatalog|None=None):
         super().__init__(parent)
@@ -102,6 +103,8 @@ class ThemesTab(QWidget):
     def _select_page(self,page_index):
         if page_index in (_SETTING_THEMES_PAGE,_WIDGET_THEMES_PAGE):
             self._page_stack.setCurrentIndex(page_index)
+            if page_index == _WIDGET_THEMES_PAGE:
+                self._refresh_widget_theme_page_from_state()
 
     def _build_setting_themes_page(self):
         page=QWidget(); page_layout=QVBoxLayout(page)
@@ -129,18 +132,31 @@ class ThemesTab(QWidget):
             "are edited once under Widgets → General → Appearance."
         )
         intro.setWordWrap(True); shared_styles.apply_shared_label_style(intro,"INFO_LABEL_STYLE"); group_layout.addWidget(intro)
-        self.widget_keep_synced=QCheckBox("Keep Widget Theme synced with Settings Theme")
-        self.widget_keep_synced.setProperty("circleIndicator", True)
+        self.widget_keep_synced=QPushButton()
+        self.widget_keep_synced.setCheckable(True)
+        self.widget_keep_synced.setMinimumWidth(300)
         self.widget_keep_synced.setToolTip(
-            "Use the explicitly linked Widget Theme for the selected Settings Theme when one exists."
+            "Linked: Settings Theme changes automatically select the explicitly paired Widget Theme. "
+            "Independent: Widget Theme can be chosen separately."
         )
-        group_layout.addWidget(self.widget_keep_synced)
+        shared_styles.bind_shared_styles(
+            self.widget_keep_synced, "MODE_TOGGLE_BUTTON_STYLE", base_style=""
+        )
+        group_layout.addWidget(self.widget_keep_synced, 0, Qt.AlignmentFlag.AlignLeft)
         self.widget_theme_list=QListWidget(); self.widget_theme_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.widget_theme_list.setStyleSheet("QListWidget { font-size: 12pt; }")
         self.widget_theme_list.setMinimumHeight(240); group_layout.addWidget(self.widget_theme_list)
         self.widget_theme_status=QLabel(""); self.widget_theme_status.setWordWrap(True)
         shared_styles.apply_shared_label_style(self.widget_theme_status,"INFO_LABEL_STYLE"); group_layout.addWidget(self.widget_theme_status)
         page_layout.addWidget(group); page_layout.addStretch(); return page
+
+    def _update_widget_link_button(self, checked: bool | None = None) -> None:
+        if not hasattr(self, "widget_keep_synced"):
+            return
+        linked = self.widget_keep_synced.isChecked() if checked is None else bool(checked)
+        self.widget_keep_synced.setText(
+            "Linked to Settings Theme" if linked else "Independent Widget Theme"
+        )
 
     def _populate_settings_themes(self):
         self._loading_selection=True
@@ -213,6 +229,7 @@ class ThemesTab(QWidget):
                 custom.setToolTip("Settings-persisted user Widget Theme snapshot.")
                 self.widget_theme_list.addItem(custom)
             self.widget_keep_synced.setChecked(state.keep_synced)
+            self._update_widget_link_button(state.keep_synced)
             effective=activate_widget_theme_state(
                 self._settings,
                 state,
@@ -239,6 +256,55 @@ class ThemesTab(QWidget):
                 self.widget_theme_list.setCurrentRow(row); return
         if self.widget_theme_list.count(): self.widget_theme_list.setCurrentRow(0)
 
+    def _refresh_widget_theme_page_from_state(self):
+        """Refresh linked/Custom UI when this lazy page becomes visible.
+
+        Card Surface edits live under Widgets -> General and can create Custom while
+        this Themes tab already exists. Refreshing on page entry keeps both surfaces
+        coherent without a polling owner or cross-tab mutation service.
+        """
+
+        if not hasattr(self, "widget_theme_list"):
+            return
+        state=read_widget_theme_state(self._settings)
+        catalog=get_current_widget_theme_catalog()
+
+        custom_row=-1
+        for row in range(self.widget_theme_list.count()):
+            item=self.widget_theme_list.item(row)
+            if item.data(Qt.ItemDataRole.UserRole)==CUSTOM_WIDGET_THEME_ID:
+                custom_row=row
+                break
+        if state.custom_payload is not None and custom_row < 0:
+            custom=QListWidgetItem("Custom")
+            custom.setData(Qt.ItemDataRole.UserRole,CUSTOM_WIDGET_THEME_ID)
+            custom.setToolTip("Settings-persisted user Widget Theme snapshot.")
+            self.widget_theme_list.addItem(custom)
+        elif state.custom_payload is None and custom_row >= 0:
+            self.widget_theme_list.takeItem(custom_row)
+
+        resolved=resolve_widget_theme_state(
+            state,
+            catalog=catalog,
+            settings_theme_id=read_persisted_theme_id(self._settings),
+        )
+        self._loading_widget_selection=True
+        try:
+            blocker=QSignalBlocker(self.widget_keep_synced)
+            self.widget_keep_synced.setChecked(state.keep_synced)
+            self._update_widget_link_button(state.keep_synced)
+            del blocker
+            self._select_widget_theme_id(resolved.theme.theme_id)
+        finally:
+            self._loading_widget_selection=False
+
+        issues=len(catalog.issues)
+        suffix=f" {issues} invalid Widget theme file{' was' if issues==1 else 's were'} ignored." if issues else ""
+        if state.keep_synced:
+            self.widget_theme_status.setText(f"Linked to {resolved.theme.name}.{suffix}")
+        else:
+            self.widget_theme_status.setText(f"Using {resolved.theme.name} independently.{suffix}")
+
     def _on_widget_theme_selection_changed(self,current,previous):
         if getattr(self,"_loading_widget_selection",False) or current is None: return
         theme_id=str(current.data(Qt.ItemDataRole.UserRole) or "")
@@ -258,6 +324,7 @@ class ThemesTab(QWidget):
         )
         blocker=QSignalBlocker(self.widget_keep_synced)
         self.widget_keep_synced.setChecked(False)
+        self._update_widget_link_button(False)
         del blocker
         resolved=activate_widget_theme_state(
             self._settings,next_state,settings_theme_id=read_persisted_theme_id(self._settings)
@@ -266,15 +333,28 @@ class ThemesTab(QWidget):
 
     def _on_widget_keep_synced_changed(self,checked):
         if getattr(self,"_loading_widget_selection",False): return
+        checked=bool(checked)
+        self._update_widget_link_button(checked)
         state=read_widget_theme_state(self._settings)
+        settings_theme_id=read_persisted_theme_id(self._settings)
+        selected_id=state.selected_id
+        catalog=get_current_widget_theme_catalog()
+        linked=None
+        if checked:
+            linked=synced_widget_theme_id_for_settings(catalog,settings_theme_id)
+            if linked is not None:
+                # Link is a real identity relationship, not just a transient resolver
+                # preference. Persist the paired id so unlinking later freezes the
+                # currently visible Widget Theme instead of resurrecting stale state.
+                selected_id=linked
         next_state=WidgetThemeState(
-            selected_id=state.selected_id,
-            keep_synced=bool(checked),
+            selected_id=selected_id,
+            keep_synced=checked,
             card_material_override=state.card_material_override,
             custom_payload=state.custom_payload,
         )
         resolved=activate_widget_theme_state(
-            self._settings,next_state,settings_theme_id=read_persisted_theme_id(self._settings)
+            self._settings,next_state,settings_theme_id=settings_theme_id
         )
         self._loading_widget_selection=True
         try:
@@ -282,21 +362,42 @@ class ThemesTab(QWidget):
         finally:
             self._loading_widget_selection=False
         if checked:
-            catalog=get_current_widget_theme_catalog()
-            linked=synced_widget_theme_id_for_settings(catalog,read_persisted_theme_id(self._settings))
             if linked is None:
-                self.widget_theme_status.setText("Keep Synced is on, but this Settings Theme has no linked Widget Theme; the current Widget Theme remains in use.")
+                self.widget_theme_status.setText(
+                    "Linked mode is on, but this Settings Theme has no paired Widget Theme; "
+                    "the current Widget Theme remains in use."
+                )
             else:
                 self.widget_theme_status.setText(f"Synced to {resolved.theme.name}.")
         else:
-            self.widget_theme_status.setText(f"Using {resolved.theme.name} independently of the Settings Theme.")
+            self.widget_theme_status.setText(
+                f"Using {resolved.theme.name} independently of the Settings Theme."
+            )
 
     def _resync_widget_theme_for_settings(self,settings_theme_id):
         if not hasattr(self,"widget_theme_list"): return
         state=read_widget_theme_state(self._settings)
         if not state.keep_synced: return
+        catalog=get_current_widget_theme_catalog()
+        linked_id=synced_widget_theme_id_for_settings(catalog,str(settings_theme_id))
+        if linked_id is None:
+            self.widget_theme_status.setText(
+                "Linked mode is on, but this Settings Theme has no paired Widget Theme; "
+                "the current Widget Theme remains in use."
+            )
+            return
+        # Persist the effective linked identity as well as publishing it. This makes
+        # unlinking a freeze operation: the currently visible Widget Theme remains
+        # selected instead of snapping back to whichever independent id happened to
+        # be stored before linking. Surface Style remains orthogonal.
+        next_state=WidgetThemeState(
+            selected_id=linked_id,
+            keep_synced=True,
+            card_material_override=state.card_material_override,
+            custom_payload=state.custom_payload,
+        )
         resolved=activate_widget_theme_state(
-            self._settings,state,settings_theme_id=str(settings_theme_id),persist=False
+            self._settings,next_state,settings_theme_id=str(settings_theme_id),persist=True
         )
         self._loading_widget_selection=True
         try:
