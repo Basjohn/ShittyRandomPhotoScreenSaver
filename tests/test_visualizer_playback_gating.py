@@ -279,8 +279,12 @@ class TestVisualizerPlaybackGating:
 def test_visualizer_gating_integration():
     """Integration test for the complete gating system."""
     engine = _SpotifyBeatEngine(bar_count=32)
-    engine._thread_manager = Mock()
-    
+    # Match the class fixture so the reused methods find the persistent
+    # analysis lane through the same _test_thread_manager seam.
+    manager = _GatingThreadManager()
+    engine.set_thread_manager(manager)
+    engine._test_thread_manager = manager
+
     # Test complete workflow
     test_instance = TestVisualizerPlaybackGating()
     
