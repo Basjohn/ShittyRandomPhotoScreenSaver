@@ -446,6 +446,29 @@ class ScreensaverEngine(QObject):
             if self.settings_manager is None:
                 self.settings_manager = SettingsManager()
             logger.debug("SettingsManager initialized")
+
+            # Retained Quick families resolve Widget Theme colours only at
+            # generation/configuration boundaries. Activate the persisted theme
+            # before any display runtime can construct; no recurring theme owner
+            # or Settings polling is introduced.
+            try:
+                from ui.settings_theme_catalog import read_persisted_theme_id
+                from ui.settings_theme_paths import resolve_settings_themes_directory
+                from ui.widget_theme_paths import resolve_widget_themes_directory
+                from ui.widget_theme_selection import activate_persisted_widget_theme
+
+                themes_root = resolve_settings_themes_directory()
+                activate_persisted_widget_theme(
+                    self.settings_manager,
+                    resolve_widget_themes_directory(themes_root),
+                    settings_theme_id=read_persisted_theme_id(self.settings_manager),
+                )
+            except Exception:
+                # Compiled Default Dark remains process-local fallback authority.
+                logger.warning(
+                    "Failed to resolve persisted Widget Theme before runtime construction",
+                    exc_info=True,
+                )
             
             # Bridge SettingsManager Qt Signal to EventSystem
             # This allows the engine to receive settings changes via EventSystem

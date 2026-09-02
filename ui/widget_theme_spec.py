@@ -174,15 +174,17 @@ class WidgetThemeSpec:
 # no external .srwtheme exists. Default Dark recommends the cheap ``normal`` card
 # material and links to the compiled Default Dark Settings theme.
 #
-# Card baseline defaults mirror OverlayCardStyle. Context Menu roles mirror the
+# Card baseline defaults mirror the accepted ordinary retained-family surface. Context Menu roles mirror the
 # physically accepted retained ContextMenu.qml pixels so moving those literals into
 # Widget Theme ownership is visually neutral; they intentionally do not inherit the
 # QWidget Settings theme directly.
 
 _DEFAULT_DARK_WIDGET_COLORS: dict[str, Rgba] = {
-    # Ordinary card surface (mirrors OverlayCardStyle defaults / OverlayCard.qml).
-    "card.background": Rgba(16, 16, 16, 179),
-    "card.border": Rgba(255, 255, 255, 230),
+    # Ordinary card surface: canonical [35,35,35,255] at 0.3 opacity,
+    # plus the canonical opaque white border. Alpha is pre-composed because the
+    # shared Widget Theme owns RGBA directly.
+    "card.background": Rgba(35, 35, 35, 76),
+    "card.border": Rgba(255, 255, 255, 255),
     "card.text": Rgba(255, 255, 255, 255),
 
     # Retained runtime Context Menu. These values intentionally mirror the

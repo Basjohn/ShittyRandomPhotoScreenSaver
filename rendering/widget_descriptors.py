@@ -1702,6 +1702,32 @@ def is_custom_position_selected_for_widget(
     return str(section.get("position", "")).strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower()
 
 
+def is_global_custom_layout_mode_selected(
+    widgets_config: Mapping[str, Any] | None,
+) -> bool:
+    """Return True when any layout-edit family currently routes through CUSTOM.
+
+    CUSTOM is a *global layout mode*, not a per-widget stacking exception.  As
+    soon as one effective family route is CUSTOM, authored stacking and the
+    stronger ordinary Media/Visualizer adjacency policy must be dormant for the
+    whole retained layout.  The live edit transaction has its own transient
+    gate; this helper covers the persisted/effective Settings side at startup
+    and recreation.
+    """
+
+    if not isinstance(widgets_config, Mapping):
+        return False
+    for descriptor in get_layout_edit_runtime_descriptors():
+        if not descriptor.supports_custom_position_slot:
+            continue
+        if is_custom_position_selected_for_widget(
+            descriptor.widget_id,
+            widgets_config,
+        ):
+            return True
+    return False
+
+
 def sync_custom_layout_restore_routes(
     widgets_config: Dict[str, Any],
 ) -> Dict[str, Any]:

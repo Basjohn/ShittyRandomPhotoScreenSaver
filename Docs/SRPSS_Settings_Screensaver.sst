@@ -358,6 +358,12 @@
         "mode": "bubble"
       }
     },
+    "widget_theme": {
+      "card_material_override": "theme",
+      "custom": null,
+      "keep_synced": true,
+      "selected_id": "default_dark"
+    },
     "widgets": {
       "abandonment_issues": {
         "accent_color": [
@@ -393,6 +399,24 @@
         "font_size": 14,
         "guilt_desaturater": false,
         "guilt_desaturation_strength": 55,
+        "header_border_color": [
+          229,
+          237,
+          244,
+          216
+        ],
+        "header_fill_color": [
+          11,
+          16,
+          22,
+          230
+        ],
+        "header_text_color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "margin": 30,
         "minimum_inactivity_weeks": 12,
         "minimum_playtime_minutes": 15,
@@ -416,25 +440,7 @@
         "show_playtime": true,
         "show_queue": false,
         "show_rediscovery_message": true,
-        "show_source": false,
-        "header_fill_color": [
-          11,
-          16,
-          22,
-          230
-        ],
-        "header_border_color": [
-          229,
-          237,
-          244,
-          216
-        ],
-        "header_text_color": [
-            255,
-            255,
-            255,
-            230
-        ]
+        "show_source": false
       },
       "achievement_pulse": {
         "artwork_shape": "portrait",
@@ -476,6 +482,24 @@
         "enabled": false,
         "font_family": "Inter",
         "font_size": 15,
+        "header_border_color": [
+          229,
+          237,
+          244,
+          216
+        ],
+        "header_fill_color": [
+          11,
+          16,
+          22,
+          230
+        ],
+        "header_text_color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "latest_unlock_count": 5,
         "margin": 30,
         "monitor": "1",
@@ -492,25 +516,7 @@
         "show_selected": false,
         "show_source": false,
         "show_total": true,
-        "square_artwork_size": 140,
-        "header_fill_color": [
-          11,
-          16,
-          22,
-          230
-        ],
-        "header_border_color": [
-          229,
-          237,
-          244,
-          216
-        ],
-        "header_text_color": [
-            255,
-            255,
-            255,
-            230
-        ]
+        "square_artwork_size": 140
       },
       "clock": {
         "analog_face_shadow": true,
@@ -730,6 +736,24 @@
         "font_family": "Inter",
         "font_size": 12,
         "group_threads": true,
+        "header_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "header_fill_color": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "header_text_color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "limit": 10,
         "margin": 30,
         "max_sender_words": 3,
@@ -758,25 +782,7 @@
         "show_unread_count_in_header": true,
         "sound_file_path": "resources/tutuogg.ogg",
         "sound_volume_percent": 25,
-        "width": 600,
-        "header_fill_color": [
-          0,
-          0,
-          0,
-          0
-        ],
-        "header_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "header_text_color": [
-            255,
-            255,
-            255,
-            230
-        ]
+        "width": 600
       },
       "layout_slots": {
         "slots": {},
@@ -807,6 +813,24 @@
         "enabled": true,
         "font_family": "Inter",
         "font_size": 17,
+        "header_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "header_fill_color": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "header_text_color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "margin": 30,
         "monitor": 2,
         "mute_button_enabled": false,
@@ -817,12 +841,6 @@
           255,
           230
         ],
-        "playback_progress_track_color": [
-          255,
-          255,
-          255,
-          74
-        ],
         "playback_progress_glow_color": [
           255,
           255,
@@ -831,19 +849,33 @@
         ],
         "playback_progress_glow_enabled": false,
         "playback_progress_height": 6,
-        "playback_progress_shadow_enabled": false,
         "playback_progress_shadow_color": [
           0,
           0,
           0,
           102
         ],
+        "playback_progress_shadow_enabled": false,
+        "playback_progress_track_color": [
+          255,
+          255,
+          255,
+          74
+        ],
         "position": "Top Left",
         "provider": "spotify",
         "rounded_artwork_border": true,
+        "show_album": true,
         "show_background": true,
         "show_controls": true,
         "show_header_frame": true,
+        "show_playback_state": true,
+        "spotify_volume_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
         "spotify_volume_enabled": true,
         "spotify_volume_fill_color": [
           79,
@@ -856,32 +888,6 @@
           35,
           35,
           255
-        ],
-        "show_album": true,
-        "show_playback_state": true,
-        "header_fill_color": [
-          0,
-          0,
-          0,
-          0
-        ],
-        "header_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "spotify_volume_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "header_text_color": [
-            255,
-            255,
-            255,
-            230
         ]
       },
       "reddit": {
@@ -909,6 +915,24 @@
         "exit_on_click": true,
         "font_family": "Inter",
         "font_size": 14,
+        "header_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "header_fill_color": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "header_text_color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "limit": 20,
         "margin": 30,
         "monitor": 2,
@@ -917,25 +941,7 @@
         "show_background": true,
         "show_refresh_spiral": true,
         "show_separators": true,
-        "subreddit": "All",
-        "header_fill_color": [
-          0,
-          0,
-          0,
-          0
-        ],
-        "header_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "header_text_color": [
-            255,
-            255,
-            255,
-            230
-        ]
+        "subreddit": "All"
       },
       "reddit2": {
         "bg_color": [

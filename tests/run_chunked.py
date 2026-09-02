@@ -93,6 +93,12 @@ DESTINATION_PROFILE = (
     "test_media_generation_recreation.py",
     "test_media_event_observation.py",
     "test_media_runtime.py",
+    # 2026-09-02 permanent retained-widget architecture regressions. These are
+    # phase-neutral destination contracts, not one-off migration diagnostics.
+    "test_media_external_volume_contract.py",
+    "test_widget_stacking_display_plan.py",
+    "test_quick_authored_layout_mode_contract.py",
+    "test_reddit_exit_logic.py::TestContextMenuClickThroughSuppression::test_menu_action_arms_pointer_guard_and_reddit_open_is_refused",
     # Permanent post-H performance/freshness contracts. These are deliberately
     # phase-neutral: I/J must not regain green by weakening reaction cadence,
     # newest-state semantics, native-cursor ownership or viewport fidelity.

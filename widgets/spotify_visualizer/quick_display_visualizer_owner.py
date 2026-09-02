@@ -81,6 +81,7 @@ class QuickDisplayVisualizerOwner:
         )
         self._committed_layout_rect: tuple[float, float, float, float] | None = None
         self._committed_layout_extent: tuple[float, float] | None = None
+        self._authored_outer_origin: tuple[float, float] = (0.0, 0.0)
         self._mode_transition_phase = "idle"
         self._mode_transition_started_at = 0.0
         self._mode_transition_fade = 1.0
@@ -340,6 +341,34 @@ class QuickDisplayVisualizerOwner:
         )
         return True
 
+    def set_authored_outer_origin(self, x: float, y: float) -> bool:
+        """Set ordinary/non-CUSTOM presentation origin without adding a cadence.
+
+        A committed CUSTOM rect is authoritative and rejects this path entirely.
+        When the owner is already active, the new origin is projected once at
+        this event boundary; subsequent normal visualizer publications reuse it.
+        """
+
+        if self._retired or self._committed_layout_rect is not None:
+            return False
+        origin = (float(x), float(y))
+        if origin == self._authored_outer_origin:
+            return False
+        self._authored_outer_origin = origin
+        if self._configured:
+            presentation = self._resolve_current_presentation()
+            if self._started:
+                self._apply_resolved_presentation(presentation)
+            else:
+                self._controller.commit_presentation_metrics(presentation)
+        return True
+
+    def resolved_outer_size(self) -> tuple[float, float]:
+        """Return current outer size for ordinary layout planning."""
+
+        presentation = self._resolve_current_presentation()
+        return (float(presentation.outer_rect[2]), float(presentation.outer_rect[3]))
+
     def configure_committed_layout(
         self,
         *,
@@ -429,7 +458,7 @@ class QuickDisplayVisualizerOwner:
             else self._controller.presentation_viewport_extent
         )
         if committed_rect is None:
-            outer_origin = (0.0, 0.0)
+            outer_origin = self._authored_outer_origin
             uniform_scale = 1.0
         else:
             outer_origin = (committed_rect[0], committed_rect[1])

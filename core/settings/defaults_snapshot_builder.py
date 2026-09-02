@@ -81,7 +81,7 @@ def build_sst_defaults_snapshot(application: str | None = None) -> Dict[str, Any
         return flattened
 
     for section, value in defaults.items():
-        if section in {"widgets", "transitions", "visualizer_custom_presets"}:
+        if section in {"widgets", "transitions", "visualizer_custom_presets", "widget_theme"}:
             snapshot[section] = deepcopy(value)
         elif isinstance(value, Mapping):
             flattened = flatten_section(value)

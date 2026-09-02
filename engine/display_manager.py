@@ -769,8 +769,7 @@ class DisplayManager(QObject):
             return True
         if action == "settings":
             if self._quick_custom_layout_owner.is_active:
-                self._quick_custom_layout_owner.cancel()
-                self._refresh_all_quick_context_menus()
+                self.cancel_custom_layout_session()
             self.settings_requested.emit()
             return True
         if action == "exit":
@@ -799,20 +798,14 @@ class DisplayManager(QObject):
             if action == "visualizer":
                 return self._request_quick_visualizer_mode(payload)
             if action == "edit_layout":
-                started = self._quick_custom_layout_owner.start()
-                if started:
-                    self._refresh_all_quick_context_menus()
-                return started
+                return self._start_quick_custom_layout_session()
             if action == "save_layout":
                 saved = self._quick_custom_layout_owner.save()
                 if saved:
                     self._refresh_all_quick_context_menus()
                 return saved
             if action == "cancel_layout":
-                cancelled = self._quick_custom_layout_owner.cancel()
-                if cancelled:
-                    self._refresh_all_quick_context_menus()
-                return cancelled
+                return self.cancel_custom_layout_session()
             if action == "reset_layout":
                 reset = self._quick_custom_layout_owner.reset_to_authored()
                 if reset:
@@ -1147,17 +1140,121 @@ class DisplayManager(QObject):
             int(id(self)),
         )
 
+    def _set_quick_authored_layout_enabled(
+        self,
+        enabled: bool,
+        *,
+        restore_base: bool = True,
+    ) -> None:
+        """Switch the authored stacking/adjacency subsystem at an event edge.
+
+        CUSTOM is global. This is the single manager-level switch used by the
+        live edit transaction and layout-slot reload path; persisted/effective
+        CUSTOM is also enforced independently by each presenter's construction
+        snapshot. There is no timer, polling loop or render-cadence owner here.
+        """
+
+        target = bool(enabled)
+        visualizer_unit = self._quick_visualizer_unit
+        for unit in tuple(self.displays):
+            if not isinstance(unit, QuickDisplayUnit) or unit.is_retired:
+                continue
+            if not target:
+                # Make dormant mean dormant: detach the stronger ordinary
+                # relationship snapshot as well as disabling generic packing.
+                # Cancel/recreation reinstalls it from current retained state.
+                unit.presenter.set_layout_observer(None)
+                unit.presenter.set_external_stack_obstacles(None, reflow=False)
+            # On re-enable, defer the chosen Visualizer display's reflow until
+            # its stronger Media+Visualizer obstacle snapshot is restored.
+            unit.presenter.set_authored_layout_enabled(
+                target,
+                restore_base=restore_base,
+                reflow=target and unit is not visualizer_unit,
+            )
+
+        if not target:
+            # Adjacency is not merely paused: project the Visualizer back onto
+            # its plain authored Media slot so CUSTOM starts from overlap-legal
+            # authored geometry rather than carrying an ordinary adjacency
+            # displacement into the global CUSTOM mode. Committed Visualizer
+            # CUSTOM geometry rejects this projection inside its owner.
+            self._project_quick_visualizer_base_authored_origin()
+            return
+
+        owner = self._quick_visualizer_owner
+        chosen = self._quick_visualizer_unit
+        if owner is None or chosen is None or chosen.is_retired:
+            return
+        if not self._install_quick_visualizer_authored_layout(
+            chosen,
+            owner,
+            install_observer=True,
+        ):
+            # No ordinary adjacency applies (for example persisted CUSTOM). If
+            # the presenter is otherwise eligible, allow its generic pack once.
+            chosen.presenter.set_authored_layout_enabled(
+                True,
+                restore_base=False,
+                reflow=True,
+            )
+
+    def _authored_layout_allowed_by_settings(self) -> bool:
+        """Return whether the persisted/effective widgets map is non-CUSTOM."""
+
+        settings = self.settings_manager
+        if settings is None:
+            return True
+        try:
+            widgets = settings.get_widgets_map()
+        except Exception:
+            logger.warning(
+                "[CUSTOM_LAYOUT] Failed to inspect persisted layout mode",
+                exc_info=True,
+            )
+            return False
+        from rendering.widget_descriptors import is_global_custom_layout_mode_selected
+
+        return not is_global_custom_layout_mode_selected(widgets)
+
+    def _start_quick_custom_layout_session(self) -> bool:
+        """Enter global CUSTOM edit mode with authored layout fully dormant."""
+
+        if self._quick_custom_layout_owner.is_active:
+            return True
+        # Disable before the owner captures session geometry. This removes any
+        # generic stack projection and prevents Media preferred-size callbacks
+        # from reasserting ordinary adjacency under the edit transaction.
+        self._set_quick_authored_layout_enabled(False, restore_base=True)
+        try:
+            started = self._quick_custom_layout_owner.start()
+        except Exception:
+            if self._authored_layout_allowed_by_settings():
+                self._set_quick_authored_layout_enabled(True, restore_base=False)
+            raise
+        if not started:
+            if self._authored_layout_allowed_by_settings():
+                self._set_quick_authored_layout_enabled(True, restore_base=False)
+            return False
+        self._refresh_all_quick_context_menus()
+        return True
+
     def _save_quick_custom_layout(self) -> bool:
         saved = self._quick_custom_layout_owner.save()
         if saved:
+            # Save requests a generation-fenced rebuild. Keep authored layout
+            # dormant in the retiring generation; the replacement generation
+            # derives its own global CUSTOM state from persisted settings.
             self._refresh_all_quick_context_menus()
         return saved
 
     def cancel_custom_layout_session(self) -> bool:
-        """Cancel the one manager-generation CUSTOM session, if active."""
+        """Cancel CUSTOM and restore authored layout only when globally eligible."""
 
         cancelled = self._quick_custom_layout_owner.cancel()
         if cancelled:
+            if self._authored_layout_allowed_by_settings():
+                self._set_quick_authored_layout_enabled(True, restore_base=False)
             self._refresh_all_quick_context_menus()
         return cancelled
 
@@ -1199,8 +1296,6 @@ class DisplayManager(QObject):
         if settings is None:
             return False
         try:
-            if self._quick_custom_layout_owner.is_active:
-                self._quick_custom_layout_owner.cancel()
             from core.settings.layout_slots import apply_layout_slot
 
             widgets_map = settings.get_widgets_map()
@@ -1210,6 +1305,15 @@ class DisplayManager(QObject):
                     slot_id,
                 )
                 return False
+
+            # Number-key slot loading is a third CUSTOM entry path. Quiesce the
+            # authored subsystem before ending any live edit transaction and
+            # before the fenced runtime rebuild, regardless of whether this
+            # particular slot resolves to authored or CUSTOM. The replacement
+            # generation derives the exact target mode from the applied map.
+            self._set_quick_authored_layout_enabled(False, restore_base=True)
+            if self._quick_custom_layout_owner.is_active:
+                self._quick_custom_layout_owner.cancel()
             settings.set_widgets_map(widgets_map, emit_change=False)
             settings.save()
             logger.info("[LAYOUT_SLOT] Loaded Quick layout slot %s", slot_id)
@@ -1704,6 +1808,241 @@ class DisplayManager(QObject):
             raise
         return _finish(admitted, chosen=chosen)
 
+    def _resolve_quick_visualizer_base_authored_origin(
+        self,
+        chosen: QuickDisplayUnit,
+        owner: Any,
+    ) -> tuple[float, float] | None:
+        """Resolve the Visualizer's plain authored anchor without adjacency.
+
+        This is the CUSTOM-safe baseline: the Visualizer still follows Media's
+        effective authored position/monitor route, but no stacking or
+        Media-relative displacement is applied. A committed Visualizer CUSTOM
+        rect remains authoritative inside the owner and rejects this projection.
+        """
+
+        bounds = chosen.display_bounds()
+        try:
+            vis_width, vis_height = owner.resolved_outer_size()
+        except Exception:
+            logger.warning(
+                "[SPOTIFY_VIS] Failed to resolve base authored visualizer size",
+                exc_info=True,
+            )
+            return None
+        vis_width = max(1.0, min(float(vis_width), float(bounds.width)))
+        vis_height = max(1.0, min(float(vis_height), float(bounds.height)))
+
+        from rendering.quick.widgets.geometry_resolver import (
+            resolve_overlay_geometry_policy,
+        )
+
+        base = resolve_overlay_geometry_policy(
+            "media",
+            self._widgets_config_snapshot,
+        ).resolve((vis_width, vis_height), bounds)
+        return (float(base.x - bounds.x), float(base.y - bounds.y))
+
+    def _project_quick_visualizer_base_authored_origin(self) -> bool:
+        """Project the plain authored Visualizer origin once, if admitted."""
+
+        owner = self._quick_visualizer_owner
+        chosen = self._quick_visualizer_unit
+        if owner is None or chosen is None or chosen.is_retired:
+            return False
+        origin = self._resolve_quick_visualizer_base_authored_origin(chosen, owner)
+        if origin is None:
+            return False
+        return bool(owner.set_authored_outer_origin(origin[0], origin[1]))
+
+    def _resolve_quick_visualizer_authored_layout(
+        self,
+        chosen: QuickDisplayUnit,
+        owner: Any,
+        *,
+        media_geometry: Any | None = None,
+    ) -> tuple[float, float, float, float, Any] | None:
+        """Resolve the ordinary Media-relative Visualizer rectangle once.
+
+        CUSTOM is a hard boundary and returns ``None``. Ordinary placement uses
+        the Media card's unstacked authored geometry, preferring the vertical
+        side with more usable space (top Media -> below, bottom Media -> above).
+        Horizontal adjacency is only a fallback when neither vertical side can
+        fit. No timer/poller/cadence owner is involved.
+        """
+
+        from rendering.widget_descriptors import is_global_custom_layout_mode_selected
+
+        widgets = self._widgets_config_snapshot
+        if (
+            not chosen.presenter.authored_layout_enabled
+            or is_global_custom_layout_mode_selected(widgets)
+        ):
+            return None
+        bounds = chosen.display_bounds()
+        try:
+            vis_width, vis_height = owner.resolved_outer_size()
+        except Exception:
+            logger.warning(
+                "[SPOTIFY_VIS] Failed to resolve ordinary visualizer size for adjacency",
+                exc_info=True,
+            )
+            return None
+        vis_width = max(1.0, min(float(vis_width), float(bounds.width)))
+        vis_height = max(1.0, min(float(vis_height), float(bounds.height)))
+
+        media_rect = media_geometry or chosen.presenter.authored_geometry_for("media")
+        if media_rect is None:
+            # Visualizer routing follows Media's authored route even when the
+            # Media *card* itself is disabled and therefore has no retained
+            # preferred-size rectangle. Resolve the Visualizer at that same
+            # authored anchor using its own current outer size. This is still
+            # ordinary/non-CUSTOM placement and owns no cadence.
+            from rendering.quick.widgets.geometry_resolver import (
+                resolve_overlay_geometry_policy,
+            )
+
+            fallback = resolve_overlay_geometry_policy("media", widgets).resolve(
+                (vis_width, vis_height), bounds
+            )
+            return (
+                float(fallback.x - bounds.x),
+                float(fallback.y - bounds.y),
+                vis_width,
+                vis_height,
+                None,
+            )
+
+        gap = 20.0
+        media_x = float(media_rect.x - bounds.x)
+        media_y = float(media_rect.y - bounds.y)
+        media_width = float(media_rect.width)
+        media_height = float(media_rect.height)
+        below_space = float(bounds.height) - (media_y + media_height)
+        above_space = media_y
+
+        x = max(0.0, min(media_x, float(bounds.width) - vis_width))
+        below_y = media_y + media_height + gap
+        above_y = media_y - gap - vis_height
+        below_fits = below_y + vis_height <= float(bounds.height)
+        above_fits = above_y >= 0.0
+        if below_fits or above_fits:
+            if below_fits and (not above_fits or below_space >= above_space):
+                y = below_y
+            else:
+                y = above_y
+        else:
+            # Exceptional very-tall pair: keep adjacency by trying horizontal
+            # free space before conceding that the display is genuinely overfull.
+            right_x = media_x + media_width + gap
+            left_x = media_x - gap - vis_width
+            right_space = float(bounds.width) - (media_x + media_width)
+            left_space = media_x
+            y = max(0.0, min(media_y, float(bounds.height) - vis_height))
+            if right_x + vis_width <= float(bounds.width) or left_x >= 0.0:
+                if right_x + vis_width <= float(bounds.width) and (
+                    left_x < 0.0 or right_space >= left_space
+                ):
+                    x = right_x
+                else:
+                    x = left_x
+            else:
+                # No side can contain the pair. Preserve the stronger relation
+                # on the larger vertical side and clamp, then report the overfill.
+                y = (
+                    max(0.0, min(below_y, float(bounds.height) - vis_height))
+                    if below_space >= above_space
+                    else max(0.0, min(above_y, float(bounds.height) - vis_height))
+                )
+                logger.warning(
+                    "[SPOTIFY_VIS] Media+Visualizer ordinary pair exceeds available adjacent space"
+                )
+
+        return (x, y, vis_width, vis_height, media_rect)
+
+    def _install_quick_visualizer_authored_layout(
+        self,
+        chosen: QuickDisplayUnit,
+        owner: Any,
+        *,
+        install_observer: bool,
+        media_geometry: Any | None = None,
+        defer_presenter_reflow: bool = False,
+    ) -> bool:
+        """Project ordinary Visualizer adjacency and optional stacking reservation."""
+
+        resolved = self._resolve_quick_visualizer_authored_layout(
+            chosen, owner, media_geometry=media_geometry
+        )
+        if resolved is None:
+            return False
+        x, y, width, height, media_rect = resolved
+        owner.set_authored_outer_origin(x, y)
+
+        from rendering.widget_stacking import DisplayStackObstacle
+
+        visualizer_obstacle = DisplayStackObstacle(
+            key="spotify_visualizer",
+            x=int(round(x)),
+            y=int(round(y)),
+            width=max(1, int(round(width))),
+            height=max(1, int(round(height))),
+        )
+        if media_rect is None:
+            # Media may be disabled while the Visualizer remains ordinary. It
+            # still occupies real screen space, so authored stacking should
+            # route other ordinary cards around it when stacking is enabled.
+            chosen.presenter.set_external_stack_obstacles(
+                (visualizer_obstacle,),
+                reflow=not defer_presenter_reflow,
+            )
+            if install_observer:
+                chosen.presenter.set_layout_observer(None)
+            return True
+
+        bounds = chosen.display_bounds()
+        media_local_x = int(round(float(media_rect.x - bounds.x)))
+        media_local_y = int(round(float(media_rect.y - bounds.y)))
+        chosen.presenter.set_external_stack_obstacles(
+            (
+                DisplayStackObstacle(
+                    key="media",
+                    x=media_local_x,
+                    y=media_local_y,
+                    width=max(1, int(round(float(media_rect.width)))),
+                    height=max(1, int(round(float(media_rect.height)))),
+                ),
+                visualizer_obstacle,
+            ),
+            fixed_widget_ids=("media",),
+            reflow=not defer_presenter_reflow,
+        )
+
+        if install_observer:
+            manager_ref = weakref.ref(self)
+
+            def _on_authored_geometry(widget_id: str, geometry: Any) -> None:
+                if widget_id != "media":
+                    return
+                manager = manager_ref()
+                if (
+                    manager is None
+                    or manager._retired
+                    or manager._quick_visualizer_owner is not owner
+                    or manager._quick_visualizer_unit is not chosen
+                ):
+                    return
+                manager._install_quick_visualizer_authored_layout(
+                    chosen,
+                    owner,
+                    install_observer=False,
+                    media_geometry=geometry,
+                    defer_presenter_reflow=True,
+                )
+
+            chosen.presenter.set_layout_observer(_on_authored_geometry)
+        return True
+
     def _construct_quick_visualizer_owner_on(
         self,
         chosen: QuickDisplayUnit,
@@ -1806,7 +2145,22 @@ class DisplayManager(QObject):
         channels = [max(0, min(255, value)) for value in channels]
         channels[3] = max(0, min(255, int(round(channels[3] * frame_opacity))))
 
+        from ui.widget_theme_active import get_active_widget_theme
+
+        widget_theme = get_active_widget_theme()
+        global_widgets = widgets.get("global", {})
+        if not isinstance(global_widgets, dict):
+            global_widgets = {}
+        try:
+            visualizer_border_width = max(
+                0.0, min(12.0, float(global_widgets.get("card_border_width_px", 4)))
+            )
+        except (TypeError, ValueError):
+            visualizer_border_width = 3.0
         card_shadow_kwargs = {
+            "background_color": widget_theme.color("card.background").as_tuple(),
+            "border_color": widget_theme.color("card.border").as_tuple(),
+            "border_width": visualizer_border_width,
             "shadow_enabled": SettingsManager.to_bool(shadows.get("enabled", True), True),
             "shadow_color": tuple(channels),
             "shadow_blur": shadow_blur,
@@ -1859,6 +2213,25 @@ class DisplayManager(QObject):
                         custom_entry.size_payload.get("viewport_extent")
                     ),
                 )
+            # Ordinary placement is resolved before start so the first retained
+            # Visualizer presentation never appears at the old (0, 0) default.
+            # CUSTOM rejects this path completely. Stacking reservation/observer
+            # are installed only after successful single-owner admission below.
+            ordinary_layout = self._resolve_quick_visualizer_authored_layout(
+                chosen, owner
+            )
+            if ordinary_layout is not None:
+                owner.set_authored_outer_origin(ordinary_layout[0], ordinary_layout[1])
+            else:
+                # Global CUSTOM disables adjacency, not authored anchoring. Keep
+                # an uncommitted Visualizer on Media's authored slot instead of
+                # leaking the owner's internal (0, 0) construction default.
+                base_origin = self._resolve_quick_visualizer_base_authored_origin(
+                    chosen, owner
+                )
+                if base_origin is not None:
+                    owner.set_authored_outer_origin(base_origin[0], base_origin[1])
+
             engine = owner.controller.engine
             generation = int(engine.get_generation_id())
             activation_id = int(engine.get_activation_id())
@@ -1878,6 +2251,9 @@ class DisplayManager(QObject):
             if media_model is not None:
                 self._bind_quick_visualizer_media(media_model)
             chosen.attach_visualizer_owner(owner)
+            self._install_quick_visualizer_authored_layout(
+                chosen, owner, install_observer=True
+            )
             from rendering.quick.visualizer.double_click_admission import (
                 QuickVisualizerDoubleClickAdmission,
             )
@@ -1912,6 +2288,9 @@ class DisplayManager(QObject):
                     cycle_preset=self._cycle_quick_visualizer_preset,
                 )
             )
+            chosen.runtime.scene_controller.set_visualizer_volume_wheel_handler(
+                self._request_quick_app_volume_step_from_visualizer
+            )
             self._refresh_all_quick_context_menus()
         except Exception:
             self._set_quick_visualizer_construct_outcome(
@@ -1933,6 +2312,34 @@ class DisplayManager(QObject):
         )
         self._set_quick_visualizer_construct_outcome("admitted")
         return True
+
+    def _request_quick_app_volume_step_from_visualizer(self, direction: int) -> bool:
+        """Route Visualizer wheel input through an already-admitted Media owner.
+
+        The Visualizer may be CUSTOM-routed to a different display from Media, so
+        same-unit assumptions are invalid. This is a bounded event dispatch only:
+        prefer the current Visualizer unit, then search the remaining live units;
+        never construct/mirror Media and never add a cadence owner.
+        """
+
+        step = 1 if int(direction) > 0 else -1 if int(direction) < 0 else 0
+        if step == 0:
+            return False
+        preferred = self._quick_visualizer_unit
+        units: list[QuickDisplayUnit] = []
+        if preferred is not None and not preferred.is_retired:
+            units.append(preferred)
+        units.extend(
+            unit
+            for unit in self.displays
+            if isinstance(unit, QuickDisplayUnit)
+            and not unit.is_retired
+            and unit is not preferred
+        )
+        for unit in units:
+            if unit.request_app_volume_step(step):
+                return True
+        return False
 
     def _resolve_quick_visualizer_media_model(
         self,
@@ -2019,6 +2426,8 @@ class DisplayManager(QObject):
         self._disconnect_quick_visualizer_media_route()
         chosen = self._quick_visualizer_unit
         if chosen is not None:
+            chosen.presenter.set_layout_observer(None)
+            chosen.presenter.set_external_stack_obstacles(None)
             chosen.runtime.scene_controller.set_visualizer_double_click_admission(None)
             chosen.runtime.scene_controller.set_visualizer_middle_click_admission(None)
         self._quick_visualizer_owner = None

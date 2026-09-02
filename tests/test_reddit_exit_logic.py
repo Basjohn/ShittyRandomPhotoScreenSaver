@@ -258,12 +258,15 @@ class TestContextMenuClickThroughSuppression:
                 runtime_pointer_input_is_suppressed("redditOpenRequested") is False
             )
 
-            # Any retained-menu action is a pointer gesture; routing it must arm
-            # the shared guard before the phantom widget open fires on the same
-            # release. ("next" is used because it touches no per-display state.)
+            # Reproduce the real regression boundary: selecting Settings from
+            # the retained menu must arm the shared guard before the phantom
+            # widget open fires on the same release.
+            settings_requests: list[bool] = []
+            manager.settings_requested.connect(lambda: settings_requests.append(True))
             assert (
-                manager._handle_quick_context_action(MagicMock(), "next", "") is True
+                manager._handle_quick_context_action(MagicMock(), "settings", "") is True
             )
+            assert settings_requests == [True]
             assert (
                 runtime_pointer_input_is_suppressed("redditOpenRequested") is True
             )

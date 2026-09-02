@@ -29,6 +29,29 @@ def test_media_volume_is_external_to_card_and_card_reclaims_old_width() -> None:
     assert "anchors.rightMargin: appVolumeSlider.visible ? 48.0 : 0.0" not in qml
 
 
+def test_media_whole_card_volume_wheel_yields_during_custom_edit() -> None:
+    qml = _text("rendering/quick/qml/MediaPresentation.qml")
+    assert "property bool volumeWheelEnabled: true" in qml
+    assert "WheelHandler {" in qml
+    assert "mediaRoot.appVolumeStepRequested" in qml
+    assert "enabled: mediaRoot.volumeWheelEnabled" in qml
+
+    controller = _text("rendering/quick/scene_controller.py")
+    assert 'media_overlay.item.setProperty("volumeWheelEnabled", False)' in controller
+    assert 'media_overlay.item.setProperty("volumeWheelEnabled", True)' in controller
+
+
+def test_visualizer_volume_wheel_is_event_only_and_custom_gated() -> None:
+    qml = _text("rendering/quick/qml/VisualizerPresentation.qml")
+    assert "property bool volumeWheelEnabled: true" in qml
+    assert "appVolumeStepRequested" in qml
+    assert "visualizerPresentationRoot.volumeWheelEnabled" in qml
+
+    controller = _text("rendering/quick/scene_controller.py")
+    assert 'self._visualizer_root.setProperty("volumeWheelEnabled", False)' in controller
+    assert 'self._visualizer_root.setProperty("volumeWheelEnabled", True)' in controller
+
+
 def test_media_settings_expose_collapsed_header_seek_and_volume_buckets() -> None:
     source = _text("ui/tabs/widgets_tab_media.py")
     for label in ("Header Appearance", "Seek Bar", "Volume Control"):

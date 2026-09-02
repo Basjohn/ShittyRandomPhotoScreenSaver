@@ -531,9 +531,21 @@ class SettingsDialog(QDialog):
             resolved_themes_directory = resolve_settings_themes_directory(
                 themes_directory
             )
-            activate_persisted_settings_theme(
+            settings_theme_startup = activate_persisted_settings_theme(
                 settings_manager,
                 resolved_themes_directory,
+            )
+
+            # Resolve the Widget Theme from the same active theme root before any
+            # Widgets/Quick-facing Settings surface is constructed.  This is a
+            # one-shot configuration boundary, never a renderer poller.
+            from ui.widget_theme_paths import resolve_widget_themes_directory
+            from ui.widget_theme_selection import activate_persisted_widget_theme
+
+            activate_persisted_widget_theme(
+                settings_manager,
+                resolve_widget_themes_directory(resolved_themes_directory),
+                settings_theme_id=settings_theme_startup.resolution.entry.theme_id,
             )
         except Exception:
             # Runtime activation is transactional; cold startup already owns

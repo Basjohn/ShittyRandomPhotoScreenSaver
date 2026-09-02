@@ -57,6 +57,120 @@ def configured_rgba_override(
     return configured if configured != default else None
 
 
+
+def _mapping_value(
+    values: Mapping[str, object],
+    keys: tuple[str, ...],
+    fallback: object,
+) -> object:
+    for key in keys:
+        if key in values:
+            return values.get(key)
+    return fallback
+
+
+def _mapping_has_any(values: Mapping[str, object], keys: tuple[str, ...]) -> bool:
+    return any(key in values for key in keys)
+
+
+def _bounded_opacity(value: object, fallback: float) -> float:
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return max(0.0, min(1.0, float(fallback)))
+
+
+def _scaled_alpha(color: Rgba, opacity: float) -> Rgba:
+    return Rgba(
+        color.r,
+        color.g,
+        color.b,
+        max(0, min(255, int(round(color.a * _bounded_opacity(opacity, 1.0))))),
+    )
+
+
+def resolve_card_surface_colors(
+    *,
+    values: Mapping[str, object],
+    defaults: Mapping[str, object],
+    background_color: RgbaTuple,
+    background_opacity: float,
+    border_color: RgbaTuple,
+    border_opacity: float,
+    background_keys: tuple[str, ...] = ("bg_color", "background_color"),
+    background_opacity_keys: tuple[str, ...] = ("bg_opacity", "background_opacity"),
+    border_keys: tuple[str, ...] = ("border_color",),
+    border_opacity_keys: tuple[str, ...] = ("border_opacity",),
+) -> tuple[RgbaTuple, RgbaTuple]:
+    """Resolve the shared Card Surface/Border baseline with family override precedence.
+
+    Canonical/default-valued family settings are the implicit ``Inherit`` state.
+    A family becomes explicit only when its stored colour *or* opacity differs from
+    the canonical family default.  Explicit family values keep precedence; otherwise
+    the process-local Widget Theme's ``card.background`` / ``card.border`` roles are
+    consumed. Returned alpha is fully composed so downstream card styles use an
+    opacity of ``1.0`` and do not double-apply alpha.
+    """
+
+    theme = get_active_widget_theme()
+
+    default_bg = as_rgba(
+        _mapping_value(defaults, background_keys, background_color),
+        background_color,
+    )
+    default_bg_opacity = _bounded_opacity(
+        _mapping_value(defaults, background_opacity_keys, background_opacity),
+        background_opacity,
+    )
+    current_bg = as_rgba(
+        _mapping_value(values, background_keys, background_color),
+        background_color,
+    )
+    current_bg_opacity = _bounded_opacity(
+        _mapping_value(values, background_opacity_keys, background_opacity),
+        background_opacity,
+    )
+    background_explicit = (
+        _mapping_has_any(values, background_keys + background_opacity_keys)
+        and (current_bg != default_bg or current_bg_opacity != default_bg_opacity)
+    )
+
+    default_border = as_rgba(
+        _mapping_value(defaults, border_keys, border_color),
+        border_color,
+    )
+    default_border_opacity = _bounded_opacity(
+        _mapping_value(defaults, border_opacity_keys, border_opacity),
+        border_opacity,
+    )
+    current_border = as_rgba(
+        _mapping_value(values, border_keys, border_color),
+        border_color,
+    )
+    current_border_opacity = _bounded_opacity(
+        _mapping_value(values, border_opacity_keys, border_opacity),
+        border_opacity,
+    )
+    border_explicit = (
+        _mapping_has_any(values, border_keys + border_opacity_keys)
+        and (
+            current_border != default_border
+            or current_border_opacity != default_border_opacity
+        )
+    )
+
+    background = (
+        _scaled_alpha(current_bg, current_bg_opacity)
+        if background_explicit
+        else theme.color("card.background")
+    )
+    border = (
+        _scaled_alpha(current_border, current_border_opacity)
+        if border_explicit
+        else theme.color("card.border")
+    )
+    return background.as_tuple(), border.as_tuple()
+
 def resolve_rgba_role(
     role: str,
     *,
@@ -144,6 +258,7 @@ __all__ = [
     "as_rgba",
     "as_tuple",
     "configured_rgba_override",
+    "resolve_card_surface_colors",
     "resolve_header_colors",
     "resolve_rgba_role",
 ]

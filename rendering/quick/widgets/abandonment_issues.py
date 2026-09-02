@@ -40,7 +40,7 @@ from .host import (
     OverlayWidgetGeometry,
     RetainedOverlayWidget,
 )
-from .theme_projection import resolve_header_colors
+from .theme_projection import resolve_card_surface_colors, resolve_header_colors
 from .steam_common import (
     SteamCardFieldListModel,
     SteamSemanticPalette,
@@ -245,8 +245,20 @@ class AbandonmentIssuesPresentationConfig:
                 metric_separator=(accent_r, accent_g, accent_b, 110),
             )
         )
+        card_background, card_border = resolve_card_surface_colors(
+            values=card if isinstance(card, Mapping) else {},
+            defaults=default_card if isinstance(default_card, Mapping) else {},
+            background_color=config.background_color,
+            background_opacity=config.background_opacity,
+            border_color=config.border_color,
+            border_opacity=config.border_opacity,
+        )
         return replace(
             config,
+            background_color=card_background,
+            background_opacity=1.0,
+            border_color=card_border,
+            border_opacity=1.0,
             header_fill_color=header_fill,
             header_border_color=header_border,
             header_text_color=header_text,

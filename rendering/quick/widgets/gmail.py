@@ -25,6 +25,7 @@ from core.settings.shadow_direction import (
 from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
 from rendering.quick.widgets.theme_projection import (
     configured_rgba_override,
+    resolve_card_surface_colors,
     resolve_header_colors,
     resolve_rgba_role,
 )
@@ -230,8 +231,20 @@ class GmailPresentationConfig:
             "local.border": config.border_color,
             "local.text": config.text_color,
         }
+        card_background, card_border = resolve_card_surface_colors(
+            values=current,
+            defaults=defaults if isinstance(defaults, Mapping) else {},
+            background_color=config.background_color,
+            background_opacity=config.background_opacity,
+            border_color=config.border_color,
+            border_opacity=config.border_opacity,
+        )
         return replace(
             config,
+            background_color=card_background,
+            background_opacity=1.0,
+            border_color=card_border,
+            border_opacity=1.0,
             header_fill_color=header_fill,
             header_border_color=header_border,
             header_text_color=header_text,

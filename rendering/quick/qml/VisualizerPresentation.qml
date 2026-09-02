@@ -7,11 +7,13 @@ Item {
 
     property bool presentationActive: false
     property bool customLayoutWorkingVisible: true
+    property bool volumeWheelEnabled: true
+    signal appVolumeStepRequested(int direction)
     property real authoredSceneOpacity: 1.0
     property real startupRevealOpacity: 1.0
     property bool cardShellEnabled: true
-    property color cardBackgroundColor: "#b3101010"
-    property color cardBorderColor: "#e6ffffff"
+    property color cardBackgroundColor: "#4c232323"
+    property color cardBorderColor: "#ffffffff"
     property real cardBorderWidth: 4.0
     property real cardCornerRadius: 8.0
     property bool cardShadowEnabled: true
@@ -33,6 +35,21 @@ Item {
 
     opacity: authoredSceneOpacity * startupRevealOpacity
     visible: presentationActive && customLayoutWorkingVisible && opacity > 0.0
+
+    WheelHandler {
+        target: null
+        enabled: visualizerPresentationRoot.presentationActive
+            && visualizerPresentationRoot.customLayoutWorkingVisible
+            && visualizerPresentationRoot.volumeWheelEnabled
+        onWheel: function(wheel) {
+            if (wheel.angleDelta.y === 0)
+                return
+            visualizerPresentationRoot.appVolumeStepRequested(
+                wheel.angleDelta.y > 0 ? 1 : -1
+            )
+            wheel.accepted = true
+        }
+    }
 
     RectangularShadow {
         id: cardShadow

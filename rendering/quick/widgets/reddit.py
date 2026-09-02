@@ -30,7 +30,7 @@ from core.settings.shadow_direction import (
     resolve_signed_offset,
 )
 
-from .theme_projection import resolve_header_colors, resolve_rgba_role
+from .theme_projection import resolve_card_surface_colors, resolve_header_colors, resolve_rgba_role
 
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
@@ -273,8 +273,20 @@ class RedditPresentationConfig:
             border=config.header_border_color,
             text=config.header_text_color,
         )
+        card_background, card_border = resolve_card_surface_colors(
+            values=merged,
+            defaults=effective_defaults,
+            background_color=config.background_color,
+            background_opacity=config.background_opacity,
+            border_color=config.border_color,
+            border_opacity=config.border_opacity,
+        )
         return replace(
             config,
+            background_color=card_background,
+            background_opacity=1.0,
+            border_color=card_border,
+            border_opacity=1.0,
             header_fill_color=header_fill,
             header_border_color=header_border,
             header_text_color=header_text,
