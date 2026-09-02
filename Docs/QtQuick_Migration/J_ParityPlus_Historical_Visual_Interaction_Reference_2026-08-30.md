@@ -324,10 +324,19 @@ Canonical architecture/deeper design: `Future_Work.md`, section **10. Ordinary-w
 
 ### Product contract
 
-- [ ] Add one mutually-exclusive `Settings -> Widgets -> General` choice: **Normal / Glass / Acrylic**.
-- [ ] Default is **Normal**, which means the current cheap translucent `OverlayCard` path and creates **no** blur/capture/offscreen material resources.
+- [ ] Add one mutually-exclusive `Settings -> Widgets -> General -> Appearance -> Surface Style` choice: **Theme Default / Normal / Glass / Acrylic**.
+- [ ] `Theme Default` is the default/no-override state. It follows the selected Widget Theme's `default_card_material_mode`; the existing/Dark Widget Theme recommends **Normal**.
+- [ ] Normal means the current cheap translucent `OverlayCard` path and creates **no** blur/capture/offscreen material resources.
+- [ ] An explicit Normal/Glass/Acrylic selection overrides **material only** while preserving the selected Widget Theme's colours. Do not require a fake Custom theme, hide swatches, or add a second `Override Theme Background` checkbox.
 - [ ] Never expose independent Glass/Acrylic booleans; simultaneous material states must be impossible.
-- [ ] Eventually allow Widget Themes (`.srwtheme`) to set the same material enum. Themes do not gain a parallel backdrop/material owner.
+- [ ] Widget Themes (`.srwtheme`) serialize a recommended/default material, not a competing final material owner. Persist the user override separately and resolve one `effective_card_material_mode` for runtime consumers.
+- [ ] `Keep Synced` links Settings Theme <-> mirrored Widget Theme identity but never clears an explicit Surface Style override; sync OFF permits independent theme pairings under the same material-resolution rule.
+- [ ] Manual edit of any Widget Theme-owned swatch/border/shadow/other visual value silently snapshots the full currently resolved named theme into user-owned **Custom**, applies the edit there, selects Custom, and turns Keep Synced OFF. The source `.srwtheme` stays immutable; unedited colours/settings remain exactly as resolved from the previous named theme.
+- [ ] Persist `Custom` in normal SRPSS Settings data, not as `themes/widgets/Custom.srwtheme`; ordinary runtime customization must not require ProgramData write access. Creating a real reusable `.srwtheme` is an explicit save/export/authoring action.
+- [ ] Do not build per-property theme override inheritance. `Custom` is the single user-owned working snapshot. Re-enabling Keep Synced may reselect the paired named Widget Theme but must not destroy the Custom snapshot.
+- [ ] Surface Style is explicitly excluded from the Custom/unsync trigger: Theme Default/Normal/Glass/Acrylic changes material ownership only.
+- [ ] Theme discovery uses one durable root: installed/frozen `.srtheme` files under `%ProgramData%\SRPSS\themes` and `.srwtheme` files under `%ProgramData%\SRPSS\themes\widgets`; source/dev mirrors this as `<repo>\themes` + `<repo>\themes\widgets`. Do not flatten both theme types into one directory or merge ProgramData/repo catalogues simultaneously. ProgramData files are read-mostly catalogue assets; automatic Custom persistence remains in Settings.
+- [ ] Runtime Context Menu follows the selected Widget Theme palette + the same effective material resolution; do not create a second menu-only material owner by default.
 - [ ] Widget activation, provider/account state, geometry, cadence and business logic remain completely outside material/theme ownership.
 
 ### Architecture admission checklist
@@ -359,13 +368,13 @@ Canonical architecture/deeper design: `Future_Work.md`, section **10. Ordinary-w
 
 ### Recommended implementation order
 
-1. [ ] Add the enum/schema/UI with **Normal only effectively enabled** first; prove persistence/theme ownership without adding render cost.
+1. [ ] Land Widget Theme identity/linking plus the three-layer surface schema first: `.srwtheme.default_card_material_mode`, persisted `card_material_override`, and resolved `effective_card_material_mode`. Expose **Theme Default / Normal / Glass / Acrylic**, with only Theme Default->Normal/Normal effectively available until material rendering is admitted. Prove persistence, Keep Synced behavior, the named-theme -> Custom snapshot + automatic unsync transition for theme-owned manual edits, Custom preservation when switching/relinking, and Surface Style override survival across theme changes without adding render cost.
 2. [ ] Prototype one shared per-display reduced-resolution Quick backdrop source + bounded blur, consumed by one test card.
 3. [ ] Prove temporal/geometry correctness during transitions and CUSTOM movement/resize before widening family coverage.
 4. [ ] Add Glass card-local recipe; measure.
 5. [ ] Add Acrylic as the same shared backdrop plus stronger cheap local treatment; measure again.
 6. [ ] Only if the simple Quick capture/effect route is demonstrably too expensive, consider producing the shared material backdrop beside `BackgroundRenderNode` from the same frame state. Do not lower-level-optimize pre-emptively.
-7. [ ] After physical/performance acceptance, allow Widget Themes to serialize/apply the same enum and material parameters.
+7. [ ] After physical/performance acceptance, enable Glass/Acrylic as selectable explicit overrides and as valid Widget Theme defaults through the same resolver. Do not add a parallel theme-material path.
 
-If this committed slice is scheduled after J close, leave `card_material_mode=normal` and the current card architecture alone until implementation begins. The live plan and Future Work retain the requirement; there is no reason to partially land blur ownership merely because the UI enum exists.
+If this committed slice is scheduled after J close, leave the resolved runtime material effectively `normal` and the current card architecture alone until implementation begins. The live plan and Future Work retain the requirement; there is no reason to partially land blur ownership merely because the future schema/UI exists.
 

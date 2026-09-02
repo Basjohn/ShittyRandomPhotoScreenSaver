@@ -1,6 +1,6 @@
 # Contracts — Current Owner Map
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 `Current_Plan.md` owns work admission. This file owns fast current/destination owner routing.
 
@@ -41,10 +41,55 @@ colour/opacity. Off = state 0. Do not conflate AccentPolicy state 3 with the doc
 `themes/dark.qss` is legacy base-stylesheet residue, not visual authority. Its audited retirement is owned by
 `Future_Cleanup.md`; do not alter native backdrop or forged-edge geometry merely to delete it.
 
-Future runtime Widget Themes are a separate visual bundle authority over widget/runtime-overlay settings. The retained
-Context Menu follows Widget Theme semantics/material because it lives in the Quick display scene; it never consumes the
-Settings QWidget theme/AccentPolicy backdrop directly. Future `Keep Synced` defaults ON and links each Settings theme to
-an explicit mirrored Widget Theme; sync OFF permits independent GUI/runtime combinations.
+Future runtime Widget Themes are a separate visual bundle authority over widget/runtime-overlay appearance. Theme identity
+and surface material are intentionally orthogonal:
+
+```text
+Widget Theme (.srwtheme)
+    -> semantic runtime palette / proven visual-only values
+    -> default_card_material_mode = normal | glass | acrylic
+
+user Surface Style
+    -> card_material_override = theme | normal | glass | acrylic
+
+resolver
+    -> effective_card_material_mode
+```
+
+`Theme Default` is the default/no-override state. An explicit Normal/Glass/Acrylic selection overrides material only and
+retains the selected Widget Theme's colours; it does not mutate/dirty the theme or alter `Keep Synced`.
+
+Manual editing of any Widget Theme-owned visual value has one separate deterministic contract: snapshot the complete
+currently resolved named Widget Theme into user-owned `Custom`, apply the edit to that snapshot, select `Custom`, and turn
+`Keep Synced` OFF. The installed/shipped `.srwtheme` remains immutable and all unedited resolved values survive the
+transition. `Custom` is serialized in normal SRPSS Settings persistence rather than emitted as a `.srwtheme` file, so
+ordinary customization never needs write access to `%ProgramData%\SRPSS\themes\widgets`. Exporting/saving a real Widget
+Theme file is a separate explicit authoring operation. Do not create hidden per-property override inheritance. Re-enabling
+Keep Synced may reselect the linked named Widget Theme but must not destroy the saved Custom snapshot.
+
+Future `Keep Synced` defaults ON and links each Settings theme to an explicit mirrored Widget Theme; sync OFF permits
+independent GUI/runtime theme combinations, and sync changes never erase an explicit surface override. Matching names may
+help author theme packs, but runtime links must use stable metadata/IDs rather than display-name heuristics.
+
+Theme storage uses one resolved root with a Widget child:
+
+```text
+installed/frozen: %ProgramData%\SRPSS\themes        -> .srtheme
+                  %ProgramData%\SRPSS\themes\widgets -> .srwtheme
+
+source/dev:       <repo-root>\themes
+                  <repo-root>\themes\widgets
+```
+
+Path resolution belongs to startup/build authority. Catalogues receive the resolved directory; they do not encode install
+paths into theme identity. Do not merge ProgramData and repository/bundled theme roots into one live catalogue. A
+repository/bundled tree may bootstrap the stable ProgramData tree, following the same one-active-root principle as other
+curated SRPSS assets. ProgramData theme files are catalogue assets, not the persistence location for automatic Custom
+state; `Custom` belongs to Settings persistence.
+
+The retained Context Menu follows the selected Widget Theme palette plus the same resolved **effective** runtime material
+because it lives in the Quick display scene; it never consumes the Settings QWidget theme/AccentPolicy backdrop directly.
+Glass/Acrylic remain scene-local Quick materials, not Settings HWND effects.
 
 ## Production runtime chain
 
