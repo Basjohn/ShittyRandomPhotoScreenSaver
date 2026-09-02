@@ -14,6 +14,13 @@ Item {
     property var verticalGuides: []
     property var horizontalGuides: []
 
+    // Theme-coloured edit-mode close (X) control. Default Dark = black circle,
+    // white X, tiny white outline. Phase 1c binds these to the resolved Widget
+    // Theme palette; the defaults here are the Default Dark appearance.
+    property color closeButtonColor: "#000000"
+    property color closeButtonBorderColor: "#ffffff"
+    property color closeButtonGlyphColor: "#ffffff"
+
     visible: editActive
     enabled: editActive
     clip: false
@@ -113,21 +120,44 @@ Item {
             Rectangle {
                 id: closeControl
                 objectName: "customLayoutClose-" + editFrame.widgetId
-                width: 24
-                height: 24
-                radius: 12
-                x: editFrame.width - width - 4
-                y: 4
-                color: "#e6a51d1d"
+                width: 22
+                height: 22
+                radius: width / 2
+                // Sit just left of a right-anchored header refresh accessory
+                // rather than jammed into the extreme corner. Approximate until
+                // the per-widget refresh glyphs are finalised.
+                x: editFrame.width - width - 34
+                y: 8
+                antialiasing: true
+                color: customLayoutOverlay.closeButtonColor
                 border.width: 1
-                border.color: "white"
+                border.color: customLayoutOverlay.closeButtonBorderColor
 
-                Text {
+                // Crisp, perfectly-centred X drawn from two rotated bars. The
+                // "×" glyph sits high in its font metrics and reads off-centre in
+                // a small circle, which is what looked deformed before.
+                Item {
                     anchors.centerIn: parent
-                    text: "×"
-                    color: "white"
-                    font.pixelSize: 18
-                    font.bold: true
+                    width: closeControl.width * 0.44
+                    height: width
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: parent.width
+                        height: 2
+                        radius: 1
+                        antialiasing: true
+                        color: customLayoutOverlay.closeButtonGlyphColor
+                        rotation: 45
+                    }
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: parent.width
+                        height: 2
+                        radius: 1
+                        antialiasing: true
+                        color: customLayoutOverlay.closeButtonGlyphColor
+                        rotation: -45
+                    }
                 }
 
                 MouseArea {
@@ -140,7 +170,9 @@ Item {
             MouseArea {
                 id: moveArea
                 anchors.fill: parent
-                anchors.topMargin: 28
+                // Keep the move zone clear of the repositioned close control so
+                // its full circle stays clickable.
+                anchors.topMargin: 32
                 cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                 property real pressOffsetX: 0
                 property real pressOffsetY: 0
