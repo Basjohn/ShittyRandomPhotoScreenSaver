@@ -114,6 +114,7 @@ Current migration implementation sequencing is **not** owned by this folder. Rea
 duplicate standalone records are intentionally absent.
 
 - [R-74 — Quick Card Shadows Could Overpaint Sibling Widget Content](R-74_Quick_Card_Shadow_Sibling_Subtree_Overpaint.md)
+- [R-75 — A Superseded Compute Callback Could Release A Held Serial-Lane Slot](R-75_Superseded_Compute_Callback_Released_Held_Serial_Lane_Slot.md)
 
 ## U Records
 
