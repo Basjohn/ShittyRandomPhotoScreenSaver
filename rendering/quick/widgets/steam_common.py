@@ -15,6 +15,7 @@ from core.settings.shadow_direction import (
     resolve_directional_extensions,
     resolve_signed_offset,
 )
+from .theme_projection import resolve_rgba_role
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
     ORDINARY_TEXT_SHADOW_BASE,
@@ -99,6 +100,76 @@ class SteamCardStyleProjection:
     text_shadow_color: QColor
     text_shadow_offset_x: float
     text_shadow_offset_y: float
+
+
+@dataclass(frozen=True)
+class SteamSemanticPalette:
+    """Presentation-ready semantic colours shared by retained Steam cards.
+
+    Each family supplies its accepted current pixels as fallbacks. Optional Widget
+    Theme roles can then unify panels/gradients/outlines without exposing another
+    permanent row of per-family Settings swatches.
+    """
+
+    info_surface: tuple[int, int, int, int] = (240, 144, 45, 230)
+    info_border: tuple[int, int, int, int] = (255, 230, 180, 220)
+    info_text: tuple[int, int, int, int] = (255, 255, 255, 255)
+    tooltip_surface: tuple[int, int, int, int] = (43, 43, 43, 255)
+    tooltip_border: tuple[int, int, int, int] = (154, 154, 154, 200)
+    tooltip_text: tuple[int, int, int, int] = (255, 255, 255, 255)
+    artwork_surface: tuple[int, int, int, int] = (12, 15, 20, 230)
+    artwork_border: tuple[int, int, int, int] = (255, 255, 255, 175)
+    artwork_stripe: tuple[int, int, int, int] = (255, 255, 255, 38)
+    artwork_gradient_start: tuple[int, int, int, int] = (105, 115, 124, 255)
+    artwork_gradient_middle: tuple[int, int, int, int] = (105, 115, 124, 255)
+    artwork_gradient_end: tuple[int, int, int, int] = (23, 27, 32, 255)
+    metric_surface: tuple[int, int, int, int] = (199, 213, 224, 69)
+    metric_border: tuple[int, int, int, int] = (199, 213, 224, 199)
+    metric_inner_border: tuple[int, int, int, int] = (199, 213, 224, 99)
+    metric_separator: tuple[int, int, int, int] = (199, 213, 224, 110)
+
+
+def project_steam_semantic_palette(
+    *,
+    fallback: SteamSemanticPalette,
+) -> SteamSemanticPalette:
+    """Resolve sparse Steam roles over one family's accepted local defaults."""
+
+    def resolved(role: str, local_role: str, value: tuple[int, int, int, int]):
+        return resolve_rgba_role(
+            role,
+            local_roles={local_role: value},
+            fallback=value,
+        )
+
+    return SteamSemanticPalette(
+        info_surface=resolved("steam.info.surface", "local.surface.alt", fallback.info_surface),
+        info_border=resolved("steam.info.border", "local.border", fallback.info_border),
+        info_text=resolved("steam.info.text", "local.text", fallback.info_text),
+        tooltip_surface=resolved("steam.tooltip.surface", "local.surface", fallback.tooltip_surface),
+        tooltip_border=resolved("steam.tooltip.border", "local.border", fallback.tooltip_border),
+        tooltip_text=resolved("steam.tooltip.text", "local.text", fallback.tooltip_text),
+        artwork_surface=resolved("steam.artwork.surface", "local.surface.alt", fallback.artwork_surface),
+        artwork_border=resolved("steam.artwork.border", "local.border", fallback.artwork_border),
+        artwork_stripe=resolved("steam.artwork.stripe", "local.separator", fallback.artwork_stripe),
+        artwork_gradient_start=resolved(
+            "steam.artwork.gradient.start", "local.gradient.start", fallback.artwork_gradient_start
+        ),
+        artwork_gradient_middle=resolved(
+            "steam.artwork.gradient.middle", "local.gradient.middle", fallback.artwork_gradient_middle
+        ),
+        artwork_gradient_end=resolved(
+            "steam.artwork.gradient.end", "local.gradient.end", fallback.artwork_gradient_end
+        ),
+        metric_surface=resolved("steam.metric.surface", "local.surface.alt", fallback.metric_surface),
+        metric_border=resolved("steam.metric.border", "local.border", fallback.metric_border),
+        metric_inner_border=resolved(
+            "steam.metric.inner_border", "local.border", fallback.metric_inner_border
+        ),
+        metric_separator=resolved(
+            "steam.metric.separator", "local.separator", fallback.metric_separator
+        ),
+    )
 
 
 def project_steam_card_style(
@@ -252,12 +323,14 @@ class SteamCardFieldListModel(QAbstractListModel):
 __all__ = [
     "SteamCardFieldListModel",
     "SteamCardStyleProjection",
+    "SteamSemanticPalette",
     "accepted_local_image_source",
     "as_bool",
     "bounded_float",
     "bounded_int",
     "optional_appid",
     "project_steam_card_style",
+    "project_steam_semantic_palette",
     "rgba",
     "with_alpha",
 ]

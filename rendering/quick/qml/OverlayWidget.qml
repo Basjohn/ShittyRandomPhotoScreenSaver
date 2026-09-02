@@ -24,6 +24,15 @@ Item {
 
     default property alias content: card.content
 
+    // Optional scene-local accessory lane beside the ordinary card. Families that
+    // need a deliberately external control (Media app-volume is the canonical
+    // first consumer) reserve authored width here; the card then occupies the
+    // remaining authored width while the accessory stays inside the same retained
+    // widget root/lifecycle/scale. Zero is the inert default for every existing
+    // family. The accessory never becomes a second geometry or lifecycle owner.
+    property real rightAccessoryExtent: 0.0
+    property alias rightAccessoryContent: rightAccessoryLayer.data
+
     // Content-driven outer geometry (H option A): each family binds its stable
     // *preferred* content size here from its intrinsic QML content (text implicit
     // sizes, fixed dimensions), NOT from this item's assigned width/height. The
@@ -124,9 +133,12 @@ Item {
     // whole-card uniform transform. The external underlay binds these values so
     // letterboxed CUSTOM geometry still shadows the actual rendered card, not
     // the larger assigned outer rectangle.
-    readonly property real cardShadowVisualWidth: authoredRoot.width * presentationScale
+    readonly property real authoredCardWidth: Math.max(
+        0.0, authoredRoot.width - Math.max(0.0, rightAccessoryExtent)
+    )
+    readonly property real cardShadowVisualWidth: authoredCardWidth * presentationScale
     readonly property real cardShadowVisualHeight: authoredRoot.height * presentationScale
-    readonly property real cardShadowVisualX: (width - cardShadowVisualWidth) / 2.0
+    readonly property real cardShadowVisualX: (width - authoredRoot.width * presentationScale) / 2.0
     readonly property real cardShadowVisualY: (height - cardShadowVisualHeight) / 2.0
 
     Item {
@@ -152,7 +164,10 @@ Item {
         OverlayCard {
             id: card
             objectName: "overlayWidgetCard"
-            anchors.fill: parent
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: overlayWidget.authoredCardWidth
             shadowEnabled: overlayWidget.cardShadowEnabled && !overlayWidget.externalCardShadow
             shadowColor: overlayWidget.cardShadowColor
             shadowBlur: overlayWidget.cardShadowBlur
@@ -163,6 +178,17 @@ Item {
             shadowExtendTop: overlayWidget.cardShadowExtendTop
             shadowExtendRight: overlayWidget.cardShadowExtendRight
             shadowExtendBottom: overlayWidget.cardShadowExtendBottom
+        }
+
+        Item {
+            id: rightAccessoryLayer
+            objectName: "overlayRightAccessoryLayer"
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.right: parent.right
+            width: Math.max(0.0, overlayWidget.rightAccessoryExtent)
+            clip: false
+            z: 2
         }
     }
 }

@@ -3,7 +3,7 @@ import QtQuick
 // Mandatory retained artwork primitive for dynamic artwork surfaces.
 //
 // Artwork changes fade through the existing frame/background instead of swapping
-// one texture visibly. The two short NumberAnimations are event-driven and only
+// one texture visibly. The two gentle NumberAnimations are event-driven and only
 // run while a source changes; there is no polling timer or steady-state cadence.
 // A single Image node remains resident, so the idle presentation cost is the same
 // image texture/node class the family would otherwise own.
@@ -14,8 +14,8 @@ Item {
     property int fillMode: Image.PreserveAspectCrop
     property bool asynchronous: true
     property bool cache: true
-    property int fadeOutDuration: 140
-    property int fadeInDuration: 240
+    property int fadeOutDuration: 200
+    property int fadeInDuration: 340
 
     readonly property int status: image.status
     readonly property bool transitionVisible:

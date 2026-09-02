@@ -23,6 +23,11 @@ from core.settings.shadow_direction import (
     resolve_signed_offset,
 )
 from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
+from rendering.quick.widgets.theme_projection import (
+    configured_rgba_override,
+    resolve_header_colors,
+    resolve_rgba_role,
+)
 from widgets.gmail_components import (
     clean_sender_name,
     format_email_date,
@@ -137,6 +142,10 @@ class GmailPresentationConfig:
     separator_thickness: int = 3
     boundary_separator_color: tuple[int, int, int, int] = (180, 180, 180, 80)
     boundary_separator_thickness: int = 3
+    action_popup_surface_color: tuple[int, int, int, int] = (43, 43, 43, 255)
+    action_popup_border_color: tuple[int, int, int, int] = (154, 154, 154, 200)
+    action_popup_hover_color: tuple[int, int, int, int] = (62, 62, 62, 220)
+    action_popup_text_color: tuple[int, int, int, int] = (255, 255, 255, 255)
     auto_title_case: bool = True
     clean_sender_names: bool = True
     max_sender_words: int = 3
@@ -195,9 +204,67 @@ class GmailPresentationConfig:
         defaults = get_default_settings().get("widgets", {}).get("gmail", {})
         current = widgets.get("gmail", {}) if isinstance(widgets, Mapping) else {}
         merged = dict(defaults) if isinstance(defaults, Mapping) else {}
-        if isinstance(current, Mapping):
+        if not isinstance(current, Mapping):
+            current = {}
+        else:
             merged.update(current)
-        return cls.from_mapping(merged)
+        config = cls.from_mapping(merged)
+        header_fill, header_border, header_text = resolve_header_colors(
+            "gmail",
+            values=current,
+            defaults=defaults if isinstance(defaults, Mapping) else {},
+            fill=config.header_fill_color,
+            border=config.header_border_color,
+            text=config.header_text_color,
+        )
+        separator_override = configured_rgba_override(
+            current, defaults if isinstance(defaults, Mapping) else {},
+            "separator_color", config.separator_color,
+        )
+        boundary_override = configured_rgba_override(
+            current, defaults if isinstance(defaults, Mapping) else {},
+            "boundary_separator_color", config.boundary_separator_color,
+        )
+        separator_local = {
+            "local.separator": config.separator_color,
+            "local.border": config.border_color,
+            "local.text": config.text_color,
+        }
+        return replace(
+            config,
+            header_fill_color=header_fill,
+            header_border_color=header_border,
+            header_text_color=header_text,
+            separator_color=resolve_rgba_role(
+                "gmail.separator", local_roles=separator_local,
+                fallback=config.separator_color, explicit=separator_override,
+            ),
+            boundary_separator_color=resolve_rgba_role(
+                "gmail.boundary_separator",
+                local_roles={**separator_local, "local.separator": config.boundary_separator_color},
+                fallback=config.boundary_separator_color, explicit=boundary_override,
+            ),
+            action_popup_surface_color=resolve_rgba_role(
+                "gmail.action.surface",
+                local_roles={"local.surface": config.action_popup_surface_color},
+                fallback=config.action_popup_surface_color,
+            ),
+            action_popup_border_color=resolve_rgba_role(
+                "gmail.action.border",
+                local_roles={"local.border": config.action_popup_border_color},
+                fallback=config.action_popup_border_color,
+            ),
+            action_popup_hover_color=resolve_rgba_role(
+                "gmail.action.hover",
+                local_roles={"local.surface.alt": config.action_popup_hover_color},
+                fallback=config.action_popup_hover_color,
+            ),
+            action_popup_text_color=resolve_rgba_role(
+                "gmail.action.text",
+                local_roles={"local.text": config.action_popup_text_color},
+                fallback=config.action_popup_text_color,
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -670,6 +737,22 @@ class GmailPresentationModel(QObject):
     @Property(QColor, notify=stateChanged)
     def boundarySeparatorColor(self) -> QColor:
         return QColor(*self.config.boundary_separator_color)
+
+    @Property(QColor, notify=stateChanged)
+    def actionPopupSurfaceColor(self) -> QColor:
+        return QColor(*self.config.action_popup_surface_color)
+
+    @Property(QColor, notify=stateChanged)
+    def actionPopupBorderColor(self) -> QColor:
+        return QColor(*self.config.action_popup_border_color)
+
+    @Property(QColor, notify=stateChanged)
+    def actionPopupHoverColor(self) -> QColor:
+        return QColor(*self.config.action_popup_hover_color)
+
+    @Property(QColor, notify=stateChanged)
+    def actionPopupTextColor(self) -> QColor:
+        return QColor(*self.config.action_popup_text_color)
 
     @Property(bool, notify=stateChanged)
     def showEnvelopeIcon(self) -> bool:

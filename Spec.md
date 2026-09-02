@@ -70,6 +70,10 @@ activation is not repaired by timers, duplicate calls or QSS replay.
 `themes/dark.qss` is legacy stylesheet residue, not theme authority. Its guarded retirement is in `Future_Cleanup.md`.
 The complete permanent contract is `Docs/Settings_Theme_Architecture.md`.
 
+## Runtime Widget Themes / semantic visuals
+
+Runtime Widget Themes (`.srwtheme`) are separate from the Settings QWidget theme. They own semantic retained-widget/runtime-overlay colors plus a recommended card material; the user's Surface Style override remains an orthogonal material-only preference. Existing intentionally authored per-family swatches beat theme baselines. Specialized schema-v2 visual roles are sparse and inherit through one resolver (`intentional family override -> exact role -> semantic parent -> local/current semantic value -> preserved fallback`); `local.*` roles are presentation context and never persistence. A role does not automatically require a Settings control: high-value family overrides may be exposed in collapsed semantic buckets (Media `Header Appearance`, `Seek Bar`, `Volume Control` are the reference), while low-level panel/separator/gradient/icon detail should normally inherit. Default-valued swatches remain implicit Inherit; a genuinely changed swatch is the family override. The retained Context Menu has no family override and consumes the generation-scoped Widget Theme palette directly. Visualizer retains its specialized line/presentation scaling authority rather than inheriting the generic decorative-stroke compensation.
+
 ## Capability / ordinary instance state
 
 Family activation/deactivation is different from ordinary instance ON/OFF. Capability deactivation preserves detail
@@ -105,15 +109,19 @@ Current proven patterns are deliberately heterogeneous:
 
 Do not create services/managers merely for naming symmetry.
 
-App volume is a Media-dependent child/accessory, not an independent widget-family capability. Its default presentation
-is a separate retained Quick item beside the Media card, with its own bounds, hit target and adjustable geometry. It
-exists only while Media and provider app-volume capability are effective, follows Media's effective display route and
-lifecycle, and may persist its own CUSTOM child rect/size payload in Media's effective display bucket without gaining an
-independent monitor. An integrated in-card presentation is allowed only as an explicit option; absent/legacy variant
-state resolves to separate. Both forms consume the existing Media presentation model plus its one
-`MediaVolumeRuntimeService` lease/action seam. The retained child item hides/retires with Media; the shared service
-lifecycle remains Media-owned/setting-gated, never child-owned. Neither form may create a second Media card, model,
-controller, poller or service, or restore the deleted QWidget presentation.
+App volume is a Media-dependent scene-local accessory, not an independent widget-family capability. Its default
+presentation is an **external right accessory lane inside the same retained `OverlayWidget` root** as the Media card.
+`OverlayWidget.rightAccessoryExtent/rightAccessoryContent` reserves authored width beside the card; the card then keeps
+its accepted ordinary content width while the accessory receives its own visible bounds/hit target and the whole Media
+presentation still shares one outer geometry, uniform CUSTOM transform, lifecycle and display route. The display-level
+ordinary-card shadow uses the card-only visual width and therefore does not expand over the accessory lane. The lane
+exists only while Media plus provider app-volume capability are effective and is default-enabled by the Media setting.
+It consumes the existing Media presentation model plus its one `MediaVolumeRuntimeService` lease/action seam. It does
+**not** persist an independent CUSTOM child rect, own an independent monitor, create another retained presentation root,
+or gain its own model/controller/poller/service. A future independently movable volume child would require a separately
+approved geometry contract rather than being inferred from this accessory lane. Moving volume back inside the card is
+likewise an explicit presentation option/feature, not a parity fallback, and must not steal the reclaimed Media card
+content width.
 
 ## State / actions
 

@@ -27,13 +27,17 @@ OverlayWidget {
     // artwork + metadata genuinely require it. Height honours the historical
     // media floor of max(220, artwork_size + 60). Config-derived (no assigned
     // width/height dependency, no feedback). J refines exact dimensions.
-    preferredContentWidth: Math.max(
+    // Media's card keeps its accepted ordinary 600 px footprint; the optional
+    // app-volume rail is a deliberate external accessory and therefore extends
+    // the widget footprint instead of stealing 48 px from card content.
+    readonly property real preferredCardWidth: Math.max(
         600.0,
         mediaModel.artworkSize + 18.0 + Math.max(220.0, mediaModel.fontSize * 16.0)
             + mediaRoot.shellInset,
-        headerFrame.implicitWidth + (appVolumeSlider.visible ? 48.0 : 0.0)
-            + mediaRoot.shellInset
+        headerFrame.implicitWidth + mediaRoot.shellInset
     )
+    rightAccessoryExtent: mediaModel.appVolumeAvailable ? 48.0 : 0.0
+    preferredContentWidth: preferredCardWidth + rightAccessoryExtent
     preferredContentHeight: Math.max(220.0, mediaModel.artworkSize + 60.0)
 
     function appVolumeLevelAt(y, height) {
@@ -65,7 +69,6 @@ OverlayWidget {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.right: parent.right
-        anchors.rightMargin: appVolumeSlider.visible ? 48.0 : 0.0
         spacing: 12.0
 
         BrandedHeader {
@@ -121,68 +124,10 @@ OverlayWidget {
                     ? Math.max(0.1, (mainBand.height - 2.0) / implicitHeight)
                     : 1.0
 
-                ShadowedText {
-                    objectName: "mediaTitle"
+                MediaMetadataColumn {
+                    id: trackMetadata
                     width: metadata.width
-                    height: implicitHeight
-                    text: mediaRoot.mediaModel.title
-                    color: mediaRoot.mediaModel.textColor
-                    font.family: mediaRoot.mediaModel.fontFamily
-                    font.pointSize: mediaRoot.mediaModel.fontSize * 1.12
-                    font.bold: true
-                    wrap: false
-                    fontSizeMode: Text.HorizontalFit
-                    minimumPointSize: 6.0
-                    maximumLineCount: 1
-                    elide: Text.ElideRight
-                    shadowEnabled: mediaRoot.mediaModel.textShadowEnabled
-                    shadowColor: mediaRoot.mediaModel.textShadowColor
-                    shadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
-                    shadowOffsetY: mediaRoot.mediaModel.textShadowOffsetY
-                }
-
-                ShadowedText {
-                    objectName: "mediaArtist"
-                    visible: text.length > 0
-                    width: metadata.width
-                    height: visible ? implicitHeight : 0.0
-                    text: mediaRoot.mediaModel.artist
-                    color: mediaRoot.mediaModel.textColor
-                    opacity: 0.92
-                    font.family: mediaRoot.mediaModel.fontFamily
-                    font.pointSize: mediaRoot.mediaModel.fontSize
-                    font.bold: true
-                    wrap: false
-                    fontSizeMode: Text.HorizontalFit
-                    minimumPointSize: 6.0
-                    maximumLineCount: 1
-                    elide: Text.ElideRight
-                    shadowEnabled: mediaRoot.mediaModel.textShadowEnabled
-                    shadowColor: mediaRoot.mediaModel.textShadowColor
-                    shadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
-                    shadowOffsetY: mediaRoot.mediaModel.textShadowOffsetY
-                }
-
-                ShadowedText {
-                    objectName: "mediaAlbum"
-                    visible: mediaRoot.mediaModel.showAlbum && text.length > 0
-                    width: metadata.width
-                    height: visible ? implicitHeight : 0.0
-                    text: mediaRoot.mediaModel.album
-                    color: mediaRoot.mediaModel.textColor
-                    opacity: 0.75
-                    font.family: mediaRoot.mediaModel.fontFamily
-                    font.pointSize: mediaRoot.mediaModel.fontSize * 0.82
-                    font.italic: true
-                    wrap: false
-                    fontSizeMode: Text.HorizontalFit
-                    minimumPointSize: 6.0
-                    maximumLineCount: 1
-                    elide: Text.ElideRight
-                    shadowEnabled: mediaRoot.mediaModel.textShadowEnabled
-                    shadowColor: mediaRoot.mediaModel.textShadowColor
-                    shadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
-                    shadowOffsetY: mediaRoot.mediaModel.textShadowOffsetY
+                    mediaModel: mediaRoot.mediaModel
                 }
 
                 ShadowedText {
@@ -314,12 +259,7 @@ OverlayWidget {
                 )
                 height: mediaRoot.mediaModel.progressHeight
                 radius: height / 2.0
-                color: Qt.rgba(
-                    mediaRoot.mediaModel.progressFillColor.r,
-                    mediaRoot.mediaModel.progressFillColor.g,
-                    mediaRoot.mediaModel.progressFillColor.b,
-                    Math.min(0.35, mediaRoot.mediaModel.progressFillColor.a * 0.32)
-                )
+                color: mediaRoot.mediaModel.progressTrackColor
 
                 Rectangle {
                     visible: mediaRoot.mediaModel.progressShadowEnabled
@@ -328,7 +268,7 @@ OverlayWidget {
                     width: parent.width
                     height: parent.height
                     radius: parent.radius
-                    color: "#66000000"
+                    color: mediaRoot.mediaModel.progressShadowColor
                     z: -2
                 }
 
@@ -382,7 +322,7 @@ OverlayWidget {
             radius: 12.0
             color: mediaRoot.mediaModel.controlsSurfaceColor
             border.width: mediaRoot.scaleAwareStrokeWidth(1.5)
-            border.color: "#55ffffff"
+            border.color: mediaRoot.mediaModel.controlsBorderColor
             clip: false
 
             // Transport bar uses the same global direction with 15% more
@@ -425,7 +365,7 @@ OverlayWidget {
                     Text {
                         anchors.centerIn: parent
                         text: "←"
-                        color: mediaRoot.mediaModel.textColor
+                        color: mediaRoot.mediaModel.controlsIconColor
                         font.family: mediaRoot.mediaModel.fontFamily
                         font.pointSize: mediaRoot.mediaModel.fontSize
                         font.bold: true
@@ -441,10 +381,10 @@ OverlayWidget {
                 }
 
                 Rectangle {
-                    width: 1.0
+                    width: mediaRoot.scaleAwareStrokeWidth(1.0)
                     height: parent.height * 0.7
                     y: (parent.height - height) / 2.0
-                    color: "#38ffffff"
+                    color: mediaRoot.mediaModel.controlsSeparatorColor
                 }
 
                 Item {
@@ -460,7 +400,7 @@ OverlayWidget {
                     Text {
                         anchors.centerIn: parent
                         text: mediaRoot.mediaModel.playbackState === "playing" ? "||" : "▶"
-                        color: mediaRoot.mediaModel.textColor
+                        color: mediaRoot.mediaModel.controlsIconColor
                         font.family: mediaRoot.mediaModel.fontFamily
                         font.pointSize: mediaRoot.mediaModel.fontSize * 0.9
                         font.bold: true
@@ -476,10 +416,10 @@ OverlayWidget {
                 }
 
                 Rectangle {
-                    width: 1.0
+                    width: mediaRoot.scaleAwareStrokeWidth(1.0)
                     height: parent.height * 0.7
                     y: (parent.height - height) / 2.0
-                    color: "#38ffffff"
+                    color: mediaRoot.mediaModel.controlsSeparatorColor
                 }
 
                 Item {
@@ -495,7 +435,7 @@ OverlayWidget {
                     Text {
                         anchors.centerIn: parent
                         text: "→"
-                        color: mediaRoot.mediaModel.textColor
+                        color: mediaRoot.mediaModel.controlsIconColor
                         font.family: mediaRoot.mediaModel.fontFamily
                         font.pointSize: mediaRoot.mediaModel.fontSize
                         font.bold: true
@@ -525,8 +465,8 @@ OverlayWidget {
                 anchors.right: parent.right
                 anchors.rightMargin: 4.0
                 radius: Math.max(8.0, Math.min(12.0, height * 0.32))
-                border.width: 1.25
-                border.color: "#41ffffff"
+                border.width: mediaRoot.scaleAwareStrokeWidth(1.25)
+                border.color: mediaRoot.mediaModel.systemMuteBorderColor
                 scale: systemMuteTap.pressed ? 1.06 : 1.0
                 property real feedbackOpacity: 0.0
                 gradient: Gradient {
@@ -559,8 +499,8 @@ OverlayWidget {
                     anchors.margins: 3.0
                     radius: Math.max(1.0, parent.radius - 1.0)
                     color: "transparent"
-                    border.width: 1.0
-                    border.color: "#3c000000"
+                    border.width: mediaRoot.scaleAwareStrokeWidth(1.0)
+                    border.color: mediaRoot.mediaModel.systemMuteInnerBorderColor
                 }
 
                 Canvas {
@@ -645,89 +585,95 @@ OverlayWidget {
         }
     }
 
-    Item {
-        id: appVolumeSlider
-        objectName: "mediaAppVolumeSlider"
-        visible: mediaRoot.mediaModel.appVolumeAvailable
-        width: 32.0
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.right: parent.right
-
-        Rectangle {
-            id: appVolumeTrack
-            objectName: "mediaAppVolumeTrack"
-            width: 18.0
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            anchors.topMargin: 6.0
-            anchors.bottomMargin: 6.0
-            anchors.horizontalCenter: parent.horizontalCenter
-            radius: width / 2.0
-            color: mediaRoot.mediaModel.appVolumeTrackColor
-            border.width: mediaRoot.scaleAwareStrokeWidth(1.5)
-            border.color: mediaRoot.mediaModel.appVolumeBorderColor
-            clip: false
-
-            // Volume track keeps the same global direction with a subtle 5%
-            // extra displacement and the same small cached blur.
-            RectangularShadow {
-                anchors.fill: parent
-                visible: mediaRoot.mediaModel.surfaceShadowEnabled
-                color: mediaRoot.mediaModel.surfaceShadowColor
-                blur: mediaRoot.mediaModel.surfaceShadowBlur
-                radius: parent.radius
-                spread: 0.0
-                offset: Qt.vector2d(
-                    mediaRoot.mediaModel.surfaceShadowOffsetX * 1.05,
-                    mediaRoot.mediaModel.surfaceShadowOffsetY * 1.05
-                )
-                cached: true
-                z: -1
-            }
-
+    rightAccessoryContent: [
+        Item {
+                id: appVolumeSlider
+                objectName: "mediaAppVolumeSlider"
+                visible: mediaRoot.mediaModel.appVolumeAvailable
+                width: 32.0
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.topMargin: mediaRoot.cardPadding
+                anchors.bottomMargin: mediaRoot.cardPadding
+                anchors.horizontalCenter: parent.horizontalCenter
+    
             Rectangle {
-                objectName: "mediaAppVolumeFill"
-                width: parent.width
-                readonly property real normalizedLevel: Math.max(
-                    0.0, Math.min(1.0, mediaRoot.mediaModel.appVolumeLevel)
-                )
-                height: normalizedLevel <= 0.0
-                    ? 0.0
-                    : Math.min(parent.height, Math.max(2.0, parent.height * normalizedLevel))
-                y: (parent.height - height) / 2.0
+                id: appVolumeTrack
+                objectName: "mediaAppVolumeTrack"
+                width: 18.0
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.topMargin: 6.0
+                anchors.bottomMargin: 6.0
+                anchors.horizontalCenter: parent.horizontalCenter
                 radius: width / 2.0
-                color: mediaRoot.mediaModel.appVolumeFillColor
-                border.width: height > 0.0 ? 1.5 : 0.0
+                color: mediaRoot.mediaModel.appVolumeTrackColor
+                border.width: mediaRoot.scaleAwareStrokeWidth(1.5)
                 border.color: mediaRoot.mediaModel.appVolumeBorderColor
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                enabled: mediaRoot.mediaModel.interactionEnabled
-                acceptedButtons: Qt.LeftButton
-                onPressed: function(mouse) {
-                    mediaRoot.appVolumeLevelRequested(
-                        mediaRoot.appVolumeLevelAt(mouse.y, height)
+                clip: false
+    
+                // Volume track keeps the same global direction with a subtle 5%
+                // extra displacement and the same small cached blur.
+                RectangularShadow {
+                    anchors.fill: parent
+                    visible: mediaRoot.mediaModel.surfaceShadowEnabled
+                    color: mediaRoot.mediaModel.surfaceShadowColor
+                    blur: mediaRoot.mediaModel.surfaceShadowBlur
+                    radius: parent.radius
+                    spread: 0.0
+                    offset: Qt.vector2d(
+                        mediaRoot.mediaModel.surfaceShadowOffsetX * 1.05,
+                        mediaRoot.mediaModel.surfaceShadowOffsetY * 1.05
                     )
+                    cached: true
+                    z: -1
                 }
-                onPositionChanged: function(mouse) {
-                    if (pressed) {
+    
+                Rectangle {
+                    objectName: "mediaAppVolumeFill"
+                    width: parent.width
+                    readonly property real normalizedLevel: Math.max(
+                        0.0, Math.min(1.0, mediaRoot.mediaModel.appVolumeLevel)
+                    )
+                    height: normalizedLevel <= 0.0
+                        ? 0.0
+                        : Math.min(parent.height, Math.max(2.0, parent.height * normalizedLevel))
+                    y: (parent.height - height) / 2.0
+                    radius: width / 2.0
+                    color: mediaRoot.mediaModel.appVolumeFillColor
+                    border.width: height > 0.0
+                        ? mediaRoot.scaleAwareStrokeWidth(1.5) : 0.0
+                    border.color: mediaRoot.mediaModel.appVolumeBorderColor
+                }
+    
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: mediaRoot.mediaModel.interactionEnabled
+                    acceptedButtons: Qt.LeftButton
+                    onPressed: function(mouse) {
                         mediaRoot.appVolumeLevelRequested(
                             mediaRoot.appVolumeLevelAt(mouse.y, height)
                         )
                     }
-                }
-                onWheel: function(wheel) {
-                    if (wheel.angleDelta.y === 0)
-                        return
-                    var direction = wheel.angleDelta.y > 0 ? 1.0 : -1.0
-                    mediaRoot.appVolumeLevelRequested(
-                        mediaRoot.mediaModel.appVolumeLevel + direction * 0.05
-                    )
-                    wheel.accepted = true
+                    onPositionChanged: function(mouse) {
+                        if (pressed) {
+                            mediaRoot.appVolumeLevelRequested(
+                                mediaRoot.appVolumeLevelAt(mouse.y, height)
+                            )
+                        }
+                    }
+                    onWheel: function(wheel) {
+                        if (wheel.angleDelta.y === 0)
+                            return
+                        var direction = wheel.angleDelta.y > 0 ? 1.0 : -1.0
+                        mediaRoot.appVolumeLevelRequested(
+                            mediaRoot.mediaModel.appVolumeLevel + direction * 0.05
+                        )
+                        wheel.accepted = true
+                    }
                 }
             }
         }
-    }
+    ]
+
 }

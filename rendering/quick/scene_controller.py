@@ -31,7 +31,11 @@ from widgets.spotify_visualizer.presentation_geometry import (
 
 from .bootstrap import quick_qml_root
 from .auxiliary import QuickAuxiliaryState
-from .context_menu import QuickContextMenuModel, QuickContextMenuShadowStyle
+from .context_menu import (
+    QuickContextMenuModel,
+    QuickContextMenuPaletteStyle,
+    QuickContextMenuShadowStyle,
+)
 from .custom_layout_overlay import (
     CustomLayoutOverlayModel,
     GeometryResolver,
@@ -514,6 +518,40 @@ class QuickSceneController(QObject):
         root.setProperty("contextMenuShadowExtendTop", float(style.extend_top))
         root.setProperty("contextMenuShadowExtendRight", float(style.extend_right))
         root.setProperty("contextMenuShadowExtendBottom", float(style.extend_bottom))
+        return True
+
+    def apply_context_menu_palette_style(
+        self, style: QuickContextMenuPaletteStyle
+    ) -> bool:
+        """Project one generation-scoped Widget Theme menu palette into QML."""
+
+        if not isinstance(style, QuickContextMenuPaletteStyle):
+            raise TypeError(
+                "Quick context-menu palette requires QuickContextMenuPaletteStyle"
+            )
+        root = self._scene_root
+        if root is None or not self._readiness.admission_open:
+            return False
+        properties = {
+            "contextMenuSurfaceColor": style.menu_surface,
+            "contextMenuBorderColor": style.menu_border,
+            "contextMenuTextColor": style.menu_text,
+            "contextMenuSelectedSurfaceColor": style.menu_selected_surface,
+            "contextMenuSeparatorColor": style.menu_separator,
+            "contextMenuIndicatorBorderColor": style.menu_indicator_border,
+            "contextMenuIndicatorFillColor": style.menu_indicator_fill,
+            "contextMenuArrowColor": style.menu_arrow,
+            "contextSubmenuSurfaceColor": style.submenu_surface,
+            "contextSubmenuBorderColor": style.submenu_border,
+            "contextSubmenuTextColor": style.submenu_text,
+            "contextSubmenuSelectedSurfaceColor": style.submenu_selected_surface,
+            "contextSubmenuCheckedTextColor": style.submenu_checked_text,
+            "contextSubmenuCheckedSurfaceColor": style.submenu_checked_surface,
+            "contextSubmenuIndicatorBorderColor": style.submenu_indicator_border,
+            "contextSubmenuIndicatorFillColor": style.submenu_indicator_fill,
+        }
+        for name, rgba in properties.items():
+            root.setProperty(name, QColor(*rgba))
         return True
 
     def bind_context_menu_model(self, model: QuickContextMenuModel) -> bool:

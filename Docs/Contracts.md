@@ -61,6 +61,8 @@ retains the selected Widget Theme's colours; it does not mutate/dirty the theme 
 
 **Widget Theme palette precedence:** Widget Theme card colours are global/default baseline values. Explicit existing `widgets.<family>.card.*` values remain higher-precedence family overrides; they are not silently reclassified as theme state. The Context Menu has no family override layer and takes Widget Theme palette values directly. A per-family swatch edit therefore does not create Widget Theme `Custom`; editing a Widget-Theme-owned baseline value does.
 
+**Semantic visual-role contract (schema v2):** specialized decorative roles are sparse and inherit through one Qt-free resolver: intentional family override -> exact theme role -> shared semantic parent -> caller-supplied `local.*` current semantic value -> preserved current fallback. `local.*` tokens are runtime/presentation context only and must never serialize into `.srwtheme`, Custom or Settings. Default-valued legacy family swatches act as implicit Inherit; only a genuinely changed stored value is an explicit family override. Adding a role is therefore not permission to recolour Default Dark or to add a permanent visible Settings swatch. A bounded high-value family override **may** be exposed when users genuinely author it; such controls belong in collapsed semantic Settings buckets and still use default-valued = Inherit semantics. Slice 9 Media is the reference: `Header Appearance`, `Seek Bar`, and `Volume Control` expose the useful family overrides while lower-level transport/mute/panel/icon roles remain inherited. New retained widgets must consume this resolver rather than implement another Media/Steam/family-local theme cascade. Visualizer's specialised line/presentation system remains exempt from the generic decorative-stroke migration.
+
 Manual editing of any Widget Theme-owned visual value has one separate deterministic contract: snapshot the complete
 currently resolved named Widget Theme into user-owned `Custom`, apply the edit to that snapshot, select `Custom`, and turn
 `Keep Synced` OFF. The installed/shipped `.srwtheme` remains immutable and all unedited resolved values survive the
@@ -91,7 +93,7 @@ state; `Custom` belongs to Settings persistence.
 
 The retained Context Menu follows the selected Widget Theme palette plus the same resolved **effective** runtime material
 because it lives in the Quick display scene; it never consumes the Settings QWidget theme/AccentPolicy backdrop directly.
-Glass/Acrylic remain scene-local Quick materials, not Settings HWND effects.
+Its palette is projected once per display generation (alongside its global Card-shadow snapshot), not read on menu-open or per frame. Default Dark's context roles deliberately reproduce the accepted retained QML pixels before semantic replacement; optional indicator/arrow roles may inherit when older/sparser themes omit them. Glass/Acrylic remain scene-local Quick materials, not Settings HWND effects.
 
 ## Production runtime chain
 
@@ -179,6 +181,8 @@ Host owns item creation/retirement, display rect, family-authored root fade, ind
 
 Presentation destruction does not automatically mean backend destruction; shared owners use real consumer cardinality.
 
+**Scene-local accessory lane:** an ordinary retained widget may reserve presentation width beside its card through `OverlayWidget.rightAccessoryExtent/rightAccessoryContent` without creating a second retained root or geometry/lifecycle owner. The card occupies `authoredRoot.width - rightAccessoryExtent`; the accessory remains in the same root, display route, startup/family fades and uniform CUSTOM transform. The ordinary display-level card shadow binds the card-only visual width, not the accessory lane. Media app-volume is the canonical first consumer. Accessory content may own its own hit target and visual shadow, but not a second provider/model/poller/service or independent monitor. If a future accessory needs independently movable CUSTOM geometry, that requires an explicit new child-geometry contract rather than silently promoting this lane.
+
 ### Startup composition
 
 **Physical status 2026-09-01:** the attempted implementation below failed operator validation: the desktop -> first-wallpaper crossfade was not visible and the same Steam-family startup flashes remained. Treat this as the intended contract pending repair, not accepted behavior. The repair must preserve R-63 non-exact-cover/1 px overscan geometry throughout startup.
@@ -217,8 +221,7 @@ identity/bounded retention. No QPixmap worker transport, base64/tempfile churn o
 Dynamic artwork presentation invariant: **every changing artwork surface fades**. Media, Achievement Pulse and
 Abandonment Issues use the shared retained `ArtworkFadeImage.qml` fade-through primitive; future dynamic artwork must
 reuse the same contract or an explicitly superior retained equivalent. Source changes never become visible as an instant
-texture swap: old art fades to zero, the new source waits for `Image.Ready`, then fades in. These are bounded event-driven
-QML animations only while artwork changes; no recurring timer/poller/cadence owner is permitted for artwork fading.
+texture swap: old art fades to zero, the new source waits for `Image.Ready`, then fades in. Slice 8's shared gentle baseline is `200 ms` out / `340 ms` in (family lifecycle choreography may explicitly shorten a fade that is already fully hidden). These are bounded event-driven QML animations only while artwork changes; no recurring timer/poller/cadence owner is permitted for artwork fading. Media metadata follows the same ownership principle: provider/model Title/Artist/Album truth updates immediately, while `MediaMetadataColumn.qml` may retain only the outgoing rendered strings for one bounded presentation crossfade (`240 ms` out / `340 ms` in). Animation must never become data authority or delay fresh metadata.
 
 ## Shadow authority
 
@@ -304,4 +307,4 @@ restores the old committed value, and ending CUSTOM removes only the override. I
 variant. Save/Cancel and layout slots preserve ordinary ON/OFF semantics without crossing capability activation.
 Cross-display transfer has one live retained pixel owner and preserves logical runtime/model identity.
 
-Ordinary uniform CUSTOM scale is absolute against stable authored/preferred geometry with a shared 40% floor; re-entering CUSTOM must not compound shrink. Reddit/Reddit2, Media and Gmail use whole-card retained uniform scaling. Gmail model width is already outer width; its row-derived preferred height alone receives shell inset. Visualizer is intentionally separate: `uniform_visual_scale` and `viewport_extent` remain independent intents.
+Ordinary uniform CUSTOM scale is absolute against stable authored/preferred geometry with a shared 40% floor; re-entering CUSTOM must not compound shrink. Reddit/Reddit2, Media and Gmail use whole-card retained uniform scaling. Media's preferred width may include a scene-local accessory extent; that extent scales as part of the same authored root while the card keeps its own authored width, so external app volume does not become a second geometry owner. Gmail model width is already outer width; its row-derived preferred height alone receives shell inset. Visualizer is intentionally separate: `uniform_visual_scale` and `viewport_extent` remain independent intents.

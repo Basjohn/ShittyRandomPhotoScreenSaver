@@ -89,15 +89,17 @@ OverlayWidget {
             width: 18.0
             height: 18.0
             radius: 9.0
-            color: "#e6f0902d"
-            border.color: "#dcffe6b4"
-            border.width: 1.0
+            color: abandonmentRoot.abandonmentModel.steamInfoSurfaceColor
+            border.color: abandonmentRoot.abandonmentModel.steamInfoBorderColor
+            border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
+                1.0, abandonmentRoot.contentScale
+            )
             z: 5
 
             Text {
                 anchors.fill: parent
                 text: "i"
-                color: "#e61e140a"
+                color: abandonmentRoot.abandonmentModel.steamInfoTextColor
                 font.family: abandonmentRoot.abandonmentModel.fontFamily
                 font.pixelSize: 12.0
                 font.bold: true
@@ -128,9 +130,11 @@ OverlayWidget {
             width: 276.0
             height: infoTipText.implicitHeight + 14.0
             radius: 6.0
-            color: "#ff2b2b2b"
-            border.color: "#c89a9a9a"
-            border.width: 1.0
+            color: abandonmentRoot.abandonmentModel.steamTooltipSurfaceColor
+            border.color: abandonmentRoot.abandonmentModel.steamTooltipBorderColor
+            border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
+                1.0, abandonmentRoot.contentScale
+            )
             z: 10
 
             Text {
@@ -138,7 +142,7 @@ OverlayWidget {
                 anchors.fill: parent
                 anchors.margins: 7.0
                 text: abandonmentRoot.abandonmentModel.connectionInfoTooltip
-                color: "white"
+                color: abandonmentRoot.abandonmentModel.steamTooltipTextColor
                 font.family: abandonmentRoot.abandonmentModel.fontFamily
                 font.pixelSize: 12.0
                 wrapMode: Text.WordWrap
@@ -190,7 +194,9 @@ OverlayWidget {
                         abandonmentRoot.abandonmentModel.accentColor.b,
                         0.80
                     )
-                    strokeWidth: 1.0
+                    strokeWidth: abandonmentRoot.scaleAwareStrokeWidthForScale(
+                        1.0, abandonmentRoot.contentScale
+                    )
                     fillColor: Qt.rgba(
                         abandonmentRoot.abandonmentModel.accentColor.r,
                         abandonmentRoot.abandonmentModel.accentColor.g,
@@ -273,15 +279,10 @@ OverlayWidget {
                         gradient: Gradient {
                             GradientStop {
                                 position: 0.0
-                                color: Qt.rgba(
-                                    abandonmentRoot.abandonmentModel.accentColor.r,
-                                    abandonmentRoot.abandonmentModel.accentColor.g,
-                                    abandonmentRoot.abandonmentModel.accentColor.b,
-                                    0.31
-                                )
+                                color: abandonmentRoot.abandonmentModel.steamArtworkGradientStartColor
                             }
-                            GradientStop { position: 0.22; color: "#96483020" }
-                            GradientStop { position: 1.0; color: "#cd121417" }
+                            GradientStop { position: 0.22; color: abandonmentRoot.abandonmentModel.steamArtworkGradientMiddleColor }
+                            GradientStop { position: 1.0; color: abandonmentRoot.abandonmentModel.steamArtworkGradientEndColor }
                         }
                     }
 
@@ -297,7 +298,7 @@ OverlayWidget {
                         Rectangle {
                             anchors.fill: parent
                             radius: 8.0
-                            color: "#be141518"
+                            color: abandonmentRoot.abandonmentModel.steamArtworkSurfaceColor
                         }
 
                         Repeater {
@@ -307,10 +308,12 @@ OverlayWidget {
                                 x: index * 12.0 - artworkFrame.height
                                 y: artworkFrame.height
                                 width: artworkFrame.height * 1.45
-                                height: 1.0
+                                height: abandonmentRoot.scaleAwareStrokeWidthForScale(
+                                    1.0, abandonmentRoot.contentScale
+                                )
                                 rotation: -45.0
                                 transformOrigin: Item.Left
-                                color: "#26ffffff"
+                                color: abandonmentRoot.abandonmentModel.steamArtworkStripeColor
                             }
                         }
 
@@ -323,9 +326,9 @@ OverlayWidget {
                             asynchronous: true
                             cache: true
                             // The archive transition commits the new model at
-                            // parent opacity zero; do not waste 140 ms fading an
+                            // parent opacity zero; do not waste 200 ms fading an
                             // already-invisible old texture before loading new art.
-                            fadeOutDuration: archiveContent.opacity <= 0.001 ? 0 : 140
+                            fadeOutDuration: archiveContent.opacity <= 0.001 ? 0 : 200
                             layer.enabled: true
                             layer.effect: MultiEffect {
                                 maskEnabled: true
@@ -345,13 +348,10 @@ OverlayWidget {
                             anchors.fill: parent
                             radius: 8.0
                             color: "transparent"
-                            border.color: Qt.rgba(
-                                abandonmentRoot.abandonmentModel.accentColor.r,
-                                abandonmentRoot.abandonmentModel.accentColor.g,
-                                abandonmentRoot.abandonmentModel.accentColor.b,
-                                0.78
+                            border.color: abandonmentRoot.abandonmentModel.steamArtworkBorderColor
+                            border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
+                                2.0, abandonmentRoot.contentScale
                             )
-                            border.width: 2.0
                         }
                     }
                 }
@@ -412,32 +412,21 @@ OverlayWidget {
                     width: Math.min(300.0, normalContent.textWidth)
                     height: 54.0
                     radius: 6.0
-                    color: Qt.rgba(
-                        abandonmentRoot.abandonmentModel.accentColor.r,
-                        abandonmentRoot.abandonmentModel.accentColor.g,
-                        abandonmentRoot.abandonmentModel.accentColor.b,
-                        0.27
+                    color: abandonmentRoot.abandonmentModel.steamMetricSurfaceColor
+                    border.color: abandonmentRoot.abandonmentModel.steamMetricBorderColor
+                    border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
+                        2.0, abandonmentRoot.contentScale
                     )
-                    border.color: Qt.rgba(
-                        abandonmentRoot.abandonmentModel.accentColor.r,
-                        abandonmentRoot.abandonmentModel.accentColor.g,
-                        abandonmentRoot.abandonmentModel.accentColor.b,
-                        0.78
-                    )
-                    border.width: 2.0
 
                     Rectangle {
                         anchors.fill: parent
                         anchors.margins: 4.0
                         radius: 4.0
                         color: "transparent"
-                        border.color: Qt.rgba(
-                            abandonmentRoot.abandonmentModel.accentColor.r,
-                            abandonmentRoot.abandonmentModel.accentColor.g,
-                            abandonmentRoot.abandonmentModel.accentColor.b,
-                            0.39
+                        border.color: abandonmentRoot.abandonmentModel.steamMetricInnerBorderColor
+                        border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
+                            1.0, abandonmentRoot.contentScale
                         )
-                        border.width: 1.0
                     }
 
                     ShadowedText {
@@ -507,13 +496,10 @@ OverlayWidget {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
-                            height: 1.0
-                            color: Qt.rgba(
-                                abandonmentRoot.abandonmentModel.accentColor.r,
-                                abandonmentRoot.abandonmentModel.accentColor.g,
-                                abandonmentRoot.abandonmentModel.accentColor.b,
-                                0.43
+                            height: abandonmentRoot.scaleAwareStrokeWidthForScale(
+                                1.0, abandonmentRoot.contentScale
                             )
+                            color: abandonmentRoot.abandonmentModel.steamMetricSeparatorColor
                         }
 
                         Rectangle {

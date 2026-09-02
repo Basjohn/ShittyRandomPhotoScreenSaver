@@ -255,12 +255,15 @@ class MediaWidgetSettings:
     rounded_artwork_border: bool = True
     provider: str = "spotify"
     spotify_volume_enabled: bool = True
-    spotify_volume_fill_color: list[int] = field(default_factory=lambda: [66, 66, 66, 255])
+    spotify_volume_fill_color: list[int] = field(default_factory=lambda: [79, 79, 79, 150])
     spotify_volume_border_color: list[int] = field(default_factory=lambda: [255, 255, 255, 255])
+    spotify_volume_track_color: list[int] = field(default_factory=lambda: [35, 35, 35, 255])
     playback_progress_enabled: bool = False
     playback_progress_height: int = 6
+    playback_progress_track_color: list[int] = field(default_factory=lambda: [255, 255, 255, 74])
     playback_progress_fill_color: list[int] = field(default_factory=lambda: [255, 255, 255, 230])
     playback_progress_shadow_enabled: bool = False
+    playback_progress_shadow_color: list[int] = field(default_factory=lambda: [0, 0, 0, 102])
     playback_progress_glow_enabled: bool = False
     playback_progress_glow_color: list[int] = field(default_factory=lambda: [255, 255, 255, 180])
     
@@ -300,12 +303,15 @@ class MediaWidgetSettings:
                 settings.get("widgets.media.provider", "spotify")
             ),
             spotify_volume_enabled=settings.get("widgets.media.spotify_volume_enabled", True),
-            spotify_volume_fill_color=settings.get("widgets.media.spotify_volume_fill_color", [66, 66, 66, 255]),
+            spotify_volume_fill_color=settings.get("widgets.media.spotify_volume_fill_color", [79, 79, 79, 150]),
             spotify_volume_border_color=settings.get("widgets.media.spotify_volume_border_color", [255, 255, 255, 255]),
+            spotify_volume_track_color=settings.get("widgets.media.spotify_volume_track_color", [35, 35, 35, 255]),
             playback_progress_enabled=settings.get("widgets.media.playback_progress_enabled", False),
             playback_progress_height=settings.get("widgets.media.playback_progress_height", 6),
+            playback_progress_track_color=settings.get("widgets.media.playback_progress_track_color", [255, 255, 255, 74]),
             playback_progress_fill_color=settings.get("widgets.media.playback_progress_fill_color", [255, 255, 255, 230]),
             playback_progress_shadow_enabled=settings.get("widgets.media.playback_progress_shadow_enabled", False),
+            playback_progress_shadow_color=settings.get("widgets.media.playback_progress_shadow_color", [0, 0, 0, 102]),
             playback_progress_glow_enabled=settings.get("widgets.media.playback_progress_glow_enabled", False),
             playback_progress_glow_color=settings.get("widgets.media.playback_progress_glow_color", [255, 255, 255, 180]),
         )
@@ -347,12 +353,15 @@ class MediaWidgetSettings:
             rounded_artwork_border=_get("rounded_artwork_border", True),
             provider=preserve_provider_setting(_get("provider", "spotify")),
             spotify_volume_enabled=_get("spotify_volume_enabled", True),
-            spotify_volume_fill_color=_get("spotify_volume_fill_color", [66, 66, 66, 255]),
+            spotify_volume_fill_color=_get("spotify_volume_fill_color", [79, 79, 79, 150]),
             spotify_volume_border_color=_get("spotify_volume_border_color", [255, 255, 255, 255]),
+            spotify_volume_track_color=_get("spotify_volume_track_color", [35, 35, 35, 255]),
             playback_progress_enabled=_get("playback_progress_enabled", False),
             playback_progress_height=int(_get("playback_progress_height", 6)),
+            playback_progress_track_color=_get("playback_progress_track_color", [255, 255, 255, 74]),
             playback_progress_fill_color=_get("playback_progress_fill_color", [255, 255, 255, 230]),
             playback_progress_shadow_enabled=_get("playback_progress_shadow_enabled", False),
+            playback_progress_shadow_color=_get("playback_progress_shadow_color", [0, 0, 0, 102]),
             playback_progress_glow_enabled=_get("playback_progress_glow_enabled", False),
             playback_progress_glow_color=_get("playback_progress_glow_color", [255, 255, 255, 180]),
         )
@@ -387,10 +396,13 @@ class MediaWidgetSettings:
             f"{prefix}.spotify_volume_enabled": self.spotify_volume_enabled,
             f"{prefix}.spotify_volume_fill_color": self.spotify_volume_fill_color,
             f"{prefix}.spotify_volume_border_color": self.spotify_volume_border_color,
+            f"{prefix}.spotify_volume_track_color": self.spotify_volume_track_color,
             f"{prefix}.playback_progress_enabled": self.playback_progress_enabled,
             f"{prefix}.playback_progress_height": int(self.playback_progress_height),
+            f"{prefix}.playback_progress_track_color": self.playback_progress_track_color,
             f"{prefix}.playback_progress_fill_color": self.playback_progress_fill_color,
             f"{prefix}.playback_progress_shadow_enabled": self.playback_progress_shadow_enabled,
+            f"{prefix}.playback_progress_shadow_color": self.playback_progress_shadow_color,
             f"{prefix}.playback_progress_glow_enabled": self.playback_progress_glow_enabled,
             f"{prefix}.playback_progress_glow_color": self.playback_progress_glow_color,
         }

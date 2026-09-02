@@ -113,7 +113,7 @@ Performance rules:
 
 # 1A. Widget semantic theme-role expansion + shared fade polish
 
-This is post-parity infrastructure work and remains inactive unless explicitly selected by the operator.
+**Slice-8 first wave is now implemented and awaiting physical validation / later live Widget Theme UI adoption.** Continue this as shared infrastructure work, not as permission to reopen accepted family geometry.
 
 ## 1A.1 Semantic role inheritance instead of swatch proliferation
 
@@ -133,11 +133,13 @@ preserved current visual default
 
 The default/inherit path must reproduce the currently accepted visuals byte-for-pixel-equivalent where practical; adding a role is not permission to recolor shipped defaults. Settings should expose advanced overrides progressively/collapsed or behind an `Inherit` state rather than flooding the normal Widget UI. Do not create a second Media/Steam-local palette system.
 
+**Landed Slice-8 foundation:** `ui/widget_visual_roles.py` owns exactly this cascade; schema-v2 themes admit sparse optional roles; `local.*` terminals never serialize. First consumers include all shared branded headers, Media transport/mute/volume/progress, Gmail action/separators, Reddit/Weather/Clock separators, Steam info/tooltip/artwork/gradients/metrics and the retained Context Menu palette. Context Menu Default Dark was reconciled to its accepted current pixels before semantic projection. Remaining work is to continue migrating meaningful decorative literals incrementally and wire the selected active Widget Theme through Phase 1b/1c, not to invent another resolver.
+
 ## 1A.2 Shared artwork and metadata fade polish
 
-`rendering/quick/qml/ArtworkFadeImage.qml` is already the shared event-driven primitive used by Media, Achievement Pulse and Abandonment Issues artwork. Tune gentleness centrally there before adding family-local animation. Preserve no polling, no provider freshness delay and bounded texture/effect cost.
+`rendering/quick/qml/ArtworkFadeImage.qml` remains the shared event-driven primitive used by Media, Achievement Pulse and Abandonment Issues artwork. Slice 8 establishes a gentler shared `200 ms` fade-out / `340 ms` fade-in baseline; family lifecycle choreography may explicitly shorten a fade only when the parent is already fully hidden. Preserve no polling, no provider freshness delay and bounded texture/effect cost. A true two-texture artwork crossfade remains optional future polish only if measured visual gain justifies the extra texture residency.
 
-For Media Title/Artist/Album, prefer a one-shot opacity transition triggered by track identity/metadata change. The authoritative metadata snapshot must update immediately; animation is presentation-only and must never buffer/stale provider truth. If a true old/new crossfade would require a second retained text/image layer, measure the cost and keep the simple fade-through-current-surface path unless the visual improvement justifies it.
+Media Title/Artist/Album now use `MediaMetadataColumn.qml`: model/provider truth updates immediately, the outgoing rendered strings are retained only for one bounded `240/340 ms` old->new opacity crossfade, and the current HorizontalFit/visibility contract is duplicated in both small text columns. No timer/cadence/provider owner was added. Validate rapid track skipping and optional Album state physically before calling this closed.
 
 ---
 
@@ -742,13 +744,22 @@ Candidate visual ownership includes:
 - semantic text/accent/selection/runtime-overlay colours that are genuinely widget appearance;
 - Glass/Acrylic tint/material strength once those scene-local materials are physically proven;
 - border colour/opacity/width where already supported;
-- branded-header pill Fill + Border roles (Media/Gmail/Reddit/Achievement Pulse/Abandonment Issues now expose alpha-aware family swatches), with logo/text geometry remaining layout rather than theme data;
-- Media sub-surface roles as they mature: app-volume Fill/Track/Outline plus transport and mute surface/icon colours. Slice 6 exposes app-volume Fill/Outline and records Track/transport/mute as future roles rather than inventing a Media-local theme cascade;
+- branded-header pill Fill + Border + Text roles through the shared semantic resolver (Media/Gmail/Reddit/Achievement Pulse/Abandonment Issues retain alpha-aware family swatches as explicit overrides), with logo/text geometry remaining layout rather than theme data;
+- Media sub-surface roles now projected through the same semantic resolver: app-volume Fill/Track/Outline, transport surface/border/separators/icons, mute surface/borders/icons and progress track/fill/glow/shadow. Slice 9 selectively exposes the frequently-authored app-volume Track/Fill/Outline and seek Track/Fill/Shadow/Glow family overrides in collapsed semantic Settings buckets; their canonical/default values remain implicit Inherit rather than blocking Widget Theme roles;
+- Steam info/tooltip/artwork/gradient/metric panels plus Gmail/Reddit/Weather/Clock decorative separators as the first sparse non-Media role wave;
 - shadow visual parameters already exposed by the final widget-style contract;
 - other existing appearance-only values that can round-trip without altering runtime behaviour;
 - optional bounded material parameters that have actually earned their place through visual/performance testing.
 
 Decorative line/border scaling has a reusable retained-presentation primitive from Slice 6: `OverlayWidget.scaleAwareStrokeWidthForScale()`. Future non-Visualizer families should opt decorative strokes into that visible baseline +/-1 px, minimum-1-px contract incrementally after visual validation. **Visualizer is exempt** because its presentation already owns specialised scale-aware line behavior; do not stack a second compensation path onto it.
+
+### Settings-bucket / semantic-override UI discipline
+
+Semantic-role coverage and Settings organization are related but not identical. Adding a role does **not** automatically add a visible control. Expose a family override only when it is a likely user-authored value that benefits from direct adjustment; keep low-level panel/gradient/separator/icon detail inherited unless there is a concrete UX need. When a set of related overrides is exposed, place it in a collapsed semantic bucket so the Widgets page stays readable. Media is the first reference layout: `Provider & Layout`, `Appearance`, `Header Appearance`, `Artwork`, `Transport Controls`, `Seek Bar`, `Volume Control`.
+
+Continue bucket cleanup incrementally rather than rearranging every widget at once. Priority after Media: Steam-family appearance/field sections, then Gmail/Reddit where provider/behavior and visual controls are mixed. Reuse shared bucket names such as `Header Appearance` where the semantics match. Bucket expansion state is UI presentation state only; it must never become Widget Theme state, provider state or runtime geometry authority. Do not remove existing functionality merely to make a section look cleaner.
+
+The Slice-9 Media volume-fill regression is a useful guardrail for the resolver: a specialized role's accepted local/default appearance must remain its own fallback. `media.volume.fill` must not inherit the seek/progress fill merely because both eventually parent to `widget.accent`; a real theme-authored `widget.accent` may override both, but absence of that theme role must preserve their distinct default pixels.
 
 The Widget Theme palette is the **global/default baseline**, not a destructive replacement for existing family-specific card settings. Existing explicit `widgets.<family>.card.*` swatches/opacity/border values keep higher precedence for that family; a family with no explicit authored value inherits the active Widget Theme role. The retained Context Menu has no family override layer and therefore consumes the Widget Theme palette directly. Editing a family-specific swatch is a family customization and does **not** create Widget Theme `Custom`; editing a Widget-Theme-owned baseline swatch does.
 

@@ -819,6 +819,12 @@
           255,
           230
         ],
+        "playback_progress_track_color": [
+          255,
+          255,
+          255,
+          74
+        ],
         "playback_progress_glow_color": [
           255,
           255,
@@ -828,6 +834,12 @@
         "playback_progress_glow_enabled": false,
         "playback_progress_height": 6,
         "playback_progress_shadow_enabled": false,
+        "playback_progress_shadow_color": [
+          0,
+          0,
+          0,
+          102
+        ],
         "position": "Top Left",
         "provider": "spotify",
         "rounded_artwork_border": true,
@@ -840,6 +852,12 @@
           79,
           79,
           150
+        ],
+        "spotify_volume_track_color": [
+          35,
+          35,
+          35,
+          255
         ],
         "show_album": true,
         "show_playback_state": true,

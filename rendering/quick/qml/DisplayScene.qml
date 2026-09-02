@@ -20,6 +20,22 @@ Item {
     property real contextMenuShadowExtendTop: 0.0
     property real contextMenuShadowExtendRight: 0.0
     property real contextMenuShadowExtendBottom: 0.0
+    property color contextMenuSurfaceColor: "#f21b1d24"
+    property color contextMenuBorderColor: "#d8f3ff"
+    property color contextMenuTextColor: "#f6f8ff"
+    property color contextMenuSelectedSurfaceColor: "#4f77b9e8"
+    property color contextMenuSeparatorColor: "#59778a"
+    property color contextMenuIndicatorBorderColor: "#b9eaff"
+    property color contextMenuIndicatorFillColor: "#82cdff"
+    property color contextMenuArrowColor: "#d8f3ff"
+    property color contextSubmenuSurfaceColor: "#f21b1d24"
+    property color contextSubmenuBorderColor: "#d8f3ff"
+    property color contextSubmenuTextColor: "#f6f8ff"
+    property color contextSubmenuSelectedSurfaceColor: "#4f77b9e8"
+    property color contextSubmenuCheckedTextColor: "#b9eaff"
+    property color contextSubmenuCheckedSurfaceColor: "#334e718b"
+    property color contextSubmenuIndicatorBorderColor: "#b9eaff"
+    property color contextSubmenuIndicatorFillColor: "#82cdff"
     property bool perfHudEnabled: false
     property string perfHudText: ""
 
@@ -97,6 +113,22 @@ Item {
         shadowExtendTop: displayScene.contextMenuShadowExtendTop
         shadowExtendRight: displayScene.contextMenuShadowExtendRight
         shadowExtendBottom: displayScene.contextMenuShadowExtendBottom
+        surfaceColor: displayScene.contextMenuSurfaceColor
+        borderColor: displayScene.contextMenuBorderColor
+        textColor: displayScene.contextMenuTextColor
+        selectedSurfaceColor: displayScene.contextMenuSelectedSurfaceColor
+        separatorColor: displayScene.contextMenuSeparatorColor
+        indicatorBorderColor: displayScene.contextMenuIndicatorBorderColor
+        indicatorFillColor: displayScene.contextMenuIndicatorFillColor
+        arrowColor: displayScene.contextMenuArrowColor
+        submenuSurfaceColor: displayScene.contextSubmenuSurfaceColor
+        submenuBorderColor: displayScene.contextSubmenuBorderColor
+        submenuTextColor: displayScene.contextSubmenuTextColor
+        submenuSelectedSurfaceColor: displayScene.contextSubmenuSelectedSurfaceColor
+        submenuCheckedTextColor: displayScene.contextSubmenuCheckedTextColor
+        submenuCheckedSurfaceColor: displayScene.contextSubmenuCheckedSurfaceColor
+        submenuIndicatorBorderColor: displayScene.contextSubmenuIndicatorBorderColor
+        submenuIndicatorFillColor: displayScene.contextSubmenuIndicatorFillColor
         z: 300
     }
 

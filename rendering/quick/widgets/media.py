@@ -27,6 +27,12 @@ if TYPE_CHECKING:
     from widgets.media_volume_runtime import MediaVolumeRuntimeSnapshot
     from widgets.system_mute_runtime import SystemMuteRuntimeSnapshot
 
+from .theme_projection import (
+    configured_rgba_override,
+    resolve_header_colors,
+    resolve_rgba_role,
+)
+
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
     ORDINARY_TEXT_SHADOW_BASE,
@@ -163,8 +169,20 @@ class MediaPresentationConfig:
     playback_progress_glow_enabled: bool = False
     playback_progress_glow_color: tuple[int, int, int, int] = (255, 255, 255, 180)
     app_volume_enabled: bool = True
-    app_volume_fill_color: tuple[int, int, int, int] = (66, 66, 66, 255)
+    app_volume_fill_color: tuple[int, int, int, int] = (79, 79, 79, 150)
     app_volume_border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
+    app_volume_track_color: tuple[int, int, int, int] = (35, 35, 35, 255)
+    controls_surface_color: tuple[int, int, int, int] = (35, 35, 35, 176)
+    controls_border_color: tuple[int, int, int, int] = (255, 255, 255, 85)
+    controls_separator_color: tuple[int, int, int, int] = (255, 255, 255, 56)
+    controls_icon_color: tuple[int, int, int, int] = (255, 255, 255, 230)
+    system_mute_background_color: tuple[int, int, int, int] = (35, 35, 35, 255)
+    system_mute_border_color: tuple[int, int, int, int] = (255, 255, 255, 65)
+    system_mute_inner_border_color: tuple[int, int, int, int] = (0, 0, 0, 60)
+    system_mute_icon_color: tuple[int, int, int, int] = (255, 255, 255, 230)
+    system_mute_muted_icon_color: tuple[int, int, int, int] = (200, 200, 200, 180)
+    playback_progress_track_color: tuple[int, int, int, int] = (255, 255, 255, 74)
+    playback_progress_shadow_color: tuple[int, int, int, int] = (0, 0, 0, 102)
     system_mute_enabled: bool = False
 
     @classmethod
@@ -204,6 +222,14 @@ class MediaPresentationConfig:
                 values.get("playback_progress_fill_color"),
                 (255, 255, 255, 230),
             ),
+            playback_progress_track_color=_rgba(
+                values.get("playback_progress_track_color"),
+                (255, 255, 255, 74),
+            ),
+            playback_progress_shadow_color=_rgba(
+                values.get("playback_progress_shadow_color"),
+                (0, 0, 0, 102),
+            ),
             playback_progress_shadow_enabled=_as_bool(
                 values.get("playback_progress_shadow_enabled"), False
             ),
@@ -219,11 +245,15 @@ class MediaPresentationConfig:
             ),
             app_volume_fill_color=_rgba(
                 values.get("spotify_volume_fill_color"),
-                (66, 66, 66, 255),
+                (79, 79, 79, 150),
             ),
             app_volume_border_color=_rgba(
                 values.get("spotify_volume_border_color"),
                 (255, 255, 255, 255),
+            ),
+            app_volume_track_color=_rgba(
+                values.get("spotify_volume_track_color"),
+                (35, 35, 35, 255),
             ),
             system_mute_enabled=_as_bool(
                 values.get("mute_button_enabled"), False
@@ -239,9 +269,134 @@ class MediaPresentationConfig:
         defaults = get_default_settings().get("widgets", {}).get("media", {})
         values = widgets.get("media", {})
         merged = dict(defaults) if isinstance(defaults, Mapping) else {}
+        current = values if isinstance(values, Mapping) else {}
         if isinstance(values, Mapping):
             merged.update(values)
-        return cls.from_mapping(merged)
+        config = cls.from_mapping(merged)
+
+        header_fill, header_border, header_text = resolve_header_colors(
+            "media",
+            values=current,
+            defaults=defaults if isinstance(defaults, Mapping) else {},
+            fill=config.header_fill_color,
+            border=config.header_border_color,
+            text=config.header_text_color,
+        )
+
+        controls_surface = QColor(*config.background_color)
+        controls_surface.setAlpha(
+            max(150, min(235, int(round(150 + 85 * config.background_opacity))))
+        )
+        controls_surface_rgba = (
+            controls_surface.red(), controls_surface.green(),
+            controls_surface.blue(), controls_surface.alpha(),
+        )
+        local_common = {
+            "local.surface": controls_surface_rgba,
+            "local.surface.alt": config.background_color,
+            "local.border": (255, 255, 255, 85),
+            "local.separator": (255, 255, 255, 56),
+            "local.text": config.text_color,
+            "local.muted": (200, 200, 200, 180),
+            "local.accent": config.playback_progress_fill_color,
+        }
+        volume_fill_override = configured_rgba_override(
+            current, defaults if isinstance(defaults, Mapping) else {},
+            "spotify_volume_fill_color", config.app_volume_fill_color,
+        )
+        volume_outline_override = configured_rgba_override(
+            current, defaults if isinstance(defaults, Mapping) else {},
+            "spotify_volume_border_color", config.app_volume_border_color,
+        )
+        volume_track_override = configured_rgba_override(
+            current, defaults if isinstance(defaults, Mapping) else {},
+            "spotify_volume_track_color", config.app_volume_track_color,
+        )
+        progress_track_override = configured_rgba_override(
+            current, defaults if isinstance(defaults, Mapping) else {},
+            "playback_progress_track_color", config.playback_progress_track_color,
+        )
+        progress_fill_override = configured_rgba_override(
+            current, defaults if isinstance(defaults, Mapping) else {},
+            "playback_progress_fill_color", config.playback_progress_fill_color,
+        )
+        progress_shadow_override = configured_rgba_override(
+            current, defaults if isinstance(defaults, Mapping) else {},
+            "playback_progress_shadow_color", config.playback_progress_shadow_color,
+        )
+        progress_glow_override = configured_rgba_override(
+            current, defaults if isinstance(defaults, Mapping) else {},
+            "playback_progress_glow_color", config.playback_progress_glow_color,
+        )
+
+        return replace(
+            config,
+            header_fill_color=header_fill,
+            header_border_color=header_border,
+            header_text_color=header_text,
+            controls_surface_color=resolve_rgba_role(
+                "media.transport.surface", local_roles=local_common, fallback=controls_surface_rgba
+            ),
+            controls_border_color=resolve_rgba_role(
+                "media.transport.border", local_roles=local_common, fallback=(255, 255, 255, 85)
+            ),
+            controls_separator_color=resolve_rgba_role(
+                "media.transport.separator", local_roles=local_common, fallback=(255, 255, 255, 56)
+            ),
+            controls_icon_color=resolve_rgba_role(
+                "media.transport.icon", local_roles=local_common, fallback=config.text_color
+            ),
+            system_mute_background_color=resolve_rgba_role(
+                "media.mute.surface", local_roles=local_common, fallback=config.background_color
+            ),
+            system_mute_border_color=resolve_rgba_role(
+                "media.mute.border", local_roles={**local_common, "local.border": (255, 255, 255, 65)},
+                fallback=(255, 255, 255, 65),
+            ),
+            system_mute_inner_border_color=resolve_rgba_role(
+                "media.mute.inner_border", local_roles={**local_common, "local.border": (0, 0, 0, 60)},
+                fallback=(0, 0, 0, 60),
+            ),
+            system_mute_icon_color=resolve_rgba_role(
+                "media.mute.icon", local_roles=local_common, fallback=config.text_color
+            ),
+            system_mute_muted_icon_color=resolve_rgba_role(
+                "media.mute.muted_icon", local_roles=local_common, fallback=(200, 200, 200, 180)
+            ),
+            app_volume_track_color=resolve_rgba_role(
+                "media.volume.track",
+                local_roles={**local_common, "local.surface": config.app_volume_track_color},
+                fallback=config.app_volume_track_color, explicit=volume_track_override,
+            ),
+            app_volume_fill_color=resolve_rgba_role(
+                "media.volume.fill",
+                local_roles={**local_common, "local.accent": config.app_volume_fill_color},
+                fallback=config.app_volume_fill_color, explicit=volume_fill_override,
+            ),
+            app_volume_border_color=resolve_rgba_role(
+                "media.volume.outline",
+                local_roles={**local_common, "local.border": config.app_volume_border_color},
+                fallback=config.app_volume_border_color, explicit=volume_outline_override,
+            ),
+            playback_progress_track_color=resolve_rgba_role(
+                "media.progress.track",
+                local_roles={**local_common, "local.surface.alt": config.playback_progress_track_color},
+                fallback=config.playback_progress_track_color, explicit=progress_track_override,
+            ),
+            playback_progress_fill_color=resolve_rgba_role(
+                "media.progress.fill", local_roles=local_common,
+                fallback=config.playback_progress_fill_color, explicit=progress_fill_override,
+            ),
+            playback_progress_glow_color=resolve_rgba_role(
+                "media.progress.glow", local_roles=local_common,
+                fallback=config.playback_progress_glow_color, explicit=progress_glow_override,
+            ),
+            playback_progress_shadow_color=resolve_rgba_role(
+                "media.progress.shadow",
+                local_roles={**local_common, "local.muted": config.playback_progress_shadow_color},
+                fallback=config.playback_progress_shadow_color, explicit=progress_shadow_override,
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -965,6 +1120,14 @@ class MediaPresentationModel(QObject):
     def progressFillColor(self) -> QColor:
         return QColor(*self.config.playback_progress_fill_color)
 
+    @Property(QColor, notify=stateChanged)
+    def progressTrackColor(self) -> QColor:
+        return QColor(*self.config.playback_progress_track_color)
+
+    @Property(QColor, notify=stateChanged)
+    def progressShadowColor(self) -> QColor:
+        return QColor(*self.config.playback_progress_shadow_color)
+
     @Property(bool, notify=stateChanged)
     def progressShadowEnabled(self) -> bool:
         return self.config.playback_progress_shadow_enabled
@@ -979,10 +1142,19 @@ class MediaPresentationModel(QObject):
 
     @Property(QColor, notify=stateChanged)
     def controlsSurfaceColor(self) -> QColor:
-        color = QColor(*self.config.background_color)
-        alpha = int(round(150 + 85 * self.config.background_opacity))
-        color.setAlpha(max(150, min(235, alpha)))
-        return color
+        return QColor(*self.config.controls_surface_color)
+
+    @Property(QColor, notify=stateChanged)
+    def controlsBorderColor(self) -> QColor:
+        return QColor(*self.config.controls_border_color)
+
+    @Property(QColor, notify=stateChanged)
+    def controlsSeparatorColor(self) -> QColor:
+        return QColor(*self.config.controls_separator_color)
+
+    @Property(QColor, notify=stateChanged)
+    def controlsIconColor(self) -> QColor:
+        return QColor(*self.config.controls_icon_color)
 
     @Property(bool, notify=stateChanged)
     def appVolumeAvailable(self) -> bool:
@@ -999,7 +1171,7 @@ class MediaPresentationModel(QObject):
 
     @Property(QColor, notify=stateChanged)
     def appVolumeTrackColor(self) -> QColor:
-        return QColor(*self.config.background_color)
+        return QColor(*self.config.app_volume_track_color)
 
     @Property(QColor, notify=stateChanged)
     def appVolumeBorderColor(self) -> QColor:
@@ -1030,13 +1202,21 @@ class MediaPresentationModel(QObject):
 
     @Property(QColor, notify=stateChanged)
     def systemMuteBackgroundColor(self) -> QColor:
-        return QColor(*self.config.background_color)
+        return QColor(*self.config.system_mute_background_color)
+
+    @Property(QColor, notify=stateChanged)
+    def systemMuteBorderColor(self) -> QColor:
+        return QColor(*self.config.system_mute_border_color)
+
+    @Property(QColor, notify=stateChanged)
+    def systemMuteInnerBorderColor(self) -> QColor:
+        return QColor(*self.config.system_mute_inner_border_color)
 
     @Property(QColor, notify=stateChanged)
     def systemMuteIconColor(self) -> QColor:
         if self._snapshot.system_muted:
-            return QColor(200, 200, 200, 180)
-        return QColor(*self.config.text_color)
+            return QColor(*self.config.system_mute_muted_icon_color)
+        return QColor(*self.config.system_mute_icon_color)
 
     @Property(str, notify=stateChanged)
     def fontFamily(self) -> str:

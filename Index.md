@@ -1,6 +1,6 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 ## Start here
 
@@ -21,6 +21,7 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | durable product/architecture | `Spec.md` |
 | fast current owner map | `Docs/Contracts.md` |
 | Settings theme / Acrylic / Glass architecture | `Docs/Settings_Theme_Architecture.md` |
+| runtime Widget Theme / semantic role / card-material implementation | `Docs/QtQuick_Migration/Widget_Theme_And_Card_Material_Implementation_Plan.md` + `Docs/Contracts.md` |
 | `dark.qss` retirement execution | `Docs/Settings_Dark_QSS_Retirement.md` |
 | physical scene/presenter architecture | `Docs/Compositor_Architecture.md` |
 | CUSTOM/edit/input/auxiliary | `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md` |
@@ -68,6 +69,10 @@ layered-QWidget native backdrop mapping, Acrylic/Glass division of responsibilit
 boundary around future `dark.qss` retirement. `Docs/Settings_Dark_QSS_Retirement.md` is the focused execution authority
 for removing that legacy stylesheet with zero intended visual/behavior change once `Future_Cleanup.md` admits the work.
 Historical Glass investigation is R-61; temporary theme planning notes are not current authority.
+
+## Runtime Widget Themes
+
+`Docs/QtQuick_Migration/Widget_Theme_And_Card_Material_Implementation_Plan.md` owns the staged `.srwtheme`/Surface Style execution plan; `Docs/Contracts.md` and `Docs/Custom_Style_Implementation.md` own the durable precedence/Custom semantics. Schema-v2 specialized widget visuals use `ui/widget_visual_roles.py` as the one sparse semantic inheritance resolver; do not create family-local theme cascades or serialize `local.*` presentation context. `Current_Plan.md` owns which portions are implemented/awaiting validation.
 
 ## Closed ordinary-family migration
 

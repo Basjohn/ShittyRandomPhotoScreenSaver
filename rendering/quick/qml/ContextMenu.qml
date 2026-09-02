@@ -15,6 +15,22 @@ Item {
     property real shadowExtendTop: 0.0
     property real shadowExtendRight: 0.0
     property real shadowExtendBottom: 0.0
+    property color surfaceColor: "#f21b1d24"
+    property color borderColor: "#d8f3ff"
+    property color textColor: "#f6f8ff"
+    property color selectedSurfaceColor: "#4f77b9e8"
+    property color separatorColor: "#59778a"
+    property color indicatorBorderColor: "#b9eaff"
+    property color indicatorFillColor: "#82cdff"
+    property color arrowColor: "#d8f3ff"
+    property color submenuSurfaceColor: "#f21b1d24"
+    property color submenuBorderColor: "#d8f3ff"
+    property color submenuTextColor: "#f6f8ff"
+    property color submenuSelectedSurfaceColor: "#4f77b9e8"
+    property color submenuCheckedTextColor: "#b9eaff"
+    property color submenuCheckedSurfaceColor: "#334e718b"
+    property color submenuIndicatorBorderColor: "#b9eaff"
+    property color submenuIndicatorFillColor: "#82cdff"
 
     readonly property real shadowBaseLeft: Math.max(0.0, -shadowOffsetX)
     readonly property real shadowBaseTop: Math.max(0.0, -shadowOffsetY)
@@ -67,10 +83,8 @@ Item {
         z: 1
     }
 
-    // These palette literals are the current Default-Dark appearance only.
-    // Future theme ownership is Widget Theme semantic roles (with Settings<->
-    // Widget Keep Synced able to make them match), never direct QWidget theme
-    // or native Settings Acrylic/Glass ownership.
+    // Palette values are generation-scoped Widget Theme projections. The QML
+    // defaults below are only fail-safe mirrors of accepted Default Dark pixels.
     Rectangle {
         id: menuSurface
         objectName: "retainedContextMenuSurface"
@@ -91,9 +105,9 @@ Item {
                 menuRoot.height - height - 4.0
             )
         )
-        color: "#f21b1d24"
+        color: menuRoot.surfaceColor
         radius: 10.0
-        border.color: "#d8f3ff"
+        border.color: menuRoot.borderColor
         border.width: 3.0
 
         Column {
@@ -132,7 +146,7 @@ Item {
                         anchors.centerIn: parent
                         width: parent.width - 24.0
                         height: 1.0
-                        color: "#59778a"
+                        color: menuRoot.separatorColor
                         visible: menuRow.modelData.kind === "separator"
                     }
 
@@ -144,7 +158,7 @@ Item {
                         anchors.topMargin: 3.0
                         anchors.bottomMargin: 3.0
                         radius: 6.0
-                        color: rowHover.hovered ? "#4f77b9e8" : "transparent"
+                        color: rowHover.hovered ? menuRoot.selectedSurfaceColor : "transparent"
                         opacity: menuRow.modelData.enabled ? 1.0 : 0.45
                         visible: menuRow.modelData.kind !== "separator"
 
@@ -157,7 +171,7 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             color: "transparent"
                             border.width: 2.0
-                            border.color: "#b9eaff"
+                            border.color: menuRoot.indicatorBorderColor
                             visible: menuRow.modelData.kind === "toggle"
                                 || menuRow.modelData.kind === "choice"
 
@@ -166,7 +180,7 @@ Item {
                                 width: 10.0
                                 height: 10.0
                                 radius: 5.0
-                                color: "#82cdff"
+                                color: menuRoot.indicatorFillColor
                                 visible: menuRow.modelData.checked
                             }
                         }
@@ -178,7 +192,7 @@ Item {
                             anchors.rightMargin: 8.0
                             anchors.verticalCenter: parent.verticalCenter
                             text: menuRow.modelData.label
-                            color: "#f6f8ff"
+                            color: menuRoot.textColor
                             elide: Text.ElideRight
                             font.family: "Jost"
                             font.pixelSize: 14
@@ -191,7 +205,7 @@ Item {
                             anchors.rightMargin: 10.0
                             anchors.verticalCenter: parent.verticalCenter
                             text: "▸"
-                            color: "#d8f3ff"
+                            color: menuRoot.arrowColor
                             font.pixelSize: 16
                             visible: menuRow.modelData.kind === "submenu"
                         }
@@ -248,9 +262,9 @@ Item {
                         )
                         width: 244.0
                         height: submenuColumn.implicitHeight + 12.0
-                        color: "#f21b1d24"
+                        color: menuRoot.submenuSurfaceColor
                         radius: 8.0
-                        border.color: "#d8f3ff"
+                        border.color: menuRoot.submenuBorderColor
                         border.width: 3.0
                         visible: menuRow.modelData.kind === "submenu"
                             && menuRoot.activeSubmenuIndex === menuRow.index
@@ -281,8 +295,8 @@ Item {
                                     height: 34.0
                                     radius: 4.0
                                     color: submenuHover.hovered
-                                        ? "#4f77b9e8"
-                                        : (modelData.checked ? "#334e718b" : "transparent")
+                                        ? menuRoot.submenuSelectedSurfaceColor
+                                        : (modelData.checked ? menuRoot.submenuCheckedSurfaceColor : "transparent")
                                     opacity: modelData.enabled ? 1.0 : 0.45
 
                                     Rectangle {
@@ -294,14 +308,14 @@ Item {
                                         anchors.verticalCenter: parent.verticalCenter
                                         color: "transparent"
                                         border.width: 2.0
-                                        border.color: "#b9eaff"
+                                        border.color: menuRoot.submenuIndicatorBorderColor
 
                                         Rectangle {
                                             anchors.centerIn: parent
                                             width: 9.0
                                             height: 9.0
                                             radius: 4.5
-                                            color: "#82cdff"
+                                            color: menuRoot.submenuIndicatorFillColor
                                             visible: submenuRow.modelData.checked
                                         }
                                     }
@@ -314,8 +328,8 @@ Item {
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: submenuRow.modelData.label
                                         color: submenuRow.modelData.checked
-                                            ? "#b9eaff"
-                                            : "#f6f8ff"
+                                            ? menuRoot.submenuCheckedTextColor
+                                            : menuRoot.submenuTextColor
                                         elide: Text.ElideRight
                                         font.family: "Jost"
                                         font.pixelSize: 13

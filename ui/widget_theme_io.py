@@ -3,8 +3,11 @@
 Mirrors ``ui/settings_theme_io.py``: a ``.srwtheme`` file is an optional
 serialized override, never required for the runtime to render. The compiled
 :data:`DEFAULT_DARK_WIDGET_THEME` is the unconditional safe fallback. The strict
-loader rejects an incomplete/mistyped role set whole rather than partially merging
-it; the safe loader converts every failure into Default Dark plus an error string.
+loader requires the complete core card/context role set and rejects unknown/mistyped
+roles whole. Schema-v2 specialized semantic roles are intentionally sparse: omitted
+optional roles inherit at runtime through ``ui.widget_visual_roles`` rather than being
+partially merged here. The safe loader converts every failure into Default Dark plus
+an error string.
 
 Automatic user ``Custom`` state is **not** a file — it lives in normal SRPSS
 Settings persistence. A real ``.srwtheme`` is produced only by explicit
@@ -25,9 +28,11 @@ from ui.settings_theme_spec import Rgba
 from ui.widget_theme_spec import (
     CARD_MATERIAL_MODES,
     DEFAULT_DARK_WIDGET_THEME,
+    WIDGET_THEME_CORE_COLOR_ROLES,
     WIDGET_THEME_SCHEMA_VERSION,
     WidgetThemeSpec,
 )
+from ui.widget_visual_roles import WIDGET_THEME_OPTIONAL_COLOR_ROLES
 
 
 WIDGET_THEME_FILE_FORMAT = "srpss.widget-theme"
@@ -111,11 +116,14 @@ def _require_role_set(
     value: Mapping[str, Any],
     reference: Mapping[str, Any],
     path: str,
+    *,
+    allow_optional: bool,
 ) -> None:
-    expected = set(reference)
+    required = set(reference)
+    allowed = required | (set(WIDGET_THEME_OPTIONAL_COLOR_ROLES) if allow_optional else set())
     actual = set(value)
-    missing = sorted(expected - actual)
-    unexpected = sorted(actual - expected)
+    missing = sorted(required - actual)
+    unexpected = sorted(actual - allowed)
     if missing or unexpected:
         details: list[str] = []
         if missing:
@@ -161,10 +169,10 @@ def widget_theme_from_payload(payload: Any) -> WidgetThemeSpec:
         )
 
     schema_version = _expect_int(obj["schema_version"], "theme.schema_version")
-    if schema_version != WIDGET_THEME_SCHEMA_VERSION:
+    if schema_version not in {1, WIDGET_THEME_SCHEMA_VERSION}:
         raise _error(
             "theme.schema_version",
-            f"unsupported version {schema_version}; expected {WIDGET_THEME_SCHEMA_VERSION}",
+            f"unsupported version {schema_version}; expected 1 or {WIDGET_THEME_SCHEMA_VERSION}",
         )
 
     theme_id = obj["theme_id"]
@@ -187,12 +195,19 @@ def widget_theme_from_payload(payload: Any) -> WidgetThemeSpec:
         raise _error("theme.linked_settings_theme_id", "must be a string or null")
 
     raw_colors = _expect_mapping(obj["colors"], "colors")
-    # A typo or omitted role is a whole-theme validation failure; schema evolution
-    # is explicit through WIDGET_THEME_SCHEMA_VERSION, not silent fragment merges.
-    _require_role_set(raw_colors, DEFAULT_DARK_WIDGET_THEME.colors, "colors")
+    # Core card/context roles remain whole-or-reject. Schema v2 adds a known sparse
+    # optional role vocabulary so themes can override only the surfaces they care
+    # about and inherit the rest. Schema-v1 payloads remain loadable and migrate to
+    # the current in-memory schema without inventing specialized colours.
+    _require_role_set(
+        raw_colors,
+        {role: None for role in WIDGET_THEME_CORE_COLOR_ROLES},
+        "colors",
+        allow_optional=(schema_version >= 2),
+    )
     colors = {
-        token: _rgba_from_payload(raw_colors[token], f"colors.{token}")
-        for token in DEFAULT_DARK_WIDGET_THEME.colors
+        token: _rgba_from_payload(value, f"colors.{token}")
+        for token, value in raw_colors.items()
     }
 
     try:
@@ -202,7 +217,7 @@ def widget_theme_from_payload(payload: Any) -> WidgetThemeSpec:
             default_card_material_mode=material,
             linked_settings_theme_id=link,
             colors=colors,
-            schema_version=schema_version,
+            schema_version=WIDGET_THEME_SCHEMA_VERSION,
         )
     except (TypeError, ValueError) as exc:
         if isinstance(exc, WidgetThemeFileError):

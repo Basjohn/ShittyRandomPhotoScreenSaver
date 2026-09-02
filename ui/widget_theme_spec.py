@@ -33,7 +33,7 @@ from typing import Mapping
 from ui.settings_theme_spec import Rgba
 
 
-WIDGET_THEME_SCHEMA_VERSION = 1
+WIDGET_THEME_SCHEMA_VERSION = 2
 
 
 # The material a Widget Theme may recommend as its default surface.
@@ -42,6 +42,31 @@ CARD_MATERIAL_MODES = frozenset({"normal", "glass", "acrylic"})
 # The persisted user Surface Style preference. ``theme`` (the "Theme Default"
 # choice) is the no-override state that follows the theme recommendation.
 CARD_MATERIAL_OVERRIDES = frozenset({"theme", "normal", "glass", "acrylic"})
+
+# Core roles are the schema-stable whole-or-reject payload. Schema-v2 themes may
+# add sparse optional roles from ``ui.widget_visual_roles`` without making those
+# additions mandatory for older themes. Keep this set independent from the
+# compiled Default Dark colour map, because Default Dark is allowed to materialize
+# optional roles needed to reproduce the accepted current pixels exactly.
+WIDGET_THEME_CORE_COLOR_ROLES = frozenset(
+    {
+        "card.background",
+        "card.border",
+        "card.text",
+        "context.menu.surface",
+        "context.menu.border",
+        "context.menu.text",
+        "context.menu.selected_surface",
+        "context.menu.disabled_text",
+        "context.menu.separator",
+        "context.submenu.surface",
+        "context.submenu.border",
+        "context.submenu.text",
+        "context.submenu.selected_surface",
+        "context.submenu.checked_text",
+        "context.submenu.checked_surface",
+    }
+)
 
 
 def resolve_effective_card_material_mode(
@@ -78,9 +103,10 @@ class WidgetThemeSpec:
     for ``Keep Synced``; ``None`` means unlinked.
 
     ``colors`` is a semantic role map (mirroring ``SettingsThemeSpec.colors``).
-    Card roles are global defaults beneath explicit ``widgets.<family>.card.*``
-    settings; Context Menu roles are direct/global because it has no family layer.
-    Phase 1 ships the schema/Default Dark values before retained runtime wiring.
+    Core card/context roles are complete; specialized Widget Theme roles may be
+    sparse and inherit through ``ui.widget_visual_roles``. Card roles are global
+    defaults beneath explicit ``widgets.<family>.card.*`` settings; Context Menu
+    roles are direct/global because it has no family layer.
     """
 
     theme_id: str
@@ -148,9 +174,10 @@ class WidgetThemeSpec:
 # no external .srwtheme exists. Default Dark recommends the cheap ``normal`` card
 # material and links to the compiled Default Dark Settings theme.
 #
-# Card baseline defaults mirror OverlayCardStyle; Context Menu roles mirror the Settings
-# theme ``context.*`` values so the menu can later inherit the Widget Theme rather
-# than the QWidget Settings theme.
+# Card baseline defaults mirror OverlayCardStyle. Context Menu roles mirror the
+# physically accepted retained ContextMenu.qml pixels so moving those literals into
+# Widget Theme ownership is visually neutral; they intentionally do not inherit the
+# QWidget Settings theme directly.
 
 _DEFAULT_DARK_WIDGET_COLORS: dict[str, Rgba] = {
     # Ordinary card surface (mirrors OverlayCardStyle defaults / OverlayCard.qml).
@@ -158,19 +185,29 @@ _DEFAULT_DARK_WIDGET_COLORS: dict[str, Rgba] = {
     "card.border": Rgba(255, 255, 255, 230),
     "card.text": Rgba(255, 255, 255, 255),
 
-    # Retained runtime Context Menu (mirrors settings_theme_spec context.* roles).
-    "context.menu.surface": Rgba(25, 25, 25, 205),
-    "context.menu.border": Rgba(255, 255, 255, 255),
-    "context.menu.text": Rgba(255, 255, 255, 255),
-    "context.menu.selected_surface": Rgba(62, 62, 62, 220),
+    # Retained runtime Context Menu. These values intentionally mirror the
+    # physically accepted current QML pixels; semantic ownership must not recolour
+    # Default Dark merely by replacing literals with theme roles.
+    "context.menu.surface": Rgba(27, 29, 36, 242),
+    "context.menu.border": Rgba(216, 243, 255, 255),
+    "context.menu.text": Rgba(246, 248, 255, 255),
+    "context.menu.selected_surface": Rgba(119, 185, 232, 79),
     "context.menu.disabled_text": Rgba(120, 120, 130, 150),
-    "context.menu.separator": Rgba(90, 90, 90, 150),
-    "context.submenu.surface": Rgba(25, 25, 25, 205),
-    "context.submenu.border": Rgba(255, 255, 255, 255),
-    "context.submenu.text": Rgba(255, 255, 255, 255),
-    "context.submenu.selected_surface": Rgba(62, 62, 62, 220),
-    "context.submenu.checked_text": Rgba(255, 255, 255, 255),
-    "context.submenu.checked_surface": Rgba(62, 62, 62, 220),
+    "context.menu.separator": Rgba(89, 119, 138, 255),
+    "context.submenu.surface": Rgba(27, 29, 36, 242),
+    "context.submenu.border": Rgba(216, 243, 255, 255),
+    "context.submenu.text": Rgba(246, 248, 255, 255),
+    "context.submenu.selected_surface": Rgba(119, 185, 232, 79),
+    "context.submenu.checked_text": Rgba(185, 234, 255, 255),
+    "context.submenu.checked_surface": Rgba(78, 113, 139, 51),
+
+    # Optional Context Menu detail roles materialized by Default Dark so the
+    # accepted indicator/arrow palette also survives the semantic migration.
+    "context.menu.indicator.border": Rgba(185, 234, 255, 255),
+    "context.menu.indicator.fill": Rgba(130, 205, 255, 255),
+    "context.menu.arrow": Rgba(216, 243, 255, 255),
+    "context.submenu.indicator.border": Rgba(185, 234, 255, 255),
+    "context.submenu.indicator.fill": Rgba(130, 205, 255, 255),
 }
 
 
@@ -191,6 +228,7 @@ __all__ = [
     "CARD_MATERIAL_OVERRIDES",
     "DEFAULT_DARK_WIDGET_THEME",
     "DEFAULT_DARK_WIDGET_THEME_ID",
+    "WIDGET_THEME_CORE_COLOR_ROLES",
     "WIDGET_THEME_SCHEMA_VERSION",
     "WidgetThemeSpec",
     "resolve_effective_card_material_mode",
