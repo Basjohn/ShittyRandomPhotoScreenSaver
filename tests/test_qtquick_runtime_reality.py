@@ -191,10 +191,15 @@ def test_successive_visualizer_revisions_reach_retained_sync_item(
 
 
 @pytest.mark.qt
-def test_active_transition_replacement_cancels_to_destination_then_starts_new(
+def test_active_transition_admission_is_transactional_and_rejects_a_newer_image(
     qt_app,
 ) -> None:
-    """A valid C request during A->B must replace the run, not be rejected."""
+    """R7: a C request reaching publication during A->B is rejected, not snapped.
+
+    The transactional admission owner never cancels/snaps an in-flight transition
+    to make room for a newer image; the active destination must finish intact and
+    the newer request is rejected before any queue mutation.
+    """
 
     class _Settings:
         def get(self, key: str, default=None):
@@ -286,25 +291,24 @@ def test_active_transition_replacement_cancels_to_destination_then_starts_new(
         assert first.source_image.source_path == "a.jpg"
         assert first.destination_image.source_path == "b.jpg"
 
-        # 427eafed raised "screen 0 already has an active Quick transition".
-        manager.present_processed_image(
-            0,
-            QPixmap(10, 7),
-            QPixmap(),
-            "c.jpg",
-        )
+        # Reaching publication while A->B still runs is an invariant failure:
+        # the newer C request is rejected loudly, never cancel/snapped in.
+        with pytest.raises(RuntimeError, match="active Quick transition"):
+            manager.present_processed_image(
+                0,
+                QPixmap(10, 7),
+                QPixmap(),
+                "c.jpg",
+            )
 
-        assert len(unit.cancel_reasons) == 1
-        assert len(unit.history) == 2
-        second = unit.active_request
-        assert second is not None
-        # QuickTransitionController.cancel_current() resolves the interrupted
-        # run to B; B therefore becomes the authoritative source for B->C.
-        assert second.source_image.source_path == "b.jpg"
-        assert second.destination_image.source_path == "c.jpg"
+        # A->B is untouched: no cancel, no second run admitted.
+        assert unit.cancel_reasons == []
+        assert len(unit.history) == 1
+        assert unit.active_request is first
 
+        # A->B finishes intact and becomes the authoritative image.
         unit.finalize_active()
-        assert manager.current_images == {0: "c.jpg"}
+        assert manager.current_images == {0: "b.jpg"}
         assert manager.has_transition_work_pending() is False
     finally:
         manager.displays = []
