@@ -126,7 +126,9 @@ def test_custom_owner_binds_media_model_from_the_other_live_display(
             return 23
 
     class _Owner:
-        def __init__(self, runtime, *, bar_count, initial_mode) -> None:
+        def __init__(self, runtime, *, bar_count, initial_mode, **_kwargs) -> None:
+            # Absorb the current owner's construction kwargs (engine_factory,
+            # presentation_resolver, card_shadow_kwargs, transition_clock, ...).
             del runtime, bar_count
             self.controller = SimpleNamespace(
                 mode_id=initial_mode,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+from pathlib import Path
 
 import pytest
 
@@ -298,7 +299,11 @@ def test_quick_geometry_has_no_legacy_growth_or_qt_authority() -> None:
 
 def test_visualizer_card_shadow_extensions_scale_with_committed_presentation() -> None:
     state = resolve_visualizer_presentation(
-        policy=_card_policy(),
+        policy=VisualizerModePresentationPolicy(
+            shell_policy=VisualizerShellPolicy.CARD,
+            clip_policy=VisualizerClipPolicy.VIEWPORT_RECT,
+            viewport_resize_capable=True,
+        ),
         display_size=(1920.0, 1080.0),
         uniform_visual_scale=1.5,
         shadow_offset=(4.0, 4.0),

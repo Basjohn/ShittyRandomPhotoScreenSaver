@@ -45,6 +45,54 @@ A complete `.srtheme` owns:
 
 The persisted theme selection is resolved and validated before first Settings construction. Persistence must never deliberately flash Default Dark before a valid saved custom theme.
 
+## Theme file storage / packaged path authority
+
+Settings and future Widget Themes share one durable **theme root** rather than inventing separate installation trees.
+
+Installed/frozen Windows builds use the same stable ProgramData base used by other SRPSS curated/runtime assets:
+
+```text
+%ProgramData%\SRPSS\
+    themes\
+        *.srtheme
+        widgets\
+            *.srwtheme
+```
+
+Settings GUI themes therefore live directly in `%ProgramData%\SRPSS\themes\`; Widget Themes live in the
+`widgets\` child so a large mirrored theme pack does not dump both file types into one directory.
+
+Source/development resolution mirrors that hierarchy:
+
+```text
+<repo-root>\themes\
+    *.srtheme
+    widgets\
+        *.srwtheme
+```
+
+The current `ui/settings_theme_paths.py` build-placeholder is temporary wiring, not the final path contract. Its eventual
+replacement should resolve one active theme root at startup/build authority rather than moving filesystem policy into
+`settings_theme_catalog.py`.
+
+Resolution rules:
+
+1. explicit path injection remains valid for tests/tools;
+2. installed/frozen builds prefer the stable `%ProgramData%\SRPSS\themes` root;
+3. source/dev builds use repository-root `themes`;
+4. Widget Theme discovery is always the `widgets` child of the resolved theme root;
+5. a bundled/repository theme tree may be used as a bootstrap/copy source when constructing ProgramData, but production
+   must not merge two roots simultaneously or create duplicate file identities;
+6. installed/frozen `.srtheme`/`.srwtheme` files are curated/read-mostly catalogue assets;
+7. automatic Widget Theme `Custom` state is stored in normal SRPSS Settings persistence, **not** as a writable
+   `%ProgramData%\SRPSS\themes\widgets\Custom.srwtheme`;
+8. compiled Default Dark remains the unconditional Settings fallback even if the external directory is absent/invalid.
+
+Widget Theme implementation should follow the same one-root principle and keep its own built-in/default-safe behavior as
+defined by the Widget Theme contract. Theme selection IDs remain portable and must not encode absolute ProgramData/repo
+paths. A real `.srwtheme` file is produced only by explicit import/export/authoring flow, not as a side effect of changing
+a runtime swatch.
+
 ## Proven Windows backdrop mapping
 
 Both translucent native materials use `SetWindowCompositionAttribute` / `WCA_ACCENT_POLICY`. This is intentional: both remain in the same composition family that physically works with the layered Qt Settings HWND.

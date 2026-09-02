@@ -1,6 +1,6 @@
 # Future Work
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 Long-horizon feature / new-implementation backlog.
 
@@ -505,7 +505,7 @@ source-level baseline even if runtime visual acceptance is temporarily unavailab
 The default material path is therefore:
 
 ```text
-card_material_mode = normal   # DEFAULT/OFF; resolves to current translucent path
+effective_card_material_mode = normal   # resolved renderer-facing DEFAULT/OFF; current translucent path
 
 ordinary OverlayCard
     -> one alpha/tinted Rectangle fill
@@ -524,19 +524,50 @@ Requirements for `normal` / the current translucent path:
 - preserve current whole-widget root-fade semantics;
 - cost should remain essentially the ordinary retained `OverlayCard` cost that exists now.
 
-A future Widget Theme (`.srwtheme`) may change the simple card's RGB/alpha/border/shadow and, once the committed material system is physically accepted, may also set the same `card_material_mode` enum. Existing/Dark behavior remains `normal`. Theme application must never create a second material owner or independent Glass/Acrylic booleans.
+A future Widget Theme (`.srwtheme`) may change the simple card's RGB/alpha/border/shadow and may recommend a
+**default** material once the committed material system is physically accepted. The theme recommendation is not the final
+runtime material authority: users must be able to keep the selected theme's colours while explicitly choosing another
+surface material. Theme application must never create a second material renderer or independent Glass/Acrylic booleans.
 
-## 10.2 Material modes
+## 10.2 Material modes and surface override
 
-The eventual **user-facing** card-material choice should be one mutually-exclusive enum in `Settings -> Widgets -> General`, not independent booleans:
+Palette/theme selection and card material are two related but **orthogonal** appearance axes. The theme may recommend a
+surface, while one explicit user override can replace only that surface without detaching the rest of the Widget Theme.
+Keep the three layers named separately so there is no dual authority:
 
 ```text
-card_material_mode = normal    # DEFAULT/OFF: current simple translucent card
-card_material_mode = glass     # user-selectable scene-local frosted material
-card_material_mode = acrylic   # user-selectable scene-local stronger material
+# serialized by the .srwtheme visual bundle
+default_card_material_mode = normal | glass | acrylic
+
+# persisted user preference; DEFAULT = theme
+card_material_override = theme | normal | glass | acrylic
+
+# one resolved value consumed by retained runtime material owners
+effective_card_material_mode = (
+    default_card_material_mode
+    if card_material_override == theme
+    else card_material_override
+)
 ```
 
-`normal` is the product/UI name for the current cheap translucent `OverlayCard` path. Do not expose separate `Enable Glass` / `Enable Acrylic` toggles: invalid simultaneous states must be impossible by construction. A future Widget Theme may set the same enum, but the ordinary General control remains the direct owner and the existing/Dark theme resolves to `normal`.
+The eventual user-facing control in `Settings -> Widgets -> General -> Appearance` should therefore be one
+mutually-exclusive **Surface Style** choice:
+
+```text
+Theme Default   # DEFAULT; subtitle/secondary text may show the resolved theme recommendation, e.g. "Glass"
+Normal          # explicit override; current cheap translucent OverlayCard path
+Glass           # explicit scene-local frosted override
+Acrylic         # explicit scene-local stronger-material override
+```
+
+This deliberately avoids a separate `Override Theme Background` checkbox. `Theme Default` *is* the no-override state, so
+there is no second switch to explain and no need to grey out the material choices. It also avoids making a fake `Custom`
+Widget Theme solely to unlock existing colour controls.
+
+`normal` remains the product/UI name for the current cheap translucent `OverlayCard` path. Do not expose separate
+`Enable Glass` / `Enable Acrylic` toggles: invalid simultaneous states must be impossible by construction. Existing/Dark
+Widget Theme recommends `normal`. Until Glass/Acrylic have passed the shared/lazy material admission gates, those explicit
+choices remain unavailable even if the future theme schema can name their defaults.
 
 Glass and Acrylic are **Qt Quick scene-local materials**. They are not Windows native backdrop modes and
 must not use the Settings HWND implementation (`SetWindowCompositionAttribute`, AccentPolicy state 3/4)
@@ -676,44 +707,146 @@ visual values may participate where they are genuinely appearance-only.
 
 Candidate visual ownership includes:
 
-- `card_material_mode`: `normal` / `glass` / `acrylic`;
+- `default_card_material_mode`: the theme's recommended `normal` / `glass` / `acrylic` surface, **not** the final resolved mode;
 - ordinary card tint/opacity and existing card/background swatches;
+- semantic text/accent/selection/runtime-overlay colours that are genuinely widget appearance;
 - Glass/Acrylic tint/material strength once those scene-local materials are physically proven;
 - border colour/opacity/width where already supported;
 - shadow visual parameters already exposed by the final widget-style contract;
 - other existing appearance-only values that can round-trip without altering runtime behaviour;
 - optional bounded material parameters that have actually earned their place through visual/performance testing.
 
-Manual edits after selecting a theme must have one explicit ownership rule (for example, the selected theme becomes
-modified/custom rather than silently fighting the user's swatches). Do not create two independent authorities for the
-same visual value.
+The theme palette and the surface override remain independent in the UI. **Do not hide or disable colour swatches merely
+because a Widget Theme is selected.** A user choosing a Glass-oriented Widget Theme and then explicitly selecting `Normal`
+or `Acrylic` must retain the same theme colours.
+
+Manual editing of any **Widget Theme-owned** appearance value has one deterministic ownership transition:
+
+```text
+selected named Widget Theme
+        +
+manual change to a theme-owned swatch/border/shadow/other visual value
+        ↓
+snapshot the complete currently resolved Widget Theme appearance into user-owned Custom
+        ↓
+apply the user's edit to that Custom snapshot
+        ↓
+Widget Theme selection = Custom
+Keep Synced = OFF
+```
+
+The switch is intentionally near-silent: no confirmation dialog is required for the edit that creates `Custom`; at most,
+show a small passive indication that the Widget Theme is now Custom and sync is off. The shipped/installed `.srwtheme` is
+never mutated. The snapshot preserves all currently resolved old theme values and changes only the value the user actually
+edited.
+
+`Custom` is a user-owned working snapshot, not a second inheritance/cascade system and **not a physical `.srwtheme`
+file**. Persist the Custom snapshot in normal SRPSS Settings data alongside Widget Theme selection/sync state; ordinary
+runtime customization must never require write access to the installed ProgramData theme catalogue. Do not preserve a
+hidden stack of per-property overrides on top of named themes. Selecting another named Widget Theme may leave the Custom
+snapshot available for later return; re-enabling `Keep Synced` while Custom is active may switch selection back to the
+Settings theme's linked Widget Theme, but must not destroy the Custom snapshot merely because it is no longer selected.
+
+Creating/exporting a real reusable `.srwtheme` is an explicit authoring/export action, separate from the automatic Custom
+working snapshot.
+
+Changing only `card_material_override` does **not** create Custom, dirty/modify the selected theme, or turn Keep Synced off,
+because Surface Style is a separate user preference rather than a mutation of the `.srwtheme` bundle.
+
+A Widget Theme should therefore contain a coherent semantic palette plus any proven material-specific tuning needed to
+render that palette in each supported material. The selected material determines which tuning is consumed; it must not
+replace the theme's semantic colour identity.
 
 Widget Themes do **not** own widget activation, ordinary ON/OFF, provider/account/source state, geometry,
 refresh cadence or runtime business logic.
 
-Default/Dark Widget Theme must resolve to `card_material_mode = normal` and reproduce the existing simple
-card appearance as closely as practical. Glass/Acrylic remain opt-in and **must not become selectable merely because
-the file schema can name them**; the shared/lazy Qt Quick material path needs runtime visual/performance proof first.
+Default/Dark Widget Theme recommends `default_card_material_mode = normal` and reproduces the existing simple card
+appearance as closely as practical. Glass/Acrylic remain opt-in and **must not become selectable merely because the file
+schema can name them**; the shared/lazy Qt Quick material path needs runtime visual/performance proof first.
 
 ### Settings Theme <-> Widget Theme mirroring / Keep Synced
 
 Every mature Settings GUI theme should have a mirrored Widget Theme intended to produce the same visual language on
 runtime cards/overlays. The Themes tab should expose **Keep Synced**, default **ON**. With sync ON, choosing a Settings
 Theme selects its linked/mirrored Widget Theme (and choosing the linked Widget Theme keeps the pair coherent); the user
-sees one coordinated style without maintaining two selections. Turning sync OFF explicitly permits arbitrary combinations
-of Settings GUI theme + Widget Theme. Manual visual edits still follow the one-authority/custom-modified rule above; sync
-must never create two writers fighting over the same widget setting. Theme IDs/link metadata should be explicit rather than
-matched by display-name heuristics.
+sees one coordinated palette without maintaining two selections. Turning sync OFF explicitly permits arbitrary
+combinations of Settings GUI theme + Widget Theme.
+
+`Keep Synced` synchronizes **theme identity**, not the explicit surface override. Therefore:
+
+```text
+Keep Synced ON + Surface Style = Theme Default
+    -> Settings theme selects mirrored Widget Theme
+    -> Widget Theme colours + its recommended material both follow the pair
+
+Keep Synced ON + Surface Style = Normal/Glass/Acrylic
+    -> Settings theme still selects mirrored Widget Theme and its colours
+    -> explicit surface override survives theme changes and wins only for material
+
+Keep Synced OFF
+    -> Settings Theme and Widget Theme may be paired arbitrarily
+    -> the same Theme Default/explicit surface rule still applies
+```
+
+This is the important UX escape hatch for a user who likes a Glass GUI/theme palette but dislikes Glass widget cards: keep
+the linked Widget Theme and select `Normal` or `Acrylic` under Surface Style. No theme duplication is required.
+
+Theme IDs/link metadata should be explicit rather than matched by display-name heuristics. Pack-generation tooling may use
+matching names/stems as a convenience when producing corresponding `.srtheme` / `.srwtheme` packs, but it should write the
+resolved stable link metadata rather than making runtime pairing depend on names forever. Manual Widget Theme-owned edits
+follow the Custom-snapshot/auto-unsync rule above; Surface Style does not. Sync must never create two writers fighting over
+the same widget setting.
 
 The retained screensaver **Context Menu belongs to Widget Theme semantics**, because it is a runtime display-scene overlay
 rendered beside widgets. It must not read the QWidget Settings theme directly. When Keep Synced is ON, the mirrored Widget
-Theme naturally makes the Context Menu match the Settings GUI; when OFF, the Context Menu follows the independently
-selected Widget Theme. Candidate Context Menu roles include surface/background, border, separator, normal/disabled text,
-hover/selected row, toggle/choice indicator, submenu arrow, and the canonical global Card shadow. If Widget Theme selects
-Glass/Acrylic, Context Menu material must use the same lazy scene-local Qt Quick material/backdrop authority as widget
-cards; never invoke the Settings HWND Acrylic/Glass AccentPolicy path for runtime menu pixels.
+Theme naturally makes the Context Menu palette match the Settings GUI; when OFF, the Context Menu follows the independently
+selected Widget Theme. Its material consumes the same **effective** runtime surface resolution described above, so an
+explicit `Normal`/`Glass`/`Acrylic` override changes the Context Menu material while preserving the selected Widget Theme's
+colours. Do not create a second Context-Menu-only surface override unless a later explicit product requirement proves one is
+needed. Candidate Context Menu roles include surface/background, border, separator, normal/disabled text, hover/selected
+row, toggle/choice indicator, submenu arrow, and the canonical global Card shadow. Glass/Acrylic Context Menu pixels must
+reuse the same lazy scene-local Qt Quick material/backdrop authority as widget cards; never invoke the Settings HWND
+Acrylic/Glass AccentPolicy path for runtime menu pixels.
 
-## 10.7 Performance / acceptance gates
+## 10.7 Theme file storage / discovery
+
+Settings and Widget Themes share one resolved theme root, with Widget Themes deliberately isolated in a child folder:
+
+```text
+installed/frozen:
+%ProgramData%\SRPSS\themes\
+    *.srtheme
+    widgets\
+        *.srwtheme
+
+source/dev:
+<repo-root>\themes\
+    *.srtheme
+    widgets\
+        *.srwtheme
+```
+
+This preserves the existing Settings-theme convention while preventing mirrored `.srtheme` + `.srwtheme` packs from
+turning one directory into a hundred-file dump.
+
+Storage/discovery rules:
+
+- filesystem location is startup/build authority, not theme-catalog semantic authority;
+- explicit test/tool directory injection remains valid;
+- installed/frozen builds use the stable ProgramData root used by other SRPSS curated assets;
+- repository/bundled trees are source/dev or bootstrap/copy sources, not a second simultaneously merged production
+  catalogue;
+- Widget Theme discovery is `resolved_theme_root / "widgets"`;
+- installed/frozen theme files are curated/read-mostly runtime assets; normal user customization does not write there;
+- the automatic `Custom` Widget Theme snapshot lives in Settings persistence, not `themes/widgets/Custom.srwtheme`;
+- portable theme IDs/link metadata never contain absolute install paths;
+- a missing external directory must degrade to the appropriate compiled/default-safe theme behavior, not a hidden second
+  mutable theme root.
+
+The live `ui/settings_theme_paths.py` placeholder is known temporary wiring. When Widget Themes land, replace/centralize
+that stub with the durable shared theme-root resolver rather than cloning another Widget-only path stub.
+
+## 10.8 Performance / acceptance gates
 
 Measure with representative simultaneous cards and real transitions on 1/2/N displays and relevant DPRs:
 
@@ -732,7 +865,12 @@ add polished Settings controls after the material path is visually worthwhile an
 The durable contract is therefore:
 
 ```text
-DEFAULT Normal = current cheap translucent OverlayCard
+Widget Theme = semantic visual bundle + recommended/default material
+Surface Style = Theme Default | Normal | Glass | Acrylic
+Theme Default = follow selected Widget Theme recommendation
+explicit Surface Style = override material only; keep Widget Theme colours
+one effective runtime material enum = the only renderer-facing material authority
+DEFAULT/Dark recommendation = Normal = current cheap translucent OverlayCard
 Glass/Acrylic = committed user-selectable modes using lazy shared per-display backdrop + bounded scene-local material
 NO per-widget capture pipelines
 NO native HWND backdrop mechanism for Quick cards
@@ -745,5 +883,5 @@ coherence and bounded-cost rules are not.
 Ideas put in this box are to be added to work asap but at a lower priotiy than future cleanup or current plan work, unless existing in those as well.
 ############
 1. Add two options in the Interaction Pill for Display. "Widget Glow on Hover" "Widget Glow On Click" with a shared swatch colour selector. These will cause a small pulse in glow effect when triggered in relation to the cursor halo and pulse out when hover leaves or click leaves. This must not introduce timers or any thread contention/starvation.
-2. Finish the already-reserved Widget Themes pill in the landed Themes tab. Prefer serializing/applying the mature existing widget visual settings (swatches, opacity, borders, shadows and other proven visual-only values) rather than inventing parallel presentation controls. Widget Themes use `.srwtheme` files and never own widget activation/ordinary ON/OFF, provider/account/source state, geometry, refresh cadence or runtime business logic. Add `Keep Synced` default ON: each Settings GUI theme has an explicitly linked mirrored Widget Theme; sync OFF permits independent pairings. Runtime Context Menu follows Widget Theme roles/material and therefore matches Settings naturally while synced. The existing/Dark Widget Theme remains the default and resolves to `card_material_mode = normal` / the current cheap translucent card architecture. The committed `glass` and `acrylic` material modes remain blocked on the shared/lazy Qt Quick material contract in section 10 and require runtime visual/performance proof before becoming selectable.
+2. Finish the already-reserved Widget Themes pill in the landed Themes tab. Prefer serializing/applying the mature existing widget visual settings (swatches, opacity, borders, shadows and other proven visual-only values) rather than inventing parallel presentation controls. Widget Themes use `.srwtheme` files and never own widget activation/ordinary ON/OFF, provider/account/source state, geometry, refresh cadence or runtime business logic. Add `Keep Synced` default ON: each Settings GUI theme has an explicitly linked mirrored Widget Theme; sync OFF permits independent pairings. Manual edits to any Widget Theme-owned visual value silently snapshot the full currently resolved named theme into user-owned `Custom`, apply the edit there, switch Widget Theme to `Custom`, and turn Keep Synced OFF; never mutate the source `.srwtheme` or build hidden per-property inheritance overrides. Keep **surface material orthogonal to theme identity**: `.srwtheme` stores `default_card_material_mode`, while `Settings -> Widgets -> General -> Appearance -> Surface Style` exposes `Theme Default / Normal / Glass / Acrylic` and persists a separate override. `Theme Default` follows the selected Widget Theme; an explicit mode overrides only material while retaining theme colours and does **not** create Custom or unsync. Runtime Context Menu follows the same Widget Theme palette + effective material resolution. The existing/Dark Widget Theme recommends Normal/current cheap translucent cards. The committed Glass/Acrylic modes remain blocked on the shared/lazy Qt Quick material contract in section 10 and require runtime visual/performance proof before becoming selectable.
 3. [LOW] Give more SettingsGUI sections Flowcontainers where it would benefit well aligned space usage.
