@@ -842,6 +842,9 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
             self.retirement_owner = SimpleNamespace(screen_index=screen_index)
             self.clear_calls = 0
             self.quiesce_calls = 0
+            self.transitions = []
+            self._running_request = None
+            self.manager = None
 
         def processing_descriptor(self, display_mode: DisplayMode):
             return DisplayProcessingDescriptor(
@@ -870,8 +873,26 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
                 (self.screen_index, QSize(*image.pixel_size), image.source_path)
             )
 
-        def start_transition(self, _request) -> None:
-            raise AssertionError("settings-free image route must not admit a transition")
+        def start_transition(self, request) -> None:
+            # Once a source image exists, a newer image transitions rather than
+            # snapping in (R7 transactional admission). The route resolves the
+            # transition from Settings; record it here for the test.
+            self.transitions.append(request)
+            self._running_request = request
+
+        def finalize_transition(self) -> None:
+            request = self._running_request
+            assert request is not None
+            self.runtime.scene_controller.presentation_image = (
+                request.destination_image
+            )
+            self._running_request = None
+            self.manager._on_quick_transition_finalized(
+                self,
+                SimpleNamespace(
+                    destination_image_identity=request.destination_image.identity,
+                ),
+            )
 
         def runtime_retirement_roots(self):
             return ((self.retirement_qobject,), (self.retirement_owner,))
@@ -884,13 +905,31 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
             self.quiesce_calls += 1
 
         def has_running_transition(self) -> bool:
-            return False
+            return self._running_request is not None
 
-    manager = DisplayManager(display_mode=DisplayMode.FIT)
+    class _Settings:
+        def get(self, key: str, default=None):
+            if key == "transitions":
+                return {
+                    "type": "Slide",
+                    "random_always": False,
+                    "durations": {"Slide": 275},
+                    "slide": {"direction": "Random"},
+                }
+            if key == "display.hw_accel":
+                return False
+            return default
+
+    manager = DisplayManager(
+        display_mode=DisplayMode.FIT,
+        settings_manager=_Settings(),
+    )
     manager.displays = [
         _Unit(2, QSize(1920, 1080), 1.0),
         _Unit(5, QSize(2560, 1440), 2.0),
     ]
+    for _unit in manager.displays:
+        _unit.manager = manager
     pixmap = QPixmap(8, 6)
     try:
         descriptors = manager.snapshot_processing_descriptors()
@@ -922,15 +961,32 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
             manager.displays[1].retirement_owner,
         ]
 
+        # First image on each screen has no prior source, so it is published
+        # directly and becomes that screen's authoritative image.
         manager.present_processed_image(5, pixmap, pixmap, "five.jpg")
         manager.show_image_on_screen(2, pixmap, "two.jpg")
+        assert published == [
+            (5, QSize(8, 6), "five.jpg"),
+            (2, QSize(8, 6), "two.jpg"),
+        ]
+        assert manager.current_images == {5: "five.jpg", 2: "two.jpg"}
+
+        # A newer broadcast image now has a source on each screen, so it routes a
+        # per-screen transition (R7) rather than snapping in; nothing new is
+        # direct-published.
         manager.show_image(pixmap, "all.jpg")
         assert published == [
             (5, QSize(8, 6), "five.jpg"),
             (2, QSize(8, 6), "two.jpg"),
-            (2, QSize(8, 6), "all.jpg"),
-            (5, QSize(8, 6), "all.jpg"),
         ]
+        assert manager.displays[0].transitions[-1].source_image.source_path == "two.jpg"
+        assert manager.displays[1].transitions[-1].source_image.source_path == "five.jpg"
+        for _dest in manager.displays:
+            assert _dest.transitions[-1].destination_image.source_path == "all.jpg"
+
+        # Each routed transition finalizes to the broadcast image.
+        for _dest in manager.displays:
+            _dest.finalize_transition()
         assert manager.current_images == {2: "all.jpg", 5: "all.jpg"}
         manager.set_transition_work_pending(True, screen_index=5)
         assert manager.has_transition_work_pending() is True
