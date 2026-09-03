@@ -142,29 +142,28 @@ _DEFAULT_DARK_WIDGET_COLORS: dict[str, Rgba] = {
     "card.border": Rgba(255, 255, 255, 255),
     "card.text": Rgba(255, 255, 255, 230),
 
-    # Retained runtime Context Menu. These values intentionally mirror the
-    # physically accepted current QML pixels; semantic ownership must not recolour
-    # Default Dark merely by replacing literals with theme roles.
-    "context.menu.surface": Rgba(27, 29, 36, 242),
-    "context.menu.border": Rgba(216, 243, 255, 255),
-    "context.menu.text": Rgba(246, 248, 255, 255),
-    "context.menu.selected_surface": Rgba(119, 185, 232, 79),
+    # Retained runtime Context Menu. Compiled Default Dark must match its
+    # colour-only Widget-theme companion: neutral charcoal/white, not the
+    # earlier icy-blue prototype palette.
+    "context.menu.surface": Rgba(25, 25, 25, 205),
+    "context.menu.border": Rgba(255, 255, 255, 255),
+    "context.menu.text": Rgba(255, 255, 255, 255),
+    "context.menu.selected_surface": Rgba(62, 62, 62, 220),
     "context.menu.disabled_text": Rgba(120, 120, 130, 150),
-    "context.menu.separator": Rgba(89, 119, 138, 255),
-    "context.submenu.surface": Rgba(27, 29, 36, 242),
-    "context.submenu.border": Rgba(216, 243, 255, 255),
-    "context.submenu.text": Rgba(246, 248, 255, 255),
-    "context.submenu.selected_surface": Rgba(119, 185, 232, 79),
-    "context.submenu.checked_text": Rgba(185, 234, 255, 255),
-    "context.submenu.checked_surface": Rgba(78, 113, 139, 51),
+    "context.menu.separator": Rgba(90, 90, 90, 150),
+    "context.submenu.surface": Rgba(25, 25, 25, 205),
+    "context.submenu.border": Rgba(255, 255, 255, 255),
+    "context.submenu.text": Rgba(255, 255, 255, 255),
+    "context.submenu.selected_surface": Rgba(62, 62, 62, 220),
+    "context.submenu.checked_text": Rgba(255, 255, 255, 255),
+    "context.submenu.checked_surface": Rgba(62, 62, 62, 220),
 
-    # Optional Context Menu detail roles materialized by Default Dark so the
-    # accepted indicator/arrow palette also survives the semantic migration.
-    "context.menu.indicator.border": Rgba(185, 234, 255, 255),
-    "context.menu.indicator.fill": Rgba(130, 205, 255, 255),
-    "context.menu.arrow": Rgba(216, 243, 255, 255),
-    "context.submenu.indicator.border": Rgba(185, 234, 255, 255),
-    "context.submenu.indicator.fill": Rgba(130, 205, 255, 255),
+    # Optional Context Menu detail roles stay neutral under compiled Default Dark.
+    "context.menu.indicator.border": Rgba(255, 255, 255, 255),
+    "context.menu.indicator.fill": Rgba(255, 255, 255, 180),
+    "context.menu.arrow": Rgba(255, 255, 255, 255),
+    "context.submenu.indicator.border": Rgba(255, 255, 255, 255),
+    "context.submenu.indicator.fill": Rgba(255, 255, 255, 180),
 }
 
 
