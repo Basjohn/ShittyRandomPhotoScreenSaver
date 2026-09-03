@@ -134,7 +134,17 @@ class QuickDevCurveRenderer:
         )
         scale = presentation.uniform_visual_scale
         extra_inset = float(presentation.shell_style.get("content_inset", 0.0))
-        authored_inset = (presentation.border_width + extra_inset) / scale
+        # The shell border now follows the shared bounded visible-stroke contract,
+        # so it is intentionally non-linear with visual scale. DevCurve's authored
+        # baseline content extent must recover the original authored border source
+        # rather than reverse-scaling the visible/clamped frame thickness.
+        authored_border = float(
+            presentation.shell_style.get(
+                "authored_border_width",
+                presentation.border_width / scale,
+            )
+        )
+        authored_inset = authored_border + extra_inset / scale
         baseline_width, baseline_height = presentation.baseline_viewport_size
         layout = compute_quick_devcurve_layout(
             local_content_rect=(

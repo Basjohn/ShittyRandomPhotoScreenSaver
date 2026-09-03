@@ -551,9 +551,6 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
     _apply_color_to_button('reddit_color_btn', '_reddit_color')
     _apply_color_to_button('reddit_bg_color_btn', '_reddit_bg_color')
     _apply_color_to_button('reddit_border_color_btn', '_reddit_border_color')
-    _apply_color_to_button('reddit_header_fill_color_btn', '_reddit_header_fill_color')
-    _apply_color_to_button('reddit_header_text_color_btn', '_reddit_header_text_color')
-    _apply_color_to_button('reddit_header_border_color_btn', '_reddit_header_border_color')
 
     # Reddit 2
     reddit2_config = widgets.get('reddit2', {})

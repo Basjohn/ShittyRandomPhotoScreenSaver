@@ -11,11 +11,11 @@ Current source truth at this checkpoint:
 
 - The deterministic Visualizer hitch owners already attributed in P0 are closed: diagnostics usage sampling, stable-set Gen2 rescans, first-publish cold import, and analysis/handoff tails. `gc.freeze()` remains the accepted stable-generation policy; post-freeze recreated generations collect normally and the pre-freeze cyclic pin is bounded until shutdown.
 - V0-V4 Visualizer authority/dormancy work is complete. The 2026-09-03 audit hole where `logical_frame_capture` eagerly imported all five frame runtimes is fixed through the canonical descriptor seam; warming the common capture chain imports no disabled mode runtime.
-- Achievement Pulse parity is physically accepted. Abandonment Issues remains visually accepted/pristine. Reddit's remaining time-column tweak is bounded and awaiting eyes-on confirmation.
+- Achievement Pulse core parity is physically accepted; the new bounded recent-badge rail polish awaits eyes-on confirmation. Abandonment Issues remains visually accepted/pristine. Reddit's remaining time-column tweak is bounded and awaiting eyes-on confirmation.
 - Runtime Widget Themes are colour-only schema-v3. Runtime card Glass/Acrylic is rejected/removed and must not return. Settings-window Glass/Acrylic remains valid and separate.
 - Settings Theme Foundry and Widget Theme Foundry are current authoring tools. Ordinary Widget Settings now defaults to shared semantic/theme authority for branded headers instead of family-local header palettes; family-specific swatches remain only where a real family-level colour contract still exists.
 - Widgets -> General -> **Style Overrides** is the shared ordinary-widget override surface: Card Surface, Card Border, Header Fill, Card Border Width, plus an explicit **Reset All Colours to Theme** action. Family-specific header colour swatches are retired. Media's lone `Show Header Pill` toggle belongs in its normal Appearance bucket, not a special Header Appearance bucket.
-- Old per-family colour fields remain readable only as a bounded compatibility bridge until the explicit reset/upgrade horizon is complete. Retired header-button descriptors/load bookkeeping are part of that bridge, not permission for new hidden override authority.
+- Old per-family colour fields remain readable only as a bounded compatibility bridge until the explicit reset/upgrade horizon is complete. Retired header-button descriptors/load/finalize expectations are removed; only persisted colour-value compatibility remains part of that bridge, not permission for new hidden override authority.
 
 Durable references when mechanism detail is needed:
 
@@ -60,7 +60,7 @@ Rules:
 Status: `[ ]` open, `[~]` implemented/source-proven but awaiting real-app validation, `[x]` physically/conclusively accepted.
 
 - [~] **Shared Widget Style Overrides / reset.** Card Surface, Card Border and Header Fill must apply coherently through Widget Theme `Custom`; `Reset All Colours to Theme` must remove ordinary family colour/alpha overrides only, without touching Visualizer-authored colours, geometry, fonts, shadows, providers or feature toggles. Media `Show Header Pill` sits in Media -> Appearance. No family Header Appearance colour bucket remains.
-- [~] **Reddit time rail parity.** `AGO` is a rigid aligned column shifted **12 authored px left from the original position** while the age-value column and title start remain fixed. Validate short/long ages and title spacing physically.
+- [~] **Reddit time rail parity.** `AGO` is a rigid aligned column shifted **14 authored px left from the original position** while the age-value column and title start remain fixed. Validate short/long ages and title spacing physically.
 - [ ] **Weather parity.** Current presentation is not accepted; perform a source-first visual pass rather than theme compensation.
 - [~] **Global CUSTOM dormancy.** Stacking and Media<->Visualizer adjacency stay off for persisted/effective CUSTOM, live Edit Layout, and number-key saved-layout load/rebuild.
 - [~] **Media<->Visualizer ordinary adjacency + wheel routing.** Only outside global CUSTOM. Whole Media and ordinary Visualizer may forward discrete volume steps through the existing app-volume owner; CUSTOM resize-wheel ownership wins absolutely.
@@ -69,8 +69,10 @@ Status: `[ ]` open, `[~]` implemented/source-proven but awaiting real-app valida
 - [~] **Bidirectional linked-theme UX.** Locked Settings/Widget theme selection uses stable IDs in both directions and never implicitly unlocks. Widget `Custom` remains Independent-only.
 - [~] **Theme authoring tools physical smoke.** Theme Foundry's simplified Everyday/All Roles workflow and Widget Theme Foundry's sparse semantic editor must open/save/strict-reload correctly in the real PySide6 environment.
 - [~] **Media artwork/metadata fades.** Shared artwork fade and retained metadata old->new crossfade are event-driven and source-owned; physically validate rapid track skipping plus optional Album visibility without provider-delay, polling or duplicate cadence.
+- [~] **Media artwork/header alignment.** Preserve the accepted narrow artwork width/crop while extending its height upward so the artwork border aligns with the branded-header top; lower boundary remains unchanged.
+- [~] **Visualizer frame visible-stroke scaling.** CUSTOM resize/screen-fit/cross-display reprojection must retain bounded scale-aware card-border thickness and must not compound a previously reduced border toward subpixel invisibility.
 - [x] **Non-CUSTOM smart stacking collision solver.** Pathological overlap case physically accepted; preserve deterministic spill and zero steady-state cadence cost.
-- [x] **Achievement Pulse parity.** Accepted after height/rail, badge, artwork/metric alignment and whole-card transform corrections.
+- [~] **Achievement Pulse badge rail polish.** Core parity remains accepted; the recent-achievement badge now starts closer to the smaller unlock text and moves right only when rendered text needs clearance. Recheck this bounded rail tweak physically.
 - [x] **Steam Abandonment Issues presentation.** Source-audited and physically accepted; preserve unless a shared semantic fix genuinely applies.
 - [x] **Windows GSMTC teardown / native fault capture.** Latest both-display evidence shows same-affinity GSMTC teardown, no `0x8001010e`, bounded clean native-fault capture and clean QML shutdown.
 

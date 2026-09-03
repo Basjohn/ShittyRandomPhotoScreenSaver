@@ -63,6 +63,24 @@ def _non_negative(value: object, *, name: str) -> float:
     return number
 
 
+def _scale_aware_visible_stroke(base_width: float, scale: float) -> float:
+    """Return a bounded visible card stroke for direct Quick geometry.
+
+    Ordinary retained cards already clamp visible stroke growth to +/-1 authored
+    pixel and never below one pixel. The Visualizer has no QML whole-card scale
+    transform (its resolved rect is resized directly), so it consumes that
+    visible target itself rather than dividing by a later transform. This keeps
+    repeated CUSTOM/screen-fit reprojection from shrinking a 4 px frame toward
+    subpixel invisibility while retaining modest scale awareness.
+    """
+
+    if base_width <= 0.0:
+        return 0.0
+    safe_scale = max(0.05, float(scale))
+    delta = max(-1.0, min(1.0, (safe_scale - 1.0) * 2.0))
+    return max(1.0, base_width + delta)
+
+
 def resolve_visualizer_presentation(
     *,
     policy: VisualizerModePresentationPolicy,
@@ -137,7 +155,11 @@ def resolve_visualizer_presentation(
     )
 
     is_card = policy.shell_policy is VisualizerShellPolicy.CARD
-    resolved_border = authored_border * resolved_scale if is_card else 0.0
+    resolved_border = (
+        _scale_aware_visible_stroke(authored_border, resolved_scale)
+        if is_card
+        else 0.0
+    )
     resolved_extra_inset = authored_inset * resolved_scale if is_card else 0.0
     resolved_inset = resolved_border + resolved_extra_inset
     resolved_inset = min(resolved_inset, outer_width / 2.0, outer_height / 2.0)
@@ -162,6 +184,10 @@ def resolve_visualizer_presentation(
         {
             "background_color": tuple(background_color),
             "border_color": tuple(border_color),
+            # Retain the authored source explicitly because visible border scaling
+            # is intentionally bounded/non-linear; resize must never reverse-
+            # derive it from a previously clamped presentation.
+            "authored_border_width": authored_border if is_card else 0.0,
             "corner_radius": outer_radius,
             "inner_corner_radius": inner_radius,
             "content_inset": resolved_extra_inset,
@@ -254,7 +280,12 @@ def resize_visualizer_presentation(
         viewport_extent=target_extent,
         scene_fade=baseline.scene_fade,
         content_fade=baseline.content_fade,
-        border_width=baseline.border_width / baseline_scale,
+        border_width=float(
+            style.get(
+                "authored_border_width",
+                baseline.border_width / baseline_scale,
+            )
+        ),
         corner_radius=_authored_scalar("corner_radius"),
         content_inset=_authored_scalar("content_inset"),
         background_color=style.get(

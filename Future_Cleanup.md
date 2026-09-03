@@ -83,12 +83,12 @@ Branded-header family colour controls are retired in favour of Widget Theme `hea
 **user-invoked**, never a startup migration. It normalizes ordinary family colour/alpha values to canonical
 implicit-Inherit values and excludes Visualizer-authored colours.
 
-Temporarily retained compatibility includes old per-family colour persistence plus invisible loader/signal-
-blocking/button-attribute bookkeeping for controls that no longer exist visibly. This is migration plumbing,
-not a supported hidden palette.
+Temporarily retained compatibility is now limited to old per-family colour persistence/value reads needed
+for old profiles/imports. Retired header-button loader/signal/finalize bookkeeping has been removed rather
+than preserved as phantom GUI authority. This is migration plumbing, not a supported hidden palette.
 
 - [ ] After the supported old-profile/SST-import horizon and exact caller proof, remove retired header-colour
-      fields and defunct UI descriptor/load bookkeeping that no surviving import contract needs.
+      persistence/value fields that no surviving import contract needs.
 - [ ] Audit the remaining non-header family colour fields individually: keep only those with genuine durable
       family-level customization value; otherwise retire them rather than preserving invisible precedence.
 - If `Reset All Colours to Theme` has become a useful permanent user action by then, keep the action and

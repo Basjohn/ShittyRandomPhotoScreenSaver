@@ -1371,9 +1371,6 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
         _apply_color('gmail_boundary_separator_color_btn', '_gmail_boundary_separator_color')
         _apply_color('gmail_bg_color_btn', '_gmail_bg_color')
         _apply_color('gmail_border_color_btn', '_gmail_border_color')
-        _apply_color('gmail_header_fill_color_btn', '_gmail_header_fill_color')
-        _apply_color('gmail_header_text_color_btn', '_gmail_header_text_color')
-        _apply_color('gmail_header_border_color_btn', '_gmail_header_border_color')
 
     _update_gmail_enabled_visibility(tab)
     _update_backend_panels(tab, use_backend=False)

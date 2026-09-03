@@ -172,11 +172,12 @@ OverlayWidget {
                 id: artworkFrame
                 objectName: "mediaArtworkFrame"
                 visible: mediaRoot.mediaModel.hasArtwork || mediaArtwork.transitionVisible
-                // Slice 3 keeps the header->seek span as the visual reference but
-                // backs the frame away from both edges.  Height is 15% smaller than
-                // Slice 2; width receives that same reduction plus a further 15%
-                // narrowing so the artwork reads mildly portrait instead of crowding
-                // the metadata/seek region.  PreserveAspectCrop remains authoritative.
+                // Keep the header->seek span as the visual reference. Width stays
+                // on the accepted narrowed Slice-3 rail, but the frame now reaches
+                // the header's top edge and grows only downward to the old lower
+                // boundary. This makes the border align with the header without
+                // widening the artwork or crowding metadata. PreserveAspectCrop
+                // remains authoritative.
                 readonly property real topInColumn: headerFrame.visible
                     ? headerFrame.y
                     : mainBand.y
@@ -186,20 +187,20 @@ OverlayWidget {
                 readonly property real referenceHeight: Math.max(
                     1.0, bottomInColumn - topInColumn
                 )
-                readonly property real parityScale: 0.85
-                readonly property real extraWidthScale: 0.85
+                readonly property real widthScale: 0.85 * 0.85
+                // The old 0.85 centred height left 7.5% of the reference span
+                // above and below. Move that upper 7.5% into the artwork while
+                // preserving the previous lower edge: 0.85 + 0.075 = 0.925.
+                readonly property real heightScale: 0.925
                 width: visible
                     ? Math.min(
-                        mediaRoot.mediaModel.artworkSize
-                            * parityScale * extraWidthScale,
+                        mediaRoot.mediaModel.artworkSize * widthScale,
                         mainBand.width
                     )
                     : 0.0
-                height: visible ? referenceHeight * parityScale : 0.0
+                height: visible ? referenceHeight * heightScale : 0.0
                 anchors.right: parent.right
-                y: visible
-                    ? topInColumn - mainBand.y + (referenceHeight - height) / 2.0
-                    : 0.0
+                y: visible ? topInColumn - mainBand.y : 0.0
                 radius: mediaRoot.mediaModel.roundedArtwork ? width / 8.0 : 0.0
                 color: "transparent"
                 clip: false
