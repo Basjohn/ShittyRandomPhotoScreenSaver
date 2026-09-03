@@ -212,6 +212,7 @@ def test_config_projects_current_steam_runtime_and_visual_settings() -> None:
     assert config.capsule_font_size == 22
     assert config.capsule_fill_color == (12, 34, 56, 78)
     assert config.capsule_border_color == (90, 87, 65, 43)
+    assert config.semantic_palette.artwork_border == (199, 213, 224, 255)
     assert dict(config.field_visibility)["source"] is True
     assert dict(config.field_visibility)["previous"] is False
     assert config.authored_size[0] == 600.0
@@ -236,6 +237,31 @@ def test_retained_layout_policy_preserves_shapes_and_grows_complete_capsule_rail
     assert square.authored_size[1] < portrait.authored_size[1]
     assert doubled.authored_size[1] > single.authored_size[1]
     assert large_capsules.authored_size[1] > doubled.authored_size[1]
+
+
+def test_latest_unlock_visibility_does_not_allocate_bottom_capsule_rails() -> None:
+    default = _config(artwork_shape="portrait", double_capsules=True)
+    no_latest = replace(
+        default,
+        field_visibility=tuple(
+            (field_id, False if field_id == "latest" else enabled)
+            for field_id, enabled in default.field_visibility
+        ),
+    )
+    extra_capsule = replace(
+        default,
+        field_visibility=tuple(
+            (field_id, True if field_id == "source" else enabled)
+            for field_id, enabled in default.field_visibility
+        ),
+    )
+
+    # ``latest`` belongs to the unlock hierarchy and must never create an empty
+    # bottom rail. Default portrait therefore returns to the historical 600x334
+    # authored envelope. A real fourth supporting field still grows the card.
+    assert default.authored_size == (600.0, 334.0)
+    assert no_latest.authored_size == default.authored_size
+    assert extra_capsule.authored_size[1] > default.authored_size[1]
 
 
 def test_style_uses_canonical_shadow_direction_and_independent_alpha() -> None:
@@ -379,12 +405,16 @@ def test_failed_runtime_start_detaches_and_fails_closed() -> None:
 
 
 @pytest.mark.qt
-def test_qml_preserves_authored_regions_and_delegate_identity(qt_app) -> None:
+def test_qml_preserves_authored_regions_and_delegate_identity(qt_app, tmp_path) -> None:
     model = _model()
     model.activate()
+    latest_icon_path = tmp_path / "latest-unlock.png"
     model.on_achievement_presentation(
         AchievementPulsePreparedPresentation(
-            model=build_mock_steam_view_model("achievement_pulse")
+            model=build_mock_steam_view_model("achievement_pulse"),
+            latest_artwork=_image(latest_icon_path),
+            latest_artwork_identity=str(latest_icon_path),
+            latest_artwork_key="latest-unlock",
         ),
         animate=False,
     )
@@ -396,6 +426,14 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app) -> None:
         artwork = _find_visual_item(item, "achievementArtworkFrame")
         metric = _find_visual_item(item, "achievementMetric")
         subtitle = _find_visual_item(item, "achievementSubtitle")
+        latest_badge = _find_visual_item(item, "achievementLatestArtworkFrame")
+        first_unlock = _find_visual_item(item, "achievementUnlock_0")
+        second_unlock = _find_visual_item(item, "achievementUnlock_1")
+        artwork_border = _find_visual_item(item, "achievementArtworkBorder")
+        latest_badge_border = _find_visual_item(
+            item, "achievementLatestArtworkBorder"
+        )
+        card = _find_visual_item(item, "overlayWidgetCard")
         rarity = _find_visual_item(item, "achievementField_rarity")
         rarity_detail = _find_visual_item(
             item, "achievementCapsuleDetail_rarity"
@@ -405,6 +443,12 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app) -> None:
         assert artwork is not None
         assert metric is not None
         assert subtitle is not None
+        assert latest_badge is not None
+        assert first_unlock is not None
+        assert second_unlock is not None
+        assert artwork_border is not None
+        assert latest_badge_border is not None
+        assert card is not None
         assert rarity is not None
         assert rarity_detail is not None
         assert float(item.property("contentScale")) == pytest.approx(1.0)
@@ -415,14 +459,37 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app) -> None:
             38.0,
         )
         assert (artwork.x(), artwork.y(), artwork.width(), artwork.height()) == (
-            442.0,
+            421.0,
             14.0,
             140.0,
             196.0,
         )
+        assert metric.x() == pytest.approx(411.0)
+        assert artwork.x() + artwork.width() / 2.0 == pytest.approx(491.0)
+        assert metric.x() + metric.width() / 2.0 == pytest.approx(491.0)
+        assert (
+            latest_badge.x(),
+            latest_badge.y(),
+            latest_badge.width(),
+            latest_badge.height(),
+        ) == (130.0, 130.0, 40.0, 40.0)
+        assert first_unlock.width() > second_unlock.width()
+        assert str(metric.property("text")).startswith("Unlocked: ")
         assert metric.y() == pytest.approx(216.0)
         assert subtitle.isVisible() is False
         assert rarity_detail.isVisible() is True
+
+        # A taller committed/CUSTOM root may retain its outer interaction rect,
+        # but the complete card shell must keep the authored 600x334 aspect.
+        # Spare height belongs outside the card, never as dead bands inside it.
+        item.setWidth(model.authoredWidth)
+        item.setHeight(400.0)
+        qt_app.processEvents()
+        assert bool(item.property("uniformScaleTransform")) is True
+        assert float(item.property("presentationScale")) == pytest.approx(1.0)
+        assert float(item.property("cardShadowVisualHeight")) == pytest.approx(334.0)
+        assert float(item.property("cardShadowVisualY")) == pytest.approx(33.0)
+        assert card.height() == pytest.approx(334.0)
 
         card = build_mock_steam_view_model("achievement_pulse")
         changed_card = replace(
@@ -484,6 +551,14 @@ def test_qml_is_presentation_only_and_keeps_family_authored_capsule_shadow() -> 
     assert "onDoubleTapped: achievementRoot.refreshRequested()" in qml
     assert "achievementRoot.settingsRequested(" in qml
     assert "AchievementCapsule" in qml
+    assert 'objectName: "achievementArtworkBorder"' in qml
+    assert 'objectName: "achievementLatestArtworkBorder"' in qml
+    assert 'uniformScaleTransform: true' in qml
+    assert 'thirdFieldColumnCenter - artworkWidth / 2.0' in qml
+    assert 'x: 130.0' in qml
+    assert 'fontSizeMode: Text.HorizontalFit' in qml
+    assert '+ ": " + achievementRoot.achievementModel.metricValue' in qml
+    assert "latestArtworkBackground" not in qml
     assert "RectangularShadow" in capsule_qml
     assert "offset: Qt.vector2d(1.5, 1.5)" in capsule_qml
     assert "cached: true" in capsule_qml

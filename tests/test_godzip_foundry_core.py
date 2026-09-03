@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import zipfile
@@ -292,3 +293,202 @@ def test_commit_then_push_updates_upstream_without_force(tmp_path: Path) -> None
     core.git_push_current(local)
     _git(local, "fetch", "origin")
     assert _git(local, "rev-parse", "origin/main") == committed
+
+
+def test_zip_candidate_discovery_filters_noise_is_shallow_and_sorts_by_mtime(tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    nested = first / "nested"
+    first.mkdir()
+    second.mkdir()
+    nested.mkdir()
+
+    old = first / "GODZIP_old.zip"
+    manifested = second / "opaque-name.zip"
+    unrelated = second / "movie-release.zip"
+    ignored_nested = nested / "GODZIP_nested.zip"
+    with zipfile.ZipFile(old, "w") as archive:
+        archive.writestr("tracked.txt", "legacy")
+    with zipfile.ZipFile(manifested, "w") as archive:
+        archive.writestr(
+            core.MANIFEST_MEMBER,
+            '{"format":"srpss-godzip","version":1,"files":[],"debris":[]}',
+        )
+    with zipfile.ZipFile(unrelated, "w") as archive:
+        archive.writestr("episode.mkv.txt", "not this project")
+    with zipfile.ZipFile(ignored_nested, "w") as archive:
+        archive.writestr("tracked.txt", "nested")
+    os.utime(old, (10, 10))
+    os.utime(manifested, (30, 30))
+    os.utime(unrelated, (40, 40))
+
+    found = core.discover_zip_candidates(
+        [first, second, tmp_path / "does-not-exist", first],
+        limit=10,
+    )
+    assert found == [manifested.resolve(), old.resolve()]
+    assert unrelated.resolve() not in found
+    assert ignored_nested.resolve() not in found
+
+    all_zips = core.discover_zip_candidates([first, second], limit=10, project_only=False)
+    assert all_zips == [unrelated.resolve(), manifested.resolve(), old.resolve()]
+
+
+def test_logzip_can_share_last_godzip_output_directory(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    logs = repo / "logs"
+    logs.mkdir()
+    (logs / "run.log").write_text("hello\n", encoding="utf-8")
+    out = tmp_path / "handoff"
+
+    first = core.create_logzip(repo, output_dir=out)
+    second = core.create_logzip(repo, output_dir=out)
+
+    short = core.git_head(repo)[:10]
+    assert first.zip_path == out / f"logs{short}.zip"
+    assert second.zip_path == out / f"logs{short}2.zip"
+    assert not (logs / first.zip_path.name).exists()
+
+
+def test_godzip_diff_uses_archived_dirty_bytes_and_finds_later_git_and_worktree_changes(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    source_head = core.git_head(repo)
+    (repo / "tracked.txt").write_text("baseline dirty\n", encoding="utf-8")
+    archive = tmp_path / "GODZIP_baseline.zip"
+    core.create_godzip(repo, ["tracked.txt"], archive)
+
+    (repo / "tracked.txt").write_text("after claude\n", encoding="utf-8")
+    (repo / "new_committed.py").write_text("print('new')\n", encoding="utf-8")
+    _git(repo, "add", "tracked.txt", "new_committed.py")
+    _git(repo, "commit", "-m", "claude work")
+    (repo / "scratch.txt").write_text("uncommitted\n", encoding="utf-8")
+    state = repo / ".godzip_foundry" / "settings.json"
+    state.parent.mkdir(exist_ok=True)
+    state.write_text("{}\n", encoding="utf-8")
+
+    result = core.generate_godzip_diff(repo, archive)
+
+    assert result.baseline_head == source_head
+    assert result.current_head == core.git_head(repo)
+    assert result.changed_files == 3
+    assert result.added == 2
+    assert result.modified == 1
+    assert result.deleted == 0
+    assert "-baseline dirty" in result.text
+    assert "+after claude" in result.text
+    assert "new_committed.py" in result.text
+    assert "scratch.txt" in result.text
+    assert ".godzip_foundry/settings.json" not in result.text
+
+
+def _add_runtime_surface(repo: Path, *, windows_venv: bool = False) -> None:
+    flags = [
+        "--debug", "-d", "--verbose", "-v", "--perf", "--gpu-timing",
+        "--usage", "--viz", "--geo", "--set", "--life", "--cache",
+        "--steam", "--noupdates", "--viz-diagnostics", "--viz-diag",
+        "--fresh", "--devcurve", "--devsteam", "--diag-pair-warm-finish",
+        "--diag-p4-stages", "--diag-p4-no-perf-hud",
+    ]
+    (repo / "main.py").write_text(
+        "def parse_screensaver_args():\n"
+        f"    _filtered = {set(flags)!r}\n"
+        "    return _filtered\n",
+        encoding="utf-8",
+    )
+    (repo / "main_mc.py").write_text("from main import parse_screensaver_args\n", encoding="utf-8")
+    python_exe = (
+        repo / ".venv" / "Scripts" / "python.exe"
+        if windows_venv
+        else core.repo_venv_python(repo)
+    )
+    python_exe.parent.mkdir(parents=True, exist_ok=True)
+    python_exe.write_bytes(b"fixture-python")
+
+
+def test_run_flag_discovery_uses_current_main_cli_surface_and_collapses_aliases(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _add_runtime_surface(repo)
+
+    flags = core.discover_run_flags(repo)
+
+    assert "--debug" in flags
+    assert "--verbose" in flags
+    assert "--viz-diagnostics" in flags
+    assert "-d" not in flags
+    assert "-v" not in flags
+    assert "--viz-diag" not in flags
+    assert set(core.RUN_DEFAULT_FLAGS).issubset(set(flags))
+
+
+def test_run_command_defaults_to_repo_venv_and_rejects_unknown_flags(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _add_runtime_surface(repo)
+
+    command = core.build_run_command(repo, "main.py", core.RUN_DEFAULT_FLAGS)
+
+    assert Path(command[0]) == core.repo_venv_python(repo)
+    assert Path(command[1]) == repo / "main.py"
+    assert tuple(command[2:]) == core.RUN_DEFAULT_FLAGS
+    with pytest.raises(core.GodzipError, match="not accepted"):
+        core.build_run_command(repo, "main.py", ["--made-up-goblin-flag"])
+
+
+def test_windows_run_console_auto_closes_unless_keep_open_is_explicit(monkeypatch, tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    repo = _repo(tmp_path)
+    # Build the Windows-shaped fixture before substituting the core's os facade.
+    (repo / "main.py").write_text(
+        "def parse_screensaver_args():\n"
+        "    _filtered = {'--debug', '--fresh'}\n"
+        "    return _filtered\n",
+        encoding="utf-8",
+    )
+    (repo / "main_mc.py").write_text("from main import parse_screensaver_args\n", encoding="utf-8")
+    python_exe = repo / ".venv" / "Scripts" / "python.exe"
+    python_exe.parent.mkdir(parents=True)
+    python_exe.write_bytes(b"fixture-python")
+
+    calls: list[tuple[list[str], dict]] = []
+
+    class FakeProcess:
+        pid = 4242
+
+    def fake_popen(command, **kwargs):
+        calls.append((list(command), dict(kwargs)))
+        return FakeProcess()
+
+    monkeypatch.setattr(core, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(core.subprocess, "Popen", fake_popen)
+
+    direct = core.launch_run_command(repo, "main.py", ["--debug"], keep_console_open=False)
+    assert direct.pid == 4242
+    direct_cmd, direct_kwargs = calls[-1]
+    assert Path(direct_cmd[0]).as_posix().endswith(".venv/Scripts/python.exe")
+    assert direct_cmd[1].endswith("main.py")
+    assert direct_cmd[2:] == ["--debug"]
+    assert direct_kwargs["creationflags"] == int(getattr(core.subprocess, "CREATE_NEW_CONSOLE", 0x00000010))
+    assert direct_cmd[0].lower() != "cmd.exe"
+
+    kept = core.launch_run_command(repo, "main.py", ["--fresh"], keep_console_open=True)
+    assert kept.pid == 4242
+    kept_cmd, kept_kwargs = calls[-1]
+    assert kept_cmd[:3] == ["cmd.exe", "/d", "/k"]
+    assert "--fresh" in kept_cmd[3]
+    assert kept_kwargs["creationflags"] == direct_kwargs["creationflags"]
+
+
+def test_run_tab_is_last_and_remains_repo_local() -> None:
+    source = (TOOLS_DIR / "godzip_foundry.py").read_text(encoding="utf-8")
+    assert "class RunTab" in source
+    assert "class DiffTab" in source
+    assert 'self.tabs.addTab(self.diff_tab, "DIFF")' in source
+    assert 'self.tabs.addTab(self.run_tab, "RUN")' in source
+    assert source.index('self.tabs.addTab(self.debris_tab, "DEBRIS")') < source.index('self.tabs.addTab(self.run_tab, "RUN")')
+    assert '"run_flags"' in source
+    assert '"run_entrypoint"' in source
+    assert "COPY TO CLIPBOARD" in source
+    assert "refresh_native_taskbar_icon" in source
+    assert "WM_SETICON" not in source  # numeric native message kept implementation-local, no shell command fallback
+    assert "LOCALAPPDATA" not in source
+    assert "AppData" not in source

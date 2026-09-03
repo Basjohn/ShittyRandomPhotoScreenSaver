@@ -24,6 +24,12 @@ OverlayWidget {
     preferredContentWidth: achievementRoot.authoredWidth
     preferredContentHeight: achievementRoot.authoredHeight
 
+    // Achievement Pulse is an authored-aspect card.  Let the shared ordinary-
+    // widget transform scale the complete card shell as one unit so a taller
+    // committed CUSTOM rectangle leaves spare space *outside* the card rather
+    // than stretching the shell around a shorter authored canvas.
+    uniformScaleTransform: true
+
     TapHandler {
         enabled: achievementRoot.achievementModel.interactionEnabled
         acceptedButtons: Qt.LeftButton
@@ -35,9 +41,13 @@ OverlayWidget {
         objectName: "achievementAuthoredCanvas"
         width: achievementRoot.authoredWidth
         height: achievementRoot.authoredHeight
-        x: (achievementRoot.width - width * scale) / 2.0
-        y: (achievementRoot.height - height * scale) / 2.0
-        scale: achievementRoot.contentScale
+        // OverlayWidget now owns the whole-card uniform transform.  Keep this
+        // authored content at canonical coordinates inside that transformed
+        // shell; a second local scale/centering pass would recreate the visible
+        // top/bottom bands that parity is removing.
+        x: 0.0
+        y: 0.0
+        scale: 1.0
         transformOrigin: Item.TopLeft
 
         BrandedHeader {
@@ -157,8 +167,13 @@ OverlayWidget {
                 achievementRoot.achievementModel.artworkShape === "portrait"
                     ? artworkWidth * 1.4
                     : (verticalArtwork ? artworkWidth : 86.0)
+            // The vertical artwork/metric rail is centered over the third
+            // supporting-field column (PREVIOUSLY in the default composition).
+            // Keep this relationship mathematical so future size changes cannot
+            // drift the cover back toward the outer edge.
+            readonly property real thirdFieldColumnCenter: 18.0 + 2.0 * 191.0 + 182.0 / 2.0
             readonly property real artworkX: verticalArtwork
-                ? 582.0 - artworkWidth : 402.0
+                ? thirdFieldColumnCenter - artworkWidth / 2.0 : 402.0
             readonly property real titleWidth: !achievementRoot.achievementModel.showArtwork
                 ? 564.0 : (verticalArtwork ? artworkX - 32.0 : 370.0)
 
@@ -184,10 +199,6 @@ OverlayWidget {
                     id: artworkBackground
                     anchors.fill: parent
                     radius: 7.0
-                    border.color: achievementRoot.achievementModel.steamArtworkBorderColor
-                    border.width: achievementRoot.scaleAwareStrokeWidthForScale(
-                        2.0, achievementRoot.contentScale
-                    )
                     gradient: Gradient {
                         GradientStop { position: 0.0; color: achievementRoot.achievementModel.steamArtworkGradientStartColor }
                         GradientStop { position: 1.0; color: achievementRoot.achievementModel.steamArtworkGradientEndColor }
@@ -216,6 +227,21 @@ OverlayWidget {
                     radius: 5.0
                     visible: false
                     layer.enabled: true
+                }
+
+                // Keep the outline on top of the image, matching the sane Steam
+                // artwork-frame contract used by Abandonment Issues.  Painting
+                // the border under an inset image made Pulse's edge look washed
+                // and inconsistently transparent.
+                Rectangle {
+                    objectName: "achievementArtworkBorder"
+                    anchors.fill: parent
+                    radius: 7.0
+                    color: "transparent"
+                    border.color: achievementRoot.achievementModel.steamArtworkBorderColor
+                    border.width: achievementRoot.scaleAwareStrokeWidthForScale(
+                        2.0, achievementRoot.contentScale
+                    )
                 }
             }
 
@@ -271,7 +297,17 @@ OverlayWidget {
                     objectName: "achievementUnlock_" + index
                     x: 18.0
                     y: index === 0 ? 100.0 : 130.0 + (index - 1) * 14.0
-                    width: normalContent.titleWidth
+                    // The first, larger unlock owns the full title rail.  The
+                    // recent-achievement badge begins below it and therefore must
+                    // not steal horizontal/vertical space from that first line.
+                    // Smaller lines stop just before the badge only when it is
+                    // actually present, avoiding text painting underneath it.
+                    width: index === 0 || !latestArtworkFrame.visible
+                        ? normalContent.titleWidth
+                        : Math.min(
+                            normalContent.titleWidth,
+                            Math.max(0.0, latestArtworkFrame.x - 24.0)
+                        )
                     height: index === 0 ? 26.0 : 13.0
                     text: unlockText
                     color: achievementRoot.achievementModel.textColor
@@ -296,29 +332,24 @@ OverlayWidget {
                     && (achievementRoot.achievementModel.latestArtworkSource.length > 0
                         || latestArtworkImage.transitionVisible)
                     && unlockRepeater.count > 0
-                x: Math.max(18.0, normalContent.artworkX - 48.0)
+                // Historical hierarchy: the badge belongs to the unlock stack,
+                // not to the game-cover rail.  Its top starts immediately below
+                // the large first unlock line; no extra line spacing is reserved.
+                x: 130.0
                 y: 130.0
                 width: 40.0
                 height: 40.0
 
+                // The Steam achievement icon already contains its ornate frame.
+                // Do not put it inside a second dark rounded panel/border: that
+                // produced the post-migration black-box abomination around it.
                 RectangularShadow {
-                    anchors.fill: latestArtworkBackground
+                    anchors.fill: latestArtworkImage
                     color: "#76000000"
                     blur: 6.0
-                    radius: 7.0
+                    radius: 6.0
                     offset: Qt.vector2d(2.0, 2.0)
                     cached: true
-                }
-
-                Rectangle {
-                    id: latestArtworkBackground
-                    anchors.fill: parent
-                    radius: 7.0
-                    color: achievementRoot.achievementModel.steamArtworkSurfaceColor
-                    border.color: achievementRoot.achievementModel.steamArtworkBorderColor
-                    border.width: achievementRoot.scaleAwareStrokeWidthForScale(
-                        1.0, achievementRoot.contentScale
-                    )
                 }
 
                 ArtworkFadeImage {
@@ -330,6 +361,20 @@ OverlayWidget {
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     cache: true
+                }
+
+                // Restore only the clean outer keyline from the old treatment.
+                // The dark filled backing panel remains intentionally retired.
+                Rectangle {
+                    objectName: "achievementLatestArtworkBorder"
+                    anchors.fill: parent
+                    radius: 4.0
+                    color: "transparent"
+                    border.color: achievementRoot.achievementModel.steamArtworkBorderColor
+                    border.width: achievementRoot.scaleAwareStrokeWidthForScale(
+                        1.0, achievementRoot.contentScale
+                    )
+                    z: 2
                 }
             }
 
@@ -345,13 +390,17 @@ OverlayWidget {
                     ? normalContent.artworkWidth + 20.0 : 200.0
                 height: 28.0
                 text: achievementRoot.achievementModel.metricLabel
-                    + " " + achievementRoot.achievementModel.metricValue
+                    + ": " + achievementRoot.achievementModel.metricValue
                 color: achievementRoot.achievementModel.textColor
                 font.family: achievementRoot.achievementModel.fontFamily
                 font.pointSize: achievementRoot.achievementModel.fontSize * 0.95
                 font.bold: true
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
+                // R-38 contract: consume the deliberately wider metric rail by
+                // fitting normal/high counts locally before exceptional elision.
+                fontSizeMode: Text.HorizontalFit
+                minimumPointSize: Math.max(8.0, achievementRoot.achievementModel.fontSize * 0.70)
                 elide: Text.ElideRight
                 shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
                 shadowColor: achievementRoot.achievementModel.textShadowColor
