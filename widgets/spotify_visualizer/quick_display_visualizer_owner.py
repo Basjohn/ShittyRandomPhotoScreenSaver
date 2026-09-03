@@ -740,6 +740,15 @@ class QuickDisplayVisualizerOwner:
     def _start_logical_runtime(self, *, interval_s: float | None = None) -> None:
         from widgets.spotify_visualizer.tick_pipeline import logical_tick
 
+        # Warm the first-publish import chain here, during activation and before
+        # the cadence thread starts, so the first logical tick does not pay the
+        # one-shot cold import of the immutable frame-capture module (and its
+        # render-state / config-applier / frame-runtime deps) on the cadence
+        # thread's first step. This moves a one-shot activation cost off the
+        # first frame; it adds no per-frame work (the import is a no-op once
+        # cached) and does not change the authored cadence.
+        from widgets.spotify_visualizer import logical_frame_capture  # noqa: F401
+
         controller = self._controller
         interval = (
             float(interval_s)
