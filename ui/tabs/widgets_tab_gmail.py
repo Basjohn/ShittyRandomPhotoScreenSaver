@@ -1053,40 +1053,9 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     color_row.addWidget(tab.gmail_color_btn)
     color_row.addStretch()
 
-    header_fill_row = _swatch_row(appearance_inner, "Header Fill:")
-    tab.gmail_header_fill_color_btn = ColorSwatchButton(
-        title="Choose Gmail Header Fill Color", show_alpha=True
-    )
-    tab.gmail_header_fill_color_btn.set_color(tab._gmail_header_fill_color)
-    tab.gmail_header_fill_color_btn.color_changed.connect(
-        lambda c: (setattr(tab, '_gmail_header_fill_color', c), tab._save_settings())
-    )
-    header_fill_row.addWidget(tab.gmail_header_fill_color_btn)
-    header_fill_row.addStretch()
-
-    header_text_row = _swatch_row(appearance_inner, "Header Text:")
-    tab.gmail_header_text_color_btn = ColorSwatchButton(
-        title="Choose Gmail Header Text Color", show_alpha=True
-    )
-    tab.gmail_header_text_color_btn.set_color(
-        getattr(tab, '_gmail_header_text_color', tab._gmail_color)
-    )
-    tab.gmail_header_text_color_btn.color_changed.connect(
-        lambda c: (setattr(tab, '_gmail_header_text_color', c), tab._save_settings())
-    )
-    header_text_row.addWidget(tab.gmail_header_text_color_btn)
-    header_text_row.addStretch()
-
-    header_border_row = _swatch_row(appearance_inner, "Header Border:")
-    tab.gmail_header_border_color_btn = ColorSwatchButton(
-        title="Choose Gmail Header Border Color", show_alpha=True
-    )
-    tab.gmail_header_border_color_btn.set_color(tab._gmail_header_border_color)
-    tab.gmail_header_border_color_btn.color_changed.connect(
-        lambda c: (setattr(tab, '_gmail_header_border_color', c), tab._save_settings())
-    )
-    header_border_row.addWidget(tab.gmail_header_border_color_btn)
-    header_border_row.addStretch()
+    # Header Fill/Text/Border are shared Widget Theme semantics. The old
+    # family swatches are intentionally absent; legacy persisted colours can be
+    # normalized explicitly from General -> Style Overrides.
 
     # Background color
     bg_color_row = _swatch_row(appearance_inner, "Background Color:")

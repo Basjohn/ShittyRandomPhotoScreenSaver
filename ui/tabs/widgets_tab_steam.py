@@ -1003,66 +1003,34 @@ def _build_card_group(
     font_row.addStretch()
 
     if key in {"achievement_pulse", "abandonment_issues"}:
-        header_fill_attr = f"_{key}_header_fill_color"
-        header_text_attr = f"_{key}_header_text_color"
-        header_border_attr = f"_{key}_header_border_color"
+        # Keep legacy persisted values load/save-compatible until the explicit
+        # General -> Style Overrides reset is run, but expose no family-specific
+        # header colour controls. Runtime theme projection treats default-valued
+        # fields as Inherit.
         header_fill_fallback = (11, 16, 22, 230)
         header_text_fallback = (255, 255, 255, 230)
         header_border_fallback = (229, 237, 244, 216)
-
-        header_fill_row = _aligned_row(appearance_layout, "Header Fill:")
-        header_fill_color = _coerce_rgba_color(
-            tab._widget_default(key, "header_fill_color", header_fill_fallback),
-            header_fill_fallback,
+        setattr(
+            tab, f"_{key}_header_fill_color",
+            _coerce_rgba_color(
+                tab._widget_default(key, "header_fill_color", header_fill_fallback),
+                header_fill_fallback,
+            ),
         )
-        setattr(tab, header_fill_attr, header_fill_color)
-        header_fill_btn = ColorSwatchButton(
-            header_fill_color,
-            title=f"Choose {label} Header Fill Color",
-            show_alpha=True,
+        setattr(
+            tab, f"_{key}_header_text_color",
+            _coerce_rgba_color(
+                tab._widget_default(key, "header_text_color", header_text_fallback),
+                header_text_fallback,
+            ),
         )
-        header_fill_btn.color_changed.connect(
-            lambda color, attr=header_fill_attr: _set_steam_card_color(tab, attr, color)
+        setattr(
+            tab, f"_{key}_header_border_color",
+            _coerce_rgba_color(
+                tab._widget_default(key, "header_border_color", header_border_fallback),
+                header_border_fallback,
+            ),
         )
-        setattr(tab, f"{key}_header_fill_color_btn", header_fill_btn)
-        header_fill_row.addWidget(header_fill_btn)
-        header_fill_row.addStretch()
-
-        header_text_row = _aligned_row(appearance_layout, "Header Text:")
-        header_text_color = _coerce_rgba_color(
-            tab._widget_default(key, "header_text_color", header_text_fallback),
-            header_text_fallback,
-        )
-        setattr(tab, header_text_attr, header_text_color)
-        header_text_btn = ColorSwatchButton(
-            header_text_color,
-            title=f"Choose {label} Header Text Color",
-            show_alpha=True,
-        )
-        header_text_btn.color_changed.connect(
-            lambda color, attr=header_text_attr: _set_steam_card_color(tab, attr, color)
-        )
-        setattr(tab, f"{key}_header_text_color_btn", header_text_btn)
-        header_text_row.addWidget(header_text_btn)
-        header_text_row.addStretch()
-
-        header_border_row = _aligned_row(appearance_layout, "Header Border:")
-        header_border_color = _coerce_rgba_color(
-            tab._widget_default(key, "header_border_color", header_border_fallback),
-            header_border_fallback,
-        )
-        setattr(tab, header_border_attr, header_border_color)
-        header_border_btn = ColorSwatchButton(
-            header_border_color,
-            title=f"Choose {label} Header Border Color",
-            show_alpha=True,
-        )
-        header_border_btn.color_changed.connect(
-            lambda color, attr=header_border_attr: _set_steam_card_color(tab, attr, color)
-        )
-        setattr(tab, f"{key}_header_border_color_btn", header_border_btn)
-        header_border_row.addWidget(header_border_btn)
-        header_border_row.addStretch()
 
     if key == "achievement_pulse":
         selection_row = _aligned_row(content_layout, "Game Selection:")
@@ -1710,9 +1678,6 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             setattr(tab, f"_{key}_header_fill_color", header_fill)
             setattr(tab, f"_{key}_header_text_color", header_text)
             setattr(tab, f"_{key}_header_border_color", header_border)
-            getattr(tab, f"{key}_header_fill_color_btn").set_color(header_fill)
-            getattr(tab, f"{key}_header_text_color_btn").set_color(header_text)
-            getattr(tab, f"{key}_header_border_color_btn").set_color(header_border)
         if key == "achievement_pulse":
             _set_achievement_selection_mode(
                 tab.achievement_pulse_selection_mode,

@@ -150,9 +150,9 @@
       255
     ],
     "widget.accent": [
-      170,
-      164,
-      232,
+      115,
+      111,
+      157,
       215
     ],
     "widget.gradient.start": [
@@ -234,9 +234,9 @@
       255
     ],
     "media.volume.fill": [
-      170,
-      164,
-      232,
+      153,
+      149,
+      200,
       215
     ],
     "media.volume.outline": [
@@ -252,9 +252,9 @@
       100
     ],
     "media.progress.fill": [
-      170,
-      164,
-      232,
+      115,
+      111,
+      157,
       215
     ],
     "media.progress.glow": [
@@ -270,9 +270,9 @@
       143
     ],
     "abandonment_issues.accent": [
-      170,
-      164,
-      232,
+      115,
+      111,
+      157,
       215
     ],
     "gmail.sender": [
@@ -318,9 +318,9 @@
       255
     ],
     "context.menu.indicator.fill": [
-      170,
-      164,
-      232,
+      115,
+      111,
+      157,
       215
     ],
     "context.menu.arrow": [
@@ -336,9 +336,9 @@
       255
     ],
     "context.submenu.indicator.fill": [
-      170,
-      164,
-      232,
+      115,
+      111,
+      157,
       215
     ]
   }

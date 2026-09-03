@@ -303,42 +303,11 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_color_row.addWidget(tab.reddit_color_btn)
     reddit_color_row.addStretch()
 
-    reddit_header_fill_row = _swatch_row(appearance_layout, "Header Fill:")
-    tab.reddit_header_fill_color_btn = ColorSwatchButton(
-        title="Choose Reddit Header Fill Color", show_alpha=True
-    )
-    tab.reddit_header_fill_color_btn.set_color(tab._reddit_header_fill_color)
-    tab.reddit_header_fill_color_btn.color_changed.connect(
-        lambda c: (setattr(tab, '_reddit_header_fill_color', c), tab._save_settings())
-    )
-    reddit_header_fill_row.addWidget(tab.reddit_header_fill_color_btn)
-    reddit_header_fill_row.addStretch()
+    # Header colours are shared Widget Theme semantics.  Family-specific header
+    # swatches were retired so one widget cannot silently drift away from the
+    # selected theme; legacy persisted values remain loadable until the explicit
+    # General -> Style Overrides reset action normalizes them.
 
-    reddit_header_text_row = _swatch_row(appearance_layout, "Header Text:")
-    tab.reddit_header_text_color_btn = ColorSwatchButton(
-        title="Choose Reddit Header Text Color", show_alpha=True
-    )
-    tab.reddit_header_text_color_btn.set_color(
-        getattr(tab, '_reddit_header_text_color', tab._reddit_color)
-    )
-    tab.reddit_header_text_color_btn.color_changed.connect(
-        lambda c: (setattr(tab, '_reddit_header_text_color', c), tab._save_settings())
-    )
-    reddit_header_text_row.addWidget(tab.reddit_header_text_color_btn)
-    reddit_header_text_row.addStretch()
-
-    reddit_header_border_row = _swatch_row(appearance_layout, "Header Border:")
-    tab.reddit_header_border_color_btn = ColorSwatchButton(
-        title="Choose Reddit Header Border Color", show_alpha=True
-    )
-    tab.reddit_header_border_color_btn.set_color(tab._reddit_header_border_color)
-    tab.reddit_header_border_color_btn.color_changed.connect(
-        lambda c: (setattr(tab, '_reddit_header_border_color', c), tab._save_settings())
-    )
-    reddit_header_border_row.addWidget(tab.reddit_header_border_color_btn)
-    reddit_header_border_row.addStretch()
-
-    # Background frame
     tab.reddit_show_background = QCheckBox("Show Background Frame")
     tab.reddit_show_background.setProperty("circleIndicator", True)
     tab.reddit_show_background.setChecked(tab._default_bool('reddit', 'show_background', True))

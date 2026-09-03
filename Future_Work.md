@@ -1,6 +1,6 @@
 # Future Work
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
 Long-horizon feature / new-implementation backlog.
 
@@ -12,7 +12,9 @@ Long-horizon feature / new-implementation backlog.
 An agent may implement work from this file only when **either**:
 
 1. the operator explicitly asks for a named `Future_Work.md` item; **or**
-2. `Current_Plan.md` and `Future_Cleanup.md` contain no remaining important active work.
+2. `Current_Plan.md` contains no remaining important active work and no **READY** cleanup row in
+   `Future_Cleanup.md` is scheduled ahead of the feature. `DELETE AFTER HORIZON` / `J EXIT` rows are dormant
+   gates and do not block unrelated future work merely by existing.
 
 Merely encountering, reading, indexing or cross-linking this file is **not** permission to begin one
 of these features.
@@ -22,14 +24,17 @@ Normal priority:
 ```text
 Current_Plan.md active work
         ↓
-Future_Cleanup.md required debt/deletion work
+Future_Cleanup.md scheduled READY debt/deletion work
         ↓
 Future_Work.md new features / experiments
 ```
 
-This file exists so good ideas survive the migration without expanding migration scope. Technical
-notes are deliberately provisional; future implementation must inspect the final landed Qt Quick
-architecture before coding.
+This file exists so good ideas survive without expanding current scope. Technical notes are deliberately
+provisional; future implementation must inspect the **current** Qt Quick architecture before coding.
+
+Runtime Widget Themes, their semantic resolver/linking/Custom model and the shared Style Overrides surface
+are **landed current architecture**, not future work. Their durable contract belongs in `Spec.md` and the
+Settings/Widget Theme architecture documents. Do not use this backlog to reopen that foundation.
 
 Capability terminology must follow the final landed contract even in future designs:
 
@@ -108,38 +113,6 @@ Performance rules:
 - bound blur/refraction/trail samples;
 - adapt quality to measured cost/resolution;
 - preserve the common Quick GL-state fence.
-
----
-
-# 1A. Widget semantic theme-role expansion + shared fade polish
-
-**The Slice-8 semantic foundation plus the named Widget Theme/catalogue/bidirectional-link wave are landed and physically exercised; remaining work is bounded semantic/readability review, not foundational admission.** Continue literal adoption only where it improves the mature shared vocabulary; do not reopen accepted family geometry or create swatches merely because a literal exists. Light/dark-text themes require composition-aware contrast on both the Settings HWND and runtime Widget surfaces.
-
-## 1A.1 Semantic role inheritance instead of swatch proliferation
-
-Extend the existing `WidgetThemeSpec.colors` semantic-role map rather than giving every decorative literal an always-visible Settings swatch. Target roles include branded-header Fill/Border/Text, separators and decorative outlines, secondary panels, gradients, Media transport surface/border/separators, mute surface/border/icon, app-volume Fill/Track/Outline and equivalent Steam secondary surfaces.
-
-Preferred resolution shape:
-
-```text
-explicit per-widget override (only when intentionally set)
-        ↓ otherwise
-widget/family semantic theme role (when theme supplies it)
-        ↓ otherwise
-shared semantic parent role (text / border / panel / accent / muted)
-        ↓ otherwise
-preserved current visual default
-```
-
-The default/inherit path must reproduce the currently accepted visuals byte-for-pixel-equivalent where practical; adding a role is not permission to recolor shipped defaults. Settings should expose advanced overrides progressively/collapsed or behind an `Inherit` state rather than flooding the normal Widget UI. Do not create a second Media/Steam-local palette system.
-
-**Landed foundation:** `ui/widget_visual_roles.py` owns exactly this cascade; schema-v3 themes admit sparse optional roles; `local.*` terminals never serialize. Consumers include all shared branded headers, Media transport/mute/volume/progress, Gmail action/separators, Reddit/Weather/Clock separators, Steam info/tooltip/artwork/gradients/metrics and the retained Context Menu palette. Named Widget Theme selection/linking and the 58-theme mirror pack are now wired at the construction authority. Remaining work is physical theme review plus incremental adoption of any genuinely meaningful decorative literals, not another resolver or blanket swatch expansion.
-
-## 1A.2 Shared artwork and metadata fade polish
-
-`rendering/quick/qml/ArtworkFadeImage.qml` remains the shared event-driven primitive used by Media, Achievement Pulse and Abandonment Issues artwork. Slice 8 establishes a gentler shared `200 ms` fade-out / `340 ms` fade-in baseline; family lifecycle choreography may explicitly shorten a fade only when the parent is already fully hidden. Preserve no polling, no provider freshness delay and bounded texture/effect cost. A true two-texture artwork crossfade remains optional future polish only if measured visual gain justifies the extra texture residency.
-
-Media Title/Artist/Album now use `MediaMetadataColumn.qml`: model/provider truth updates immediately, the outgoing rendered strings are retained only for one bounded `240/340 ms` old->new opacity crossfade, and the current HorizontalFit/visibility contract is duplicated in both small text columns. No timer/cadence/provider owner was added. Validate rapid track skipping and optional Album state physically before calling this closed.
 
 ---
 
@@ -504,51 +477,51 @@ single existing implementation/descriptor rather than manufacturing a new transi
 
 # 9. Current idea priority — not active sequencing
 
-1. **Slide optional motion styles** — Elastic first, then Wobble/Flex/Perspective inside Slide;
-2. **Deformable 3D Sphere / Blob Sphere experiment**;
-3. **Directional Pixel Accretion**;
-4. **Glass Shatter**;
-5. **Exploding Tiles**;
-6. **Organic Growth / Ink Bloom** prototype;
-7. other 3D visualizer experiments after final migration validation;
-8. **Runtime frosted/glass ordinary-widget cards are rejected/shelved.** Reconsider only if a future renderer architecture independently justifies the capability; do not revive the 2026-09-02 card-only experiments.
+This is priority **inside Future Work only**. `Current_Plan.md` and any scheduled **READY** cleanup still
+outrank it; dormant compatibility-horizon/J-exit rows do not.
 
-Glass Shatter, Directional Pixel Accretion and the Deformable 3D Sphere are worth preserving even if
-their first prototypes are abandoned. Their intended identities should not collapse into generic
-`shatter`, `pixel dissolve`, or `audio sphere` effects.
+1. **Widget hover/click glow** — operator-requested bounded interaction polish; shared swatch, event-driven
+   hover/click pulse, no polling/timers/thread owner;
+2. **Slide optional motion styles** — Elastic first, then Wobble/Flex/Perspective inside Slide;
+3. **Deformable 3D Sphere / Blob Sphere experiment**;
+4. **Directional Pixel Accretion**;
+5. **Glass Shatter**;
+6. **Exploding Tiles**;
+7. **Organic Growth / Ink Bloom** prototype;
+8. other 3D visualizer experiments after final J validation;
+9. **Settings FlowContainer polish [LOW]** where it genuinely improves alignment/space use;
+10. **Optional true two-texture artwork crossfade [LOW]** only if the current event-driven fade still has a
+    demonstrated visual discontinuity worth the extra texture residency.
+
+Glass Shatter, Directional Pixel Accretion and the Deformable 3D Sphere are worth preserving even if their
+first prototypes are abandoned. Their intended identities should not collapse into generic `shatter`,
+`pixel dissolve`, or `audio sphere` effects.
+
+Runtime frosted/glass ordinary-widget cards remain **rejected/shelved**, not a queued feature. Reconsider
+only if a future renderer architecture independently justifies the capability; begin from the rejected-
+experiment record rather than reviving 2026-09-02 debris.
 
 ---
 
-# 10. Runtime Widget Themes — colour-only semantic bundles
+# 10. Operator-requested UI polish contracts
 
-Status: implemented/retained. Runtime Widget Themes are intentionally narrower than Settings themes: they own semantic colours and explicit Settings<->Widget stable link identity, not backdrop/material rendering. The 2026-09-02 Quick Glass/Acrylic card experiments were rejected after physically breaking wallpaper/transition presentation and are preserved only in `Docs/QtQuick_Migration/Rejected_Card_Material_Experiments_2026-09-02.md`.
+## 10.1 Widget glow on hover / click
 
-Durable contract:
+Add two Interaction controls: **Widget Glow on Hover** and **Widget Glow on Click**, with one shared glow
+colour swatch. The visual should pulse in relation to cursor interaction and decay when hover/click state
+ends. Implementation must be event/state driven: no recurring timer, poller, worker, or thread-contention
+owner. Prefer one shared retained visual primitive rather than per-widget implementations.
 
-```text
-Widget Theme = stable identity + linked Settings-theme id + semantic RGBA roles
-Custom       = persisted colour snapshot created by editing a theme-owned role
-Keep Synced  = bidirectional stable-ID theme identity link
-Style Overrides = Card Surface + Card Border + Card Border Width
-runtime card = ordinary retained RGBA OverlayCard path
-```
+## 10.2 Settings FlowContainer polish [LOW]
 
-- Widget Themes never own activation, ordinary ON/OFF, provider/account/source state, geometry, refresh cadence, compositor state or native Settings-window backdrop mode.
-- Card Surface/Card Border edits snapshot the full resolved named palette into `Custom` and switch the Widget side Independent; explicit family card overrides remain higher precedence.
-- Card Border Width is a global geometry/style value outside `.srwtheme`.
-- Context Menu consumes Widget Theme semantics directly because it has no family override layer.
-- Specialized optional roles inherit through `ui/widget_visual_roles.py`; do not serialize `local.*` presentation context or invent family-local cascades.
-- The curated pack contains 58 Settings themes + 58 deterministic Widget mirrors. Widget mirrors are schema-v3 colour-only files and materialize mature Media/Volume/Seek/Backlog roles through `tools/generate_widget_theme_mirrors.py`.
-- Settings theme names/files may contain `[Glass]`/`[Acrylic]` because those describe the Settings HWND. Widget mirror names/files omit those runtime-irrelevant tags while `linked_settings_theme_id` keeps the exact Settings file identity.
-- Theme Foundry `Save Widget Counterpart…` must use the same deterministic converter as pack generation and strict-reload its output.
-- Installed/frozen storage remains `%ProgramData%\SRPSS\themes\widgets`; source/dev remains `<repo-root>/themes/widgets`. `Custom` remains Settings persistence, never a generated file.
-- The retained screensaver Context Menu follows the selected Widget Theme, not the QWidget Settings theme directly. When linking is ON the paired identities naturally coordinate palettes; when Independent it follows the independently selected Widget Theme.
+Use FlowContainers in additional Settings sections only where they materially improve alignment and space
+usage. This is presentation polish, not permission to restructure settings ownership or eagerly construct
+otherwise lazy bodies.
 
-Do not add a Surface Style control, `default_card_material_mode`, `card_material_override`, runtime material enum, material Loader/capture/mask tree, or background-layer cadence callback back into this architecture. A future backdrop-card proposal requires a fresh product/renderer justification and must start from the rejected-experiment record rather than reviving hidden debris.
+## 10.3 Optional artwork crossfade [LOW]
 
-!OPERATOR BOX!
-Ideas put in this box are to be added to work asap but at a lower priotiy than future cleanup or current plan work, unless existing in those as well.
-############
-1. Add two options in the Interaction Pill for Display. "Widget Glow on Hover" "Widget Glow On Click" with a shared swatch colour selector. These will cause a small pulse in glow effect when triggered in relation to the cursor halo and pulse out when hover leaves or click leaves. This must not introduce timers or any thread contention/starvation.
-2. Finish/accept the colour-only Widget Themes vertical slice. Preserve the shared semantic resolver, 58 mirrored `.srwtheme` catalogue, explicit bidirectional stable-ID link metadata, Linked/Independent control and Custom snapshot behavior. Widget Theme card roles are global/default baselines and explicit `widgets.<family>.card.*` values remain higher-precedence family overrides; Context Menu consumes Widget Theme semantics directly. Continue semantic migration only where physical review exposes a meaningful uncovered visual; do not serialize `local.*`, blanket-theme debug/editor/shadow primitives, or revive runtime card-material state.
-3. [LOW] Give more SettingsGUI sections Flowcontainers where it would benefit well aligned space usage.
+The current shared artwork/metadata fades are landed and belong to current physical validation, not future
+architecture work. A true outgoing+incoming two-texture artwork crossfade is a separate optional experiment
+only if eyes-on validation proves the current fade insufficient. Measure texture residency and transition
+cost before keeping it.
+
