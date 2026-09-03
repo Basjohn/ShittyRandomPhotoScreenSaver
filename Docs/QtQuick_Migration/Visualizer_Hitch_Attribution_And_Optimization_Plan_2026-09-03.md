@@ -137,6 +137,74 @@ Do not infer that these maxima are Visualizer-visible without timestamp correlat
 
 Runtime replacement produced a ~117 ms Bubble gap during display reconstruction and a later ~3.19 s Spectrum age warning during another replacement/re-admission window. These are **not steady-state evidence** and must not be mixed into the periodic-hitch metric. They still require a recreation/startup freshness acceptance lane after steady-state owners are removed.
 
+#### Attributed (2026-09-03, long post-P0 run evidence)
+
+Repeated recreation/resume events share one shape: the source packet **passes the current generation/activation identity checks and is reported `ready=True`, but is stale by wall-clock age, and is then actually consumed into the first reactive result before the genuinely fresh packet arrives.** This is **not** cross-generation/mode poison — generation/activation fencing is working. It is **temporal staleness inside the current identity**.
+
+Concrete edge samples (VIS_PLAYBACK_EDGE T1..T6):
+
+```text
+Spectrum recreation   engine/source=6/6   stale source age=4302.0 ms
+  T4 ready=True (edge) -> T3 fresh source +69.4 ms (age 0.5 ms) -> T6 first retained sync +117.3 ms
+Bubble WARM RESUME    engine/source=11/11 warm_resume=True stale age=4961.7 ms
+  T4 ready=True, stale packet consumed with nonzero reactive energy -> T3 fresh +17.2 ms -> T6 +20.2 ms
+Bubble recreation adm engine/source=11/11 stale age=1326.8 ms
+  T4 ready=True, stale packet consumed with nonzero reactive energy -> T3 fresh +67.8 ms -> T6 +151.9 ms
+```
+
+Root cause (E1 — freshness admission): the freshness fence
+(`_waiting_for_fresh_engine_frame` + `_pending_engine_generation`/`_pending_engine_activation_id`)
+clears on a **generation-only** condition
+(`latest_gen >= pending_gen and waveform_ready and activation_ready`,
+`tick_pipeline.consume_engine_bars` ~1080-1108). The shared registry beat engine is
+**persistent across owner recreation** and retains its last committed
+`_smoothed_bars` + `_latest_authoritative_frame_ts` at the *same* generation.
+On a same-mode/same-bar-count recreation nothing bumps the generation
+(that is a mode-change lever via `reset_smoothing_state`, not a recreation one — hence `engine/source = 6/6`),
+and `quick_display_visualizer_owner._apply_configuration` ends with an
+**unconditional `state._waiting_for_fresh_engine_frame = False`** (line ~229).
+So the first `consume_engine_bars` reads `engine.get_smoothed_bars()` and admits the
+stale pre-recreation frame as the first reactive result. On warm resume the play edge
+(`set_playing` True) has the same hole: the pre-pause stale frame is admitted before a
+post-resume frame commits.
+
+The multi-second "stale source age" number is **not** the latency — it is the *age of the wrongly
+admitted frame*. The true fresh-source gap is only ~17-88 ms (matches the guardrail caution that
+stale pre-recreation timestamps create absurd multi-second latency warnings). The defect is that a
+~4.3 s-old frame carrying **real old audio energy** is briefly shown instead of holding quiet for
+those ~17-88 ms.
+
+Two latency components must be attributed separately (do not conflate):
+
+1. **E1 — capture freshness gap** (edge -> genuinely fresh source, T3): ~17-88 ms. Owned here.
+2. **E2 — presentation/re-admission delay** (fresh source -> first retained sync, T6 - T3): ~3 ms
+   (Bubble warm resume) .. ~14-48 ms (Spectrum recreation) .. ~84 ms (Bubble recreation). This is the
+   render-bridge publish / Quick snapshot admission path, an owner **independent of capture freshness**.
+   Attribute and address separately; E1 does not fix it.
+
+#### E1 fix (bounded, freshness-strengthening; golden-invariant §2 line 42 "newest-state semantics")
+
+Add a monotonic per-commit watermark to the existing fence — no new cadence/queue owner, no accepted
+stale, no snapshot reuse, no polling/sleep, no widened source-age tolerance, no weakened generation
+fencing:
+
+- `_SpotifyBeatEngine` gains a monotonic `_authoritative_frame_commit_seq` (incremented whenever a
+  smoothed frame is committed in `_commit_analysis_frame`) + `get_authoritative_frame_commit_seq()`.
+  Monotonic-for-life; never reset on generation bump.
+- The fence clear-condition additionally requires `current_commit_seq > pending_commit_seq` — i.e. a
+  frame committed **after** re-entry, not merely one at the pending generation.
+- Re-entry arms the fence with the current commit seq **only when the engine is warm**
+  (`get_latest_authoritative_frame()[0] > 0`, i.e. a prior frame exists). Cold start (seq 0, ts 0) is
+  left byte-for-byte unchanged, preserving the startup-reveal / black-flash machinery. Armed at both
+  `_apply_configuration` (recreation) and the `set_playing` False->True edge (warm resume).
+- The paused idle-self-animating fence clear (`consume_engine_bars` ~1068) is untouched: paused modes
+  carry no reactive-energy expectation; the play edge re-arms on resume.
+
+Effect: on warm recreation/resume the first reactive frame is guaranteed to be one the persistent
+engine committed after re-entry; the ~17-88 ms window holds quiet (fresh) state via the existing
+fenced-publish path (`logical_tick` ~1475) instead of flashing ~4 s-old energy. Cadence, generation
+fencing, and cold start are unchanged.
+
 ### Resource observation — not yet leak evidence
 
 Across this short multi-recreation run, RSS/USS/private bytes and tracked cache bytes moved materially with image/cache/recreation activity but did not show a simple monotonic leak signature. Thread/handle counts also settled rather than rising every sample. A four-minute run cannot prove plateau safety; retain the dedicated soak/resource-plateau task.
