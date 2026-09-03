@@ -12,24 +12,25 @@ Test Purpose:
 - Ensure no visual fidelity loss during gating
 - Confirm CPU savings when not playing
 
-Test Count: 6 tests
+Test Count: 5 tests (FFT preservation, dynamic floor, playback gating x2, idle seed)
 Status: All passing
 Requires: numpy, unittest.mock
 """
 
-import sys
 import numpy as np
 from unittest.mock import Mock
 
-# Add the project root to the path
-sys.path.insert(0, '.')
+import pytest
 
-try:
-    from widgets.spotify_visualizer_widget import SpotifyVisualizerAudioWorker, _SpotifyBeatEngine
-except ImportError as e:
-    print("Import error: {}".format(e))
-    print("This test requires the project to be run from its root directory")
-    sys.exit(1)
+# Post-Quick-cutover home of the migrated FFT worker and beat engine. The old
+# `widgets.spotify_visualizer_widget` monolith was removed; this DSP behavior
+# (FFT-to-bars, dynamic floor, playback gating) lives on in the split package.
+# importorskip skips cleanly instead of aborting the whole suite if a genuine
+# import regression appears.
+_audio_worker = pytest.importorskip("widgets.spotify_visualizer.audio_worker")
+_beat_engine = pytest.importorskip("widgets.spotify_visualizer.beat_engine")
+SpotifyVisualizerAudioWorker = _audio_worker.SpotifyVisualizerAudioWorker
+_SpotifyBeatEngine = _beat_engine._SpotifyBeatEngine
 
 
 class TestSpotifyVisualizerIntegration:
@@ -220,35 +221,16 @@ class TestSpotifyVisualizerIntegration:
         
         print("✅ FFT gating when not playing works correctly")
     
-    def test_fft_processing_when_playing(self):
-        """Test that FFT processing occurs when playing."""
-        print("Testing FFT processing when playing...")
-        
-        engine = _SpotifyBeatEngine(bar_count=32)
-        engine._thread_manager = Mock()
-        engine.set_playback_state(True)
-        
-        # Mock audio data
-        mock_samples = [0.1, 0.2, 0.3] * 100
-        mock_frame = Mock()
-        mock_frame.samples = mock_samples
-        engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
-        
-        # Mock the thread manager
-        mock_tm = engine._thread_manager
-        mock_tm.submit_compute_task = Mock()
-        
-        # Call tick - should schedule FFT processing
-        result = engine.tick()
-        
-        # Should return None (processing in background) or list
-        assert result is None or isinstance(result, list)
-        
-        # Verify compute task was scheduled
-        mock_tm.submit_compute_task.assert_called_once()
-        
-        print("✅ FFT processing when playing works correctly")
-    
+    # NOTE: `test_fft_processing_when_playing` and `test_performance_impact_simulation`
+    # were removed here. They asserted the retired per-tick
+    # `ThreadManager.submit_compute_task` scheduling path. The engine now drives
+    # audio analysis through one persistent serial `visualizer.audio_analysis`
+    # compute lane (`create_compute_lane`), and the maintained
+    # `tests/test_visualizer_playback_gating.py` (playing admits one lane packet,
+    # paused admits none) plus `tests/test_visualizer_compute_lanes.py` (must not
+    # fall back to per-frame Future/task submission) cover the surviving
+    # playback-gated-analysis contract with the current mechanism.
+
     def test_idle_seed_requirement(self):
         """Test that paused idle presentation stays visible but low-energy."""
         print("Testing idle seed requirement...")
@@ -276,57 +258,6 @@ class TestSpotifyVisualizerIntegration:
 
         print("✅ Idle seed requirement works correctly")
     
-    def test_performance_impact_simulation(self):
-        """Test that CPU usage is reduced when not playing."""
-        print("Testing performance impact...")
-        
-        engine = _SpotifyBeatEngine(bar_count=32)
-        engine._thread_manager = Mock()
-        
-        # Mock compute task scheduling to track calls
-        compute_calls = []
-        
-        def track_compute_calls(job, callback, **_metadata):
-            compute_calls.append((job, callback))
-            return Mock()
-        
-        engine._thread_manager.submit_compute_task = track_compute_calls
-        
-        # Mock audio data
-        mock_samples = [0.1, 0.2, 0.3] * 100
-        mock_frame = Mock()
-        mock_frame.samples = mock_samples
-        engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
-        
-        # Simulate playing state - should schedule compute tasks
-        engine.set_playback_state(True)
-        for _ in range(10):
-            engine._compute_task_active = False  # Reset each time
-            engine.tick()
-        
-        playing_calls = len(compute_calls)
-        
-        # Reset for not playing test
-        compute_calls.clear()
-        engine._compute_task_active = False
-        
-        # Simulate not playing state - should NOT schedule compute tasks
-        engine.set_playback_state(False)
-        for _ in range(10):
-            engine.tick()
-        
-        not_playing_calls = len(compute_calls)
-        
-        # Verify significant reduction in compute task scheduling
-        assert playing_calls > 0, "Should schedule compute tasks when playing"
-        assert not_playing_calls == 0, "Should not schedule compute tasks when not playing"
-        
-        # Calculate simulated CPU savings
-        cpu_savings_percentage = (playing_calls - not_playing_calls) / playing_calls * 100
-        print("   Simulated CPU savings: {:.1f}%".format(cpu_savings_percentage))
-        assert cpu_savings_percentage >= 90, "Expected >= 90% CPU savings, got {:.1f}%".format(cpu_savings_percentage)
-        
-        print("✅ Performance impact test passed")
 
 
 def run_all_integration_tests():
