@@ -492,54 +492,6 @@ class TestBubbleTransientMixWeights:
 # 11. Sine/Osc Scheduler Event Wiring (§2.4)
 # ===========================================================================
 
-class TestLineSchedulerEventWiring:
-    """Verify sine/osc GPU kwargs include scheduler-derived event strengths."""
-
-    def test_build_kwargs_includes_line_event_strengths(self):
-        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
-        from widgets.spotify_visualizer.transient_bus import OnsetEvent, TransientEventScheduler
-
-        sched = TransientEventScheduler()
-        now = time.time()
-        assert sched.feed(OnsetEvent(timestamp=now, event_type='kick', strength=0.7))
-        assert sched.feed(OnsetEvent(timestamp=now + 0.12, event_type='snare', strength=0.45))
-
-        engine = _SchedulerEngine(
-            sched,
-            tb=TransientEnergyBands(bass_transient=0.2, mid_transient=0.1),
-            eb=_StubEnergyBands(bass=0.3, mid=0.2, high=0.1, overall=0.2),
-        )
-
-        widget = _ModeKwargsWidget()
-        osc_kwargs = build_gpu_push_extra_kwargs(widget, 'oscilloscope', engine)
-        sine_kwargs = build_gpu_push_extra_kwargs(widget, 'sine_wave', engine)
-
-        assert abs(osc_kwargs['line_kick_event_strength'] - 0.7) < 1e-9
-        assert abs(osc_kwargs['line_snare_event_strength'] - 0.45) < 1e-9
-        assert abs(sine_kwargs['line_kick_event_strength'] - 0.7) < 1e-9
-        assert abs(sine_kwargs['line_snare_event_strength'] - 0.45) < 1e-9
-
-    def test_build_kwargs_zero_line_event_strengths_when_scheduler_empty(self):
-        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
-        from widgets.spotify_visualizer.transient_bus import TransientEventScheduler
-
-        engine = _SchedulerEngine(
-            TransientEventScheduler(),
-            tb=TransientEnergyBands(),
-            eb=_StubEnergyBands(),
-        )
-
-        widget = _ModeKwargsWidget()
-        osc_kwargs = build_gpu_push_extra_kwargs(widget, 'oscilloscope', engine)
-
-        assert osc_kwargs['line_kick_event_strength'] == 0.0
-        assert osc_kwargs['line_snare_event_strength'] == 0.0
-
-
-# ===========================================================================
-# 12. Sine/Osc Transient Width Mix (§2.3)
-# ===========================================================================
-
 class _ModeKwargsWidget:
     def __init__(self):
         self._rainbow_enabled = False

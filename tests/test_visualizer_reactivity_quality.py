@@ -15,7 +15,7 @@ from PySide6.QtGui import QColor
 def _make_spectrum_soak_worker(np_module, bar_count: int = 15):
     from utils.lockfree import TripleBuffer
     from widgets.spotify_visualizer.bar_computation import SpectrumShapeConfig
-    from widgets.spotify_visualizer_widget import SpotifyVisualizerAudioWorker, _AudioFrame
+    from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker, _AudioFrame
 
     worker = SpotifyVisualizerAudioWorker(bar_count=bar_count, buffer=TripleBuffer())
     worker._np = np_module  # type: ignore[attr-defined]
