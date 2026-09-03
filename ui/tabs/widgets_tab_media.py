@@ -810,7 +810,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     for toggle, body in (
         (provider_toggle, provider_body),
         (appearance_toggle, appearance_body),
-        (header_toggle, header_body),
         (artwork_toggle, artwork_body),
         (controls_toggle, controls_body),
         (seek_toggle, seek_body),
