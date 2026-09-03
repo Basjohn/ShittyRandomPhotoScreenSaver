@@ -32,6 +32,40 @@ os.environ["LOCALAPPDATA"] = str(TEST_LOCALAPPDATA)
 
 
 # ---------------------------------------------------------------------------
+# Deferred stale-test reconciliation (skip in the meantime; reconcile at J+ exit)
+# ---------------------------------------------------------------------------
+# These modules import pre-cutover code the retained-Quick architecture removed
+# (the SpotifyVisualizerWidget monolith, spotify_bars_gl_overlay, WidgetManager,
+# rendering.spotify_widget_creators, rendering.widget_setup_all, and various
+# removed config_applier/tick_helpers/adapter symbols). The visualizer floor is
+# already reconciled and green; these remaining modules are skipped here until
+# the J+ exit reconciliation pass, which biases to the current Quick
+# architecture and deletes when in doubt. See Current_Plan.md.
+collect_ignore = [
+    # Visualizer-unrelated infrastructure (WidgetManager / display / logging /
+    # layout / shadow / GL-compositor) — reconcile or delete at J+ exit.
+    "test_widget_manager.py",
+    "test_widget_manager_refresh.py",
+    "test_widget_setup.py",
+    "test_widget_import_dormancy.py",
+    "test_display_context_menu.py",
+    "test_display_image_ops.py",
+    "test_display_integration.py",
+    "test_custom_layout_manager.py",
+    "test_logging_routing.py",
+    "test_f0_5_shadow_controls.py",
+    "test_p3_set_state_attribution.py",
+    "test_compositor_gpu_queries.py",
+    "test_startup_shader_warmup.py",
+    # Visualizer-related but still importing removed modules — reconcile at J+
+    # exit (fix against the current renderers/config_applier where valuable).
+    "test_ghost_isolation.py",
+    "test_line4_6_pipeline_trace.py",
+    "test_oscilloscope_display_contract.py",
+]
+
+
+# ---------------------------------------------------------------------------
 # Chunked-suite support
 # ---------------------------------------------------------------------------
 

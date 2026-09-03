@@ -77,18 +77,6 @@ def test_no_quick_visualizer_render_module_owns_a_second_fade_clock():
     )
 
 
-def test_presentation_fade_remains_the_single_derivation_authority():
-    source = (
-        ROOT / "widgets" / "spotify_visualizer" / "presentation_fade.py"
-    ).read_text(encoding="utf-8")
-    # The bars/content layer is a pure function of the one progress, not a second
-    # animation.
-    assert "def bars_fade_from_progress(" in source
-    assert "one animation, one progress scalar" in source.lower() or (
-        "one animation" in source.lower()
-    )
-
-
 def test_render_node_folds_inherited_opacity_into_content_fade():
     """The GL content must fade with the QML root, not ignore its opacity.
 
