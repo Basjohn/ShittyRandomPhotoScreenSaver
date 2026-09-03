@@ -83,6 +83,15 @@ scene dt_max_ms=171.16
 
 This is direct same-window evidence. The existing conservative `RuntimeGCPolicy` therefore remains an unfinished performance owner, not a closed subject. Fix the allocation/lifetime cause or safe collection scheduling/ownership; do not merely push collection indefinitely or suppress evidence.
 
+#### Attribution 2026-09-03 (headless, `tools/gc_gen2_attribution_harness.py`)
+
+- **Gen2 cost is O(retained tracked container objects), linear** (~61 ms per 1M tracked objects on this box: 35K -> 2.8 ms, 1.6M -> 100 ms). So the operator's 142 ms scan implies ~2.3M tracked objects and the in-situ 56 ms scan ~0.9M. **The retained set is the cost driver, not per-frame churn.**
+- **The Bubble tick is not the driver.** Driving the real `BubbleFrameRuntime.advance()` for 900 ticks nets only ~+1.5 *retained* tracked objects/tick (~+53 transient/tick, collected at gen0). The tick's allocations are modest and short-lived; they only affect gen2 *trigger frequency* (~every ~100 s at the runtime thresholds), not its cost.
+- **`gc.freeze()` is the lever and is essentially free.** It splices the current generation lists into a permanent generation in O(1) (~0.01 ms for 2M objects) that future collections never scan. Post-freeze, a gen2 scan traverses only post-freeze objects (0.00-0.28 ms in the harness). It does not disable GC and does not hide leaks: objects allocated after the freeze are collected normally, so a post-freeze leak stays visible; only a bounded startup/steady-state snapshot is pinned (freed at `gc.unfreeze()` on RUN stop).
+- **It must be called from a normal (non-collection) context.** Freezing from inside a gc `stop` callback captured only a partial set (5,431 of 200K), so the freeze must run once from a normal call site after warmup, not from the gc callback.
+
+**Proposed fix (pending in-situ validation):** freeze the stable generation once, shortly after startup warms (structure + scene + first image/cache cycle), and `gc.unfreeze()` on RUN stop. Because freeze is free and reversible and cannot hide leaks, the only open question is *benefit* — whether the retained set is stable (freeze holds) or grows (a leak; the separate resource-plateau concern). **Gen2 duration is itself the tracked-object proxy**, so a longer `--perf --viz` run (several gen2 collections) validates stability before/after: stable durations -> safe and beneficial; rising durations -> growth to investigate first. Do not implement the `RuntimeGCPolicy` freeze until that in-situ lifetime evidence is captured.
+
 ### P0 lead C — first-frame publication has a separate one-shot stall
 
 The initial Bubble tick recorded:
