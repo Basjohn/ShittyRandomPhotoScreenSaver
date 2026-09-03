@@ -1,33 +1,40 @@
 {
   "format": "srpss-godzip",
   "version": 1,
-  "generated_at_utc": "2026-09-03T15:01:24.619227Z",
+  "generated_at_utc": "2026-09-03T15:55:00Z",
   "repo_name": "ShittyRandomPhotoScreenSaver",
-  "source_head": "5d329d751d78e09f378e294923e12d0e0a95d869",
+  "source_head": "538a7a472f3ccf778668dd070f9b224e3abb9c11",
   "source_branch": "main",
   "dirty_worktree": true,
   "archive_scope": "manifest_file_set",
   "omission_means_delete": false,
   "files": [
     {
+      "path": ".gitignore",
+      "action": "replace_file",
+      "sha256": "c2e893c372bb95559ec3c4f8e36791b4c618743821368eb03104da2017169176",
+      "size": 3672,
+      "source_status": "MODIFIED"
+    },
+    {
       "path": "tools/godzip_foundry.py",
       "action": "replace_file",
-      "sha256": "e4ce8d2f43e82744f9057e6c64973e68be9242aacd6999730ef0f4a5c27599e4",
-      "size": 93345,
+      "sha256": "03cd825122def3dfef5e56778f673b26d6b594faca6cd806bdb91748fa272db8",
+      "size": 107913,
       "source_status": "MODIFIED"
     },
     {
       "path": "tools/godzip_foundry_core.py",
       "action": "replace_file",
-      "sha256": "25435d65236dcb10ff7c894f1e56ee88468e201c81140bbf93321411e7bac301",
-      "size": 60667,
+      "sha256": "a9e973e1f6391206a5032e648218816b13128408bd9bd96866a5b3e0a30b22c9",
+      "size": 76187,
       "source_status": "MODIFIED"
     },
     {
       "path": "tests/test_godzip_foundry_core.py",
       "action": "replace_file",
-      "sha256": "c1c957c9a2cd51d6ab5d8d1a17827ef9536eb84a639bf360b8ae3bb18cb07500",
-      "size": 17579,
+      "sha256": "939c5007b9958f35c3253ebe44563cf1705301d12d83b6d9856ea6c048aa1513",
+      "size": 22853,
       "source_status": "MODIFIED"
     }
   ],

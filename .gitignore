@@ -218,7 +218,10 @@ output/
 *.rej
 *~
 
-# GODZIP Foundry repo-local state and debris staging
+# GODZIP archive metadata, Foundry repo-local state and debris staging
+/.godzip/
 /.godzip_foundry/
 /deleteme/
+*.godzip
+.godzip/manifest.json
 

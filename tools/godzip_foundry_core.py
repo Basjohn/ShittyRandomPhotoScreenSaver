@@ -129,7 +129,9 @@ class ArchiveInspection:
     source_branch: str = ""
     dirty_worktree: bool = False
     relation: str = "unknown"
-    relation_detail: str = "Archive age cannot be proven."
+    relation_detail: str = "Archive baseline applicability cannot be proven."
+    baseline_relation: str = "unknown"
+    history_overlap_paths: list[str] = field(default_factory=list)
     legacy: bool = False
     legacy_common_prefix: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -140,7 +142,24 @@ class ArchiveInspection:
 
     @property
     def proven_older(self) -> bool:
-        return self.relation == "older"
+        """Compatibility shim: baseline ancestry alone is no longer an apply blocker."""
+        return False
+
+    def selection_requires_history_ack(
+        self,
+        selected_targets: Sequence[str],
+        selected_debris: Sequence[str] = (),
+    ) -> bool:
+        selected = {validate_repo_relpath(path).casefold() for path in selected_targets}
+        selected.update(validate_debris_relpath(path).casefold() for path in selected_debris)
+        if not selected:
+            return False
+        if self.baseline_relation in {"newer", "diverged"}:
+            return True
+        if self.baseline_relation != "older":
+            return False
+        overlap = {path.casefold() for path in self.history_overlap_paths}
+        return bool(selected & overlap)
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,6 +238,21 @@ class LogzipResult:
     files: tuple[str, ...]
 
 
+def _hidden_subprocess_kwargs() -> dict[str, object]:
+    """Hide internal console programs on Windows. RUN launches are handled separately."""
+    if os.name != "nt":
+        return {}
+    creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000))
+    kwargs: dict[str, object] = {"creationflags": creationflags}
+    startupinfo_cls = getattr(subprocess, "STARTUPINFO", None)
+    if startupinfo_cls is not None:
+        startupinfo = startupinfo_cls()
+        startupinfo.dwFlags |= int(getattr(subprocess, "STARTF_USESHOWWINDOW", 0x00000001))
+        startupinfo.wShowWindow = int(getattr(subprocess, "SW_HIDE", 0))
+        kwargs["startupinfo"] = startupinfo
+    return kwargs
+
+
 def _run_git(repo_root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[bytes]:
     try:
         return subprocess.run(
@@ -227,6 +261,7 @@ def _run_git(repo_root: Path, *args: str, check: bool = True) -> subprocess.Comp
             stderr=subprocess.PIPE,
             check=check,
             timeout=30,
+            **_hidden_subprocess_kwargs(),
         )
     except FileNotFoundError as exc:
         raise GodzipError("git.exe is not available on PATH") from exc
@@ -253,6 +288,7 @@ def _run_git_text(
             text=True,
             encoding="utf-8",
             errors="replace",
+            **_hidden_subprocess_kwargs(),
         )
     except FileNotFoundError as exc:
         raise GodzipError("git.exe is not available on PATH") from exc
@@ -396,6 +432,15 @@ def validate_repo_relpath(raw: str, *, allow_metadata: bool = False) -> str:
         raise GodzipError(f"Reserved path cannot be a repository target: {normalized}")
     return normalized
 
+def validate_debris_relpath(raw: str) -> str:
+    """Validate a reversible debris target, allowing stale .godzip metadata cleanup."""
+    normalized = validate_repo_relpath(raw, allow_metadata=True)
+    lower = normalized.casefold()
+    forbidden = (".git/", ".git", ".godzip_foundry/", ".godzip_foundry", "deleteme/", "deleteme")
+    if any(lower == item or lower.startswith(item) for item in forbidden):
+        raise GodzipError(f"Reserved path cannot be moved as debris: {normalized}")
+    return normalized
+
 
 def _is_zip_symlink(info: zipfile.ZipInfo) -> bool:
     mode = (info.external_attr >> 16) & 0xFFFF
@@ -463,7 +508,7 @@ def build_manifest(
     debris: list[dict] = []
     debris_seen: set[str] = set()
     for item in debris_entries:
-        rel = validate_repo_relpath(str(item.get("path", "")))
+        rel = validate_debris_relpath(str(item.get("path", "")))
         key = rel.casefold()
         if key in debris_seen:
             continue
@@ -542,21 +587,29 @@ def _git_commit_exists(repo_root: Path, sha: str) -> bool:
 
 
 def compare_source_head(repo_root: Path, source_head: str) -> tuple[str, str]:
+    """Compare baseline commits only; this does NOT decide whether archive bytes are stale."""
     source_head = str(source_head or "").strip()
     local_head = git_head(repo_root)
     if not source_head:
-        return "unknown", "Archive has no source HEAD."
+        return "unknown", "Archive has no baseline HEAD."
     if source_head == local_head:
-        return "same", f"Archive source HEAD matches local HEAD ({local_head[:10]})."
+        return "same", f"Archive baseline HEAD matches local HEAD ({local_head[:10]})."
     if not _git_commit_exists(repo_root, source_head):
-        return "unknown", f"Archive source commit {source_head[:10]} is not known locally; age cannot be proven."
+        return "unknown", f"Archive baseline commit {source_head[:10]} is not known locally; ancestry cannot be proven."
     older = _run_git(repo_root, "merge-base", "--is-ancestor", source_head, local_head, check=False)
     if older.returncode == 0:
-        return "older", f"Archive source {source_head[:10]} is an ancestor of local HEAD {local_head[:10]} — proven older."
+        return "older", f"Archive baseline {source_head[:10]} is an ancestor of local HEAD {local_head[:10]}."
     newer = _run_git(repo_root, "merge-base", "--is-ancestor", local_head, source_head, check=False)
     if newer.returncode == 0:
-        return "newer", f"Local HEAD {local_head[:10]} is an ancestor of archive source {source_head[:10]} — archive is newer."
-    return "diverged", f"Archive source {source_head[:10]} and local HEAD {local_head[:10]} have diverged."
+        return "newer", f"Archive baseline {source_head[:10]} is newer than local HEAD {local_head[:10]}."
+    return "diverged", f"Archive baseline {source_head[:10]} and local HEAD {local_head[:10]} have diverged."
+
+
+def _committed_changed_paths(repo_root: Path, base_head: str, local_head: str) -> set[str]:
+    if not base_head or not local_head or base_head == local_head:
+        return set()
+    raw = _run_git(repo_root, "diff", "--name-only", "-z", f"{base_head}..{local_head}").stdout
+    return {path.replace("\\", "/") for path in _zlist(raw)}
 
 
 def _load_manifest_from_archive(
@@ -674,7 +727,7 @@ def inspect_godzip(
         inspection.source_head = str(manifest.get("source_head", "") or "")
         inspection.source_branch = str(manifest.get("source_branch", "") or "")
         inspection.dirty_worktree = bool(manifest.get("dirty_worktree", False))
-        inspection.relation, inspection.relation_detail = compare_source_head(repo_root, inspection.source_head)
+        inspection.baseline_relation, baseline_detail = compare_source_head(repo_root, inspection.source_head)
 
         target_seen: set[str] = set()
         for record in manifest.get("files", []):
@@ -722,7 +775,7 @@ def inspect_godzip(
                 raise GodzipError("Manifest debris entry must be an object")
             if entry.get("action", "move_to_deleteme") != "move_to_deleteme":
                 raise GodzipError(f"Unsupported debris action: {entry.get('action')!r}")
-            rel = validate_repo_relpath(str(entry.get("path", "")))
+            rel = validate_debris_relpath(str(entry.get("path", "")))
             key = rel.casefold()
             if key in debris_seen:
                 continue
@@ -741,8 +794,48 @@ def inspect_godzip(
                     raise GodzipError(
                         f"Manifest conflict: {debris.path} is debris but overlaps replacement {target.as_posix()}"
                     )
+        local_head = git_head(repo_root)
+        if inspection.baseline_relation == "same":
+            inspection.relation = "same"
+            inspection.relation_detail = baseline_detail
+        elif inspection.baseline_relation == "older":
+            changed = _committed_changed_paths(repo_root, inspection.source_head, local_head)
+            archive_paths = {item.target_path for item in inspection.files} | {item.path for item in inspection.debris}
+            overlap = sorted(archive_paths & changed, key=str.casefold)
+            inspection.history_overlap_paths = overlap
+            if overlap:
+                inspection.relation = "conflict"
+                inspection.relation_detail = (
+                    f"Archive baseline {inspection.source_head[:10]} predates local HEAD {local_head[:10]}, "
+                    f"and {len(overlap)} archive target(s) were also changed by newer local commits. "
+                    "The archive itself is not assumed stale; review overlapping targets before applying."
+                )
+                preview = ", ".join(overlap[:5])
+                if len(overlap) > 5:
+                    preview += f", +{len(overlap) - 5} more"
+                inspection.warnings.append(f"Committed-history overlap: {preview}")
+            else:
+                inspection.relation = "compatible"
+                inspection.relation_detail = (
+                    f"Archive baseline {inspection.source_head[:10]} predates local HEAD {local_head[:10]}, "
+                    "but newer commits do not touch any file/debris target carried by this partial GODZIP. "
+                    "No committed-history conflict was found."
+                )
+        elif inspection.baseline_relation == "newer":
+            inspection.relation = "future"
+            inspection.relation_detail = (
+                f"Archive baseline {inspection.source_head[:10]} is newer than local HEAD {local_head[:10]}. "
+                "Applying selected targets may depend on commits not present locally."
+            )
+        elif inspection.baseline_relation == "diverged":
+            inspection.relation = "diverged"
+            inspection.relation_detail = baseline_detail + " Review every selected target before applying."
+        else:
+            inspection.relation = "unknown"
+            inspection.relation_detail = baseline_detail
+
         if inspection.dirty_worktree:
-            inspection.warnings.append("Archive was produced from a dirty worktree; source HEAD is a base identity, not a content identity.")
+            inspection.warnings.append("Archive was produced from a dirty worktree; baseline HEAD identifies ancestry, not the archive file bytes.")
         return inspection
 
 
@@ -780,11 +873,11 @@ def apply_godzip(
     *,
     selected_debris: Sequence[str] = (),
     create_rollback_snapshot: bool = True,
-    allow_proven_older: bool = False,
+    allow_history_conflict: bool = False,
 ) -> ApplyResult:
     repo_root = repo_root.resolve()
-    if inspection.proven_older and not allow_proven_older:
-        raise GodzipError("This GODZIP is proven older than local HEAD; explicit override is required")
+    if inspection.selection_requires_history_ack(selected_targets, selected_debris) and not allow_history_conflict:
+        raise GodzipError("Selected GODZIP targets overlap incompatible/newer commit history; explicit review is required")
 
     file_by_target = {item.target_path: item for item in inspection.files}
     targets: list[ArchiveFile] = []
@@ -801,7 +894,7 @@ def apply_godzip(
     debris_paths: list[str] = []
     debris_seen: set[str] = set()
     for raw in selected_debris:
-        rel = validate_repo_relpath(raw)
+        rel = validate_debris_relpath(raw)
         if rel not in debris_map:
             raise GodzipError(f"Selected debris entry is not present in manifest: {rel}")
         if rel.casefold() not in debris_seen:
@@ -811,7 +904,7 @@ def apply_godzip(
     if not targets and not debris_paths:
         raise GodzipError("Nothing is selected to apply")
 
-    # Re-inspect immediately before mutation so archive hashes and age warning are not stale.
+    # Re-inspect immediately before mutation so archive hashes and history applicability are not stale.
     fresh = inspect_godzip(
         repo_root,
         inspection.zip_path,
@@ -819,8 +912,8 @@ def apply_godzip(
             item.target_path != item.member_name for item in inspection.files
         )),
     )
-    if fresh.proven_older and not allow_proven_older:
-        raise GodzipError("This GODZIP is now proven older than local HEAD; explicit override is required")
+    if fresh.selection_requires_history_ack(selected_targets, selected_debris) and not allow_history_conflict:
+        raise GodzipError("Selected GODZIP targets now overlap incompatible/newer commit history; explicit review is required")
     fresh_by_target = {item.target_path: item for item in fresh.files}
     fresh_debris = {item.path for item in fresh.debris}
     for rel in debris_paths:
@@ -973,7 +1066,7 @@ def move_paths_to_deleteme(
     normalized: list[str] = []
     seen: set[str] = set()
     for raw in paths:
-        rel = validate_repo_relpath(raw)
+        rel = validate_debris_relpath(raw)
         key = rel.casefold()
         if key not in seen:
             seen.add(key)
@@ -999,7 +1092,7 @@ def write_debris_manifest(path: Path, paths: Sequence[str], *, reasons: Mapping[
     seen: set[str] = set()
     reasons = reasons or {}
     for raw in paths:
-        rel = validate_repo_relpath(raw)
+        rel = validate_debris_relpath(raw)
         if rel.casefold() in seen:
             continue
         seen.add(rel.casefold())
@@ -1045,7 +1138,7 @@ def read_debris_manifest(path: Path) -> list[dict[str, str]]:
     for entry in entries:
         if not isinstance(entry, dict):
             raise GodzipError("Debris entry must be an object")
-        rel = validate_repo_relpath(str(entry.get("path", "")))
+        rel = validate_debris_relpath(str(entry.get("path", "")))
         result.append({"path": rel, "reason": str(entry.get("reason", "") or "")})
     return result
 
