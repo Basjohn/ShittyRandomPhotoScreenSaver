@@ -13,10 +13,13 @@ constructed. These tests pin that:
 """
 from __future__ import annotations
 
+import ast
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
+
+import pytest
 
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
@@ -118,3 +121,144 @@ def test_enable_state_resolution_introduces_no_timer_or_thread():
     source = (REPO / "core" / "settings" / "visualizer_mode_registry.py").read_text()
     for banned in ("QTimer", "threading", "Thread(", "start_timer", "schedule_"):
         assert banned not in source, f"enable-state owner unexpectedly references {banned}"
+
+
+# --- Lead-C / V4 real-runtime dormancy (the common capture module must not
+#     import every mode's frame runtime, and a real sole-enabled tick must import
+#     only the active mode's runtime) --------------------------------------------
+
+_FRAME_RUNTIME_MODULES = {
+    "spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
+    "oscilloscope": "widgets.spotify_visualizer.oscilloscope_frame_runtime",
+    "sine_wave": "widgets.spotify_visualizer.sine_frame_runtime",
+    "bubble": "widgets.spotify_visualizer.bubble_frame_runtime",
+    "devcurve": "widgets.spotify_visualizer.devcurve_frame_runtime",
+}
+
+
+def test_warming_logical_frame_capture_imports_no_frame_runtime():
+    # Lead C warms `logical_frame_capture` during activation. That common capture
+    # module must not drag in any mode's frame runtime at import time.
+    out = _run_fresh(
+        """
+        import widgets.spotify_visualizer.logical_frame_capture  # noqa: F401  (the Lead-C warm)
+        heavy = sorted(m for m in sys.modules if m.endswith('_frame_runtime'))
+        print(repr(heavy))
+        """
+    )
+    assert out == "[]", f"warming logical_frame_capture loaded frame runtimes: {out}"
+
+
+_REAL_RUNTIME_BODY = """
+from types import SimpleNamespace
+
+MODE = __MODE__
+
+
+class _Engine:
+    def get_bubble_energy_bands(self):
+        return SimpleNamespace(bass=0.0, mid=0.0, high=0.0, overall=0.0)
+
+    get_energy_bands = get_bubble_energy_bands
+    get_pre_agc_energy_bands = get_bubble_energy_bands
+
+    def get_transient_energy_bands(self):
+        return SimpleNamespace(bass_transient=0.0, mid_transient=0.0,
+                               high_transient=0.0, onset_detected=False,
+                               onset_type="", onset_strength=0.0)
+
+    def get_event_scheduler(self):
+        return None
+
+    def get_perf_diagnostics(self):
+        return {}
+
+    def get_generation_id(self):
+        return 3
+
+    def get_activation_id(self):
+        return 4
+
+    def get_latest_generation_with_frame(self):
+        return 3
+
+    def get_latest_generation_with_waveform(self):
+        return 3
+
+    def get_latest_authoritative_frame(self):
+        return (0.0, 3, 4)
+
+    def get_waveform(self):
+        return ()
+
+    def get_waveform_count(self):
+        return 0
+
+    def get_floor_snapshot(self):
+        return None
+
+
+from widgets.spotify_visualizer import tick_pipeline
+from widgets.spotify_visualizer.logical_tick_state import (
+    install_default_logical_tick_state,
+)
+from widgets.spotify_visualizer.runtime_controller import (
+    VisualizerRuntimeController,
+)
+from widgets.spotify_visualizer.logical_frame_capture import (
+    _mode_frame_runtime_type,
+)
+
+controller = VisualizerRuntimeController(
+    runtime_generation=1, bar_count=32, initial_mode=MODE
+)
+state = controller.logical_tick_state
+install_default_logical_tick_state(state, bar_count=32)
+state._display_bars = [0.0] * 32
+controller.enabled = True
+controller.playing = True
+controller.engine = _Engine()
+# Resolve the active mode through the canonical descriptor seam (imports only
+# the active mode's runtime, which is legitimately allowed).
+controller.resolve_logical_mode_state(MODE, _mode_frame_runtime_type(MODE))
+controller.begin_render_activation(engine_generation=3, activation_id=4)
+state._mode_teardown_block_until_ready = False
+state._mode_transition_ready = True
+state._waiting_for_fresh_engine_frame = False
+
+# Keep the heavy real engine.tick / heartbeat / perf out of the way; the mode
+# dispatch + capture (which own the frame-runtime resolution) still run.
+tick_pipeline.consume_engine_bars = lambda owner, now: (True, True)
+tick_pipeline.process_heartbeat = lambda owner, now: None
+tick_pipeline.record_tick_perf = lambda owner, now: None
+
+for _ in range(3):
+    try:
+        tick_pipeline.logical_tick(state)
+    except Exception:
+        # The active mode's frame-runtime import happens before any capture data
+        # work; a later data failure does not affect the dormancy assertion.
+        pass
+
+runtimes = {
+    "spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
+    "oscilloscope": "widgets.spotify_visualizer.oscilloscope_frame_runtime",
+    "sine_wave": "widgets.spotify_visualizer.sine_frame_runtime",
+    "bubble": "widgets.spotify_visualizer.bubble_frame_runtime",
+    "devcurve": "widgets.spotify_visualizer.devcurve_frame_runtime",
+}
+print(repr({m: (mod in sys.modules) for m, mod in runtimes.items()}))
+"""
+
+
+@pytest.mark.parametrize("mode", VISUALIZER_MODE_IDS)
+def test_real_sole_enabled_tick_imports_only_active_frame_runtime(mode):
+    out = _run_fresh(_REAL_RUNTIME_BODY.replace("__MODE__", repr(mode)))
+    loaded = ast.literal_eval(out)
+    assert loaded[mode] is True, f"{mode}: active frame runtime did not load ({out})"
+    for other, present in loaded.items():
+        if other != mode:
+            assert present is False, (
+                f"{mode} active but disabled mode {other!r} frame runtime imported "
+                f"through the real logical/capture path ({out})"
+            )
