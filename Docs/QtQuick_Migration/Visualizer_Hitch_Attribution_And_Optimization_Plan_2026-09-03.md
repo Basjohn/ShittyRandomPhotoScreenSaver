@@ -62,6 +62,15 @@ Fix (landed): `ProcessUsageCollector` now refreshes those two GIL-held system-wi
 
 Lead B (Gen2 GC) is the same stop-the-world class but is active in **every** RUN-lifetime run and remains the real production owner; its cause (allocation churn) is a separate attribution task and must precede any `RuntimeGCPolicy` change.
 
+##### In-situ confirmation — `main_mc.py --usage --viz --perf`, 2026-09-03 03:07:46-03:09:46 (music playing)
+
+A real 120 s capture confirmed the fix and cleaned up attribution:
+
+- Usage samples seq 2-8 (the light samples) cost 21-44 ms wall-time but produced **zero** `Tick dt spike`s — down from the pre-fix *10 of 13 spikes coincident every 15 s*. `threads_app` correctly held at 93 across the light samples and re-measured to 95 at the next heavy sample (seq 9), proving the partition and carry-forward live.
+- In the real (loaded) process, `memory_full_info()`/USS dominates light-sample wall-time (~20-40 ms) — much larger than the ~2 ms seen against a tiny headless process — but it **releases the GIL** during `QueryWorkingSetEx`, so it does not stall the logical thread (seq 4's 44 ms collect caused no spike). USS therefore stays per-sample; memory/leak fidelity is unchanged.
+- Only the every-8th **heavy** sample still coincides with a spike (seq 9, 137 ms collect -> 44 ms spike, ~once per 2 min, `--usage` only). Acceptable residual; could be split/rarefied later if it ever muddies an attribution run.
+- The one **steady-state** spike in the window was `03:09:03 bubble 60.13 ms`, coincident with `GC generation=2 duration_ms=56.62 collected=34` — clean lead B evidence, now no longer buried under usage-sampler noise. Three more spikes were the startup cluster (03:07:51-54, lead C).
+
 ### P0 lead B — Gen2 GC is a proven independent hitch owner
 
 At `01:34:48`:
