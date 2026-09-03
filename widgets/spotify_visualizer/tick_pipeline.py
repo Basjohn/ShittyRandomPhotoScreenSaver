@@ -54,6 +54,50 @@ def _ensure_fresh_generation_state(widget: Any) -> None:
         widget._pending_engine_activation_id = -1
     if not hasattr(widget, "_last_engine_activation_seen"):
         widget._last_engine_activation_seen = -1
+    if not hasattr(widget, "_pending_engine_frame_epoch"):
+        # Lead E1: <0 means "no post-re-entry watermark", i.e. the generation-only
+        # fence clear applies unchanged (mode-change and steady-state paths).
+        widget._pending_engine_frame_epoch = -1
+
+
+def arm_reentry_fresh_frame_fence(state: Any, engine: Any) -> bool:
+    """Arm the fresh-engine-frame fence for a warm re-entry (recreation/resume).
+
+    The shared beat engine is persistent: it retains its last committed frame
+    across owner recreation and across a pause. On a same-generation re-entry
+    that retained frame satisfies the generation-only clear condition, so without
+    a per-commit watermark it would be admitted as the first reactive result
+    (a flash of seconds-old audio energy). Arm the fence with the engine's current
+    authoritative commit sequence so the fence only clears on a frame committed
+    *after* this call.
+
+    Cold engines (no frame ever committed, ts == 0) are deliberately left unfenced
+    so the cold-start reveal / black-flash path is byte-for-byte unchanged.
+    Returns True when the fence was armed with a watermark.
+    """
+
+    _ensure_fresh_generation_state(state)
+    try:
+        latest_ts, _gen, _act = engine.get_latest_authoritative_frame()
+    except Exception:
+        return False
+    if not (isinstance(latest_ts, (int, float)) and float(latest_ts) > 0.0):
+        # Cold engine: nothing retained to guard against; preserve prior behavior.
+        state._waiting_for_fresh_engine_frame = False
+        state._pending_engine_frame_epoch = -1
+        return False
+    try:
+        state._pending_engine_generation = int(engine.get_generation_id())
+        state._pending_engine_activation_id = int(engine.get_activation_id())
+        state._pending_engine_frame_epoch = int(
+            engine.get_authoritative_frame_commit_seq()
+        )
+    except Exception:
+        state._waiting_for_fresh_engine_frame = False
+        state._pending_engine_frame_epoch = -1
+        return False
+    state._waiting_for_fresh_engine_frame = True
+    return True
 
 
 def _mode_requires_fresh_waveform(mode_str: str) -> bool:
@@ -1076,6 +1120,7 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     ):
         widget._waiting_for_fresh_engine_frame = False
         widget._pending_engine_generation = -1
+        widget._pending_engine_frame_epoch = -1
 
     if widget._waiting_for_fresh_engine_frame and widget._pending_engine_generation >= 0:
         try:
@@ -1097,8 +1142,27 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
             except Exception:
                 latest_waveform_gen = -1
             waveform_ready = latest_waveform_gen >= widget._pending_engine_generation
-        if latest_gen >= widget._pending_engine_generation and waveform_ready and activation_ready:
+        # Lead E1: on a warm re-entry (recreation/resume) the retained frame shares
+        # the current generation, so a generation-only clear would admit it. When a
+        # post-re-entry commit-seq watermark is armed, additionally require a frame
+        # the engine committed *after* re-entry (strictly newer commit sequence).
+        # A <0 watermark (mode-change / steady-state) leaves the check unchanged.
+        frame_epoch_ready = True
+        pending_epoch = int(getattr(widget, "_pending_engine_frame_epoch", -1))
+        if pending_epoch >= 0:
+            try:
+                current_epoch = int(engine.get_authoritative_frame_commit_seq())
+            except Exception:
+                current_epoch = -1
+            frame_epoch_ready = current_epoch > pending_epoch
+        if (
+            latest_gen >= widget._pending_engine_generation
+            and waveform_ready
+            and activation_ready
+            and frame_epoch_ready
+        ):
             widget._waiting_for_fresh_engine_frame = False
+            widget._pending_engine_frame_epoch = -1
             widget._last_engine_generation_seen = latest_gen
             widget._last_engine_activation_seen = engine_activation_id
             logger.debug(

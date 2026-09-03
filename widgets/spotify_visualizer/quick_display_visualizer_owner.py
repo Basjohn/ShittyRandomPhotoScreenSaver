@@ -226,7 +226,18 @@ class QuickDisplayVisualizerOwner:
         )
         state._mode_teardown_block_until_ready = False
         state._mode_transition_ready = True
-        state._waiting_for_fresh_engine_frame = False
+        # Lead E1: a persistent (shared) beat engine keeps its last committed frame
+        # across owner recreation. On a same-generation warm re-entry that retained
+        # frame would satisfy the generation-only fresh-frame fence and be admitted
+        # as the first reactive result (a flash of seconds-old audio energy). Arm
+        # the fence with a commit-seq watermark so only a frame committed after this
+        # re-entry is accepted. A cold engine (no prior frame) is left unfenced, so
+        # cold start is byte-for-byte unchanged.
+        from widgets.spotify_visualizer.tick_pipeline import (
+            arm_reentry_fresh_frame_fence,
+        )
+
+        arm_reentry_fresh_frame_fence(state, engine)
 
     def bind(self, *, engine_generation: int, activation_id: int) -> Any:
         if self._retired:
@@ -314,6 +325,16 @@ class QuickDisplayVisualizerOwner:
         if not callable(set_playback_state):
             raise RuntimeError("visualizer BeatEngine has no playback-state authority")
         set_playback_state(active)
+        if active and not previous:
+            # Lead E1: warm resume must not admit the pre-pause retained frame as
+            # the first reactive result. Arm the commit-seq watermark so the first
+            # accepted reactive frame is one the engine committed after this resume
+            # edge. Cold engines are left unfenced (see the helper).
+            from widgets.spotify_visualizer.tick_pipeline import (
+                arm_reentry_fresh_frame_fence,
+            )
+
+            arm_reentry_fresh_frame_fence(controller.logical_tick_state, engine)
         if edge_seq > 0:
             committed_ts = time.time()
             warm_resume = bool(

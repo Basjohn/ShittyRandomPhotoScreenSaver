@@ -187,6 +187,12 @@ class _SpotifyBeatEngine(QObject):
         self._latest_authoritative_frame_ts: float = 0.0
         self._latest_authoritative_frame_generation: int = -1
         self._latest_authoritative_frame_activation: int = -1
+        # Lead E1: monotonic count of authoritative frames this engine has ever
+        # committed. Never reset (not even on generation advance), so a warm
+        # re-entry (recreation/resume) can watermark "a frame committed after
+        # this point" and refuse to present the persistent engine's retained
+        # pre-re-entry frame as its first reactive result.
+        self._authoritative_frame_commit_seq: int = 0
 
         # Waveform buffer for oscilloscope visualizer (last 256 raw samples)
         self._waveform: List[float] = [0.0] * 256
@@ -950,6 +956,7 @@ class _SpotifyBeatEngine(QObject):
             self._latest_authoritative_frame_ts = float(timestamp)
             self._latest_authoritative_frame_generation = self._generation_id
             self._latest_authoritative_frame_activation = self._activation_id
+            self._authoritative_frame_commit_seq += 1
         if isinstance(energy, EnergyBands):
             self._energy_bands = energy
         if waveform is not None:
@@ -1084,6 +1091,15 @@ class _SpotifyBeatEngine(QObject):
             self._latest_authoritative_frame_generation,
             self._latest_authoritative_frame_activation,
         )
+
+    def get_authoritative_frame_commit_seq(self) -> int:
+        """Monotonic count of authoritative frames committed for the engine's life.
+
+        Never reset (generation advance included). Used as a re-entry watermark so
+        a warm recreation/resume accepts only a frame committed after re-entry,
+        not the retained pre-re-entry frame that shares the current generation.
+        """
+        return self._authoritative_frame_commit_seq
 
     def get_latest_generation_with_waveform(self) -> int:
         return self._latest_generation_with_waveform
