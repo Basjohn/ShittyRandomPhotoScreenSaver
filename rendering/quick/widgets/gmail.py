@@ -553,13 +553,16 @@ class GmailPresentationModel(QObject):
 
     def _project_runtime_snapshot(self, snapshot: GmailRuntimeSnapshot) -> None:
         config = self.config
-        candidates = list(snapshot.emails[: config.limit])
         if snapshot.error is not None:
             display_rows = ()
         elif config.group_threads:
-            display_rows = group_emails(candidates)[: config.limit]
+            # ``limit`` is a visible-row contract, not a pre-group source-message
+            # budget. Group the accepted shared inbox window first, then cap the
+            # resulting rows so a six-message conversation does not silently turn
+            # a requested 10-row widget into only five visible entries.
+            display_rows = group_emails(list(snapshot.emails))[: config.limit]
         else:
-            display_rows = candidates
+            display_rows = list(snapshot.emails[: config.limit])
         rows = []
         for item in display_rows:
             email = item.email if hasattr(item, "email") else item

@@ -330,9 +330,10 @@ OverlayWidget {
                             asynchronous: true
                             cache: true
                             // The archive transition commits the new model at
-                            // parent opacity zero; do not waste 200 ms fading an
-                            // already-invisible old texture before loading new art.
-                            fadeOutDuration: archiveContent.opacity <= 0.001 ? 0 : 200
+                            // parent opacity zero. The shared primitive now loads
+                            // replacement art without first fading out the old
+                            // texture, so skip only the redundant hidden fade-in.
+                            fadeInDuration: archiveContent.opacity <= 0.001 ? 0 : 340
                             layer.enabled: true
                             layer.effect: MultiEffect {
                                 maskEnabled: true

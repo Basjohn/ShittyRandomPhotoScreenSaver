@@ -103,36 +103,6 @@ Two real runs validated it:
 
 Lead B is resolved: the recurring Gen2 stop-the-world stall on the pure-Python cadence thread is eliminated with no cadence/amplitude/motion change and no GC disablement.
 
-#### Lead B follow-up (2026-09-04) — the *first* gen2 was racing the freeze
-
-Both pre-E and post-E1 runs under realistic load show the **first** expensive gen2
-landing a few seconds *before* the fixed 45 s freeze (latest example ~124 ms
-immediately before freeze; post-freeze gen2 were ~10-21 ms). The freeze timing
-assumption ("first gen2 ~66 s, stable by ~30 s, so 45 s is safe") held for the
-lighter stability run but not under heavier load, where allocation reaches the
-gen2 trigger (`derive_runtime_thresholds` full=50) at ~43 s and can win the race.
-
-The wasteful part is specific: that first pre-freeze gen2 merely **rescans the
-long-lived set that the freeze is about to pin, and frees ~nothing**
-(`collected≈0`). And `gc.freeze()` pins everything currently tracked regardless of
-whether a gen2 ran first — so skipping that scan changes *nothing* about the
-frozen set. This makes the fix contract-neutral rather than a lifetime change.
-
-**Fix (implemented + headless-green, `tests/test_runtime_perf_policy_contracts.py`):**
-`RuntimeGCPolicy.start()` now applies **warmup thresholds** that keep young/middle
-at the active cadence but raise only the gen2 (full) trigger by
-`_WARMUP_FULL_DEFERRAL` (×10), so the first gen2 cannot fire during the pre-freeze
-window under any realistic load. `freeze_stable_generation()` then `gc.freeze()`s
-the stable set **and restores the active thresholds**, so post-freeze objects
-(recreated runtime/display/Settings generations) collect on the normal cadence.
-The trigger is left finite (not disabled), so a run whose freeze never fires still
-collects gen2 on a bounded — if later — cadence rather than growing without limit.
-The frozen set is unchanged, the freeze lifetime contract is preserved, and the
-race is removed load-independently (vs. merely moving the fixed timer earlier,
-which stays fragile). **Physical acceptance owed:** confirm on a realistic-load
-run that no >100 ms pre-freeze gen2 appears and post-freeze cadence/memory match
-the prior good runs.
-
 ### P0 lead C — first-frame publication has a separate one-shot stall
 
 The initial Bubble tick recorded:
@@ -234,73 +204,6 @@ Effect: on warm recreation/resume the first reactive frame is guaranteed to be o
 engine committed after re-entry; the ~17-88 ms window holds quiet (fresh) state via the existing
 fenced-publish path (`logical_tick` ~1475) instead of flashing ~4 s-old energy. Cadence, generation
 fencing, and cold start are unchanged.
-
-#### E1 physical acceptance (2026-09-03 eyes-on, `--viz --perf`)
-
-**Physically green for its contract.** Repeated Settings recreation + pause/resume on Bubble across
-both displays: **no black screen and no stale-energy flash** — the retained pre-re-entry frame no
-longer gains visual authority. The only apparent cost is a small continuity change because the old
-stale-frame shortcut no longer masks the fresh-frame wait; comparable Bubble re-entry reached retained
-presentation only ~single-digit ms later than pre-E. Commits `5fd2fbde` (fix), `4cbd6a4d`/`09c3d436`
-(docs). The `[SPOTIFY_VIS][LATENCY] lag_ms=1233..5268 severity=high ... frame_generation=0` warnings
-seen at each admission are the **recreation-boundary telemetry artifact** the guardrail flags
-(Performance_Optimization_Contract §5 line 175): they observe the retained frame's stale timestamp
-*while the fence holds*; they are not a consumed-stale-frame nor a real multi-second stall. Do not
-revisit E1 without new evidence directly implicating it.
-
-### P0 lead E2 — fresh source -> retained Quick presentation/re-admission latency (ACTIVE)
-
-The larger remaining recreation opportunity. Post-E1 recreation samples still spend roughly
-**~60-100 ms (typ. ~70-75 ms)** between genuinely fresh authoritative source (T3) and first retained
-Quick presentation (T6). This is above the logical runtime, which stays broadly at authored cadence
-(`interval_ms=11.11`, `slow_steps=0`); the gap lives in render-bridge publish / Quick snapshot
-admission / retained presentation / runtime replacement, not in capture freshness.
-
-Attribution target (source-first; add narrow instrumentation only where T3/T4/T6 + recreation markers
-cannot separate the owner):
-
-- trace fresh authoritative source availability -> `publish_render_snapshot` / render-bridge
-  `begin_activation`+`publish` -> Quick item snapshot admission -> first painted retained frame;
-- look for unnecessary waits, serialization, reconstruction, queued/deferred work, duplicate ownership,
-  or avoidable generation-replacement cost across that boundary;
-- must not weaken freshness or generation/activation fencing, add cadence/queue owners, or accept stale.
-
-Path map (source-traced 2026-09-04). The retained presentation edge is a single
-GUI-side owner, not a queue:
-
-```text
-logical_tick (pure-Python ~90Hz) -> _publish_logical_state -> controller.logical_mailbox (latest-wins)
-  -> QuickFramePacer._service_deadline (QTimer @ target_hz) -> owner.sync_present -> QuickVisualizerPresentationSync.sync_latest:
-       mailbox.take() -> _identity_is_current(logical) vs controller.render_identity
-       -> resolve_presentation() -> controller.publish_render_snapshot -> VisualizerSnapshotBridge.publish  [T6]
-       -> commit_presentation + _request_present -> window.update()
-  -> (Quick render thread) VisualizerRenderItem.updatePaintNode -> bridge.take_for_render -> paint  [T7]
-```
-
-The bridge (`publish`/`take_for_render`) is an O(1) lock-guarded latest-wins slot,
-and the pacer runs at authored `target_hz` (~11 ms) — so steady-state T3->T6 is
-one-to-two cycles. A recreation-only ~70-75 ms therefore means `sync_latest` is
-**returning False (no publish) for several pacer cycles after fresh source**. The
-candidate owners the split must decide between:
-
-- **identity-alignment window** — `_identity_is_current` / `publish_render_snapshot`
-  reject until the freshly-bound `render_identity` and the new runtime's logical
-  frames agree (must not be "fixed" by weakening fencing);
-- **presentation-resolve gap** — `resolve_presentation()` returns None until the
-  new owner's geometry/scale/style resolves;
-- **pacer/first-opportunity latency** after admission;
-- **logical first-publish latency** on the freshly-started runtime.
-
-Existing T1..T7 markers only arm on a Play/Pause edge, so they cannot split a pure
-recreation. **Instrumentation added (diagnostics-only, 2026-09-04):**
-`begin_playback_edge` now takes a `kind` label (threaded into T3/T4/T5/T6), and a
-warm recreation arms it as `kind=recreation` from `_apply_configuration` (only when
-`arm_reentry_fresh_frame_fence` reports warm). The next `--viz` run then yields, per
-recreation: edge->T3 (fence/capture, the E1 window), T3->T5 (logical consume+publish),
-T5->T6 (pacer sync + bridge publish) — pinning which owner holds the ~70-75 ms. Any
-fix must preserve the fade-in transitions (`sync_present` phases / authored reveal)
-and generation/activation fencing; gentler/longer fades are acceptable, shorter are
-not.
 
 ### Resource observation — not yet leak evidence
 

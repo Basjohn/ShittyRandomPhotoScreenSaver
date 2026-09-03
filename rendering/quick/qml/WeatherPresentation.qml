@@ -9,6 +9,13 @@ OverlayWidget {
     signal settingsRequested(string target)
     signal refreshRequested()
 
+    // The QWidget Weather card's effective horizontal content edge was its
+    // 4 px frame plus 20 px root-layout margin. OverlayCard already contributes
+    // 14 px, so retain the missing 10 px here rather than globally perturbing
+    // every ordinary-widget family.
+    readonly property real legacyHorizontalInset: 10.0
+    readonly property real legacyTextInset: 6.0
+
     // Content-driven outer size (H option A). Width honours the historical
     // ordinary-card minimum footprint (BaseOverlayWidget.DEFAULT_CARD_MIN_WIDTH =
     // 600) and only enlarges above it when the intrinsic text/icon content
@@ -20,6 +27,8 @@ OverlayWidget {
         (weatherModel.showConditionIcon ? weatherModel.iconSize + 12.0 : 0.0)
             + Math.max(locationText.implicitWidth, conditionText.implicitWidth)
             + weatherRoot.shellInset
+            + 2.0 * weatherRoot.legacyHorizontalInset
+            + 2.0 * weatherRoot.legacyTextInset
     )
     preferredContentHeight: Math.max(
         60.0, readyColumn.childrenRect.height
@@ -39,9 +48,9 @@ OverlayWidget {
         Column {
             id: readyColumn
             objectName: "weatherReadyContent"
-            width: parent.width
+            width: Math.max(1.0, parent.width - 2.0 * weatherRoot.legacyHorizontalInset)
             anchors.centerIn: parent
-            spacing: 6.0
+            spacing: 4.0
             visible: weatherRoot.weatherModel.viewState === "ready"
 
             Item {
@@ -54,21 +63,25 @@ OverlayWidget {
                     primaryText.implicitHeight
                 )
 
-                Image {
+                Item {
                     id: leftConditionIcon
                     objectName: "weatherConditionIconLeft"
                     visible: weatherRoot.weatherModel.showConditionIcon
                         && weatherRoot.weatherModel.iconAlignment === "LEFT"
-                    source: visible ? weatherRoot.weatherModel.conditionIconSource : ""
-                    sourceSize.width: weatherRoot.weatherModel.iconSize
-                    sourceSize.height: weatherRoot.weatherModel.iconSize
                     width: visible ? weatherRoot.weatherModel.iconSize : 0.0
                     height: width
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    fillMode: Image.PreserveAspectFit
-                    asynchronous: false
-                    cache: true
+
+                    Image {
+                        anchors.fill: parent
+                        anchors.margins: 4.0
+                        source: leftConditionIcon.visible
+                            ? weatherRoot.weatherModel.conditionIconSource : ""
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: false
+                        cache: true
+                    }
                 }
 
                 Column {
@@ -76,10 +89,14 @@ OverlayWidget {
                     objectName: "weatherPrimaryText"
                     anchors.left: leftConditionIcon.visible
                         ? leftConditionIcon.right : parent.left
-                    anchors.leftMargin: leftConditionIcon.visible ? 14.0 : 0.0
+                    anchors.leftMargin: leftConditionIcon.visible
+                        ? 16.0 + weatherRoot.legacyTextInset
+                        : weatherRoot.legacyTextInset
                     anchors.right: rightConditionIcon.visible
                         ? rightConditionIcon.left : parent.right
-                    anchors.rightMargin: rightConditionIcon.visible ? 14.0 : 0.0
+                    anchors.rightMargin: rightConditionIcon.visible
+                        ? 16.0 + weatherRoot.legacyTextInset
+                        : weatherRoot.legacyTextInset
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 2.0
 
@@ -123,21 +140,25 @@ OverlayWidget {
                     }
                 }
 
-                Image {
+                Item {
                     id: rightConditionIcon
                     objectName: "weatherConditionIconRight"
                     visible: weatherRoot.weatherModel.showConditionIcon
                         && weatherRoot.weatherModel.iconAlignment === "RIGHT"
-                    source: visible ? weatherRoot.weatherModel.conditionIconSource : ""
-                    sourceSize.width: weatherRoot.weatherModel.iconSize
-                    sourceSize.height: weatherRoot.weatherModel.iconSize
                     width: visible ? weatherRoot.weatherModel.iconSize : 0.0
                     height: width
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    fillMode: Image.PreserveAspectFit
-                    asynchronous: false
-                    cache: true
+
+                    Image {
+                        anchors.fill: parent
+                        anchors.margins: 4.0
+                        source: rightConditionIcon.visible
+                            ? weatherRoot.weatherModel.conditionIconSource : ""
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: false
+                        cache: true
+                    }
                 }
             }
 
@@ -150,7 +171,7 @@ OverlayWidget {
                 Column {
                     id: detailsColumn
                     width: parent.width
-                    spacing: 5.0
+                    spacing: 4.0
 
                     Separator {
                         width: parent.width
@@ -163,7 +184,14 @@ OverlayWidget {
                         id: detailsRow
                         objectName: "weatherDetailsRow"
                         width: parent.width
-                        height: Math.max(28.0, weatherRoot.weatherModel.detailIconSize + 4.0)
+                        // Rebuild the pre-migration detail-row breathing room.
+                        // The icons/text remain compact and centred; the band owns
+                        // the vertical air rather than inflating the glyphs.
+                        height: Math.max(
+                            68.0,
+                            weatherRoot.weatherModel.detailIconSize + 38.0,
+                            weatherRoot.weatherModel.detailFontSize * 3.2
+                        )
 
                         Repeater {
                             model: [
@@ -189,24 +217,31 @@ OverlayWidget {
                                 width: detailsRow.width / 3.0
                                 height: detailsRow.height
 
-                                Row {
+                                Item {
+                                    id: metricContent
+                                    width: metricIcon.width + 1.0 + metricText.implicitWidth
+                                    height: Math.max(metricIcon.height, metricText.implicitHeight)
                                     anchors.centerIn: parent
-                                    spacing: 2.0
 
                                     Image {
+                                        id: metricIcon
                                         source: modelData.icon
-                                        sourceSize.width: weatherRoot.weatherModel.detailIconSize
-                                        sourceSize.height: weatherRoot.weatherModel.detailIconSize
                                         width: weatherRoot.weatherModel.detailIconSize
                                         height: width
+                                        anchors.left: parent.left
+                                        anchors.verticalCenter: parent.verticalCenter
                                         fillMode: Image.PreserveAspectFit
                                         asynchronous: false
                                         cache: true
                                     }
 
                                     ShadowedText {
+                                        id: metricText
                                         width: implicitWidth
                                         height: implicitHeight
+                                        anchors.left: metricIcon.right
+                                        anchors.leftMargin: 1.0
+                                        anchors.verticalCenter: parent.verticalCenter
                                         text: modelData.text
                                         color: weatherRoot.weatherModel.textColor
                                         font.family: weatherRoot.weatherModel.fontFamily
@@ -233,7 +268,7 @@ OverlayWidget {
                 Column {
                     id: forecastColumn
                     width: parent.width
-                    spacing: 5.0
+                    spacing: 8.0
 
                     Separator {
                         width: parent.width
@@ -266,7 +301,10 @@ OverlayWidget {
         Column {
             id: statusColumn
             objectName: "weatherStatusContent"
-            width: Math.max(1.0, parent.width - 12.0)
+            width: Math.max(
+                1.0,
+                parent.width - 2.0 * weatherRoot.legacyHorizontalInset - 12.0
+            )
             anchors.centerIn: parent
             spacing: 6.0
             visible: weatherRoot.weatherModel.viewState !== "ready"
