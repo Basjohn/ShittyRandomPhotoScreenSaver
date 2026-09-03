@@ -1,7 +1,14 @@
 # Visualizer Mode Modularization + Settings Tab — Decomposition
 
 Date: 2026-09-02
-Status: **P0 PARTIALLY ADMITTED — V0-V4 AUTHORITY/DORMANCY FIRST; V5-V8 UI REHOST/FUTURE-MODE WORK AFTER HITCH STABILITY**
+Status: **V0-V4 COMPLETE (2026-09-03) — mode wiring centralized, per-mode enable state persisted (no settings lost) + routed + dormancy-proven; V5-V8 UI REHOST/FUTURE-MODE WORK STILL DEFERRED UNTIL HITCH OWNERS ARE STABLE**
+
+V0-V4 landed as commits 54c87e0c (V1), dc8d6670 (V2), c5c0d69e (V3), fd3fbbe8 (V4)
+on top of the reconciled green visualizer floor (V0). Descriptor is now the single
+per-mode runtime/renderer wiring source; `enabled_modes` persists additively with a
+full no-settings-lost audit; cycling/context-menu/initial-mode route through the
+effective enabled set; dormancy is proven in a fresh interpreter. Behavior is
+transparent today because every mode is enabled by default (no disable UI until V5-V8).
 
 This document decomposes a future refactor that makes each Visualizer mode genuinely optional/dormant and then moves Visualizer Settings out of the overloaded Widgets tab into a dedicated top-level Visualizers tab.
 
