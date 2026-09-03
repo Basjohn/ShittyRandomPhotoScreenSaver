@@ -87,6 +87,8 @@ try:
         QAbstractItemView,
         QApplication,
         QCheckBox,
+        QDialog,
+        QDialogButtonBox,
         QFileDialog,
         QFrame,
         QHBoxLayout,
@@ -95,6 +97,7 @@ try:
         QLineEdit,
         QMainWindow,
         QMessageBox,
+        QPlainTextEdit,
         QProgressBar,
         QPushButton,
         QSplitter,
@@ -114,17 +117,26 @@ from godzip_foundry_core import (  # noqa: E402
     ArchiveInspection,
     DebrisItem,
     GodzipError,
+    PullInspection,
     RepoFile,
     apply_godzip,
+    collect_log_files,
     collect_repo_files,
     create_godzip,
+    create_logzip,
     discover_repo_root,
     git_branch,
+    git_changes,
+    git_commit_all,
     git_dirty,
     git_head,
+    git_pull_ff_only,
+    git_push_current,
     inspect_godzip,
+    inspect_pull,
     move_paths_to_deleteme,
     read_debris_manifest,
+    selective_sync_from_remote,
     suggested_godzip_name,
     validate_repo_relpath,
     write_debris_manifest,
@@ -378,7 +390,6 @@ class CreateTab(QWidget):
         self.repo_root = window.repo_root
         self.repo_files: list[RepoFile] = []
         self._build_ui()
-        QTimer.singleShot(0, self.refresh)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -393,8 +404,8 @@ class CreateTab(QWidget):
         intro_l.addWidget(title)
         desc = QLabel(
             "Git-aware archive creation. Ignored files never enter the source universe. "
-            "Workflow defaults keep ordinary source selected, changed tests/docs selected, "
-            "and heavyweight images/goldens off unless you explicitly opt in."
+            "Workflow defaults keep ordinary source + all Docs + direct tests/* files selected, "
+            "while themes, images, goldens and nested test payloads stay off unless explicitly selected."
         )
         desc.setWordWrap(True)
         desc.setObjectName("muted")
@@ -1122,6 +1133,490 @@ class DebrisTab(QWidget):
             self.window.show_error("Debris move failed", exc)
 
 
+
+class ConfirmFileListDialog(QDialog):
+    """Prominent final confirmation that exposes every affected path."""
+
+    def __init__(self, title: str, warning: str, lines: list[str], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.resize(760, 620)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+        banner = QLabel(warning)
+        banner.setObjectName("warningText")
+        banner.setWordWrap(True)
+        layout.addWidget(banner)
+        label = QLabel(f"Review all {len(lines)} affected path(s) before continuing:")
+        label.setObjectName("muted")
+        layout.addWidget(label)
+        text = QPlainTextEdit()
+        text.setReadOnly(True)
+        text.setPlainText("\n".join(lines) if lines else "(none)")
+        layout.addWidget(text, 1)
+        self.ack = QCheckBox("I reviewed the complete file list above")
+        self.ack.setObjectName("dangerCheck")
+        layout.addWidget(self.ack)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        ok = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        ok.setText("CONFIRM")
+        ok.setEnabled(False)
+        self.ack.toggled.connect(ok.setEnabled)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+
+class LogzipTab(QWidget):
+    def __init__(self, window: "GodzipFoundryWindow") -> None:
+        super().__init__(window)
+        self.window = window
+        self.repo_root = window.repo_root
+        self._paths: list[Path] = []
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setSpacing(10)
+        intro = Panel()
+        il = QVBoxLayout(intro)
+        il.setContentsMargins(14, 12, 14, 12)
+        title = QLabel("LOGZIP")
+        title.setObjectName("sectionTitle")
+        il.addWidget(title)
+        desc = QLabel(
+            "Bundles direct loose files inside /logs only. Subfolders and existing ZIPs are ignored. "
+            "The archive is named from current Git HEAD; repeated bundles receive 2/3/4… suffixes. Sources are left untouched."
+        )
+        desc.setObjectName("muted")
+        desc.setWordWrap(True)
+        il.addWidget(desc)
+        layout.addWidget(intro)
+        controls = QHBoxLayout()
+        refresh = QPushButton("Refresh")
+        refresh.clicked.connect(self.refresh)
+        all_b = QPushButton("All")
+        all_b.clicked.connect(lambda: self._set_all(True))
+        none_b = QPushButton("None")
+        none_b.clicked.connect(lambda: self._set_all(False))
+        controls.addWidget(refresh)
+        controls.addWidget(all_b)
+        controls.addWidget(none_b)
+        controls.addStretch(1)
+        layout.addLayout(controls)
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels(["Loose log file", "Size"])
+        self.tree.setRootIsDecorated(False)
+        self.tree.setAlternatingRowColors(True)
+        self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.tree.itemChanged.connect(lambda *_: self._update())
+        layout.addWidget(self.tree, 1)
+        footer = Panel()
+        fl = QHBoxLayout(footer)
+        fl.setContentsMargins(14, 12, 14, 12)
+        self.summary = QLabel("Not scanned yet.")
+        self.summary.setObjectName("muted")
+        self.button = QPushButton("CREATE LOGZIP")
+        self.button.setObjectName("primaryButton")
+        self.button.clicked.connect(self.create)
+        self.button.setEnabled(False)
+        fl.addWidget(self.summary, 1)
+        fl.addWidget(self.button)
+        layout.addWidget(footer)
+
+    def refresh(self) -> None:
+        try:
+            self._paths = collect_log_files(self.repo_root)
+            self.tree.blockSignals(True)
+            self.tree.clear()
+            for path in self._paths:
+                item = QTreeWidgetItem([path.name, human_size(path.stat().st_size)])
+                item.setData(0, ROLE_PATH, path.name)
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(0, Qt.CheckState.Checked)
+                self.tree.addTopLevelItem(item)
+            self.tree.blockSignals(False)
+            self._update()
+            self.window.set_status(f"LOGZIP scan: {len(self._paths)} direct loose /logs file(s)")
+        except Exception as exc:
+            self.window.show_error("LOGZIP scan failed", exc)
+
+    def _set_all(self, checked: bool) -> None:
+        self.tree.blockSignals(True)
+        for i in range(self.tree.topLevelItemCount()):
+            self.tree.topLevelItem(i).setCheckState(0, Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        self.tree.blockSignals(False)
+        self._update()
+
+    def _selected(self) -> list[str]:
+        return [
+            str(self.tree.topLevelItem(i).data(0, ROLE_PATH))
+            for i in range(self.tree.topLevelItemCount())
+            if self.tree.topLevelItem(i).checkState(0) == Qt.CheckState.Checked
+        ]
+
+    def _update(self) -> None:
+        names = self._selected()
+        by_name = {p.name: p for p in self._paths}
+        size = sum(by_name[name].stat().st_size for name in names if name in by_name)
+        self.summary.setText(f"{len(names)} file(s) · {human_size(size)} · HEAD {git_head(self.repo_root)[:10]}")
+        self.button.setEnabled(bool(names))
+
+    def create(self) -> None:
+        names = self._selected()
+        self.window.set_busy(True, "Creating verified LOGZIP…")
+        try:
+            result = create_logzip(self.repo_root, names)
+            self.window.set_status(f"Created {result.zip_path.name} from {len(result.files)} loose log file(s)")
+            QMessageBox.information(
+                self,
+                "LOGZIP created",
+                f"Created:\n{result.zip_path}\n\nFiles: {len(result.files)}\nSource logs were not removed.",
+            )
+            self.refresh()
+        except Exception as exc:
+            self.window.show_error("LOGZIP creation failed", exc)
+        finally:
+            self.window.set_busy(False)
+
+
+class PushTab(QWidget):
+    def __init__(self, window: "GodzipFoundryWindow") -> None:
+        super().__init__(window)
+        self.window = window
+        self.repo_root = window.repo_root
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setSpacing(10)
+        intro = Panel()
+        il = QVBoxLayout(intro)
+        il.setContentsMargins(14, 12, 14, 12)
+        title = QLabel("COMMIT / PUSH")
+        title.setObjectName("sectionTitle")
+        il.addWidget(title)
+        desc = QLabel(
+            "Commit stages every Git-visible worktree change shown below (git add -A). COMMIT & PUSH pushes only after a successful commit. "
+            "No force-push, merge or rebase path exists here."
+        )
+        desc.setObjectName("muted")
+        desc.setWordWrap(True)
+        il.addWidget(desc)
+        layout.addWidget(intro)
+        row = QHBoxLayout()
+        refresh = QPushButton("Refresh")
+        refresh.clicked.connect(self.refresh)
+        row.addWidget(refresh)
+        row.addStretch(1)
+        layout.addLayout(row)
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels(["Git path", "State", "Index", "Worktree"])
+        self.tree.setRootIsDecorated(False)
+        self.tree.setAlternatingRowColors(True)
+        self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for col in range(1, 4):
+            self.tree.header().setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+        layout.addWidget(self.tree, 1)
+        box = Panel()
+        bl = QVBoxLayout(box)
+        bl.setContentsMargins(14, 12, 14, 12)
+        self.summary = QLabel()
+        self.summary.setObjectName("muted")
+        bl.addWidget(self.summary)
+        msgrow = QHBoxLayout()
+        self.message = QLineEdit()
+        self.message.setPlaceholderText("Commit message…")
+        msgrow.addWidget(QLabel("Message"))
+        msgrow.addWidget(self.message, 1)
+        bl.addLayout(msgrow)
+        buttons = QHBoxLayout()
+        self.commit_button = QPushButton("COMMIT")
+        self.commit_push_button = QPushButton("COMMIT & PUSH")
+        self.commit_push_button.setObjectName("primaryButton")
+        self.push_button = QPushButton("PUSH EXISTING COMMITS")
+        self.commit_button.clicked.connect(lambda: self.commit(push=False))
+        self.commit_push_button.clicked.connect(lambda: self.commit(push=True))
+        self.push_button.clicked.connect(self.push)
+        buttons.addStretch(1)
+        buttons.addWidget(self.commit_button)
+        buttons.addWidget(self.push_button)
+        buttons.addWidget(self.commit_push_button)
+        bl.addLayout(buttons)
+        layout.addWidget(box)
+
+    def refresh(self) -> None:
+        try:
+            changes = git_changes(self.repo_root)
+            self.tree.clear()
+            for change in changes:
+                item = QTreeWidgetItem([
+                    change.path,
+                    change.status,
+                    "staged" if change.staged else "—",
+                    "new" if change.untracked else ("modified" if change.unstaged else "—"),
+                ])
+                self.tree.addTopLevelItem(item)
+            self.summary.setText(
+                f"{len(changes)} current Git change(s) · branch {git_branch(self.repo_root)} · HEAD {git_head(self.repo_root)[:10]}"
+            )
+            self.commit_button.setEnabled(bool(changes))
+            self.commit_push_button.setEnabled(bool(changes))
+            self.window.refresh_repo_header()
+        except Exception as exc:
+            self.window.show_error("Git change scan failed", exc)
+
+    def _confirm_commit(self, push: bool) -> bool:
+        changes = git_changes(self.repo_root)
+        lines = [f"{item.status:8} {item.path}" for item in changes]
+        warning = (
+            "This will stage and commit EVERY Git-visible change listed below"
+            + (" and then push the resulting commit if commit succeeds." if push else ".")
+        )
+        return ConfirmFileListDialog("Confirm commit", warning, lines, self).exec() == QDialog.DialogCode.Accepted
+
+    def commit(self, *, push: bool) -> None:
+        message = self.message.text().strip()
+        if not message:
+            QMessageBox.warning(self, "Commit message required", "Enter a commit message first.")
+            return
+        if not self._confirm_commit(push):
+            return
+        self.window.set_busy(True, "Committing Git changes…")
+        try:
+            head = git_commit_all(self.repo_root, message)
+            detail = f"Committed {head[:10]}."
+            if push:
+                self.window.set_status("Commit succeeded; pushing…")
+                pushed = git_push_current(self.repo_root)
+                detail += "\n\nPush complete."
+                if pushed:
+                    detail += f"\n{pushed}"
+            QMessageBox.information(self, "Git operation complete", detail)
+            self.message.clear()
+            self.refresh()
+            self.window.create_tab.refresh()
+        except Exception as exc:
+            self.window.show_error("Commit/push failed", exc)
+        finally:
+            self.window.set_busy(False)
+
+    def push(self) -> None:
+        answer = QMessageBox.warning(
+            self,
+            "Push current branch?",
+            f"Push branch {git_branch(self.repo_root)} at HEAD {git_head(self.repo_root)[:10]}?\n\nNo force-push is permitted.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.window.set_busy(True, "Pushing current branch…")
+        try:
+            detail = git_push_current(self.repo_root)
+            QMessageBox.information(self, "Push complete", detail or "Push completed successfully.")
+            self.window.refresh_repo_header()
+        except Exception as exc:
+            self.window.show_error("Push failed", exc)
+        finally:
+            self.window.set_busy(False)
+
+
+class PullTab(QWidget):
+    """Fetch/inspect lazily. Full PULL is strict ff-only; partial is worktree sync."""
+
+    def __init__(self, window: "GodzipFoundryWindow") -> None:
+        super().__init__(window)
+        self.window = window
+        self.repo_root = window.repo_root
+        self.inspection: PullInspection | None = None
+        self.loaded_once = False
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setSpacing(10)
+        intro = Panel()
+        il = QVBoxLayout(intro)
+        il.setContentsMargins(14, 12, 14, 12)
+        title = QLabel("PULL — REVIEW BEFORE MUTATION")
+        title.setObjectName("sectionTitle")
+        il.addWidget(title)
+        desc = QLabel(
+            "Nothing is fetched until this tab is opened/refreshed. Full PULL only fast-forwards a CLEAN worktree. "
+            "SELECTIVE SYNC copies checked remote file states without advancing HEAD and backs overwritten local files into /deleteme."
+        )
+        desc.setObjectName("muted")
+        desc.setWordWrap(True)
+        il.addWidget(desc)
+        layout.addWidget(intro)
+        row = QHBoxLayout()
+        refresh = QPushButton("FETCH / REFRESH")
+        refresh.setObjectName("primaryButton")
+        refresh.clicked.connect(self.refresh)
+        all_b = QPushButton("All")
+        none_b = QPushButton("None")
+        all_b.clicked.connect(lambda: self.tree.set_leaf_checks(lambda _p: True))
+        none_b.clicked.connect(lambda: self.tree.set_leaf_checks(lambda _p: False))
+        row.addWidget(refresh)
+        row.addWidget(all_b)
+        row.addWidget(none_b)
+        row.addStretch(1)
+        layout.addLayout(row)
+        self.banner = RelationBanner()
+        self.banner.set_relation("unknown", "Not fetched yet.")
+        layout.addWidget(self.banner)
+        self.tree = CheckPathTree(["Incoming path", "Remote", "Local"])
+        self.tree.itemChanged.connect(lambda *_: self._update())
+        layout.addWidget(self.tree, 1)
+        footer = Panel()
+        fl = QVBoxLayout(footer)
+        fl.setContentsMargins(14, 12, 14, 12)
+        self.warning = QLabel(
+            "FULL PULL will not run on dirty/diverged worktrees. SELECTIVE SYNC intentionally leaves local HEAD unchanged."
+        )
+        self.warning.setObjectName("warningText")
+        self.warning.setWordWrap(True)
+        fl.addWidget(self.warning)
+        line = QHBoxLayout()
+        self.summary = QLabel("No remote inspection yet.")
+        self.summary.setObjectName("muted")
+        self.sync_button = QPushButton("SELECTIVE SYNC CHECKED")
+        self.sync_button.setObjectName("dangerButton")
+        self.pull_button = QPushButton("PULL ALL (FF-ONLY)")
+        self.pull_button.setObjectName("primaryButton")
+        self.sync_button.clicked.connect(self.selective_sync)
+        self.pull_button.clicked.connect(self.pull_all)
+        line.addWidget(self.summary, 1)
+        line.addWidget(self.sync_button)
+        line.addWidget(self.pull_button)
+        fl.addLayout(line)
+        layout.addWidget(footer)
+        self.sync_button.setEnabled(False)
+        self.pull_button.setEnabled(False)
+
+    def ensure_loaded(self) -> None:
+        if not self.loaded_once:
+            self.refresh()
+
+    def refresh(self) -> None:
+        self.window.set_busy(True, "Fetching remote and inspecting incoming changes…")
+        try:
+            inspection = inspect_pull(self.repo_root, fetch=True)
+            self.inspection = inspection
+            self.loaded_once = True
+            relation_ui = {
+                "same": "same",
+                "behind": "newer",
+                "ahead": "same",
+                "diverged": "older",
+            }.get(inspection.relation, "unknown")
+            self.banner.set_relation(relation_ui, inspection.relation_detail)
+            self.tree.clear()
+            for entry in inspection.files:
+                local = "LOCAL DIRTY" if entry.local_dirty else "clean"
+                self.tree.add_path(
+                    entry.path,
+                    [entry.path, entry.status, local],
+                    checked=True,
+                    payload=entry,
+                )
+            self.tree.expandToDepth(0)
+            self._update()
+            self.window.set_status(
+                f"Remote inspection: {inspection.remote_ref} {inspection.remote_head[:10]} · {len(inspection.files)} incoming path(s)"
+            )
+        except Exception as exc:
+            self.inspection = None
+            self.loaded_once = True
+            self.banner.set_relation("older", f"PULL inspection failed: {exc}")
+            self.tree.clear()
+            self._update()
+        finally:
+            self.window.set_busy(False)
+
+    def _update(self) -> None:
+        inspection = self.inspection
+        if inspection is None:
+            self.summary.setText("No valid remote inspection.")
+            self.sync_button.setEnabled(False)
+            self.pull_button.setEnabled(False)
+            return
+        selected = self.tree.checked_paths()
+        conflicts = sum(1 for item in inspection.files if item.path in selected and item.local_dirty)
+        self.summary.setText(
+            f"{len(inspection.files)} incoming · {len(selected)} selected"
+            + (f" · {conflicts} overlap local edits" if conflicts else "")
+            + (" · WORKTREE DIRTY" if inspection.worktree_dirty else " · worktree clean")
+        )
+        self.sync_button.setEnabled(bool(selected) and inspection.relation in {"behind", "diverged"})
+        self.pull_button.setEnabled(
+            inspection.relation == "behind" and not inspection.worktree_dirty and bool(inspection.files)
+        )
+
+    def _confirm(self, title: str, warning: str, entries: list) -> bool:
+        lines = []
+        for item in entries:
+            local = " [LOCAL DIRTY]" if item.local_dirty else ""
+            lines.append(f"{item.status:6} {item.display_path}{local}")
+        return ConfirmFileListDialog(title, warning, lines, self).exec() == QDialog.DialogCode.Accepted
+
+    def pull_all(self) -> None:
+        inspection = self.inspection
+        if inspection is None:
+            return
+        if not self._confirm(
+            "Confirm full pull",
+            "MAJOR WARNING: this will advance local HEAD and replace/delete tracked files exactly as listed. "
+            "The operation is strict fast-forward only and requires a clean worktree.",
+            inspection.files,
+        ):
+            return
+        self.window.set_busy(True, "Applying reviewed fast-forward pull…")
+        try:
+            detail = git_pull_ff_only(self.repo_root, inspection)
+            QMessageBox.information(self, "Pull complete", detail or "Fast-forward pull completed.")
+            self.window.refresh_after_git_mutation()
+            self.refresh()
+        except Exception as exc:
+            self.window.show_error("Pull failed", exc)
+        finally:
+            self.window.set_busy(False)
+
+    def selective_sync(self) -> None:
+        inspection = self.inspection
+        if inspection is None:
+            return
+        selected = self.tree.checked_paths()
+        chosen = [item for item in inspection.files if item.path in selected]
+        if not self._confirm(
+            "Confirm selective remote sync",
+            "MAJOR WARNING: this does NOT advance HEAD. Checked remote states are copied into the working tree, "
+            "remote deletions/rename sources are removed, and overwritten local files are backed up under /deleteme first.",
+            chosen,
+        ):
+            return
+        self.window.set_busy(True, "Synchronizing selected remote file states…")
+        try:
+            result = selective_sync_from_remote(self.repo_root, inspection, selected)
+            detail = f"Written: {result.written}\nRemoved/renamed-away: {result.deleted}\nHEAD unchanged: {git_head(self.repo_root)[:10]}"
+            if result.backup_dir:
+                detail += f"\n\nRollback backup:\n{result.backup_dir}"
+            QMessageBox.information(self, "Selective sync complete", detail)
+            self.window.refresh_after_git_mutation()
+            self.refresh()
+        except Exception as exc:
+            self.window.show_error("Selective sync failed", exc)
+        finally:
+            self.window.set_busy(False)
+
+
 class GodzipFoundryWindow(QMainWindow):
     def __init__(self, repo_root: Path, initial_zip: Path | None = None) -> None:
         super().__init__()
@@ -1134,6 +1629,9 @@ class GodzipFoundryWindow(QMainWindow):
         self._build_ui()
         self._apply_style()
         self.refresh_repo_header()
+        # Populate the default CREATE page before the first native show. Doing the
+        # first large tree build after show caused several visible startup repaints.
+        self.create_tab.refresh()
         if initial_zip is not None:
             QTimer.singleShot(0, lambda: self.apply_tab.load_zip(initial_zip))
 
@@ -1149,6 +1647,7 @@ class GodzipFoundryWindow(QMainWindow):
 
     def _set_icon(self) -> None:
         for path in (
+            self.repo_root / "images" / "foundries" / "SRPSSGodZIP.ico",
             self.repo_root / "images" / "foundries" / "SRPSSBuild.ico",
             self.repo_root / "SRPSS.ico",
         ):
@@ -1210,9 +1709,16 @@ class GodzipFoundryWindow(QMainWindow):
         self.debris_tab = DebrisTab(self)
         self.create_tab = CreateTab(self)
         self.apply_tab = ApplyTab(self)
+        self.logzip_tab = LogzipTab(self)
+        self.push_tab = PushTab(self)
+        self.pull_tab = PullTab(self)
         self.tabs.addTab(self.create_tab, "CREATE GOD ZIP")
         self.tabs.addTab(self.apply_tab, "APPLY GOD ZIP")
+        self.tabs.addTab(self.logzip_tab, "LOGZIP")
+        self.tabs.addTab(self.push_tab, "PUSH")
+        self.tabs.addTab(self.pull_tab, "PULL")
         self.tabs.addTab(self.debris_tab, "DEBRIS")
+        self.tabs.currentChanged.connect(self._tab_changed)
         body_l.addWidget(self.tabs, 1)
         shell_l.addWidget(body, 1)
         outer.addWidget(shell, 1)
@@ -1230,6 +1736,20 @@ class GodzipFoundryWindow(QMainWindow):
         status_row.addWidget(self.busy)
         status_row.addWidget(dpi)
         outer.addLayout(status_row)
+
+    def _tab_changed(self, _index: int) -> None:
+        current = self.tabs.currentWidget()
+        if current is self.pull_tab:
+            self.pull_tab.ensure_loaded()
+        elif current is self.push_tab:
+            self.push_tab.refresh()
+        elif current is self.logzip_tab:
+            self.logzip_tab.refresh()
+
+    def refresh_after_git_mutation(self) -> None:
+        self.refresh_repo_header()
+        self.create_tab.refresh()
+        self.push_tab.refresh()
 
     def refresh_repo_header(self) -> None:
         try:
@@ -1254,7 +1774,8 @@ class GodzipFoundryWindow(QMainWindow):
         self.busy.setVisible(busy)
         if busy:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-            QApplication.processEvents()
+            if self.isVisible():
+                QApplication.processEvents()
         else:
             while QApplication.overrideCursor() is not None:
                 QApplication.restoreOverrideCursor()

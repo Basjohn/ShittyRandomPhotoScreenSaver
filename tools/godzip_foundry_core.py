@@ -34,15 +34,14 @@ DEBRIS_MANIFEST_NAMES = (
 )
 HEAVY_DEFAULT_PREFIXES = (
     "images/",
+    "themes/",
     "golden/",
     "goldens/",
     "tests/golden/",
     "tests/goldens/",
-    "tests/fixtures/golden/",
-    "tests/fixtures/goldens/",
-    "tests/fixtures/screenshots/",
+    "tests/fixtures/",
+    "tests/screenshots/",
 )
-CHANGED_ONLY_PREFIXES = ("tests/", "docs/")
 FORBIDDEN_TARGET_PREFIXES = (".git/", ".godzip/", ".godzip_foundry/", "deleteme/")
 
 
@@ -112,6 +111,57 @@ class ApplyResult:
     debris_dir: Path | None
 
 
+@dataclass(frozen=True, slots=True)
+class GitChange:
+    path: str
+    status: str
+    staged: bool = False
+    unstaged: bool = False
+    untracked: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class PullFile:
+    path: str
+    status: str
+    old_path: str = ""
+    local_dirty: bool = False
+
+    @property
+    def display_path(self) -> str:
+        return f"{self.old_path} -> {self.path}" if self.old_path else self.path
+
+
+@dataclass(slots=True)
+class PullInspection:
+    branch: str
+    remote: str
+    remote_ref: str
+    local_head: str
+    remote_head: str
+    relation: str
+    relation_detail: str
+    files: list[PullFile] = field(default_factory=list)
+    worktree_dirty: bool = False
+
+    @property
+    def fast_forward_possible(self) -> bool:
+        return self.relation in {"same", "behind"}
+
+
+@dataclass(frozen=True, slots=True)
+class SelectiveSyncResult:
+    written: int
+    deleted: int
+    backup_dir: Path | None
+
+
+@dataclass(frozen=True, slots=True)
+class LogzipResult:
+    zip_path: Path
+    files: tuple[str, ...]
+
+
 def _run_git(repo_root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[bytes]:
     try:
         return subprocess.run(
@@ -127,6 +177,32 @@ def _run_git(repo_root: Path, *args: str, check: bool = True) -> subprocess.Comp
         raise GodzipError(f"Git command timed out: {' '.join(args)}") from exc
     except subprocess.CalledProcessError as exc:
         detail = exc.stderr.decode("utf-8", errors="replace").strip()
+        raise GodzipError(detail or f"Git command failed: {' '.join(args)}") from exc
+
+
+def _run_git_text(
+    repo_root: Path,
+    *args: str,
+    check: bool = True,
+    timeout: int = 60,
+) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            ["git", "-C", str(repo_root), *args],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=check,
+            timeout=timeout,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except FileNotFoundError as exc:
+        raise GodzipError("git.exe is not available on PATH") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise GodzipError(f"Git command timed out: {' '.join(args)}") from exc
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip()
         raise GodzipError(detail or f"Git command failed: {' '.join(args)}") from exc
 
 
@@ -176,11 +252,22 @@ def git_status_map(repo_root: Path) -> dict[str, str]:
 
 
 def workflow_default_selected(path: str, status: str = "") -> bool:
+    """Return the SRPSS workflow default for a Git-visible file.
+
+    The transfer profile intentionally keeps all documentation and direct
+    ``tests/*`` files because those are valuable handoff context, while
+    excluding test fixture/subfolder payloads, themes, images and goldens.
+    Gitignored files never reach this decision point.
+    """
     lower = path.replace("\\", "/").lower().lstrip("./")
     if any(lower == prefix.rstrip("/") or lower.startswith(prefix) for prefix in HEAVY_DEFAULT_PREFIXES):
         return False
-    if any(lower.startswith(prefix) for prefix in CHANGED_ONLY_PREFIXES):
-        return bool(status)
+    if lower.startswith("tests/"):
+        # Keep files directly inside /tests, but not any nested payload tree.
+        return len(PurePosixPath(lower).parts) == 2
+    # Docs are intentionally all-on, not changed-only.
+    if lower.startswith("docs/"):
+        return True
     return True
 
 
@@ -906,6 +993,374 @@ def read_debris_manifest(path: Path) -> list[dict[str, str]]:
     return result
 
 
+
+def _parse_name_status_z(raw: bytes) -> list[tuple[str, str, str]]:
+    """Parse ``git diff --name-status -z`` into (status, path, old_path)."""
+    parts = _zlist(raw)
+    result: list[tuple[str, str, str]] = []
+    i = 0
+    while i < len(parts):
+        status = parts[i]
+        i += 1
+        if i >= len(parts):
+            raise GodzipError("Unexpected truncated Git name-status output")
+        if status.startswith(("R", "C")):
+            old_path = parts[i].replace("\\", "/")
+            i += 1
+            if i >= len(parts):
+                raise GodzipError("Unexpected truncated Git rename output")
+            path = parts[i].replace("\\", "/")
+            i += 1
+        else:
+            old_path = ""
+            path = parts[i].replace("\\", "/")
+            i += 1
+        result.append((status, path, old_path))
+    return result
+
+
+def git_changes(repo_root: Path) -> list[GitChange]:
+    """Return every current worktree/index change, including deletions."""
+    repo_root = repo_root.resolve()
+    staged_raw = _run_git(repo_root, "diff", "--cached", "--name-status", "-z").stdout
+    unstaged_raw = _run_git(repo_root, "diff", "--name-status", "-z").stdout
+    untracked_raw = _run_git(repo_root, "ls-files", "--others", "--exclude-standard", "-z").stdout
+    merged: dict[str, dict[str, object]] = {}
+
+    def note(status: str, path: str, *, staged: bool = False, unstaged: bool = False) -> None:
+        key = path.casefold()
+        entry = merged.setdefault(
+            key,
+            {"path": path, "statuses": [], "staged": False, "unstaged": False, "untracked": False},
+        )
+        statuses = entry["statuses"]
+        assert isinstance(statuses, list)
+        statuses.append(status)
+        entry["staged"] = bool(entry["staged"]) or staged
+        entry["unstaged"] = bool(entry["unstaged"]) or unstaged
+
+    for status, path, _old in _parse_name_status_z(staged_raw):
+        note(status, path, staged=True)
+    for status, path, _old in _parse_name_status_z(unstaged_raw):
+        note(status, path, unstaged=True)
+    for path in _zlist(untracked_raw):
+        rel = path.replace("\\", "/")
+        key = rel.casefold()
+        entry = merged.setdefault(
+            key,
+            {"path": rel, "statuses": [], "staged": False, "unstaged": False, "untracked": False},
+        )
+        statuses = entry["statuses"]
+        assert isinstance(statuses, list)
+        statuses.append("?")
+        entry["untracked"] = True
+
+    result: list[GitChange] = []
+    for entry in merged.values():
+        statuses = entry["statuses"]
+        assert isinstance(statuses, list)
+        result.append(
+            GitChange(
+                path=str(entry["path"]),
+                status="/".join(dict.fromkeys(str(item) for item in statuses)),
+                staged=bool(entry["staged"]),
+                unstaged=bool(entry["unstaged"]),
+                untracked=bool(entry["untracked"]),
+            )
+        )
+    result.sort(key=lambda item: item.path.casefold())
+    return result
+
+
+def git_commit_all(repo_root: Path, message: str) -> str:
+    """Stage all Git-visible changes and create one commit. Returns new HEAD."""
+    message = str(message or "").strip()
+    if not message:
+        raise GodzipError("Commit message is required")
+    if not git_changes(repo_root):
+        raise GodzipError("There are no Git changes to commit")
+    _run_git_text(repo_root, "add", "-A")
+    _run_git_text(repo_root, "commit", "-m", message, timeout=120)
+    return git_head(repo_root)
+
+
+def git_upstream(repo_root: Path) -> str:
+    result = _run_git_text(
+        repo_root,
+        "rev-parse",
+        "--abbrev-ref",
+        "--symbolic-full-name",
+        "@{u}",
+        check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def git_push_current(repo_root: Path) -> str:
+    """Push current branch without force. Establish origin tracking if needed."""
+    branch = git_branch(repo_root)
+    if branch == "DETACHED":
+        raise GodzipError("Cannot push from a detached HEAD")
+    upstream = git_upstream(repo_root)
+    if upstream:
+        result = _run_git_text(repo_root, "push", timeout=180)
+        return (result.stdout or result.stderr).strip()
+    remotes = [line.strip() for line in _run_git_text(repo_root, "remote").stdout.splitlines() if line.strip()]
+    if "origin" not in remotes:
+        raise GodzipError("Current branch has no upstream and there is no 'origin' remote")
+    result = _run_git_text(repo_root, "push", "--set-upstream", "origin", branch, timeout=180)
+    return (result.stdout or result.stderr).strip()
+
+
+def _split_remote_ref(upstream: str, branch: str) -> tuple[str, str]:
+    if upstream and "/" in upstream:
+        remote, remote_branch = upstream.split("/", 1)
+        return remote, remote_branch
+    return "origin", branch
+
+
+def inspect_pull(repo_root: Path, *, fetch: bool = True) -> PullInspection:
+    """Fetch and inspect incoming changes without mutating HEAD/worktree."""
+    repo_root = repo_root.resolve()
+    branch = git_branch(repo_root)
+    if branch == "DETACHED":
+        raise GodzipError("PULL is disabled on a detached HEAD")
+    upstream = git_upstream(repo_root)
+    remote, remote_branch = _split_remote_ref(upstream, branch)
+    remotes = [line.strip() for line in _run_git_text(repo_root, "remote").stdout.splitlines() if line.strip()]
+    if remote not in remotes:
+        raise GodzipError(f"Remote {remote!r} is not configured")
+    if fetch:
+        _run_git_text(repo_root, "fetch", "--prune", remote, timeout=180)
+    remote_ref = upstream or f"{remote}/{remote_branch}"
+    probe = _run_git(repo_root, "rev-parse", "--verify", remote_ref, check=False)
+    if probe.returncode != 0:
+        raise GodzipError(f"Remote tracking ref does not exist after fetch: {remote_ref}")
+    local_head = git_head(repo_root)
+    remote_head = probe.stdout.decode("utf-8", errors="replace").strip()
+    if local_head == remote_head:
+        relation = "same"
+        detail = f"Local HEAD already matches {remote_ref} ({local_head[:10]})."
+    elif _run_git(repo_root, "merge-base", "--is-ancestor", local_head, remote_head, check=False).returncode == 0:
+        relation = "behind"
+        count = _run_git_text(repo_root, "rev-list", "--count", f"{local_head}..{remote_head}").stdout.strip()
+        detail = f"Local HEAD is behind {remote_ref} by {count or '?'} commit(s); fast-forward is possible."
+    elif _run_git(repo_root, "merge-base", "--is-ancestor", remote_head, local_head, check=False).returncode == 0:
+        relation = "ahead"
+        detail = f"Local HEAD is ahead of {remote_ref}; there is nothing to pull."
+    else:
+        relation = "diverged"
+        detail = f"Local HEAD and {remote_ref} have diverged. GODZIP Foundry will not merge/rebase automatically."
+
+    statuses = git_status_map(repo_root)
+    incoming_raw = _run_git(
+        repo_root,
+        "diff",
+        "--name-status",
+        "-z",
+        "--find-renames",
+        local_head,
+        remote_head,
+    ).stdout
+    files: list[PullFile] = []
+    for status, path, old_path in _parse_name_status_z(incoming_raw):
+        dirty = bool(statuses.get(path, "") or (old_path and statuses.get(old_path, "")))
+        files.append(PullFile(path=path, status=status, old_path=old_path, local_dirty=dirty))
+    files.sort(key=lambda item: item.display_path.casefold())
+    return PullInspection(
+        branch=branch,
+        remote=remote,
+        remote_ref=remote_ref,
+        local_head=local_head,
+        remote_head=remote_head,
+        relation=relation,
+        relation_detail=detail,
+        files=files,
+        worktree_dirty=git_dirty(repo_root),
+    )
+
+
+def git_pull_ff_only(repo_root: Path, inspection: PullInspection) -> str:
+    """Apply the already-reviewed remote update as a strict fast-forward."""
+    fresh = inspect_pull(repo_root, fetch=False)
+    if fresh.local_head != inspection.local_head or fresh.remote_head != inspection.remote_head:
+        raise GodzipError("Local or remote HEAD changed after PULL inspection; refresh and review again")
+    if fresh.relation == "same":
+        return "Already up to date."
+    if fresh.relation != "behind":
+        raise GodzipError(f"Fast-forward pull is not possible: {fresh.relation}")
+    if fresh.worktree_dirty:
+        raise GodzipError("Full PULL requires a clean worktree. Commit/stash or use SELECTIVE SYNC.")
+    result = _run_git_text(repo_root, "merge", "--ff-only", fresh.remote_ref, timeout=180)
+    return (result.stdout or result.stderr).strip()
+
+
+def _git_blob_bytes(repo_root: Path, remote_head: str, path: str) -> bytes:
+    result = _run_git(repo_root, "show", f"{remote_head}:{path}", check=False)
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        raise GodzipError(detail or f"Cannot read {path} from {remote_head[:10]}")
+    return result.stdout
+
+
+def _atomic_write_bytes(target: Path, data: bytes) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_name(f".{target.name}.{os.getpid()}.sync")
+    try:
+        temp.write_bytes(data)
+        os.replace(temp, target)
+    finally:
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def selective_sync_from_remote(
+    repo_root: Path,
+    inspection: PullInspection,
+    selected_paths: Sequence[str],
+) -> SelectiveSyncResult:
+    """Copy selected remote file states into the worktree without advancing HEAD.
+
+    Existing local targets/deleted rename sources are backed up under /deleteme.
+    This operation intentionally leaves the worktree dirty relative to local HEAD.
+    """
+    repo_root = repo_root.resolve()
+    fresh = inspect_pull(repo_root, fetch=False)
+    if fresh.local_head != inspection.local_head or fresh.remote_head != inspection.remote_head:
+        raise GodzipError("Local or remote HEAD changed after PULL inspection; refresh and review again")
+    available = {item.path: item for item in fresh.files}
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in selected_paths:
+        rel = validate_repo_relpath(raw)
+        if rel not in available:
+            raise GodzipError(f"Selected incoming path is no longer present: {rel}")
+        if rel.casefold() not in seen:
+            seen.add(rel.casefold())
+            normalized.append(rel)
+    if not normalized:
+        raise GodzipError("No incoming paths selected")
+
+    tag = _timestamp_tag()
+    backup_root = _unique_destination(repo_root / "deleteme" / f"PULL_SYNC_BACKUP_{tag}")
+    written = 0
+    deleted = 0
+    backed_any = False
+
+    def backup(path_rel: str) -> None:
+        nonlocal backed_any
+        source = repo_root / Path(*PurePosixPath(path_rel).parts)
+        if not source.exists():
+            return
+        dest = backup_root / Path(*PurePosixPath(path_rel).parts)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if source.is_dir():
+            shutil.copytree(source, dest, dirs_exist_ok=True)
+        else:
+            shutil.copy2(source, dest)
+        backed_any = True
+
+    for rel in normalized:
+        item = available[rel]
+        code = item.status[:1]
+        target = repo_root / Path(*PurePosixPath(item.path).parts)
+        if code in {"D"}:
+            backup(item.path)
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink(missing_ok=True)
+            deleted += 1
+            continue
+        if code in {"R"} and item.old_path:
+            old_rel = validate_repo_relpath(item.old_path)
+            old_target = repo_root / Path(*PurePosixPath(old_rel).parts)
+            backup(old_rel)
+            if old_target.is_dir():
+                shutil.rmtree(old_target)
+            else:
+                old_target.unlink(missing_ok=True)
+            deleted += 1
+        backup(item.path)
+        data = _git_blob_bytes(repo_root, fresh.remote_head, item.path)
+        _atomic_write_bytes(target, data)
+        written += 1
+
+    if not backed_any:
+        try:
+            backup_root.rmdir()
+        except OSError:
+            pass
+    return SelectiveSyncResult(
+        written=written,
+        deleted=deleted,
+        backup_dir=backup_root if backup_root.exists() else None,
+    )
+
+
+def collect_log_files(repo_root: Path) -> list[Path]:
+    """Return direct loose files in /logs, excluding ZIPs and subfolders."""
+    logs = repo_root.resolve() / "logs"
+    if not logs.is_dir():
+        return []
+    result = [path for path in logs.iterdir() if path.is_file() and path.suffix.lower() != ".zip"]
+    result.sort(key=lambda path: path.name.casefold())
+    return result
+
+
+def suggested_logzip_path(repo_root: Path) -> Path:
+    logs = repo_root.resolve() / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    base = f"logs{git_head(repo_root)[:10]}"
+    candidate = logs / f"{base}.zip"
+    index = 2
+    while candidate.exists():
+        candidate = logs / f"{base}{index}.zip"
+        index += 1
+    return candidate
+
+
+def create_logzip(repo_root: Path, selected_names: Sequence[str] | None = None) -> LogzipResult:
+    """Create a verified ZIP from direct loose /logs files without deleting sources."""
+    repo_root = repo_root.resolve()
+    files = collect_log_files(repo_root)
+    by_name = {path.name: path for path in files}
+    if selected_names is None:
+        selected = files
+    else:
+        selected = []
+        seen: set[str] = set()
+        for raw in selected_names:
+            name = Path(str(raw)).name
+            if name != str(raw) or name.casefold() in seen:
+                continue
+            seen.add(name.casefold())
+            path = by_name.get(name)
+            if path is not None:
+                selected.append(path)
+    if not selected:
+        raise GodzipError("No loose /logs files selected")
+    output = suggested_logzip_path(repo_root)
+    temp = output.with_name(f".{output.name}.{os.getpid()}.tmp")
+    try:
+        with zipfile.ZipFile(temp, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as archive:
+            for path in selected:
+                archive.write(path, arcname=path.name)
+        with zipfile.ZipFile(temp, "r") as archive:
+            bad = archive.testzip()
+            if bad:
+                raise GodzipError(f"LOGZIP CRC validation failed at {bad}")
+        os.replace(temp, output)
+    finally:
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return LogzipResult(zip_path=output, files=tuple(path.name for path in selected))
+
+
 __all__ = [
     "ArchiveFile",
     "ArchiveInspection",
@@ -913,23 +1368,38 @@ __all__ = [
     "DebrisItem",
     "FORMAT_NAME",
     "FORMAT_VERSION",
+    "GitChange",
     "GodzipError",
+    "LogzipResult",
     "MANIFEST_MEMBER",
+    "PullFile",
+    "PullInspection",
     "RepoFile",
+    "SelectiveSyncResult",
     "apply_godzip",
+    "collect_log_files",
     "collect_repo_files",
     "compare_source_head",
     "create_godzip",
+    "create_logzip",
     "discover_repo_root",
     "git_branch",
+    "git_changes",
+    "git_commit_all",
     "git_dirty",
     "git_head",
+    "git_pull_ff_only",
+    "git_push_current",
     "git_status_map",
+    "git_upstream",
     "inspect_godzip",
+    "inspect_pull",
     "move_paths_to_deleteme",
     "read_debris_manifest",
+    "selective_sync_from_remote",
     "sha256_file",
     "suggested_godzip_name",
+    "suggested_logzip_path",
     "validate_repo_relpath",
     "workflow_default_selected",
     "write_debris_manifest",
