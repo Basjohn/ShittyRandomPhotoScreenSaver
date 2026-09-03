@@ -405,6 +405,8 @@ def install_default_logical_tick_state(state: Any, *, bar_count: int) -> None:
     # Source freshness / mode-teardown readiness.
     state._waiting_for_fresh_frame = False
     state._waiting_for_fresh_engine_frame = False
+    # Lead E1: post-re-entry commit-seq watermark (<0 => generation-only fence).
+    state._pending_engine_frame_epoch = -1
     state._has_pushed_first_frame = False
     state._fallback_logged = False
     state._mode_teardown_block_until_ready = False
