@@ -76,6 +76,47 @@ def test_runtime_gc_policy_freezes_stable_generation_once_and_unfreezes_on_stop(
     assert policy.frozen is False
 
 
+def test_derive_warmup_thresholds_defers_only_gen2():
+    from core.performance.gc_policy import (
+        _WARMUP_FULL_DEFERRAL,
+        derive_runtime_thresholds,
+        derive_warmup_thresholds,
+    )
+
+    active = derive_runtime_thresholds((700, 10, 10))  # (700, 20, 50)
+    warmup = derive_warmup_thresholds(active)
+    # Young/middle keep the active cadence; only gen2 (full) is deferred.
+    assert warmup[0] == active[0]
+    assert warmup[1] == active[1]
+    assert warmup[2] == active[2] * _WARMUP_FULL_DEFERRAL
+    assert warmup[2] > active[2]
+    # An intentionally disabled collector stays disabled.
+    assert derive_warmup_thresholds((0, 10, 10)) == (0, 10, 10)
+
+
+def test_gc_policy_defers_gen2_in_warmup_then_restores_active_on_freeze():
+    from core.performance.gc_policy import RuntimeGCPolicy
+
+    original = tuple(gc.get_threshold())
+    policy = RuntimeGCPolicy()
+    try:
+        assert policy.start() is True
+        # During warmup the gen2 trigger is deferred above the active value, so the
+        # first expensive gen2 cannot race the one-shot freeze.
+        warmup = tuple(gc.get_threshold())
+        assert warmup == policy._warmup_thresholds
+        if original[0] > 0:
+            assert warmup[2] > policy._active_thresholds[2]
+        # Freezing the stable set restores the normal active cadence so post-freeze
+        # objects (recreated runtime/display/Settings generations) collect normally.
+        assert policy.freeze_stable_generation() is True
+        assert tuple(gc.get_threshold()) == policy._active_thresholds
+    finally:
+        policy.stop()
+        gc.unfreeze()
+    assert tuple(gc.get_threshold()) == original
+
+
 def _install_fake_pyside() -> tuple[type, type]:
     qtgui = types.ModuleType("PySide6.QtGui")
     pyside = types.ModuleType("PySide6")
