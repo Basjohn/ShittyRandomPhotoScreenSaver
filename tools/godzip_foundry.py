@@ -15,6 +15,7 @@ import ctypes
 import json
 import os
 import subprocess
+import threading
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 import sys
@@ -83,8 +84,8 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
 try:
-    from PySide6.QtCore import Qt, QTimer
-    from PySide6.QtGui import QColor, QFont, QGuiApplication, QIcon
+    from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+    from PySide6.QtGui import QColor, QDesktopServices, QFont, QGuiApplication, QIcon
     from PySide6.QtWidgets import (
         QAbstractItemView,
         QApplication,
@@ -476,9 +477,13 @@ class CreateTab(QWidget):
         self.output_edit.setText(remembered)
         browse = QPushButton("Output Folder…")
         browse.clicked.connect(self.choose_output)
+        open_saved = QPushButton("Open Saved Folder")
+        open_saved.setToolTip("Open the current GODZIP output folder in the system file manager.")
+        open_saved.clicked.connect(self.open_saved_folder)
         row.addWidget(QLabel("Output"))
         row.addWidget(self.output_edit, 1)
         row.addWidget(browse)
+        row.addWidget(open_saved)
         foot.addLayout(row)
         row2 = QHBoxLayout()
         self.name_edit = QLineEdit(suggested_godzip_name(self.repo_root))
@@ -558,6 +563,12 @@ class CreateTab(QWidget):
         if path:
             self.output_edit.setText(path)
             _save_local_setting(self.repo_root, "output_dir", path)
+
+    def open_saved_folder(self) -> None:
+        self.window.open_folder(
+            Path(self.output_edit.text().strip() or str(self.repo_root.parent)).expanduser(),
+            label="GODZIP output folder",
+        )
 
     def create_archive(self) -> None:
         selected = self.tree.checked_paths()
@@ -1384,7 +1395,11 @@ class LogzipTab(QWidget):
         self.button.setObjectName("primaryButton")
         self.button.clicked.connect(self.create)
         self.button.setEnabled(False)
+        open_saved = QPushButton("Open Saved Folder")
+        open_saved.setToolTip("Open the remembered GODZIP/LOGZIP output folder in the system file manager.")
+        open_saved.clicked.connect(self.open_saved_folder)
         fl.addLayout(summary_box, 1)
+        fl.addWidget(open_saved)
         fl.addWidget(self.button)
         layout.addWidget(footer)
 
@@ -1392,6 +1407,9 @@ class LogzipTab(QWidget):
         settings = _load_local_settings(self.repo_root)
         remembered = str(settings.get("output_dir", "")).strip()
         return Path(remembered).expanduser() if remembered else self.repo_root.parent
+
+    def open_saved_folder(self) -> None:
+        self.window.open_folder(self._output_dir(), label="LOGZIP output folder")
 
     def refresh(self) -> None:
         try:
@@ -1976,6 +1994,8 @@ class PullTab(QWidget):
 class RunTab(QWidget):
     """Repo-local SRPSS launcher with remembered diagnostic flag profiles."""
 
+    runWaitFinished = Signal(object)
+
     def __init__(self, window: "GodzipFoundryWindow") -> None:
         super().__init__(window)
         self.window = window
@@ -1983,6 +2003,9 @@ class RunTab(QWidget):
         self.flag_checks: dict[str, QCheckBox] = {}
         self._flags: tuple[str, ...] = ()
         self._building = False
+        self._auto_logzip_process: subprocess.Popen | None = None
+        self._auto_logzip_wait_thread: threading.Thread | None = None
+        self.runWaitFinished.connect(self._run_wait_finished)
         self._build_ui()
         self.refresh_flags()
 
@@ -2063,8 +2086,16 @@ class RunTab(QWidget):
             "Off (default): the dedicated console closes naturally with Python. "
             "On: launch through cmd /k so the console remains for inspection."
         )
-        self.keep_console.stateChanged.connect(self._selection_changed)
+        self.keep_console.toggled.connect(self._keep_console_toggled)
         bottom.addWidget(self.keep_console)
+        self.auto_logzip = QCheckBox("LogZIP after run automatically")
+        self.auto_logzip.setToolTip(
+            "After the launched SRPSS Python process has fully exited, bundle all direct loose /logs files "
+            "to the remembered GODZIP output folder. Uses process.wait(); no polling or timer. "
+            "Mutually exclusive with keeping the console open so session completion stays exact."
+        )
+        self.auto_logzip.toggled.connect(self._auto_logzip_toggled)
+        bottom.addWidget(self.auto_logzip)
         bottom.addStretch(1)
         self.launch_button = QPushButton("RUN")
         self.launch_button.setObjectName("primaryButton")
@@ -2112,7 +2143,11 @@ class RunTab(QWidget):
                 col = index % 3
                 self.flags_grid.addWidget(check, row, col)
 
-            self.keep_console.setChecked(bool(settings.get("run_keep_console_open", False)))
+            auto_logzip = bool(settings.get("run_auto_logzip_after_exit", False))
+            self.auto_logzip.setChecked(auto_logzip)
+            self.keep_console.setChecked(
+                bool(settings.get("run_keep_console_open", False)) and not auto_logzip
+            )
             python_exe = repo_venv_python(self.repo_root)
             self.python_label.setText(str(python_exe))
         except Exception as exc:
@@ -2146,6 +2181,16 @@ class RunTab(QWidget):
         if not self._building:
             self._update_preview()
 
+    def _keep_console_toggled(self, checked: bool) -> None:
+        if checked and self.auto_logzip.isChecked():
+            self.auto_logzip.setChecked(False)
+        self._selection_changed()
+
+    def _auto_logzip_toggled(self, checked: bool) -> None:
+        if checked and self.keep_console.isChecked():
+            self.keep_console.setChecked(False)
+        self._selection_changed()
+
     def _display_command(self) -> str:
         entrypoint = self.entrypoint_combo.currentText() or "main.py"
         flags = self.selected_flags()
@@ -2167,6 +2212,7 @@ class RunTab(QWidget):
             self.run_status.setText(
                 "Ready — launches in a dedicated console" +
                 (" that stays open after exit." if self.keep_console.isChecked() else " that closes when SRPSS exits.")
+                + (" LOGZIP will be created after SRPSS exits." if self.auto_logzip.isChecked() else "")
             )
         except Exception as exc:
             self.launch_button.setEnabled(False)
@@ -2176,6 +2222,7 @@ class RunTab(QWidget):
         entrypoint = self.entrypoint_combo.currentText() or "main.py"
         flags = self.selected_flags()
         keep_open = self.keep_console.isChecked()
+        auto_logzip = self.auto_logzip.isChecked()
         try:
             process = launch_run_command(
                 self.repo_root,
@@ -2186,15 +2233,92 @@ class RunTab(QWidget):
             _save_local_setting(self.repo_root, "run_entrypoint", entrypoint)
             _save_local_setting(self.repo_root, "run_flags", flags)
             _save_local_setting(self.repo_root, "run_keep_console_open", keep_open)
+            _save_local_setting(self.repo_root, "run_auto_logzip_after_exit", auto_logzip)
             self.window.set_status(
                 f"Launched {entrypoint} as PID {process.pid} with {len(flags)} flag(s)"
             )
             self.run_status.setText(
                 f"Running as PID {process.pid}. "
                 + ("Console will remain open after exit." if keep_open else "Console will close automatically when SRPSS exits.")
+                + (" LOGZIP will be created only after the SRPSS process exits." if auto_logzip else "")
             )
+            if auto_logzip:
+                self._start_auto_logzip_wait(process)
         except Exception as exc:
             self.window.show_error("RUN launch failed", exc)
+
+    def _start_auto_logzip_wait(self, process: subprocess.Popen) -> None:
+        """Wait off the UI thread for the actual SRPSS process, without polling."""
+
+        self._auto_logzip_process = process
+        self.launch_button.setEnabled(False)
+        self.auto_logzip.setEnabled(False)
+        self.keep_console.setEnabled(False)
+
+        def wait_for_exit() -> None:
+            try:
+                payload: object = ("ok", int(process.wait()))
+            except Exception as exc:  # pragma: no cover - OS/process failure path
+                payload = ("error", str(exc))
+            try:
+                self.runWaitFinished.emit(payload)
+            except RuntimeError:
+                # Foundry may have been closed while SRPSS was still running.
+                pass
+
+        self._auto_logzip_wait_thread = threading.Thread(
+            target=wait_for_exit,
+            name="GodzipFoundryRunWait",
+            daemon=True,
+        )
+        self._auto_logzip_wait_thread.start()
+
+    def _run_wait_finished(self, payload: object) -> None:
+        self._auto_logzip_process = None
+        self._auto_logzip_wait_thread = None
+        self.auto_logzip.setEnabled(True)
+        self.keep_console.setEnabled(True)
+
+        status, detail = (
+            payload
+            if isinstance(payload, tuple) and len(payload) == 2
+            else ("error", "invalid wait result")
+        )
+        if status != "ok":
+            self._update_preview()
+            self.window.show_error("RUN completion watch failed", detail)
+            return
+
+        logs = collect_log_files(self.repo_root)
+        if not logs:
+            message = (
+                f"SRPSS exited with code {detail}; Auto-LOGZIP skipped because /logs "
+                "has no direct loose files."
+            )
+            self.window.set_status(message)
+            self.run_status.setText(message)
+            self.window.logzip_tab.refresh()
+            self._update_preview()
+            return
+
+        self.window.set_busy(True, "SRPSS exited — creating automatic LOGZIP…")
+        try:
+            result = create_logzip(
+                self.repo_root,
+                output_dir=self.window.logzip_tab._output_dir(),
+            )
+            message = (
+                f"SRPSS exited with code {detail}; created {result.zip_path.name} "
+                f"from {len(result.files)} loose log file(s)."
+            )
+            self.window.set_status(message)
+            self.run_status.setText(f"{message}\n{result.zip_path}")
+            self.window.logzip_tab.refresh()
+        except Exception as exc:
+            self.window.show_error("Automatic LOGZIP creation failed", exc)
+        finally:
+            self.window.set_busy(False)
+            self._update_preview()
 
 
 class GodzipFoundryWindow(QMainWindow):
@@ -2214,6 +2338,16 @@ class GodzipFoundryWindow(QMainWindow):
         self.create_tab.refresh()
         if initial_zip is not None:
             QTimer.singleShot(0, lambda: self.apply_tab.load_zip(initial_zip))
+
+    def open_folder(self, path: Path, *, label: str = "folder") -> None:
+        """Open one existing directory through the desktop shell; never spawn a console."""
+
+        target = Path(path).expanduser().resolve()
+        if not target.is_dir():
+            self.show_error(f"Cannot open {label}", GodzipError(f"Directory does not exist: {target}"))
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(target))):
+            self.show_error(f"Cannot open {label}", GodzipError(f"Desktop shell refused directory: {target}"))
 
     def _fit_to_screen(self) -> None:
         screen = QApplication.primaryScreen()
