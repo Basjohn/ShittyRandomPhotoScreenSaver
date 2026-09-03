@@ -1312,6 +1312,13 @@
             "devcurve_transient_clamp": 1.5,
             "devcurve_transient_pulse_gain": 1.0,
             "enabled": true,
+            "enabled_modes": [
+                "spectrum",
+                "oscilloscope",
+                "sine_wave",
+                "bubble",
+                "devcurve"
+            ],
             "mode": "devcurve",
             "monitor": "ALL",
             "osc_ghost_decay": 0.4,

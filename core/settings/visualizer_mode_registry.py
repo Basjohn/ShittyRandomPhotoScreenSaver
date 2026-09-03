@@ -208,3 +208,84 @@ def coerce_visualizer_mode_id(mode_id: str | None) -> str:
     if raw in VISUALIZER_MODE_IDS:
         return raw
     return get_default_visualizer_mode_id()
+
+
+def resolve_effective_enabled_modes(
+    requested: object,
+) -> tuple[str, ...]:
+    """Normalize a persisted enabled-mode selection into canonical order.
+
+    Keeps only canonical mode ids, de-duplicates, and preserves canonical
+    ``VISUALIZER_MODE_IDS`` order regardless of stored order. Enforces the V2
+    invariant that a live Visualizer family has at least one enabled mode: an
+    absent, empty, or fully-invalid selection resolves to **all** registered
+    modes (this is also the migration default for existing users, preserving
+    today's behavior where every mode is reachable).
+
+    This is intentionally about the *registered* canonical set, not dev gates:
+    enable-state is persisted product configuration, separate from ``is_mode_active``.
+    """
+
+    if requested is None:
+        return VISUALIZER_MODE_IDS
+
+    if isinstance(requested, str):
+        raw_items: tuple[object, ...] = (requested,)
+    elif isinstance(requested, (list, tuple, set, frozenset)):
+        raw_items = tuple(requested)
+    else:
+        return VISUALIZER_MODE_IDS
+
+    selected = {
+        str(item or "").strip().lower()
+        for item in raw_items
+    }
+    ordered = tuple(
+        mode_id for mode_id in VISUALIZER_MODE_IDS if mode_id in selected
+    )
+    if not ordered:
+        # Never let a stale/garbage selection disable the whole family.
+        return VISUALIZER_MODE_IDS
+    return ordered
+
+
+def resolve_effective_mode(
+    requested_mode: object,
+    enabled_modes: object,
+) -> tuple[str, bool]:
+    """Resolve a requested mode against the effective enabled-mode set.
+
+    Returns ``(mode_id, substituted)``:
+
+    - requested is enabled            -> (requested, False)
+    - requested is canonical, disabled -> deterministic enabled substitute
+      (the next enabled mode in canonical order, wrapping once), True
+    - requested is unknown/retired     -> the configured default when enabled,
+      else the first enabled canonical mode, True
+
+    A stale/disabled selection is never silently re-enabled: the substitute is
+    always drawn from ``enabled_modes``. Callers own persisting/logging the
+    substitution; this function is pure.
+    """
+
+    enabled = resolve_effective_enabled_modes(enabled_modes)
+    requested = str(requested_mode or "").strip().lower()
+
+    if requested in enabled:
+        return requested, False
+
+    if requested in VISUALIZER_MODE_IDS:
+        # Canonical but disabled: walk canonical order from just after the
+        # requested mode, wrapping once, and pick the first enabled mode.
+        start = VISUALIZER_MODE_IDS.index(requested)
+        count = len(VISUALIZER_MODE_IDS)
+        for step in range(1, count + 1):
+            candidate = VISUALIZER_MODE_IDS[(start + step) % count]
+            if candidate in enabled:
+                return candidate, True
+
+    # Unknown/retired: prefer the configured default if it is enabled.
+    default_mode = get_default_visualizer_mode_id()
+    if default_mode in enabled:
+        return default_mode, True
+    return enabled[0], True
