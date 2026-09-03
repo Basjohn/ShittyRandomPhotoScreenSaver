@@ -265,7 +265,42 @@ cannot separate the owner):
   or avoidable generation-replacement cost across that boundary;
 - must not weaken freshness or generation/activation fencing, add cadence/queue owners, or accept stale.
 
-<!-- E2 mechanism attribution below as source/log evidence accrues -->
+Path map (source-traced 2026-09-04). The retained presentation edge is a single
+GUI-side owner, not a queue:
+
+```text
+logical_tick (pure-Python ~90Hz) -> _publish_logical_state -> controller.logical_mailbox (latest-wins)
+  -> QuickFramePacer._service_deadline (QTimer @ target_hz) -> owner.sync_present -> QuickVisualizerPresentationSync.sync_latest:
+       mailbox.take() -> _identity_is_current(logical) vs controller.render_identity
+       -> resolve_presentation() -> controller.publish_render_snapshot -> VisualizerSnapshotBridge.publish  [T6]
+       -> commit_presentation + _request_present -> window.update()
+  -> (Quick render thread) VisualizerRenderItem.updatePaintNode -> bridge.take_for_render -> paint  [T7]
+```
+
+The bridge (`publish`/`take_for_render`) is an O(1) lock-guarded latest-wins slot,
+and the pacer runs at authored `target_hz` (~11 ms) — so steady-state T3->T6 is
+one-to-two cycles. A recreation-only ~70-75 ms therefore means `sync_latest` is
+**returning False (no publish) for several pacer cycles after fresh source**. The
+candidate owners the split must decide between:
+
+- **identity-alignment window** — `_identity_is_current` / `publish_render_snapshot`
+  reject until the freshly-bound `render_identity` and the new runtime's logical
+  frames agree (must not be "fixed" by weakening fencing);
+- **presentation-resolve gap** — `resolve_presentation()` returns None until the
+  new owner's geometry/scale/style resolves;
+- **pacer/first-opportunity latency** after admission;
+- **logical first-publish latency** on the freshly-started runtime.
+
+Existing T1..T7 markers only arm on a Play/Pause edge, so they cannot split a pure
+recreation. **Instrumentation added (diagnostics-only, 2026-09-04):**
+`begin_playback_edge` now takes a `kind` label (threaded into T3/T4/T5/T6), and a
+warm recreation arms it as `kind=recreation` from `_apply_configuration` (only when
+`arm_reentry_fresh_frame_fence` reports warm). The next `--viz` run then yields, per
+recreation: edge->T3 (fence/capture, the E1 window), T3->T5 (logical consume+publish),
+T5->T6 (pacer sync + bridge publish) — pinning which owner holds the ~70-75 ms. Any
+fix must preserve the fade-in transitions (`sync_present` phases / authored reveal)
+and generation/activation fencing; gentler/longer fades are acceptable, shorter are
+not.
 
 ### Resource observation — not yet leak evidence
 
