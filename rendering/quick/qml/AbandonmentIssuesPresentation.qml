@@ -158,6 +158,13 @@ OverlayWidget {
             SequentialAnimation {
                 id: archiveTransition
 
+                // Drive continuous frames while the content fade runs, event-driven,
+                // so the threaded scene renders the fade instead of flashing.
+                onRunningChanged: {
+                    if (typeof widgetFrameDemand !== 'undefined' && widgetFrameDemand)
+                        widgetFrameDemand.setAnimationActive(archiveTransition, running)
+                }
+
                 NumberAnimation {
                     target: archiveContent
                     property: "opacity"

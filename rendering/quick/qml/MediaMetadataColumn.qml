@@ -237,5 +237,10 @@ Item {
             metadataFade._outgoingVisible = false
             currentColumn.opacity = 1.0
         }
+        // Drive continuous frames while the text crossfade runs, event-driven.
+        onRunningChanged: {
+            if (typeof widgetFrameDemand !== 'undefined' && widgetFrameDemand)
+                widgetFrameDemand.setAnimationActive(metadataCrossfade, running)
+        }
     }
 }

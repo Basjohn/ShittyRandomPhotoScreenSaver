@@ -886,6 +886,20 @@ class QuickSceneController(QObject):
             raise TypeError("perf pacer state provider must be callable")
         self._perf_pacer_state_provider = provider
 
+    def bind_widget_frame_demand(self, gate: QObject | None) -> bool:
+        """Expose the widget-animation frame-demand gate to this display's QML.
+
+        Set as the ``widgetFrameDemand`` context property so every retained
+        widget (and its nested crossfade primitives) can raise a continuous-frame
+        demand while an opacity/crossfade animation runs — event-driven, no timer.
+        """
+
+        context = self._context
+        if context is None:
+            return False
+        context.setContextProperty("widgetFrameDemand", gate)
+        return True
+
     def set_transition_run(self, run: TransitionRun | None) -> bool:
         """Publish the current generation-fenced run into the Quick sync path."""
 

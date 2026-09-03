@@ -22,6 +22,11 @@ class QuickFrameDemand(IntFlag):
     NONE = 0
     TRANSITION = auto()
     VISUALIZER = auto()
+    # A widget QML opacity/crossfade animation is running. Without this the
+    # threaded scene is only driven while a wallpaper transition or the
+    # visualizer demands frames, so a track-change/rotation fade with neither
+    # active renders only its first/last frame and reads as a hard flash.
+    WIDGET_ANIMATION = auto()
 
 
 @dataclass(frozen=True)
@@ -125,7 +130,11 @@ class QuickFramePacer(QObject):
 
         if self._closed:
             raise RuntimeError("Quick frame pacer is closed")
-        allowed = int(QuickFrameDemand.TRANSITION | QuickFrameDemand.VISUALIZER)
+        allowed = int(
+            QuickFrameDemand.TRANSITION
+            | QuickFrameDemand.VISUALIZER
+            | QuickFrameDemand.WIDGET_ANIMATION
+        )
         reason_value = int(reason)
         if reason_value == 0 or reason_value & ~allowed:
             raise ValueError(f"unsupported Quick frame demand: {reason!r}")
@@ -151,6 +160,9 @@ class QuickFramePacer(QObject):
 
     def set_visualizer_active(self, active: bool) -> None:
         self.set_demand(QuickFrameDemand.VISUALIZER, active)
+
+    def set_widget_animation_active(self, active: bool) -> None:
+        self.set_demand(QuickFrameDemand.WIDGET_ANIMATION, active)
 
     def set_visualizer_sync(
         self,

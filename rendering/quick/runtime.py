@@ -142,6 +142,16 @@ class QuickDisplayRuntime(QObject):
             )
         )
         self._scene.bind_perf_pacer_state_provider(self._pacer.describe)
+        # Event-driven continuous-frame demand for running widget QML animations
+        # (Media artwork/metadata, Steam content rotations, lifecycle fades). Set
+        # before any family widget QML is instantiated so its animations can raise
+        # the demand from onRunningChanged and fade smoothly instead of flashing.
+        from rendering.quick.widget_frame_demand import QuickWidgetFrameDemand
+
+        self._widget_frame_demand: QuickWidgetFrameDemand | None = (
+            QuickWidgetFrameDemand(self._pacer, parent=self)
+        )
+        self._scene.bind_widget_frame_demand(self._widget_frame_demand)
         self._auxiliary.set_pixel_shift_defer_check(
             lambda: self._transition is not None and self._transition.is_active
         )
@@ -491,6 +501,8 @@ class QuickDisplayRuntime(QObject):
         # generation-owned runtime service outlives its display generation.
         if self._widget_runtime_manager is not None:
             self._widget_runtime_manager.cleanup()
+        if self._widget_frame_demand is not None:
+            self._widget_frame_demand.clear()
         self.frame_pacer.close()
         self.scene_controller.quiesce_for_retirement()
         # This is the only legal window retirement entry: QuickDisplayWindow
