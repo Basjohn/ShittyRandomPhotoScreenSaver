@@ -51,6 +51,31 @@ def test_runtime_gc_policy_restores_interpreter_thresholds_and_callback():
     assert policy._gc_callback not in gc.callbacks
 
 
+def test_runtime_gc_policy_freezes_stable_generation_once_and_unfreezes_on_stop():
+    from core.performance.gc_policy import RuntimeGCPolicy
+
+    baseline = gc.get_freeze_count()
+    policy = RuntimeGCPolicy()
+    try:
+        # No freeze before the policy is active.
+        assert policy.freeze_stable_generation() is False
+        assert policy.frozen is False
+
+        assert policy.start() is True
+        retained = [{"k": [1, 2, 3]} for _ in range(1000)]
+        assert policy.freeze_stable_generation() is True
+        assert policy.frozen is True
+        assert gc.get_freeze_count() > baseline
+        # Idempotent: a second freeze is a no-op.
+        assert policy.freeze_stable_generation() is False
+        assert retained  # keep the frozen set alive across the freeze
+    finally:
+        policy.stop()
+        gc.unfreeze()  # belt-and-suspenders: never leak freeze state to other tests
+    # stop() released the pinned snapshot and cleared the flag.
+    assert policy.frozen is False
+
+
 def _install_fake_pyside() -> tuple[type, type]:
     qtgui = types.ModuleType("PySide6.QtGui")
     pyside = types.ModuleType("PySide6")
