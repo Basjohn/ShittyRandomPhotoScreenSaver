@@ -2,13 +2,90 @@ from __future__ import annotations
 
 import logging
 import time
+from types import SimpleNamespace
 
 from core.performance.usage_sampler import (
     GpuUsageSnapshot,
+    ProcessUsageCollector,
     ProcessUsageSnapshot,
     UsageTelemetryService,
     WindowsGpuUsageCollector,
 )
+
+
+class _CountingProc:
+    """A psutil.Process-like double that counts the two GIL-held system-wide
+    enumerations (``children(recursive=True)`` and ``num_threads()``) so tests
+    can pin that they run only on the heavy sub-cadence."""
+
+    def __init__(self, pid: int = 4242) -> None:
+        self.pid = pid
+        self.children_calls = 0
+        self.num_threads_calls = 0
+        self.threads = 17
+        self.rss = 100 * 1024 * 1024
+
+    def cpu_percent(self, interval=None):  # noqa: D401 - test double
+        return 5.0
+
+    def children(self, recursive=False):
+        self.children_calls += 1
+        return []
+
+    def memory_info(self):
+        return SimpleNamespace(rss=self.rss, vms=200 * 1024 * 1024, private=90 * 1024 * 1024)
+
+    def memory_full_info(self):
+        return SimpleNamespace(uss=80 * 1024 * 1024)
+
+    def num_threads(self):
+        self.num_threads_calls += 1
+        return self.threads
+
+    def num_handles(self):
+        return 500
+
+    def io_counters(self):
+        return SimpleNamespace(read_bytes=10, write_bytes=5)
+
+
+def test_collector_partitions_system_wide_enumerations_to_heavy_cadence():
+    proc = _CountingProc()
+    collector = ProcessUsageCollector(proc, heavy_refresh_samples=4)
+
+    # Sample 0 is always heavy: it discovers topology and measures threads.
+    first = collector.collect()
+    assert proc.children_calls == 1
+    assert proc.num_threads_calls == 1
+    assert first.threads_app == 17
+    assert first.rss_app_mb > 0.0
+
+    # Samples 1..3 are light: no children()/num_threads() calls, and the thread
+    # count carries forward even though the underlying value changed.
+    proc.threads = 99
+    proc.rss = 150 * 1024 * 1024
+    for _ in range(3):
+        light = collector.collect()
+        assert light.threads_app == 17  # carried forward, not re-measured
+        # Cheap per-process memory metrics are still refreshed every sample.
+        assert light.rss_app_mb > first.rss_app_mb
+    assert proc.children_calls == 1
+    assert proc.num_threads_calls == 1
+
+    # Sample 4 refreshes the heavy metrics again and picks up the new count.
+    heavy = collector.collect()
+    assert proc.children_calls == 2
+    assert proc.num_threads_calls == 2
+    assert heavy.threads_app == 99
+
+
+def test_collector_heavy_refresh_one_measures_every_sample():
+    proc = _CountingProc()
+    collector = ProcessUsageCollector(proc, heavy_refresh_samples=1)
+    for _ in range(3):
+        collector.collect()
+    assert proc.children_calls == 3
+    assert proc.num_threads_calls == 3
 
 
 class _Timer:
