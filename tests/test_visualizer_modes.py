@@ -21,18 +21,18 @@ class TestVisualizerModeEnum:
 
     def test_visualizer_mode_enum_exists(self):
         """Verify VisualizerMode enum can be imported."""
-        from widgets.spotify_visualizer_widget import VisualizerMode
+        from widgets.spotify_visualizer.audio_worker import VisualizerMode
         assert VisualizerMode is not None
 
     def test_visualizer_mode_has_spectrum(self):
         """Verify SPECTRUM mode exists."""
-        from widgets.spotify_visualizer_widget import VisualizerMode
+        from widgets.spotify_visualizer.audio_worker import VisualizerMode
         assert hasattr(VisualizerMode, "SPECTRUM")
         assert VisualizerMode.SPECTRUM.value == 1
 
     def test_visualizer_mode_count(self):
         """Verify the current visualizer mode set exists."""
-        from widgets.spotify_visualizer_widget import VisualizerMode
+        from widgets.spotify_visualizer.audio_worker import VisualizerMode
         from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
         modes = list(VisualizerMode)
         assert len(modes) == 5
@@ -46,92 +46,11 @@ class TestVisualizerModeEnum:
         assert get_default_visualizer_mode_id() == DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]["mode"]
 
 
-class TestVisualizerWidgetModes:
-    """Tests for visualization mode on SpotifyVisualizerWidget."""
-
-    def test_widget_default_mode_matches_canonical_default(self, qt_app):
-        """Verify cold widget construction follows the canonical default mode."""
-        from core.settings.visualizer_mode_registry import get_default_visualizer_mode_id
-        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget, VisualizerMode
-        widget = SpotifyVisualizerWidget(bar_count=15)
-        expected_mode = VisualizerMode[get_default_visualizer_mode_id().upper()]
-        assert widget.get_visualization_mode() == expected_mode
-
-    def test_widget_honors_initial_mode_seed(self, qt_app):
-        """Verify constructor seeding can override the cold default safely."""
-        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget, VisualizerMode
-        widget = SpotifyVisualizerWidget(bar_count=15, initial_mode="devcurve")
-        assert widget.get_visualization_mode() == VisualizerMode.DEVCURVE
-
-    def test_widget_has_get_visualization_mode(self, qt_app):
-        """Verify widget has get_visualization_mode method."""
-        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-        widget = SpotifyVisualizerWidget(bar_count=15)
-        assert hasattr(widget, "get_visualization_mode")
-        assert callable(widget.get_visualization_mode)
-
-    def test_widget_has_set_visualization_mode(self, qt_app):
-        """Verify widget has set_visualization_mode method."""
-        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-        widget = SpotifyVisualizerWidget(bar_count=15)
-        assert hasattr(widget, "set_visualization_mode")
-        assert callable(widget.set_visualization_mode)
-
-    def test_set_spectrum_mode(self, qt_app):
-        """Verify SPECTRUM mode can be set."""
-        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget, VisualizerMode
-        widget = SpotifyVisualizerWidget(bar_count=15)
-        widget.set_visualization_mode(VisualizerMode.SPECTRUM)
-        assert widget.get_visualization_mode() == VisualizerMode.SPECTRUM
-
-
-class TestVisualizerWidgetBasics:
-    """Basic tests for SpotifyVisualizerWidget."""
-
-    def test_widget_creation(self, qt_app):
-        """Verify widget can be created."""
-        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-        widget = SpotifyVisualizerWidget(bar_count=15)
-        assert widget is not None
-
-    def test_widget_bar_count_initialized(self, qt_app):
-        """Verify bar count is initialized."""
-        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-        widget = SpotifyVisualizerWidget(bar_count=15)
-        # Bar count may be adjusted by shared engine, but should be positive
-        assert widget._bar_count > 0
-
-    def test_widget_default_bar_count(self, qt_app):
-        """Verify default bar count."""
-        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-        widget = SpotifyVisualizerWidget()
-        # Default bar count should be reasonable (32 is the default)
-        assert widget._bar_count > 0
-
-    def test_widget_has_bar_segments(self, qt_app):
-        """Verify widget has dynamic bar segments."""
-        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-        widget = SpotifyVisualizerWidget(bar_count=15)
-        assert hasattr(widget, "_bar_segments_base")
-        assert widget._bar_segments_base > 0
-        assert hasattr(widget, "_dynamic_bar_segments")
-        segs = widget._dynamic_bar_segments()
-        assert 8 <= segs <= 64
-
-    def test_widget_has_display_bars(self, qt_app):
-        """Verify widget has display_bars list."""
-        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-        widget = SpotifyVisualizerWidget(bar_count=15)
-        assert hasattr(widget, "_display_bars")
-        assert isinstance(widget._display_bars, list)
-
-    def test_widget_has_target_bars(self, qt_app):
-        """Verify widget has target_bars list."""
-        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-        widget = SpotifyVisualizerWidget(bar_count=15)
-        assert hasattr(widget, "_target_bars")
-        assert isinstance(widget._target_bars, list)
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+# NOTE: TestVisualizerWidgetModes and TestVisualizerWidgetBasics were removed
+# here. They exercised the removed pre-cutover `SpotifyVisualizerWidget`
+# monolith (mode get/set, bar_segments/display_bars/target_bars). The retained
+# Quick visualizer owns mode selection through `VisualizerRuntimeController` /
+# `quick_display_visualizer_owner`; that behavior is covered by
+# `tests/test_qtquick_visualizer_all_modes.py`,
+# `tests/test_visualizer_runtime_controller.py` and the per-mode
+# `tests/test_qtquick_visualizer_*` suite.
