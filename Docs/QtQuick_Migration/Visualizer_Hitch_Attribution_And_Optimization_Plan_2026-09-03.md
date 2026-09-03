@@ -295,12 +295,50 @@ Existing T1..T7 markers only arm on a Play/Pause edge, so they cannot split a pu
 recreation. **Instrumentation added (diagnostics-only, 2026-09-04):**
 `begin_playback_edge` now takes a `kind` label (threaded into T3/T4/T5/T6), and a
 warm recreation arms it as `kind=recreation` from `_apply_configuration` (only when
-`arm_reentry_fresh_frame_fence` reports warm). The next `--viz` run then yields, per
-recreation: edge->T3 (fence/capture, the E1 window), T3->T5 (logical consume+publish),
-T5->T6 (pacer sync + bridge publish) — pinning which owner holds the ~70-75 ms. Any
-fix must preserve the fade-in transitions (`sync_present` phases / authored reveal)
-and generation/activation fencing; gentler/longer fades are acceptable, shorter are
-not.
+`arm_reentry_fresh_frame_fence` reports warm). Any fix must preserve the fade-in
+transitions (`sync_present` phases / authored reveal) and generation/activation
+fencing; gentler/longer fades are acceptable, shorter are not.
+
+#### E2 results — instrumented run 2026-09-04 (`main.py --debug --perf --gpu-timing --usage --viz --geo --set --life --cache --fresh`)
+
+The split **corrects the earlier attribution**. Two structural facts first: **T3 == T5
+in every sample** (fresh authoritative source and the material logical publication
+land on the same logical tick — the logical path is instant), and `set_visualizer_active`
+is never toggled on pause/resume (so the pacer is not re-activating). Measured splits:
+
+```text
+kind=recreation (playing, n=9): edge->T3 (E1 fence/capture) med 23  max 35 ms ; T3->T6 (logical+bridge) med 4  max 16 ms
+kind=playback   (playing, n=6): edge->T3 (capture wake)     med 66  max 162 ms ; T3->T6                  med 29 max 63 ms
+```
+
+Conclusions:
+
+- **The render-bridge / Quick snapshot-admission / retained-presentation path is exonerated
+  as the recreation bottleneck.** On recreation T3->T6 is ~4 ms (max 16) — the O(1) bridge and
+  ~90 Hz pacer behave as designed. The earlier "~70-75 ms recreation" was **warm-resume**, not
+  recreation, and it was measured edge->T6 (or including paint), not the presentation path alone.
+- **Warm-resume re-entry is the real ~60-100 ms, and it is dominated by capture wake**
+  (edge->T3 med ~66 ms — the audio pipeline producing its first fresh frame after the pause
+  `engine.wake()`), which is **upstream of "fresh source availability"** and therefore outside
+  the render-presentation lane. E1 did not add this window; it only made it quiet instead of a
+  stale-energy flash. Reducing it belongs to an **audio capture-wake lane** and must not be solved
+  by accepting stale.
+- A smaller **warm-resume T3->T6 ~29 ms** (vs ~4 ms recreation) remains — a minor
+  logical->bridge sync variance on resume, worth a look but not the headline owner.
+- **System-load caveat (measured this run):** `--usage` reported **`cpu_main_pct` ~80-108 %** for the
+  whole capture — the GUI/**main thread was near or above one full logical core** (deliberately
+  elevated load) — while the pure-Python logical cadence stayed clean (**one** `Tick dt spike` all run,
+  62.9 ms at 00:34:37 startup, `slow_steps=0`). The presentation-side timings (T3->T6 sync, and the
+  edge->T3 162 ms / T3->T6 63 ms maxima) are therefore inflated by **main-thread CPU contention** (the
+  pacer's `sync_present` runs on that saturated thread), plus `--usage` heavy samples (a known
+  GIL-contention source, classified separately) — not a steady render-path cost. Read the medians as the
+  structural signal; a quieter repeat run should shrink the maxima and the ~29 ms resume sync. **T6->T7
+  (paint) is still unmeasured** (T7 arms only on a playing-flip); if a paint cost is ever suspected on
+  recreation, arm T7 on the recreation edge too.
+
+Net: E2-as-scoped (fresh source -> retained presentation) is **healthy**; the remaining recreation/
+resume latency is capture-wake (a separate lane) plus load. No presentation-path fix is warranted on
+this evidence.
 
 ### Resource observation — not yet leak evidence
 
