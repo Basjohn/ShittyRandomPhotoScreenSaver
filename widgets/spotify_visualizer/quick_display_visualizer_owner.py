@@ -237,7 +237,21 @@ class QuickDisplayVisualizerOwner:
             arm_reentry_fresh_frame_fence,
         )
 
-        arm_reentry_fresh_frame_fence(state, engine)
+        warm_reentry = arm_reentry_fresh_frame_fence(state, engine)
+        if warm_reentry and is_viz_diagnostics_enabled():
+            # E2 attribution (diagnostics-only): arm the existing T3..T6 markers on
+            # this warm recreation so the fresh-source -> retained-presentation gap
+            # is attributable exactly like a play/pause edge, labelled kind=recreation.
+            from widgets.spotify_visualizer.reactivity_diagnostics import (
+                begin_playback_edge,
+            )
+
+            begin_playback_edge(
+                state,
+                now_ts=time.time(),
+                playing=bool(controller.playing),
+                kind="recreation",
+            )
 
     def bind(self, *, engine_generation: int, activation_id: int) -> Any:
         if self._retired:
