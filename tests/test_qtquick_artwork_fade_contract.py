@@ -11,12 +11,17 @@ def test_shared_artwork_fade_primitive_is_event_driven_and_timerless() -> None:
     source = (QML / "ArtworkFadeImage.qml").read_text(encoding="utf-8")
 
     assert source.count("NumberAnimation {") == 2
-    assert "Qt.callLater" in source
+    assert "Qt.callLater" not in source
+    assert source.count("Image {") == 2
     assert "Image.Ready" in source
+    assert "_activeIndex" in source
+    assert "_inactiveImage" in source
     assert "fadeOut.running" in source
     assert "QTimer" not in source
     assert "Timer {" not in source
     assert "onSourceChanged" in source
+    assert "incoming.status !== Image.Ready" in source
+    assert '_setSource(oldIndex, "")' in source
 
 
 def test_all_current_dynamic_artwork_surfaces_use_shared_fade_primitive() -> None:

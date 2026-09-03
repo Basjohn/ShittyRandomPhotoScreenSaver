@@ -251,6 +251,10 @@ def test_weather_model_is_stable_runtime_consumer_for_loading_ready_and_cached_e
     assert model.detailIconSize == 30.0
     assert model.forecastText == "Tomorrow: 19°C, light rain"
     assert model.conditionIconSource.endswith("partly-cloudy-day.png")
+    assert "/images/weather/presented/" in model.conditionIconSource.replace("\\", "/")
+    assert "/images/weather/presented/detail/" in model.rainIconSource.replace("\\", "/")
+    assert "/images/weather/presented/detail/" in model.humidityIconSource.replace("\\", "/")
+    assert "/images/weather/presented/detail/" in model.windIconSource.replace("\\", "/")
     assert model.weather_pending_first_show() is False
 
     runtime.fail("offline")
@@ -490,6 +494,19 @@ def test_weather_qml_and_registry_are_static_presentation_only() -> None:
     )
     for marker in banned:
         assert marker not in qml
+    # Weather keeps native packaged texture resolution so high-DPI rendering does
+    # not decode a 96 px source and then upscale it on a 150%/200% display.
+    assert "sourceSize." not in qml
+    assert "legacyHorizontalInset: 10.0" in qml
+    assert "68.0" in qml
+    for asset in (
+        ROOT / "images" / "weather" / "presented" / "overcast-day.png",
+        ROOT / "images" / "weather" / "presented" / "clear-night.png",
+        ROOT / "images" / "weather" / "presented" / "detail" / "umbrella.png",
+        ROOT / "images" / "weather" / "presented" / "detail" / "humidity.png",
+        ROOT / "images" / "weather" / "presented" / "detail" / "wind.png",
+    ):
+        assert asset.is_file(), asset
     assert "WeatherPresentation 1.0 WeatherPresentation.qml" in (
         QML_ROOT / "qmldir"
     ).read_text(encoding="utf-8")

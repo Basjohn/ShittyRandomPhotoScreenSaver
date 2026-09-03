@@ -382,6 +382,39 @@ def test_gmail_model_rejects_stale_snapshot_and_mutates_rows_in_place() -> None:
     assert model.config.font_size == 18
 
 
+def test_gmail_visible_limit_applies_after_thread_grouping() -> None:
+    config = _config(limit=5, group_threads=True)
+    model = GmailPresentationModel(config, _style(config))
+    model.activate()
+
+    # The newest five source messages all belong to one collapsed conversation.
+    # Older unique messages must still be considered so ``limit=5`` means five
+    # visible rows/groups rather than five raw source messages before grouping.
+    emails = (
+        _email("thread-5", thread_id="thread-shared", minute=9),
+        _email("thread-4", thread_id="thread-shared", minute=8),
+        _email("thread-3", thread_id="thread-shared", minute=7),
+        _email("thread-2", thread_id="thread-shared", minute=6),
+        _email("thread-1", thread_id="thread-shared", minute=5),
+        _email("unique-4", thread_id="unique-4", minute=4, subject="Unique Four"),
+        _email("unique-3", thread_id="unique-3", minute=3, subject="Unique Three"),
+        _email("unique-2", thread_id="unique-2", minute=2, subject="Unique Two"),
+        _email("unique-1", thread_id="unique-1", minute=1, subject="Unique One"),
+    )
+
+    model.on_gmail_runtime_snapshot(_snapshot(1, emails, unread=len(emails)))
+
+    assert model.row_model.rowCount() == 5
+    assert model.row_model.rows[0].count == 5
+    assert [row.identity for row in model.row_model.rows] == [
+        "thread-shared",
+        "unique-4",
+        "unique-3",
+        "unique-2",
+        "unique-1",
+    ]
+
+
 def test_gmail_grouping_setting_reprojects_accepted_snapshot_in_place() -> None:
     config = _config(group_threads=True)
     model = GmailPresentationModel(config, _style(config))

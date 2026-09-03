@@ -60,20 +60,13 @@ def begin_playback_edge(
     *,
     now_ts: float,
     playing: bool,
-    kind: str = "playback",
 ) -> int:
-    """Record one diagnostics-only edge and return its sequence id.
-
-    ``kind`` labels the edge in the T3..T6 markers so a warm recreation/re-entry
-    edge (E2 fresh-source -> retained presentation attribution) is distinguishable
-    from an ordinary Play/Pause edge. Diagnostics-only; no behavioural effect.
-    """
+    """Record one diagnostics-only Play/Pause edge and return its sequence id."""
 
     if not is_viz_diagnostics_enabled():
         return 0
     sequence = int(getattr(host, "_reactivity_diag_edge_seq", 0) or 0) + 1
     host._reactivity_diag_edge_seq = sequence
-    host._reactivity_diag_edge_kind = str(kind or "playback")
     host._reactivity_diag_edge_playing = bool(playing)
     host._reactivity_diag_edge_started_ts = float(now_ts)
     host._reactivity_diag_edge_t3_logged = False
@@ -129,7 +122,6 @@ def maybe_log_reactivity_boundary(
     edge_seq = int(getattr(host, "_reactivity_diag_edge_seq", 0) or 0)
     edge_started = float(getattr(host, "_reactivity_diag_edge_started_ts", 0.0) or 0.0)
     edge_playing = bool(getattr(host, "_reactivity_diag_edge_playing", active))
-    edge_kind = str(getattr(host, "_reactivity_diag_edge_kind", "playback"))
     if edge_seq > 0 and edge_playing == active and edge_started > 0.0:
         fresh_after_edge = bool(
             source_timestamp is not None
@@ -142,10 +134,9 @@ def maybe_log_reactivity_boundary(
         ):
             host._reactivity_diag_edge_t3_logged = True
             logger.debug(
-                "[VIS_PLAYBACK_EDGE] stage=T3 edge=%d kind=%s mode=%s playing=%s dt_ms=%.1f "
+                "[VIS_PLAYBACK_EDGE] stage=T3 edge=%d mode=%s playing=%s dt_ms=%.1f "
                 "source=%d/%d source_age_ms=%.1f",
                 edge_seq,
-                edge_kind,
                 canonical_mode,
                 active,
                 max(0.0, (timestamp - edge_started) * 1000.0),
@@ -156,10 +147,9 @@ def maybe_log_reactivity_boundary(
         if ready and not bool(getattr(host, "_reactivity_diag_edge_t4_logged", False)):
             host._reactivity_diag_edge_t4_logged = True
             logger.debug(
-                "[VIS_PLAYBACK_EDGE] stage=T4 edge=%d kind=%s mode=%s playing=%s dt_ms=%.1f "
+                "[VIS_PLAYBACK_EDGE] stage=T4 edge=%d mode=%s playing=%s dt_ms=%.1f "
                 "ready=%s source=%d/%d",
                 edge_seq,
-                edge_kind,
                 canonical_mode,
                 active,
                 max(0.0, (timestamp - edge_started) * 1000.0),
@@ -281,10 +271,9 @@ def maybe_log_logical_publication(
 
     host._reactivity_diag_edge_t5_logged = True
     logger.debug(
-        "[VIS_PLAYBACK_EDGE] stage=T5 edge=%d kind=%s mode=%s playing=%s dt_ms=%.1f "
+        "[VIS_PLAYBACK_EDGE] stage=T5 edge=%d mode=%s playing=%s dt_ms=%.1f "
         "revision=%d energy_level=%.3f bars_level=%.3f waveform_level=%.3f",
         edge_seq,
-        str(getattr(host, "_reactivity_diag_edge_kind", "playback")),
         str(getattr(logical, "mode_id", "unknown")),
         edge_playing,
         max(0.0, (float(now_ts) - edge_started) * 1000.0) if edge_started > 0.0 else -1.0,
@@ -324,9 +313,8 @@ def maybe_log_snapshot_publication(
     host._reactivity_diag_edge_t6_logged = True
     edge_started = float(getattr(host, "_reactivity_diag_edge_started_ts", 0.0) or 0.0)
     logger.debug(
-        "[VIS_PLAYBACK_EDGE] stage=T6 edge=%d kind=%s mode=%s playing=%s dt_ms=%.1f revision=%d",
+        "[VIS_PLAYBACK_EDGE] stage=T6 edge=%d mode=%s playing=%s dt_ms=%.1f revision=%d",
         edge_seq,
-        str(getattr(host, "_reactivity_diag_edge_kind", "playback")),
         str(getattr(logical, "mode_id", "unknown")),
         edge_playing,
         max(0.0, (float(now_ts) - edge_started) * 1000.0) if edge_started > 0.0 else -1.0,

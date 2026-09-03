@@ -37,6 +37,7 @@ from .host import (
 
 
 _WEATHER_ICON_DIR = Path(__file__).resolve().parents[3] / "images" / "weather"
+_WEATHER_PRESENTED_ICON_DIR = _WEATHER_ICON_DIR / "presented"
 _WEATHER_SETTINGS_TARGET = "weather_location"
 _WEATHER_CODE_ICON_MAP: tuple[tuple[frozenset[int], str], ...] = (
     (frozenset({0}), "clear-day.png"),
@@ -64,9 +65,9 @@ _CONDITION_ICON_MAP: tuple[tuple[str, str], ...] = (
     ("thunder", "thunderstorms-day-rain.png"),
 )
 _DETAIL_ICON_FILES = {
-    "rain": "umbrella.png",
-    "humidity": "humidity.png",
-    "wind": "wind.png",
+    "rain": "detail/umbrella.png",
+    "humidity": "detail/humidity.png",
+    "wind": "detail/wind.png",
 }
 
 
@@ -131,8 +132,16 @@ def _optional_float(value: object) -> float | None:
         return None
 
 
-def _file_source(filename: str) -> str:
-    path = _WEATHER_ICON_DIR / filename
+def _file_source(filename: str, *, presented: bool = False) -> str:
+    """Return one packaged Weather asset URI without runtime image processing.
+
+    Dynamic condition/detail art uses pre-presented PNGs (shadow/tint already
+    baked into the asset), so the retained QML path performs no colour-overlay,
+    blur or per-frame image effect work.
+    """
+
+    root = _WEATHER_PRESENTED_ICON_DIR if presented else _WEATHER_ICON_DIR
+    path = root / filename
     return path.resolve().as_uri() if path.is_file() else ""
 
 
@@ -166,7 +175,7 @@ def _condition_icon_source(
         elif icon_name.endswith(".png"):
             candidates.insert(0, f"{icon_name[:-4]}-night.png")
     for candidate in candidates:
-        source = _file_source(candidate)
+        source = _file_source(candidate, presented=True)
         if source:
             return source
     return ""
@@ -604,15 +613,15 @@ class WeatherPresentationModel(QObject):
 
     @Property(str, notify=stateChanged)
     def rainIconSource(self) -> str:
-        return _file_source(_DETAIL_ICON_FILES["rain"])
+        return _file_source(_DETAIL_ICON_FILES["rain"], presented=True)
 
     @Property(str, notify=stateChanged)
     def humidityIconSource(self) -> str:
-        return _file_source(_DETAIL_ICON_FILES["humidity"])
+        return _file_source(_DETAIL_ICON_FILES["humidity"], presented=True)
 
     @Property(str, notify=stateChanged)
     def windIconSource(self) -> str:
-        return _file_source(_DETAIL_ICON_FILES["wind"])
+        return _file_source(_DETAIL_ICON_FILES["wind"], presented=True)
 
     @Property(str, notify=stateChanged)
     def rainText(self) -> str:

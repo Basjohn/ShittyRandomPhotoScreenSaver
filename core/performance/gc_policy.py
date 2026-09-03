@@ -63,35 +63,6 @@ def derive_runtime_thresholds(
     )
 
 
-# How far the gen2 (full) trigger is deferred during the pre-freeze warmup window.
-# The one expensive pre-freeze gen2 merely rescans the soon-to-be-frozen stable
-# set (near-zero yield); deferring it past `freeze_stable_generation()` removes
-# that ~100 ms stall without disabling gen2 outright.
-_WARMUP_FULL_DEFERRAL = 10
-
-
-def derive_warmup_thresholds(
-    active: tuple[int, int, int],
-) -> tuple[int, int, int]:
-    """Return startup thresholds that keep the first gen2 from racing the freeze.
-
-    Young/middle keep the active cadence; only the gen2 (full) trigger is raised,
-    so the single expensive pre-freeze gen2 — which merely rescans the
-    soon-to-be-frozen long-lived set and frees almost nothing — does not fire
-    before `freeze_stable_generation()`. This is contract-neutral: `gc.freeze()`
-    pins the same tracked set either way, so raising the warmup trigger only skips
-    a wasteful scan, it does not change what gets frozen. The trigger is left
-    finite (not zero/disabled), so a run whose freeze never fires still collects
-    gen2 on a bounded — if later — cadence rather than growing without limit.
-    """
-
-    young, middle, full = (max(0, int(v)) for v in active)
-    if young <= 0:
-        # Honour an intentionally disabled collector rather than reviving it.
-        return (young, middle, full)
-    return (young, middle, max(full * _WARMUP_FULL_DEFERRAL, full))
-
-
 class RuntimeGCPolicy:
     """Single RUN-lifetime owner of automatic GC threshold policy/telemetry."""
 
@@ -101,9 +72,6 @@ class RuntimeGCPolicy:
         self._lock = threading.Lock()
         self._original_thresholds = tuple(int(v) for v in gc.get_threshold())
         self._active_thresholds = derive_runtime_thresholds(self._original_thresholds)
-        # Applied only until the one-shot freeze runs; keeps the pre-freeze gen2
-        # from racing the freeze (see derive_warmup_thresholds).
-        self._warmup_thresholds = derive_warmup_thresholds(self._active_thresholds)
         self._active = False
         self._frozen = False
         self._starts_ns = [0, 0, 0]
@@ -155,19 +123,12 @@ class RuntimeGCPolicy:
             if not self._active or self._frozen:
                 return False
             gc.freeze()
-            # The stable set is now excluded from every future gen2 scan, so the
-            # warmup gen2 deferral has done its job: restore the normal active
-            # cadence for post-freeze objects (recreated runtime/display/Settings
-            # generations still collect normally).
-            gc.set_threshold(*self._active_thresholds)
             self._frozen = True
             frozen_count = gc.get_freeze_count()
         logger.info(
             "[GC_POLICY] Froze %d stable objects into the permanent generation "
-            "(excluded from future gen2 scans; released on stop); restored active "
-            "thresholds=%s for post-freeze collection",
+            "(excluded from future gen2 scans; released on stop)",
             frozen_count,
-            self._active_thresholds,
         )
         return True
 
@@ -175,16 +136,13 @@ class RuntimeGCPolicy:
         with self._lock:
             if self._active:
                 return False
-            # Warmup thresholds until the one-shot freeze: gen2 is deferred so the
-            # first expensive gen2 cannot fire before the stable set is frozen.
-            gc.set_threshold(*self._warmup_thresholds)
+            gc.set_threshold(*self._active_thresholds)
             if self._gc_callback not in gc.callbacks:
                 gc.callbacks.append(self._gc_callback)
             self._active = True
         logger.info(
-            "[GC_POLICY] RUN policy active original=%s warmup=%s active=%s manual_collect=disabled",
+            "[GC_POLICY] RUN policy active original=%s active=%s manual_collect=disabled",
             self._original_thresholds,
-            self._warmup_thresholds,
             self._active_thresholds,
         )
         return True
