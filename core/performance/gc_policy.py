@@ -73,6 +73,7 @@ class RuntimeGCPolicy:
         self._original_thresholds = tuple(int(v) for v in gc.get_threshold())
         self._active_thresholds = derive_runtime_thresholds(self._original_thresholds)
         self._active = False
+        self._frozen = False
         self._starts_ns = [0, 0, 0]
         self._collections = [0, 0, 0]
         self._collected = [0, 0, 0]
@@ -82,6 +83,42 @@ class RuntimeGCPolicy:
     @property
     def active(self) -> bool:
         return self._active
+
+    @property
+    def frozen(self) -> bool:
+        return self._frozen
+
+    def freeze_stable_generation(self) -> bool:
+        """Move the current long-lived tracked set to the permanent generation.
+
+        Called once, from a normal (non-collection) context after startup warms.
+        In-situ evidence (2026-09-03): the objects that survive to gen2 are a
+        stable, long-lived set that gen2 rescans for ~28-142 ms while freeing
+        almost nothing (``collected=0``), and each scan stalls the pure-Python
+        Visualizer cadence thread (a ~32 ms gen2 produced a ~43 ms Bubble tick
+        spike). ``gc.freeze()`` splices that set into a permanent generation in
+        O(1) (~0.01 ms) that future collections never scan, so recurring gen2 no
+        longer causes those stalls.
+
+        This is NOT disabling GC and does NOT hide leaks: objects allocated after
+        the freeze are still collected on the normal cadence, so any post-freeze
+        growth stays visible; only a bounded startup/steady-state snapshot is
+        pinned, and it is released by ``gc.unfreeze()`` when the RUN policy stops.
+        Idempotent; a no-op once frozen or when the policy is inactive.
+        """
+
+        with self._lock:
+            if not self._active or self._frozen:
+                return False
+            gc.freeze()
+            self._frozen = True
+            frozen_count = gc.get_freeze_count()
+        logger.info(
+            "[GC_POLICY] Froze %d stable objects into the permanent generation "
+            "(excluded from future gen2 scans; released on stop)",
+            frozen_count,
+        )
+        return True
 
     def start(self) -> bool:
         with self._lock:
@@ -108,6 +145,14 @@ class RuntimeGCPolicy:
             except (ValueError, RuntimeError):
                 pass
             gc.set_threshold(*self._original_thresholds)
+            if self._frozen:
+                # Release the pinned startup snapshot back to normal collection
+                # so the interpreter's original lifetime behavior is fully restored.
+                try:
+                    gc.unfreeze()
+                except Exception:
+                    pass
+                self._frozen = False
             self._active = False
         snapshot = self.snapshot()
         logger.info(

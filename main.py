@@ -529,6 +529,15 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
         gc_policy = RuntimeGCPolicy()
         gc_policy.start()
         engine._gc_policy = gc_policy
+        # One-shot (not a poller): after startup warms, freeze the stable
+        # long-lived tracked set into the permanent generation so recurring
+        # Gen2 scans stop stalling the Visualizer cadence thread. In-situ
+        # evidence: the first Gen2 lands ~66 s in and RSS/tracked-set are stable
+        # by ~30 s, so a ~45 s warmup freezes after the set is built but before
+        # the first Gen2. gc.unfreeze() runs on policy stop.
+        from PySide6.QtCore import QTimer as _GCFreezeTimer
+
+        _GCFreezeTimer.singleShot(45_000, gc_policy.freeze_stable_generation)
         try:
             return app.exec()
         finally:
