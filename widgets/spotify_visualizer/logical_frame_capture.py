@@ -13,12 +13,7 @@ from typing import Any
 
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from widgets.spotify_visualizer import config_applier, mode_capabilities
-from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
-from widgets.spotify_visualizer.devcurve_frame_runtime import DevCurveFrameRuntime
 from widgets.spotify_visualizer.logical_runtime import coerce_identity
-from widgets.spotify_visualizer.oscilloscope_frame_runtime import (
-    OscilloscopeFrameRuntime,
-)
 from widgets.spotify_visualizer.reactivity_diagnostics import (
     maybe_log_reactivity_boundary,
 )
@@ -36,13 +31,34 @@ from widgets.spotify_visualizer.render_state import (
     VisualizerTransientState,
     freeze_render_fields,
 )
-from widgets.spotify_visualizer.spectrum_frame_runtime import (
-    SpectrumFrameRuntime,
-)
-from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
-    compute_spectrum_height_scale,
-)
-from widgets.spotify_visualizer.sine_frame_runtime import SineFrameRuntime
+
+# The five mode frame-runtime classes are NOT imported at module scope: doing so
+# would load every mode's frame runtime as soon as this common capture module is
+# imported (including Lead-C's activation-time warm), breaking V4 dormancy for
+# disabled modes. Each per-mode capture below resolves ONLY its own mode's frame
+# runtime lazily, through the single canonical descriptor wiring, so a sole-Bubble
+# runtime imports only the Bubble frame runtime.
+
+
+def _mode_frame_runtime_type(mode_id: str) -> type:
+    """Lazily resolve one mode's frame-runtime class via the canonical descriptor.
+
+    Reuses the single per-mode wiring source (`visualizer_mode_registry`
+    descriptor `frame_runtime_module`/`frame_runtime_class`, the same seam
+    `quick_display_visualizer_owner._mode_runtime_factory` uses) rather than a
+    second hard-coded mode->class table. Importing this module imports no frame
+    runtime; only the active mode's runtime loads, when its capture runs.
+    """
+
+    from importlib import import_module
+
+    from core.settings.visualizer_mode_registry import (
+        get_visualizer_mode_descriptor,
+    )
+
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    module = import_module(descriptor.frame_runtime_module)
+    return getattr(module, descriptor.frame_runtime_class)
 
 
 logger = get_logger(__name__)
@@ -291,6 +307,7 @@ def _capture_spectrum(
         raise RuntimeError(
             "Spectrum logical capture requires its runtime controller owner"
         )
+    SpectrumFrameRuntime = _mode_frame_runtime_type("spectrum")
     runtime = _resolve_current_mode_runtime(
         controller,
         "spectrum",
@@ -356,6 +373,10 @@ def _capture_spectrum(
             input_values=source_bars,
             resolved_values=resolved.bars,
         )
+    from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
+        compute_spectrum_height_scale,
+    )
+
     extra["spectrum_height_scale"] = compute_spectrum_height_scale(
         viewport_height
     )
@@ -395,6 +416,7 @@ def _capture_oscilloscope(
         raise RuntimeError(
             "Oscilloscope logical capture requires its runtime controller owner"
         )
+    OscilloscopeFrameRuntime = _mode_frame_runtime_type("oscilloscope")
     runtime = _resolve_current_mode_runtime(
         controller,
         "oscilloscope",
@@ -496,6 +518,7 @@ def _capture_sine(
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
         raise RuntimeError("Sine logical capture requires its runtime controller owner")
+    SineFrameRuntime = _mode_frame_runtime_type("sine_wave")
     runtime = _resolve_current_mode_runtime(
         controller,
         "sine_wave",
@@ -627,6 +650,7 @@ def _capture_bubble(
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
         raise RuntimeError("Bubble logical capture requires its runtime controller")
+    BubbleFrameRuntime = _mode_frame_runtime_type("bubble")
     runtime = _resolve_current_mode_runtime(
         controller,
         "bubble",
@@ -684,6 +708,7 @@ def _capture_devcurve(
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
         raise RuntimeError("DevCurve logical capture requires its runtime controller")
+    DevCurveFrameRuntime = _mode_frame_runtime_type("devcurve")
     runtime = _resolve_current_mode_runtime(
         controller,
         "devcurve",

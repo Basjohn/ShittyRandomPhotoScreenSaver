@@ -115,6 +115,12 @@ publish_ms=361.25
 
 This is not the same class as recurring 15-second hitches. Attribute immutable-frame construction/copying/publication and first-render handoff separately. Avoid moving this cost into every frame merely to improve activation.
 
+#### Resolution — cold import warmed off the first tick (+ dormancy correction)
+
+Attributed: the publish phase pays a one-shot **cold import** of `logical_frame_capture` and its chain (~62 ms headless; larger cold). `capture` itself is a per-tick data copy with no first-call cost. Fix: `QuickDisplayVisualizerOwner._start_logical_runtime` warms `import logical_frame_capture` during activation, before the cadence thread starts, so the first tick no longer pays it. Pure import placement — no per-frame work, cadence unchanged, and every freshness/generation/activation/mode-id fence (bridge-snapshot clear on new activation, mismatch rejection, reactive-first-frame source identity, no stale/previous-mode frame across activation, no increased source age, no paint ACK, newest-state publication) is untouched.
+
+Audit follow-up: warming that module **exposed a pre-existing dormancy hole** — `logical_frame_capture` imported all five mode frame-runtime classes at module scope, so the warm loaded every mode's runtime, violating V4 for disabled modes. Fixed by resolving each mode's frame runtime lazily through the canonical descriptor seam (`_mode_frame_runtime_type`, the same `frame_runtime_module`/`class` wiring `_mode_runtime_factory` uses) rather than a second hard-coded table. Now warming imports no frame runtime, and a real sole-enabled `logical_tick` imports only the active mode's runtime — proven in `tests/test_visualizer_mode_dormancy.py` (per-mode real-runtime + capture-import tests). The Lead-C prewarm strategy itself was sound; the hole was pre-existing and indirect.
+
 ### P0 lead D — analysis/presentation tails remain measurable
 
 The persistent serial `visualizer.audio_analysis` lane is healthy on average but recorded approximately:
