@@ -6,6 +6,8 @@ semantics so those safety contracts remain testable without Qt.
 """
 from __future__ import annotations
 
+import ast
+import difflib
 import hashlib
 import json
 import os
@@ -43,6 +45,46 @@ HEAVY_DEFAULT_PREFIXES = (
     "tests/screenshots/",
 )
 FORBIDDEN_TARGET_PREFIXES = (".git/", ".godzip/", ".godzip_foundry/", "deleteme/")
+
+RUN_ENTRYPOINTS = ("main.py", "main_mc.py")
+RUN_DEFAULT_FLAGS = (
+    "--debug",
+    "--set",
+    "--perf",
+    "--usage",
+    "--geo",
+    "--life",
+    "--viz",
+    "--gpu-timing",
+    "--cache",
+    "--fresh",
+)
+RUN_FLAG_ALIASES = {
+    "-d": "--debug",
+    "-v": "--verbose",
+    "--viz-diag": "--viz-diagnostics",
+}
+RUN_FLAG_DESCRIPTIONS = {
+    "--debug": "Enable debug logging",
+    "--verbose": "Enable full verbose log stream",
+    "--perf": "Performance metrics/logging",
+    "--gpu-timing": "Sampled owner-context GPU timing (implies --perf)",
+    "--usage": "CPU/GPU/memory/thread usage telemetry",
+    "--viz": "Visualizer diagnostics",
+    "--geo": "Geometry/z-order/edit-layout diagnostics",
+    "--set": "Settings mutation/import/schema diagnostics",
+    "--life": "Widget/worker/engine lifecycle diagnostics",
+    "--cache": "Image-cache/prefetch/cache-authority diagnostics",
+    "--steam": "Steam widget-family diagnostics",
+    "--noupdates": "Disable automatic Gmail/Reddit/Weather retrievals",
+    "--viz-diagnostics": "Extra Spotify visualizer diagnostics",
+    "--fresh": "Clear current logs before starting",
+    "--devcurve": "Legacy compatibility no-op",
+    "--devsteam": "Show unfinished Steam development cards",
+    "--diag-pair-warm-finish": "Internal paired warm-finish diagnostics",
+    "--diag-p4-stages": "Internal P4 stage diagnostics",
+    "--diag-p4-no-perf-hud": "Internal P4 diagnostics without perf HUD",
+}
 
 
 class GodzipError(RuntimeError):
@@ -110,6 +152,21 @@ class ApplyResult:
     backup_dir: Path | None
     debris_dir: Path | None
 
+
+
+
+@dataclass(frozen=True, slots=True)
+class GodzipDiffResult:
+    text: str
+    changed_files: int
+    added: int
+    modified: int
+    deleted: int
+    binary: int
+    baseline_head: str
+    current_head: str
+    baseline_dirty: bool
+    current_dirty: bool
 
 @dataclass(frozen=True, slots=True)
 class GitChange:
@@ -1310,19 +1367,148 @@ def collect_log_files(repo_root: Path) -> list[Path]:
     return result
 
 
-def suggested_logzip_path(repo_root: Path) -> Path:
-    logs = repo_root.resolve() / "logs"
-    logs.mkdir(parents=True, exist_ok=True)
+def _zip_member_names(path: Path) -> tuple[str, ...]:
+    try:
+        with zipfile.ZipFile(path, "r") as archive:
+            return tuple(name.replace("\\", "/").lstrip("/") for name in archive.namelist())
+    except (OSError, zipfile.BadZipFile):
+        return ()
+
+
+def is_probable_srpss_zip(path: Path) -> bool:
+    """Return whether a direct ZIP looks related to this SRPSS GODZIP workflow.
+
+    A valid GODZIP manifest is authoritative when present, but discovery does
+    not *require* manifests so older/legacy archives remain usable.  Named
+    GODZIPs are accepted, while unnamed legacy archives need a small SRPSS
+    structural fingerprint.  This keeps a personal download folder useful
+    without flooding it with unrelated ZIPs.
+    """
+    path = Path(path)
+    if path.suffix.lower() != ".zip":
+        return False
+    names = _zip_member_names(path)
+    if not names:
+        return "godzip" in path.name.casefold()
+
+    by_fold = {name.casefold(): name for name in names}
+    for candidate in MANIFEST_CANDIDATES:
+        actual = by_fold.get(candidate.casefold())
+        if not actual:
+            continue
+        try:
+            with zipfile.ZipFile(path, "r") as archive:
+                payload = json.loads(archive.read(actual).decode("utf-8"))
+            if isinstance(payload, dict) and payload.get("format") == FORMAT_NAME:
+                return True
+        except (OSError, KeyError, UnicodeDecodeError, json.JSONDecodeError, zipfile.BadZipFile):
+            pass
+
+    if "godzip" in path.name.casefold():
+        return True
+
+    folded = tuple(name.casefold() for name in names)
+    def has_path_or_wrapped(target: str) -> bool:
+        target = target.casefold().strip("/")
+        return any(name == target or name.endswith("/" + target) for name in folded)
+
+    def has_dir(name: str) -> bool:
+        token = "/" + name.casefold().strip("/") + "/"
+        prefix = name.casefold().strip("/") + "/"
+        return any(item.startswith(prefix) or token in "/" + item for item in folded)
+
+    anchors = sum(
+        (
+            has_dir("core"),
+            has_dir("rendering"),
+            has_dir("widgets"),
+            has_dir("tools"),
+            has_path_or_wrapped("Current_Plan.md"),
+            has_path_or_wrapped("versioning.py"),
+        )
+    )
+    return bool(has_path_or_wrapped("main.py") and anchors >= 1) or anchors >= 3
+
+
+def discover_zip_candidates(
+    search_dirs: Iterable[Path],
+    *,
+    limit: int = 40,
+    project_only: bool = True,
+) -> list[Path]:
+    """Return newest direct ZIP files from supplied directories.
+
+    Discovery is intentionally shallow and sorted by filesystem modified time.
+    The cheap pass only stats directory entries.  In project-only mode,
+    GODZIP-named files are admitted without opening them and only a bounded set
+    of recent opaque-name ZIPs are inspected for manifest/legacy fingerprints.
+    This keeps a large personal download folder from becoming an archive-I/O
+    benchmark.
+    """
+    found: dict[str, tuple[float, Path]] = {}
+    for raw_dir in search_dirs:
+        directory = Path(raw_dir).expanduser()
+        try:
+            if not directory.is_dir():
+                continue
+            for entry in directory.iterdir():
+                try:
+                    if not entry.is_file() or entry.suffix.lower() != ".zip":
+                        continue
+                    stamp = entry.stat().st_mtime
+                    resolved = entry.resolve()
+                except OSError:
+                    continue
+                key = os.path.normcase(str(resolved))
+                current = found.get(key)
+                if current is None or stamp > current[0]:
+                    found[key] = (stamp, resolved)
+        except OSError:
+            continue
+
+    ordered = sorted(found.values(), key=lambda item: (-item[0], item[1].name.casefold()))
+    cap = max(0, int(limit))
+    if not project_only:
+        return [path for _stamp, path in ordered[:cap]]
+
+    accepted: dict[str, tuple[float, Path]] = {}
+    for stamp, path in ordered:
+        if "godzip" in path.name.casefold():
+            accepted[os.path.normcase(str(path))] = (stamp, path)
+
+    opaque_budget = max(120, cap * 3) if cap else 0
+    inspected = 0
+    for stamp, path in ordered:
+        if "godzip" in path.name.casefold():
+            continue
+        if inspected >= opaque_budget:
+            break
+        inspected += 1
+        if is_probable_srpss_zip(path):
+            accepted[os.path.normcase(str(path))] = (stamp, path)
+
+    project = sorted(accepted.values(), key=lambda item: (-item[0], item[1].name.casefold()))
+    return [path for _stamp, path in project[:cap]]
+
+
+def suggested_logzip_path(repo_root: Path, output_dir: Path | None = None) -> Path:
+    destination = Path(output_dir).expanduser().resolve() if output_dir is not None else repo_root.resolve().parent
+    destination.mkdir(parents=True, exist_ok=True)
     base = f"logs{git_head(repo_root)[:10]}"
-    candidate = logs / f"{base}.zip"
+    candidate = destination / f"{base}.zip"
     index = 2
     while candidate.exists():
-        candidate = logs / f"{base}{index}.zip"
+        candidate = destination / f"{base}{index}.zip"
         index += 1
     return candidate
 
 
-def create_logzip(repo_root: Path, selected_names: Sequence[str] | None = None) -> LogzipResult:
+def create_logzip(
+    repo_root: Path,
+    selected_names: Sequence[str] | None = None,
+    *,
+    output_dir: Path | None = None,
+) -> LogzipResult:
     """Create a verified ZIP from direct loose /logs files without deleting sources."""
     repo_root = repo_root.resolve()
     files = collect_log_files(repo_root)
@@ -1342,7 +1528,7 @@ def create_logzip(repo_root: Path, selected_names: Sequence[str] | None = None) 
                 selected.append(path)
     if not selected:
         raise GodzipError("No loose /logs files selected")
-    output = suggested_logzip_path(repo_root)
+    output = suggested_logzip_path(repo_root, output_dir)
     temp = output.with_name(f".{output.name}.{os.getpid()}.tmp")
     try:
         with zipfile.ZipFile(temp, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as archive:
@@ -1361,6 +1547,279 @@ def create_logzip(repo_root: Path, selected_names: Sequence[str] | None = None) 
     return LogzipResult(zip_path=output, files=tuple(path.name for path in selected))
 
 
+def discover_run_flags(repo_root: Path) -> tuple[str, ...]:
+    """Read the canonical long-form runtime switches accepted by ``main.py``.
+
+    ``parse_screensaver_args`` owns the filter set for diagnostic/developer
+    switches.  Reading that AST keeps GODZIP Foundry from fossilising a second
+    copy of the CLI surface while avoiding importing the Qt-heavy entrypoint.
+    """
+    source_path = Path(repo_root) / "main.py"
+    try:
+        source = source_path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(source_path))
+    except (OSError, SyntaxError) as exc:
+        raise GodzipError(f"Cannot inspect runtime CLI surface: {exc}") from exc
+
+    raw_flags: list[str] = []
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef) or node.name != "parse_screensaver_args":
+            continue
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Assign):
+                continue
+            if not any(isinstance(target, ast.Name) and target.id == "_filtered" for target in child.targets):
+                continue
+            value = child.value
+            if not isinstance(value, (ast.Set, ast.Tuple, ast.List)):
+                continue
+            for elt in value.elts:
+                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                    raw_flags.append(elt.value)
+        break
+
+    if not raw_flags:
+        raise GodzipError("main.py parse_screensaver_args() exposes no diagnostic CLI filter set")
+
+    canonical: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_flags:
+        flag = RUN_FLAG_ALIASES.get(raw, raw)
+        if not flag.startswith("--") or flag in seen:
+            continue
+        seen.add(flag)
+        canonical.append(flag)
+    return tuple(canonical)
+
+
+def run_flag_description(flag: str) -> str:
+    return RUN_FLAG_DESCRIPTIONS.get(str(flag), "Runtime/developer switch accepted by main.py")
+
+
+
+def _git_commit_exists(repo_root: Path, revision: str) -> bool:
+    revision = str(revision or "").strip()
+    if not revision:
+        return False
+    return _run_git(repo_root, "cat-file", "-e", f"{revision}^{{commit}}", check=False).returncode == 0
+
+
+def _git_blob_at_revision(repo_root: Path, revision: str, path: str) -> bytes | None:
+    if not revision:
+        return None
+    result = _run_git(repo_root, "show", f"{revision}:{path}", check=False)
+    return result.stdout if result.returncode == 0 else None
+
+
+def _current_repo_bytes(repo_root: Path, rel: str) -> bytes | None:
+    rel = validate_repo_relpath(rel)
+    target = repo_root.resolve() / Path(rel)
+    try:
+        if target.is_symlink():
+            return ("SYMLINK->" + os.readlink(target)).encode("utf-8")
+        if not target.is_file():
+            return None
+        return target.read_bytes()
+    except OSError as exc:
+        raise GodzipError(f"Cannot read current repo file for DIFF: {rel}: {exc}") from exc
+
+
+def _decode_diff_text(data: bytes) -> str | None:
+    if b"\x00" in data[:8192]:
+        return None
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return None
+
+
+def _bytes_digest(data: bytes | None) -> str:
+    if data is None:
+        return "missing"
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+def _changed_paths_since(repo_root: Path, source_head: str) -> set[str]:
+    paths: set[str] = set()
+    if source_head and _git_commit_exists(repo_root, source_head):
+        current_head = git_head(repo_root)
+        raw = _run_git(repo_root, "diff", "--name-only", "-z", source_head, current_head).stdout
+        paths.update(item.replace("\\", "/") for item in _zlist(raw))
+    for change in git_changes(repo_root):
+        paths.add(change.path.replace("\\", "/"))
+    return paths
+
+
+def generate_godzip_diff(repo_root: Path, zip_path: Path) -> GodzipDiffResult:
+    """Compare current repo state against a chosen GODZIP baseline.
+
+    The baseline uses archived bytes for every file actually carried by the
+    GODZIP (so dirty-worktree snapshots remain exact).  When the manifest's
+    source HEAD is available locally, committed changes since that HEAD plus
+    current non-ignored worktree changes extend the candidate set, allowing new
+    files that were created after the GODZIP to appear without treating every
+    archive omission as an addition.
+    """
+    root = Path(repo_root).resolve()
+    inspection = inspect_godzip(root, Path(zip_path))
+    archived = {item.target_path: item.member_name for item in inspection.files}
+    candidates = set(archived)
+    source_head = inspection.source_head if _git_commit_exists(root, inspection.source_head) else ""
+    candidates.update(_changed_paths_since(root, source_head))
+
+    # Ignore Foundry/runtime-private targets even if a malformed legacy archive
+    # somehow carried them.  validate_repo_relpath is still the final fence.
+    clean_candidates: list[str] = []
+    for raw in candidates:
+        rel = raw.replace("\\", "/")
+        try:
+            clean_candidates.append(validate_repo_relpath(rel))
+        except GodzipError:
+            continue
+    clean_candidates = sorted(set(clean_candidates), key=str.casefold)
+
+    archive_bytes: dict[str, bytes] = {}
+    with zipfile.ZipFile(inspection.zip_path, "r") as archive:
+        for rel, member in archived.items():
+            archive_bytes[rel] = archive.read(member)
+
+    chunks: list[str] = []
+    added = modified = deleted = binary = 0
+    for rel in clean_candidates:
+        before = archive_bytes.get(rel)
+        if before is None and source_head:
+            before = _git_blob_at_revision(root, source_head, rel)
+        after = _current_repo_bytes(root, rel)
+        if before == after:
+            continue
+        if before is None and after is not None:
+            kind = "added"
+            added += 1
+        elif before is not None and after is None:
+            kind = "deleted"
+            deleted += 1
+        else:
+            kind = "modified"
+            modified += 1
+
+        before_text = _decode_diff_text(before) if before is not None else ""
+        after_text = _decode_diff_text(after) if after is not None else ""
+        chunks.append(f"diff --godzip {kind} {rel}\n")
+        if before_text is None or after_text is None:
+            binary += 1
+            chunks.append(
+                "Binary content differs "
+                f"(GODZIP={_bytes_digest(before)} size={len(before) if before is not None else 0}; "
+                f"CURRENT={_bytes_digest(after)} size={len(after) if after is not None else 0})\n\n"
+            )
+            continue
+
+        fromfile = f"GODZIP/{rel}" if before is not None else "/dev/null"
+        tofile = f"CURRENT/{rel}" if after is not None else "/dev/null"
+        delta = difflib.unified_diff(
+            before_text.splitlines(keepends=True),
+            after_text.splitlines(keepends=True),
+            fromfile=fromfile,
+            tofile=tofile,
+            lineterm="\n",
+        )
+        rendered = "".join(delta)
+        chunks.append(rendered)
+        if rendered and not rendered.endswith("\n"):
+            chunks.append("\n")
+        chunks.append("\n")
+
+    current_head = git_head(root)
+    changed = added + modified + deleted
+    generated = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+    header = [
+        "# SRPSS GODZIP DIFF",
+        f"# Baseline ZIP: {inspection.zip_path.name}",
+        f"# Baseline HEAD: {inspection.source_head or 'unknown'}",
+        f"# Baseline archive dirty: {'yes' if inspection.dirty_worktree else 'no/unknown'}",
+        f"# Current HEAD: {current_head}",
+        f"# Current worktree dirty: {'yes' if git_dirty(root) else 'no'}",
+        f"# Generated: {generated}",
+        "# Scope: exact archived bytes + Git changes since baseline HEAD + current non-ignored worktree changes",
+        f"# Summary: {changed} changed file(s) | {added} added | {modified} modified | {deleted} deleted | {binary} binary",
+        "",
+    ]
+    body = "".join(chunks) if chunks else "# No differences found in the resolved comparison scope.\n"
+    return GodzipDiffResult(
+        text="\n".join(header) + body,
+        changed_files=changed,
+        added=added,
+        modified=modified,
+        deleted=deleted,
+        binary=binary,
+        baseline_head=inspection.source_head,
+        current_head=current_head,
+        baseline_dirty=inspection.dirty_worktree,
+        current_dirty=git_dirty(root),
+    )
+
+
+def repo_venv_python(repo_root: Path) -> Path:
+    root = Path(repo_root)
+    if os.name == "nt":
+        return root / ".venv" / "Scripts" / "python.exe"
+    return root / ".venv" / "bin" / "python"
+
+
+def build_run_command(
+    repo_root: Path,
+    entrypoint: str,
+    flags: Sequence[str],
+) -> tuple[str, ...]:
+    root = Path(repo_root).resolve()
+    entrypoint = str(entrypoint).strip()
+    if entrypoint not in RUN_ENTRYPOINTS:
+        raise GodzipError(f"Unsupported RUN entrypoint: {entrypoint}")
+    script = root / entrypoint
+    if not script.is_file():
+        raise GodzipError(f"RUN entrypoint does not exist: {script}")
+    python_exe = repo_venv_python(root)
+    if not python_exe.is_file():
+        raise GodzipError(f"Repo venv Python is missing: {python_exe}")
+
+    accepted = set(discover_run_flags(root))
+    chosen: list[str] = []
+    seen: set[str] = set()
+    for raw in flags:
+        flag = RUN_FLAG_ALIASES.get(str(raw).strip(), str(raw).strip())
+        if flag not in accepted:
+            raise GodzipError(f"RUN flag is not accepted by current main.py: {flag}")
+        if flag in seen:
+            continue
+        seen.add(flag)
+        chosen.append(flag)
+    return (str(python_exe), str(script), *chosen)
+
+
+def launch_run_command(
+    repo_root: Path,
+    entrypoint: str,
+    flags: Sequence[str],
+    *,
+    keep_console_open: bool = False,
+) -> subprocess.Popen:
+    """Launch SRPSS in an independent console and return immediately.
+
+    On Windows, the normal path launches Python directly with CREATE_NEW_CONSOLE;
+    that console therefore closes naturally when SRPSS exits.  The opt-in
+    keep-open path uses ``cmd /k`` so the console deliberately survives.
+    """
+    root = Path(repo_root).resolve()
+    command = build_run_command(root, entrypoint, flags)
+    kwargs: dict = {"cwd": str(root)}
+    if os.name == "nt":
+        kwargs["creationflags"] = int(getattr(subprocess, "CREATE_NEW_CONSOLE", 0x00000010))
+        if keep_console_open:
+            command_line = subprocess.list2cmdline(list(command))
+            return subprocess.Popen(["cmd.exe", "/d", "/k", command_line], **kwargs)
+    return subprocess.Popen(list(command), **kwargs)
+
+
 __all__ = [
     "ArchiveFile",
     "ArchiveInspection",
@@ -1369,20 +1828,28 @@ __all__ = [
     "FORMAT_NAME",
     "FORMAT_VERSION",
     "GitChange",
+    "GodzipDiffResult",
     "GodzipError",
     "LogzipResult",
     "MANIFEST_MEMBER",
     "PullFile",
     "PullInspection",
     "RepoFile",
+    "RUN_DEFAULT_FLAGS",
+    "RUN_ENTRYPOINTS",
+    "RUN_FLAG_DESCRIPTIONS",
     "SelectiveSyncResult",
     "apply_godzip",
+    "build_run_command",
     "collect_log_files",
     "collect_repo_files",
     "compare_source_head",
     "create_godzip",
     "create_logzip",
     "discover_repo_root",
+    "discover_run_flags",
+    "discover_zip_candidates",
+    "generate_godzip_diff",
     "git_branch",
     "git_changes",
     "git_commit_all",
@@ -1394,8 +1861,12 @@ __all__ = [
     "git_upstream",
     "inspect_godzip",
     "inspect_pull",
+    "is_probable_srpss_zip",
+    "launch_run_command",
     "move_paths_to_deleteme",
     "read_debris_manifest",
+    "repo_venv_python",
+    "run_flag_description",
     "selective_sync_from_remote",
     "sha256_file",
     "suggested_godzip_name",

@@ -14,6 +14,8 @@ import argparse
 import ctypes
 import json
 import os
+import subprocess
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 import sys
 from typing import Any, Iterable
@@ -87,10 +89,12 @@ try:
         QAbstractItemView,
         QApplication,
         QCheckBox,
+        QComboBox,
         QDialog,
         QDialogButtonBox,
         QFileDialog,
         QFrame,
+        QGridLayout,
         QHBoxLayout,
         QHeaderView,
         QLabel,
@@ -119,12 +123,18 @@ from godzip_foundry_core import (  # noqa: E402
     GodzipError,
     PullInspection,
     RepoFile,
+    RUN_DEFAULT_FLAGS,
+    RUN_ENTRYPOINTS,
     apply_godzip,
+    build_run_command,
     collect_log_files,
     collect_repo_files,
     create_godzip,
     create_logzip,
     discover_repo_root,
+    discover_run_flags,
+    discover_zip_candidates,
+    generate_godzip_diff,
     git_branch,
     git_changes,
     git_commit_all,
@@ -134,15 +144,20 @@ from godzip_foundry_core import (  # noqa: E402
     git_push_current,
     inspect_godzip,
     inspect_pull,
+    launch_run_command,
     move_paths_to_deleteme,
     read_debris_manifest,
+    repo_venv_python,
+    run_flag_description,
     selective_sync_from_remote,
     suggested_godzip_name,
+    suggested_logzip_path,
     validate_repo_relpath,
     write_debris_manifest,
 )
 
 APP_TITLE = "SRPSS GODZIP Foundry"
+PERSONAL_GODZIP_DROP_DIR = Path(r"Z:\Torrents\Torrentfiles")
 
 # Build Foundry's palette, translated to Qt/QSS.
 COLORS = {
@@ -179,6 +194,24 @@ def human_size(value: int) -> str:
             return f"{size:.1f} {unit}"
         size /= 1024.0
     return f"{size:.1f} TB"
+
+
+def modified_stamp(path: Path) -> str:
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+    except OSError:
+        return "date unknown"
+
+
+def _resolved_foundry_icon(repo_root: Path) -> Path | None:
+    for path in (
+        repo_root / "images" / "foundries" / "SRPSSGodZIP.ico",
+        repo_root / "images" / "foundries" / "SRPSSBuild.ico",
+        repo_root / "SRPSS.ico",
+    ):
+        if path.is_file():
+            return path.resolve()
+    return None
 
 
 def _inside_repo(repo_root: Path, path: Path) -> str:
@@ -574,6 +607,8 @@ class ApplyTab(QWidget):
         self.repo_root = window.repo_root
         self.inspection: ArchiveInspection | None = None
         self.current_zip: Path | None = None
+        self._discovery_loaded = False
+        self._discovered_zips: list[Path] = []
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -594,10 +629,35 @@ class ApplyTab(QWidget):
         s.setWordWrap(True)
         left.addWidget(s)
         d.addLayout(left, 1)
+        quick = QVBoxLayout()
+        quick.setSpacing(6)
+        quick_label = QLabel("FOUND ZIPS")
+        quick_label.setObjectName("faint")
+        quick.addWidget(quick_label)
+        quick_row = QHBoxLayout()
+        self.found_combo = QComboBox()
+        self.found_combo.setMinimumWidth(360)
+        self.found_combo.setToolTip(
+            "Newest direct ZIPs from repo-adjacent/output locations and the optional personal drop folder."
+        )
+        self.found_combo.activated.connect(self._load_discovered_index)
+        quick_row.addWidget(self.found_combo, 1)
+        self.show_all_zips = QCheckBox("Show all ZIPs")
+        self.show_all_zips.setToolTip(
+            "Off: show only recognized SRPSS/GODZIP archives. On: show every direct ZIP in the quick locations."
+        )
+        self.show_all_zips.toggled.connect(lambda *_: self.refresh_discovered_zips(force=True))
+        quick_row.addWidget(self.show_all_zips)
+        refresh_found = QPushButton("↻")
+        refresh_found.setToolTip("Refresh discovered ZIPs")
+        refresh_found.clicked.connect(lambda: self.refresh_discovered_zips(force=True))
+        quick_row.addWidget(refresh_found)
         browse = QPushButton("BROWSE GOD ZIP…")
         browse.setObjectName("primaryButton")
         browse.clicked.connect(self.browse)
-        d.addWidget(browse)
+        quick_row.addWidget(browse)
+        quick.addLayout(quick_row)
+        d.addLayout(quick)
         layout.addWidget(drop)
 
         info = Panel()
@@ -683,9 +743,67 @@ class ApplyTab(QWidget):
         btm.addLayout(row)
         layout.addWidget(bottom)
 
+    def _zip_search_dirs(self) -> list[Path]:
+        return self.window.zip_search_dirs()
+
+    def ensure_discovery_loaded(self) -> None:
+        if not self._discovery_loaded:
+            self.refresh_discovered_zips()
+
+    def refresh_discovered_zips(self, *, force: bool = False) -> None:
+        if self._discovery_loaded and not force:
+            return
+        self._discovered_zips = discover_zip_candidates(
+            self._zip_search_dirs(),
+            limit=40,
+            project_only=not self.show_all_zips.isChecked(),
+        )
+        self.found_combo.blockSignals(True)
+        try:
+            self.found_combo.clear()
+            self.found_combo.addItem("Choose a discovered ZIP…")
+            for path in self._discovered_zips:
+                try:
+                    parent = path.parent
+                    if os.name == "nt" and parent == PERSONAL_GODZIP_DROP_DIR:
+                        where = "goblin drop"
+                    elif parent == self.repo_root.parent:
+                        where = "repo-adjacent"
+                    else:
+                        where = parent.name or str(parent)
+                except Exception:
+                    where = str(path.parent)
+                self.found_combo.addItem(
+                    f"{modified_stamp(path)}  —  {path.name}  —  {where}",
+                    str(path),
+                )
+                self.found_combo.setItemData(
+                    self.found_combo.count() - 1,
+                    str(path),
+                    Qt.ItemDataRole.ToolTipRole,
+                )
+            if not self._discovered_zips:
+                self.found_combo.addItem("No ZIPs found in quick locations")
+        finally:
+            self.found_combo.blockSignals(False)
+        self._discovery_loaded = True
+
+    def _load_discovered_index(self, index: int) -> None:
+        if index <= 0:
+            return
+        raw = self.found_combo.itemData(index)
+        if raw:
+            self.load_zip(Path(str(raw)))
+
     def browse(self) -> None:
-        start = str(self.current_zip.parent if self.current_zip else self.repo_root.parent)
-        path, _ = QFileDialog.getOpenFileName(self, "Open GODZIP", start, "ZIP archives (*.zip);;All files (*)")
+        if self.current_zip is not None:
+            start_path = self.current_zip.parent
+        elif os.name == "nt" and PERSONAL_GODZIP_DROP_DIR.is_dir():
+            start_path = PERSONAL_GODZIP_DROP_DIR
+        else:
+            candidates = self._zip_search_dirs()
+            start_path = next((path for path in candidates if path.is_dir()), self.repo_root.parent)
+        path, _ = QFileDialog.getOpenFileName(self, "Open GODZIP", str(start_path), "ZIP archives (*.zip);;All files (*)")
         if path:
             self.load_zip(Path(path))
 
@@ -1218,15 +1336,26 @@ class LogzipTab(QWidget):
         footer = Panel()
         fl = QHBoxLayout(footer)
         fl.setContentsMargins(14, 12, 14, 12)
+        summary_box = QVBoxLayout()
         self.summary = QLabel("Not scanned yet.")
         self.summary.setObjectName("muted")
+        self.destination = QLabel("")
+        self.destination.setObjectName("faint")
+        self.destination.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        summary_box.addWidget(self.summary)
+        summary_box.addWidget(self.destination)
         self.button = QPushButton("CREATE LOGZIP")
         self.button.setObjectName("primaryButton")
         self.button.clicked.connect(self.create)
         self.button.setEnabled(False)
-        fl.addWidget(self.summary, 1)
+        fl.addLayout(summary_box, 1)
         fl.addWidget(self.button)
         layout.addWidget(footer)
+
+    def _output_dir(self) -> Path:
+        settings = _load_local_settings(self.repo_root)
+        remembered = str(settings.get("output_dir", "")).strip()
+        return Path(remembered).expanduser() if remembered else self.repo_root.parent
 
     def refresh(self) -> None:
         try:
@@ -1264,13 +1393,18 @@ class LogzipTab(QWidget):
         by_name = {p.name: p for p in self._paths}
         size = sum(by_name[name].stat().st_size for name in names if name in by_name)
         self.summary.setText(f"{len(names)} file(s) · {human_size(size)} · HEAD {git_head(self.repo_root)[:10]}")
+        try:
+            target = suggested_logzip_path(self.repo_root, self._output_dir())
+            self.destination.setText(f"Destination: {target}")
+        except Exception as exc:
+            self.destination.setText(f"Destination unavailable: {exc}")
         self.button.setEnabled(bool(names))
 
     def create(self) -> None:
         names = self._selected()
         self.window.set_busy(True, "Creating verified LOGZIP…")
         try:
-            result = create_logzip(self.repo_root, names)
+            result = create_logzip(self.repo_root, names, output_dir=self._output_dir())
             self.window.set_status(f"Created {result.zip_path.name} from {len(result.files)} loose log file(s)")
             QMessageBox.information(
                 self,
@@ -1280,6 +1414,192 @@ class LogzipTab(QWidget):
             self.refresh()
         except Exception as exc:
             self.window.show_error("LOGZIP creation failed", exc)
+        finally:
+            self.window.set_busy(False)
+
+
+class DiffResultDialog(QDialog):
+    def __init__(self, parent: QWidget, title: str, text: str, summary: str) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.resize(1120, 820)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 14, 14, 14)
+        heading = QLabel(summary)
+        heading.setObjectName("sectionTitle")
+        heading.setWordWrap(True)
+        layout.addWidget(heading)
+        hint = QLabel(
+            "Unified text diff. Paste this directly into ChatGPT/Claude; binary changes are summarized by hash/size."
+        )
+        hint.setObjectName("muted")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self.text = QPlainTextEdit()
+        self.text.setReadOnly(True)
+        self.text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.text.setPlainText(text)
+        layout.addWidget(self.text, 1)
+        buttons = QHBoxLayout()
+        copy = QPushButton("COPY TO CLIPBOARD")
+        copy.setObjectName("primaryButton")
+        copy.clicked.connect(self.copy_all)
+        close = QPushButton("CLOSE")
+        close.clicked.connect(self.accept)
+        buttons.addStretch(1)
+        buttons.addWidget(copy)
+        buttons.addWidget(close)
+        layout.addLayout(buttons)
+
+    def copy_all(self) -> None:
+        QApplication.clipboard().setText(self.text.toPlainText())
+        self.text.selectAll()
+
+
+class DiffTab(QWidget):
+    def __init__(self, window: "GodzipFoundryWindow") -> None:
+        super().__init__(window)
+        self.window = window
+        self.repo_root = window.repo_root
+        self.current_zip: Path | None = None
+        self._loaded = False
+        self._zips: list[Path] = []
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setSpacing(10)
+        intro = Panel()
+        il = QVBoxLayout(intro)
+        il.setContentsMargins(14, 12, 14, 12)
+        title = QLabel("GODZIP DIFF")
+        title.setObjectName("sectionTitle")
+        il.addWidget(title)
+        desc = QLabel(
+            "Compare the current repo against a chosen GODZIP baseline. Archived bytes win for files carried by the ZIP; "
+            "manifest source HEAD + current non-ignored Git changes extend the comparison so later committed/new files are visible "
+            "without treating every intentional GODZIP omission as an addition."
+        )
+        desc.setObjectName("muted")
+        desc.setWordWrap(True)
+        il.addWidget(desc)
+        layout.addWidget(intro)
+
+        chooser = Panel()
+        cl = QVBoxLayout(chooser)
+        cl.setContentsMargins(14, 12, 14, 12)
+        row = QHBoxLayout()
+        self.combo = QComboBox()
+        self.combo.setMinimumWidth(500)
+        self.combo.activated.connect(self._choose_index)
+        row.addWidget(self.combo, 1)
+        self.show_all = QCheckBox("Show all ZIPs")
+        self.show_all.setToolTip("Normally only recognized SRPSS/GODZIP archives are listed.")
+        self.show_all.toggled.connect(lambda *_: self.refresh(force=True))
+        row.addWidget(self.show_all)
+        refresh = QPushButton("↻")
+        refresh.clicked.connect(lambda: self.refresh(force=True))
+        row.addWidget(refresh)
+        browse = QPushButton("BROWSE…")
+        browse.clicked.connect(self.browse)
+        row.addWidget(browse)
+        cl.addLayout(row)
+        self.selected = QLabel("No baseline selected")
+        self.selected.setObjectName("faint")
+        self.selected.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        cl.addWidget(self.selected)
+        layout.addWidget(chooser)
+
+        scope = Panel()
+        sl = QVBoxLayout(scope)
+        sl.setContentsMargins(14, 12, 14, 12)
+        scope_title = QLabel("WHAT THE DIFF MEANS")
+        scope_title.setObjectName("sectionTitle")
+        sl.addWidget(scope_title)
+        scope_text = QLabel(
+            "It is not a GitHub web diff and it does not mutate anything. The chosen GODZIP is the baseline; the current local repo is the target. "
+            "Git-ignored untracked files stay out. For a manifested baseline, its dirty archived bytes are preserved exactly."
+        )
+        scope_text.setObjectName("muted")
+        scope_text.setWordWrap(True)
+        sl.addWidget(scope_text)
+        layout.addWidget(scope)
+        layout.addStretch(1)
+
+        footer = Panel()
+        fl = QHBoxLayout(footer)
+        fl.setContentsMargins(14, 12, 14, 12)
+        self.summary = QLabel("Choose a GODZIP baseline.")
+        self.summary.setObjectName("muted")
+        self.button = QPushButton("GENERATE DIFF")
+        self.button.setObjectName("primaryButton")
+        self.button.setEnabled(False)
+        self.button.clicked.connect(self.generate)
+        fl.addWidget(self.summary, 1)
+        fl.addWidget(self.button)
+        layout.addWidget(footer)
+
+    def ensure_loaded(self) -> None:
+        if not self._loaded:
+            self.refresh()
+
+    def refresh(self, *, force: bool = False) -> None:
+        if self._loaded and not force:
+            return
+        self._zips = discover_zip_candidates(
+            self.window.zip_search_dirs(),
+            limit=40,
+            project_only=not self.show_all.isChecked(),
+        )
+        self.combo.blockSignals(True)
+        try:
+            self.combo.clear()
+            self.combo.addItem("Choose a GODZIP baseline…")
+            for path in self._zips:
+                self.combo.addItem(f"{modified_stamp(path)}  —  {path.name}", str(path))
+                self.combo.setItemData(self.combo.count() - 1, str(path), Qt.ItemDataRole.ToolTipRole)
+            if not self._zips:
+                self.combo.addItem("No matching ZIPs found")
+        finally:
+            self.combo.blockSignals(False)
+        self._loaded = True
+
+    def _choose_index(self, index: int) -> None:
+        if index <= 0:
+            return
+        raw = self.combo.itemData(index)
+        if raw:
+            self.set_zip(Path(str(raw)))
+
+    def set_zip(self, path: Path) -> None:
+        self.current_zip = path.expanduser().resolve()
+        self.selected.setText(f"Baseline: {self.current_zip} · modified {modified_stamp(self.current_zip)}")
+        self.summary.setText("Ready to compare against the current local repo.")
+        self.button.setEnabled(True)
+
+    def browse(self) -> None:
+        start = PERSONAL_GODZIP_DROP_DIR if os.name == "nt" and PERSONAL_GODZIP_DROP_DIR.is_dir() else self.repo_root.parent
+        path, _ = QFileDialog.getOpenFileName(self, "Choose GODZIP baseline", str(start), "ZIP archives (*.zip);;All files (*)")
+        if path:
+            self.set_zip(Path(path))
+
+    def generate(self) -> None:
+        if self.current_zip is None:
+            return
+        self.window.set_busy(True, f"Diffing current repo against {self.current_zip.name}…")
+        try:
+            result = generate_godzip_diff(self.repo_root, self.current_zip)
+            summary = (
+                f"{result.changed_files} changed file(s) · {result.added} added · "
+                f"{result.modified} modified · {result.deleted} deleted · {result.binary} binary"
+            )
+            self.summary.setText(summary)
+            dialog = DiffResultDialog(self, f"GODZIP DIFF — {self.current_zip.name}", result.text, summary)
+            dialog.exec()
+            self.window.set_status(f"Generated DIFF against {self.current_zip.name}: {summary}")
+        except Exception as exc:
+            self.window.show_error("GODZIP DIFF failed", exc)
         finally:
             self.window.set_busy(False)
 
@@ -1617,6 +1937,230 @@ class PullTab(QWidget):
             self.window.set_busy(False)
 
 
+class RunTab(QWidget):
+    """Repo-local SRPSS launcher with remembered diagnostic flag profiles."""
+
+    def __init__(self, window: "GodzipFoundryWindow") -> None:
+        super().__init__(window)
+        self.window = window
+        self.repo_root = window.repo_root
+        self.flag_checks: dict[str, QCheckBox] = {}
+        self._flags: tuple[str, ...] = ()
+        self._building = False
+        self._build_ui()
+        self.refresh_flags()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setSpacing(10)
+
+        intro = Panel()
+        il = QVBoxLayout(intro)
+        il.setContentsMargins(14, 12, 14, 12)
+        title = QLabel("RUN SRPSS")
+        title.setObjectName("sectionTitle")
+        il.addWidget(title)
+        desc = QLabel(
+            "Launch the repo through its own .venv Python in a separate console. "
+            "The normal console closes automatically when SRPSS exits; keep-open is opt-in."
+        )
+        desc.setWordWrap(True)
+        desc.setObjectName("muted")
+        il.addWidget(desc)
+        layout.addWidget(intro)
+
+        controls = Panel()
+        cl = QVBoxLayout(controls)
+        cl.setContentsMargins(14, 12, 14, 12)
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Entrypoint"))
+        self.entrypoint_combo = QComboBox()
+        self.entrypoint_combo.addItems(list(RUN_ENTRYPOINTS))
+        self.entrypoint_combo.currentTextChanged.connect(self._selection_changed)
+        row.addWidget(self.entrypoint_combo)
+        self.python_label = QLabel()
+        self.python_label.setObjectName("faint")
+        self.python_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        row.addWidget(self.python_label, 1)
+        refresh = QPushButton("Refresh CLI")
+        refresh.clicked.connect(self.refresh_flags)
+        row.addWidget(refresh)
+        cl.addLayout(row)
+        layout.addWidget(controls)
+
+        flags_panel = Panel()
+        fl = QVBoxLayout(flags_panel)
+        fl.setContentsMargins(14, 12, 14, 12)
+        heading = QHBoxLayout()
+        label = QLabel("RUNTIME / DIAGNOSTIC FLAGS")
+        label.setObjectName("sectionTitle")
+        heading.addWidget(label)
+        heading.addStretch(1)
+        for text, handler in (
+            ("Diagnostic Default", self.select_default),
+            ("All", self.select_all),
+            ("None", self.select_none),
+        ):
+            button = QPushButton(text)
+            button.clicked.connect(handler)
+            heading.addWidget(button)
+        fl.addLayout(heading)
+        self.flags_host = QWidget()
+        self.flags_grid = QGridLayout(self.flags_host)
+        self.flags_grid.setContentsMargins(0, 4, 0, 0)
+        self.flags_grid.setHorizontalSpacing(20)
+        self.flags_grid.setVerticalSpacing(5)
+        fl.addWidget(self.flags_host)
+        layout.addWidget(flags_panel)
+
+        command_panel = Panel()
+        cp = QVBoxLayout(command_panel)
+        cp.setContentsMargins(14, 12, 14, 12)
+        cp.addWidget(QLabel("COMMAND PREVIEW"))
+        self.command_preview = QLineEdit()
+        self.command_preview.setReadOnly(True)
+        cp.addWidget(self.command_preview)
+        bottom = QHBoxLayout()
+        self.keep_console = QCheckBox("Keep console open after SRPSS exits")
+        self.keep_console.setToolTip(
+            "Off (default): the dedicated console closes naturally with Python. "
+            "On: launch through cmd /k so the console remains for inspection."
+        )
+        self.keep_console.stateChanged.connect(self._selection_changed)
+        bottom.addWidget(self.keep_console)
+        bottom.addStretch(1)
+        self.launch_button = QPushButton("RUN")
+        self.launch_button.setObjectName("primaryButton")
+        self.launch_button.clicked.connect(self.launch)
+        bottom.addWidget(self.launch_button)
+        cp.addLayout(bottom)
+        self.run_status = QLabel()
+        self.run_status.setObjectName("muted")
+        cp.addWidget(self.run_status)
+        layout.addWidget(command_panel)
+        layout.addStretch(1)
+
+    def _clear_flag_widgets(self) -> None:
+        while self.flags_grid.count():
+            item = self.flags_grid.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self.flag_checks.clear()
+
+    def refresh_flags(self) -> None:
+        self._building = True
+        try:
+            self._flags = discover_run_flags(self.repo_root)
+            settings = _load_local_settings(self.repo_root)
+            remembered_entrypoint = str(settings.get("run_entrypoint", "main.py"))
+            if remembered_entrypoint not in RUN_ENTRYPOINTS:
+                remembered_entrypoint = "main.py"
+            self.entrypoint_combo.setCurrentText(remembered_entrypoint)
+
+            remembered = settings.get("run_flags")
+            if isinstance(remembered, list):
+                selected = {str(flag) for flag in remembered if str(flag) in self._flags}
+            else:
+                selected = {flag for flag in RUN_DEFAULT_FLAGS if flag in self._flags}
+
+            self._clear_flag_widgets()
+            for index, flag in enumerate(self._flags):
+                check = QCheckBox(flag)
+                check.setChecked(flag in selected)
+                check.setToolTip(run_flag_description(flag))
+                check.stateChanged.connect(self._selection_changed)
+                self.flag_checks[flag] = check
+                row = index // 3
+                col = index % 3
+                self.flags_grid.addWidget(check, row, col)
+
+            self.keep_console.setChecked(bool(settings.get("run_keep_console_open", False)))
+            python_exe = repo_venv_python(self.repo_root)
+            self.python_label.setText(str(python_exe))
+        except Exception as exc:
+            self._flags = ()
+            self._clear_flag_widgets()
+            self.run_status.setText(str(exc))
+        finally:
+            self._building = False
+        self._update_preview()
+
+    def selected_flags(self) -> list[str]:
+        return [flag for flag in self._flags if self.flag_checks.get(flag) and self.flag_checks[flag].isChecked()]
+
+    def select_default(self) -> None:
+        wanted = set(RUN_DEFAULT_FLAGS)
+        for flag, check in self.flag_checks.items():
+            check.setChecked(flag in wanted)
+        self._update_preview()
+
+    def select_all(self) -> None:
+        for check in self.flag_checks.values():
+            check.setChecked(True)
+        self._update_preview()
+
+    def select_none(self) -> None:
+        for check in self.flag_checks.values():
+            check.setChecked(False)
+        self._update_preview()
+
+    def _selection_changed(self, *_args) -> None:
+        if not self._building:
+            self._update_preview()
+
+    def _display_command(self) -> str:
+        entrypoint = self.entrypoint_combo.currentText() or "main.py"
+        flags = self.selected_flags()
+        if os.name == "nt":
+            parts = [r".\.venv\Scripts\python.exe", rf".\{entrypoint}", *flags]
+        else:
+            parts = ["./.venv/bin/python", f"./{entrypoint}", *flags]
+        return subprocess.list2cmdline(parts) if os.name == "nt" else " ".join(parts)
+
+    def _update_preview(self) -> None:
+        self.command_preview.setText(self._display_command())
+        try:
+            build_run_command(
+                self.repo_root,
+                self.entrypoint_combo.currentText() or "main.py",
+                self.selected_flags(),
+            )
+            self.launch_button.setEnabled(True)
+            self.run_status.setText(
+                "Ready — launches in a dedicated console" +
+                (" that stays open after exit." if self.keep_console.isChecked() else " that closes when SRPSS exits.")
+            )
+        except Exception as exc:
+            self.launch_button.setEnabled(False)
+            self.run_status.setText(str(exc))
+
+    def launch(self) -> None:
+        entrypoint = self.entrypoint_combo.currentText() or "main.py"
+        flags = self.selected_flags()
+        keep_open = self.keep_console.isChecked()
+        try:
+            process = launch_run_command(
+                self.repo_root,
+                entrypoint,
+                flags,
+                keep_console_open=keep_open,
+            )
+            _save_local_setting(self.repo_root, "run_entrypoint", entrypoint)
+            _save_local_setting(self.repo_root, "run_flags", flags)
+            _save_local_setting(self.repo_root, "run_keep_console_open", keep_open)
+            self.window.set_status(
+                f"Launched {entrypoint} as PID {process.pid} with {len(flags)} flag(s)"
+            )
+            self.run_status.setText(
+                f"Running as PID {process.pid}. "
+                + ("Console will remain open after exit." if keep_open else "Console will close automatically when SRPSS exits.")
+            )
+        except Exception as exc:
+            self.window.show_error("RUN launch failed", exc)
+
+
 class GodzipFoundryWindow(QMainWindow):
     def __init__(self, repo_root: Path, initial_zip: Path | None = None) -> None:
         super().__init__()
@@ -1646,18 +2190,68 @@ class GodzipFoundryWindow(QMainWindow):
         self.resize(width, height)
 
     def _set_icon(self) -> None:
-        for path in (
-            self.repo_root / "images" / "foundries" / "SRPSSGodZIP.ico",
-            self.repo_root / "images" / "foundries" / "SRPSSBuild.ico",
-            self.repo_root / "SRPSS.ico",
-        ):
-            if path.is_file():
-                icon = QIcon(str(path))
-                self.setWindowIcon(icon)
-                app = QApplication.instance()
-                if app is not None:
-                    app.setWindowIcon(icon)
-                break
+        self._icon_path = _resolved_foundry_icon(self.repo_root)
+        self._native_icon_handles: list[int] = []
+        if self._icon_path is None:
+            return
+        icon = QIcon(str(self._icon_path))
+        self.setWindowIcon(icon)
+        app = QApplication.instance()
+        if app is not None:
+            app.setWindowIcon(icon)
+
+    def refresh_native_taskbar_icon(self) -> None:
+        """Refresh HWND icons after first show so Windows taskbar does not keep python.exe's icon."""
+        if sys.platform != "win32" or self._icon_path is None:
+            return
+        try:
+            hwnd = int(self.winId())
+            user32 = ctypes.windll.user32
+            load_image = user32.LoadImageW
+            load_image.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+            load_image.restype = ctypes.c_void_p
+            send_message = user32.SendMessageW
+            send_message.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_void_p]
+            send_message.restype = ctypes.c_ssize_t
+            image_icon = 1
+            lr_loadfromfile = 0x0010
+            wm_seticon = 0x0080
+            sizes = (
+                (1, int(user32.GetSystemMetrics(11)), int(user32.GetSystemMetrics(12))),  # ICON_BIG
+                (0, int(user32.GetSystemMetrics(49)), int(user32.GetSystemMetrics(50))),  # ICON_SMALL
+            )
+            for kind, width, height in sizes:
+                raw_handle = load_image(None, str(self._icon_path), image_icon, width, height, lr_loadfromfile)
+                handle = int(raw_handle or 0)
+                if not handle:
+                    continue
+                send_message(ctypes.c_void_p(hwnd), wm_seticon, kind, ctypes.c_void_p(handle))
+                self._native_icon_handles.append(handle)
+        except (AttributeError, OSError, ValueError):
+            return
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        if sys.platform == "win32":
+            try:
+                destroy_icon = ctypes.windll.user32.DestroyIcon
+                destroy_icon.argtypes = [ctypes.c_void_p]
+                destroy_icon.restype = ctypes.c_bool
+                for handle in getattr(self, "_native_icon_handles", []):
+                    destroy_icon(ctypes.c_void_p(handle))
+            except (AttributeError, OSError, ValueError):
+                pass
+            self._native_icon_handles = []
+        super().closeEvent(event)
+
+    def zip_search_dirs(self) -> list[Path]:
+        settings = _load_local_settings(self.repo_root)
+        dirs: list[Path] = [self.repo_root.parent]
+        remembered_output = str(settings.get("output_dir", "")).strip()
+        if remembered_output:
+            dirs.append(Path(remembered_output))
+        if os.name == "nt":
+            dirs.append(PERSONAL_GODZIP_DROP_DIR)
+        return dirs
 
     def _build_ui(self) -> None:
         root = QWidget(self)
@@ -1709,15 +2303,19 @@ class GodzipFoundryWindow(QMainWindow):
         self.debris_tab = DebrisTab(self)
         self.create_tab = CreateTab(self)
         self.apply_tab = ApplyTab(self)
+        self.diff_tab = DiffTab(self)
         self.logzip_tab = LogzipTab(self)
         self.push_tab = PushTab(self)
         self.pull_tab = PullTab(self)
+        self.run_tab = RunTab(self)
         self.tabs.addTab(self.create_tab, "CREATE GOD ZIP")
         self.tabs.addTab(self.apply_tab, "APPLY GOD ZIP")
+        self.tabs.addTab(self.diff_tab, "DIFF")
         self.tabs.addTab(self.logzip_tab, "LOGZIP")
         self.tabs.addTab(self.push_tab, "PUSH")
         self.tabs.addTab(self.pull_tab, "PULL")
         self.tabs.addTab(self.debris_tab, "DEBRIS")
+        self.tabs.addTab(self.run_tab, "RUN")
         self.tabs.currentChanged.connect(self._tab_changed)
         body_l.addWidget(self.tabs, 1)
         shell_l.addWidget(body, 1)
@@ -1741,6 +2339,10 @@ class GodzipFoundryWindow(QMainWindow):
         current = self.tabs.currentWidget()
         if current is self.pull_tab:
             self.pull_tab.ensure_loaded()
+        elif current is self.apply_tab:
+            self.apply_tab.ensure_discovery_loaded()
+        elif current is self.diff_tab:
+            self.diff_tab.ensure_loaded()
         elif current is self.push_tab:
             self.push_tab.refresh()
         elif current is self.logzip_tab:
@@ -1892,8 +2494,13 @@ def main() -> int:
     app = QApplication(sys.argv[:1])
     app.setApplicationName(APP_TITLE)
     app.setOrganizationName("SRPSS")
-    window = GodzipFoundryWindow(args.repo, args.initial_zip)
+    repo_root = discover_repo_root(args.repo)
+    icon_path = _resolved_foundry_icon(repo_root)
+    if icon_path is not None:
+        app.setWindowIcon(QIcon(str(icon_path)))
+    window = GodzipFoundryWindow(repo_root, args.initial_zip)
     window.show()
+    QTimer.singleShot(0, window.refresh_native_taskbar_icon)
     return app.exec()
 
 

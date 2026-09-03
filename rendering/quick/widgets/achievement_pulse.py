@@ -79,6 +79,11 @@ _FIELD_DEFAULTS: tuple[tuple[str, bool], ...] = (
     ("selected", False),
 )
 
+# ``latest`` controls the unlock text/icon hierarchy, not a supporting bottom
+# capsule.  Keep it in the runtime field-visibility contract while excluding it
+# from authored capsule-rail occupancy.
+_NON_CAPSULE_FIELD_IDS = frozenset({"latest"})
+
 
 @dataclass(frozen=True)
 class AchievementPulsePresentationConfig:
@@ -233,7 +238,10 @@ class AchievementPulsePresentationConfig:
         semantic_palette = project_steam_semantic_palette(
             fallback=SteamSemanticPalette(
                 artwork_surface=(12, 15, 20, 230),
-                artwork_border=(255, 255, 255, 175),
+                # The portrait/wide artwork frame is a real opaque outline.
+                # The previous translucent white fallback made the edge change
+                # apparent weight with whatever image/background sat beneath it.
+                artwork_border=(199, 213, 224, 255),
                 artwork_gradient_start=(105, 115, 124, 255),
                 artwork_gradient_middle=(105, 115, 124, 255),
                 artwork_gradient_end=(23, 27, 32, 255),
@@ -309,7 +317,11 @@ class AchievementPulsePresentationConfig:
 
     @property
     def authored_size(self) -> tuple[float, float]:
-        field_count = sum(1 for _field_id, enabled in self.field_visibility if enabled)
+        field_count = sum(
+            1
+            for field_id, enabled in self.field_visibility
+            if enabled and field_id not in _NON_CAPSULE_FIELD_IDS
+        )
         capsule_height, capsule_gap = achievement_capsule_geometry(
             font_family=self.font_family,
             capsule_font_size=self.capsule_font_size,
