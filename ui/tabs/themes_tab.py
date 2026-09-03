@@ -203,8 +203,8 @@ class ThemesTab(QWidget):
         group=QGroupBox("Available Widget Themes"); style_group_box(group)
         group_layout=QVBoxLayout(group); group_layout.setContentsMargins(18,16,18,18); group_layout.setSpacing(10)
         intro=QLabel(
-            "Choose the shared runtime widget palette. Card Surface and Card Border "
-            "are edited once under Widgets → General → Appearance."
+            "Choose the shared runtime widget palette. Card Surface, Card Border and Header Fill "
+            "are edited once under Widgets → General → Style Overrides."
         )
         intro.setWordWrap(True); shared_styles.apply_shared_label_style(intro,"INFO_LABEL_STYLE"); group_layout.addWidget(intro)
         self.widget_keep_synced=self._make_link_button()

@@ -94,6 +94,7 @@ from theme_foundry_model import (  # noqa: E402
     ThemeDraft,
     alpha_over,
     color_category,
+    everyday_theme_role_group,
     friendly_token_label,
     gradient_summary,
     matching_acrylic_preset,
@@ -110,6 +111,7 @@ from theme_foundry_model import (  # noqa: E402
 from ui.settings_theme_io import (  # noqa: E402
     SETTINGS_THEME_FILE_EXTENSION,
     SettingsThemeFileError,
+    discover_settings_theme_files,
     load_settings_theme_file,
     save_settings_theme_file,
     settings_theme_from_json,
@@ -136,7 +138,7 @@ from ui.settings_theme_spec import (  # noqa: E402
 )
 
 APP_TITLE = "SRPSS Theme Foundry"
-PREFERENCES_VERSION = 3
+PREFERENCES_VERSION = 4
 CANONICAL_DEFAULT_FILENAME = "Default Dark.srtheme"
 
 
@@ -383,6 +385,7 @@ class ThemeFoundryWindow(QMainWindow):
 
         self._fit_initial_window_to_screen()
         self._build_ui()
+        self._refresh_theme_file_list()
         self._apply_internal_style()
         self._refresh_backdrop_ui()
         self._rebuild_tree()
@@ -446,6 +449,21 @@ class ThemeFoundryWindow(QMainWindow):
         )
         subtitle.setObjectName("themeFoundrySubtitle")
         outer.addWidget(subtitle)
+
+        quick = QHBoxLayout()
+        quick.addWidget(QLabel("Theme"))
+        self.theme_combo = QComboBox()
+        self.theme_combo.setMinimumWidth(360)
+        quick.addWidget(self.theme_combo, 1)
+        self.open_selected_btn = QPushButton("OPEN SELECTED")
+        self.open_selected_btn.clicked.connect(self._open_selected_theme)
+        quick.addWidget(self.open_selected_btn)
+        self.refresh_themes_btn = QPushButton("↻")
+        self.refresh_themes_btn.setFixedWidth(42)
+        self.refresh_themes_btn.setToolTip("Refresh repository Settings themes")
+        self.refresh_themes_btn.clicked.connect(self._refresh_theme_file_list)
+        quick.addWidget(self.refresh_themes_btn)
+        outer.addLayout(quick)
 
         toolbar = QHBoxLayout()
         self.new_btn = QPushButton("New From Default")
@@ -563,6 +581,33 @@ class ThemeFoundryWindow(QMainWindow):
         layout = QVBoxLayout(pane)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
+
+        help_label = QLabel(
+            "Everyday view keeps the high-frequency authoring roles plus all shadows/gradients and hides "
+            "the comparison-column wall. All Roles restores the complete SettingsThemeSpec when you need the weird stuff."
+        )
+        help_label.setObjectName("muted")
+        help_label.setWordWrap(True)
+        layout.addWidget(help_label)
+
+        view_row = QHBoxLayout()
+        view_row.addWidget(QLabel("View"))
+        self.role_view = QComboBox()
+        self.role_view.addItems(["Everyday", "All Roles"])
+        preferred_view = str(self._prefs.get("role_view", "Everyday"))
+        self.role_view.setCurrentText(preferred_view if preferred_view in {"Everyday", "All Roles"} else "Everyday")
+        view_row.addWidget(self.role_view)
+        self.changed_opened_only = QCheckBox("Changed from Opened")
+        self.changed_opened_only.setToolTip("Show only working values that differ from the opened theme")
+        view_row.addWidget(self.changed_opened_only)
+        self.differs_default_only = QCheckBox("Differs from Default")
+        self.differs_default_only.setToolTip("Show only working values that differ from compiled Default Dark")
+        view_row.addWidget(self.differs_default_only)
+        self.clear_filters_btn = QPushButton("CLEAR FILTERS")
+        self.clear_filters_btn.clicked.connect(self._clear_role_filters)
+        view_row.addWidget(self.clear_filters_btn)
+        layout.addLayout(view_row)
+
         search_row = QHBoxLayout()
         search_row.addWidget(QLabel("Filter"))
         self.search = QLineEdit()
@@ -589,11 +634,15 @@ class ThemeFoundryWindow(QMainWindow):
         header.setSectionResizeMode(self.COL_TOKEN, QHeaderView.ResizeMode.Stretch)
         for col in (self.COL_KIND, self.COL_STATE, self.COL_WORKING, self.COL_OPENED, self.COL_DEFAULT):
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+        self._apply_role_view_columns()
         layout.addWidget(self.tree, 1)
 
+        self.role_view.currentTextChanged.connect(self._role_view_changed)
         self.search.textChanged.connect(self._filter_tree)
         self.category_filter.currentTextChanged.connect(self._filter_tree)
         self.favorites_only.toggled.connect(self._filter_tree)
+        self.changed_opened_only.toggled.connect(self._filter_tree)
+        self.differs_default_only.toggled.connect(self._filter_tree)
         self.tree.currentItemChanged.connect(self._tree_selection_changed)
         self.tree.itemClicked.connect(self._tree_item_clicked)
         return pane
@@ -627,7 +676,7 @@ class ThemeFoundryWindow(QMainWindow):
             self._collapsible(
                 "MOST USED COLOURS",
                 self._build_most_used_colors_box(),
-                expanded=False,
+                expanded=True,
             )
         )
 
@@ -870,6 +919,20 @@ class ThemeFoundryWindow(QMainWindow):
         row.addWidget(self.alpha_pct)
         form.addRow("Opacity", wrap)
         layout.addLayout(form)
+
+        hex_row = QHBoxLayout()
+        self.color_hex_edit = QLineEdit()
+        self.color_hex_edit.setPlaceholderText("#RRGGBB or #RRGGBBAA")
+        self.color_hex_edit.returnPressed.connect(self._apply_selected_color_hex)
+        hex_row.addWidget(self.color_hex_edit, 1)
+        self.color_hex_apply_btn = QPushButton("APPLY HEX")
+        self.color_hex_apply_btn.clicked.connect(self._apply_selected_color_hex)
+        hex_row.addWidget(self.color_hex_apply_btn)
+        self.color_copy_rgba_btn = QPushButton("COPY RGBA")
+        self.color_copy_rgba_btn.clicked.connect(self._copy_selected_rgba)
+        hex_row.addWidget(self.color_copy_rgba_btn)
+        layout.addLayout(hex_row)
+
         for spin in (self.r_spin, self.g_spin, self.b_spin):
             spin.valueChanged.connect(self._color_channels_changed)
         self.a_spin.valueChanged.connect(self._color_alpha_spin_changed)
@@ -1046,14 +1109,74 @@ class ThemeFoundryWindow(QMainWindow):
             return "DEFAULT", "Working value differs from opened theme and equals compiled Default Dark."
         return "EDITED", "Working value differs from the opened theme."
 
+    def _apply_role_view_columns(self) -> None:
+        if not hasattr(self, "tree"):
+            return
+        advanced = self.role_view.currentText() == "All Roles"
+        self.tree.setColumnHidden(self.COL_KIND, not advanced)
+        self.tree.setColumnHidden(self.COL_OPENED, not advanced)
+        self.tree.setColumnHidden(self.COL_DEFAULT, not advanced)
+
+    def _role_view_changed(self, view: str) -> None:
+        self._prefs["role_view"] = view if view in {"Everyday", "All Roles"} else "Everyday"
+        self._save_prefs()
+        self._apply_role_view_columns()
+        self._rebuild_tree(self.selected_entry)
+
+    def _clear_role_filters(self) -> None:
+        self.search.clear()
+        self.category_filter.setCurrentIndex(0)
+        self.favorites_only.setChecked(False)
+        self.changed_opened_only.setChecked(False)
+        self.differs_default_only.setChecked(False)
+        self._filter_tree()
+
+    def _tree_category_for(self, kind: str, token: str) -> str | None:
+        if self.role_view.currentText() == "Everyday":
+            group = everyday_theme_role_group(kind, token)
+            if group is not None:
+                return group
+            if self._entry_id(kind, token) in self.favorites:
+                return "★ Favorites"
+            return None
+        if kind == "color":
+            return color_category(token)
+        if kind == "shadow":
+            return "Shadows"
+        if kind == "gradient":
+            return "Gradients"
+        return None
+
     def _rebuild_tree(self, select_entry: tuple[str, str] | None = None) -> None:
         self.tree.clear()
         self.tree_items.clear()
+        raw_entries: list[tuple[str, str]] = []
+        raw_entries += [("color", token) for token in self.draft.colors]
+        raw_entries += [("shadow", token) for token in self.draft.shadows]
+        raw_entries += [("gradient", token) for token in self.draft.gradients]
+
         entries: list[tuple[str, str, str]] = []
-        entries += [(color_category(token), "color", token) for token in self.draft.colors]
-        entries += [("Shadows", "shadow", token) for token in self.draft.shadows]
-        entries += [("Gradients", "gradient", token) for token in self.draft.gradients]
-        categories = sorted({category for category, _kind, _token in entries})
+        for kind, token in raw_entries:
+            category = self._tree_category_for(kind, token)
+            if category is not None:
+                entries.append((category, kind, token))
+
+        categories = list(dict.fromkeys(category for category, _kind, _token in entries))
+        if self.role_view.currentText() == "Everyday":
+            preferred = [
+                "Surfaces & Panels",
+                "Text",
+                "Borders & Separators",
+                "Accent & Selection",
+                "Controls",
+                "Shadows",
+                "Gradients",
+                "★ Favorites",
+            ]
+            categories.sort(key=lambda value: (preferred.index(value) if value in preferred else len(preferred), value))
+        else:
+            categories.sort()
+
         current_filter = self.category_filter.currentText()
         self.category_filter.blockSignals(True)
         self.category_filter.clear()
@@ -1062,6 +1185,7 @@ class ThemeFoundryWindow(QMainWindow):
         if current_filter in {"All categories", *categories}:
             self.category_filter.setCurrentText(current_filter)
         self.category_filter.blockSignals(False)
+
         parents: dict[str, QTreeWidgetItem] = {}
         for category in categories:
             parent = QTreeWidgetItem(["", category])
@@ -1070,7 +1194,11 @@ class ThemeFoundryWindow(QMainWindow):
             parent.setFont(self.COL_TOKEN, f)
             self.tree.addTopLevelItem(parent)
             parents[category] = parent
-        for category, kind, token in sorted(entries, key=lambda x: (x[0], friendly_token_label(x[2]).lower())):
+
+        for category, kind, token in sorted(
+            entries,
+            key=lambda x: (categories.index(x[0]), friendly_token_label(x[2]).lower()),
+        ):
             entry_id = self._entry_id(kind, token)
             state, detail = self._state_for(kind, token)
             working = self._value_for_draft(kind, token)
@@ -1086,12 +1214,22 @@ class ThemeFoundryWindow(QMainWindow):
             item.setToolTip(self.COL_STATE, detail)
             parents[category].addChild(item)
             self.tree_items[entry_id] = item
-        self.tree.expandAll()
+
+        if self.role_view.currentText() == "Everyday":
+            initially_open = {"Surfaces & Panels", "Text", "Accent & Selection"}
+            for index in range(self.tree.topLevelItemCount()):
+                parent = self.tree.topLevelItem(index)
+                parent.setExpanded(parent.text(self.COL_TOKEN) in initially_open)
+        else:
+            self.tree.expandAll()
         target = select_entry or self.selected_entry
         if target:
             item = self.tree_items.get(self._entry_id(*target))
             if item is not None:
                 self.tree.setCurrentItem(item)
+            elif self.role_view.currentText() == "Everyday":
+                self.selected_entry = None
+                self._refresh_editor()
         self._filter_tree()
         self._refresh_most_used_colors()
 
@@ -1099,6 +1237,8 @@ class ThemeFoundryWindow(QMainWindow):
         text = self.search.text().strip().lower()
         category = self.category_filter.currentText()
         favorites_only = self.favorites_only.isChecked()
+        changed_opened_only = self.changed_opened_only.isChecked()
+        differs_default_only = self.differs_default_only.isChecked()
         for i in range(self.tree.topLevelItemCount()):
             parent = self.tree.topLevelItem(i)
             category_name = parent.text(self.COL_TOKEN)
@@ -1110,15 +1250,28 @@ class ThemeFoundryWindow(QMainWindow):
                     continue
                 kind, token = str(data[0]), str(data[1])
                 entry_id = self._entry_id(kind, token)
+                working_value = self._value_for_draft(kind, token)
+                differs_opened = working_value != self._value_for_spec(self.opened_spec, kind, token)
+                differs_default = working_value != self._value_for_spec(self.default_spec, kind, token)
                 haystack = f"{token} {friendly_token_label(token)} {kind} {category_name}".lower()
                 visible = (
                     (category == "All categories" or category == category_name)
                     and (not favorites_only or entry_id in self.favorites)
+                    and (not changed_opened_only or differs_opened)
+                    and (not differs_default_only or differs_default)
                     and (not text or text in haystack)
                 )
                 item.setHidden(not visible)
                 visible_children += int(visible)
             parent.setHidden(visible_children == 0)
+            if visible_children and (
+                text
+                or category != "All categories"
+                or favorites_only
+                or changed_opened_only
+                or differs_default_only
+            ):
+                parent.setExpanded(True)
 
     def _tree_selection_changed(self, current: QTreeWidgetItem | None, previous: QTreeWidgetItem | None) -> None:
         del previous
@@ -1184,6 +1337,7 @@ class ThemeFoundryWindow(QMainWindow):
         self.a_spin.setValue(value.a)
         self.a_slider.setValue(value.a)
         self.alpha_pct.setText(f"{value.a * 100.0 / 255.0:.1f}%")
+        self.color_hex_edit.setText(f"#{value.r:02X}{value.g:02X}{value.b:02X}{value.a:02X}")
         matching = matching_color_tokens(self.draft.colors, value)
         self.bulk_color_btn.setText(f"Change All Matching ({len(matching)})…")
         self.bulk_color_btn.setEnabled(len(matching) > 1)
@@ -1317,11 +1471,19 @@ class ThemeFoundryWindow(QMainWindow):
     def _layer_item_activated(self, item: QTreeWidgetItem, column: int) -> None:
         del column
         token = item.data(0, Qt.ItemDataRole.UserRole)
-        if token:
-            target = self.tree_items.get(self._entry_id("color", str(token)))
-            if target is not None:
-                self.tree.setCurrentItem(target)
-                self.tree.scrollToItem(target)
+        if not token:
+            return
+        entry_id = self._entry_id("color", str(token))
+        target = self.tree_items.get(entry_id)
+        if target is None and self.role_view.currentText() == "Everyday":
+            # Relationships may point at a valid low-frequency role hidden by the
+            # human-first view. Switch to complete schema rather than making the
+            # relationship look broken.
+            self.role_view.setCurrentText("All Roles")
+            target = self.tree_items.get(entry_id)
+        if target is not None:
+            self.tree.setCurrentItem(target)
+            self.tree.scrollToItem(target)
 
     def _choose_qcolor(self, initial: Rgba, title: str, *, alpha: bool = True) -> Rgba | None:
         options = QColorDialog.ColorDialogOption.DontUseNativeDialog
@@ -1339,6 +1501,32 @@ class ThemeFoundryWindow(QMainWindow):
         chosen = self._choose_qcolor(self.draft.colors[token], f"Choose {friendly_token_label(token)}")
         if chosen:
             self._set_color(token, chosen)
+
+    @staticmethod
+    def _parse_rgba_hex(text: str) -> Rgba:
+        value = str(text).strip().lstrip("#")
+        if len(value) == 6:
+            value += "FF"
+        if len(value) != 8 or any(ch not in "0123456789abcdefABCDEF" for ch in value):
+            raise ValueError("Use #RRGGBB or #RRGGBBAA")
+        return Rgba(*(int(value[index:index + 2], 16) for index in range(0, 8, 2)))
+
+    def _apply_selected_color_hex(self) -> None:
+        if not self.selected_entry or self.selected_entry[0] != "color":
+            return
+        try:
+            color = self._parse_rgba_hex(self.color_hex_edit.text())
+        except ValueError as exc:
+            self._warning("Invalid colour", str(exc))
+            return
+        self._set_color(self.selected_entry[1], color)
+
+    def _copy_selected_rgba(self) -> None:
+        if not self.selected_entry or self.selected_entry[0] != "color":
+            return
+        color = self.draft.colors[self.selected_entry[1]]
+        QApplication.clipboard().setText(f"{color.r},{color.g},{color.b},{color.a}")
+        self._set_status("RGBA copied to clipboard.")
 
     def _choose_all_matching_colors(self) -> None:
         if self.selected_entry is None or self.selected_entry[0] != "color":
@@ -1658,6 +1846,7 @@ class ThemeFoundryWindow(QMainWindow):
             if kind == "color":
                 self._refresh_layers()
                 self._refresh_most_used_colors()
+            self._filter_tree()
         finally:
             self._updating = False
         self._update_dirty_status()
@@ -1740,6 +1929,49 @@ class ThemeFoundryWindow(QMainWindow):
             self._last_acrylic_tint = self.draft.backdrop_tint
         self._refresh_backdrop_ui()
 
+    def _refresh_theme_file_list(self) -> None:
+        """Refresh the repo-local Settings theme picker without loading anything."""
+
+        current_path = str(self.theme_path) if self.theme_path is not None else None
+        self.theme_combo.blockSignals(True)
+        self.theme_combo.clear()
+        self.theme_combo.addItem("Compiled Default Dark", None)
+        themes_dir = self.repo_root / "themes"
+        for path in discover_settings_theme_files(themes_dir):
+            # The compiled Default Dark is authority; its on-disk mirror is not a
+            # second editable catalogue entry in this quick picker.
+            if path.name.casefold() == CANONICAL_DEFAULT_FILENAME.casefold():
+                continue
+            self.theme_combo.addItem(path.name, str(path))
+        if current_path is not None:
+            index = self.theme_combo.findData(current_path)
+            if index >= 0:
+                self.theme_combo.setCurrentIndex(index)
+        else:
+            self.theme_combo.setCurrentIndex(0)
+        self.theme_combo.blockSignals(False)
+
+    def _open_selected_theme(self) -> None:
+        if not self._confirm_discard_if_dirty():
+            return
+        data = self.theme_combo.currentData()
+        if data is None:
+            self._open_compiled_default()
+            return
+        self._open_theme_path(Path(str(data)))
+
+    def _open_compiled_default(self) -> None:
+        self.opened_spec = self.default_spec
+        self.draft = ThemeDraft.from_spec(self.default_spec)
+        self.theme_path = None
+        self.name_edit.setText(self.draft.name)
+        self.file_label.setText("Compiled Default Dark (no file opened)")
+        self._reset_backdrop_helper()
+        self._rebuild_tree(self.selected_entry)
+        self._refresh_theme_file_list()
+        self._update_dirty_status()
+        self._set_status("Editing compiled Default Dark. Use Save As to create a selectable custom .srtheme.")
+
     # File lifecycle ---------------------------------------------------
     def new_from_default(self) -> None:
         if not self._confirm_discard_if_dirty():
@@ -1752,6 +1984,7 @@ class ThemeFoundryWindow(QMainWindow):
         self.file_label.setText("New unsaved theme based on compiled Default Dark")
         self._reset_backdrop_helper()
         self._rebuild_tree(self.selected_entry)
+        self._refresh_theme_file_list()
         self._update_dirty_status()
 
     def open_theme(self) -> None:
@@ -1778,6 +2011,7 @@ class ThemeFoundryWindow(QMainWindow):
         self.file_label.setText(str(path))
         self._reset_backdrop_helper()
         self._rebuild_tree(self.selected_entry)
+        self._refresh_theme_file_list()
         self._update_dirty_status()
         self._save_prefs(last_theme=str(path))
         self._set_status(f"Loaded schema-v{spec.schema_version} semantic theme: {path.name}")
@@ -1849,6 +2083,7 @@ class ThemeFoundryWindow(QMainWindow):
         self.file_label.setText(str(path))
         self._reset_backdrop_helper()
         self._rebuild_tree(self.selected_entry)
+        self._refresh_theme_file_list()
         self._update_dirty_status()
         self._save_prefs(last_theme=str(path))
         self._set_status(f"Saved and strict-reloaded complete semantic theme: {path.name}")
@@ -1997,6 +2232,8 @@ class ThemeFoundryWindow(QMainWindow):
     def _save_prefs(self, *, last_theme: str | None = None) -> None:
         self._prefs["version"] = PREFERENCES_VERSION
         self._prefs["favorites"] = sorted(self.favorites)
+        if hasattr(self, "role_view"):
+            self._prefs["role_view"] = self.role_view.currentText()
         if last_theme is not None:
             self._prefs["last_theme"] = last_theme
         _save_preferences(self._prefs)

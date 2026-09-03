@@ -1,148 +1,82 @@
-# Current Plan — Qt Quick Production Migration
+# Current Plan — Post-Cutover J+
 
 Last updated: 2026-09-03
+Outside of Codex Work Began: `886e6fa419ff130ff2a9aedf5091ae6162d1e958`
 
 ## Current checkpoint
 
-The production Qt Quick cutover is complete. Current work is now **post-cutover product completion, validation, modularity and cleanup** rather than presenter migration.
+The Qt Quick production cutover is complete. This file is now a **live post-cutover plan**, not a migration diary. Completed H/I mechanism history belongs in closure/historical records and must not be recopied here.
 
-Detailed H/I history is intentionally not repeated here. Use the closure/historical records when mechanism evidence is needed:
+Current source truth at this checkpoint:
+
+- The deterministic Visualizer hitch owners already attributed in P0 are closed: diagnostics usage sampling, stable-set Gen2 rescans, first-publish cold import, and analysis/handoff tails. `gc.freeze()` remains the accepted stable-generation policy; post-freeze recreated generations collect normally and the pre-freeze cyclic pin is bounded until shutdown.
+- V0-V4 Visualizer authority/dormancy work is complete. The 2026-09-03 audit hole where `logical_frame_capture` eagerly imported all five frame runtimes is fixed through the canonical descriptor seam; warming the common capture chain imports no disabled mode runtime.
+- Achievement Pulse parity is physically accepted. Abandonment Issues remains visually accepted/pristine. Reddit's remaining time-column tweak is bounded and awaiting eyes-on confirmation.
+- Runtime Widget Themes are colour-only schema-v3. Runtime card Glass/Acrylic is rejected/removed and must not return. Settings-window Glass/Acrylic remains valid and separate.
+- Settings Theme Foundry and Widget Theme Foundry are current authoring tools. Ordinary Widget Settings now defaults to shared semantic/theme authority for branded headers instead of family-local header palettes; family-specific swatches remain only where a real family-level colour contract still exists.
+- Widgets -> General -> **Style Overrides** is the shared ordinary-widget override surface: Card Surface, Card Border, Header Fill, Card Border Width, plus an explicit **Reset All Colours to Theme** action. Family-specific header colour swatches are retired. Media's lone `Show Header Pill` toggle belongs in its normal Appearance bucket, not a special Header Appearance bucket.
+- Old per-family colour fields remain readable only as a bounded compatibility bridge until the explicit reset/upgrade horizon is complete. Retired header-button descriptors/load bookkeeping are part of that bridge, not permission for new hidden override authority.
+
+Durable references when mechanism detail is needed:
 
 - `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md`
-- `Docs/Historical_Bugs/README.md`
-- `Docs/QtQuick_Migration/Post_Cutover_Operator_Observation_Ledger_2026-08-30.md`
+- `Docs/QtQuick_Migration/Visualizer_Hitch_Attribution_And_Optimization_Plan_2026-09-03.md`
+- `Docs/QtQuick_Migration/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md`
 - `Docs/Tooling_Audit_2026-09-01.md`
+- `Docs/TestSuite.md`
 - `Future_Cleanup.md`
-
-Do **not** repopulate this plan with completed migration sub-slices. The live plan should contain only current work, current validation gates, and durable guardrails needed to enter the next task safely.
 
 ## Immediate sequence
 
-1. **P0 — Visualizer hitch attribution/baseline.** Bubble and extreme-tall Spectrum are co-equal sensitive oracles. Attribute recurring >33 ms delivery holes before changing smoothing or authored response. The logical cadence is a pure-Python thread, so a spike means a single GIL-held C call (or stop-the-world GC) stalled it. The `--usage` sampler lead is **resolved** (a diagnostics-perturbation artifact: two GIL-held system-wide psutil enumerations, now partitioned), and the always-on **Gen2 GC hitch is resolved** (stable long-lived survivors frozen out of gen2 scans via `gc.freeze()`, validated in-situ on both displays). The still-open owners are first-frame publication and analysis/presentation tails. See `Docs/QtQuick_Migration/Visualizer_Hitch_Attribution_And_Optimization_Plan_2026-09-03.md`.
-2. **[DONE] P0 — Visualizer V0-V4 behavior-floor + authority/dormancy.** Behavior floor pinned green (V0), canonical mode wiring centralized into the descriptor (V1), per-mode enable state persisted additively with no settings lost (V2), every runtime caller routed through the effective enabled set (V3), and disabled-mode dormancy proven (V4). The Settings UI was intentionally **not** moved. Performance work now has the final active owner graph.
-3. **[LARGELY DONE] P0 — remove deterministic hitch owners from the surviving active path.** Done: usage-telemetry contention (partitioned); Gen2 GC (stable set frozen out of gen2 scans, validated in-situ incl. aggressive recreation); first-frame publication (cold-import warmed off the first tick); analysis/handoff tails (closed — not a visible owner once the periodic sources were removed). Remaining lower-priority: recreation-specific latency and any GUI/pacer/logging follow-ups only if a real Bubble/tall-Spectrum oracle still shows a gap. Never solve them by lowering cadence, accepting stale state or damping authored amplitude/motion.
-4. **Then complete V5-V8 Visualizers Settings extraction/rehosting, Media dependency UX and future-mode proof.** Settings presentation moves only after mode authority/dormancy and the main hitch owners are stable.
-5. **Measure/repair the theme-switch slowdown.** Existing `[PERF][SETTINGS_THEME]` and `[PERF][THEME_SELECT]` timings point to overlapping QWidget refresh/repolish listeners; optimize only after confirming overlap. Do not weaken bidirectional stable-ID linking or transactional rollback.
-6. **Run the narrow theme-system fragility / edge-contract audit.** Stale Qt wrappers/QObject lifetime, lazy Settings-page state, linked-theme transaction edges, retained-runtime recreation, theme catalogue/path/build/install boundaries, live renderer failure propagation and hidden polling/fallback owners.
-7. **Resume bounded J visual parity + cleanup, then the broader optimization/resource plateau tranche.** Remaining widget parity, snap guides and polish matter, but recurring Visualizer hitches are a product-quality blocker and should not be buried under cosmetic work.
+1. **Finish shared Widget colour-authority cleanup and physical check.** Apply the Style Overrides/header cleanup, run **Reset All Colours to Theme** once on the current profile when desired, and verify Media/Reddit/Gmail/Steam branded headers resolve cohesively from the selected Widget Theme/shared override. No hidden family colour should survive merely because its GUI swatch was removed.
+2. **Weather parity.** Weather is the next substantial widget visual target. Use current Quick source and the pre-migration visual oracle; do not compensate for theme defects with family-local styling hacks.
+3. **Visualizer recreation-specific delivery quality.** Deterministic steady-state hitch owners are closed; remaining performance work is generation replacement/re-admission freshness/latency, then resource plateau. Bubble and extreme-tall Spectrum remain co-equal physical oracles. Do not lower cadence, accept stale frames, or damp authored response.
+4. **V5-V8 Visualizer Settings rehost.** Only after the hard pre-V5/V6 gate below is satisfied: deepest enabled-mode admission, correct startup substitution ordering, durable no-settings-lost coverage, and Settings-body dormancy.
+5. **Theme-switch slowdown + narrow theme fragility audit.** Attribute duplicate QWidget refresh/repolish work first, then audit only real edge contracts: stale wrappers, lazy Settings pages, linked-theme transactions, catalogue/install roots, retained recreation, live failure propagation, and hidden lifetime owners.
+6. **J cleanup/optimization/acceptance.** Reconcile stale tests/tools, restore broad-suite signal, finish remaining bounded parity/snap polish, run resource/CPU/GPU ownership passes, then compiled/frozen/installed acceptance.
 
-### Retired runtime card-material work
+## User-environment validation gate
 
-The Quick-runtime Glass/Acrylic backdrop-card experiment is **rejected and removed**, not merely disabled. Do not reintroduce its schema/state/UI or renderer machinery during ordinary theme work. The failed methods and reasons are preserved in `Docs/QtQuick_Migration/Rejected_Card_Material_Experiments_2026-09-02.md`; they do not belong in this live checklist. Settings-window Glass/Acrylic remains a separate accepted QWidget/HWND theme feature.
-
-### Retained theme/UI completion
-
-- [~] **Abandonment/BACKLOG semantic + readability.** `abandonment_issues.accent -> widget.accent` owns the archive/BACKLOG block; the label uses ordinary resolved text colour. Existing explicit family accent override remains higher precedence.
-- [~] **58 colour-only Widget counterparts.** Shipped `.srwtheme` files are schema-v3 semantic-colour bundles with no material recommendation and no `[Glass]`/`[Acrylic]` Widget display/file suffix. Stable `linked_settings_theme_id` still points to the actual Settings-theme identity, whose name/file may legitimately retain Settings-window material tags. All 58 mirrors materialize mature Media/Volume/Seek/Backlog roles. Light/dark-text counterparts now enforce a high-opacity light runtime card floor and opaque secondary metadata so arbitrary wallpaper cannot collapse contrast.
-- [~] **Reddit parity.** Age value and `AGO` use fixed subcolumns so the first value digit and `AGO` column align while the title gap remains tight; the aligned `AGO` column is shifted 3 px left from the prior parity pass.
-- [~] **Context Menu submenu crossing.** Transparent pointer corridor + one-event-turn defer; no timer/poller/sticky owner.
-- [~] **Theme Foundry Widget export.** One deterministic Settings->Widget converter, stable link identity, strict reload, and colour-only v3 output.
-- [~] **Widgets -> General `Style Overrides`.** Card Surface + Card Border edits fork the full resolved named Widget palette into persisted `Custom`; Card Border Width remains a global geometry style. There is no Surface Style/material control.
-- [~] **Overlay-install debris cleanup.** `tools/material_rollback_cleanup_gui.py` moves known rejected material files, stale material-named Widget mirrors and failed root experiment artifacts into `/deleteme/<timestamp>` with manifest-backed Undo. It never touches Settings theme files merely because they legitimately contain `[Glass]`/`[Acrylic]`.
-
-## User-environment automated validation gate
-
-The 2026-09-01 `98/98` destination result is historical evidence only. The current tree includes stacking, global-CUSTOM dormancy, volume-wheel routing, Widget Theme/link/semantic work and new regression bars. Run:
+Run the maintained destination profile after meaningful current slices:
 
 ```powershell
 python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 900 --log
 ```
 
-- [ ] **Run the refreshed `destination` profile in the normal user environment with PySide6/OpenGL available.** The maintained profile includes stacking/CUSTOM, volume, Widget Theme mirror/semantic/link, Settings-theme deleted-wrapper lifetime safety, and retained Context Menu Settings-click regressions.
-- [ ] **Classify every red against current ownership.** A red is not permission to restore QWidget/GL presentation, a retired fallback, polling, or a second runtime owner.
-- [ ] **Keep automated green separate from physical acceptance.** QML pixels, CUSTOM transitions, frozen paths and display topology still require real-app validation.
-
-Before final J closure also run the broad gate:
+Before final J closure also run:
 
 ```powershell
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
 ```
 
-The destination profile remains production authority; broad-suite museum/deleted-owner failures are cleanup evidence, not product-authority evidence.
+Rules:
+
+- [ ] Classify every red against **current ownership**. Museum/deleted-owner failures are cleanup evidence, not permission to resurrect retired QWidget/GL/polling/fallback architecture.
+- [ ] Keep automated green separate from physical acceptance. QML pixels, CUSTOM transitions, frozen paths, topology and real Qt lifetime behavior still require the user environment.
+- [ ] Do not weaken the destination profile to make the broad suite prettier.
 
 ## Current physical / product validation queue
 
-Status: `[ ]` open, `[~]` implemented/source-proven but awaiting real-app validation, `[x]` physically or conclusively accepted.
+Status: `[ ]` open, `[~]` implemented/source-proven but awaiting real-app validation, `[x]` physically/conclusively accepted.
 
-- [x] **Non-CUSTOM smart stacking collision solver.** Operator physically exercised the pathological all-widgets-on-one-slot case and reported exceptional behavior. Preserve deterministic whole-display spill and zero steady-state cadence cost.
-- [~] **Global CUSTOM dormancy across all three entry paths.** Authored stacking and Media↔Visualizer adjacency must be completely off when: (1) persisted/effective CUSTOM exists, (2) live Edit Layout begins, or (3) a number-key saved layout begins its fenced load/rebuild. Number-key load is a first-class entry path, not an edge case.
-- [~] **Media↔Visualizer ordinary adjacency.** Only while global CUSTOM is inactive: Media remains at its authored ordinary location and Visualizer occupies the useful adjacent side; disabled Media still supplies the authored route. This contract must never leak into CUSTOM.
-- [~] **Whole-Media + Visualizer app-volume wheel routing.** Entire Media root and ordinary Visualizer may forward discrete wheel steps through the existing Media app-volume owner; CUSTOM resize-wheel ownership wins absolutely.
-- [~] **Context Menu -> Settings click-through suppression.** Source uses an event/deadline guard rather than a timer/poller; run the maintained Qt regressions and physical click-through check.
-- [~] **Settings Theme live-recreation regression.** Reopen/recreate Settings, then switch repeatedly across Glass/Acrylic/Glass themes. No `Internal C++ object (SettingsDialog) already deleted` error may occur; a stale PySide wrapper must be pruned from the root-QSS registry without weakening transactional rollback for genuinely live renderer failures. `test_settings_theme_qobject_lifetime.py` is an explicit PySide6 user-environment regression for the real Shiboken edge.
-- [~] **Bidirectional linked-theme UX.** The compact lock/unlock control appears on both Settings Themes and Widget Themes pages. While locked, choosing either catalogue selects/persists the explicit matching stable-ID pair in the other catalogue; selection must never implicitly unlock. Themes with no counterpart (including Widget Custom) require Independent mode first.
-- [~] **Widget Theme selection/semantic inheritance.** Verify named Widget themes, Independent state, Custom creation, Card Surface/Card Border inheritance and family override precedence. Clock is already semantic through shared `card.text` when its family swatch is canonical. Dark-theme mirrors may keep primary text near-neutral/near-white; light-theme mirrors deliberately use dark text over a stronger light runtime card floor. Subtle movement is not evidence that Clock bypasses theming.
-- [x] **Windows GSMTC teardown / `0x8001010e` wrong-thread fault.** The latest 2026-09-03 operator log again shows native GSMTC observation establish/teardown staying on the same affinity owner thread (`72164`) through recreation with no `0x8001010e` or native-fault dump. Preserve the explicit owner lane and callback fencing.
-- [x] **Native fault logging gap.** Latest source/debug run produced a bounded `native_faults.log` from capture-open through capture-close with no native dump; `screensaver_qml.log` also closed at 0 messages / 0 warnings / 0 errors / 0 criticals. Source/developer and explicit debug/verbose runs keep native capture; ordinary compiled non-diagnostic runs remain free of the extra file unless debug/verbose is requested. The hang watchdog must never retarget global faulthandler output.
+- [~] **Shared Widget Style Overrides / reset.** Card Surface, Card Border and Header Fill must apply coherently through Widget Theme `Custom`; `Reset All Colours to Theme` must remove ordinary family colour/alpha overrides only, without touching Visualizer-authored colours, geometry, fonts, shadows, providers or feature toggles. Media `Show Header Pill` sits in Media -> Appearance. No family Header Appearance colour bucket remains.
+- [~] **Reddit time rail parity.** `AGO` is a rigid aligned column shifted **12 authored px left from the original position** while the age-value column and title start remain fixed. Validate short/long ages and title spacing physically.
+- [ ] **Weather parity.** Current presentation is not accepted; perform a source-first visual pass rather than theme compensation.
+- [~] **Global CUSTOM dormancy.** Stacking and Media<->Visualizer adjacency stay off for persisted/effective CUSTOM, live Edit Layout, and number-key saved-layout load/rebuild.
+- [~] **Media<->Visualizer ordinary adjacency + wheel routing.** Only outside global CUSTOM. Whole Media and ordinary Visualizer may forward discrete volume steps through the existing app-volume owner; CUSTOM resize-wheel ownership wins absolutely.
+- [~] **Context Menu interaction edges.** Settings click-through suppression and submenu crossing use event/deadline ownership only; no sticky lifetime, timer or poller.
+- [~] **Settings Theme live recreation.** Repeated Settings recreation and Glass/Acrylic switching must not reintroduce stale `SettingsDialog` wrapper failures; live renderer failures must still propagate transactionally.
+- [~] **Bidirectional linked-theme UX.** Locked Settings/Widget theme selection uses stable IDs in both directions and never implicitly unlocks. Widget `Custom` remains Independent-only.
+- [~] **Theme authoring tools physical smoke.** Theme Foundry's simplified Everyday/All Roles workflow and Widget Theme Foundry's sparse semantic editor must open/save/strict-reload correctly in the real PySide6 environment.
+- [~] **Media artwork/metadata fades.** Shared artwork fade and retained metadata old->new crossfade are event-driven and source-owned; physically validate rapid track skipping plus optional Album visibility without provider-delay, polling or duplicate cadence.
+- [x] **Non-CUSTOM smart stacking collision solver.** Pathological overlap case physically accepted; preserve deterministic spill and zero steady-state cadence cost.
+- [x] **Achievement Pulse parity.** Accepted after height/rail, badge, artwork/metric alignment and whole-card transform corrections.
+- [x] **Steam Abandonment Issues presentation.** Source-audited and physically accepted; preserve unless a shared semantic fix genuinely applies.
+- [x] **Windows GSMTC teardown / native fault capture.** Latest both-display evidence shows same-affinity GSMTC teardown, no `0x8001010e`, bounded clean native-fault capture and clean QML shutdown.
 
-- [~] **Theme selection responsiveness regression — owner now identified, optimization queued.** Latest timings show total Settings-theme publication around 152-298ms, dominated by `ui.tabs.shared_styles._refresh_live_shared_widgets` (~74-165ms) and `ui.settings_theme._refresh_registered_widgets` (~68-112ms); bidirectional linked selection adds only about 10ms beyond that publication. Audit duplicate/redundant QWidget repolish/refresh coverage between those two listeners before weakening transaction/link correctness.
-- [~] **Abandonment Issues / BACKLOG accent inheritance.** `abandonment_issues.accent -> widget.accent`; the existing explicit family `accent_color` override remains higher precedence. No new global Settings swatch.
-- [~] **Reddit parity.** Split the time field into two fixed sub-columns: value (`03D`/`02HR`) uses a fixed left edge so its first digit vertically aligns; constant `AGO` is right-aligned so its O/right edge aligns. The complete aligned `AGO` column is now 3 px further left. Keep the title gap tight. Validate short/long ages and elision physically.
-- [~] **Context Menu submenu crossing.** A narrow transparent hover corridor plus one-event-turn defer keeps ownership while crossing parent -> submenu without adding a timer/poller or sticky lifetime. Validate both left- and right-opening submenus.
-- [~] **Theme Foundry Widget counterpart export.** `Save Widget Counterpart…` uses the same deterministic Settings->Widget counterpart authority as the curated mirror generator and strict-reloads the saved `.srwtheme`. File-authored drafts must acquire a real Settings-theme identity; compiled Default Dark may use its existing builtin stable ID directly. Validate both paths.
-- [~] **Widgets -> General `Style Overrides` grouping.** Card Surface, Card Border and Card Border Width sit together immediately above Layout. Editing Card Surface/Border forks the full named Widget palette into persisted `Custom`; Border Width remains global styling rather than Widget Theme schema. There is no runtime Surface Style/material control.
-- [~] **Curated light/metal theme expansion.** The pack is now 58 Settings themes + 58 deterministic Widget counterparts. New light/white-adjacent themes: Porcelain Sky, Linen Sage, Pearl Blush, Alabaster Citrus. New silver/metal themes: Polished Chrome, Brushed Nickel, Titanium Cobalt, Tungsten Blues. Preserve stable mirror IDs/link identities and readable contrast. The six dark-text light/light-metal Widget mirrors now establish a wallpaper-independent light card floor and keep muted/metadata text opaque enough for runtime contrast. Widget mirrors are colour-only v3.
-- [~] **Installed/frozen theme + asset roots.** Source/dev uses `<repo>/themes`; installed/frozen uses `%ProgramData%\SRPSS\themes` with `widgets\` beneath it. QRC remains the embedded Settings-UI lane; raw `images/` remains the runtime branding lane.
-- [~] **Visualizer card shadow / Clock separator / Edit-mode X alignment / remaining bounded J parity items.** Keep these in the operator observation ledger or focused J decomposition; do not expand them into another migration phase here.
+## Visualizer delivery-quality tranche
 
-## P0 Visualizer hitch / delivery-quality tranche — active
-
-Detailed owner/evidence checklist: `Docs/QtQuick_Migration/Visualizer_Hitch_Attribution_And_Optimization_Plan_2026-09-03.md`.
-
-Latest operator log establishes that the current tall-Spectrum flicker cannot safely be treated as a smoothing-only regression. R-76 remains valid, but missed delivery windows are large enough to recreate visible tall-card jumps. Bubble is equally sensitive and is a co-primary physical oracle.
-
-- [x] **Periodic usage sampler attribution.** Resolved: the `--usage` sampler's `children(recursive=True)` + `num_threads()` are GIL-held system-wide enumerations that stalled the pure-Python logical thread (proven headless). Partitioned to a slow sub-cadence; a `--usage`-only diagnostics-perturbation artifact, not a shipping owner. Record in the attribution doc.
-- [x] **Gen2 GC owner.** Resolved. Attributed (headless): gen2 scan cost is O(retained tracked objects); the retained set is stable, long-lived survivors gen2 rescans (~28-142 ms) while freeing ~0. The Bubble tick is not the driver. Fix: `RuntimeGCPolicy.freeze_stable_generation()` (one-shot ~45 s after start; `gc.unfreeze()` on stop) moves that set to the permanent generation (O(1), free) so future gen2 scans skip it — not disabling GC. **Validated in-situ on both displays**: `Froze 132666 stable objects`, then no gen2 stall for the rest of the run; RSS stable, QML messages=0, no native fault, clean shutdown. Lifecycle audit (`tests/test_gc_freeze_lifetime.py` + in-situ): generations recreated after the freeze retire normally (no accumulation); the one generation live at freeze time is a bounded pin until stop (resources release by explicit teardown regardless). **Real-recreation confirmed** on both displays under ~6-8+ aggressive Settings recreations — RSS/private drop on recreation, threads/handles plateau, 0 errors, QML clean, `freeze_restored=True` on stop. `stop()` reports unfreeze failure loudly. See the attribution doc.
-- [~] **First-frame publication.** Attributed: the first publish pays a one-shot **cold import** of `logical_frame_capture` + its render-state/config-applier chain (~62 ms headless; more on a cold machine). Fix: `_start_logical_runtime` warms that import during activation, before the cadence thread starts, so the first tick no longer pays it (no per-frame cost, cadence unchanged, all freshness/generation/activation fences untouched — an import-placement change only). **Dormancy correction (audit):** warming `logical_frame_capture` had exposed a pre-existing hole — it imported all five mode frame-runtime classes at module scope. Fixed by resolving each mode's frame runtime lazily through the canonical descriptor seam (no new mode table), so warming imports no frame runtime and a real sole-enabled tick imports only the active mode's runtime (proven in `tests/test_visualizer_mode_dormancy.py`). Any residual beyond the import in the operator's ~361 ms is machine/activation-specific and one-shot; re-check in a real run.
-- [x] **Analysis/handoff tails.** Closed as not a visible owner. With the usage sampler + GC removed, the clean both-display run's lane was healthy (execution_ms_mean ~1.4, handoff_ms_mean ~2.9 over 16k+ steps); its rare maxima (~42/25 ms) produced **no** attributable tick spike — every steady-state spike traced to startup, the pre-freeze gen2, or the `--usage`-only heavy-sample blip. Per the plan, no optimization is warranted. (Remaining `--usage`-only residual: the every-~8th usage heavy sample runs children()+num_threads() together for a ~55-80 ms blip — diagnostics-only, could be split across alternating heavy samples later.)
-- [ ] **Recreation-specific latency.** A ~117 ms Bubble gap during replacement construction and ~3.19 s Spectrum age warning during later re-admission are separate from steady-state hitch metrics. Preserve fresh-generation fencing while reducing replacement latency.
-- [ ] **Pacer/UI/logging attribution.** Track skipped presentation deadlines, long UI deliveries and scene invalidation after producer stalls are controlled. Log writer lag reached ~440 ms but caller max was ~4.93 ms with zero dropped records; do not misattribute asynchronous file lag without evidence.
-- [ ] **Resource plateau remains open.** Short-run RSS/private/cache/thread/handle values moved with recreation/cache activity but did not prove a monotonic leak. Soak/topology/resource-plateau work remains required before J closes.
-- [ ] **No symptom damping.** Bubble motion/radius/Ghost and Spectrum amplitude/R-76 vertical response stay authored. No cadence reduction, stale snapshots, catch-up FIFO, extra timer or per-mode clock.
-- [ ] **Order:** attribution baseline -> V0-V4 behavior-floor/authority/dormancy -> deterministic hitch owners -> active-path tails -> recreation freshness -> Bubble+tall-Spectrum physical acceptance -> V5-V8 Settings rehost/dependency/future-mode proof.
-
-## Theme-system fragility / edge-contract audit — future task, not started
-
-Run this **after** the rollback/parity/Foundry checkpoint is physically accepted. Keep it narrow and contract-oriented rather than reopening semantic-theme coverage.
-
-- [ ] stale Qt wrappers / QObject lifetime edges;
-- [ ] lazy Settings-page state and recreation;
-- [ ] linked-theme transaction edges in both directions;
-- [ ] retained-runtime recreation and generation handoff;
-- [ ] theme catalogue/path/build/install boundaries;
-- [ ] no swallowed live renderer failures;
-- [ ] no hidden polling, fallback or background lifetime owners.
-
-This audit is explicitly **not** a request to inventory every visual literal, create another diagnostic theme, or perform a three-part semantic coverage exercise.
-
-## Golden guardrails
-
-### Visualizer fidelity / freshness / scaling
-
-Visualizer authored response is protected above refactor neatness, allocation counters and Settings organization. Read these before any mode modularization work:
-
-- `Docs/Visualizer_Change_Checklist.md`
-- `Docs/Visualizer_Reference.md`
-- `Docs/Guardrails/Visualizer_Presentation.md`
-- `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
-- `Docs/Guardrails/Performance_Optimization_Contract.md`
-- `Docs/QtQuick_Migration/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md`
-
-Never solve modularity, performance or extreme viewport behavior by:
-
-- reducing the authored/logical Visualizer cadence;
-- adding per-mode clocks, QML timers, catch-up FIFOs or paint acknowledgements;
-- increasing source/snapshot staleness;
-- globally compressing Bubble head radius, reaction amplitude, motion or Ghost/history displacement as viewport extent grows;
-- adding a second viewport/domain compensation to state already normalized once;
-- retuning DSP/gain/cold-play response to hide a presentation or activation defect;
-- changing mode presets, CUSTOM scale/extent semantics or renderer transfer merely to make registry work easier.
-
-**R-69 remains binding.** Bubble's restored scaling/reactivity contract is the golden reference for all mode-modularity work. A registry/settings refactor must be behaviorally transparent to canonical, wide and tall viewports.
-
-### One authored Visualizer runtime
-
-Keep the accepted chain:
+The accepted authored chain remains:
 
 ```text
 one shared BeatEngine
@@ -154,98 +88,95 @@ one shared BeatEngine
 -> one lazy active mode renderer inside the display QQuickWindow
 ```
 
-Mode enable/disable architecture may decide **which mode is eligible**; it may not create a second engine, logical clock, presentation surface or analysis lane.
+Closed evidence does not need re-investigation without a new symptom:
 
-### CUSTOM is a global layout mode
+- [x] diagnostics usage sampler attribution/partitioning;
+- [x] stable-set Gen2 GC attribution and `gc.freeze()` lifecycle validation;
+- [x] first-publish cold-import relocation, with V4 dormancy hole corrected at the canonical descriptor seam;
+- [x] analysis/handoff tails closed as not a visible steady-state owner.
 
-The first widget entering CUSTOM disables authored stacking/adjacency globally. This includes number-key saved-layout loading. Ordinary layout may become eligible again only after the effective persisted/live layout is globally non-CUSTOM.
+Still live:
 
-Visualizer mode preset `Custom` and global display-layout CUSTOM are separate concepts. A future mode Settings reorganization must not conflate them.
+- [ ] **Recreation/re-admission latency and freshness.** Reduce replacement gaps without weakening generation/activation fencing or serving stale state.
+- [ ] **Pacer/UI/logging attribution only if the physical oracle still shows gaps.** Async writer lag is not automatically caller/presentation latency.
+- [ ] **Resource plateau.** Soak recreation/topology changes and track RSS/USS, VRAM, threads, handles, caches/workers and retained resources.
+- [ ] **Physical Bubble + extreme-tall Spectrum acceptance after remaining latency work.** Preserve R-69/R-76 authored response.
 
-### Media event ownership
+Never solve any of these by reducing logical cadence, adding per-mode clocks/QML timers/catch-up FIFOs/paint acknowledgements, increasing source age, or globally compressing Bubble/Spectrum authored response.
 
-Do not restore fast Media polling or process-probe fallbacks. GSMTC/event ownership is primary; slow reconciliation/watchdog is deliberate degraded-path coverage. Visualizer depends on Media product admission but does not acquire a second Media owner.
+## HARD pre-V5/V6 Visualizer Settings gate
+
+Resolve these **immediately before** moving the Settings presentation. Do not start the rehost and promise to fix them afterward.
+
+1. **Startup substitution ordering.** Resolve the effective enabled target mode before final activation/model payload resolution; re-enter the canonical resolver for the substitute rather than field-patching mode A state onto mode B.
+2. **Deepest request admission.** `_request_quick_visualizer_mode()` must itself reject an explicitly requested disabled mode. Startup/stale persisted selection may deterministically substitute an enabled mode with an explicit log; normal runtime/UI requests may not silently route to or re-enable a disabled mode.
+3. **Durable no-settings-lost coverage.** All existing Visualizer fields, mode presets, preset indices, mode-local Custom state and disabled-mode state survive load/model/save and Settings/app recreation. `enabled_modes` remains additive only.
+4. **Settings-body dormancy.** Runtime dormancy is already proven; the future top-level Visualizers tab must also avoid constructing disabled mode Settings bodies while preserving their persisted state.
+
+Then perform V5-V8:
+
+- [ ] Rehost existing Visualizer builders/preset sliders/Custom UI into a top-level `Visualizers` tab with `SETUP` plus enabled-mode pills. Rehost; do not rewrite behavior.
+- [ ] If Media is disabled at the Widgets capability/setup level, disable the Visualizers tab with tooltip **`Enable Media In Widgets`**. Do not create a second Media activation owner.
+- [ ] Prove future-mode addition needs one canonical descriptor plus isolated runtime/renderer/Settings modules and focused tests, not unrelated five-way switch edits.
+- [ ] Perform a before-vs-after Settings self-audit: controls, curated presets, Custom transitions, disabled-mode persistence, re-enable restore, selected/effective mode coherence, lazy page saving, Media-disabled state preservation, and no new timers/pollers/workers/fallback owners.
+
+## Theme-system edge audit
+
+Keep this narrow. Do **not** restart a semantic-literal inventory or another material experiment.
+
+- [ ] stale Qt wrappers / QObject lifetime edges;
+- [ ] lazy Settings-page construction/recreation;
+- [ ] linked-theme transaction edges in both directions;
+- [ ] retained-runtime recreation/generation handoff;
+- [ ] theme catalogue/path/build/install boundaries;
+- [ ] live renderer failures are not swallowed;
+- [ ] no hidden polling, fallback or background lifetime owners.
+
+## Residual cleanup / test truth
+
+Exact deletion/test ledgers belong in `Future_Cleanup.md`, `Docs/TestSuite.md` and the tooling audit. Current Plan keeps only the live outcomes:
+
+- [ ] Reconcile skipped/stale tests against current Quick ownership; migrate surviving behavioral assertions and delete fossils rather than resurrecting dead presenters.
+- [ ] Reconcile remaining old Media Center physical-window tests against current Quick role/policy ownership.
+- [ ] Re-run caller/import searches before each deletion batch; no compatibility fallback may silently recreate a second presenter/analysis/polling owner.
+- [ ] Restore the broad whole-tree gate to useful signal without weakening destination authority.
+- [ ] Retire migration-only benchmark/spike tools after final J physical/installed acceptance proves they have no remaining evidence job.
+
+## Required optimization tranche before J closure
+
+H/P0 proved architecture and removed known deterministic stalls; J still requires profiling the actual migrated product.
+
+- [ ] **CPU/GPU/QML pass.** Frame tails, overdraw/offscreen work, binding churn, hidden animations, unnecessary invalidation and duplicate work.
+- [ ] **Ownership/contention pass.** Remaining timers/pollers, worker/thread cardinality, locks/queues and duplicate event ownership. Prefer event-driven ownership and fewer owners over reduced authored rates.
+- [ ] **Allocation/lifetime pass.** Measure current allocation churn and GC/lifetime tails before touching `RuntimeGCPolicy`; preserve the proven stable-generation freeze contract unless new evidence requires change. The caller-dead pre-Quick `GCController` facade is cleanup residue, not runtime authority.
+- [ ] **Resource plateau.** Soak recreation/topology changes and prove non-accumulation across RSS/USS, VRAM, threads, handles, caches/workers and retained resources.
+- [ ] **Quality recheck.** Modest and representative-heavy runs must preserve cadence, freshness, authored amplitude/motion and visible fidelity.
+
+## Final J acceptance obligations
+
+- [ ] Finish Weather and any remaining bounded family visual-parity work against the pre/post migration oracle where useful.
+- [ ] Complete remaining alignment/snap-guide and bounded presentation polish.
+- [ ] Complete compiled/frozen/installed 1/2/N-display, DPR, topology and Media Center/screensaver acceptance.
+- [ ] Reconcile historical-bug/migration records worth preserving after the three live planning authorities are clean.
+- [ ] Run final maintained destination + broad-suite gates and reconcile source/docs/tests before J closes.
+
+## Golden guardrails
+
+### Visualizer fidelity / scaling
+
+R-69 remains binding. Bubble's restored scaling/reactivity contract is the golden reference; extreme CUSTOM geometry must never be fixed by globally reducing head radius, authored reaction amplitude, motion, Ghost/history displacement or adding a second viewport/domain compensation. R-76 tall-Spectrum response is likewise protected.
+
+### CUSTOM is global layout mode
+
+The first widget entering global CUSTOM disables authored stacking/adjacency globally, including number-key saved-layout loading. Visualizer preset `Custom` is a separate concept.
+
+### Media ownership
+
+Do not restore fast Media polling or process-probe fallbacks. GSMTC/event ownership is primary; slow reconciliation/watchdog remains bounded degraded-path coverage. Visualizer consumes Media admission but never acquires a second Media owner.
 
 ### Performance admission
 
 Freshness/reactivity and latency-tail quality outrank prettier aggregate counters. No performance change may silently lower authored quality. Use `Docs/Guardrails/Performance_Optimization_Contract.md`.
-
-## Next architecture tranche — Visualizer mode modularization
-
-**Assessment: feasible and worthwhile, but only if mode activation is made real before the Settings UI is moved.** The whole Visualizer family is already capability-gated; individual modes are only partially modular today.
-
-Target product UX:
-
-```text
-Visualizers tab
-    SETUP
-        family enabled/dependency state
-        active mode toggles
-        shared Visualizer position / common controls
-    Spectrum        [pill only if active]
-    Oscilloscope    [pill only if active]
-    Sine Waves      [pill only if active]
-    Bubble          [pill only if active]
-    Spline Curve    [pill only if active]
-```
-
-- [x] **Phase V0 — baseline/fencing tests before refactor.** Visualizer test floor reconciled to green (646+); pins active-mode cycling, preset/Custom behavior, renderer/runtime laziness, viewport scale/extent, Bubble/BTF and source freshness. (Non-visualizer/heavy stale modules deferred to J+ exit via `tests/conftest.py collect_ignore`.)
-- [x] **Phase V1 — consolidate neutral mode metadata/activation authority without moving UI.** Done: the `VisualizerModeDescriptor` is the single source of per-mode frame-runtime + renderer wiring (lazy import-path strings); `_mode_runtime_factory` and the renderer `implementation_registry` derive from it. `iter_all_visualizer_mode_descriptors` (all registered) vs `iter_visualizer_mode_descriptors` (active) distinction preserved. Behavior-transparent; lazy imports intact.
-- [x] **Phase V2 — persisted per-mode activation.** Done: additive `enabled_modes` on `SpotifyVisualizerSettings` (default all; migration = absent -> all) + pure `resolve_effective_enabled_modes`/`resolve_effective_mode` (family ON -> >=1; disabled-current -> deterministic enabled substitute, logged, never re-enables). **Self-audited: no settings lost** (312 fields round-trip; to_dict gains only `enabled_modes`). Disabling a mode preserves its settings/presets.
-- [x] **Phase V3 — route callers through the effective enabled set.** Done: cycling (double-click/context-menu), context-menu mode list, and initial/stale persisted-mode resolution all consult the enabled set so a disabled mode is unreachable; schema/serialization still knows all modes. Behavior-transparent today (all enabled). Renderer/frame-runtime/capture implicitly covered (active-mode only). Settings mode-selector UI restriction deferred to V5-V8.
-- [x] **Phase V4 — prove true dormancy.** Done (`tests/test_visualizer_mode_dormancy.py`): fresh-interpreter proof that a disabled mode imports/constructs no renderer/frame-runtime, each mode can be the sole enabled mode, and enable-state owns no timer/thread/poller. **Strengthened (audit):** the original tests only proved the factory + renderer resolution were individually lazy. Added tests that drive the **real** logical path — for each mode as the sole enabled mode, start the controller/logical-tick state and run an actual `logical_tick` publication/capture boundary, then assert only the active mode's frame-runtime module is in `sys.modules` and every disabled mode's is absent — and that warming `logical_frame_capture` itself imports no frame runtime. This closed a pre-existing eager-import hole (`logical_frame_capture` imported all five frame-runtime classes at module scope), exposed when Lead C warmed that module; the Lead-C prewarm strategy itself was sound.
-
-#### HARD pre-V5/V6 corrective gate — resolve immediately before V5/V6, do NOT start V5/V6 first
-
-An independent audit found V2-V4 broadly sound but flagged two real admission/config gaps and two proof requirements. They are **dormant today** (every mode is enabled, so substitution/rejection never fire) but **must be fixed before any per-mode enable/disable UI or Settings rehosting**. Do not reopen V2-V4 for these mid-perf-work unless the code being changed directly intersects one; then fix only the intersecting item at its ownership boundary. No Visualizer behavior tuning, no generic mega-class, no retired QWidget/GL plumbing, no fallback activation paths.
-
-1. **Disabled-current startup substitution ordering.** Today `_construct_quick_visualizer_owner_on` resolves the activation payload/model for the persisted mode, then patches `model.mode = substitute` afterward — leaving the disabled mode's preset/active-alias state on a model whose runtime mode is the substitute. Fix: resolve the effective enabled target mode **before** the final activation payload/model is resolved, and re-enter the existing canonical activation resolver for that target (do not field-patch after the fact). Regression: deliberately conflicting preset/settings between disabled-persisted mode A and enabled substitute B; prove the constructed model/resolved-activation carry B's own preset/Custom/technical state, not A's aliases. Preserve all disabled-mode settings/presets/Custom/preset-indices; never silently re-enable A.
-
-2. **Deepest request-admission boundary.** `_request_quick_visualizer_mode()` still accepts any canonical/dev-active mode without consulting `enabled_modes`; UI/menu/cycle callers currently sanitize, but the canonical boundary must enforce the invariant itself. Semantics: startup/stale persisted selection -> deterministic enabled substitution + explicit log; explicit normal runtime/UI request for a disabled mode -> **reject explicitly** (do not silently enable or route to it). Schema/migration stays aware of all registered modes; this is runtime admission only. Tests: a disabled mode cannot be reached through direct normal activation even when a caller supplies its canonical id.
-
-3. **Durable no-settings-lost regression.** Convert the V2 one-off self-audit into permanent coverage against current settings/preset authorities (not resurrected pre-Quick tests): every existing Visualizer field survives load->model->save; all five modes' mode-specific settings intact while modes are disabled; each mode's preset index; curated preset selection; mode-level Custom snapshot/cache; switching into Custom after an advanced edit; disabled-mode state surviving while another mode is active; `enabled_modes` additive (never replacing/deleting old state).
-
-4. **Settings-body dormancy is NOT closed.** V4 proved runtime dormancy (lazy renderer/frame-runtime, resolver/cycling, no new timer/thread), but the Widgets-hosted Visualizer Settings still builds all five mode bodies. Carry into V5/V6: new top-level `Visualizers` tab + `SETUP` pill + a pill only for enabled modes; rehost existing builders/preset sliders/Custom UI (do not rewrite); a disabled mode's Settings body is not constructed (preferably built only when its enabled pill needs it); disabled-mode settings/presets remain persisted despite no UI construction. Keep V4/V5 wording from conflating runtime vs Settings-body dormancy.
-
-**V5/V6 Settings-migration self-audit (before declaring V5/V6 done):** a deliberate before-vs-after audit against the pre-migration checkpoint (we previously lost and had to recover Visualizer preset/settings behavior, so do not infer fidelity from the UI rendering). Prove: all five builders preserve controls/semantics; curated preset selection works; preset sliders select the same authored slots; advanced changes still move to Custom; Custom snapshot/save/restore stays mode-local; settings survive Settings close/reopen and app recreation; disabled modes retain settings/presets; re-enabling restores prior config; selected/effective runtime mode stays coherent with `enabled_modes`; no save serializes only currently-built/lazy pages and drops unbuilt mode state; Media-disabled Visualizers-tab state does not erase Visualizer state; no new timers/pollers/workers/fallback owners/second runtime authorities appear. Keep every unchanged persistence key unchanged — a UI rehost is not a reason to migrate the schema.
-
-- [ ] **Phases V5-V8 — move Settings presentation only after V0-V4 are green and hitch owners are stable.** Extract the narrow Visualizer Settings host first, then create a top-level Visualizers tab with a `SETUP` pill plus one pill for each enabled mode, preserve the Media dependency UX, and prove a bounded future-mode addition path. Reuse existing mode builders, preset sliders and mode Custom system; rehost them rather than rewriting visualizer behavior.
-- [ ] **Media dependency UX.** If Media is disabled at the Widgets capability/setup level, grey/disable the Visualizers tab and expose tooltip text **`Enable Media In Widgets`**. Do not create a second way to activate Media from Visualizers. Re-enable normal Visualizers tab behavior when Media becomes available.
-- [ ] **Phase V5 — future-mode authoring proof.** Adding a new mode should require one canonical descriptor plus its isolated runtime/renderer/Settings modules and focused tests, not edits to multiple unrelated five-way switch tables.
-- [ ] **Physical acceptance after modularization.** Exercise every enabled/disabled combination that matters, one-mode-only operation for each mode, mode cycling, preset/custom round-trip, canonical/wide/tall viewport behavior, pause/play freshness, multi-display admission and Bubble/BTF eyes-on behavior.
-
-The detailed decomposition and known hard-coded mode seams are in `Docs/QtQuick_Migration/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md`.
-
-## Residual migration truth cleanup — non-blocking unless a red proves otherwise
-
-Detailed deletion/test ledgers live in `Future_Cleanup.md`, `Docs/TestSuite.md` and the tooling audit. Keep only these live obligations here:
-
-- [~] Reconcile stale tests that still import deleted GL/compositor/physical-owner code. **Visualizer floor is done and green** (646 pass; retired ~28 pre-cutover P2 presenter tests + monolith/overlay/creator/mode_transition tests, migrated the current-architecture ones, fixed a `sys.modules` isolation leak). **Deferred to J+ exit:** the remaining stale modules are skipped via `tests/conftest.py collect_ignore` (visualizer-unrelated infra: widget_manager/refresh/setup, widget_import_dormancy, display_context_menu/image_ops/integration, custom_layout_manager, logging_routing, f0_5_shadow_controls, p3_set_state_attribution, compositor_gpu_queries, startup_shader_warmup; plus visualizer-adjacent ghost_isolation, line4_6_pipeline_trace, oscilloscope_display_contract) and one headless-GL pixel test in `test_qtquick_visualizer_clip_smoke.py`. At J+ exit, reconcile each biasing to the current Quick architecture (fix where a current contract survives, delete when in doubt) and remove it from `collect_ignore`.
-- [ ] Reconcile remaining old MC physical-window tests against current Quick role/policy ownership.
-- [ ] Preserve neutral transition math/registry/shaders and neutral Visualizer DSP/logical algorithms that current Quick source actually uses.
-- [ ] Re-run exact caller/import searches before each residue deletion batch; no compatibility fallback may silently recreate a second presenter/analysis/polling owner.
-- [ ] Bring the broad whole-tree gate back to useful signal without weakening the destination production profile.
-- [ ] Retire migration-only benchmark/spike tools only after final J physical acceptance proves they are no longer needed.
-
-## Required post-migration optimization tranche — before J closure
-
-H proved the retained Qt Quick architecture can meet its accepted heavy-load boundary. It was **not** a general optimization pass. J cannot close without profiling the real migrated product and removing measured useless work.
-
-- [ ] **CPU/GPU/QML pass.** Measure frame tails, overdraw/offscreen work, binding churn, hidden animations, unnecessary scene invalidation and duplicate work.
-- [ ] **Ownership/contention pass.** Audit remaining timers/pollers, worker/thread cardinality, locks/queues and event ownership. Prefer event-driven ownership and fewer owners over reduced authored update rates.
-- [ ] **Allocation/GC pass.** Attribute Bubble's documented Gen2-correlated wall-clock stalls and remaining non-GC stalls using allocation/lifetime evidence before changing `RuntimeGCPolicy`. Current policy is conservative evidence-led behavior, not a finished optimization. The caller-dead pre-Quick `GCController` facade is cleanup residue, not runtime authority.
-
-- [ ] **Resource plateau.** Soak recreation/topology changes and track RSS/USS, VRAM, threads, handles, caches/workers and retained resources.
-- [ ] **Quality recheck after optimization.** Modest and representative-heavy runs must preserve cadence, source freshness, authored amplitude/motion and visible fidelity.
-
-## Final J acceptance obligations
-
-- [ ] Family visual-parity pass against the pre/post migration image oracle where useful.
-  - [~] **Achievement Pulse bounded parity slice — SECOND PASS IMPLEMENTED / AWAITING PHYSICAL VALIDATION.** First physical pass confirmed the `latest` rail-count correction, full `Unlocked:` fitting and badge rehome materially improved parity, but exposed three remaining presentation defects: the 600x334 authored canvas was still being centered inside a taller committed/custom card shell (visible dead bands above/below), the cleaned badge lost the desired neutral keyline entirely, and the portrait-artwork/metric rail remained ~21 authored px right of the third supporting-field column. Second pass keeps the accepted reusable header/capsules and the first-pass data/layout fixes, opts Pulse into the shared whole-widget uniform transform so spare CUSTOM height falls outside the 600x334 card rather than inside it, restores a transparent 1px semantic artwork keyline around the badge without resurrecting the dark backing panel, and mathematically centers portrait artwork + `Unlocked:` over the third capsule column (`x=421` for the default 140px portrait width, center `491`). Abandonment Issues remains source-audited/pristine and unchanged.
-- [ ] Complete remaining alignment/snap-guide and bounded presentation polish.
-- [ ] Complete compiled/frozen/installed 1/2/N-display, DPR, topology and Media Center/screensaver acceptance.
-- [ ] Reconcile remaining historical-bug records/failed methods worth preserving.
-- [ ] Run final maintained destination + broad-suite gates and reconcile source/docs/tests before J closes.
 
 ## Authority order
 
@@ -260,4 +191,4 @@ exact source / exact test tree
 -> historical records for mechanism/failed-method lessons
 ```
 
-Historical documents preserve what happened; they do not override current owner maps. Current source also must not erase a binding historical lesson merely because a shortcut looks locally cleaner.
+Historical documents preserve what happened; they do not override current owner maps. Current source must also not erase a binding historical lesson merely because a shortcut looks locally cleaner.

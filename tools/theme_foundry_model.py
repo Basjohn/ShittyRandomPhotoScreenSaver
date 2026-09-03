@@ -220,6 +220,132 @@ _COLOR_CATEGORY_PREFIXES: tuple[tuple[str, str], ...] = (
     ("context.", "Context Menu"),
 )
 
+
+# Human-first Theme Foundry view. This is presentation metadata only: the
+# production SettingsThemeSpec remains the complete authority and All Roles view
+# always exposes every serialized role. Keep this list intentionally small and
+# biased toward the roles an operator commonly tweaks while authoring a theme.
+EVERYDAY_THEME_ROLE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Surfaces & Panels",
+        (
+            "window.dialog_glass",
+            "window.titlebar.surface",
+            "navigation.sidebar.surface",
+            "navigation.tab.surface",
+            "navigation.subtab.surface",
+            "bucket.closed.surface",
+            "bucket.open.surface",
+            "content.surface",
+            "panel.group.surface",
+            "panel.subsection.surface",
+            "control.input.surface",
+            "control.list.surface",
+            "control.button.surface",
+            "combo.popup.surface",
+            "tooltip.surface",
+            "popup.container.surface",
+            "context.menu.surface",
+            "context.submenu.surface",
+        ),
+    ),
+    (
+        "Text",
+        (
+            "window.titlebar.text",
+            "navigation.tab.text",
+            "navigation.tab.selected_text",
+            "navigation.subtab.text",
+            "bucket.closed.text",
+            "bucket.open.text",
+            "text.primary",
+            "text.secondary",
+            "text.tertiary",
+            "text.disabled",
+            "panel.group.text",
+            "panel.group.title_text",
+            "control.input.text",
+            "control.button.text",
+            "tooltip.text",
+            "context.menu.text",
+            "context.submenu.text",
+        ),
+    ),
+    (
+        "Borders & Separators",
+        (
+            "chrome.outer_border",
+            "panel.border",
+            "navigation.subtab.border",
+            "bucket.closed.border",
+            "bucket.open.border",
+            "control.input.border",
+            "control.list.border",
+            "control.button.border",
+            "tooltip.border",
+            "popup.container.border",
+            "context.menu.border",
+            "context.menu.separator",
+            "context.submenu.border",
+        ),
+    ),
+    (
+        "Accent & Selection",
+        (
+            "navigation.tab.hover_surface",
+            "navigation.tab.selected_surface",
+            "control.list.selected_surface",
+            "control.list.selected_accent",
+            "control.mode.checked_surface",
+            "control.mode.checked_border",
+            "control.checkbox.checked.surface",
+            "slider.recommended_mark",
+            "popup.icon.info",
+            "popup.icon.warning",
+            "popup.icon.error",
+            "popup.icon.success",
+        ),
+    ),
+    (
+        "Controls",
+        (
+            "control.input.hover_surface",
+            "control.input.focus_surface",
+            "control.button.hover_surface",
+            "control.button.pressed_surface",
+            "control.checkbox.indicator.surface",
+            "combo.popup.selection_surface",
+            "control.mode.surface",
+            "control.mode.border",
+        ),
+    ),
+)
+
+
+def everyday_theme_role_group(kind: str, token: str) -> str | None:
+    """Return the compact authoring group for one role, or ``None``.
+
+    Shadows and gradients are few enough to remain visible in Everyday view.
+    Colours are curated above. This helper never affects serialization/runtime.
+    """
+
+    if kind == "shadow":
+        return "Shadows"
+    if kind == "gradient":
+        return "Gradients"
+    if kind != "color":
+        return None
+    for group, tokens in EVERYDAY_THEME_ROLE_GROUPS:
+        if token in tokens:
+            return group
+    return None
+
+
+def everyday_theme_role_tokens() -> tuple[str, ...]:
+    """Return the ordered curated colour-role set used by Everyday view."""
+
+    return tuple(token for _group, tokens in EVERYDAY_THEME_ROLE_GROUPS for token in tokens)
+
 _SPECIAL_WORDS = {
     "rss": "RSS",
     "api": "API",

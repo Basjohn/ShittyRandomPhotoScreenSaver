@@ -58,6 +58,8 @@ Menu has no family override and consumes Widget Theme roles directly.
 
 - Card Surface — theme-owned edit; forks named theme to persisted Widget `Custom`;
 - Card Border — same ownership rule;
+- Header Fill — same ownership rule for the shared branded-header fill semantic;
+- Reset All Colours to Theme — explicit profile cleanup/migration action; normalizes ordinary family colour + card-alpha overrides to canonical Inherit values and never runs at startup;
 - Card Border Width — global styling outside Widget Theme schema.
 
 No Surface Style/material control exists.
@@ -89,7 +91,7 @@ rollback behavior.
 ## 7. Current acceptance
 
 - physical bidirectional selection/recreation;
-- Custom creation from Card Surface/Border edits;
+- Custom creation from Card Surface/Border/Header Fill edits;
 - family override precedence;
 - Context Menu semantic coverage and submenu crossing;
 - Abandonment/BACKLOG readability;

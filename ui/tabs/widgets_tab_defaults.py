@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import weakref
+from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping
 
@@ -52,7 +53,10 @@ from ui.widget_theme_selection import (
     read_widget_theme_state,
     resolve_widget_theme_state,
 )
-from ui.widget_visual_roles import materialize_theme_owned_optional_colors
+from ui.widget_visual_roles import (
+    materialize_theme_owned_optional_colors,
+    resolve_widget_visual_color,
+)
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -61,6 +65,108 @@ logger = get_logger(__name__)
 
 _SHADOW_SPIN_CONTROL_WIDTH = 220
 _SHADOW_SPIN_SHADOW_PAD = 10
+
+# User-invoked migration bridge for the ordinary retained Widget Theme families.
+# These sections are the current colour-semantic consumers; Visualizer-authored
+# colours are deliberately excluded because they are not generic Widget Theme
+# presentation.  See Future_Cleanup.md for the eventual retirement gate.
+_THEME_COLOR_OVERRIDE_SECTIONS = (
+    "clock",
+    "weather",
+    "reddit",
+    "reddit2",
+    "gmail",
+    "media",
+    "achievement_pulse",
+    "abandonment_issues",
+)
+_THEME_COLOR_OVERRIDE_EXTRA_KEYS = frozenset({"bg_opacity", "border_opacity"})
+_HEADER_FILL_LOCAL_FALLBACK = Rgba(0, 0, 0, 0)
+
+
+def _is_theme_family_color_override_key(key: str) -> bool:
+    normalized = str(key or "")
+    return (
+        normalized == "color"
+        or normalized.endswith("_color")
+        or normalized in _THEME_COLOR_OVERRIDE_EXTRA_KEYS
+    )
+
+
+def _resolved_shared_header_fill(theme) -> Rgba:
+    """Resolve the optional shared header fill without inventing a second schema.
+
+    Sparse Widget themes are legal.  When ``header.fill`` is absent, the semantic
+    resolver reaches the existing family-local seam; the General swatch therefore
+    shows the neutral transparent local fallback until the user authors a shared
+    Header Fill, at which point the normal named-theme -> Custom transition owns it.
+    """
+
+    return resolve_widget_visual_color(
+        theme,
+        "header.fill",
+        local_roles={"local.header.fill": _HEADER_FILL_LOCAL_FALLBACK},
+        fallback=_HEADER_FILL_LOCAL_FALLBACK,
+    ).color
+
+
+def _reset_family_color_overrides_to_theme(tab: "WidgetsTab") -> tuple[str, ...]:
+    """Normalize persisted ordinary-widget colour overrides to canonical defaults.
+
+    This is intentionally operator-invoked rather than a startup migration.
+    Canonical/default-valued family fields are the existing implicit ``Inherit``
+    state, so normalizing them makes the selected Widget Theme authoritative again
+    without changing the selected named/Custom Widget Theme itself.
+    """
+
+    widgets = tab._settings.get_widgets_map()
+    changed: list[str] = []
+    for section_name in _THEME_COLOR_OVERRIDE_SECTIONS:
+        current = widgets.get(section_name)
+        if not isinstance(current, Mapping):
+            continue
+        defaults = tab._settings.get_widget_defaults(section_name)
+        if not defaults:
+            continue
+        section = dict(current)
+        for key, default_value in defaults.items():
+            if not _is_theme_family_color_override_key(key) or key not in section:
+                continue
+            if section.get(key) == default_value:
+                continue
+            section[key] = deepcopy(default_value)
+            changed.append(f"widgets.{section_name}.{key}")
+        widgets[section_name] = section
+
+    if changed:
+        tab._save_coalesce_token += 1
+        tab._save_coalesce_pending = False
+        tab._settings.set_widgets_map(widgets, emit_change=False)
+        tab._settings.save()
+        tab.load_from_settings()
+    return tuple(changed)
+
+
+def _on_reset_family_colors_to_theme(tab: "WidgetsTab") -> None:
+    confirmed = StyledPopup.question(
+        tab,
+        "Reset Widget Colours to Theme",
+        "Reset every ordinary per-widget colour override to the selected Widget Theme? "
+        "This includes card/header/text/separator/Media/Steam colours and the per-widget "
+        "card opacity values that can make a colour explicit. Visualizer colours, geometry, "
+        "feature toggles, shadows and the selected Widget Theme itself are untouched.",
+        yes_text="Reset Colours",
+        no_text="Cancel",
+        default_to_yes=False,
+    )
+    if not confirmed:
+        return
+    changed = _reset_family_color_overrides_to_theme(tab)
+    logger.info(
+        "[WIDGET_THEME] User reset %d family colour overrides to theme authority",
+        len(changed),
+    )
+
 
 
 def _rgba_to_qcolor(color: Rgba) -> QColor:
@@ -85,18 +191,21 @@ def _sync_general_widget_theme_controls(tab: "WidgetsTab") -> None:
 
     surface_btn = getattr(tab, "widget_card_surface_btn", None)
     border_btn = getattr(tab, "widget_card_border_btn", None)
-    if surface_btn is None and border_btn is None:
+    header_btn = getattr(tab, "widget_header_fill_btn", None)
+    if surface_btn is None and border_btn is None and header_btn is None:
         return
-    state, resolved = _resolved_widget_theme_for_tab(tab)
+    _, resolved = _resolved_widget_theme_for_tab(tab)
     if surface_btn is not None:
         surface_btn.set_color(_rgba_to_qcolor(resolved.theme.color("card.background")))
     if border_btn is not None:
         border_btn.set_color(_rgba_to_qcolor(resolved.theme.color("card.border")))
+    if header_btn is not None:
+        header_btn.set_color(_rgba_to_qcolor(_resolved_shared_header_fill(resolved.theme)))
 
 
 
 def _bind_general_widget_theme_controls(tab: "WidgetsTab") -> None:
-    """Keep the two shared swatches current across lazy Settings-tab navigation.
+    """Keep the shared Style Override swatches current across lazy Settings-tab navigation.
 
     This is a Settings-UI event subscription only. Retained presentations still
     consume one construction-time theme snapshot and own no live theme cadence.
@@ -115,10 +224,13 @@ def _bind_general_widget_theme_controls(tab: "WidgetsTab") -> None:
             return
         surface_btn = getattr(owner, "widget_card_surface_btn", None)
         border_btn = getattr(owner, "widget_card_border_btn", None)
+        header_btn = getattr(owner, "widget_header_fill_btn", None)
         if surface_btn is not None:
             surface_btn.set_color(_rgba_to_qcolor(theme.color("card.background")))
         if border_btn is not None:
             border_btn.set_color(_rgba_to_qcolor(theme.color("card.border")))
+        if header_btn is not None:
+            header_btn.set_color(_rgba_to_qcolor(_resolved_shared_header_fill(theme)))
 
     unsubscribe = subscribe_widget_theme(_theme_changed, call_immediately=True)
     tab._widget_theme_controls_unsubscribe = unsubscribe
@@ -135,7 +247,7 @@ def _bind_general_widget_theme_controls(tab: "WidgetsTab") -> None:
 def _edit_shared_widget_theme_color(
     tab: "WidgetsTab", token: str, color: QColor
 ) -> None:
-    """Turn a shared Card Surface/Border edit into the Settings-persisted Custom theme."""
+    """Turn a shared Style Override colour edit into persisted Widget Theme Custom."""
 
     if getattr(tab, "_loading", False):
         return
@@ -160,6 +272,8 @@ def _edit_shared_widget_theme_color(
         tab.widget_card_surface_btn.set_color(_rgba_to_qcolor(snapshot.color(token)))
     elif token == "card.border":
         tab.widget_card_border_btn.set_color(_rgba_to_qcolor(snapshot.color(token)))
+    elif token == "header.fill":
+        tab.widget_header_fill_btn.set_color(_rgba_to_qcolor(snapshot.color(token)))
 
 
 def _finalize_bucket_body(toggle, body: QWidget) -> None:
@@ -706,6 +820,45 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     card_border_row.addWidget(tab.widget_card_border_btn)
     card_border_row.addStretch()
+
+    header_fill_row, _ = add_aligned_row(
+        style_overrides_layout,
+        "Header Fill:",
+        label_width=label_width,
+        wrap=False,
+    )
+    tab.widget_header_fill_btn = ColorSwatchButton(
+        title="Choose Shared Widget Header Fill",
+        show_alpha=True,
+    )
+    tab.widget_header_fill_btn.setToolTip(
+        "Theme-owned shared branded-header fill. Editing it forks the selected named "
+        "Widget Theme into persisted Custom; per-family header colour controls are retired."
+    )
+    tab.widget_header_fill_btn.color_changed.connect(
+        lambda color, owner=tab: _edit_shared_widget_theme_color(owner, "header.fill", color)
+    )
+    header_fill_row.addWidget(tab.widget_header_fill_btn)
+    header_fill_row.addStretch()
+
+    reset_colors_row = QHBoxLayout()
+    reset_colors_row.setContentsMargins(0, 4, 0, 2)
+    reset_colors_row.setSpacing(12)
+    reset_colors_row.addStretch()
+    tab.reset_widget_colors_to_theme_btn = QPushButton("Reset All Colours to Theme")
+    tab.reset_widget_colors_to_theme_btn.setFixedHeight(30)
+    tab.reset_widget_colors_to_theme_btn.setToolTip(
+        "One-shot profile cleanup: normalize all ordinary per-widget colour overrides "
+        "back to canonical inherit values. The selected Widget Theme/Custom palette is unchanged."
+    )
+    shared_styles.bind_shared_styles(
+        tab.reset_widget_colors_to_theme_btn, "GHOST_ACTION_BUTTON_STYLE", base_style=""
+    )
+    tab.reset_widget_colors_to_theme_btn.clicked.connect(
+        lambda _checked=False, owner=tab: _on_reset_family_colors_to_theme(owner)
+    )
+    reset_colors_row.addWidget(tab.reset_widget_colors_to_theme_btn)
+    style_overrides_layout.addLayout(reset_colors_row)
 
     _sync_general_widget_theme_controls(tab)
     _bind_general_widget_theme_controls(tab)

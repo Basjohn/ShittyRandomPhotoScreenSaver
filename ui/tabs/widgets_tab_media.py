@@ -358,13 +358,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         on_toggle=lambda checked: tab.set_widget_bucket_state("media", "appearance", checked),
         defer_initial_visibility=True,
     )
-    header_toggle, header_body, header_layout = build_bucket_toggle(
-        _media_ctrl_layout,
-        "Header Appearance",
-        expanded=tab.get_widget_bucket_state("media", "header_appearance", default=False),
-        on_toggle=lambda checked: tab.set_widget_bucket_state("media", "header_appearance", checked),
-        defer_initial_visibility=True,
-    )
     artwork_toggle, artwork_body, artwork_layout = build_bucket_toggle(
         _media_ctrl_layout,
         "Artwork",
@@ -514,40 +507,9 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_color_row.addWidget(tab.media_color_btn)
     media_color_row.addStretch()
 
-    media_header_fill_row = _swatch_row(header_layout, "Header Fill:")
-    tab.media_header_fill_color_btn = ColorSwatchButton(
-        title="Choose Media Header Fill Color", show_alpha=True
-    )
-    tab.media_header_fill_color_btn.set_color(tab._media_header_fill_color)
-    tab.media_header_fill_color_btn.color_changed.connect(
-        lambda c: (setattr(tab, '_media_header_fill_color', c), tab._save_settings())
-    )
-    media_header_fill_row.addWidget(tab.media_header_fill_color_btn)
-    media_header_fill_row.addStretch()
-
-    media_header_text_row = _swatch_row(header_layout, "Header Text:")
-    tab.media_header_text_color_btn = ColorSwatchButton(
-        title="Choose Media Header Text Color", show_alpha=True
-    )
-    tab.media_header_text_color_btn.set_color(
-        getattr(tab, '_media_header_text_color', tab._media_color)
-    )
-    tab.media_header_text_color_btn.color_changed.connect(
-        lambda c: (setattr(tab, '_media_header_text_color', c), tab._save_settings())
-    )
-    media_header_text_row.addWidget(tab.media_header_text_color_btn)
-    media_header_text_row.addStretch()
-
-    media_header_border_row = _swatch_row(header_layout, "Header Border:")
-    tab.media_header_border_color_btn = ColorSwatchButton(
-        title="Choose Media Header Border Color", show_alpha=True
-    )
-    tab.media_header_border_color_btn.set_color(tab._media_header_border_color)
-    tab.media_header_border_color_btn.color_changed.connect(
-        lambda c: (setattr(tab, '_media_header_border_color', c), tab._save_settings())
-    )
-    media_header_border_row.addWidget(tab.media_header_border_color_btn)
-    media_header_border_row.addStretch()
+    # Header appearance is one shared Widget Theme semantic. Media no longer
+    # exposes a higher-precedence family colour bucket; the explicit reset action
+    # in General -> Style Overrides handles old persisted family colours.
 
     tab.media_show_album = QCheckBox("Show Album Line")
     tab.media_show_album.setProperty("circleIndicator", True)
@@ -696,7 +658,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         tab._default_bool('media', 'show_header_frame', True)
     )
     tab.media_show_header_frame.stateChanged.connect(tab._save_settings)
-    header_layout.insertWidget(0, tab.media_show_header_frame)
+    appearance_layout.addWidget(tab.media_show_header_frame)
 
     tab.media_show_controls = QCheckBox("Show Transport Controls")
     tab.media_show_controls.setProperty("circleIndicator", True)
