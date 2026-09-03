@@ -98,6 +98,8 @@ Closed evidence does not need re-investigation without a new symptom:
 Still live:
 
 - [ ] **Recreation/re-admission latency and freshness.** Reduce replacement gaps without weakening generation/activation fencing or serving stale state.
+  - E1 (freshness admission) attributed + fixed: same-generation recreation/warm-resume admitted the persistent engine's stale pre-re-entry frame because the fence cleared on a generation-only condition. Fix = monotonic per-commit watermark on the existing fence, armed on warm re-entry only (cold start unchanged). See attribution doc lead E. Physical acceptance still owed.
+  - E2 (presentation/re-admission delay, T3->T6 ~3-84 ms) still open: render-bridge publish / Quick snapshot admission path, independent of capture freshness. Attribute before tuning.
 - [ ] **Pacer/UI/logging attribution only if the physical oracle still shows gaps.** Async writer lag is not automatically caller/presentation latency.
 - [ ] **Resource plateau.** Soak recreation/topology changes and track RSS/USS, VRAM, threads, handles, caches/workers and retained resources.
 - [ ] **Physical Bubble + extreme-tall Spectrum acceptance after remaining latency work.** Preserve R-69/R-76 authored response.
