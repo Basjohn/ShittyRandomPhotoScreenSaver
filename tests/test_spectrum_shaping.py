@@ -25,7 +25,7 @@ from widgets.spotify_visualizer.bar_computation import (
     SpectrumShapeConfig,
     _DEFAULT_SHAPE_CONFIG,
 )
-from widgets.spotify_visualizer_widget import SpotifyVisualizerAudioWorker, _AudioFrame
+from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker, _AudioFrame
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -171,54 +171,8 @@ class TestSpectrumShapeEditorNotches:
             editor.deleteLater()
 
 
-# ---------------------------------------------------------------------------
-# 2. Config applier propagation
-# ---------------------------------------------------------------------------
-
-class TestConfigApplierShaping:
-    def _make_widget_mock(self) -> MagicMock:
-        widget = MagicMock()
-        widget._spectrum_lane_strengths_mirrored = {"Mid": 0.60, "Vocal": 0.64, "Low-Mid": 0.70, "Bass": 0.80}
-        widget._spectrum_lane_strengths_linear = {"Bass": 0.80, "Low-Mid": 0.70, "Vocal": 0.64, "Hi-Mid": 0.80, "Treble": 1.00}
-        widget._spectrum_wave_amplitude = 0.50
-        widget._spectrum_profile_floor = 0.12
-        widget._bar_count = 15
-        widget._engine = None
-        return widget
-
-    def test_shaping_keys_applied_to_widget(self):
-        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
-        widget = self._make_widget_mock()
-        apply_vis_mode_kwargs(widget, {'spectrum_lane_strengths_linear': {'Bass': 0.25, 'Low-Mid': 0.4, 'Vocal': 0.8, 'Hi-Mid': 0.55, 'Treble': 0.95}})
-        assert widget._spectrum_lane_strengths_linear["Bass"] == pytest.approx(0.25)
-        assert widget._spectrum_lane_strengths_linear["Vocal"] == pytest.approx(0.8)
-
-    def test_shaping_clamped_to_bounds(self):
-        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
-        widget = self._make_widget_mock()
-        apply_vis_mode_kwargs(widget, {'spectrum_lane_strengths_linear': {'Bass': 5.0}, 'spectrum_profile_floor': -1.0})
-        assert widget._spectrum_lane_strengths_linear["Bass"] == 1.0  # clamped to max
-        assert widget._spectrum_profile_floor == 0.05  # clamped to min
-
-    def test_shaping_pushes_to_engine(self):
-        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
-        mock_engine = MagicMock()
-        widget = self._make_widget_mock()
-        widget._engine = mock_engine
-        apply_vis_mode_kwargs(widget, {'spectrum_wave_amplitude': 0.75})
-        mock_engine.set_spectrum_shape_config.assert_called_once()
-        cfg = mock_engine.set_spectrum_shape_config.call_args[0][0]
-        assert isinstance(cfg, SpectrumShapeConfig)
-        assert cfg.wave_amplitude == 0.75
-
-    def test_no_engine_push_when_unchanged(self):
-        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
-        mock_engine = MagicMock()
-        widget = self._make_widget_mock()
-        widget._engine = mock_engine
-        # Apply same values as defaults — no change → no push
-        apply_vis_mode_kwargs(widget, {'spectrum_lane_strengths_linear': dict(widget._spectrum_lane_strengths_linear)})
-        mock_engine.set_spectrum_shape_config.assert_not_called()
+# NOTE: TestConfigApplierShaping removed - it drove the retired combined
+# config_applier.apply_vis_mode_kwargs (now split into apply_logical_/apply_presentation_).
 
 
 # ---------------------------------------------------------------------------

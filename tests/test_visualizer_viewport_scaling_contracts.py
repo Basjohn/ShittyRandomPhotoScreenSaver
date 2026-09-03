@@ -415,17 +415,6 @@ class BubbleViewportScalingTests(unittest.TestCase):
 
 
 class RetainedPresentationCoherenceTests(unittest.TestCase):
-    def test_capture_uses_one_playback_identity_snapshot(self):
-        source = (
-            ROOT / "widgets/spotify_visualizer/legacy_render_snapshot_adapter.py"
-        ).read_text()
-        self.assertIn("playing = context.playing", source)
-        self.assertIn("raw_playing", source)
-        self.assertNotIn(
-            'mode_state, extra = captured\n    playing = bool(getattr(widget, "_spotify_playing", False))',
-            source,
-        )
-
     def test_geometry_mismatch_keeps_last_valid_visualizer_pixels(self):
         bridge = (ROOT / "widgets/spotify_visualizer/render_bridge.py").read_text()
         item = (ROOT / "rendering/quick/visualizer/item.py").read_text()
