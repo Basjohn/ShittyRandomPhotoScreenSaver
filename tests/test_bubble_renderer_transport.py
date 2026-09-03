@@ -120,7 +120,11 @@ def test_bubble_renderer_reuses_transport_buffers_and_zeroes_tail():
     assert second_trail[4][:4].tolist() == pytest.approx([0.61, 0.51, 0.0, 0.0])
 
 
-def test_bubble_renderer_skips_trail_upload_when_tail_effect_disabled():
+def test_bubble_renderer_skips_trail_upload_when_tail_and_ghost_disabled():
+    # The trail buffer feeds both the optional ripple-tail style and Ghost
+    # history, so the renderer only skips its upload when BOTH are off. With
+    # ghosting on (the _make_state default) the upload is correct even when the
+    # tail style is disabled.
     gl = _CaptureGL()
     uniforms = {
         "u_overall_energy": 1,
@@ -147,6 +151,8 @@ def test_bubble_renderer_skips_trail_upload_when_tail_effect_disabled():
     state = _make_state(
         _bubble_trail_strength=0.0,
         _bubble_tail_opacity=0.0,
+        _bubble_ghosting_enabled=False,
+        _bubble_ghost_alpha=0.0,
     )
 
     assert bubble_renderer.upload_uniforms(gl, uniforms, state) is True
