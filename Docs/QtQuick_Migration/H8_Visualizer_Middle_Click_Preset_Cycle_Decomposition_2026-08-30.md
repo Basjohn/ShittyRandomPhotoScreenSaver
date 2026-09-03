@@ -1,6 +1,6 @@
 # H8 — Visualizer Middle-Click Preset Hotswap Decomposition — 2026-08-30
 
-Status: **IMPLEMENTED / DETERMINISTIC GREEN. Physical H acceptance pending.**
+Status: **CLOSED historical H8 implementation evidence. Deterministic GREEN at the checkpoint; H physical acceptance has since closed. Do not treat old pending labels below as live work.**
 
 Sequence authority remains `Current_Plan.md`. This file owns only the bounded H8 technical route.
 

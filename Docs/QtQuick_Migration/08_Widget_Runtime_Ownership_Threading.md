@@ -1,6 +1,6 @@
 # 08 — Widget Runtime Ownership, Cardinality, Threading and Async Lifetimes
 
-Status: **landed neutral runtime ownership contract / current G-H reference**  
+Status: **landed permanent post-cutover runtime ownership/cardinality/threading contract**  
 Last updated: 2026-08-28
 
 This is a durable owner/cardinality/threading contract, not an unfinished phase plan.

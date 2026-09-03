@@ -1,5 +1,6 @@
 # Documentation / Test-Suite Reconciliation — 2026-09-01
 
+> **SUPERSEDED STATUS AUDIT.** This 2026-09-01 reconciliation remains historical evidence only. Post-cutover documentation authority was re-audited on 2026-09-03 in `Docs/audits/Post_Cutover_Wide_Documentation_Reconciliation_2026-09-03.md`; do not use old phase/status wording here to schedule work.
 Authority remains `Current_Plan.md`. This note records a documentation-only sweep after repo checkpoint `2e43a0cb` (R7 + event-driven Media). It changes no production owner or runtime behavior.
 
 ## Reconciled authority and safety wording

@@ -284,9 +284,9 @@ intentional family/widget override
 -> preserved current fallback pixel
 ```
 
-`Widgets -> General -> Style Overrides` owns the shared **Card Surface**, **Card Border** and **Card Border Width** once for all widget families and sits immediately above Layout. Card Surface/Border edits fork a named Widget Theme into persisted `Custom`; Border Width is global styling rather than Widget Theme schema. Do not add duplicate global Card Surface controls to each family.
+`Widgets -> General -> Style Overrides` owns the shared **Card Surface**, **Card Border**, **Header Fill**, **Reset All Colours to Theme** and **Card Border Width** once for ordinary widget families. Surface/Border/Header Fill edits fork a named Widget Theme into persisted `Custom`; the reset is explicit profile cleanup back to theme authority; Border Width is global styling rather than Widget Theme schema. Do not add duplicate card/header palette controls to each family.
 
-Existing/high-value family swatches remain valid only as explicit family overrides. Canonical/default-valued persisted family fields are effectively Inherit where the current semantic adapter defines that behavior. Editing a family override must not create Widget Theme `Custom`; editing a Widget-Theme-owned global value may.
+Existing/high-value **specialized** family swatches remain valid only when they represent a durable family contract (for example Media Seek/Volume), and then act as explicit family overrides. Canonical/default-valued persisted family fields are effectively Inherit where the current semantic adapter defines that behavior. Branded header colours are not a valid reason to add a family swatch: use shared `header.*` semantics instead. Editing a surviving family override must not create Widget Theme `Custom`; editing a Widget-Theme-owned shared value may.
 
 Semantic roles should represent product meaning, not every literal. Editor chrome, diagnostics, legibility scrims, retained rendering primitives and context-only `local.*` values remain local unless a real cross-theme requirement proves otherwise. Never serialize `local.*`.
 
@@ -392,7 +392,7 @@ Eyes-on:
 - global CUSTOM entry/exit without authored stacking leakage;
 - at least Default Dark plus a deliberately contrasting Widget Theme;
 - family explicit override precedence;
-- Card Surface/Card Border theme inheritance plus explicit family/global override precedence.
+- Card Surface/Card Border/Header Fill theme inheritance, explicit Reset-All-Colours behavior, and only genuinely specialized family override precedence.
 
 Theme coverage should not rely solely on eyeballing: use a static literal/semantic-role inventory and, when useful, a non-shipping diagnostic Widget Theme with deliberately distinct role colours to expose unowned presentation pixels. Human review still decides whether an unchanged pixel is intentionally local.
 

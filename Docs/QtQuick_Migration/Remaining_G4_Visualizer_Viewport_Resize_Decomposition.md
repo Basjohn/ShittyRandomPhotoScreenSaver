@@ -1,6 +1,6 @@
 # Remaining G4 — Visualizer Viewport-Extent Resize Technical Decomposition
 
-Status: **core implementation LANDED; bounded post-checkpoint audit corrections are PRIORITY before G7**  
+Status: **CLOSED historical G4 decomposition; implementation + post-checkpoint corrections landed before closed G7/G8/H. Do not execute its old “before G7” sequencing as current work.**  
 Work admission: `Current_Plan.md`  
 Correction playbook: `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md`
 

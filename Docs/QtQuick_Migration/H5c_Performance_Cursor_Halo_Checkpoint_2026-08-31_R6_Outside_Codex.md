@@ -1,7 +1,7 @@
 # H5c Performance Cursor-Halo Checkpoint — R6 (Outside Codex)
 
 Date: 2026-08-31
-Status: **IMPLEMENTED / SOURCE-ONLY GREEN / AWAITING PHYSICAL VALIDATION**
+Status: **SUPERSEDED CHECKPOINT / provenance only. The later native-`QCursor` Halo path was physically accepted; use current contracts/`Current_Plan.md` for any new cursor regression.**
 
 This checkpoint supersedes only the R5 Cursor-Halo implementation. R5 Bubble complete-wake scaling and replacement-runtime prefetch reseeding remain accepted and must not be reverted.
 

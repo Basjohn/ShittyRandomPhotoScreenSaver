@@ -341,7 +341,9 @@ chains.
 These preserve `VisualizerLogicalRuntime` as the authored logical clock. Presentation may not discard
 logical steps or turn render refresh into simulation cadence.
 
-## 7.1 Deformable 3D Sphere / Blob Sphere experiment
+**Unique Mode means a real mode boundary.** Each experiment labelled `Unique Mode` gets one canonical descriptor plus its own lazy mode-local logical/runtime/renderer/Settings implementation. It may reuse shared analysis bands, direction vocabulary, shader utilities and proven math, but it must not parasitically run another mode's active runtime, install a second visualizer clock, or create an ad-hoc six-way switch outside the descriptor seam. A Bubble-derived or Spectrum-derived experiment may borrow contracts/equations while remaining independently dormant when disabled.
+
+## 7.1 Deformable 3D Sphere / Blob Sphere experiment - Unique Mode
 
 The project once had a lost visualizer remembered as **Blob** that could never be rebuilt correctly.
 This is **not** a promise to reconstruct that historical effect from memory.
@@ -363,6 +365,8 @@ same fade/lifecycle/generation ownership, and stays inside its assigned transpar
 Visualizer viewport resizing is a current destination requirement. Any future sphere must therefore use aspect-correct
 projection so wider/taller viewports reveal or reframe more space without turning the sphere into an ellipse. Whole-size
 corner/scroll resize scales it uniformly; edge viewport resize changes framing/aspect.
+
+The sphere must expose bounded material/lighting options rather than baking one look into the mode. At minimum, preserve design space for **Chrome**, **Obsidian**, **Magma** (including bounded emissive/flow treatment) and **Silver**, plus gloss/specular controls. Material choice is presentation configuration only: it must not add another cadence, per-frame Python material rebuild, or independent resource owner.
 
 Cheap shape:
 
@@ -403,7 +407,7 @@ rotation, transient acceleration/twist, bounded drifting axis, preset-controlled
 
 Lighting is essential. For a proper version derive deformed normals in the vertex shader by evaluating
 the deformation field at two small tangent offsets and crossing displaced tangents. This allows
-specular light to crawl over the actual changing dents/bulges without CPU normal rebuilds.
+specular light to crawl over the actual changing dents/bulges without CPU normal rebuilds. Reuse the project's existing eight-way direction vocabulary/resolver for key-light direction, and it may default from the current global shadow direction when the mode/preset is resolved. Do **not** create a live per-frame dependency on Widget shadow state: the resolved Visualizer configuration/preset owns the light direction for the active mode.
 
 Candidate fragment stack:
 
@@ -425,28 +429,28 @@ Validation: actual Z/depth geometry, deterministic deformation, independent band
 3D rotation, normals/specular consistent with deformation, no render-frame-driven logical simulation,
 clean resource release/dormancy, and subjective confirmation it reads as a deforming 3D body.
 
-## 7.2 Extruded Spectrum
+## 7.2 Extruded Spectrum - Unique Mode
 
 Instanced shallow 3D columns: one cuboid mesh, 32–128 instances, per-instance height/color/energy,
 restrained lighting/specular and mild perspective/orthographic depth.
 
-## 7.3 Waveform Ribbon
+## 7.3 Waveform Ribbon - Unique Mode
 
 Oscilloscope/Sine-like state as a 3D ribbon with a few hundred vertices, amplitude on Y,
 authored phase/history through X/Z twist, neighboring-sample normals and bounded ghost ribbons.
 
-## 7.4 Bubble Depth Field
+## 7.4 Bubble Depth Field - Unique Mode
 
 Shallow Z/depth presentation option without changing Bubble logical motion **or R-69 response amplitude**. Depth/parallax must not become a viewport-dependent damping term. Prefer instanced billboard
 sphere impostors with analytic normals/specular, per-bubble Z from authored state, depth ordering and
 subtle parallax.
 
-## 7.5 Reactive Particle Field
+## 7.5 Reactive Particle Field - Unique Mode
 
 Bounded 3D instanced point/quad field driven by existing analysis. Prefer hundreds/low-thousands in
 one/few draws. Persistent state, if truly required, belongs to proper logical/runtime ownership.
 
-## 7.6 Spectrum Terrain
+## 7.6 Spectrum Terrain - Unique Mode
 
 Spectrum/history mapped onto a modest grid mesh: current spectrum across one axis, short retained
 history into depth, a few thousand vertices, displacement from compact data/texture, normals/lighting.
