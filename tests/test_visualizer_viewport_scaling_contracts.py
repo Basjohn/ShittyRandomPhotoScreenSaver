@@ -50,9 +50,32 @@ def _load_bubble_module():
 
 
 class BubbleViewportScalingTests(unittest.TestCase):
+    # `_load_bubble_module` replaces these real modules in sys.modules with
+    # Qt-avoiding stubs. They MUST be restored, or later tests importing the real
+    # `core.settings.visualizer_mode_registry` (e.g. the Bubble cadence/BTF
+    # suites) get the stub and fail with "cannot import ... (unknown location)".
+    _STUBBED_MODULES = (
+        "widgets.spotify_visualizer",
+        "core.settings.visualizer_mode_registry",
+        "widgets.spotify_visualizer.render_state",
+        "widgets.spotify_visualizer.signal_contract",
+        "widgets.spotify_visualizer.bubble_simulation",
+    )
+
     @classmethod
     def setUpClass(cls):
+        cls._saved_modules = {
+            name: sys.modules.get(name) for name in cls._STUBBED_MODULES
+        }
         cls.bubble = _load_bubble_module()
+
+    @classmethod
+    def tearDownClass(cls):
+        for name, original in cls._saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
 
     def _impulse_delta(self, extent: tuple[float, float]) -> tuple[float, float]:
         bs = self.bubble

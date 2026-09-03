@@ -34,11 +34,25 @@ class _Presenter:
             if media_model is None
             else SimpleNamespace(model=media_model)
         )
+        # Mirrors the real display presenter default (ordinary authored layout
+        # on until CUSTOM disables it); read by
+        # display_manager._resolve_quick_visualizer_authored_layout.
+        self.authored_layout_enabled = True
 
     def presentation_for_widget_id(self, widget_id: str):
         if widget_id == "media":
             return self._media_presentation
         return None
+
+    # No-op setters the current owner construction path calls on the presenter.
+    def set_layout_observer(self, _observer) -> None:
+        return None
+
+    def set_external_stack_obstacles(self, *_args, **_kwargs) -> None:
+        return None
+
+    def set_authored_layout_enabled(self, enabled, **_kwargs) -> None:
+        self.authored_layout_enabled = bool(enabled)
 
 
 def _live_unit(
@@ -53,6 +67,7 @@ def _live_unit(
         visualizer_contains_scene_position=lambda _position: True,
         set_visualizer_double_click_admission=lambda _admission: None,
         set_visualizer_middle_click_admission=lambda _admission: None,
+        set_visualizer_volume_wheel_handler=lambda _handler: None,
     )
     return QuickDisplayUnit(
         runtime=SimpleNamespace(
@@ -60,6 +75,11 @@ def _live_unit(
             binding_loss=binding_loss,
             scene_controller=scene_controller,
             window=SimpleNamespace(screen=lambda: object()),
+            # display_bounds() reads display_identity.geometry; give each screen
+            # a distinct non-overlapping rect like a real dual-display topology.
+            display_identity=SimpleNamespace(
+                geometry=(screen_index * 1920, 0, 1920, 1080)
+            ),
         ),
         presenter=_Presenter(media_model),
         ctrl_coordinator=SimpleNamespace(),
