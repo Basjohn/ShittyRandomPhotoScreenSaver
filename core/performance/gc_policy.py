@@ -100,10 +100,22 @@ class RuntimeGCPolicy:
         O(1) (~0.01 ms) that future collections never scan, so recurring gen2 no
         longer causes those stalls.
 
-        This is NOT disabling GC and does NOT hide leaks: objects allocated after
-        the freeze are still collected on the normal cadence, so any post-freeze
-        growth stays visible; only a bounded startup/steady-state snapshot is
-        pinned, and it is released by ``gc.unfreeze()`` when the RUN policy stops.
+        Precise lifetime semantics (this is NOT disabling GC), proven in
+        `tests/test_gc_freeze_lifetime.py`:
+        - objects allocated *after* the freeze remain under normal generational
+          GC, so post-freeze growth — including post-freeze cyclic garbage and
+          every runtime/display/Settings generation recreated after the freeze —
+          is still collected on the normal cadence and stays visible;
+        - ordinary refcount-zero destruction still frees frozen objects
+          immediately; only *cyclic* collection of the frozen set is deferred to
+          ``gc.unfreeze()`` on stop;
+        - consequence: the single runtime generation live *at freeze time* has a
+          cyclic Python graph, so if it later retires it stays pinned until
+          unfreeze. This is a bounded one-generation offset, NOT unbounded
+          accumulation (later generations are not frozen and retire normally),
+          and its OS resources (threads/GL/handles) are released by explicit
+          teardown regardless. Do not move runtime-owned cyclic lifetime into the
+          pre-freeze set expecting it to be reclaimed before stop.
         Idempotent; a no-op once frozen or when the policy is inactive.
         """
 
@@ -145,25 +157,34 @@ class RuntimeGCPolicy:
             except (ValueError, RuntimeError):
                 pass
             gc.set_threshold(*self._original_thresholds)
+            unfreeze_failed = False
             if self._frozen:
                 # Release the pinned startup snapshot back to normal collection
-                # so the interpreter's original lifetime behavior is fully restored.
+                # so the interpreter's original lifetime behavior is fully
+                # restored. If this fails, keep the internal state truthful
+                # (still frozen) and report loudly rather than claiming success.
                 try:
                     gc.unfreeze()
+                    self._frozen = False
                 except Exception:
-                    pass
-                self._frozen = False
+                    unfreeze_failed = True
+                    logger.error(
+                        "[GC_POLICY] gc.unfreeze() FAILED on stop; the frozen "
+                        "startup generation remains pinned until process exit",
+                        exc_info=True,
+                    )
             self._active = False
         snapshot = self.snapshot()
         logger.info(
             "[GC_POLICY] RUN policy restored original=%s collections=%s "
-            "duration_ms=%s max_ms=%s",
+            "duration_ms=%s max_ms=%s freeze_restored=%s",
             self._original_thresholds,
             snapshot.collections,
             tuple(round(v, 2) for v in snapshot.duration_ms),
             tuple(round(v, 2) for v in snapshot.duration_max_ms),
+            not unfreeze_failed,
         )
-        return True
+        return not unfreeze_failed
 
     def snapshot(self) -> GCPolicySnapshot:
         with self._lock:
