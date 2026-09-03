@@ -662,12 +662,20 @@ class DisplayManager(QObject):
         )
         if visualizer_available:
             from core.settings.visualizer_mode_registry import (
-                iter_visualizer_mode_descriptors,
+                get_visualizer_mode_descriptor,
+                resolve_effective_enabled_modes,
             )
 
+            # V3: the context menu lists only the effective enabled modes, so a
+            # disabled mode is not reachable through direct menu selection. With
+            # every mode enabled (today's default) this is the full canonical set.
+            _vis_model = getattr(visualizer.controller, "settings_model", None)
+            _enabled_ids = resolve_effective_enabled_modes(
+                getattr(_vis_model, "enabled_modes", None)
+            )
             visualizer_modes = tuple(
-                (descriptor.mode_id, descriptor.display_name)
-                for descriptor in iter_visualizer_mode_descriptors()
+                (mode_id, get_visualizer_mode_descriptor(mode_id).display_name)
+                for mode_id in _enabled_ids
             )
             current_visualizer = str(visualizer.controller.mode_id)
         else:
@@ -903,8 +911,12 @@ class DisplayManager(QObject):
             next_visualizer_mode_id,
         )
 
+        # Cycle only the effective enabled modes (V3): a disabled mode must never
+        # be reachable by double-click/context-menu cycling.
+        model = getattr(owner.controller, "settings_model", None)
+        enabled_modes = getattr(model, "enabled_modes", None)
         self._request_quick_visualizer_mode(
-            next_visualizer_mode_id(owner.controller.mode_id)
+            next_visualizer_mode_id(owner.controller.mode_id, enabled_modes)
         )
 
     def _request_quick_visualizer_preset_change(self) -> bool:
@@ -2109,6 +2121,23 @@ class DisplayManager(QObject):
             build_technical_cache,
         )
 
+        # Resolve a disabled/stale persisted mode to an enabled one before
+        # construction (V3): never silently re-enable a user-disabled mode to
+        # satisfy a stale selected id. With every mode enabled (today's default)
+        # this is a no-op.
+        from core.settings.visualizer_mode_registry import resolve_effective_mode
+
+        _effective_mode, _mode_substituted = resolve_effective_mode(
+            model.mode, model.enabled_modes
+        )
+        if _mode_substituted:
+            logger.info(
+                "[SPOTIFY_VIS] Persisted visualizer mode %r is not enabled; "
+                "starting enabled mode %r instead",
+                model.mode,
+                _effective_mode,
+            )
+            model.mode = _effective_mode
         mode = str(model.mode)
         technical_cache = build_technical_cache(None, model)
         shadows = widgets.get("shadows", {})

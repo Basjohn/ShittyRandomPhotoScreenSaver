@@ -76,3 +76,26 @@ def test_substitute_is_never_a_disabled_mode():
         enabled = ["bubble"]
         mode, _ = resolve_effective_mode(requested, enabled)
         assert mode in resolve_effective_enabled_modes(enabled)
+
+
+def test_cycling_restricted_to_enabled_modes_v3():
+    from rendering.quick.visualizer.double_click_admission import (
+        next_visualizer_mode_id,
+    )
+
+    # No enable-state context -> full registered cycle (legacy behavior).
+    assert next_visualizer_mode_id("spectrum") == "oscilloscope"
+
+    # Restricted enabled set: cycle only enabled modes, canonical order, wrapping.
+    enabled = ["spectrum", "bubble"]
+    assert next_visualizer_mode_id("spectrum", enabled) == "bubble"
+    assert next_visualizer_mode_id("bubble", enabled) == "spectrum"
+    # A disabled current mode starts the cycle at the first enabled mode.
+    assert next_visualizer_mode_id("sine_wave", enabled) == "spectrum"
+
+    # A single enabled mode cycles to itself.
+    assert next_visualizer_mode_id("bubble", ["bubble"]) == "bubble"
+
+    # Never lands on a disabled mode regardless of the current id.
+    for current in VISUALIZER_MODE_IDS:
+        assert next_visualizer_mode_id(current, enabled) in tuple(enabled)
