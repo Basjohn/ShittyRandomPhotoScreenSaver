@@ -113,7 +113,7 @@ Performance rules:
 
 # 1A. Widget semantic theme-role expansion + shared fade polish
 
-**The Slice-8 semantic foundation plus the 2026-09-02 named Widget Theme/catalogue/link wave are implemented and awaiting physical validation.** Continue remaining literal adoption only where it improves the mature shared vocabulary; do not reopen accepted family geometry or create swatches merely because a literal exists.
+**The Slice-8 semantic foundation plus the named Widget Theme/catalogue/bidirectional-link wave are landed and physically exercised; remaining work is bounded semantic/readability review, not foundational admission.** Continue literal adoption only where it improves the mature shared vocabulary; do not reopen accepted family geometry or create swatches merely because a literal exists. Light/dark-text themes require composition-aware contrast on both the Settings HWND and runtime Widget surfaces.
 
 ## 1A.1 Semantic role inheritance instead of swatch proliferation
 
@@ -133,7 +133,7 @@ preserved current visual default
 
 The default/inherit path must reproduce the currently accepted visuals byte-for-pixel-equivalent where practical; adding a role is not permission to recolor shipped defaults. Settings should expose advanced overrides progressively/collapsed or behind an `Inherit` state rather than flooding the normal Widget UI. Do not create a second Media/Steam-local palette system.
 
-**Landed foundation:** `ui/widget_visual_roles.py` owns exactly this cascade; schema-v2 themes admit sparse optional roles; `local.*` terminals never serialize. Consumers include all shared branded headers, Media transport/mute/volume/progress, Gmail action/separators, Reddit/Weather/Clock separators, Steam info/tooltip/artwork/gradients/metrics and the retained Context Menu palette. Named Widget Theme selection/linking and the 50-theme mirror pack are now wired at the construction authority. Remaining work is physical theme review plus incremental adoption of any genuinely meaningful decorative literals, not another resolver or blanket swatch expansion.
+**Landed foundation:** `ui/widget_visual_roles.py` owns exactly this cascade; schema-v3 themes admit sparse optional roles; `local.*` terminals never serialize. Consumers include all shared branded headers, Media transport/mute/volume/progress, Gmail action/separators, Reddit/Weather/Clock separators, Steam info/tooltip/artwork/gradients/metrics and the retained Context Menu palette. Named Widget Theme selection/linking and the 58-theme mirror pack are now wired at the construction authority. Remaining work is physical theme review plus incremental adoption of any genuinely meaningful decorative literals, not another resolver or blanket swatch expansion.
 
 ## 1A.2 Shared artwork and metadata fade polish
 
@@ -511,7 +511,7 @@ single existing implementation/descriptor rather than manufacturing a new transi
 5. **Exploding Tiles**;
 6. **Organic Growth / Ink Bloom** prototype;
 7. other 3D visualizer experiments after final migration validation;
-8. **Frosted / glass ordinary-widget cards** only after the widget migration/cutover architecture is stable.
+8. **Runtime frosted/glass ordinary-widget cards are rejected/shelved.** Reconsider only if a future renderer architecture independently justifies the capability; do not revive the 2026-09-02 card-only experiments.
 
 Glass Shatter, Directional Pixel Accretion and the Deformable 3D Sphere are worth preserving even if
 their first prototypes are abandoned. Their intended identities should not collapse into generic
@@ -519,418 +519,36 @@ their first prototypes are abandoned. Their intended identities should not colla
 
 ---
 
-# 10. Ordinary-widget card materials — committed Normal / Glass / Acrylic modes
+# 10. Runtime Widget Themes — colour-only semantic bundles
 
-Late J+ execution/admission checklist: `Docs/QtQuick_Migration/J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md`, section **10. Committed non-blocking J+ work — ordinary-widget Glass / Acrylic cards**.
+Status: implemented/retained. Runtime Widget Themes are intentionally narrower than Settings themes: they own semantic colours and explicit Settings<->Widget stable link identity, not backdrop/material rendering. The 2026-09-02 Quick Glass/Acrylic card experiments were rejected after physically breaking wallpaper/transition presentation and are preserved only in `Docs/QtQuick_Migration/Rejected_Card_Material_Experiments_2026-09-02.md`.
 
-**Status: shared/lazy source path implemented 2026-09-02; Qt/physical/performance acceptance remains open. The ordinary translucent card
-is the baseline and must remain the default.** This feature is not migration parity and must not turn
-every ordinary widget into an effect-bearing card simply because Qt Quick makes that possible.
-
-## 10.1 Baseline that must remain cheap
-
-Current source already has the expected simple retained-card architecture: `OverlayCard.qml` paints one
-ordinary `Rectangle` background with independent alpha, border and cached shadow, while family content
-stays above it. Its current default background (`#b3101010`) is already translucent. Treat that as the
-source-level baseline even if runtime visual acceptance is temporarily unavailable during migration.
-
-The default material path is therefore:
+Durable contract:
 
 ```text
-effective_card_material_mode = normal   # resolved renderer-facing DEFAULT/OFF; current translucent path
-
-ordinary OverlayCard
-    -> one alpha/tinted Rectangle fill
-    -> ordinary border
-    -> existing cached shadow
-    -> retained family content
+Widget Theme = stable identity + linked Settings-theme id + semantic RGBA roles
+Custom       = persisted colour snapshot created by editing a theme-owned role
+Keep Synced  = bidirectional stable-ID theme identity link
+Style Overrides = Card Surface + Card Border + Card Border Width
+runtime card = ordinary retained RGBA OverlayCard path
 ```
 
-Requirements for `normal` / the current translucent path:
-
-- no backdrop capture;
-- no offscreen texture/FBO created for card materials;
-- no blur pass;
-- no `ShaderEffectSource` / `MultiEffect` solely for the card;
-- no additional render cadence or timer;
-- preserve current whole-widget root-fade semantics;
-- cost should remain essentially the ordinary retained `OverlayCard` cost that exists now.
-
-A future Widget Theme (`.srwtheme`) may change the simple card's RGB/alpha/border/shadow and may recommend a
-**default** material once the committed material system is physically accepted. The theme recommendation is not the final
-runtime material authority: users must be able to keep the selected theme's colours while explicitly choosing another
-surface material. Theme application must never create a second material renderer or independent Glass/Acrylic booleans.
-
-## 10.2 Material modes and surface override
-
-Palette/theme selection and card material are two related but **orthogonal** appearance axes. The theme may recommend a
-surface, while one explicit user override can replace only that surface without detaching the rest of the Widget Theme.
-Keep the three layers named separately so there is no dual authority:
-
-```text
-# serialized by the .srwtheme visual bundle
-default_card_material_mode = normal | glass | acrylic
-
-# persisted user preference; DEFAULT = theme
-card_material_override = theme | normal | glass | acrylic
-
-# one resolved value consumed by retained runtime material owners
-effective_card_material_mode = (
-    default_card_material_mode
-    if card_material_override == theme
-    else card_material_override
-)
-```
-
-The eventual user-facing control in `Settings -> Widgets -> General -> Appearance` should therefore be one
-mutually-exclusive **Surface Style** choice:
-
-```text
-Theme Default   # DEFAULT; subtitle/secondary text may show the resolved theme recommendation, e.g. "Glass"
-Normal          # explicit override; current cheap translucent OverlayCard path
-Glass           # explicit scene-local frosted override
-Acrylic         # explicit scene-local stronger-material override
-```
-
-This deliberately avoids a separate `Override Theme Background` checkbox. `Theme Default` *is* the no-override state, so
-there is no second switch to explain and no need to grey out the material choices. It also avoids making a fake `Custom`
-Widget Theme solely to unlock existing colour controls.
-
-`normal` remains the product/UI name for the current cheap translucent `OverlayCard` path. Do not expose separate
-`Enable Glass` / `Enable Acrylic` toggles: invalid simultaneous states must be impossible by construction. Existing/Dark
-Widget Theme recommends `normal`. Glass/Acrylic are now exposed through the shared lazy per-display implementation; they remain **unaccepted** until Qt/physical/performance validation proves the material path on real displays.
-
-Glass and Acrylic are **Qt Quick scene-local materials**. They are not Windows native backdrop modes and
-must not use the Settings HWND implementation (`SetWindowCompositionAttribute`, AccentPolicy state 3/4)
-on the screensaver `QQuickWindow` or attempt one native backdrop per widget. The Settings solution is
-valuable architecture evidence about separating material ownership, but its HWND primitive is the wrong
-mechanism for cards that live inside one Quick scene.
-
-Suggested visual recipes:
-
-```text
-Glass
-    shared blurred screensaver backdrop
-    + weak / highly translucent card tint
-    + border
-    + existing shadow/content
-
-Acrylic
-    same shared blurred screensaver backdrop
-    + stronger material tint
-    + optional restrained noise/luminosity treatment if it materially helps
-    + border
-    + existing shadow/content
-```
-
-Glass/Acrylic should preferably share the same blurred backdrop representation. Their visible
-difference should primarily come from cheap card-local material parameters. Do not create separate
-full-display blur pipelines merely because the names differ. If eyes-on work eventually proves distinct
-blur strengths are necessary, prefer a small bounded set of shared per-display blur tiers rather than
-one arbitrary blur pass per card.
-
-## 10.3 Shared/lazy backdrop contract
-
-When at least one Glass/Acrylic card is visible on a display:
-
-```text
-base image / current transition for that display
-        ↓
-ONE lazy shared per-display backdrop source
-        ↓
-optional deliberate downsample
-        ↓
-ONE shared bounded blur representation (or bounded shared tiers if proven necessary)
-        ↓
-card-local display-space crop/sample + rounded mask
-        ↓
-Glass/Acrylic local material parameters
-        ↓
-normal cached card shadow + retained family content
-```
-
-When the final Glass/Acrylic consumer disappears, the shared backdrop resources should retire and the
-display returns to the plain `normal` / current-translucent cost path.
-
-Hard rules:
-
-- never create one full-display `ShaderEffectSource`, capture, FBO or blur chain per widget;
-- never capture the already-composited widget layer: the source is the scene **below ordinary widgets**;
-- do not capture the Visualizer, other cards, CUSTOM overlays, cursor halo or context menu into the
-  backdrop; avoid recursion, feedback and double blur;
-- keep all expensive material work GPU/Quick/render-thread native; no Python pixel readback, QWidget
-  screenshots, QPixmap bridges or CPU blur;
-- one optional render-thread-owned per-display offscreen target is acceptable if that proves to be the
-  cheapest production solution. The prohibition is against per-widget/CPU/duplicate capture ownership,
-  not against the single shared texture that a real blur material necessarily needs;
-- card-local tint, mask, border and any subtle Acrylic noise should remain cheap even with many cards;
-- preserve the single production `QQuickWindow` and retained scene; do not add another accelerated
-  top-level/window merely for material effects.
-
-## 10.4 Prototype path versus production path
-
-Do not prematurely build a complicated custom texture bridge before proving the look and measuring it.
-Recommended order:
-
-### Prototype / visual proof
-
-Use **one per-display `ShaderEffectSource` targeting the background presentation only**, deliberately
-reduced in resolution, feeding one shared blur (`MultiEffect` or an equivalent bounded Quick effect).
-Cards sample/crop that shared result.
-
-This prototype is acceptable because there is still only one backdrop source/blur owner per display.
-Measure it before replacing it simply because a lower-level design sounds faster.
-
-### Production optimization only if measurements justify it
-
-The existing `BackgroundRenderItem` / `BackgroundRenderNode` already owns the real image/transition
-pixels and current source/destination textures. If the Quick capture/effect path is measurably too
-expensive, prefer moving shared-backdrop production beside that existing render owner rather than
-capturing the whole Quick scene repeatedly.
-
-Candidate shape:
-
-```text
-BackgroundRenderNode
-    draws normal full-resolution background/transition
-    + when material consumers exist only:
-        produces one reduced per-display material backdrop from the SAME frame state
-        performs/feeds one bounded shared blur
-        exposes that shared result through the smallest legal Quick/render bridge
-```
-
-Do not assume a raw OpenGL texture can simply be handed to arbitrary QML. The concrete bridge
-(QSGTexture provider, custom material item, shared render node, `ShaderEffectSource`, or another supported
-Qt mechanism) must be chosen against the Qt/PySide version that exists when this feature is implemented.
-Prefer the simplest measured solution that obeys the ownership rules above.
-
-## 10.5 Temporal and geometry correctness
-
-A frosted card must show the background that is actually behind that card **on the same presented
-frame**.
-
-During transitions:
-
-- backdrop production must use the same `TransitionRun` and the same per-frame transition sample as the
-  full-resolution background;
-- if backdrop generation is moved into the custom background renderer, sample canonical transition time
-  once and use that exact sample for both the display draw and material-backdrop draw;
-- do not let the card blur lag a frame behind or independently sample monotonic time, because even a
-  small mismatch will read as the card swimming/slipping over the transition.
-
-For geometry:
-
-- crop/sample coordinates must be resolved in final display space, including current CUSTOM placement,
-  resize and pixel-shift transform;
-- do not use stale stored geometry to choose backdrop UVs;
-- rounded masking belongs to the card-local material stage, not the shared full-display backdrop.
-
-Background dimming currently lives below ordinary widgets. A card should therefore visually agree with
-the dimmed background beneath it. If the dimming operation remains uniform black/opacity, it can be
-reapplied cheaply in the material sample path rather than forcing a second composited scene capture.
-
-## 10.6 Widget Theme ownership
-
-The eventual `.srwtheme` contract should primarily **serialize/apply the mature visual settings already exposed in
-Settings** instead of inventing a parallel palette system. Existing widget swatches, opacity, border and shadow controls
-remain the normal editing surface; a Widget Theme is a named visual bundle over those same authorities. Family-specific
-visual values may participate where they are genuinely appearance-only.
-
-Candidate visual ownership includes:
-
-- `default_card_material_mode`: the theme's recommended `normal` / `glass` / `acrylic` surface, **not** the final resolved mode;
-- ordinary card tint/opacity and existing card/background swatches;
-- semantic text/accent/selection/runtime-overlay colours that are genuinely widget appearance;
-- Glass/Acrylic tint/material strength once those scene-local materials are physically proven;
-- border colour/opacity/width where already supported;
-- branded-header pill Fill + Border + Text roles through the shared semantic resolver (Media/Gmail/Reddit/Achievement Pulse/Abandonment Issues retain alpha-aware family swatches as explicit overrides), with logo/text geometry remaining layout rather than theme data;
-- Media sub-surface roles now projected through the same semantic resolver: app-volume Fill/Track/Outline, transport surface/border/separators/icons, mute surface/borders/icons and progress track/fill/glow/shadow. Slice 9 selectively exposes the frequently-authored app-volume Track/Fill/Outline and seek Track/Fill/Shadow/Glow family overrides in collapsed semantic Settings buckets; their canonical/default values remain implicit Inherit rather than blocking Widget Theme roles;
-- Steam info/tooltip/artwork/gradient/metric panels plus Gmail/Reddit/Weather/Clock decorative separators as the first sparse non-Media role wave;
-- shadow visual parameters already exposed by the final widget-style contract;
-- other existing appearance-only values that can round-trip without altering runtime behaviour;
-- optional bounded material parameters that have actually earned their place through visual/performance testing.
-
-Decorative line/border scaling has a reusable retained-presentation primitive from Slice 6: `OverlayWidget.scaleAwareStrokeWidthForScale()`. Future non-Visualizer families should opt decorative strokes into that visible baseline +/-1 px, minimum-1-px contract incrementally after visual validation. **Visualizer is exempt** because its presentation already owns specialised scale-aware line behavior; do not stack a second compensation path onto it.
-
-### Settings-bucket / semantic-override UI discipline
-
-Semantic-role coverage and Settings organization are related but not identical. Adding a role does **not** automatically add a visible control. Expose a family override only when it is a likely user-authored value that benefits from direct adjustment; keep low-level panel/gradient/separator/icon detail inherited unless there is a concrete UX need. When a set of related overrides is exposed, place it in a collapsed semantic bucket so the Widgets page stays readable. Media is the first reference layout: `Provider & Layout`, `Appearance`, `Header Appearance`, `Artwork`, `Transport Controls`, `Seek Bar`, `Volume Control`.
-
-Continue bucket cleanup incrementally rather than rearranging every widget at once. Priority after Media: Steam-family appearance/field sections, then Gmail/Reddit where provider/behavior and visual controls are mixed. Reuse shared bucket names such as `Header Appearance` where the semantics match. Bucket expansion state is UI presentation state only; it must never become Widget Theme state, provider state or runtime geometry authority. Do not remove existing functionality merely to make a section look cleaner.
-
-The Slice-9 Media volume-fill regression is a useful guardrail for the resolver: a specialized role's accepted local/default appearance must remain its own fallback. `media.volume.fill` must not inherit the seek/progress fill merely because both eventually parent to `widget.accent`; a real theme-authored `widget.accent` may override both, but absence of that theme role must preserve their distinct default pixels.
-
-The Widget Theme palette is the **global/default baseline**, not a destructive replacement for existing family-specific card settings. Existing explicit `widgets.<family>.card.*` swatches/opacity/border values keep higher precedence for that family; a family with no explicit authored value inherits the active Widget Theme role. The retained Context Menu has no family override layer and therefore consumes the Widget Theme palette directly. Editing a family-specific swatch is a family customization and does **not** create Widget Theme `Custom`; editing a Widget-Theme-owned baseline swatch does.
-
-The theme palette and the surface override remain independent in the UI. **Do not hide or disable colour swatches merely
-because a Widget Theme is selected.** A user choosing a Glass-oriented Widget Theme and then explicitly selecting `Normal`
-or `Acrylic` must retain the same theme colours.
-
-Manual editing of any **Widget Theme-owned** appearance value has one deterministic ownership transition:
-
-```text
-selected named Widget Theme
-        +
-manual change to a theme-owned swatch/border/shadow/other visual value
-        ↓
-snapshot the complete currently resolved Widget Theme appearance into user-owned Custom
-        ↓
-apply the user's edit to that Custom snapshot
-        ↓
-Widget Theme selection = Custom
-Keep Synced = OFF
-```
-
-The switch is intentionally near-silent: no confirmation dialog is required for the edit that creates `Custom`; at most,
-show a small passive indication that the Widget Theme is now Custom and sync is off. The shipped/installed `.srwtheme` is
-never mutated. The snapshot preserves all currently resolved old theme values and changes only the value the user actually
-edited.
-
-`Custom` is a user-owned working snapshot, not a second inheritance/cascade system and **not a physical `.srwtheme`
-file**. Persist the Custom snapshot in normal SRPSS Settings data alongside Widget Theme selection/sync state; ordinary
-runtime customization must never require write access to the installed ProgramData theme catalogue. Do not preserve a
-hidden stack of per-property overrides on top of named themes. Selecting another named Widget Theme may leave the Custom
-snapshot available for later return; re-enabling `Keep Synced` while Custom is active may switch selection back to the
-Settings theme's linked Widget Theme, but must not destroy the Custom snapshot merely because it is no longer selected.
-
-Creating/exporting a real reusable `.srwtheme` is an explicit authoring/export action, separate from the automatic Custom
-working snapshot.
-
-Changing only `card_material_override` does **not** create Custom, dirty/modify the selected theme, or turn Keep Synced off,
-because Surface Style is a separate user preference rather than a mutation of the `.srwtheme` bundle.
-
-A Widget Theme should therefore contain a coherent semantic palette plus any proven material-specific tuning needed to
-render that palette in each supported material. The selected material determines which tuning is consumed; it must not
-replace the theme's semantic colour identity.
-
-Widget Themes do **not** own widget activation, ordinary ON/OFF, provider/account/source state, geometry,
-refresh cadence or runtime business logic.
-
-Default/Dark Widget Theme recommends `default_card_material_mode = normal` and reproduces the existing simple card
-appearance as closely as practical. Glass/Acrylic remain opt-in and **must not be treated as accepted/stable merely because the file schema can name them**. They are now selectable specifically so the shared/lazy Qt Quick material path can receive runtime visual/performance proof before acceptance.
-
-### Settings Theme <-> Widget Theme mirroring / Keep Synced
-
-Every mature Settings GUI theme should have a mirrored Widget Theme intended to produce the same visual language on
-runtime cards/overlays. The Themes tab should expose **Keep Synced**, default **ON**. With sync ON, choosing a Settings
-Theme selects its linked/mirrored Widget Theme (and choosing the linked Widget Theme keeps the pair coherent); the user
-sees one coordinated palette without maintaining two selections. Turning sync OFF explicitly permits arbitrary
-combinations of Settings GUI theme + Widget Theme.
-
-`Keep Synced` synchronizes **theme identity**, not the explicit surface override. Therefore:
-
-```text
-Keep Synced ON + Surface Style = Theme Default
-    -> Settings theme selects mirrored Widget Theme
-    -> Widget Theme colours + its recommended material both follow the pair
-
-Keep Synced ON + Surface Style = Normal/Glass/Acrylic
-    -> Settings theme still selects mirrored Widget Theme and its colours
-    -> explicit surface override survives theme changes and wins only for material
-
-Keep Synced OFF
-    -> Settings Theme and Widget Theme may be paired arbitrarily
-    -> the same Theme Default/explicit surface rule still applies
-```
-
-This is the important UX escape hatch for a user who likes a Glass GUI/theme palette but dislikes Glass widget cards: keep
-the linked Widget Theme and select `Normal` or `Acrylic` under Surface Style. No theme duplication is required.
-
-Theme IDs/link metadata should be explicit rather than matched by display-name heuristics. Pack-generation tooling may use
-matching names/stems as a convenience when producing corresponding `.srtheme` / `.srwtheme` packs, but it should write the
-resolved stable link metadata rather than making runtime pairing depend on names forever. Manual Widget Theme-owned edits
-follow the Custom-snapshot/auto-unsync rule above; Surface Style does not. Sync must never create two writers fighting over
-the same widget setting.
-
-The retained screensaver **Context Menu belongs to Widget Theme semantics**, because it is a runtime display-scene overlay
-rendered beside widgets. It must not read the QWidget Settings theme directly. When Keep Synced is ON, the mirrored Widget
-Theme naturally makes the Context Menu palette match the Settings GUI; when OFF, the Context Menu follows the independently
-selected Widget Theme. Its material consumes the same **effective** runtime surface resolution described above, so an
-explicit `Normal`/`Glass`/`Acrylic` override changes the Context Menu material while preserving the selected Widget Theme's
-colours. Do not create a second Context-Menu-only surface override unless a later explicit product requirement proves one is
-needed. Candidate Context Menu roles include surface/background, border, separator, normal/disabled text, hover/selected
-row, toggle/choice indicator, submenu arrow, and the canonical global Card shadow. Glass/Acrylic Context Menu pixels must
-reuse the same lazy scene-local Qt Quick material/backdrop authority as widget cards; never invoke the Settings HWND
-Acrylic/Glass AccentPolicy path for runtime menu pixels.
-
-## 10.7 Theme file storage / discovery
-
-Settings and Widget Themes share one resolved theme root, with Widget Themes deliberately isolated in a child folder:
-
-```text
-installed/frozen:
-%ProgramData%\SRPSS\themes\
-    *.srtheme
-    widgets\
-        *.srwtheme
-
-source/dev:
-<repo-root>\themes\
-    *.srtheme
-    widgets\
-        *.srwtheme
-```
-
-This preserves the existing Settings-theme convention while preventing mirrored `.srtheme` + `.srwtheme` packs from
-turning one directory into a hundred-file dump.
-
-Storage/discovery rules:
-
-- filesystem location is startup/build authority, not theme-catalog semantic authority;
-- explicit test/tool directory injection remains valid;
-- installed/frozen builds use the stable ProgramData root used by other SRPSS curated assets;
-- repository/bundled trees are source/dev or bootstrap/copy sources, not a second simultaneously merged production
-  catalogue;
-- Widget Theme discovery is `resolved_theme_root / "widgets"`;
-- installed/frozen theme files are curated/read-mostly runtime assets; normal user customization does not write there;
-- the automatic `Custom` Widget Theme snapshot lives in Settings persistence, not `themes/widgets/Custom.srwtheme`;
-- portable theme IDs/link metadata never contain absolute install paths;
-- a missing external directory must degrade to the appropriate compiled/default-safe theme behavior, not a hidden second
-  mutable theme root.
-
-The durable shared resolver now lives in `ui/settings_theme_paths.py`: source/dev uses `<repo-root>/themes`, while
-frozen/installed SRPSS uses `%ProgramData%\SRPSS\themes`. `ui/widget_theme_paths.py` derives only the `widgets/` child.
-The normal and Media Center installers seed/clean-replace that ProgramData tree from the curated pack, mirroring the
-visualizer-preset deployment model. Do not reintroduce a build-replace placeholder, merge ProgramData with a onefile
-extraction/app-local catalogue at runtime, or create a second Widget-only root. Installed/frozen acceptance must still
-prove both installer paths and 50/50 Settings<->Widget catalogue presence.
-
-## 10.8 Performance / acceptance gates
-
-Measure with representative simultaneous cards and real transitions on 1/2/N displays and relevant DPRs:
-
-- full-scene GPU time;
-- extra offscreen/capture/blur pass cost;
-- texture memory;
-- batching impact;
-- p95/p99/tail frame cost;
-- transition temporal coherence inside and outside cards;
-- cost when one card uses a material versus many cards;
-- proof that zero Glass/Acrylic consumers returns to the plain Normal/current-translucent cost path.
-
-Bound blur radius/sample count and use deliberate downsampling when the visual result survives it. Only
-add polished Settings controls after the material path is visually worthwhile and cheap enough.
-
-The durable contract is therefore:
-
-```text
-Widget Theme = semantic visual bundle + recommended/default material
-Surface Style = Theme Default | Normal | Glass | Acrylic
-Theme Default = follow selected Widget Theme recommendation
-explicit Surface Style = override material only; keep Widget Theme colours
-one effective runtime material enum = the only renderer-facing material authority
-DEFAULT/Dark recommendation = Normal = current cheap translucent OverlayCard
-Glass/Acrylic = committed user-selectable modes using lazy shared per-display backdrop + bounded scene-local material
-NO per-widget capture pipelines
-NO native HWND backdrop mechanism for Quick cards
-```
-
-The exact Qt effect/texture type is provisional; the ownership, default behavior, laziness, temporal
-coherence and bounded-cost rules are not.
+- Widget Themes never own activation, ordinary ON/OFF, provider/account/source state, geometry, refresh cadence, compositor state or native Settings-window backdrop mode.
+- Card Surface/Card Border edits snapshot the full resolved named palette into `Custom` and switch the Widget side Independent; explicit family card overrides remain higher precedence.
+- Card Border Width is a global geometry/style value outside `.srwtheme`.
+- Context Menu consumes Widget Theme semantics directly because it has no family override layer.
+- Specialized optional roles inherit through `ui/widget_visual_roles.py`; do not serialize `local.*` presentation context or invent family-local cascades.
+- The curated pack contains 58 Settings themes + 58 deterministic Widget mirrors. Widget mirrors are schema-v3 colour-only files and materialize mature Media/Volume/Seek/Backlog roles through `tools/generate_widget_theme_mirrors.py`.
+- Settings theme names/files may contain `[Glass]`/`[Acrylic]` because those describe the Settings HWND. Widget mirror names/files omit those runtime-irrelevant tags while `linked_settings_theme_id` keeps the exact Settings file identity.
+- Theme Foundry `Save Widget Counterpart…` must use the same deterministic converter as pack generation and strict-reload its output.
+- Installed/frozen storage remains `%ProgramData%\SRPSS\themes\widgets`; source/dev remains `<repo-root>/themes/widgets`. `Custom` remains Settings persistence, never a generated file.
+- The retained screensaver Context Menu follows the selected Widget Theme, not the QWidget Settings theme directly. When linking is ON the paired identities naturally coordinate palettes; when Independent it follows the independently selected Widget Theme.
+
+Do not add a Surface Style control, `default_card_material_mode`, `card_material_override`, runtime material enum, material Loader/capture/mask tree, or background-layer cadence callback back into this architecture. A future backdrop-card proposal requires a fresh product/renderer justification and must start from the rejected-experiment record rather than reviving hidden debris.
 
 !OPERATOR BOX!
 Ideas put in this box are to be added to work asap but at a lower priotiy than future cleanup or current plan work, unless existing in those as well.
 ############
 1. Add two options in the Interaction Pill for Display. "Widget Glow on Hover" "Widget Glow On Click" with a shared swatch colour selector. These will cause a small pulse in glow effect when triggered in relation to the cursor halo and pulse out when hover leaves or click leaves. This must not introduce timers or any thread contention/starvation.
-2. Finish/accept the already-landed Widget Themes vertical slice. The shared semantic resolver, 50 mirrored `.srwtheme` catalogue, explicit Settings<->Widget link metadata, themed Linked/Independent control, Custom snapshot behavior, orthogonal Surface Style control, and one-lazy-shared-per-display Glass/Acrylic source path now exist. Preserve precedence: Widget Theme card roles are global/default baselines and explicit `widgets.<family>.card.*` values remain higher-precedence family overrides; Context Menu consumes Widget Theme semantics directly. Widget Themes never own activation/ordinary ON/OFF, provider/account/source state, geometry, refresh cadence or runtime business logic. Glass/Acrylic are deliberately selectable now for real Qt visual/performance proof, but remain **unaccepted** until that proof is green; Normal must keep the shared material loader dormant. Continue semantic migration only where physical theme review exposes a meaningful uncovered visual, rather than serializing `local.*` or blanket-theming debug/editor/shadow primitives.
+2. Finish/accept the colour-only Widget Themes vertical slice. Preserve the shared semantic resolver, 58 mirrored `.srwtheme` catalogue, explicit bidirectional stable-ID link metadata, Linked/Independent control and Custom snapshot behavior. Widget Theme card roles are global/default baselines and explicit `widgets.<family>.card.*` values remain higher-precedence family overrides; Context Menu consumes Widget Theme semantics directly. Continue semantic migration only where physical review exposes a meaningful uncovered visual; do not serialize `local.*`, blanket-theme debug/editor/shadow primitives, or revive runtime card-material state.
 3. [LOW] Give more SettingsGUI sections Flowcontainers where it would benefit well aligned space usage.

@@ -13,6 +13,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from os import PathLike
+from time import perf_counter_ns
+
+from core.logging.logger import get_logger
 
 from ui.settings_theme_spec import (
     DEFAULT_DARK_SETTINGS_THEME,
@@ -21,6 +24,8 @@ from ui.settings_theme_spec import (
 
 
 SettingsThemeListener = Callable[[SettingsThemeSpec], None]
+
+logger = get_logger(__name__)
 
 _active_theme = DEFAULT_DARK_SETTINGS_THEME
 _listeners: list[SettingsThemeListener] = []
@@ -77,10 +82,19 @@ def set_active_settings_theme(theme: SettingsThemeSpec) -> bool:
     listeners = tuple(_listeners)
     notified: list[SettingsThemeListener] = []
 
+    transaction_started_ns = perf_counter_ns()
+    listener_timings: list[tuple[str, float]] = []
     try:
         for listener in listeners:
             notified.append(listener)
+            listener_started_ns = perf_counter_ns()
             listener(theme)
+            elapsed_ms = (perf_counter_ns() - listener_started_ns) / 1_000_000.0
+            listener_name = (
+                f"{getattr(listener, '__module__', '<unknown>')}."
+                f"{getattr(listener, '__qualname__', getattr(listener, '__name__', type(listener).__name__))}"
+            )
+            listener_timings.append((listener_name, elapsed_ms))
     except Exception:
         _active_theme = previous
         for listener in reversed(notified):
@@ -92,6 +106,16 @@ def set_active_settings_theme(theme: SettingsThemeSpec) -> bool:
                 pass
         raise
 
+    total_ms = (perf_counter_ns() - transaction_started_ns) / 1_000_000.0
+    detail = ", ".join(
+        f"{name}={elapsed_ms:.2f}ms" for name, elapsed_ms in listener_timings
+    )
+    logger.info(
+        "[PERF][SETTINGS_THEME] theme=%s total=%.2fms listeners=[%s]",
+        theme.name,
+        total_ms,
+        detail,
+    )
     return True
 
 

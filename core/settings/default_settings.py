@@ -565,7 +565,6 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 4
                                           'mode': 'bubble'}},
  'widget_theme': {'selected_id': 'default_dark',
                   'keep_synced': True,
-                  'card_material_override': 'theme',
                   'custom': None},
  'widgets': {'abandonment_issues': {'accent_color': [211, 209, 222, 225],
                                     'artwork_shape': 'portrait',

@@ -110,7 +110,6 @@ Item {
     property alias cardShellEnabled: card.shellEnabled
     property alias cardBackgroundColor: card.backgroundColor
     property alias cardBorderColor: card.borderColor
-    property alias cardMaterialMode: card.materialMode
     property alias cardBorderWidth: card.borderWidth
     property alias cardCornerRadius: card.cornerRadius
     property alias cardPadding: card.padding

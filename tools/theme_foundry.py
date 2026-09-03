@@ -115,6 +115,16 @@ from ui.settings_theme_io import (  # noqa: E402
     settings_theme_from_json,
     settings_theme_to_json,
 )
+from ui.widget_theme_io import (  # noqa: E402
+    WIDGET_THEME_FILE_EXTENSION,
+    load_widget_theme_file,
+    save_widget_theme_file,
+)
+from tools.generate_widget_theme_mirrors import (  # noqa: E402
+    BUILTIN_SETTINGS_THEME_ID,
+    widget_counterpart_for_settings_theme,
+)
+
 from ui.settings_theme_spec import (  # noqa: E402
     DEFAULT_DARK_SETTINGS_THEME,
     SETTINGS_THEME_SCHEMA_VERSION,
@@ -442,10 +452,14 @@ class ThemeFoundryWindow(QMainWindow):
         self.open_btn = QPushButton("Open Theme…")
         self.save_btn = QPushButton("Save")
         self.save_as_btn = QPushButton("Save As…")
+        self.widget_export_btn = QPushButton("Save Widget Counterpart…")
         self.validate_btn = QPushButton("Validate Draft")
         self.launch_btn = QPushButton("Launch Settings (--s)")
         self.save_as_btn.setObjectName("themeFoundryPrimary")
-        for button in (self.new_btn, self.open_btn, self.save_btn, self.save_as_btn, self.validate_btn):
+        for button in (
+            self.new_btn, self.open_btn, self.save_btn, self.save_as_btn,
+            self.widget_export_btn, self.validate_btn,
+        ):
             toolbar.addWidget(button)
         toolbar.addStretch(1)
         toolbar.addWidget(self.launch_btn)
@@ -493,6 +507,7 @@ class ThemeFoundryWindow(QMainWindow):
         self.open_btn.clicked.connect(self.open_theme)
         self.save_btn.clicked.connect(self.save_theme)
         self.save_as_btn.clicked.connect(self.save_theme_as)
+        self.widget_export_btn.clicked.connect(self.save_widget_counterpart)
         self.validate_btn.clicked.connect(self.validate_draft)
         self.launch_btn.clicked.connect(self.launch_settings)
         self.name_edit.textEdited.connect(self._theme_name_changed)
@@ -1837,6 +1852,85 @@ class ThemeFoundryWindow(QMainWindow):
         self._update_dirty_status()
         self._save_prefs(last_theme=str(path))
         self._set_status(f"Saved and strict-reloaded complete semantic theme: {path.name}")
+
+    def save_widget_counterpart(self) -> None:
+        """Generate/save a stable-ID-linked Widget theme through one converter."""
+
+        spec = self._current_spec_or_error()
+        if spec is None:
+            return
+
+        # Compiled Default Dark already has a stable builtin identity even when
+        # Foundry was opened without an on-disk mirror. Any other draft must be
+        # saved first so its link cannot point at a theme that does not exist.
+        builtin_default = (
+            self.theme_path is None
+            and not self._is_dirty()
+            and spec == self.default_spec
+        )
+        if not builtin_default and (self.theme_path is None or self._is_dirty()):
+            self.save_theme()
+            spec = self._current_spec_or_error()
+            if spec is None or self.theme_path is None or self._is_dirty():
+                return
+
+        themes_dir = (self.repo_root / "themes").resolve()
+        if builtin_default:
+            settings_theme_id = BUILTIN_SETTINGS_THEME_ID
+        else:
+            assert self.theme_path is not None
+            settings_path = self.theme_path.resolve()
+            if settings_path.parent != themes_dir:
+                self._warning(
+                    "Save Settings theme into the theme catalogue first",
+                    "A linked Widget counterpart needs a stable Settings theme identity. "
+                    "Save the Settings theme directly in the SRPSS themes folder, then export its Widget counterpart.",
+                )
+                return
+            if settings_path.name.casefold() == CANONICAL_DEFAULT_FILENAME.casefold():
+                if spec != self.default_spec:
+                    self._warning(
+                        "Default Dark is protected",
+                        "The canonical Default Dark Settings theme must remain exact before exporting its Widget counterpart.",
+                    )
+                    return
+                settings_theme_id = BUILTIN_SETTINGS_THEME_ID
+            else:
+                settings_theme_id = f"file:{settings_path.name}"
+
+        widget_theme = widget_counterpart_for_settings_theme(
+            spec, settings_theme_id=settings_theme_id
+        )
+        widget_dir = themes_dir / "widgets"
+        widget_dir.mkdir(parents=True, exist_ok=True)
+        # Runtime Widget themes are colour/semantic bundles only. Use the
+        # projected Widget display name so Settings-only [Glass]/[Acrylic] tags
+        # never leak back into Widget-theme filenames.
+        initial = widget_dir / f"{widget_theme.name}{WIDGET_THEME_FILE_EXTENSION}"
+        path_str, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save linked SRPSS Widget Theme",
+            str(initial),
+            f"SRPSS Widget Theme (*{WIDGET_THEME_FILE_EXTENSION});;All Files (*)",
+        )
+        if not path_str:
+            return
+        path = Path(path_str)
+        if path.suffix.lower() != WIDGET_THEME_FILE_EXTENSION:
+            path = path.with_suffix(WIDGET_THEME_FILE_EXTENSION)
+        try:
+            save_widget_theme_file(widget_theme, path)
+            loaded = load_widget_theme_file(path)
+            if loaded != widget_theme:
+                raise RuntimeError(
+                    "Saved Widget counterpart failed exact strict reload equality"
+                )
+        except Exception as exc:
+            self._error("Save Widget Counterpart failed", str(exc))
+            return
+        self._set_status(
+            f"Saved linked Widget counterpart: {path.name} → {settings_theme_id}"
+        )
 
     def validate_draft(self) -> None:
         spec = self._current_spec_or_error()

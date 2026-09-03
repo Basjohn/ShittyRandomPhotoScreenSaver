@@ -1,66 +1,45 @@
 # Test Suite Guide
 
-Last updated: 2026-09-01
+Last updated: 2026-09-03
 
-Reviewed authority:
+## Current authority
 
-```text
-G: CLOSED.
-H: CLOSED — production Quick authority, post-cutover runtime correction and heavy-load acceptance complete.
-I: ACTIVE — caller-proven stale test/tool/source reconciliation.
-J: queued — final visual/fidelity/installed/physical acceptance and residual performance polish.
+The production Qt Quick cutover and caller-proven I cleanup are complete. Current testing is post-cutover: P0 Visualizer delivery/hitch removal, mode dormancy/modularity, remaining J/Parity+ visual acceptance, theme/runtime correctness and resource/lifecycle hardening. `Current_Plan.md` owns sequence; the exact current source/test tree and the maintained `destination` profile own executable test membership.
 
-Permanent H destination contracts include:
+Permanent destination guardrails include:
+
 - native-QCursor Halo; no mouse-rate QML scene motion;
 - transactional image admission + generation/token prefetch wake;
-- R-63 non-exact-cover overscan with black=0 priority over a harmless bounded 1px mixed-DPR overshoot;
-- event-driven Media observation; no fast polling fallback;
-- persistent serial visualizer.audio_analysis lane with retained DSP state and no generic Future fallback;
+- R-63 non-exact-cover overscan with black=0 priority over harmless bounded mixed-DPR overshoot;
+- event-driven Media observation on the explicit GSMTC affinity owner; no fast polling fallback;
+- persistent serial `visualizer.audio_analysis` lane with retained DSP state and no generic Future fallback;
 - R-68 CUSTOM Visualizer working-geometry presentation authority;
 - R-69 golden Visualizer/Bubble scaling rule: viewport adaptation may not compress authored reactivity;
-- ordinary CUSTOM absolute 40% scale floor; Reddit/Reddit2/Media/Gmail whole-card uniform transform;
-- H7 Exit, H8 preset cycling, H5a/H5b routing/topology accepted physically.
-```
+- ordinary CUSTOM absolute scale floor and whole-card uniform transform where applicable;
+- startup desktop->wallpaper crossfade plus independent coordinated startup reveal;
+- colour-only Widget Theme stable-ID linking/Custom ownership and the permanent runtime-card-material anti-resurrection contract.
 
-This document is the SRPSS testing strategy and **live test-file inventory/retirement ledger**. It is not a phase changelog. `Current_Plan.md` owns active sequence; exact source/test tree and physical evidence outrank stale prose. H acceptance details are preserved in `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md`.
+This document is now a **testing guide plus preserved migration reconciliation ledger**, not a second hand-maintained inventory authority. The large section-10 tables are a dated 2026-09-01 migration-audit snapshot explaining why old tests were kept/re-homed/deleted. They may mention files that have since been removed or renamed. Do not restore an old owner or stale test merely because a historical row names it.
 
-The whole top-level test tree is **not yet one homogeneous current-owner gate**. H deleted the legacy physical `DisplayWidget`/GLCompositor presenter, while the complete supplied tree still contains tests/tools whose implementation owners are gone. Phase I exists to rehome/delete that residue. A broad whole-tree red therefore requires classification; it never authorizes restoring a retired production owner.
+Current membership is determined from the exact tree and `tests/run_chunked.py` profile definitions. Whenever a current checkpoint adds/removes/re-homes a maintained test, update the current additions/contract notes in this document; do not try to keep the old migration snapshot pretending to be a live filesystem listing.
 
-The maintained production-authority profile is now phase-neutral **`destination`**. `h-destination` remains a temporary compatibility alias only.
+## 1. Evidence and status vocabulary
 
-### H-closure execution qualification
-
-The H-closure environment has `pytest`/NumPy but lacks PySide6 and PyOpenGL. `tests/conftest.py` imports PySide6 unconditionally, so complete pytest collection cannot run here and **no new aggregate pass count is claimed**. The corrected changed tests all compile syntactically; the pure source-only viewport/Bubble contract suite executed successfully (`17` tests); every `destination` target exists in the supplied complete test tree and the profile has no duplicate target. The first Phase-I gate is the real-environment `destination` run.
-
-## 1. Audit method and status vocabulary
-
-This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
-
-This is deliberately **not** a claim that every assertion in every top-level test module was manually
-read line-by-line or executed during this review. The row-level inventory is the useful current authority; semantic inspection was
-concentrated where migration status could change whether a test remains authority.
-
-### Status vocabulary
+Architecture-sensitive failures are classified against the current owner before changing production code. Historical section-10 row labels retain their original meanings:
 
 | Status | Meaning |
 | --- | --- |
-| `KEEP` | Current useful coverage; no migration-specific retirement identified. |
-| `KEEP — PERMANENT` / `KEEP — MIGRATION PERMANENT` | Protects a presentation-neutral or destination-architecture contract and should survive cutover. |
-| `I RECONCILIATION — <origin>` | The durable contract may survive, but the named old migration/physical harness is already superseded. Rehome/update/delete the stale assertion during I against the current Quick/neutral owner; never restore the retired owner. |
-| `STALE I RESIDUE — <origin>` | The implementation owner named by the old phase has already been removed/superseded. The test is no longer production authority; delete or rehome only the surviving behavior contract during I. |
-| `UPDATE REQUIRED NOW` | The test itself is already stale/brittle/known-red against current authority. Classify source-vs-test first, then fix deliberately. |
-| `OBSOLETE NOW` | No longer meaningful current regression coverage. Delete rather than skip or preserve as fake authority. |
+| `KEEP` / `KEEP — PERMANENT` | The reviewed contract remained useful at the audit point; verify current-tree existence before invoking it. |
+| `I RECONCILIATION — <origin>` | Historical marker that a behavior might survive but the named old owner was already superseded. I is now closed; this label is provenance, not queued work. |
+| `STALE I RESIDUE — <origin>` | Historical marker for deleted/superseded implementation-owner coverage. Never resurrect the retired owner. |
+| `UPDATE REQUIRED NOW` | At the audit point, the test itself was known stale/brittle. Re-check the current tree before acting. |
+| `OBSOLETE NOW` | Historical conclusion that the assertion had no current regression value. |
 
-**Completed migration phases must not remain written as future test work.** F/G/H-origin rows now use `I RECONCILIATION` / `STALE I RESIDUE`: the old owner is already ported or deleted, and the only remaining question is whether a surviving behavior contract needs a current-owner test.
-
-**Do not use filename age or phase prefixes as the decision rule.** `test_p2_logical_runtime.py`, for example, is permanent logical-runtime coverage, while some newer-looking files encode presenter paths intentionally scheduled for deletion.
+Current red tests use the normal rule: classify source defect vs stale/brittle test vs environment first, then repair the smallest demonstrated owner. A broad red never authorizes restoring retired QWidget/QRhi/GL-compositor presentation paths.
 
 ### Inventory count policy
 
-Do not maintain hand-written aggregate module/status totals in this live document. During migration they become stale as
-soon as a test is added, removed or reclassified and can contradict the row-level inventory in the same file. The tables
-under section 10 are the authority for current test ownership. Generate counts from the current tree only when a specific
-audit actually needs them.
+Do not maintain hand-written aggregate module/status totals. Generate counts from the exact tree/profile only when a specific audit needs them.
 
 ## 2. Standard commands and evidence levels
 
@@ -78,15 +57,15 @@ python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 9
 
 `run_chunked.py` performs one collection preflight before starting the maintained profile. Every selected maintained-profile target then runs in its own fresh pytest subprocess; `--chunks` groups reporting/logs only. This isolation is deliberate for QQuick/Qt lifecycle tests so queued teardown from one target cannot contaminate another.
 
-`h-destination` is a temporary alias for existing scripts/habits. New documentation and automation use `destination`. Remove the alias only after exact caller/search proof in I.
+`h-destination` is a historical compatibility alias if it still exists in the exact tree; new documentation and automation use `destination`. Remove an alias only after exact caller/search proof, never because an old phase name looks untidy.
 
-A complete-tree run remains a broad Phase-I reconciliation diagnostic:
+A complete-tree run is a broad regression/reconciliation diagnostic:
 
 ```powershell
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
 ```
 
-Until I retires/re-homes deleted-owner tests/tools, do not treat whole-tree results as one homogeneous production-authority gate. After I, broad collection should become truthful again.
+Treat the maintained `destination` profile as the current product-authority gate. A complete-tree red still requires classification because historical/optional/environment-gated modules may be present, but the retired Phase-I presenter owners are not production authority.
 
 Do not use a red broad-suite run as the only evidence that a current slice failed. Inspect the exact failure and run the smallest focused gate that can falsify the changed contract. Never restore retired production seams to satisfy stale tests.
 
@@ -103,18 +82,26 @@ Validation levels:
 Use `Docs/Harness_Index.md` for recurring real-GL/physical/runtime harness commands.
 
 
-### 2A. H closure -> I runtime reality smoke
+### 2A. Post-cutover runtime reality smoke
 
 A maintained pytest profile proves deterministic ownership contracts but does not replace Windows/driver/QML evidence. H's physical acceptance is preserved in `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md` rather than duplicated here.
 
-Every physical Quick/J claim inspects both diagnostic planes:
+Every physical Quick/J claim inspects both general diagnostic planes:
 
 ```text
 screensaver.log
 screensaver_qml.log
 ```
 
-The first I run must execute the corrected `destination` profile in the normal PySide6/OpenGL environment. A target failure is classified against current source and the row-level inventory before any production change. If a genuine accepted destination contract is falsified, reopen that smallest owner/incident; do not reopen H wholesale.
+Source/developer runs and explicit debug/verbose runs add a synchronous native-fault companion:
+
+```text
+native_faults.log
+```
+
+For COM/SEH/native-fault acceptance that companion is mandatory evidence, not an optional console substitute. It lives in the same log directory so a complete log-directory bundle carries recoverable native faults even when the process continues running.
+
+Post-cutover checkpoints execute the maintained `destination` profile in the normal Windows/PySide6/OpenGL environment when the changed contract requires it. A target failure is classified against current source before any production change. If a genuine accepted destination contract is falsified, reopen that smallest owner/incident; do not reopen migration phases wholesale.
 
 For Visualizer performance/quality, deterministic tests may prove ownership but the operator remains the oracle for visible reactivity, Bubble temporal fidelity, large-viewport behavior, transition/black-flash behavior and real multi-DPR composition. R-69's no-reactivity-compression rule is binding even if a counter-oriented test appears easier to satisfy another way.
 
@@ -154,17 +141,20 @@ The full test pack exposed additional current-authority drift that is also repai
 - `test_spectrum_presentation_smoothing.py` remains historical/compatibility coverage; R-76 supersedes its old larger-axis rule with height-only temporal scaling, and `test_spectrum_viewport_temporal_scaling.py` pins the live Quick owner without a second cadence;
 - `test_runtime_perf_policy_contracts.py` pins the R-63 no-hardcoded-monitor rule while preserving the non-exact-cover principle.
 
-`tests/run_chunked.py` now exposes canonical `destination` and includes the surviving permanent R4-R7/Media/audio/freshness targets that were missing from the old H list. At closure it contains **95 unique targets**, all present in the supplied complete test tree. Do not publish an aggregate pass count until this exact profile runs in the real PySide6/OpenGL environment.
+`tests/run_chunked.py` now exposes canonical `destination` and includes the surviving permanent R4-R7/Media/audio/freshness targets that were missing from the old H list. The current 2026-09-02 profile contains **110 unique targets** in the canonical full repository. GOD overlay ZIPs intentionally carry only tests/docs added or modified in their work slice, so unchanged profile targets remain supplied by the destination repository. Do not publish an aggregate pass count until this exact profile runs in the user environment.
 
-### 2026-09-02 J+ Widget-theme/material/resource contract additions
+### 2026-09-02 J+ Widget-theme/resource contract additions
 
 The maintained `destination` profile also includes the current J+ source contracts:
 
 - `test_widget_theme_mirror_pack.py` — one explicit `.srwtheme` mirror per Settings theme and stable link metadata;
-- `test_widget_material_shared_contract.py` — themed Surface Style control, Normal dormancy, one shared material capture/blur authority rather than per-card effects, and admitted primary/secondary semantic consumers;
+- `test_widget_theme_no_material_contract.py` — schema-v3 colour-only Widget Theme state, no Surface Style control/material persistence, direct healthy background/transition topology, ordinary RGBA card shells, and absence of the abandoned material Loader/layer/capture/mask/cadence ownership;
+- `test_theme_completion_slice_contract.py` — Abandonment/BACKLOG accent-block inheritance with text-semantic contrast, split Reddit value/`AGO` alignment geometry (including the final 3 px left shift), timerless Context Menu submenu crossing corridor, and Theme Foundry reuse of the shared Settings->Widget counterpart authority;
+- `test_theme_expansion_light_metal_contract.py` — the eight light/metal Settings themes and mirrors exist; dark-text light Settings surfaces are composited against a conservative native backdrop instead of tested as imaginary opaque RGB; light Widget mirrors establish a wallpaper-independent card floor with readable metadata/menu text; heading shadows/list selection remain readable; mirror stable IDs/semantic roles match their Settings counterparts;
+- `test_media_winrt_affinity_and_native_fault_contract.py` — retained GSMTC subscribe/rebind/detach work executes on one non-caller affinity thread, manager dirty callbacks queue COM-touching rebinds back to that owner, a finishing owner transaction blocks overlapping observation ownership, source/developer or explicit debug mode opens `native_faults.log`, ordinary compiled non-debug release mode does not open the companion, false-positive activation is rejected, and the hang watchdog cannot retarget persistent faulthandler output;
 - `test_widget_theme_link_and_asset_contract.py` — link/unlink identity persistence, lazy Settings-page coherence without polling, the mixed static-asset packaging contract (`assets.qrc`/`assets_rc.py` for embedded Settings UI resources, raw `images/` for runtime branded/widget imagery), and frozen theme deployment authority (`%ProgramData%\SRPSS\themes` + installer seed/clean-replace).
 
-These source contracts can run without Qt. Actual Glass/Acrylic pixels, retained theme application, link UI behavior and frozen-build asset availability remain physical/PySide6 acceptance work and must not be marked closed from source-only green.
+These source contracts can run without Qt. Runtime-card Glass/Acrylic was physically rejected after v3/v3.1 produced only modest card pixels while breaking wallpaper/transition presentation. The current gate therefore protects the rollback: no material-specific Quick layer/capture/effect/cadence owner may remain, while Widget Theme semantic selection/linking and ordinary card colours stay intact. Actual startup image/transition motion, retained theme application, link UI behavior and frozen-build asset availability remain physical acceptance work and must not be marked closed from source-only green.
 
 ## 4. Permanent architecture gates
 
@@ -608,6 +598,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_media_runtime_state.py` | **KEEP** | Retain; no current retirement identified. |
 | `tests/test_media_runtime.py` | **KEEP — PERMANENT / EVENT-DRIVEN / RECONCILED** | Shared Media owner/lease/controller/state/artwork/generation plus native-event coalescing, command convergence, slow reconcile watchdog, degraded/missed-event telemetry and stale-generation fencing. The stale deleted-`WidgetManager` production-setup test was removed because current Quick binder + generation recreation suites own that integration; the retired 1–2.5s active poll is not authority. |
 | `tests/test_media_event_observation.py` | **KEEP — PERMANENT / EVENT-DRIVEN** | Controller-level GSMTC subscription/token/session-replacement contract; native callbacks remain tiny and generation-fenced, with real-WinRT round-trip environment-gated. |
+| `tests/test_media_winrt_affinity_and_native_fault_contract.py` | **KEEP — PERMANENT / WINRT OWNERSHIP + LOGGING** | Proves retained manager/session subscriptions and manager-change rebinds share one affinity OS thread, plus debug native-fault companion ownership and hang-watchdog non-interference. Listed in `destination`. |
 | `tests/test_media_volume_runtime.py` | **KEEP — PERMANENT** | Shared app-volume owner/lease/read-write generation/coalescing plus neutral Media-anchor injection contract. |
 | `tests/test_system_mute_runtime.py` | **KEEP — PERMANENT** | Shared system-audio endpoint/poll/action/lease plus neutral Media-anchor injection contract. |
 | `tests/test_media_widget_runtime_methods.py` | **I RECONCILIATION — OLD PHYSICAL OWNER** | Temporary non-painting accepted-state/runtime/Visualizer anchor, geometry and neutral auxiliary-action lifecycle; physical host is already deleted; rehome only surviving accepted-state/Visualizer semantics in I and delete stale anchor/geometry assertions. |
@@ -933,3 +924,10 @@ A later failure reopens the smallest demonstrated defect.
 - `tests/test_qtquick_custom_layout_owner.py` — uniform-transform edit admission canonicalizes a stale aspect-mismatched outer rectangle to the actual visible retained-card envelope, preventing dead letterbox geometry from becoming resize authority.
 
 The new permanent files are included in the canonical `destination` profile. Physical J validation still owns subjective shadow coverage, analogue spacing, Bubble fade feel, Reddit edit-frame fit and the desktop/startup reveal.
+
+
+### 2026-09-02 Settings-theme lifetime + bidirectional link regression
+
+The Widget Theme catalogue/link checkpoint adds two permanent lifetime guards to the canonical `destination` profile. `tests/test_settings_theme_lifetime_contract.py` is Qt-free and verifies transaction semantics with a simulated wrapper lifetime. `tests/test_settings_theme_qobject_lifetime.py` runs only in the normal PySide6 environment and deletes a real QWidget before refreshing the root-QSS registry, proving the actual Shiboken edge that produced `Internal C++ object (SettingsDialog) already deleted`.
+
+`tests/test_widget_theme_no_material_contract.py` and the link/asset contract protect the linked-theme UX shape: the same compact themed lock control exists on both theme pages, Widget->Settings selection uses explicit reverse link metadata, and locked catalogue selection preserves `keep_synced=True` instead of silently converting to Independent. These source contracts do **not** replace the required user-environment test: physically recreate Settings, switch themes repeatedly, verify bidirectional list movement/persistence from both pages, and confirm no deleted-C++-object warning appears.

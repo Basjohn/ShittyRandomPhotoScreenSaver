@@ -1,10 +1,9 @@
 # Ordinary Widget Authoring Guide
 
-Last updated: 2026-08-26
+Last updated: 2026-09-02
 
 Canonical guide for adding or deeply refactoring a **non-Visualizer runtime widget** in the accepted Qt
-Quick architecture. This guide is based on landed/proven patterns from Clock, Weather, Media and Reddit.
-Gmail is the current partial family and is an active example, not closure authority.
+Quick architecture. This guide is based on the landed retained Quick families: Clock, Weather, Media, Reddit/Reddit2, Gmail, Achievement Pulse and Abandonment Issues. It also incorporates the shared colour-only Widget Theme semantics, smart-stacking and global-CUSTOM architecture that later slices added across those families.
 
 `Current_Plan.md` owns which family may be changed now.
 
@@ -177,8 +176,13 @@ QML semantic signal
 QML does not directly persist settings, own auth, perform network I/O, decide cache policy, call backend
 APIs as business authority, or mutate accepted playback/message/provider truth.
 
-Purely visual press/flash/menu-open state may be QML-owned. Interaction admission is shared runtime input
-policy, not separately invented per family.
+Purely visual press/flash/menu-open state may be QML-owned. Interaction admission is shared runtime input policy, not separately invented per family.
+
+### Tooltips / transient explanatory UI
+
+Tooltips are acceptable retained UI when they are event-driven. A hidden tooltip must not create polling, a worker or continuous animation. Qt/Quick hover delivery for the handful of visible delegates is cheap; an optional show-delay timer is allowed only while an actual hover candidate exists. Prefer constructing/showing the tooltip only when needed (for example, a Reddit title is actually elided).
+
+A tooltip is presentation state only. It must not become geometry authority, provider cadence or a reason to keep inactive rows/families alive.
 
 ## 9. Dynamic images
 
@@ -194,9 +198,17 @@ runtime owns decoded QImage + stable key
 No QPixmap worker transport, base64 churn, tempfile per update, unchanged-image reupload, or unearned
 per-widget provider duplication. Static packaged icons can use stable packaged file identities.
 
-## 10. Geometry / dynamic height
+Asset lane is deliberate:
 
-Outer geometry is Python/session-owned. QML lays out inside assigned rect.
+- Settings GUI micro-assets/fonts in `ui/resources/assets.qrc` are embedded and addressed through `:/ui/assets/...`;
+- runtime/branded widget imagery remains raw `images/` data and is resolved as packaged filesystem/file URLs;
+- adding a runtime logo to QRC does not remove the requirement to package raw `images/` when the runtime loader expects it.
+
+Do not silently move a family between lanes. When `assets.qrc` changes, regenerate `assets_rc.py`; when a raw branded asset changes, keep the Nuitka/installer raw-image packaging contract intact.
+
+## 10. Geometry / dynamic height / ordinary stacking
+
+Outer geometry is Python/session-owned. QML lays out inside assigned rect. A family presentation must report a stable preferred/natural outer size when content materially changes; it must not become its own placement solver.
 
 Materially different shapes may have stable variants:
 
@@ -204,11 +216,29 @@ Materially different shapes may have stable variants:
 (widget_id, display_identity, geometry_variant)
 ```
 
-Clock digital/analogue is the first proven case. Never repeatedly derive one saved variant from the other
-and accumulate drift.
+Clock digital/analogue is the first proven case. Never repeatedly derive one saved variant from the other and accumulate drift.
 
-Content-driven natural height may derive from accepted state. Keep it separate from transient overlays.
-Opening Gmail's three-dot menu must not rewrite Gmail's committed CUSTOM height.
+Content-driven natural height may derive from accepted state. Keep it separate from transient overlays. Opening Gmail's three-dot menu must not rewrite Gmail's committed CUSTOM height.
+
+### Non-CUSTOM authored stacking
+
+Ordinary placement is owned by the display presentation/orchestration layer, not by family QML. When global CUSTOM is inactive, the smart stacker may project a family away from its authored slot to avoid collisions. A new widget therefore needs:
+
+- a correct base authored rectangle / preferred outer size;
+- deterministic size-change notification at real event boundaries;
+- no private overlap avoidance, screen-slot search or periodic geometry timer.
+
+Do not persist the stacker's projected collision-avoidance position as new authored user geometry. The authored slot remains the base policy.
+
+### Global CUSTOM hard boundary
+
+CUSTOM is a **global layout mode**, not a per-widget exception list. Authored stacking and Media↔Visualizer adjacency are completely dormant when any of these is true:
+
+1. persisted/effective CUSTOM exists;
+2. live Edit Layout begins;
+3. a number-key saved-layout load begins its fenced rebuild.
+
+A new ordinary widget must not register itself as a stacking obstacle/participant while that subsystem is dormant. Family code must not try to compensate locally.
 
 ## 11. Shared edit-mode X
 
@@ -223,12 +253,14 @@ command:
 Context-menu Save or Enter commits. Cancel restores geometry, duplicate set and ordinary enabled state.
 Family QML does not persist this itself.
 
-## 12. Card / text / header style
+## 12. Card / text / header style / Widget Theme semantics
 
 Ordinary card:
 
 ```text
-OverlayCard -> cached RectangularShadow
+OverlayCard
+-> shared ordinary shadow projection
+-> ordinary semantic RGBA surface/border
 ```
 
 Ordinary text:
@@ -238,15 +270,41 @@ shadow glyph at signed offset
 + visible glyph
 ```
 
-No ordinary text blur or MultiEffect/layer capture for parity. Canonical direction resolves in Python.
-Current ordinary base distances live in the retained widget host. Card/frame **Extra Offset grows only the selected far edge(s)** while preserving opposite-edge coverage; Text Extra Offset remains glyph displacement. Canonical direction resolves in Python.
+No ordinary text blur or private MultiEffect/layer capture for parity. Canonical direction resolves in Python. Current ordinary base distances live in the retained widget host. Card/frame **Extra Offset grows only the selected far edge(s)** while preserving opposite-edge coverage; Text Extra Offset remains glyph displacement.
 
-A family owns a visual exception only if it independently authored that relationship. Retired
-`shadowtuning.json` card/text/header/icon/control/volume values are not family-authored because a widget once
-consumed them.
+### Widget Theme ownership
 
-Family header geometry remains family content, but colours/opacity come from the correct style authority,
-not an unrelated value such as a row separator colour.
+New widgets consume the one shared semantic resolver. Do **not** create a family-local theme cascade. Effective visual intent follows the current precedence model:
+
+```text
+intentional family/widget override
+-> exact Widget Theme semantic role
+-> shared semantic parent role
+-> local/current semantic context (`local.*`, never serialized)
+-> preserved current fallback pixel
+```
+
+`Widgets -> General -> Style Overrides` owns the shared **Card Surface**, **Card Border** and **Card Border Width** once for all widget families and sits immediately above Layout. Card Surface/Border edits fork a named Widget Theme into persisted `Custom`; Border Width is global styling rather than Widget Theme schema. Do not add duplicate global Card Surface controls to each family.
+
+Existing/high-value family swatches remain valid only as explicit family overrides. Canonical/default-valued persisted family fields are effectively Inherit where the current semantic adapter defines that behavior. Editing a family override must not create Widget Theme `Custom`; editing a Widget-Theme-owned global value may.
+
+Semantic roles should represent product meaning, not every literal. Editor chrome, diagnostics, legibility scrims, retained rendering primitives and context-only `local.*` values remain local unless a real cross-theme requirement proves otherwise. Never serialize `local.*`.
+
+Legibility-sensitive text may legitimately remain close to neutral across related named themes while still being semantic. Clock is the current example: when its family colour is canonical it consumes shared `card.text`. Dark themes commonly keep that role near-neutral/near-white, while light themes deliberately switch it to dark typography over a stronger light card floor. Do not infer "unthemed" solely from a subtle colour delta, and do not repurpose `widget.accent` for primary time/numeral text just to create visual movement. Specialized product accents should inherit explicitly rather than bypassing the graph; Abandonment Issues uses `abandonment_issues.accent -> widget.accent`, while its existing authored family accent remains the higher-precedence override.
+
+Theme-link UI is not a widget-family responsibility. Settings Themes and Widget Themes share one persisted bidirectional link state resolved by stable IDs. A new widget must never introduce its own theme-link toggle or attempt name-based theme pairing.
+
+### Header reuse
+
+Use the shared branded-header/component vocabulary when the family fits it. Header geometry/logo identity remains family-authored content, while semantic colours/opacity/shadows come from shared style/theme authority. Do not copy Media/Steam-specific layout merely to reuse the header.
+
+### Plain card surface contract
+
+Runtime widget cards use the ordinary retained Qt Quick RGBA surface/border/shadow path only. Widget Themes provide semantic colours; explicit family overrides remain higher precedence. The abandoned runtime Glass/Acrylic backdrop experiments must not leave a `ShaderEffectSource`, `MultiEffect`, layer-backed background, material mask tree, capture FBO, material Loader, cadence callback, worker, timer or poller in the screensaver scene. The wallpaper/transition render node remains directly composited by the healthy pre-material path.
+
+Settings-window Glass/Acrylic is a separate native QWidget/HWND theme facility and does not authorize a corresponding runtime-card material path. If runtime materials are reconsidered in future, they require a broader independently justified renderer architecture and a fresh acceptance plan rather than reviving the rejected card-only experiments.
+
+A family owns a visual exception only if it independently authored that relationship. Retired `shadowtuning.json` card/text/header/icon/control/volume values are not family-authored because a widget once consumed them.
 
 ## 13. Fade / animation
 
@@ -292,12 +350,11 @@ presentation-only tests. Do not keep an old selectable/fallback presenter for sa
 
 ## 16. Performance / resource rules
 
-Static retained widgets must not create Python callbacks per physical frame, run provider refresh through
-QML `Timer`, rebuild stable trees for unchanged state, keep hidden continuous animation alive, multiply
-provider/controller/timer/thread/subscription cardinality, keep custom-GL frame demand active merely by
-existing, or load inactive family backends through common imports.
+Static retained widgets must not create Python callbacks per physical frame, run provider refresh through QML `Timer`, rebuild stable trees for unchanged state, keep hidden continuous animation alive, multiply provider/controller/timer/thread/subscription cardinality, keep custom-GL frame demand active merely by existing, or load inactive family backends through common imports.
 
-Measure whole-scene cost with several real widgets, not only isolated component cost.
+Shared features remain plugin-like: an inactive family should not import/construct its heavy provider tree; global CUSTOM should be able to make authored stacking dormant. New cross-family infrastructure should have a similarly explicit inactive state instead of a permanent polling owner.
+
+Measure whole-scene cost with several real widgets, not only isolated component cost. Do not add an accelerated/offscreen surface for cosmetic card treatment without a broader measured architectural benefit.
 
 ## 17. Validation checklist
 
@@ -329,8 +386,15 @@ Eyes-on:
 - card on/off;
 - realistic long/short content;
 - practical DPRs/sizes;
-- interactions/transient menus/controls;
-- busy background where readability/shadows matter.
+- interactions/transient menus/controls/tooltips;
+- busy background where readability/shadows matter;
+- non-CUSTOM collision placement with several families;
+- global CUSTOM entry/exit without authored stacking leakage;
+- at least Default Dark plus a deliberately contrasting Widget Theme;
+- family explicit override precedence;
+- Card Surface/Card Border theme inheritance plus explicit family/global override precedence.
+
+Theme coverage should not rely solely on eyeballing: use a static literal/semantic-role inventory and, when useful, a non-shipping diagnostic Widget Theme with deliberately distinct role colours to expose unowned presentation pixels. Human review still decides whether an unchanged pixel is intentionally local.
 
 Then caller-proof and retire old pixels.
 

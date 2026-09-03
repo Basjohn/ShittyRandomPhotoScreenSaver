@@ -57,11 +57,11 @@ def arm(label: str, *, timeout_s: float = 20.0) -> None:
 
     global _armed_label, _dump_file
     with _lock:
-        try:
-            # Native crash dumps (access violations) also print a C-level stack.
-            faulthandler.enable(file=sys.stderr, all_threads=True)
-        except Exception:
-            pass
+        # Do not call ``faulthandler.enable`` here. Persistent native-fault
+        # routing belongs to core.logging.crash_capture; retargeting it from this
+        # one-shot watchdog previously stranded recoverable Windows faults on the
+        # debug console instead of in the log bundle. ``dump_traceback_later``
+        # works independently of the global fatal-signal target.
         try:
             faulthandler.cancel_dump_traceback_later()
         except Exception:

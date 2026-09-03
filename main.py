@@ -642,22 +642,36 @@ def main(*, entrypoint: str = "main"):
         logger.debug("[QT_CAPTURE] Failed to install QML/Qt message capture", exc_info=True)
     diagnostic_record = None
     diagnostic_close = None
-    if diagnostic_build:
+    native_fault_capture_requested = bool(
+        diagnostic_build
+        or not is_compiled_runtime()
+        or logging_profile.debug
+        or logging_profile.verbose
+    )
+    if native_fault_capture_requested:
         from core.logging.crash_capture import (
             close_diagnostic_crash_capture,
             enable_diagnostic_crash_capture,
             record_diagnostic_stage,
         )
 
-        diagnostic_record = record_diagnostic_stage
         diagnostic_close = close_diagnostic_crash_capture
-        crash_path = enable_diagnostic_crash_capture(get_log_dir())
-        logger.info(
-            "[DIAGNOSTIC] Bounded logs active at %s crash_capture=%s",
+        crash_path = enable_diagnostic_crash_capture(
             get_log_dir(),
+            allow_runtime_capture=bool(
+                not is_compiled_runtime()
+                or logging_profile.debug
+                or logging_profile.verbose
+            ),
+        )
+        logger.info(
+            "[NATIVE_FAULT_CAPTURE] active=%s path=%s",
+            bool(crash_path),
             crash_path or "unavailable",
         )
-        diagnostic_record("main_logging_ready")
+        if diagnostic_build:
+            diagnostic_record = record_diagnostic_stage
+            diagnostic_record("main_logging_ready")
     if fresh_result is not None:
         fresh_log_dir, fresh_deleted = fresh_result
         logger.info(

@@ -23,7 +23,9 @@ def test_link_toggle_persists_current_paired_widget_identity() -> None:
     assert "selected_id=linked" in source
     assert "selected_id=linked_id" in source
     assert "persist=True" in source
-    assert "unlinking later freezes" in source
+    assert "synced_settings_theme_id_for_widget" in source
+    assert "keep_synced=True" in source
+    assert "Switch to Independent before selecting it." in source
 
 
 def test_settings_qrc_and_raw_widget_images_remain_distinct_asset_paths() -> None:

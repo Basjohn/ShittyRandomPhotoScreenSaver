@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 
 OverlayWidget {
     id: gmailRoot

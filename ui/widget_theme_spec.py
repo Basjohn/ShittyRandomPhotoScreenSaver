@@ -1,9 +1,9 @@
 """Semantic runtime Widget Theme specification.
 
 A Widget Theme is a named visual bundle supplying the retained Qt Quick runtime's
-global/default card palette and the Context Menu palette, plus a recommended card
-**surface material**. Explicit per-widget card swatches remain higher-precedence
-family overrides; the Context Menu has no family override layer. It is the runtime-scene counterpart of the QWidget
+global/default card palette and the Context Menu palette. Explicit per-widget card
+swatches remain higher-precedence family overrides; the Context Menu has no family
+override layer. It is the runtime-scene counterpart of the QWidget
 Settings theme (`ui/settings_theme_spec.py`) and deliberately mirrors that module's
 shape (frozen dataclass, schema version, semantic role maps, compiled Default Dark)
 so the two theme systems share one mental model and one file root.
@@ -11,14 +11,11 @@ so the two theme systems share one mental model and one file root.
 Boundaries (durable design owners: `Docs/Contracts.md`,
 `Docs/Custom_Style_Implementation.md`, `Future_Work.md` §10):
 
-* Widget Theme owns runtime palette + a recommended surface material only. It does
-  **not** own widget activation, provider/account state, geometry, cadence or any
-  business logic.
-* Glass/Acrylic are scene-local Qt Quick materials. This spec only names the
-  *recommended default* material; it never routes the Settings HWND AccentPolicy
-  onto the screensaver window.
-* The final runtime material is resolved from this recommendation plus a separate
-  persisted user Surface Style override (see :func:`resolve_effective_card_material_mode`).
+* Widget Theme owns runtime semantic colours only. It does **not** own widget
+  activation, provider/account state, geometry, cadence, compositor state, native
+  Settings-window backdrop mode, or other business logic.
+* Runtime cards are ordinary RGBA Qt Quick surfaces. Settings Glass/Acrylic remain
+  a separate QWidget/native-HWND theme concern and are never projected into cards.
 
 Rgba/palette primitives are shared with the Settings theme spec so both systems use
 one colour type.
@@ -33,17 +30,10 @@ from typing import Mapping
 from ui.settings_theme_spec import Rgba
 
 
-WIDGET_THEME_SCHEMA_VERSION = 2
+WIDGET_THEME_SCHEMA_VERSION = 3
 
 
-# The material a Widget Theme may recommend as its default surface.
-CARD_MATERIAL_MODES = frozenset({"normal", "glass", "acrylic"})
-
-# The persisted user Surface Style preference. ``theme`` (the "Theme Default"
-# choice) is the no-override state that follows the theme recommendation.
-CARD_MATERIAL_OVERRIDES = frozenset({"theme", "normal", "glass", "acrylic"})
-
-# Core roles are the schema-stable whole-or-reject payload. Schema-v2 themes may
+# Core roles are the schema-stable whole-or-reject payload. Schema-v3 themes may
 # add sparse optional roles from ``ui.widget_visual_roles`` without making those
 # additions mandatory for older themes. Keep this set independent from the
 # compiled Default Dark colour map, because Default Dark is allowed to materialize
@@ -69,30 +59,6 @@ WIDGET_THEME_CORE_COLOR_ROLES = frozenset(
 )
 
 
-def resolve_effective_card_material_mode(
-    default_card_material_mode: str,
-    card_material_override: str,
-) -> str:
-    """Resolve the single runtime material consumed by retained card owners.
-
-    ``card_material_override == "theme"`` (Surface Style = "Theme Default") follows
-    the Widget Theme's recommendation; any explicit override wins for material only.
-    Both inputs are validated/normalised and anything unexpected fails safe to
-    ``normal`` so the runtime can never reach a card with no coherent surface.
-    """
-
-    default_mode = str(default_card_material_mode or "").strip().lower()
-    if default_mode not in CARD_MATERIAL_MODES:
-        default_mode = "normal"
-
-    override = str(card_material_override or "").strip().lower()
-    if override not in CARD_MATERIAL_OVERRIDES:
-        override = "theme"
-
-    resolved = default_mode if override == "theme" else override
-    return resolved if resolved in CARD_MATERIAL_MODES else "normal"
-
-
 @dataclass(frozen=True, slots=True)
 class WidgetThemeSpec:
     """Resolved semantic Widget Theme values consumed by runtime surfaces.
@@ -111,7 +77,6 @@ class WidgetThemeSpec:
 
     theme_id: str
     name: str
-    default_card_material_mode: str = "normal"
     linked_settings_theme_id: str | None = None
     colors: Mapping[str, Rgba] = field(default_factory=dict)
     schema_version: int = WIDGET_THEME_SCHEMA_VERSION
@@ -125,15 +90,6 @@ class WidgetThemeSpec:
             raise ValueError(
                 f"Unsupported Widget theme schema version: {self.schema_version}"
             )
-
-        material = self.default_card_material_mode
-        material = material.strip().lower() if isinstance(material, str) else material
-        if material not in CARD_MATERIAL_MODES:
-            raise ValueError(
-                "Widget theme default_card_material_mode must be one of "
-                f"{sorted(CARD_MATERIAL_MODES)!r}, got {self.default_card_material_mode!r}"
-            )
-        object.__setattr__(self, "default_card_material_mode", material)
 
         link = self.linked_settings_theme_id
         if link is not None:
@@ -171,8 +127,7 @@ class WidgetThemeSpec:
 # ---------------------------------------------------------------------------
 #
 # Mirrors the current runtime surface defaults so the runtime looks unchanged when
-# no external .srwtheme exists. Default Dark recommends the cheap ``normal`` card
-# material and links to the compiled Default Dark Settings theme.
+# no external .srwtheme exists. It links to the compiled Default Dark Settings theme.
 #
 # Card baseline defaults mirror the accepted ordinary retained-family surface. Context Menu roles mirror the
 # physically accepted retained ContextMenu.qml pixels so moving those literals into
@@ -219,19 +174,15 @@ DEFAULT_DARK_WIDGET_THEME_ID = "default_dark"
 DEFAULT_DARK_WIDGET_THEME = WidgetThemeSpec(
     theme_id=DEFAULT_DARK_WIDGET_THEME_ID,
     name="Default Dark",
-    default_card_material_mode="normal",
     linked_settings_theme_id="builtin:default-dark",
     colors=_DEFAULT_DARK_WIDGET_COLORS,
 )
 
 
 __all__ = [
-    "CARD_MATERIAL_MODES",
-    "CARD_MATERIAL_OVERRIDES",
     "DEFAULT_DARK_WIDGET_THEME",
     "DEFAULT_DARK_WIDGET_THEME_ID",
     "WIDGET_THEME_CORE_COLOR_ROLES",
     "WIDGET_THEME_SCHEMA_VERSION",
     "WidgetThemeSpec",
-    "resolve_effective_card_material_mode",
 ]

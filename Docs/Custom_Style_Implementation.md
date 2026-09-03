@@ -1,61 +1,78 @@
 # Custom Style Implementation
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
+
+This document owns the durable relationship between Settings styling, runtime Widget Theme semantics, explicit family overrides and user-owned `Custom` state. Live sequencing remains in `Current_Plan.md`.
 
 ## Settings UI
 
-Settings remains QWidget-based. Settings-window shadows under `ui/widgets/control_shadow.py` are Settings
-styling, separate from runtime widget shadow authority.
+Settings remains QWidget-based. Settings-window shadows under `ui/widgets/control_shadow.py` are Settings styling and are separate from runtime widget shadow authority.
 
-Settings visual values are owned by schema-v5 `SettingsThemeSpec`; permanent architecture is
-`Docs/Settings_Theme_Architecture.md`. The frameless translucent Settings top-level is a layered HWND on Windows.
-Acrylic and Glass deliberately stay on the same AccentPolicy composition family: Acrylic uses state 4 with native theme
-tint; Glass uses untinted state 3 and semantic Qt RGBA surfaces supply its visible palette/opacity. Do not move native
-material behavior into QSS or use native backdrop changes to compensate for semantic stylesheet defects.
+Settings visual values are owned by schema-v5 `SettingsThemeSpec`; the permanent native/theme architecture is `Docs/Settings_Theme_Architecture.md`. The frameless translucent Settings top-level is a layered HWND on Windows. Acrylic and Glass remain accepted **Settings-window** backdrop modes: Acrylic uses the native tinted composition path, while Glass uses the untinted composition family and semantic Qt RGBA surfaces provide the visible palette/opacity.
 
-`themes/dark.qss` is temporary legacy base-QSS residue, not palette authority. Its safe structural-selector retirement
-is recorded in `Future_Cleanup.md`; do not remove it by recreating its old colour literals in component code.
+Do not use native backdrop changes to compensate for QSS/semantic palette defects. `themes/dark.qss` remains legacy structural stylesheet residue, not palette authority; its guarded retirement is tracked in `Future_Cleanup.md`.
 
-## Settings theme selection and sectional navigation
+## Settings and Widget theme selection
 
-The landed Themes tab owns live `.srtheme` selection for the Settings GUI and reserves a separate **Widget Themes** pill
-for future `.srwtheme` work. Settings-theme selection must continue through the schema-v5 catalog/runtime path above;
-individual Settings tabs do not own private palettes.
+The Themes tab has two landed catalogues:
 
-Future Widget Theme UX has **two orthogonal appearance axes**, not one overloaded theme selector. `Keep Synced` (default
-ON) links Settings-theme identity to an explicitly mirrored Widget Theme. The Widget Theme owns the semantic runtime
-palette/visual bundle and a `default_card_material_mode` recommendation. `Settings -> Widgets -> General -> Appearance`
-owns one separate **Surface Style** preference: `Theme Default / Normal / Glass / Acrylic`. `Theme Default` follows the
-selected Widget Theme recommendation; an explicit material overrides only the surface while retaining the same Widget
-Theme colours. Keep Synced never clears an explicit surface override. Do not solve this by hiding colour swatches, by
-manufacturing a fake `Custom` theme solely to unlock them, or by adding a second `Override Theme Background` checkbox—the
-`Theme Default` Surface Style entry is the inheritance/no-override state.
+- **Settings Themes** — `.srtheme`, Settings QWidget/native-window appearance;
+- **Widget Themes** — `.srwtheme`, runtime retained-widget/overlay semantic colours.
 
-Widget Theme card roles are fallback/global defaults underneath existing explicit per-widget card controls. Resolve an ordinary family card role as `explicit widgets.<family>.card.* value -> Widget Theme baseline`. This preserves mature family customisation when switching themes. The Context Menu is direct/global because it has no family card override. Per-family edits remain family-specific and do not trigger the Widget Theme Custom/unsync transition.
+The two catalogues use explicit stable IDs and a bidirectional **Linked / Independent** control. While Linked, selecting either side transactionally selects and persists the exact counterpart on the other side. Selection does not silently unlink. A theme with no valid counterpart requires Independent mode before it can be selected independently.
 
-Schema-v2 specialized visuals use the same ownership model without swatch proliferation. Resolve them as `intentional family override -> exact Widget Theme role -> shared semantic parent -> local/current semantic value -> preserved fallback`. `local.*` is runtime context, never serialized. A default-valued stored family swatch is the implicit **Inherit** state; a genuinely changed value remains an explicit family override. Sparse role overrides may be exposed selectively when they are meaningful user-authored controls, but related controls belong in collapsed semantic buckets rather than one giant Appearance section. Slice 9 Media is the reference: `Header Appearance` owns Header Fill/Border/Text; `Seek Bar` owns Track/Fill/Shadow/Glow; `Volume Control` owns Track/Fill/Outline. The lower-level transport/mute/panel/icon roles remain theme-inherited and are not exposed merely because the resolver knows them. Do not add one permanent swatch for every separator, panel, gradient, icon and outline.
+Widget themes are **colour-only schema-v3 bundles**. They do not own a backdrop/material recommendation and there is no runtime Surface Style preference. Settings theme names may legitimately retain `[Glass]`/`[Acrylic]` because those tags describe the Settings HWND; Widget counterpart names/files intentionally omit those material suffixes while `linked_settings_theme_id` still points to the exact Settings-theme identity.
 
-Manual edits to a **Widget Theme-owned** swatch/border/shadow/other visual value use one explicit ownership transition:
-snapshot the complete currently resolved named Widget Theme into user-owned `Custom`, apply the edit to that snapshot,
-switch the Widget Theme selector to `Custom`, and automatically turn `Keep Synced` OFF. This should be near-silent (no
-confirmation dialog for the edit itself); the shipped `.srwtheme` is never mutated and all unedited theme values are
-preserved in the Custom snapshot. `Custom` is persisted inside normal SRPSS Settings data, **not** written as
-`themes/widgets/Custom.srwtheme`; runtime customization therefore requires no write permission to the installed theme
-directory. A real `.srwtheme` is created only by an explicit save/export/authoring action. Do not implement hidden
-per-property override inheritance on top of named themes.
+## Widget Theme precedence and semantic inheritance
 
-Changing only Surface Style does **not** create Custom, modify the selected `.srwtheme`, or unsync the themes. If the user
-later re-enables Keep Synced while Custom is active, the UI may switch back to the linked named Widget Theme, but the Custom
-snapshot should remain available rather than being destroyed. Pack generation may pair matching `.srtheme`/`.srwtheme`
-names as an authoring convenience, but runtime linkage should use explicit stable theme IDs/metadata rather than
-display-name heuristics.
+Widget Theme card roles are global/default baselines underneath intentional family overrides:
 
-Sectional pill navigation is renderer/layout structure, not a new theme semantic. The Display tab now uses the same
-sectional pill language as other large Settings tabs and consumes the existing `navigation.subtab.*` colour roles. Future
-sectional rearrangements should reuse those semantic roles unless a genuinely distinct visual concept appears. Different
-geometry/padding may have a narrow component style owner without expanding every `.srtheme`.
+```text
+explicit widgets.<family>.card.* value
+    -> Widget Theme semantic baseline
+    -> preserved local/default fallback
+```
 
-Theme-file layout is one shared root with a Widget subfolder, not one flat catalogue:
+The Context Menu is direct/global because it has no family card override. Specialized visuals use the same sparse-role model:
+
+```text
+intentional family override
+    -> exact Widget Theme role
+    -> shared semantic parent
+    -> local/current semantic value
+    -> preserved fallback
+```
+
+`local.*` is runtime context and is never serialized. A default-valued stored family swatch is the implicit **Inherit** state; a genuinely changed family value remains an explicit family override. Related controls belong in semantic buckets rather than one giant Appearance section. Media is the reference: `Header Appearance`, `Seek Bar` and `Volume Control` expose meaningful family-facing roles while lower-level transport/mute/panel/icon roles remain theme-inherited.
+
+Do not add one permanent Settings swatch for every separator, panel, icon, gradient or outline merely because the resolver knows the role.
+
+## Named Widget Theme -> Custom ownership transition
+
+Manual edits to a **Widget Theme-owned** palette value use one explicit ownership transition:
+
+1. snapshot the complete currently resolved named Widget Theme;
+2. apply the edit to that snapshot;
+3. select user-owned `Custom`;
+4. turn Linked/Keep Synced OFF.
+
+The shipped `.srwtheme` is never mutated and all unedited values are preserved in the Custom snapshot. `Custom` lives in normal SRPSS Settings persistence, not as `themes/widgets/Custom.srwtheme`; ordinary customization therefore requires no write permission to the installed theme directory. A reusable `.srwtheme` is created only by an explicit save/export/authoring action such as Theme Foundry's Widget counterpart export.
+
+Do not implement hidden per-property named-theme override inheritance on top of this state machine.
+
+## Widgets -> General -> Style Overrides
+
+`Style Overrides` groups the card controls whose interactions users need to see together:
+
+- **Card Surface** — theme-owned colour edit; editing a named Widget Theme forks to `Custom`;
+- **Card Border** — theme-owned colour edit; editing a named Widget Theme forks to `Custom`;
+- **Card Border Width** — global card geometry style, outside Widget Theme schema.
+
+There is **no Surface Style / Theme Default / Normal / Glass / Acrylic runtime control**. Runtime card backdrop materials were physically rejected and removed; see `Docs/Historical_Bugs/Runtime_Card_Backdrop_Materials_Rejected_2026-09-02.md` and the detailed failed-method ledger in `Docs/QtQuick_Migration/Rejected_Card_Material_Experiments_2026-09-02.md`.
+
+## Theme-file layout
+
+Theme files use one root with a Widget subfolder:
 
 ```text
 installed/frozen: %ProgramData%\SRPSS\themes\*.srtheme
@@ -65,14 +82,20 @@ source/dev:       <repo>\themes\*.srtheme
                   <repo>\themes\widgets\*.srwtheme
 ```
 
-The Settings/Widget theme catalogues consume directories injected/resolved by startup/build authority. Do not duplicate
-path policy inside renderers or merge ProgramData and repository catalogues simultaneously. The repository/bundled tree is
-a development/bootstrap source; the installed stable root is ProgramData. Those installed theme files are read-mostly
-catalogue assets; the automatic Widget Theme `Custom` state lives in Settings persistence rather than the filesystem.
+The Settings/Widget catalogues consume directories injected/resolved by startup/build authority. Do not duplicate path policy inside renderers or merge ProgramData and repository catalogues simultaneously. The repository/bundled tree is the development/bootstrap source; ProgramData is the installed stable root. Installed theme files are read-mostly catalogue assets; automatic Widget `Custom` state lives in Settings persistence.
 
-## Canonical runtime shadow controls — F0.5 CLOSED / independently GREEN
+## Runtime card and shadow destination
 
-Widgets → General → Appearance owns:
+Ordinary runtime cards use the retained Qt Quick path only:
+
+```text
+OverlayCard RGBA surface/border
+-> cached RectangularShadow
+```
+
+Ordinary text uses the authored duplicate shadow glyph at signed offset plus the visible glyph. There is no ordinary text blur/layer capture. Whole-widget fade is ancestor/root opacity; no staged effect carrier owns presentation.
+
+Canonical runtime shadow controls remain:
 
 ```text
 Widget/Card: enabled, frame_opacity, blur_radius, frame_extra_offset
@@ -81,46 +104,45 @@ Header:      header_enabled
 All:         direction = NW/N/NE/W/E/SW/S/SE
 ```
 
-Direction picker is compact 3×3, center inert, default/fallback SE. No Text Blur, Intense mode or old
-`widgets.shadows.offset`.
+Card/frame **Extra Offset is directional growth**, not whole-shadow translation: the base signed offset remains authored and only selected far edges extend. Text Extra Offset remains signed glyph displacement. Direction resolves in Python.
 
-General save merges edits onto the existing `widgets.shadows` mapping so unrelated/future keys survive.
+`shadowtuning.json` / `core.settings.shadow_tuning` is retired and must not return by relocation. Do not reconstruct hidden card/text/header/icon/control/volume profiles from old sidecar data.
 
-## Retired tuning authority
+## Runtime Context Menu
 
-`shadowtuning.json` / `core.settings.shadow_tuning` is retired and must not return by relocation. Do not
-reconstruct hidden card/text/text_large/header/icon/control/volume_slider profiles.
+The retained Context Menu is a Quick overlay. It consumes the global Card shadow direction/opacity/blur/Extra Offset contract and Widget Theme semantic palette once per runtime generation. Its shadow is composed in the menu overlay plane so it may cast over runtime widgets/Visualizer/edit chrome while remaining behind the menu itself.
 
-A visual rule is family-authored only if the family independently owns it. Clock analogue ring/marker/
-numeral/hand relationships qualify; retired sidecar values do not become family-authored because they were
-copied into a family file.
-
-## Quick destination
-
-Ordinary card: `OverlayCard -> cached RectangularShadow`.
-Ordinary text: duplicate shadow glyph at signed offset + visible glyph.
-No ordinary text blur/MultiEffect/layer capture. Whole-widget fade is ancestor/root opacity; no staged
-shadow/effect carriers.
-
-Current deliberate ordinary base magnitudes live in the retained widget host. Card/frame **Extra Offset is directional growth**, not whole-shadow translation: the base signed offset stays authored and only the selected far edge(s) extend. Text Extra Offset remains signed glyph displacement. Direction still resolves in Python.
-
-Retained Context Menu is a runtime Quick overlay and consumes the same global **Card** shadow direction/opacity/blur/Extra Offset contract once per runtime generation. Its cached shadow is composed in the menu overlay plane so it can cast over runtime widgets/Visualizer/edit chrome while remaining behind the menu itself. Its palette now also projects from **Widget Theme** semantic roles once per display generation; no menu-open/per-frame Settings read is allowed. Default Dark first mirrors the accepted current QML pixels, including sparse indicator/arrow detail roles, so semantic ownership itself is visually neutral. `Keep Synced` (future, default ON) links each Settings theme to its mirrored Widget Theme, while the separate Surface Style resolver determines the effective runtime material. Thus a user can keep a synced Glass-theme palette but explicitly render widget/menu surfaces as Normal or Acrylic. Glass/Acrylic menu pixels must reuse the same scene-local material authority as widget cards and never the Settings HWND AccentPolicy path.
+No menu-open/per-frame Settings read is allowed. The menu uses the same ordinary RGBA semantic-surface architecture as runtime cards; Settings HWND Glass/Acrylic does not authorize a runtime menu/card material path.
 
 ## Header styling
 
-`header_enabled` gates destination header-shadow semantic where applicable. Branded Media/Gmail/Reddit/Achievement Pulse/Abandonment Issues headers consume the shared retained `BrandedHeader.qml` primitive; its accepted geometry/casing/intrinsic-width behavior, logo/text shadows and extension-shadow treatment are protected J/J+ authored baseline rather than family-local knobs. Header Fill/Border/Text remain family swatches where exposed, but default-valued swatches inherit through the Widget Theme semantic-role resolver. Settings organization should converge on a shared collapsed `Header Appearance` bucket for branded families when those sections are otherwise overloaded; bucket layout is UI structure, not new theme data. Do not substitute an unrelated style value because it is convenient: a header border derives from proper header/border authority, not a low-alpha row separator colour.
+`header_enabled` gates destination header-shadow semantics where applicable. Branded Media/Gmail/Reddit/Achievement Pulse/Abandonment Issues headers consume `BrandedHeader.qml`; accepted geometry/casing/intrinsic-width behavior, logo/text shadows and extension-shadow treatment are shared J/J+ presentation contracts rather than family-local reinventions.
+
+Header Fill/Border/Text remain family swatches where exposed, with canonical/default values inheriting through Widget Theme roles. Do not substitute unrelated semantic values because they are convenient: a header border derives from header/border authority, not a low-alpha row separator.
+
+The small retained `MultiEffect` use in branded headers/artwork is local image treatment/masking only. It is not permission to restore full-card or full-display backdrop capture.
 
 ## Specialized local fallback guard
 
-A specialized role may share a semantic parent without sharing the same accepted default pixel. Callers must supply the specialized current/default value at the relevant `local.*` terminal. Example: `media.volume.fill` and `media.progress.fill` can both be overridden by a theme-authored `widget.accent`, but in Default Dark the app-volume fill remains its own muted gray/alpha and must not silently borrow the white seek/progress fill. Focused semantic tests protect this distinction.
+A specialized role may share a semantic parent without sharing the same accepted default pixel. Callers must supply the specialized current/default value at the relevant `local.*` terminal. For example, `media.volume.fill` and `media.progress.fill` can both inherit a theme-authored accent, while Default Dark may preserve distinct family-local fallback pixels when no theme/override owns them.
+
+## Sectional navigation
+
+Sectional pill navigation is renderer/layout structure, not a new theme semantic. Settings tabs should reuse the existing `navigation.subtab.*` roles unless a genuinely distinct visual concept appears. Geometry/padding may have a narrow component style owner without expanding every `.srtheme`.
 
 ## Clock analogue
 
-`Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md` is permanent landed contract. Global direction
-applies to directional special analogue shadows. Do not flatten them into generic card/text recipes.
+`Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md` remains the permanent special-shadow contract. Global direction applies to directional analogue shadows; do not flatten analogue ring/marker/numeral/hand relationships into generic card/text recipes.
 
 ## Change process
 
-Identify current product/style contract -> reject obsolete QWidget/shared-tuning mechanics -> update retained
-destination owner -> focused tests -> eyes-on where subjective -> reconcile test/docs ownership -> commit.
-No fidelity downgrade as performance shortcut.
+```text
+identify current product/style contract
+-> reject obsolete/duplicate owners
+-> update the retained destination owner
+-> focused source tests
+-> physical review where subjective
+-> reconcile docs/test ownership
+```
+
+No fidelity downgrade is admitted as a performance shortcut. Settings native materials and runtime Widget semantic colours are separate architectures and must remain separate unless a future independently justified renderer redesign explicitly proves otherwise.

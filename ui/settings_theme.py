@@ -10,6 +10,11 @@ from __future__ import annotations
 from pathlib import Path
 from weakref import WeakSet
 
+try:
+    from shiboken6 import Shiboken
+except ImportError:  # pragma: no cover - PySide runtime supplies shiboken6
+    Shiboken = None
+
 from core.logging.logger import get_logger
 from ui.settings_theme_runtime import (
     get_active_settings_theme,
@@ -170,6 +175,7 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
 
                 QListWidget::item:selected {
                     background-color: %(list_selected_surface)s;
+                    color: %(list_text)s;
                     border-left: 3px solid %(list_selected_accent)s;
                 }
 
@@ -410,8 +416,30 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
     }
 
 
+def _is_live_qobject(widget) -> bool:
+    """Return whether a PySide wrapper still owns a live C++ QObject.
+
+    ``WeakSet`` only tracks Python-wrapper lifetime. PySide can keep that wrapper
+    alive briefly after Qt has already deleted the underlying ``SettingsDialog``.
+    Theme activation is transactional, so a stale wrapper must be removed before
+    it can abort an otherwise-valid live theme change.
+    """
+
+    if widget is None:
+        return False
+    if Shiboken is None:
+        return True
+    try:
+        return bool(Shiboken.isValid(widget))
+    except RuntimeError:
+        return False
+
+
 def _apply_theme_to_widget(widget, theme: SettingsThemeSpec) -> bool:
     """Apply one resolved theme to a registered Settings root."""
+
+    if not _is_live_qobject(widget):
+        return False
 
     stylesheet = _load_base_stylesheet()
     if stylesheet is None:
@@ -423,10 +451,24 @@ def _apply_theme_to_widget(widget, theme: SettingsThemeSpec) -> bool:
 
 
 def _refresh_registered_widgets(theme: SettingsThemeSpec) -> None:
-    """Re-render every live Settings root after an active-theme change."""
+    """Re-render every live Settings root after an active-theme change.
+
+    Dead PySide wrappers are pruned as an ownership cleanup, not treated as a
+    renderer failure. A RuntimeError from a still-valid QWidget remains fatal so
+    the runtime transaction can correctly roll the theme back.
+    """
 
     for widget in tuple(_THEMED_WIDGETS):
-        _apply_theme_to_widget(widget, theme)
+        if not _is_live_qobject(widget):
+            _THEMED_WIDGETS.discard(widget)
+            continue
+        try:
+            _apply_theme_to_widget(widget, theme)
+        except RuntimeError:
+            if not _is_live_qobject(widget):
+                _THEMED_WIDGETS.discard(widget)
+                continue
+            raise
 
 
 def load_theme(widget) -> None:

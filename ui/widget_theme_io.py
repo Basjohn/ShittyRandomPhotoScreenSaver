@@ -4,7 +4,7 @@ Mirrors ``ui/settings_theme_io.py``: a ``.srwtheme`` file is an optional
 serialized override, never required for the runtime to render. The compiled
 :data:`DEFAULT_DARK_WIDGET_THEME` is the unconditional safe fallback. The strict
 loader requires the complete core card/context role set and rejects unknown/mistyped
-roles whole. Schema-v2 specialized semantic roles are intentionally sparse: omitted
+roles whole. Schema-v3 specialized semantic roles are intentionally sparse: omitted
 optional roles inherit at runtime through ``ui.widget_visual_roles`` rather than being
 partially merged here. The safe loader converts every failure into Default Dark plus
 an error string.
@@ -26,7 +26,6 @@ from typing import Any
 
 from ui.settings_theme_spec import Rgba
 from ui.widget_theme_spec import (
-    CARD_MATERIAL_MODES,
     DEFAULT_DARK_WIDGET_THEME,
     WIDGET_THEME_CORE_COLOR_ROLES,
     WIDGET_THEME_SCHEMA_VERSION,
@@ -44,7 +43,6 @@ _TOP_LEVEL_KEYS = frozenset(
         "schema_version",
         "theme_id",
         "name",
-        "default_card_material_mode",
         "linked_settings_theme_id",
         "colors",
     }
@@ -143,7 +141,6 @@ def widget_theme_to_payload(theme: WidgetThemeSpec) -> dict[str, Any]:
         "schema_version": theme.schema_version,
         "theme_id": theme.theme_id,
         "name": theme.name,
-        "default_card_material_mode": theme.default_card_material_mode,
         "linked_settings_theme_id": theme.linked_settings_theme_id,
         "colors": {token: color.as_list() for token, color in theme.colors.items()},
     }
@@ -159,6 +156,14 @@ def widget_theme_from_payload(payload: Any) -> WidgetThemeSpec:
     """Strictly validate a decoded ``.srwtheme`` payload (whole or reject)."""
 
     obj = _expect_mapping(payload, "theme")
+    if "schema_version" not in obj:
+        raise _error("theme", "missing ['schema_version']")
+    schema_version = _expect_int(obj["schema_version"], "theme.schema_version")
+    if schema_version != WIDGET_THEME_SCHEMA_VERSION:
+        raise _error(
+            "theme.schema_version",
+            f"unsupported version {schema_version}; expected {WIDGET_THEME_SCHEMA_VERSION}",
+        )
     _expect_exact_keys(obj, _TOP_LEVEL_KEYS, "theme")
 
     file_format = obj["format"]
@@ -168,13 +173,6 @@ def widget_theme_from_payload(payload: Any) -> WidgetThemeSpec:
             f"expected {WIDGET_THEME_FILE_FORMAT!r}, got {file_format!r}",
         )
 
-    schema_version = _expect_int(obj["schema_version"], "theme.schema_version")
-    if schema_version not in {1, WIDGET_THEME_SCHEMA_VERSION}:
-        raise _error(
-            "theme.schema_version",
-            f"unsupported version {schema_version}; expected 1 or {WIDGET_THEME_SCHEMA_VERSION}",
-        )
-
     theme_id = obj["theme_id"]
     if not isinstance(theme_id, str) or not theme_id.strip():
         raise _error("theme.theme_id", "must be a non-empty string")
@@ -182,28 +180,20 @@ def widget_theme_from_payload(payload: Any) -> WidgetThemeSpec:
     name = obj["name"]
     if not isinstance(name, str) or not name.strip():
         raise _error("theme.name", "must be a non-empty string")
-
-    material = obj["default_card_material_mode"]
-    if not isinstance(material, str) or material.strip().lower() not in CARD_MATERIAL_MODES:
-        raise _error(
-            "theme.default_card_material_mode",
-            f"must be one of {sorted(CARD_MATERIAL_MODES)!r}",
-        )
+    name = name.strip()
 
     link = obj["linked_settings_theme_id"]
     if link is not None and (not isinstance(link, str) or not link.strip()):
         raise _error("theme.linked_settings_theme_id", "must be a string or null")
 
     raw_colors = _expect_mapping(obj["colors"], "colors")
-    # Core card/context roles remain whole-or-reject. Schema v2 adds a known sparse
-    # optional role vocabulary so themes can override only the surfaces they care
-    # about and inherit the rest. Schema-v1 payloads remain loadable and migrate to
-    # the current in-memory schema without inventing specialized colours.
+    # Core card/context roles remain whole-or-reject. Schema v3 retains the sparse
+    # optional role vocabulary introduced for specialized Widget semantics.
     _require_role_set(
         raw_colors,
         {role: None for role in WIDGET_THEME_CORE_COLOR_ROLES},
         "colors",
-        allow_optional=(schema_version >= 2),
+        allow_optional=True,
     )
     colors = {
         token: _rgba_from_payload(value, f"colors.{token}")
@@ -214,7 +204,6 @@ def widget_theme_from_payload(payload: Any) -> WidgetThemeSpec:
         return WidgetThemeSpec(
             theme_id=theme_id,
             name=name,
-            default_card_material_mode=material,
             linked_settings_theme_id=link,
             colors=colors,
             schema_version=WIDGET_THEME_SCHEMA_VERSION,

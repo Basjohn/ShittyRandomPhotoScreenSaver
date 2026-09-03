@@ -19,7 +19,6 @@ from ui.widget_theme_catalog import (
     set_current_widget_theme_catalog,
 )
 from ui.widget_theme_runtime import (
-    DEFAULT_CARD_MATERIAL_OVERRIDE,
     DEFAULT_KEEP_SYNCED,
     ResolvedWidgetTheme,
     WidgetThemeState,
@@ -65,18 +64,25 @@ def read_widget_theme_state(settings: WidgetThemeSelectionStore) -> WidgetThemeS
     selected = str(values.get("selected_id", DEFAULT_DARK_WIDGET_THEME_ID) or "").strip()
     if not selected:
         selected = DEFAULT_DARK_WIDGET_THEME_ID
-    override = str(
-        values.get("card_material_override", DEFAULT_CARD_MATERIAL_OVERRIDE) or ""
-    ).strip().lower()
-    if override not in {"theme", "normal", "glass", "acrylic"}:
-        override = DEFAULT_CARD_MATERIAL_OVERRIDE
     custom = values.get("custom")
-    return WidgetThemeState(
+    custom_payload = dict(custom) if isinstance(custom, Mapping) else None
+    migrated = "card_material_override" in values
+    if custom_payload is not None and custom_payload.get("schema_version") in {1, 2}:
+        # One-time state migration from the abandoned material-bearing Widget
+        # Theme schemas. Drop only that retired field and retain stable identity,
+        # link metadata, and every semantic colour. This is a migration, not a
+        # runtime fallback: the persisted root is immediately rewritten as v3.
+        custom_payload.pop("default_card_material_mode", None)
+        custom_payload["schema_version"] = 3
+        migrated = True
+    state = WidgetThemeState(
         selected_id=selected,
         keep_synced=_to_bool(values.get("keep_synced"), DEFAULT_KEEP_SYNCED),
-        card_material_override=override,
-        custom_payload=dict(custom) if isinstance(custom, Mapping) else None,
+        custom_payload=custom_payload,
     )
+    if migrated:
+        persist_widget_theme_state(settings, state)
+    return state
 
 
 def persist_widget_theme_state(
@@ -88,7 +94,6 @@ def persist_widget_theme_state(
         {
             "selected_id": state.selected_id,
             "keep_synced": bool(state.keep_synced),
-            "card_material_override": state.card_material_override,
             "custom": (
                 dict(state.custom_payload) if state.custom_payload is not None else None
             ),
@@ -115,6 +120,28 @@ def synced_widget_theme_id_for_settings(
     return None
 
 
+def synced_settings_theme_id_for_widget(
+    catalog: WidgetThemeCatalog,
+    widget_theme_id: str | None,
+) -> str | None:
+    """Resolve explicit Widget-theme -> Settings-theme link metadata.
+
+    This is the reverse half of the linked-theme contract. Runtime/UI code must
+    use the stored stable identity rather than matching display names. Custom has
+    no paired Settings identity and therefore cannot be selected while linking is
+    locked.
+    """
+
+    requested = str(widget_theme_id or "").strip()
+    if not requested:
+        return None
+    entry = catalog.entry_by_id(requested)
+    if entry is None:
+        return None
+    linked = entry.theme.linked_settings_theme_id
+    return str(linked).strip() if linked is not None else None
+
+
 def resolve_widget_theme_state(
     state: WidgetThemeState,
     *,
@@ -138,22 +165,14 @@ def activate_widget_theme_state(
     settings_theme_id: str | None = None,
     persist: bool = True,
 ) -> ResolvedWidgetTheme:
-    """Resolve + publish one configuration snapshot.
-
-    The retained renderer consumes exactly one already-resolved material enum.
-    Normal keeps the shared material Loader dormant; Glass/Acrylic use the one
-    lazy per-display backdrop authority and never create per-card capture owners.
-    """
+    """Resolve + publish one Widget Theme configuration snapshot."""
 
     resolved = resolve_widget_theme_state(
         state,
         catalog=catalog,
         settings_theme_id=settings_theme_id,
     )
-    set_active_widget_theme(
-        resolved.theme,
-        material_mode=resolved.effective_card_material_mode,
-    )
+    set_active_widget_theme(resolved.theme)
     if persist:
         persist_widget_theme_state(settings, state)
     return resolved
@@ -188,5 +207,6 @@ __all__ = [
     "persist_widget_theme_state",
     "read_widget_theme_state",
     "resolve_widget_theme_state",
+    "synced_settings_theme_id_for_widget",
     "synced_widget_theme_id_for_settings",
 ]

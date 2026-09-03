@@ -31,20 +31,6 @@ Item {
     property color submenuCheckedSurfaceColor: "#334e718b"
     property color submenuIndicatorBorderColor: "#b9eaff"
     property color submenuIndicatorFillColor: "#82cdff"
-    property string materialMode: "normal"
-
-    function materialSurfaceTint(baseColor) {
-        if (materialMode === "glass") {
-            const alpha = Math.max(0.10, Math.min(0.36, baseColor.a * 0.75))
-            return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, alpha)
-        }
-        if (materialMode === "acrylic") {
-            const alpha = Math.max(0.25, Math.min(0.68, baseColor.a))
-            return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, alpha)
-        }
-        return baseColor
-    }
-
     readonly property real shadowBaseLeft: Math.max(0.0, -shadowOffsetX)
     readonly property real shadowBaseTop: Math.max(0.0, -shadowOffsetY)
     readonly property real shadowBaseRight: Math.max(0.0, shadowOffsetX)
@@ -52,34 +38,6 @@ Item {
     property int activeSubmenuIndex: -1
     readonly property real menuWidth: 292.0
     readonly property real menuHeight: menuColumn.implicitHeight + 16.0
-    readonly property real materialSurfaceX: menuSurface.x
-    readonly property real materialSurfaceY: menuSurface.y
-    readonly property real materialSurfaceWidth: menuSurface.width
-    readonly property real materialSurfaceHeight: menuSurface.height
-    readonly property real materialSurfaceRadius: menuSurface.radius
-    readonly property var activeSubmenuRow: activeSubmenuIndex >= 0
-        ? menuRepeater.itemAt(activeSubmenuIndex)
-        : null
-    readonly property var activeSubmenuSurface: activeSubmenuRow
-        ? activeSubmenuRow.materialSubmenuSurface
-        : null
-    readonly property bool materialSubmenuVisible: !!activeSubmenuSurface
-        && activeSubmenuSurface.visible
-    readonly property real materialSubmenuX: activeSubmenuSurface
-        ? menuSurface.x + menuColumn.x + activeSubmenuRow.x + activeSubmenuSurface.x
-        : 0.0
-    readonly property real materialSubmenuY: activeSubmenuSurface
-        ? menuSurface.y + menuColumn.y + activeSubmenuRow.y + activeSubmenuSurface.y
-        : 0.0
-    readonly property real materialSubmenuWidth: activeSubmenuSurface
-        ? activeSubmenuSurface.width
-        : 0.0
-    readonly property real materialSubmenuHeight: activeSubmenuSurface
-        ? activeSubmenuSurface.height
-        : 0.0
-    readonly property real materialSubmenuRadius: activeSubmenuSurface
-        ? activeSubmenuSurface.radius
-        : 0.0
 
     anchors.fill: parent
     visible: contextMenuModel !== null && contextMenuModel.menuVisible
@@ -146,7 +104,7 @@ Item {
                 menuRoot.height - height - 4.0
             )
         )
-        color: menuRoot.materialSurfaceTint(menuRoot.surfaceColor)
+        color: menuRoot.surfaceColor
         radius: 10.0
         border.color: menuRoot.borderColor
         border.width: 3.0
@@ -167,7 +125,6 @@ Item {
                     id: menuRow
                     required property var modelData
                     required property int index
-                    property alias materialSubmenuSurface: submenuSurface
                     width: menuColumn.width
                     height: modelData.kind === "separator" ? 7.0 : 38.0
 
@@ -180,6 +137,7 @@ Item {
                         Qt.callLater(function() {
                             if (menuRoot.activeSubmenuIndex === menuRow.index
                                     && !rowHover.hovered
+                                    && !submenuCorridorHover.hovered
                                     && !submenuSurfaceHover.hovered)
                                 menuRoot.activeSubmenuIndex = -1
                         })
@@ -288,6 +246,38 @@ Item {
                         }
                     }
 
+                    // Narrow transparent ownership bridge between the parent row
+                    // and its submenu. It is event-driven pointer geometry, not a
+                    // timer: the submenu stays open only while the cursor is on the
+                    // parent, this short crossing corridor, or the submenu itself.
+                    Item {
+                        id: submenuPointerCorridor
+                        readonly property real overlap: 5.0
+                        visible: menuRow.modelData.kind === "submenu"
+                            && menuRoot.activeSubmenuIndex === menuRow.index
+                        x: submenuSurface.x >= 0.0
+                            ? rowSurface.x + rowSurface.width - overlap
+                            : submenuSurface.x + submenuSurface.width - overlap
+                        width: submenuSurface.x >= 0.0
+                            ? Math.max(0.0, submenuSurface.x - x + overlap)
+                            : Math.max(0.0, rowSurface.x - x + overlap)
+                        y: Math.min(rowSurface.y, submenuSurface.y)
+                        height: Math.max(
+                            rowSurface.y + rowSurface.height,
+                            submenuSurface.y + submenuSurface.height
+                        ) - y
+                        z: 19
+
+                        HoverHandler {
+                            id: submenuCorridorHover
+                            enabled: submenuPointerCorridor.visible
+                            onHoveredChanged: {
+                                if (!hovered)
+                                    menuRow.dismissSubmenuIfPointerLeftPath()
+                            }
+                        }
+                    }
+
                     Rectangle {
                         id: submenuSurface
                         objectName: "retainedContextSubmenu"
@@ -305,7 +295,7 @@ Item {
                         )
                         width: 244.0
                         height: submenuColumn.implicitHeight + 12.0
-                        color: menuRoot.materialSurfaceTint(menuRoot.submenuSurfaceColor)
+                        color: menuRoot.submenuSurfaceColor
                         radius: 8.0
                         border.color: menuRoot.submenuBorderColor
                         border.width: 3.0

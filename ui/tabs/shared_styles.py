@@ -1305,6 +1305,38 @@ def _build_mode_toggle_button_style() -> str:
 MODE_TOGGLE_BUTTON_STYLE = _build_mode_toggle_button_style()
 
 
+def _build_theme_link_button_style() -> str:
+    """Compact linked-theme control using the same semantic button vocabulary.
+
+    The control is intentionally about 20% smaller than the general mode toggle:
+    it is a relationship affordance on both theme pages, not a primary mode pill.
+    """
+
+    return (
+        "QPushButton {"
+        f" background-color: {_theme_qss_color('control.mode.surface')};"
+        f" color: {_theme_qss_color('control.mode.text')};"
+        f" border: 2px solid {_theme_qss_color('control.mode.border')};"
+        " border-radius: 14px; padding: 7px 16px;"
+        " font-weight: 600; min-height: 14px;"
+        " }"
+        "QPushButton:hover {"
+        f" background-color: {_theme_qss_color('control.mode.hover_surface')};"
+        " }"
+        "QPushButton:checked {"
+        f" background-color: {_theme_qss_color('control.mode.checked_surface')};"
+        f" border-color: {_theme_qss_color('control.mode.checked_border')};"
+        " }"
+        "QPushButton:disabled {"
+        f" color: {_theme_qss_color('control.mode.disabled_text')};"
+        f" border-color: {_theme_qss_color('control.mode.disabled_border')};"
+        " }"
+    )
+
+
+THEME_LINK_BUTTON_STYLE = _build_theme_link_button_style()
+
+
 def _build_text_secondary_color_style() -> str:
     return f"color: {_theme_qss_color('text.secondary')};"
 
