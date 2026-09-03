@@ -53,6 +53,43 @@ def test_header_family_swatch_controls_are_retired() -> None:
         assert '_header_border_color_btn = ColorSwatchButton' not in source, relative
 
 
+def test_retired_header_swatches_have_no_phantom_runtime_expectations() -> None:
+    # Persistence colour *values* intentionally survive the compatibility horizon;
+    # GUI button/control names do not. A stale descriptor/finalize/load reference
+    # previously crashed Settings after the header controls were rehosted.
+    retired_button_names = (
+        "media_header_fill_color_btn",
+        "media_header_text_color_btn",
+        "media_header_border_color_btn",
+        "reddit_header_fill_color_btn",
+        "reddit_header_text_color_btn",
+        "reddit_header_border_color_btn",
+        "gmail_header_fill_color_btn",
+        "gmail_header_text_color_btn",
+        "gmail_header_border_color_btn",
+        "achievement_pulse_header_fill_color_btn",
+        "achievement_pulse_header_text_color_btn",
+        "achievement_pulse_header_border_color_btn",
+        "abandonment_issues_header_fill_color_btn",
+        "abandonment_issues_header_text_color_btn",
+        "abandonment_issues_header_border_color_btn",
+    )
+    audited = {
+        "rendering/widget_descriptors.py": _text("rendering/widget_descriptors.py"),
+        "ui/tabs/widgets_tab_media.py": _text("ui/tabs/widgets_tab_media.py"),
+        "ui/tabs/widgets_tab_reddit.py": _text("ui/tabs/widgets_tab_reddit.py"),
+        "ui/tabs/widgets_tab_gmail.py": _text("ui/tabs/widgets_tab_gmail.py"),
+        "ui/tabs/widgets_tab_steam.py": _text("ui/tabs/widgets_tab_steam.py"),
+    }
+    for relative, source in audited.items():
+        for name in retired_button_names:
+            assert name not in source, (relative, name)
+
+    media = audited["ui/tabs/widgets_tab_media.py"]
+    assert "header_toggle" not in media
+    assert "header_body" not in media
+
+
 def test_reset_scope_covers_every_ordinary_theme_family_but_not_visualizer() -> None:
     source = _text("ui/tabs/widgets_tab_defaults.py")
     for section in (

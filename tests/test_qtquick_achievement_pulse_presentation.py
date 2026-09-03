@@ -467,12 +467,16 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app, tmp_path) 
         assert metric.x() == pytest.approx(411.0)
         assert artwork.x() + artwork.width() / 2.0 == pytest.approx(491.0)
         assert metric.x() + metric.width() / 2.0 == pytest.approx(491.0)
-        assert (
-            latest_badge.x(),
-            latest_badge.y(),
-            latest_badge.width(),
-            latest_badge.height(),
-        ) == (130.0, 130.0, 40.0, 40.0)
+        assert latest_badge.y() == pytest.approx(130.0)
+        assert latest_badge.width() == pytest.approx(40.0)
+        assert latest_badge.height() == pytest.approx(40.0)
+        # Badge starts materially left of the old fixed x=130 rail but is allowed
+        # to move right when the rendered smaller unlock strings require room.
+        assert latest_badge.x() < 130.0
+        assert latest_badge.x() >= 102.0
+        assert latest_badge.x() >= (
+            second_unlock.x() + second_unlock.implicitWidth() + 8.0 - 0.5
+        )
         assert first_unlock.width() > second_unlock.width()
         assert str(metric.property("text")).startswith("Unlocked: ")
         assert metric.y() == pytest.approx(216.0)

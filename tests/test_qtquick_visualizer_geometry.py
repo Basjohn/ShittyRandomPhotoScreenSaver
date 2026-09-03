@@ -63,10 +63,10 @@ def test_uniform_scale_changes_shell_and_viewport_coherently() -> None:
     assert state.outer_rect == (40.0, 60.0, 630.0, 420.0)
     assert state.uniform_visual_scale == 1.5
     assert state.current_aspect_ratio == 1.5
-    assert state.border_width == 6.0
-    assert state.content_rect == (49.0, 69.0, 612.0, 402.0)
+    assert state.border_width == 5.0
+    assert state.content_rect == (48.0, 68.0, 614.0, 404.0)
     assert state.shell_style["corner_radius"] == 12.0
-    assert state.shell_style["inner_corner_radius"] == 3.0
+    assert state.shell_style["inner_corner_radius"] == 4.0
     assert state.shell_style["content_inset"] == 3.0
     assert state.shell_style["shadow_blur"] == 27.0
     assert state.shell_style["shadow_offset"] == (3.0, 6.0)
@@ -99,7 +99,9 @@ def test_retained_uniform_resize_preserves_viewport_and_rescales_authored_chrome
     assert resized.outer_rect == pytest.approx(
         (120.0, 90.0, 420.0 * target_scale, 280.0 * target_scale)
     )
-    assert resized.border_width == pytest.approx(4.0 * target_scale)
+    assert resized.border_width == pytest.approx(
+        max(1.0, 4.0 + max(-1.0, min(1.0, (target_scale - 1.0) * 2.0)))
+    )
     assert resized.shell_style["shadow_blur"] == pytest.approx(
         18.0 * target_scale
     )
@@ -150,7 +152,7 @@ def test_edge_reproject_changes_extent_only_without_touching_uniform_scale(
     assert reprojected.baseline_viewport_size == (420.0, 280.0)
     assert reprojected.baseline_aspect_ratio == 1.5
     # Authored chrome remains scaled by uniform scale only, never by aspect.
-    assert reprojected.border_width == pytest.approx(4.0 * 1.5)
+    assert reprojected.border_width == pytest.approx(5.0)
     assert reprojected.shell_style["shadow_blur"] == pytest.approx(18.0 * 1.5)
 
 
@@ -202,6 +204,40 @@ def test_uniform_reproject_preserves_a_previously_committed_custom_extent() -> N
     assert resized.outer_rect == pytest.approx(
         (80.0, 80.0, 420.0 * 1.5, 560.0 * 1.5)
     )
+
+
+def test_repeated_screen_fit_and_reproject_never_compound_visualizer_border_thinness() -> None:
+    policy = get_visualizer_presentation_policy("bubble")
+    state = resolve_visualizer_presentation(
+        policy=policy,
+        display_size=(300.0, 200.0),
+        outer_origin=(0.0, 0.0),
+        border_width=4.0,
+    )
+
+    # Small-display screen fit may reduce the card but the visible frame stays
+    # comfortably above the authored-minus-one floor.
+    assert state.uniform_visual_scale == pytest.approx(5.0 / 7.0)
+    assert state.border_width >= 3.0
+    assert state.shell_style["authored_border_width"] == pytest.approx(4.0)
+
+    # Reproject the already-fitted presentation repeatedly, including onto a
+    # larger display. Border authority comes from the retained authored scalar,
+    # not from reverse-scaling the previously clamped visible result.
+    for display, factor in (
+        ((300.0, 200.0), 0.8),
+        ((2560.0, 1440.0), 1.0),
+        ((2560.0, 1440.0), 1.6),
+        ((300.0, 200.0), 1.0),
+    ):
+        state = resize_visualizer_presentation_uniformly(
+            state,
+            display_size=display,
+            outer_origin=(0.0, 0.0),
+            relative_scale=factor,
+        )
+        assert state.border_width >= 3.0
+        assert state.shell_style["authored_border_width"] == pytest.approx(4.0)
 
 
 def test_screen_fit_reduces_uniformly_and_clamps_display_local_origin() -> None:

@@ -333,9 +333,30 @@ OverlayWidget {
                         || latestArtworkImage.transitionVisible)
                     && unlockRepeater.count > 0
                 // Historical hierarchy: the badge belongs to the unlock stack,
-                // not to the game-cover rail.  Its top starts immediately below
+                // not to the game-cover rail. Its top starts immediately below
                 // the large first unlock line; no extra line spacing is reserved.
-                x: 130.0
+                // Keep the badge close to the smaller unlock text by default,
+                // pushing it right only when an actual rendered line needs room.
+                // This replaces the old fixed x=130 rail without coupling the
+                // badge to the unrelated game-cover/artwork column.
+                readonly property real baseRailX: 102.0
+                readonly property real textClearance: 8.0
+                function resolvedRailX() {
+                    let required = baseRailX
+                    for (let row = 1; row < unlockRepeater.count; ++row) {
+                        const unlockItem = unlockRepeater.itemAt(row)
+                        if (unlockItem !== null)
+                            required = Math.max(
+                                required,
+                                unlockItem.x + unlockItem.implicitWidth + textClearance
+                            )
+                    }
+                    return Math.min(
+                        required,
+                        Math.max(18.0, normalContent.titleWidth - width)
+                    )
+                }
+                x: resolvedRailX()
                 y: 130.0
                 width: 40.0
                 height: 40.0
