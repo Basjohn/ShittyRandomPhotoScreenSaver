@@ -340,6 +340,47 @@ Net: E2-as-scoped (fresh source -> retained presentation) is **healthy**; the re
 resume latency is capture-wake (a separate lane) plus load. No presentation-path fix is warranted on
 this evidence.
 
+#### Capture-wake lane audit (2026-09-04, source + run logs)
+
+Where the warm-resume `edge->T3` med ~66 ms goes (the only material residual):
+
+- **`wake()` has no avoidable cost.** It restarts capture *only when stale*
+  (`is_capture_stale`/`is_capture_healthy`); a warm resume within the 6 s
+  `_capture_keepalive_grace` leaves a healthy stream running, so wake is a no-op
+  beyond `ensure_started()` + a `_last_smooth_ts` reset. `set_playback_state` is O(1).
+- **The analysis path is not the owner.** `[AUDIO_LANE]` for the run reports
+  `completed == published == logical_steps`, `rejected_busy=0`, `executor_tasks=0` —
+  analysis runs inline on the logical thread (GIL-releasing numpy), keeps up every
+  step, and never backlogs. There is no cold-pipeline or executor-handoff cost to
+  shave.
+- **The dominant component is the OS audio capture delivering the first frame captured
+  *after* the resume edge.** Capture is WASAPI shared-mode `sample_rate=48000` with a
+  backend-negotiated block; both the E1 commit-seq fence and the T3 freshness rule
+  require a *post-edge* frame, so the floor is `~block period + WASAPI shared-mode
+  capture latency + one tick`. On top of that this run carried `cpu_main_pct ~80-108 %`,
+  which delays the capture-callback/tick observation — a large part of the 66 ms
+  median (and essentially all of the 162 ms max) is contention, not a steady floor.
+
+**Reducibility (against the absolute no-stale / no-first-frame-poison / no-downstream-
+staleness constraint):** the residual is inherent OS capture latency plus load, and E1
+already converts that window from a stale-energy flash into a correct quiet-then-fresh
+hold. It is **not safely reducible** in the app:
+
+- lowering the audio block would cut the block-period term but raises callback/CPU
+  overhead — a **user-facing latency/CPU tradeoff** (`audio_block_size` setting), not an
+  architectural fix, and not to be changed unilaterally;
+- warming the analysis lane during pause (dispatching on drained frames) would save
+  almost nothing (the lane already keeps up) while adding pause-time CPU **and**
+  re-opening exactly the pause-boundary first-frame-poison risk the fencing exists to
+  prevent — rejected;
+- anything that shows a pre-edge frame sooner is accepting stale — forbidden.
+
+**Recommendation: close the capture-wake lane as attributed-not-reducible.** The
+first-fresh-frame-after-resume latency is correct and fresh; do not touch the wake/
+capture path. A quieter repeat run (no `--usage`, normal load) would confirm how much
+of the 66 ms is contention vs. the inherent floor, but changes nothing about the
+recommendation.
+
 ### Resource observation — not yet leak evidence
 
 Across this short multi-recreation run, RSS/USS/private bytes and tracked cache bytes moved materially with image/cache/recreation activity but did not show a simple monotonic leak signature. Thread/handle counts also settled rather than rising every sample. A four-minute run cannot prove plateau safety; retain the dedicated soak/resource-plateau task.
