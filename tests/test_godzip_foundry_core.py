@@ -73,7 +73,30 @@ def test_manifest_archive_records_dirty_source_and_never_implies_deletion(tmp_pa
     assert all(entry.sha256 for entry in inspection.files)
 
 
-def test_proven_older_archive_requires_override_and_preserves_rollback_and_debris(
+def test_older_baseline_with_unrelated_new_commit_is_compatible_and_not_blocked(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    (repo / "tracked.txt").write_text("archive version\n", encoding="utf-8")
+    archive = tmp_path / "GODZIP_test.zip"
+    core.create_godzip(repo, ["tracked.txt"], archive)
+
+    # Advance HEAD in an unrelated path. The archive bytes are not made stale by this.
+    (repo / "unrelated.txt").write_text("newer commit\n", encoding="utf-8")
+    _git(repo, "add", "unrelated.txt")
+    _git(repo, "commit", "-m", "unrelated advance")
+
+    inspection = core.inspect_godzip(repo, archive)
+    assert inspection.baseline_relation == "older"
+    assert inspection.relation == "compatible"
+    assert inspection.history_overlap_paths == []
+    assert inspection.selection_requires_history_ack(["tracked.txt"]) is False
+
+    (repo / "tracked.txt").write_text("local pre-apply\n", encoding="utf-8")
+    result = core.apply_godzip(repo, inspection, ["tracked.txt"])
+    assert result.replaced == 1
+    assert (repo / "tracked.txt").read_text(encoding="utf-8") == "archive version\n"
+
+
+def test_older_baseline_target_overlap_requires_review_and_preserves_rollback_and_debris(
     tmp_path: Path,
 ) -> None:
     repo = _repo(tmp_path)
@@ -94,9 +117,13 @@ def test_proven_older_archive_requires_override_and_preserves_rollback_and_debri
     _git(repo, "commit", "-m", "advance")
 
     inspection = core.inspect_godzip(repo, archive)
-    assert inspection.proven_older is True
+    assert inspection.baseline_relation == "older"
+    assert inspection.relation == "conflict"
+    assert inspection.history_overlap_paths == ["tracked.txt"]
+    assert inspection.selection_requires_history_ack(["tracked.txt"]) is True
+    assert inspection.selection_requires_history_ack(["new.txt"]) is False
 
-    with pytest.raises(core.GodzipError, match="proven older"):
+    with pytest.raises(core.GodzipError, match="explicit review"):
         core.apply_godzip(
             repo,
             inspection,
@@ -109,7 +136,7 @@ def test_proven_older_archive_requires_override_and_preserves_rollback_and_debri
         inspection,
         ["tracked.txt", "new.txt"],
         selected_debris=["obsolete.txt"],
-        allow_proven_older=True,
+        allow_history_conflict=True,
     )
 
     assert (repo / "tracked.txt").read_text(encoding="utf-8") == "archive version\n"
@@ -119,6 +146,12 @@ def test_proven_older_archive_requires_override_and_preserves_rollback_and_debri
     assert (result.backup_dir / "tracked.txt").read_text(encoding="utf-8") == "newer local version\n"
     assert result.debris_dir is not None
     assert (result.debris_dir / "obsolete.txt").read_text(encoding="utf-8") == "move me\n"
+
+
+def test_internal_git_subprocesses_are_hidden_on_windows(monkeypatch) -> None:
+    monkeypatch.setattr(core.os, "name", "nt")
+    kwargs = core._hidden_subprocess_kwargs()
+    assert kwargs["creationflags"] & int(getattr(core.subprocess, "CREATE_NO_WINDOW", 0x08000000))
 
 
 def test_legacy_zip_is_unknown_age_and_has_no_implicit_debris(tmp_path: Path) -> None:
@@ -144,6 +177,24 @@ def test_ui_persists_preferences_repo_locally_not_in_global_appdata() -> None:
     assert "AppData" not in source
     assert "SRPSSGodZIP.ico" in source
     assert "QTimer.singleShot(0, self.refresh)" not in source
+    assert "QApplication.processEvents()" not in source
+
+
+
+def test_reserved_godzip_metadata_can_be_moved_as_debris_but_not_replaced(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    metadata = repo / ".godzip" / "manifest.json"
+    metadata.parent.mkdir()
+    metadata.write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(core.GodzipError, match="Reserved path"):
+        core.validate_repo_relpath(".godzip/manifest.json")
+
+    assert core.validate_debris_relpath(".godzip/manifest.json") == ".godzip/manifest.json"
+    moved_root, count = core.move_paths_to_deleteme(repo, [".godzip/manifest.json"], label="metadata")
+    assert count == 1
+    assert not metadata.exists()
+    assert (moved_root / ".godzip" / "manifest.json").is_file()
 
 
 def test_workflow_defaults_keep_docs_and_direct_tests_but_not_payload_trees() -> None:

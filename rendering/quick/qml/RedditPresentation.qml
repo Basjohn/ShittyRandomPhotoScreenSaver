@@ -199,7 +199,11 @@ OverlayWidget {
                         id: ageAgoText
                         objectName: "redditPostAgeAgo_" + postRow.index
                         anchors.right: parent.right
-                        anchors.rightMargin: 3.0
+                        // Keep the AGO labels as one rigid vertical column, but
+                        // pull that column modestly toward the age value. The
+                        // title rail remains anchored to ageText.right, so this
+                        // only tightens the intentional value <-> AGO gap.
+                        anchors.rightMargin: 15.0
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.max(30.0, parent.width * 0.36)
                         height: parent.height

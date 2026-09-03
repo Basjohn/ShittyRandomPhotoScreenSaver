@@ -409,7 +409,7 @@ class Panel(QFrame):
 
 class RelationBanner(QLabel):
     def set_relation(self, relation: str, text: str) -> None:
-        relation = relation if relation in {"same", "newer", "older", "diverged", "unknown"} else "unknown"
+        relation = relation if relation in {"same", "compatible", "conflict", "future", "diverged", "unknown"} else "unknown"
         self.setProperty("relation", relation)
         self.setText(text)
         self.style().unpolish(self)
@@ -680,7 +680,7 @@ class ApplyTab(QWidget):
             chips.addWidget(chip)
         chips.addStretch(1)
         info_l.addLayout(chips)
-        self.relation = RelationBanner("Archive age cannot be proven.")
+        self.relation = RelationBanner("Archive baseline applicability cannot be proven.")
         self.relation.setWordWrap(True)
         info_l.addWidget(self.relation)
         self.warning_label = QLabel("")
@@ -726,11 +726,11 @@ class ApplyTab(QWidget):
         opts.addWidget(self.include_debris)
         opts.addStretch(1)
         btm.addLayout(opts)
-        self.older_ack = QCheckBox("I understand this archive is PROVEN OLDER than local HEAD")
-        self.older_ack.setObjectName("dangerCheck")
-        self.older_ack.hide()
-        self.older_ack.toggled.connect(self._update_apply_summary)
-        btm.addWidget(self.older_ack)
+        self.history_ack = QCheckBox("I reviewed the selected commit-history overlap")
+        self.history_ack.setObjectName("dangerCheck")
+        self.history_ack.hide()
+        self.history_ack.toggled.connect(self._update_apply_summary)
+        btm.addWidget(self.history_ack)
         row = QHBoxLayout()
         self.summary = QLabel("Load a GODZIP to inspect it.")
         self.summary.setObjectName("muted")
@@ -835,9 +835,9 @@ class ApplyTab(QWidget):
         assert inspection is not None
         self.archive_label.setText(str(inspection.zip_path))
         self.kind_chip.setText("LEGACY / UNMANIFESTED" if inspection.legacy else "MANIFEST v1")
-        self.head_chip.setText(f"source {inspection.source_head[:10] if inspection.source_head else 'unknown'}")
+        self.head_chip.setText(f"baseline {inspection.source_head[:10] if inspection.source_head else 'unknown'}")
         self.branch_chip.setText(f"branch {inspection.source_branch or 'unknown'}")
-        self.dirty_chip.setText("source DIRTY" if inspection.dirty_worktree else "source clean")
+        self.dirty_chip.setText("archive from DIRTY worktree" if inspection.dirty_worktree else "archive source clean")
         self.relation.set_relation(inspection.relation, inspection.relation_detail)
         warnings = list(inspection.warnings)
         dirty_count = sum(1 for item in inspection.files if item.local_state == "LOCAL DIRTY")
@@ -854,14 +854,17 @@ class ApplyTab(QWidget):
         self.strip_wrapper.blockSignals(False)
 
         self.tree.clear()
+        overlap = {path.casefold() for path in inspection.history_overlap_paths}
         for entry in inspection.files:
+            committed_overlap = entry.target_path.casefold() in overlap
+            state_text = entry.local_state + (" + COMMITTED SINCE BASE" if committed_overlap else "")
             item = self.tree.add_path(
                 entry.target_path,
-                [entry.target_path, entry.local_state, human_size(entry.size), entry.sha256[:12]],
+                [entry.target_path, state_text, human_size(entry.size), entry.sha256[:12]],
                 checked=entry.default_selected,
                 payload=entry,
             )
-            if entry.local_state == "LOCAL DIRTY":
+            if entry.local_state == "LOCAL DIRTY" or committed_overlap:
                 for col in range(self.tree.columnCount()):
                     item.setForeground(col, QColor(COLORS["red"]))
             elif entry.local_state == "NEW":
@@ -869,8 +872,10 @@ class ApplyTab(QWidget):
             elif entry.local_state == "SAME":
                 item.setForeground(1, QColor(COLORS["faint"]))
         self.tree.expandToDepth(0)
-        self.older_ack.setVisible(inspection.proven_older)
-        self.older_ack.setChecked(False)
+        self.history_ack.blockSignals(True)
+        self.history_ack.setChecked(False)
+        self.history_ack.hide()
+        self.history_ack.blockSignals(False)
         self.include_debris.setVisible(bool(inspection.debris))
         self.include_debris.setText(
             f"Apply checked archive debris moves ({len(inspection.debris)}) — review in Debris tab"
@@ -911,8 +916,29 @@ class ApplyTab(QWidget):
             + (f" · {dirty} LOCAL DIRTY" if dirty else "")
             + (f" · {len(debris)} debris move(s)" if debris else "")
         )
-        age_ok = not inspection.proven_older or self.older_ack.isChecked()
-        self.apply_button.setEnabled(bool(chosen or debris) and age_ok)
+        history_ack_required = inspection.selection_requires_history_ack(checked, debris)
+        self.history_ack.blockSignals(True)
+        try:
+            self.history_ack.setVisible(history_ack_required)
+            if history_ack_required:
+                if inspection.baseline_relation == "older":
+                    overlap_count = len(
+                        ({path.casefold() for path in checked} | {path.casefold() for path in debris})
+                        & {path.casefold() for path in inspection.history_overlap_paths}
+                    )
+                    self.history_ack.setText(
+                        f"I reviewed {overlap_count} selected target(s) changed by commits after the archive baseline"
+                    )
+                elif inspection.baseline_relation == "newer":
+                    self.history_ack.setText("I understand this archive was built on a newer baseline than my local HEAD")
+                else:
+                    self.history_ack.setText("I reviewed the selected targets against diverged commit history")
+            elif self.history_ack.isChecked():
+                self.history_ack.setChecked(False)
+        finally:
+            self.history_ack.blockSignals(False)
+        history_ok = not history_ack_required or self.history_ack.isChecked()
+        self.apply_button.setEnabled(bool(chosen or debris) and history_ok)
 
     def apply_selected(self) -> None:
         inspection = self.inspection
@@ -936,8 +962,18 @@ class ApplyTab(QWidget):
             lines.append(f"Move {len(debris)} manifest debris path(s) into /deleteme.")
         if dirty:
             lines.append(f"WARNING: {len(dirty)} selected target(s) contain local uncommitted changes.")
-        if inspection.proven_older:
-            lines.append("WARNING: this archive is PROVEN OLDER than local HEAD.")
+        if inspection.selection_requires_history_ack(selected, debris):
+            if inspection.baseline_relation == "older":
+                selected_overlap = (
+                    {path.casefold() for path in selected} | {path.casefold() for path in debris}
+                ) & {path.casefold() for path in inspection.history_overlap_paths}
+                lines.append(
+                    f"WARNING: {len(selected_overlap)} selected target(s) were also changed by commits after the archive baseline."
+                )
+            elif inspection.baseline_relation == "newer":
+                lines.append("WARNING: this archive was built on a newer baseline than local HEAD.")
+            else:
+                lines.append("WARNING: archive baseline and local HEAD have diverged.")
         lines.append("Missing archive files are NEVER interpreted as deletions.")
         answer = QMessageBox.warning(
             self,
@@ -956,7 +992,7 @@ class ApplyTab(QWidget):
                 selected,
                 selected_debris=debris,
                 create_rollback_snapshot=self.rollback.isChecked(),
-                allow_proven_older=self.older_ack.isChecked(),
+                allow_history_conflict=self.history_ack.isChecked(),
             )
             detail = (
                 f"Replaced: {result.replaced}\n"
@@ -2164,7 +2200,7 @@ class RunTab(QWidget):
 class GodzipFoundryWindow(QMainWindow):
     def __init__(self, repo_root: Path, initial_zip: Path | None = None) -> None:
         super().__init__()
-        self.repo_root = discover_repo_root(repo_root)
+        self.repo_root = repo_root.expanduser().resolve()
         self.setWindowTitle(APP_TITLE)
         self.setAcceptDrops(True)
         self.setMinimumSize(900, 680)
@@ -2376,8 +2412,6 @@ class GodzipFoundryWindow(QMainWindow):
         self.busy.setVisible(busy)
         if busy:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-            if self.isVisible():
-                QApplication.processEvents()
         else:
             while QApplication.overrideCursor() is not None:
                 QApplication.restoreOverrideCursor()
@@ -2467,9 +2501,10 @@ class GodzipFoundryWindow(QMainWindow):
             QProgressBar {{ background: #0e1517; border: 1px solid {c['border']}; border-radius: 4px; text-align: center; }}
             QProgressBar::chunk {{ background: {c['amber_dark']}; }}
             QLabel[relation="same"] {{ color: {c['green']}; background: #15231f; border: 1px solid {c['green']}; border-radius: 5px; padding: 7px; font-weight: 650; }}
-            QLabel[relation="newer"] {{ color: {c['green']}; background: #15231f; border: 1px solid {c['green']}; border-radius: 5px; padding: 7px; font-weight: 650; }}
-            QLabel[relation="older"] {{ color: {c['red']}; background: #2d1717; border: 1px solid {c['red']}; border-radius: 5px; padding: 7px; font-weight: 800; }}
-            QLabel[relation="diverged"] {{ color: {c['amber']}; background: #2a2114; border: 1px solid {c['amber']}; border-radius: 5px; padding: 7px; font-weight: 750; }}
+            QLabel[relation="compatible"] {{ color: {c['green']}; background: #15231f; border: 1px solid {c['green']}; border-radius: 5px; padding: 7px; font-weight: 650; }}
+            QLabel[relation="conflict"] {{ color: {c['red']}; background: #2d1717; border: 1px solid {c['red']}; border-radius: 5px; padding: 7px; font-weight: 800; }}
+            QLabel[relation="future"] {{ color: {c['amber']}; background: #2a2114; border: 1px solid {c['amber']}; border-radius: 5px; padding: 7px; font-weight: 750; }}
+            QLabel[relation="diverged"] {{ color: {c['red']}; background: #2d1717; border: 1px solid {c['red']}; border-radius: 5px; padding: 7px; font-weight: 800; }}
             QLabel[relation="unknown"] {{ color: {c['amber']}; background: #241d12; border: 1px solid {c['amber_dark']}; border-radius: 5px; padding: 7px; }}
             QToolTip {{ color: {c['text']}; background: {c['panel_alt']}; border: 1px solid {c['amber_dark']}; padding: 5px; }}
             """
