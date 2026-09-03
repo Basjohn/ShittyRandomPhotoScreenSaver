@@ -22,18 +22,28 @@ from typing import Any, Callable
 from core.settings.visualizer_mode_registry import (
     coerce_visualizer_mode_id,
     iter_visualizer_mode_descriptors,
+    resolve_effective_enabled_modes,
 )
 
 
-def next_visualizer_mode_id(current_mode_id: str) -> str:
-    """Return the next visualizer mode id in canonical registry order.
+def next_visualizer_mode_id(
+    current_mode_id: str,
+    enabled_modes: object = None,
+) -> str:
+    """Return the next visualizer mode id, cycling only enabled modes.
 
-    Mirrors the legacy ``mode_transition.cycle_mode`` order exactly: registry
-    descriptor order, wrapping ``(idx + 1) % len``. An unknown current id starts
-    the cycle at the first mode.
+    Mirrors the legacy ``mode_transition.cycle_mode`` order exactly: canonical
+    descriptor order, wrapping ``(idx + 1) % len``. When ``enabled_modes`` is
+    given, cycling is restricted to that effective enabled set (V3) so a disabled
+    mode is never reachable by cycling; when it is ``None`` the full registered
+    active set is used (legacy callers / no enable-state context). An unknown
+    current id starts the cycle at the first mode.
     """
 
-    ids = tuple(desc.mode_id for desc in iter_visualizer_mode_descriptors())
+    if enabled_modes is None:
+        ids = tuple(desc.mode_id for desc in iter_visualizer_mode_descriptors())
+    else:
+        ids = resolve_effective_enabled_modes(enabled_modes)
     if not ids:
         return coerce_visualizer_mode_id(current_mode_id)
     current = coerce_visualizer_mode_id(current_mode_id)
