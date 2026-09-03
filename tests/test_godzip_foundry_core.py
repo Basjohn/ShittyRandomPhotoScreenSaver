@@ -543,3 +543,25 @@ def test_run_tab_is_last_and_remains_repo_local() -> None:
     assert "WM_SETICON" not in source  # numeric native message kept implementation-local, no shell command fallback
     assert "LOCALAPPDATA" not in source
     assert "AppData" not in source
+
+
+def test_run_auto_logzip_waits_for_process_exit_without_polling_and_is_repo_local() -> None:
+    source = (TOOLS_DIR / "godzip_foundry.py").read_text(encoding="utf-8")
+
+    assert 'QCheckBox("LogZIP after run automatically")' in source
+    assert '"run_auto_logzip_after_exit"' in source
+    assert "process.wait()" in source
+    assert "process.poll()" not in source
+    assert 'name="GodzipFoundryRunWait"' in source
+    assert "create_logzip(" in source
+    assert "if checked and self.keep_console.isChecked():" in source
+    assert "if checked and self.auto_logzip.isChecked():" in source
+
+
+def test_create_and_logzip_expose_shell_open_for_remembered_output_without_console_spawn() -> None:
+    source = (TOOLS_DIR / "godzip_foundry.py").read_text(encoding="utf-8")
+
+    assert source.count('QPushButton("Open Saved Folder")') >= 2
+    assert "QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))" in source
+    assert "def open_saved_folder" in source
+    assert "explorer.exe" not in source
