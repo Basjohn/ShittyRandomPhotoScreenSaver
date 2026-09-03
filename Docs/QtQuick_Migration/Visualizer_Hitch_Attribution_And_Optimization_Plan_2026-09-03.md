@@ -49,6 +49,19 @@ Post-warm-up usage collection cost was roughly **87–128 ms** per sample; the f
 
 This is **strong correlation, not yet sole-causality proof**. The sampler runs outside the GUI owner, so attribution must distinguish CPU/GIL/process-enumeration/log-serialization contention from UI callback work before changing it.
 
+#### Resolution 2026-09-03 — sole causality proven headless, sampler partitioned
+
+`tools/viz_logical_gil_contention_harness.py` reproduces the mechanism deterministically without a display, running the **real** `VisualizerLogicalRuntime`:
+
+- CPython preempts the GIL every ~5 ms (`sys.getswitchinterval`). A pure-Python 100 ms busy loop and a real GIL-releasing `collect()` both produced **0** `dt` spikes — so pure-Python work and psutil syscalls that release the GIL are *not* the owner.
+- `Process.children(recursive=True)` (~16-25 ms) and `Process.num_threads()` (~15-87 ms) are Windows **system-wide** `NtQuerySystemInformation` enumerations that hold the GIL for the whole call. Hammered back-to-back against the real logical thread they produce **10-13 spikes of 42-118 ms, 100 % coincident** — the operator's exact signature, load-scaled by total system process/thread count.
+
+Because the logical cadence is a pure-Python thread, any uninterruptible GIL hold on any thread stalls it by that hold's duration. Lead A is therefore a **diagnostics-perturbation artifact**: it only exists under `--usage`, i.e. the instrument was stalling the thread it measures (10/13 spikes were the instrument).
+
+Fix (landed): `ProcessUsageCollector` now refreshes those two GIL-held system-wide enumerations together on a slow sub-cadence (`heavy_refresh_samples`, default 8 ≈ 2 min) while every sample still reports fresh RSS/USS/CPU/handles/IO for the cached process set. Light samples fell from ~30-120 ms to **~1-3 ms** with no system-wide enumeration; the thread count carries forward between refreshes. `tests/test_usage_sampler.py` pins the partition. This did **not** lower the authored cadence, the 42 ms threshold, or any diagnostic field.
+
+Lead B (Gen2 GC) is the same stop-the-world class but is active in **every** RUN-lifetime run and remains the real production owner; its cause (allocation churn) is a separate attribution task and must precede any `RuntimeGCPolicy` change.
+
 ### P0 lead B — Gen2 GC is a proven independent hitch owner
 
 At `01:34:48`:
@@ -101,7 +114,7 @@ Across this short multi-recreation run, RSS/USS/private bytes and tracked cache 
 - [ ] Make sure diagnostics themselves can be disabled or sampled and are not the hitch owner being measured.
 - [ ] Capture a steady-state run with Bubble and one with extreme-tall Spectrum without opening Settings/CUSTOM during the measurement window.
 - [ ] Quantify `dt`/source-age/presentation-age tails and map every >33 ms event to a known owner or mark it unattributed.
-- [ ] Run an A/B with periodic usage telemetry disabled or reduced **for diagnosis only**. If the 15-second spike signature disappears, redesign the sampler rather than leaving diagnostics permanently blind.
+- [x] Run an A/B with periodic usage telemetry disabled or reduced **for diagnosis only**. If the 15-second spike signature disappears, redesign the sampler rather than leaving diagnostics permanently blind. *(Done headless via `tools/viz_logical_gil_contention_harness.py`: proved the two system-wide psutil enumerations are the GIL-held owner; sampler redesigned, not blinded — see lead A resolution above.)*
 - [ ] Correlate Gen2 collections with Visualizer and scene-frame tails; capture allocation/lifetime evidence around the collection interval.
 - [ ] Separate startup/recreation spikes from steady-state statistics.
 
@@ -120,7 +133,7 @@ Reason: performance work should target the final active owner graph, not optimiz
 
 ### P0-C — remove deterministic app-owned hitch sources
 
-- [ ] **Usage telemetry:** remove/partition the 15-second collection contention while preserving useful diagnostics. Candidates must be measured; do not simply lengthen the interval and call the hitch fixed.
+- [x] **Usage telemetry:** remove/partition the 15-second collection contention while preserving useful diagnostics. Candidates must be measured; do not simply lengthen the interval and call the hitch fixed. *(Done: `ProcessUsageCollector` partitions the two proven GIL-held system-wide enumerations to a slow sub-cadence; every sample still logs fresh RSS/USS/CPU/handles/IO. Light-sample cost ~1-3 ms.)*
 - [ ] **Allocation/GC:** attribute high-churn allocations and remove useless churn first; then reassess collection policy. Do not globally disable GC or hide unbounded retention.
 - [ ] **First-frame publish:** attribute the 361 ms publication cost and make activation cheap without adding recurring copies/owners.
 - [ ] **Analysis lane tails:** correlate max execution/handoff events; optimize only if they survive as visible owners after the two deterministic periodic sources are removed.

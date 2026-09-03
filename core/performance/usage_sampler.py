@@ -18,6 +18,18 @@ logger = get_logger(__name__)
 DEFAULT_USAGE_INTERVAL_MS = 15_000
 _MB = 1024.0 * 1024.0
 
+# How many samples pass between the two GIL-held, system-wide Windows
+# enumerations (recursive child discovery + per-process thread counts). Both go
+# through ``NtQuerySystemInformation`` and hold the GIL for the whole call
+# (no ``Py_BEGIN_ALLOW_THREADS``), so at the 15 s cadence they scale with total
+# system process/thread count and directly stall the pure-Python Visualizer
+# logical-cadence thread (proven 2026-09-03: 87-120 ms collect -> 44-65 ms
+# `Tick dt spike`). Every sample still reports fresh RSS/USS/CPU/handles/IO for
+# the known process set; only topology discovery and the thread count are
+# refreshed on this slower sub-cadence. 8 samples ~= 2 min at the default
+# interval. See `Docs/QtQuick_Migration/Visualizer_Hitch_Attribution_And_Optimization_Plan_2026-09-03.md`.
+DEFAULT_HEAVY_REFRESH_SAMPLES = 8
+
 
 def _mb(value: int | float) -> float:
     return max(0.0, float(value)) / _MB
@@ -69,12 +81,32 @@ class GpuUsageSnapshot:
 
 
 class ProcessUsageCollector:
-    """Collect main-process and recursive child totals without blocking intervals."""
+    """Collect main-process and recursive child totals without blocking intervals.
 
-    def __init__(self, process: psutil.Process | None = None) -> None:
+    The two GIL-held, system-wide Windows enumerations - recursive child
+    discovery (``children(recursive=True)``) and per-process thread counts
+    (``num_threads()``) - are refreshed together on a slow sub-cadence
+    (``heavy_refresh_samples``) rather than every sample, because holding the
+    GIL uninterruptibly for those calls stalls the pure-Python Visualizer
+    logical-cadence thread. Cheap, GIL-releasing per-process metrics (RSS, USS,
+    CPU, handles, IO) run every sample against the cached live-process set, so
+    memory/leak fidelity is unchanged; only child topology and the thread count
+    carry forward between heavy refreshes.
+    """
+
+    def __init__(
+        self,
+        process: psutil.Process | None = None,
+        *,
+        heavy_refresh_samples: int = DEFAULT_HEAVY_REFRESH_SAMPLES,
+    ) -> None:
         self._main = process or psutil.Process(os.getpid())
         self._processes: dict[int, psutil.Process] = {self._main.pid: self._main}
         self._sample_count = 0
+        self._heavy_refresh_samples = max(1, int(heavy_refresh_samples))
+        # Force a heavy refresh (topology + thread count) on the first collect.
+        self._samples_since_heavy = self._heavy_refresh_samples
+        self._last_threads_app = 0
         self._prime_cpu(self._main)
         psutil.cpu_percent(interval=None)
 
@@ -85,7 +117,8 @@ class ProcessUsageCollector:
         except (psutil.Error, OSError):
             pass
 
-    def _live_processes(self) -> list[psutil.Process]:
+    def _refresh_topology(self) -> list[psutil.Process]:
+        """Re-enumerate recursive children (GIL-held) and prune dead handles."""
         try:
             children = self._main.children(recursive=True)
         except (psutil.Error, OSError):
@@ -110,7 +143,18 @@ class ProcessUsageCollector:
         return live
 
     def collect(self) -> ProcessUsageSnapshot:
-        processes = self._live_processes()
+        # Only pay the two GIL-held system-wide enumerations on the slow
+        # sub-cadence. Between refreshes, reuse the cached process handles; dead
+        # children naturally drop out of the per-sample aggregates below because
+        # their per-process reads raise and are skipped.
+        self._samples_since_heavy += 1
+        heavy_sample = self._samples_since_heavy >= self._heavy_refresh_samples
+        if heavy_sample:
+            self._samples_since_heavy = 0
+            processes = self._refresh_topology()
+        else:
+            processes = list(self._processes.values())
+
         main_cpu = 0.0
         app_cpu = 0.0
         rss_main = 0
@@ -166,10 +210,14 @@ class ProcessUsageCollector:
                 if process.pid == self._main.pid:
                     uss_main = int(uss_value)
 
-            try:
-                threads_app += int(process.num_threads())
-            except (psutil.Error, OSError, AttributeError):
-                pass
+            # num_threads() is a system-wide NtQuerySystemInformation snapshot
+            # that holds the GIL for its whole duration; only sample it on the
+            # heavy sub-cadence and carry the last value forward otherwise.
+            if heavy_sample:
+                try:
+                    threads_app += int(process.num_threads())
+                except (psutil.Error, OSError, AttributeError):
+                    pass
 
             try:
                 handles_app += int(process.num_handles())
@@ -182,6 +230,14 @@ class ProcessUsageCollector:
                 io_write += int(getattr(io, "write_bytes", 0) or 0)
             except (psutil.Error, OSError, AttributeError):
                 io_available = False
+
+        # Thread count is only re-measured on the heavy sub-cadence; carry the
+        # last measured value forward on light samples so the field stays
+        # populated for leak/plateau tracking without a per-sample GIL stall.
+        if heavy_sample:
+            self._last_threads_app = threads_app
+        else:
+            threads_app = self._last_threads_app
 
         system_cpu = max(0.0, float(psutil.cpu_percent(interval=None)))
         snapshot = ProcessUsageSnapshot(
