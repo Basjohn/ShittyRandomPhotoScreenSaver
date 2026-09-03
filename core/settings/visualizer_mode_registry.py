@@ -51,6 +51,17 @@ class VisualizerModeDescriptor:
     preset_slider_attr: str
     setting_prefixes: tuple[str, ...]
     presentation_policy: VisualizerModePresentationPolicy
+    # Lazy wiring identity: import-path/name strings only. Holding these as
+    # strings keeps this metadata module free of Qt/renderer/runtime imports;
+    # the actual module is imported on demand by the owning caller
+    # (quick_display_visualizer_owner for the frame runtime, the Quick renderer
+    # implementation_registry for the renderer). This is the single source of
+    # per-mode runtime/renderer wiring; the previous duplicate five-way tables
+    # now derive from here.
+    frame_runtime_module: str
+    frame_runtime_class: str
+    renderer_module: str
+    renderer_factory: str = "create_visualizer_renderer"
 
     @property
     def preset_key(self) -> str:
@@ -64,6 +75,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         "_spectrum_preset_slider",
         ("spectrum_",),
         _REFLOWING_CARDED_POLICY,
+        frame_runtime_module="widgets.spotify_visualizer.spectrum_frame_runtime",
+        frame_runtime_class="SpectrumFrameRuntime",
+        renderer_module="rendering.quick.visualizer.implementations.spectrum",
     ),
     VisualizerModeDescriptor(
         "oscilloscope",
@@ -71,6 +85,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         "_osc_preset_slider",
         ("osc_", "oscilloscope_"),
         _REFLOWING_CARDED_POLICY,
+        frame_runtime_module="widgets.spotify_visualizer.oscilloscope_frame_runtime",
+        frame_runtime_class="OscilloscopeFrameRuntime",
+        renderer_module="rendering.quick.visualizer.implementations.oscilloscope",
     ),
     VisualizerModeDescriptor(
         "sine_wave",
@@ -78,6 +95,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         "_sine_preset_slider",
         ("sine_", "sine_wave_", "sinewave_"),
         _REFLOWING_CARDED_POLICY,
+        frame_runtime_module="widgets.spotify_visualizer.sine_frame_runtime",
+        frame_runtime_class="SineFrameRuntime",
+        renderer_module="rendering.quick.visualizer.implementations.sine_wave",
     ),
     VisualizerModeDescriptor(
         "bubble",
@@ -85,6 +105,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         "_bubble_preset_slider",
         ("bubble_",),
         _REFLOWING_CARDED_POLICY,
+        frame_runtime_module="widgets.spotify_visualizer.bubble_frame_runtime",
+        frame_runtime_class="BubbleFrameRuntime",
+        renderer_module="rendering.quick.visualizer.implementations.bubble",
     ),
     VisualizerModeDescriptor(
         "devcurve",
@@ -92,6 +115,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         "_devcurve_preset_slider",
         ("devcurve_",),
         _REFLOWING_CARDED_POLICY,
+        frame_runtime_module="widgets.spotify_visualizer.devcurve_frame_runtime",
+        frame_runtime_class="DevCurveFrameRuntime",
+        renderer_module="rendering.quick.visualizer.implementations.devcurve",
     ),
 )
 
@@ -107,6 +133,16 @@ VISUALIZER_MODE_IDS: tuple[str, ...] = tuple(d.mode_id for d in _ALL_DESCRIPTORS
 def iter_visualizer_mode_descriptors() -> tuple[VisualizerModeDescriptor, ...]:
     """Return only the currently active (non-gated) mode descriptors."""
     return _active_descriptors()
+
+
+def iter_all_visualizer_mode_descriptors() -> tuple[VisualizerModeDescriptor, ...]:
+    """Return every registered canonical mode descriptor, gated or not.
+
+    Schema/default/renderer-registration authority uses this (every canonical
+    mode has a renderer/runtime regardless of enable-state); runtime *selection*
+    and cycling use :func:`iter_visualizer_mode_descriptors` instead.
+    """
+    return _ALL_DESCRIPTORS
 
 
 def get_visualizer_mode_descriptor(mode_id: str) -> VisualizerModeDescriptor:

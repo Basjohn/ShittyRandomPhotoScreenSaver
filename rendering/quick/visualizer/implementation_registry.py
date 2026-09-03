@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from importlib import import_module
 
-from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
+from core.settings.visualizer_mode_registry import (
+    VISUALIZER_MODE_IDS,
+    iter_all_visualizer_mode_descriptors,
+)
 
 from .render_contract import QuickVisualizerRenderer
 
@@ -17,37 +20,18 @@ class QuickVisualizerImplementationDescriptor:
     factory_name: str = "create_visualizer_renderer"
 
 
-_IMPLEMENTATIONS = (
+# Derived view of the single canonical wiring source
+# (`core.settings.visualizer_mode_registry`). Every registered mode has a
+# renderer; the module path is imported lazily by
+# ``resolve_quick_visualizer_renderer`` only when that mode renders. Order
+# follows the canonical descriptor order.
+_IMPLEMENTATIONS = tuple(
     QuickVisualizerImplementationDescriptor(
-        mode_id="spectrum",
-        module_name=(
-            "rendering.quick.visualizer.implementations.spectrum"
-        ),
-    ),
-    QuickVisualizerImplementationDescriptor(
-        mode_id="oscilloscope",
-        module_name=(
-            "rendering.quick.visualizer.implementations.oscilloscope"
-        ),
-    ),
-    QuickVisualizerImplementationDescriptor(
-        mode_id="sine_wave",
-        module_name=(
-            "rendering.quick.visualizer.implementations.sine_wave"
-        ),
-    ),
-    QuickVisualizerImplementationDescriptor(
-        mode_id="bubble",
-        module_name=(
-            "rendering.quick.visualizer.implementations.bubble"
-        ),
-    ),
-    QuickVisualizerImplementationDescriptor(
-        mode_id="devcurve",
-        module_name=(
-            "rendering.quick.visualizer.implementations.devcurve"
-        ),
-    ),
+        mode_id=descriptor.mode_id,
+        module_name=descriptor.renderer_module,
+        factory_name=descriptor.renderer_factory,
+    )
+    for descriptor in iter_all_visualizer_mode_descriptors()
 )
 _BY_ID = {descriptor.mode_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

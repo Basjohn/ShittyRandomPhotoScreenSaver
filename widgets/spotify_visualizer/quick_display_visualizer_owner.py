@@ -29,21 +29,27 @@ _ACTIVATION_SCENE_FADE_DURATION_S = 1.3
 
 
 def _mode_runtime_factory(mode_id: str) -> Callable[[], Any]:
+    """Resolve a mode's frame-runtime class from the canonical descriptor wiring.
+
+    The per-mode import path lives once in
+    ``core.settings.visualizer_mode_registry``; this reads that string and
+    imports lazily, so no frame runtime is imported until its mode is actually
+    constructed. An unknown/empty mode falls back to Spectrum exactly as the
+    previous hand-written switch did.
+    """
+    from importlib import import_module
+
+    from core.settings.visualizer_mode_registry import (
+        get_visualizer_mode_descriptor,
+    )
+
     normalized = str(mode_id or "").lower()
-    if normalized == "bubble":
-        from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
-        return BubbleFrameRuntime
-    if normalized == "devcurve":
-        from widgets.spotify_visualizer.devcurve_frame_runtime import DevCurveFrameRuntime
-        return DevCurveFrameRuntime
-    if normalized == "oscilloscope":
-        from widgets.spotify_visualizer.oscilloscope_frame_runtime import OscilloscopeFrameRuntime
-        return OscilloscopeFrameRuntime
-    if normalized == "sine_wave":
-        from widgets.spotify_visualizer.sine_frame_runtime import SineFrameRuntime
-        return SineFrameRuntime
-    from widgets.spotify_visualizer.spectrum_frame_runtime import SpectrumFrameRuntime
-    return SpectrumFrameRuntime
+    try:
+        descriptor = get_visualizer_mode_descriptor(normalized)
+    except KeyError:
+        descriptor = get_visualizer_mode_descriptor("spectrum")
+    module = import_module(descriptor.frame_runtime_module)
+    return getattr(module, descriptor.frame_runtime_class)
 
 
 class QuickDisplayVisualizerOwner:
