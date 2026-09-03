@@ -1,6 +1,6 @@
 # Remaining J — Final Installed / Physical Acceptance Decomposition
 
-Status: **future acceptance phase; H is closed and I is active. Execute final J closure after I caller-proven residue cleanup is GREEN. Vision-capable agents may prepare/front-load the mandatory image-oracle parity tranche, but may not use J to hide a deterministic I defect or weaken an accepted H contract.**  
+Status: **current J/J+ acceptance framework. H and the caller-proven Phase-I cleanup are closed; surviving residue is an explicit ledger in `Future_Cleanup.md`. `Current_Plan.md` owns live J+ ordering, and J must not resurrect retired H/I architecture to satisfy stale evidence.**  
 Work admission: `Current_Plan.md`  
 Validation shape: `Docs/QtQuick_Migration/06_Build_Tooling_Validation.md`  
 Test ownership/retirement: `Docs/TestSuite.md`

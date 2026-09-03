@@ -1,6 +1,6 @@
 # 06 — Build, Tooling, Tests, Installed Validation and Cutover Evidence
 
-Status: **current validation contract; H closed, I active, J queued**  
+Status: **current post-cutover validation contract; H/I closed, J+ active under `Current_Plan.md`**  
 Last updated: 2026-09-01
 
 Cross-links:
@@ -158,7 +158,7 @@ Preserve P0 as architecture evidence.
 Do not keep expanding it merely to reconfirm Quick. Use production-shaped harnesses for migration
 regression.
 
-Only `presentation_benchmark_core.py` + `qtquick_presentation_spike.py` remain as explicitly non-authoritative architecture-selection evidence until J. P0/worker-push/deleted-replay benchmarks are I debris; see `Docs/Tooling_Audit_2026-09-01.md` and `Docs/TestSuite.md`.
+Only explicitly classified temporary/J-exit tools in `Docs/Tooling_Audit_2026-09-01.md` may survive as non-authoritative evidence. P0 attribution harnesses are closed-investigation evidence, not product-performance authority; deleted replay/worker-push/old phase harnesses must not be recreated. See the tooling audit and `Docs/TestSuite.md`.
 
 ## 9. Automated/focused tests
 

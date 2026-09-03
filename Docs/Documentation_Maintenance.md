@@ -100,7 +100,7 @@ Current retirement policy:
 - transition/visualizer old pixel-only owners -> caller-proof as soon as dead;
 - old CUSTOM/auxiliary pixels -> caller-proof during G;
 - remaining physical presenter/backend -> closed in H;
-- caller-dead residue/tests/tools/aliases -> I (active).
+- caller-dead residue/tests/tools/aliases -> `Future_Cleanup.md` / `Docs/TestSuite.md` (Phase I is closed; do not describe it as a live phase).
 
 Do not preserve old presentation to maintain temporary product continuity. Do not use blanket H/I retirement labels for
 caller-dead components that can already leave.

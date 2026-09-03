@@ -1,6 +1,6 @@
 # 07 — Settings Capability Activation and Lazy Navigation
 
-Status: **landed capability/Settings contract — preserved through closed Phase F and current G/H**  
+Status: **landed permanent capability/Settings contract; F/G/H closed. Future V5-V8 Visualizer Settings rehost must preserve it.**  
 Last updated: 2026-08-28
 
 ## Durable capability model

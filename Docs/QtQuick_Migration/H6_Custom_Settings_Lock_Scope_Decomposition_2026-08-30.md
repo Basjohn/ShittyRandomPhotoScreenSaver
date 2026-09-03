@@ -3,7 +3,7 @@
 Date: 2026-08-30  
 Starting source: `af8896b52fbee153fe1cd0b627a55455c14625d1`
 
-Current status (2026-08-31): **source/runtime-shaped GREEN; physical revalidation pending.**
+Checkpoint status (2026-08-31): **source/runtime-shaped GREEN. H is now closed; this file is historical decomposition, not a live physical-revalidation queue. Any surviving global-CUSTOM acceptance debt is owned by `Current_Plan.md`.**
 
 ## Contract
 

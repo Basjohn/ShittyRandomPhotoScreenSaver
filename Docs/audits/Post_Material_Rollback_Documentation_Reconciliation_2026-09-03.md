@@ -1,5 +1,6 @@
 # Post-Material-Rollback Documentation Reconciliation — 2026-09-03
 
+> **SUPERSEDED BY THE LATER 2026-09-03 WIDE RECONCILIATION.** Preserve this file for the card-material rollback findings, but use `Post_Cutover_Wide_Documentation_Reconciliation_2026-09-03.md` for current cross-document status/tool/theme reconciliation.
 Status: **docs-only architecture audit complete for the current slice**
 
 ## Scope

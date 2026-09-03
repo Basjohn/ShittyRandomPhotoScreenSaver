@@ -33,7 +33,7 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | visualizer authored/reference behavior | `Docs/Visualizer_Reference.md` |
 | Visualizer change checklist / preflight | `Docs/Visualizer_Change_Checklist.md` |
 | active Visualizer hitch attribution / optimization | `Docs/QtQuick_Migration/Visualizer_Hitch_Attribution_And_Optimization_Plan_2026-09-03.md` |
-| planned per-mode enable/dormancy + dedicated Visualizers Settings tab | `Docs/QtQuick_Migration/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md` |
+| Visualizer mode modularization (V0-V4 landed) + planned V5-V8 Settings rehost | `Docs/QtQuick_Migration/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md` |
 | ordinary widget authoring | `Docs/10_WIDGET_GUIDELINES.md` |
 | safety | `Docs/Guardrails.md` |
 | test inventory/retirement | `Docs/TestSuite.md` |
@@ -119,8 +119,7 @@ For geometry/CUSTOM work read these together:
 
 For historical H visualizer-edge reasoning only, use the closed
 `H_Pre_Cutover_Visualizer_Edge_Corrections.md` + `H_True_F_Technical_Closure.md` pair. They are evidence, not active work
-admission. `Remaining_H_Production_Cutover_Decomposition.md` is the durable closed cutover record; current I admission lives
-only in `Current_Plan.md`.
+admission. `Remaining_H_Production_Cutover_Decomposition.md` is the durable closed cutover record; Phase I is closed and surviving residue/deletion work lives only in `Current_Plan.md` / `Future_Cleanup.md` / `Docs/TestSuite.md`.
 
 The all-five-mode capability policy is landed. Do not reintroduce a Bubble false gate to avoid correcting viewport
 ownership or spatial-domain defects.
@@ -133,7 +132,7 @@ Closed rationale and old owner maps belong under `Docs/Historical_Plans/`, `Docs
 `Docs/phase_reports/`, `Docs/Performance_Evidence/`, or `Docs/audits/`. Historical wording does not define current work
 admission or ownership and is not rewritten merely to sound current.
 
-- `Docs/Tooling_Audit_2026-09-01.md` — post-H operator-tool keep/delete/migrate authority; R-72 production/tool boundary.
+- `Docs/Tooling_Audit_2026-09-01.md` — stable route to the **2026-09-03 re-audited** current operator-tool keep/temporary/J-exit authority; R-72 production/tool boundary.
 
 - `Docs/Historical_Bugs/R-73_Quick_Card_Shadow_Extra_Offset_Translation_And_Visualizer_Omission.md` — frame Extra Offset is directional growth, and Visualizer joins global card-shadow ownership.
 - `Docs/Historical_Bugs/Runtime_Card_Backdrop_Materials_Rejected_2026-09-02.md` — runtime Glass/Acrylic card backdrops are explicitly rejected; Settings-window native materials remain separate.

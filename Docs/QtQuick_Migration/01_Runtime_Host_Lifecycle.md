@@ -6,8 +6,7 @@ Last updated: 2026-08-29
 
 ## Migration routing rule
 
-`Current_Plan.md` owns whether production cutover has occurred. While migration scaffolding exists, it may still route through
-legacy `DisplayWidget`; that is never destination architecture and never requires a compatibility facade.
+The production cutover is complete: `QuickDisplayRuntime`/`QQuickWindow` is sole physical presentation authority. Historical migration scaffolding that once routed through legacy `DisplayWidget` is not rollback architecture and must not be recreated as a compatibility facade. `Current_Plan.md` owns only current sequencing/acceptance, not whether cutover occurred.
 
 Destination host shape:
 

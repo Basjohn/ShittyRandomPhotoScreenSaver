@@ -2,7 +2,7 @@
 
 Applies to: H post-cutover runtime-reality correction and J final physical/visual acceptance.
 
-This ledger is mandatory phase-close input. Narrow implementation prompts never imply that unmentioned rows are done.
+This ledger is **historical post-cutover observation evidence**, not a second live checklist. Narrow implementation prompts never implied that unmentioned rows were done at the time, but surviving open product work has since been promoted into `Current_Plan.md` / focused contracts. Unchecked H/J rows here must not be executed merely because their box remained open.
 
 ## Baseline / parity rule
 

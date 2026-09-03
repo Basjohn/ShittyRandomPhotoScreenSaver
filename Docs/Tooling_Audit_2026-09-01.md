@@ -1,75 +1,93 @@
-# Tooling Authority Audit — 2026-09-01
+# Tooling Authority Audit — stable route, re-audited 2026-09-03
 
-Status: **CURRENT I AUTHORITY FOR `tools/` CLEANUP**
-
-This audit was performed after Phase H closed and the Qt Quick destination became production authority.
-Its purpose is to prevent old migration/investigation executables from becoming accidental architecture authority.
+Status: **CURRENT POST-CUTOVER TOOLING AUTHORITY**  
+Current source basis: `ab6d5f6055507f85ae410fb40100069c30a752a5` (2026-09-03).  
+The filename is retained as a stable documentation route; the old 2026-09-01 Phase-I keep/delete ledger is superseded by this content.
 
 ## Golden rule
 
 ```text
 production runtime emits evidence
         ↓
-focused current tests own deterministic contracts
+current tests own deterministic contracts
         ↓
-operator-side tools may observe or exercise a bounded external/runtime seam
+operator tools may author assets or observe/exercise one bounded current seam
 ```
 
-A tool is not retained because it once helped. It stays executable only when it has a current, unique job.
-Historical reports/goldens preserve evidence; they do not require preservation of a dead executable harness.
+A tool is not retained because it once helped. It stays executable only while it has a current unique job. Historical reports/goldens preserve evidence without requiring a dead executable harness.
 
-Current audited accounting after adding the re-homed ImageWorker harness: **40 current keep, 2 temporary architecture-selection tools queued for J deletion, 20 manual-delete tools = 62 tool files accounted for.** The new ImageWorker harness supersedes one of those 20 old names; applying the deletion list leaves 42 executable/support tool files.
+Tooling may never:
 
-### Tooling may never
-
-- import/restore a deleted QWidget/GL/compositor/replay owner merely so an old harness passes;
-- become an in-process production shutdown/startup action;
+- import/restore a deleted QWidget/GL/compositor/replay owner so an old harness passes;
+- become a hidden in-process production startup/shutdown action;
 - create a second test manifest beside `tests/run_chunked.py`;
-- claim Visualizer freshness/reactivity from synthetic DSP/simulation data alone;
-- treat lower CPU/RAM/GC counters as permission to weaken R-69 cadence/reactivity/freshness;
-- silently mutate installed/user settings when a repo-local/schema-derived path exists.
+- claim Visualizer physical freshness/reactivity from synthetic data alone;
+- lower cadence/freshness/amplitude or disturb R-69/R-76 to improve counters;
+- add polling/timers/fallback owners merely because a diagnostic wants easier sampling;
+- silently mutate installed/user settings when a repo-local/schema-derived authoring path exists.
 
-`R-72` records the production-shutdown parser authority failure that triggered the permanent production/tools boundary.
+`R-72` remains the permanent production/tools import boundary.
 
-## Current keep set
+## Current accounting
 
-### Canonical operator/build/schema tools
+The exact top-level `tools/` tree at the source basis contains **48 files**:
+
+- **22** build/schema/authoring/operator utilities;
+- **11** focused probes/parsers/runtime evidence tools;
+- **11** current Qt Quick smoke harnesses;
+- **2** closed-P0 attribution harnesses retained temporarily as evidence;
+- **2** architecture-selection spikes retained until J exit.
+
+The old 2026-09-01 `20 manual delete now` executable set is already absent and must not be recreated. `tools/material_rollback_cleanup_gui.py` has also completed its one rejected-card-material cleanup job and is absent from current source. `tools/generate_visualizer_replay_fixtures.py` is absent too; fixture/golden authority survives without that executable.
+
+## KEEP — build / schema / authoring / operator workflow
 
 - `tools/build_layout.ps1`
 - `tools/build_runner.py`
 - `tools/check_ui_parity.py`
 - `tools/convert_svg_to_png.py`
 - `tools/convert_weather_svgs.py`
-- `tools/download_weather_icons.py`
-- `tools/regen_qrc.py`
-- `tools/run_tests.py` — compatibility convenience only; delegates to canonical `tests/run_chunked.py`.
-- `tools/theme_foundry.py`
-- `tools/theme_foundry_model.py`
 - `tools/default_settings_editor.py`
 - `tools/defaults_foundry_core.py`
+- `tools/download_weather_icons.py`
+- `tools/generate_widget_theme_mirrors.py`
+- `tools/godzip_foundry.py`
+- `tools/godzip_foundry_core.py`
+- `tools/regen_qrc.py`
 - `tools/regenerate_defaults_artifacts.py`
 - `tools/regenerate_defaults_snapshot_artifacts.py`
 - `tools/regenerate_sst_defaults.py`
 - `tools/regenerate_visualizer_shipped_presets.py`
+- `tools/run_tests.py` — convenience delegate only; `tests/run_chunked.py` remains canonical.
+- `tools/theme_foundry.py`
+- `tools/theme_foundry_model.py`
 - `tools/visualizer_preset_repair.py`
+- `tools/widget_theme_foundry.py`
+- `tools/widget_theme_foundry_model.py`
 
-The defaults regeneration family is **current and protected**: current schema sources are used, artifacts are constructed in memory, private fields are rejected, check/dry-run exists where applicable, and multi-file writes are transactional/rollback-safe. Do not recreate `R-33` by adding installed-profile mutation as a convenience fallback.
+### Foundry boundaries
 
-### Current focused runtime/external evidence
+Theme/Widget Theme Foundries edit the production schemas and strict-reload saved output; they do not invent parallel theme schemas. GODZIP Foundry is repo/operator transfer tooling, never production runtime authority. Its persistent preferences belong repo-locally under `.godzip_foundry/`, not AppData/QSettings. Archive manifests describe included bytes; omission never means delete; debris deletion remains explicit/reversible under `/deleteme`.
 
-- `tools/perf_measure.py` — independent out-of-process process-tree sampler. Context only; application PERF telemetry remains freshness/GPU/GC/presentation authority.
-- `tools/image_change_perf_parser.py` — narrow image-admission/prefetch/GC aggregation only. It is retained because it answers one bounded cross-event question; it is not a generic application-health parser.
-- `tools/image_worker_shm_lifecycle_harness.py` — current R-52 spawned ImageWorker/shared-memory plateau and disposal proof.
+Defaults/preset regeneration remains protected current tooling: derive from current schema/source truth, reject private/machine-local state, prefer check/dry-run before writes, and keep multi-file writes transactional where applicable. Never mutate an installed user profile as a convenience fallback.
+
+## KEEP — focused current evidence / probes
+
+- `tools/flicker_test.py` — Settings/Win32 investigation isolator; not general product acceptance authority.
 - `tools/gsm_tc_spotify_video_probe.py`
 - `tools/hardware_ingress_validator.py`
+- `tools/image_change_perf_parser.py` — bounded image-admission/prefetch/GC correlation, not a generic health parser.
+- `tools/image_worker_shm_lifecycle_harness.py`
 - `tools/media_key_matrix_compare.py`
 - `tools/media_key_matrix_harness.py`
 - `tools/media_key_reality_harness.py`
+- `tools/perf_measure.py` — passive external process/resource context; application PERF/QML/GPU/GC telemetry remains runtime authority.
 - `tools/reddit_helper_task_harness.py`
 - `tools/winprobe_observer.py`
-- `tools/flicker_test.py` — investigation-only Settings/Win32 isolator; not ordinary acceptance authority.
 
-### Current focused Qt Quick smokes
+Keep these only while they answer their narrow current question. Do not expand one into a generic framework because another subsystem needs evidence.
+
+## KEEP — current Qt Quick smokes
 
 - `tools/qtquick_abandonment_issues_smoke.py`
 - `tools/qtquick_achievement_pulse_smoke.py`
@@ -83,96 +101,47 @@ The defaults regeneration family is **current and protected**: current schema so
 - `tools/qtquick_visualizer_clip_smoke.py`
 - `tools/qtquick_weather_smoke.py`
 
-These remain focused physical/runtime evidence for current Quick owners. Phase-named wording in `qtquick_phase_c_effect_smoke.py` is historical naming only; the harness exercises the current transition implementation.
+Phase-coded naming in `qtquick_phase_c_effect_smoke.py` is historical naming only; it exercises current transition owners. Smoke output is runtime evidence, not automatic visual parity.
 
-### Current fixture generation
+## TEMPORARY EVIDENCE — closed P0 attribution harnesses
 
-- `tools/generate_visualizer_replay_fixtures.py` — retain only as the deterministic synthetic `FeatureClip` fixture generator used by current feature-frame/fixture contracts. The old executable replay presenter is retired; fixture data/goldens remain evidence.
+- `tools/gc_gen2_attribution_harness.py`
+- `tools/viz_logical_gil_contention_harness.py`
 
-## Keep temporarily; delete in J after final physical/installed acceptance
+These proved the P0-B retained-set Gen2 mechanism and P0-A Windows GIL-held enumeration mechanism respectively. Their findings are now protected by production policy/tests and the attribution record. They are **not** current product-performance authority and must not drive retuning after their owning leads are closed.
 
-These are bounded architecture-selection evidence and explicitly **not current product-performance authority**:
+Disposition: keep through the remaining recreation/resource/J acceptance window for reproducibility; at J exit, re-check whether any unique diagnostic value remains. If not, delete them rather than canonizing one-off attribution experiments.
+
+## J EXIT — architecture-selection evidence only
 
 - `tools/presentation_benchmark_core.py`
 - `tools/qtquick_presentation_spike.py`
 
-They already label themselves as spikes/negative controls. Do not expand them. Delete them and their spike-only tests in J once final compiled/installed/physical acceptance no longer needs architecture-selection evidence.
+These are bounded architecture-selection/negative-control evidence. Do not expand them. Delete them with spike-only tests once final compiled/installed/physical acceptance no longer needs that evidence.
 
-## Manual delete now — no redeeming current executable authority
+## Already retired — do not resurrect
 
-The following are I deletion residue. Historical documents that mention their old names stay historical.
+The old manual-delete list (replay/overlay/worker-push/phase benchmark/parser executables) is absent from current source. Specific anti-resurrection examples:
 
-- `tools/bubble_parity_harness.py` — simulation-only historical comparison; **no viewport/domain/DPR/presentation scaling oracle**, therefore incapable of catching R-69. Current Bubble viewport/reactivity/BTF tests are stronger.
-- `tools/manual_preset_cleanup.py` — one-off persisted-state mutator superseded by current preset/schema owners.
-- `tools/overlay_log_parser.py` — retired overlay telemetry.
-- `tools/perf_integration_harness.py` — imports deleted Media/Visualizer/GL physical owners.
-- `tools/phase1_measurement_benchmark.py` — Phase-1 measurement experiment; current instrumentation + external sampler supersede it.
-- `tools/phase3_lifecycle_harness.py` — migration lifecycle evidence already captured historically.
-- `tools/phase4_image_worker_shm_harness.py` — **superseded by** `tools/image_worker_shm_lifecycle_harness.py`.
-- `tools/phase4_resource_harness.py` — count/resource migration harness superseded by application usage telemetry + `perf_measure.py`.
-- `tools/phase5_frame_owner_benchmark.py` — imports deleted compositor metrics owner.
-- `tools/phase5_thread_manager_benchmark.py` — synthetic general-executor benchmark from a Visualizer investigation; Visualizer no longer uses per-frame general executor tasks and the benchmark can misdirect optimization.
-- `tools/qtquick_p0_presentation_benchmark.py` — imports deleted replay runtime and belongs to architecture selection, not destination acceptance.
-- `tools/recovery_evidence_parser.py` — broken self-importing compatibility parser for a missing historical base.
-- `tools/run_qtquick_p0_light_01.ps1`
-- `tools/run_worker_push_p0_light_01.ps1`
-- `tools/slide_metrics_parser.py` — old Slide/GL metric schema.
-- `tools/spotify_vis_metrics_parser.py` — old GL/overlay Visualizer metric schema; never reconnect it to `main.py`.
-- `tools/transition_perf_health_parser.py` — overgrown generic archaeology parser. Current app instrumentation already owns the useful telemetry; focused parsers/tests should exist only for a demonstrated bounded question.
-- `tools/visualizer_distribution_harness.py` — synthetic/private `_fft_to_bars` scoring duplicates stronger maintained DSP/reactivity tests and is not presentation/scaling authority.
-- `tools/visualizer_replay.py` — imports deleted replay physical owner. Preserve fixtures/goldens and current temporal tests, not the dead executable host.
-- `tools/worker_push_presentation_benchmark.py` — imports deleted physical Visualizer/presenter owners.
+- no `tools/visualizer_replay.py` physical host;
+- no `tools/generate_visualizer_replay_fixtures.py` executable requirement;
+- no generic `transition_perf_health_parser.py` archaeology authority;
+- no old overlay/Spotify-GL metrics parsers;
+- no `material_rollback_cleanup_gui.py` after rejected-card-material debris was removed;
+- no phase benchmark/recovery parser solely to make museum tests pass.
 
-## Tool-coupled tests to delete/rehome in I
+Fixture/golden data may remain useful independently of the executable that once produced it. Regenerate only through a current-owner route if a real contract requires regeneration.
 
-Delete these with the executable owner after confirming the supplied H-closure test patch/current owner map is present:
+## Permanent boundary / review questions
 
-- `tests/test_phase1_measurement_benchmark.py`
-- `tests/test_phase3_runtime_lifecycle.py`
-- `tests/test_qtquick_p0_presentation_benchmark.py`
-- `tests/test_recovery_evidence_parser.py`
-- `tests/test_transition_perf_health_parser.py`
-- `tests/test_visualizer_replay.py`
-- `tests/test_worker_push_presentation_benchmark.py`
+Before adding or retaining a tool:
 
-Do **not** delete fixture/golden tests merely because the old replay executable is gone. Current tests such as Bubble cadence/BTF/viewport, Spectrum smoothing and feature-frame/temporal-golden tests own the surviving behavior contracts.
+- [ ] What exact current question does it answer that production telemetry/current tests cannot answer more directly?
+- [ ] Does it exercise the current owner rather than a retired compatibility host?
+- [ ] Is synthetic output clearly fenced from physical/freshness/reactivity claims?
+- [ ] If it writes artifacts/settings, is scope explicit, repo-local where appropriate, validated and recoverable?
+- [ ] Is it out-of-process unless its exact job genuinely requires current runtime construction?
+- [ ] Does it avoid a second cadence/poller/timer/fallback owner?
+- [ ] Would deleting it lose a real current capability rather than only historical convenience?
 
-## Permanent boundary tests
-
-`tests/test_tooling_ownership.py` is destination coverage. It protects:
-
-- production Python never importing `tools`/`scripts` analysis modules;
-- `tools/run_tests.py` delegating to `tests/run_chunked.py` rather than owning a second suite list;
-- attached-PID resource observation remaining passive;
-- the re-homed ImageWorker SHM harness using the current spawned-worker/image-pipeline owner.
-
-## Audit discipline for future tools
-
-Before retaining or adding a tool, answer all of these:
-
-- [ ] What exact current question can this tool answer that built-in instrumentation/current tests cannot answer more directly?
-- [ ] Does it exercise the current owner rather than a deleted compatibility host?
-- [ ] Is its output incapable of being mistaken for physical/freshness/reactivity proof when it is synthetic?
-- [ ] If it mutates artifacts/settings, is scope explicit, repo-local by default, validated and rollback-safe?
-- [ ] Is the tool out-of-process unless its job genuinely requires current runtime construction?
-- [ ] Is there one canonical owner for the underlying test/telemetry/schema contract?
-- [ ] Would deleting the tool lose an actual capability, rather than only convenience or historical nostalgia?
-
-If the final answer is “no unique capability,” delete the executable and preserve only the historical evidence that still matters.
-
-## Preset/default tooling result
-
-The preset/default tooling was audited separately because stale mutators can destroy authored Visualizer behavior even when runtime ownership is correct.
-
-Current disposition:
-
-- `tools/manual_preset_cleanup.py` — **DELETE**. One-off persisted-state mutator; no current ownership value.
-- `tools/visualizer_preset_repair.py` — **KEEP**. It repairs curated source presets through the current Visualizer mode/schema/migration owners, writes recoverable backups, audits stale/deprecated payload shapes, and re-synchronizes shipped artifacts. Batch Repair All now defers release/manifest synchronization until the batch boundary instead of remirroring the whole curated tree once per file.
-- `tools/regenerate_visualizer_shipped_presets.py` — **KEEP**. Source of truth is `presets/visualizer_modes`; generated targets are the manifest and Media Center release mirror. It now provides read-only `--check` / `--dry-run` modes so operators can prove drift without mutating the tree.
-- `tools/regenerate_defaults_artifacts.py` + wrappers / Defaults Foundry — **KEEP**. These are current-schema/default owners, build output in memory, reject private/machine-local state and use transactional writes. Visualizer defaults are normalized through the current schema-v5 boundary; they do not treat curated runtime preset selection/custom backup state as canonical defaults.
-- Build-runner preset-manifest regeneration remains a **generated-artifact/build responsibility**, not runtime preset ownership.
-
-Guardrail: curated preset tooling may repair/regenerate repository artifacts, but must never become a second runtime preset owner, directly edit installed profile preset state as a convenience cleanup, or restore retired Visualizer presentation contracts. Prefer read-only audit/check modes before mutating commands.
-
-Current curated-tree static audit (2026-09-01): 26 preset JSON files inspected; no duplicate preset slots, non-contiguous authored slots, `custom_preset_backup` blocks, or known deprecated authored/global keys were found. This complements, but does not replace, the real-environment preset tests.
-
+If the answer to the last question is no, delete the executable and preserve the lesson/evidence in docs/tests instead.

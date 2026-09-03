@@ -35,7 +35,7 @@ python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 9
 Maintained profiles isolate selected targets in fresh pytest subprocesses so queued Qt/QQuick teardown from one target cannot
 poison an unrelated result. `--chunks` groups/logs those isolated targets; it is not four giant shared Qt processes.
 
-The whole-tree wrapper remains a broad Phase-I **reconciliation diagnostic**:
+The whole-tree wrapper remains a broad post-cutover **reconciliation/regression diagnostic**; Phase I is closed and this command does not resurrect it as a live phase:
 
 ```powershell
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
@@ -149,9 +149,9 @@ See `Docs/TestSuite.md` and `Docs/Transition_Change_Checklist.md`.
 
 ## 5. Visualizer authored-fidelity evidence
 
-The old `tools/visualizer_replay.py` executable is retired in I because it imports the deleted replay physical owner. **Do not restore that host.**
+The old `tools/visualizer_replay.py` executable is retired because it imported the deleted replay physical owner. **Do not restore that host.**
 
-Preserve authored evidence through current temporal/BTF/viewport tests plus `tests/fixtures/visualizer_replay/`, `tests/goldens/visualizer_replay/` and `tests/goldens/visualizer_temporal/`. `tools/generate_visualizer_replay_fixtures.py` remains only as the synthetic `FeatureClip` fixture generator.
+Preserve authored evidence through current temporal/BTF/viewport tests plus `tests/fixtures/visualizer_replay/`, `tests/goldens/visualizer_replay/` and `tests/goldens/visualizer_temporal/`. The former `tools/generate_visualizer_replay_fixtures.py` executable is no longer in the current tree; fixture/golden data remains evidence and must not be regenerated through a resurrected replay presenter.
 
 Do not regenerate goldens merely to accommodate presentation migration. For Bubble, apply `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
 

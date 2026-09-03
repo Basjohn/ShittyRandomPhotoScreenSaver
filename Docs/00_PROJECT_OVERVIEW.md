@@ -27,8 +27,8 @@ Exact sequence and source checkpoint live only in `Current_Plan.md`; this overvi
 
 - F/G are closed;
 - H is closed: Quick is the sole production presentation authority and post-cutover functional/performance acceptance is preserved in `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md`;
-- I is active caller-proven residue/test/tool/source reconciliation;
-- J is queued for final visual/fidelity/compiled/installed/physical acceptance plus evidence-driven residual performance work.
+- the production cutover and caller-proven Phase-I cleanup are closed; surviving residue/deletion debt is tracked explicitly in `Future_Cleanup.md` rather than treated as an active migration phase;
+- the project is in post-cutover **J+** acceptance/polish: current visual parity, Visualizer recreation-delivery quality, resource/optimization work and final compiled/installed/physical acceptance are sequenced only by `Current_Plan.md`.
 
 ## Visualizer geometry
 

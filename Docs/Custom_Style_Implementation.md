@@ -43,7 +43,7 @@ intentional family override
     -> preserved fallback
 ```
 
-`local.*` is runtime context and is never serialized. A default-valued stored family swatch is the implicit **Inherit** state; a genuinely changed family value remains an explicit family override. Related controls belong in semantic buckets rather than one giant Appearance section. Media is the reference: `Header Appearance`, `Seek Bar` and `Volume Control` expose meaningful family-facing roles while lower-level transport/mute/panel/icon roles remain theme-inherited.
+`local.*` is runtime context and is never serialized. A default-valued stored family swatch is the implicit **Inherit** state; a genuinely changed surviving family value remains an explicit family override. Related controls belong in semantic buckets rather than one giant Appearance section. **Branded header colour controls are deliberately not family overrides anymore**: Media/Gmail/Reddit/Steam consume shared `header.*` semantics, while Media keeps only genuinely family-specific authoring such as `Seek Bar` and `Volume Control`.
 
 Do not add one permanent Settings swatch for every separator, panel, icon, gradient or outline merely because the resolver knows the role.
 
@@ -66,6 +66,8 @@ Do not implement hidden per-property named-theme override inheritance on top of 
 
 - **Card Surface** — theme-owned colour edit; editing a named Widget Theme forks to `Custom`;
 - **Card Border** — theme-owned colour edit; editing a named Widget Theme forks to `Custom`;
+- **Header Fill** — theme-owned shared branded-header fill; editing a named Widget Theme forks to `Custom`;
+- **Reset All Colours to Theme** — explicit operator action that normalizes ordinary family colour/card-alpha compatibility overrides to canonical Inherit values; never runs at startup and never touches Visualizer-authored colours;
 - **Card Border Width** — global card geometry style, outside Widget Theme schema.
 
 There is **no Surface Style / Theme Default / Normal / Glass / Acrylic runtime control**. Runtime card backdrop materials were physically rejected and removed; see `Docs/Historical_Bugs/Runtime_Card_Backdrop_Materials_Rejected_2026-09-02.md` and the detailed failed-method ledger in `Docs/QtQuick_Migration/Rejected_Card_Material_Experiments_2026-09-02.md`.
@@ -118,7 +120,7 @@ No menu-open/per-frame Settings read is allowed. The menu uses the same ordinary
 
 `header_enabled` gates destination header-shadow semantics where applicable. Branded Media/Gmail/Reddit/Achievement Pulse/Abandonment Issues headers consume `BrandedHeader.qml`; accepted geometry/casing/intrinsic-width behavior, logo/text shadows and extension-shadow treatment are shared J/J+ presentation contracts rather than family-local reinventions.
 
-Header Fill/Border/Text remain family swatches where exposed, with canonical/default values inheriting through Widget Theme roles. Do not substitute unrelated semantic values because they are convenient: a header border derives from header/border authority, not a low-alpha row separator.
+Branded Header Fill/Border/Text are shared Widget Theme semantics, not Media/Gmail/Reddit/Steam swatches. `Header Fill` is the one ordinary GUI authoring control in Style Overrides; Header Border/Text normally resolve from `header.border` / `header.text` (and their semantic parents) and may be authored in Widget Theme files/Foundry when a theme genuinely needs them. Old persisted family header fields remain compatibility-read plumbing only until the explicit deletion horizon and must never become invisible permanent precedence.
 
 The small retained `MultiEffect` use in branded headers/artwork is local image treatment/masking only. It is not permission to restore full-card or full-display backdrop capture.
 
