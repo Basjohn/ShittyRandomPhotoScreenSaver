@@ -15,6 +15,7 @@ from core.settings.visualizer_mode_registry import (
     coerce_visualizer_mode_id,
     get_preset_key,
     get_setting_prefixes,
+    resolve_effective_enabled_modes,
     VISUALIZER_MODE_IDS,
 )
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
@@ -98,6 +99,10 @@ _CORE_SETTINGS_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "monitor": str,
     "position": str,
     "mode": str,
+    # Persisted per-mode enable set (V2). Always serialized in canonical order
+    # with at least one enabled mode; a disabled mode keeps all its own settings
+    # and presets — only its presence in this list changes.
+    "enabled_modes": lambda value: list(resolve_effective_enabled_modes(value)),
     "rainbow_enabled": bool,
     "rainbow_speed": float,
     "sine_line_dim": bool,
@@ -1108,6 +1113,11 @@ class SpotifyVisualizerSettings:
     devcurve_sensitivity: float = 1.0
     devcurve_bar_count: int = 32
     mode: str = "bubble"
+    # V2 persisted per-mode enable set. Default = every registered mode enabled,
+    # which preserves today's behavior and is the migration default for existing
+    # users (an absent key resolves to all modes). Disabling a mode never
+    # deletes its settings/presets; it only removes it from this list.
+    enabled_modes: list = field(default_factory=lambda: list(VISUALIZER_MODE_IDS))
     osc_glow_enabled: bool = True
     osc_glow_intensity: float = 0.5
     osc_glow_reactivity: float = 1.0
@@ -1442,22 +1452,24 @@ class SpotifyVisualizerSettings:
         _preset_kwargs = resolve_all_preset_indices_from_getter(get, prefix=prefix)
         _active_mode = coerce_visualizer_mode_id(str(get(f"{prefix}.mode", "bubble")))
 
-        return cls(
-            **cls._build_constructor_kwargs_from_mode_state(
-                _get,
-                lambda mode, key, default: _mode_value(mode, key, default),
-                lambda key, default: _mode_value(
-                    _active_mode,
-                    key,
-                    _get(key, default),
-                ),
-                active_mode=_active_mode,
-                preset_kwargs=_preset_kwargs,
-                bubble_gradient_semantics_version=bubble_gradient_semantics_version,
-                bubble_stream_constant_speed_default=0.5,
-                bubble_stream_speed_cap_default=2.0,
-            )
+        kwargs = cls._build_constructor_kwargs_from_mode_state(
+            _get,
+            lambda mode, key, default: _mode_value(mode, key, default),
+            lambda key, default: _mode_value(
+                _active_mode,
+                key,
+                _get(key, default),
+            ),
+            active_mode=_active_mode,
+            preset_kwargs=_preset_kwargs,
+            bubble_gradient_semantics_version=bubble_gradient_semantics_version,
+            bubble_stream_constant_speed_default=0.5,
+            bubble_stream_speed_cap_default=2.0,
         )
+        kwargs["enabled_modes"] = list(
+            resolve_effective_enabled_modes(get(f"{prefix}.enabled_modes", None))
+        )
+        return cls(**kwargs)
 
     @classmethod
     def from_mapping(
@@ -1497,18 +1509,20 @@ class SpotifyVisualizerSettings:
             resolve_preset_indices=resolve_preset_indices,
         )
 
-        return cls(
-            **cls._build_constructor_kwargs_from_mode_state(
-                _get,
-                lambda mode, key, default: _get_per_mode_value(mode, key, default),
-                lambda key, default: _get_mode_value(key, default),
-                active_mode=_mode,
-                preset_kwargs=_preset_kwargs,
-                bubble_gradient_semantics_version=bubble_gradient_semantics_version,
-                bubble_stream_constant_speed_default=0.6,
-                bubble_stream_speed_cap_default=1.0,
-            )
+        kwargs = cls._build_constructor_kwargs_from_mode_state(
+            _get,
+            lambda mode, key, default: _get_per_mode_value(mode, key, default),
+            lambda key, default: _get_mode_value(key, default),
+            active_mode=_mode,
+            preset_kwargs=_preset_kwargs,
+            bubble_gradient_semantics_version=bubble_gradient_semantics_version,
+            bubble_stream_constant_speed_default=0.6,
+            bubble_stream_speed_cap_default=1.0,
         )
+        kwargs["enabled_modes"] = list(
+            resolve_effective_enabled_modes(_get("enabled_modes", None))
+        )
+        return cls(**kwargs)
 
     def to_dict(self, prefix: str = "widgets.spotify_visualizer") -> Dict[str, Any]:
         """Convert to dictionary for saving."""
@@ -1645,4 +1659,4 @@ class SpotifyVisualizerSettings:
 
     def resolve_oscilloscope_transient_width_mix(self) -> float:
         return float(self.oscilloscope_transient_width_mix)
-
+
