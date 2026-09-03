@@ -1,6 +1,6 @@
 # Settings Theme Architecture
 
-Last updated: 2026-08-28
+Last updated: 2026-09-02
 
 Durable contract for the QWidget Settings theme system, native backdrop ownership and theme authoring. This document owns the current Settings-theme architecture. Historical investigation belongs under `Docs/Historical_Bugs/`; temporary theme migration notes do not override this contract.
 
@@ -47,7 +47,7 @@ The persisted theme selection is resolved and validated before first Settings co
 
 ## Theme file storage / packaged path authority
 
-Settings and future Widget Themes share one durable **theme root** rather than inventing separate installation trees.
+Settings Themes and the landed colour-only Widget Themes share one durable **theme root** rather than inventing separate installation trees.
 
 Installed/frozen Windows builds use the same stable ProgramData base used by other SRPSS curated/runtime assets:
 
@@ -71,9 +71,10 @@ Source/development resolution mirrors that hierarchy:
         *.srwtheme
 ```
 
-The current `ui/settings_theme_paths.py` build-placeholder is temporary wiring, not the final path contract. Its eventual
-replacement should resolve one active theme root at startup/build authority rather than moving filesystem policy into
-`settings_theme_catalog.py`.
+`ui/settings_theme_paths.py` owns this resolved-root policy. Frozen/installed builds resolve directly to the stable
+ProgramData theme root above; source/dev builds resolve the repository `themes` tree. Installer scripts seed the same
+ProgramData tree from the bundled curated pack, matching the existing preset-seeding model. Do not reintroduce a frozen
+build placeholder or teach `settings_theme_catalog.py` to merge multiple roots.
 
 Resolution rules:
 
@@ -90,12 +91,32 @@ Resolution rules:
 
 Widget Theme palette roles are runtime **baseline/defaults** rather than a writer that erases existing per-family `widgets.<family>.card.*` settings. Explicit family card values win for that family; the Context Menu consumes Widget Theme values directly because it has no family layer. This precedence is independent of the shared filesystem root.
 
-Widget Theme schema v2 separates a strict core card/context role set from a sparse optional semantic vocabulary. Specialized roles may be omitted and inherit through `ui/widget_visual_roles.py`: exact role -> semantic parent -> runtime `local.*` current value -> preserved fallback, with an intentional family override above the theme when one exists. `local.*` roles are never file/persistence data. This is the approved mechanism for separators, panels, gradients, header colors, Media controls and similar visual-only detail; do not encode those fallbacks independently in each widget and do not make every optional role mandatory in every `.srwtheme`. The resolver vocabulary is intentionally larger than the Settings GUI: only high-value family overrides should be exposed, grouped in collapsed semantic buckets. Slice 9 Media establishes the reference `Header Appearance` / `Seek Bar` / `Volume Control` organization while leaving lower-level roles inherited. Default-valued swatches are Inherit; a genuinely changed family swatch is the explicit override.
+Widget Theme schema v3 separates a strict core card/context role set from a sparse optional semantic vocabulary. Specialized roles may be omitted and inherit through `ui/widget_visual_roles.py`: exact role -> semantic parent -> runtime `local.*` current value -> preserved fallback, with an intentional family override above the theme when one exists. `local.*` roles are never file/persistence data. This is the approved mechanism for separators, panels, gradients, header colors, Media controls and similar visual-only detail; do not encode those fallbacks independently in each widget and do not make every optional role mandatory in every `.srwtheme`. The resolver vocabulary is intentionally larger than the Settings GUI: only high-value family overrides should be exposed, grouped in collapsed semantic buckets. Slice 9 Media establishes the reference `Header Appearance` / `Seek Bar` / `Volume Control` organization while leaving lower-level roles inherited. Default-valued swatches are Inherit; a genuinely changed family swatch is the explicit override.
 
 Widget Theme implementation should follow the same one-root principle and keep its own built-in/default-safe behavior as
 defined by the Widget Theme contract. Theme selection IDs remain portable and must not encode absolute ProgramData/repo
 paths. A real `.srwtheme` file is produced only by explicit import/export/authoring flow, not as a side effect of changing
 a runtime swatch.
+
+### Settings / Widget Theme linking
+
+Settings Themes and Widget Themes are independently selectable palettes with an optional **bidirectional stable-ID link**.
+The link is one persisted relationship state and is surfaced on both theme pages with the same lock/unlock affordance.
+
+While linked:
+
+- selecting a Settings Theme selects and persists its explicitly paired Widget Theme;
+- selecting a Widget Theme selects and persists its explicitly paired Settings Theme;
+- pairing is resolved only through stable metadata IDs (`linked_settings_theme_id` and the catalogue reverse lookup), never
+  through display-name matching;
+- an unpaired theme or settings-persisted Widget `Custom` snapshot cannot silently break the relationship; the user must
+  switch to Independent first.
+
+While independent, either catalogue may change without mutating the other. Card Surface/Card Border edits that create Widget `Custom` therefore also require/produce an independent Widget-theme state rather than inventing a synthetic Settings counterpart.
+
+`Widgets -> General -> Style Overrides` groups the global card styling controls where their interactions are visible: Card Surface/Card Border edits are theme-authoring edits that fork the full resolved palette to Widget `Custom`; Card Border Width is a global style value outside Widget Theme schema. Runtime Widget Themes are colour/semantic bundles only; Settings-window Glass/Acrylic remains a separate native-window concern.
+
+The curated catalogue currently contains **58 Settings themes and 58 deterministic Widget mirrors**. The 2026-09-02 expansion adds four genuinely light/white-adjacent themes (Porcelain Sky, Linen Sage, Pearl Blush, Alabaster Citrus) and four silver/metal themes (Polished Chrome, Brushed Nickel, Titanium Cobalt, Tungsten Blues). Mirrors use the same stable-ID projection authority as the original pack. Dark-text light/light-metal Widget mirrors also establish a high-opacity light runtime card floor because, unlike the Settings HWND, runtime cards sit directly over arbitrary wallpaper. Regeneration must remain deterministic; mirrors change only when their semantic source/mapping intentionally changes.
 
 ## Proven Windows backdrop mapping
 
@@ -126,6 +147,23 @@ Glass is intentionally untinted at the native layer. A Glass theme obtains its a
 - different Glass themes may therefore differ materially in RGB and opacity without changing the native primitive.
 
 Do not make Glass opacity by inventing a hidden native tint or by changing the native primitive per Glass theme.
+
+## Live Settings-root QObject lifetime
+
+`ui/settings_theme.py` keeps registered Settings roots in a Python `WeakSet`, but **Python wrapper lifetime is not C++ QObject
+lifetime under PySide**. A `SettingsDialog` wrapper can remain weak-referenceable after Qt has deleted the underlying C++
+object. Theme publication must therefore validate each registered root with Shiboken before applying QSS.
+
+Required transaction behavior:
+
+- an invalid/deleted QObject wrapper is stale ownership debris: prune it from the registry and continue publishing the theme;
+- if a `RuntimeError` occurs and Shiboken confirms the target became invalid, prune it and continue;
+- a renderer failure from a still-valid Settings root is **not** stale ownership and must remain fatal so
+  `settings_theme_runtime.py` can roll the theme transaction back;
+- do not solve stale wrappers by weakening all renderer errors, retry timers, event-loop pumping or asynchronous QSS replay.
+
+This distinction is important for native Glass/Acrylic as well as QSS. A stale root-QSS listener must not abort theme
+publication before the live native-backdrop listeners receive the committed theme.
 
 ## Native transition ownership
 
@@ -190,7 +228,8 @@ Required backdrop authoring semantics:
 - Glass must be described as untinted AccentPolicy state-3 blur whose visible colour/opacity comes from semantic Qt surfaces;
 - Glass must never be authored as a pale/clear Acrylic recipe;
 - unavailable Mica/system-backdrop experiments are not selectable theme modes;
-- save only complete themes that strict runtime loading can round-trip.
+- save only complete themes that strict runtime loading can round-trip;
+- `Save Widget Counterpart…` is an explicit authoring action, not runtime coupling: persist the current Settings theme into the catalogue first so it has a stable `builtin:`/`file:` identity, then generate/save the `.srwtheme` through the same `widget_counterpart_for_settings_theme()` authority used by the curated mirror pack; never duplicate the semantic mapping inside Foundry.
 
 Foundry previews are authoring aids, not runtime authorities. The actual Settings window remains the final visual oracle for layered composition.
 

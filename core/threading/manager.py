@@ -581,6 +581,8 @@ class ThreadManager:
         self._resource_id = None
         self._compute_lane_lock = threading.RLock()
         self._compute_lane_scheduler = None
+        self._affinity_lane_lock = threading.RLock()
+        self._affinity_lane_scheduler = None
         
         # Initialize pools
         self._initialize_pools()
@@ -846,6 +848,46 @@ class ThreadManager:
             owner_id=owner_id,
         )
 
+    def create_affinity_lane(
+        self,
+        *,
+        lane_id: str,
+        category: str,
+        runtime_generation: object | None = None,
+        owner: object | None = None,
+    ):
+        """Create a logical lane on the process-owned thread-affinity worker.
+
+        Use this only for retained native resources whose create/mutate/release
+        operations must execute on one OS thread (for example COM/WinRT
+        subscription objects). The lane is event-driven and owns no cadence.
+        """
+
+        if self._shutdown:
+            raise RuntimeError("Cannot create an affinity lane after shutdown")
+        from core.threading.affinity_lanes import AffinityLaneScheduler
+
+        with self._affinity_lane_lock:
+            if self._shutdown:
+                raise RuntimeError("Cannot create an affinity lane after shutdown")
+            scheduler = self._affinity_lane_scheduler
+            if scheduler is None:
+                scheduler = AffinityLaneScheduler()
+                self._affinity_lane_scheduler = scheduler
+
+        owner_class = type(owner).__name__ if owner is not None else None
+        owner_id = id(owner) if owner is not None else None
+        generation = runtime_generation
+        if generation is None and owner is not None:
+            generation = getattr(owner, "_runtime_generation", None)
+        return scheduler.register_lane(
+            lane_id=lane_id,
+            category=category,
+            runtime_generation=generation,
+            owner_class=owner_class,
+            owner_id=owner_id,
+        )
+
     def get_task_result(self, task_id: str, timeout: Optional[float] = None) -> TaskResult:
         """Get the result of a specific task"""
         with self._active_tasks_lock:
@@ -919,6 +961,17 @@ class ThreadManager:
                     "queue_depth": 0,
                     "registered_lanes": 0,
                     "logical_steps_completed": 0,
+                }
+            ),
+            "affinity_lanes": (
+                self._affinity_lane_scheduler.diagnostic_snapshot()
+                if self._affinity_lane_scheduler is not None
+                else {
+                    "worker_threads": 0,
+                    "worker_active": 0,
+                    "queue_depth": 0,
+                    "registered_lanes": 0,
+                    "tasks_completed": 0,
                 }
             ),
         }
@@ -1033,6 +1086,9 @@ class ThreadManager:
         scheduler = self._compute_lane_scheduler
         if scheduler is not None:
             tasks = tasks + scheduler.lifecycle_work_snapshot()
+        affinity_scheduler = self._affinity_lane_scheduler
+        if affinity_scheduler is not None:
+            tasks = tasks + affinity_scheduler.lifecycle_work_snapshot()
         with _ui_diagnostic_lock:
             ui = {
                 "queue_depth": int(_ui_diagnostics["queue_depth"]),
@@ -1059,12 +1115,21 @@ class ThreadManager:
         logger.info("Shutting down thread manager...")
         
         if self._shutdown:
+            complete = True
             scheduler = self._compute_lane_scheduler
-            if scheduler is None:
-                return True
-            complete = bool(scheduler.shutdown(wait=wait, timeout=timeout))
-            if complete:
-                self._compute_lane_scheduler = None
+            if scheduler is not None:
+                compute_complete = bool(scheduler.shutdown(wait=wait, timeout=timeout))
+                complete = complete and compute_complete
+                if compute_complete:
+                    self._compute_lane_scheduler = None
+            affinity_scheduler = self._affinity_lane_scheduler
+            if affinity_scheduler is not None:
+                affinity_complete = bool(
+                    affinity_scheduler.shutdown(wait=wait, timeout=timeout)
+                )
+                complete = complete and affinity_complete
+                if affinity_complete:
+                    self._affinity_lane_scheduler = None
             return complete
         self._shutdown = True
         try:
@@ -1089,6 +1154,19 @@ class ThreadManager:
                 lane_shutdown_complete = False
             if lane_shutdown_complete:
                 self._compute_lane_scheduler = None
+
+        affinity_shutdown_complete = True
+        affinity_scheduler = self._affinity_lane_scheduler
+        if affinity_scheduler is not None:
+            try:
+                affinity_shutdown_complete = bool(
+                    affinity_scheduler.shutdown(wait=wait, timeout=timeout)
+                )
+            except Exception:
+                logger.exception("Affinity lane scheduler shutdown failed")
+                affinity_shutdown_complete = False
+            if affinity_shutdown_complete:
+                self._affinity_lane_scheduler = None
         
         # Cancel active tasks
         with self._active_tasks_lock:
@@ -1147,10 +1225,13 @@ class ThreadManager:
         with self._active_tasks_lock:
             self._active_tasks.clear()
         
-        if not lane_shutdown_complete:
+        if not lane_shutdown_complete or not affinity_shutdown_complete:
             logger.critical(
-                "Thread manager shutdown retained live compute-lane workers; "
-                "lifecycle accounting remains armed until they exit"
+                "Thread manager shutdown retained live lane workers "
+                "(compute_complete=%s affinity_complete=%s); lifecycle accounting "
+                "remains armed until they exit",
+                lane_shutdown_complete,
+                affinity_shutdown_complete,
             )
             return False
         logger.info("Thread manager shut down complete")

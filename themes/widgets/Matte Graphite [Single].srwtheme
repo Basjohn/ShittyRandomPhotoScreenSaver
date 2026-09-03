@@ -1,9 +1,8 @@
 {
   "format": "srpss.widget-theme",
-  "schema_version": 2,
+  "schema_version": 3,
   "theme_id": "mirror:file:Matte Graphite [Single].srtheme",
   "name": "Matte Graphite [Single]",
-  "default_card_material_mode": "normal",
   "linked_settings_theme_id": "file:Matte Graphite [Single].srtheme",
   "colors": {
     "card.background": [
@@ -173,6 +172,108 @@
       45,
       49,
       179
+    ],
+    "media.transport.surface": [
+      41,
+      45,
+      49,
+      230
+    ],
+    "media.transport.border": [
+      172,
+      189,
+      200,
+      255
+    ],
+    "media.transport.separator": [
+      91,
+      101,
+      108,
+      165
+    ],
+    "media.transport.icon": [
+      245,
+      247,
+      248,
+      255
+    ],
+    "media.mute.surface": [
+      29,
+      32,
+      35,
+      255
+    ],
+    "media.mute.border": [
+      172,
+      189,
+      200,
+      255
+    ],
+    "media.mute.inner_border": [
+      15,
+      17,
+      18,
+      235
+    ],
+    "media.mute.icon": [
+      245,
+      247,
+      248,
+      255
+    ],
+    "media.mute.muted_icon": [
+      209,
+      214,
+      217,
+      255
+    ],
+    "media.volume.track": [
+      21,
+      23,
+      25,
+      255
+    ],
+    "media.volume.fill": [
+      143,
+      167,
+      181,
+      215
+    ],
+    "media.volume.outline": [
+      15,
+      17,
+      18,
+      235
+    ],
+    "media.progress.track": [
+      41,
+      45,
+      49,
+      234
+    ],
+    "media.progress.fill": [
+      143,
+      167,
+      181,
+      215
+    ],
+    "media.progress.glow": [
+      143,
+      167,
+      181,
+      155
+    ],
+    "media.progress.shadow": [
+      209,
+      214,
+      217,
+      143
+    ],
+    "abandonment_issues.accent": [
+      143,
+      167,
+      181,
+      215
     ],
     "gmail.sender": [
       209,

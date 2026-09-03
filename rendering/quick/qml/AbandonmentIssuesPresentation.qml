@@ -218,6 +218,10 @@ OverlayWidget {
                     text: abandonmentRoot.abandonmentModel.statusText.length > 0
                         ? abandonmentRoot.abandonmentModel.statusText
                         : "CURATED SHELF"
+                    // The archive/Backlog BLOCK carries the distinctive accent
+                    // through its fill/border. Keep the label on the resolved
+                    // theme text semantic so pale/low-contrast accents cannot
+                    // make BACKLOG text disappear into its own accent surface.
                     color: abandonmentRoot.abandonmentModel.textColor
                     font.family: abandonmentRoot.abandonmentModel.fontFamily
                     font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 0.66

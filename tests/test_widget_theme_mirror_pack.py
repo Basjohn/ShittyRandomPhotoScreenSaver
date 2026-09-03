@@ -47,10 +47,38 @@ SHARED_SEMANTIC_ROLES = {
     "widget.gradient.middle",
     "widget.gradient.end",
 }
+MATURE_FAMILY_ROLES = {
+    "abandonment_issues.accent",
+    "media.transport.surface",
+    "media.transport.border",
+    "media.transport.separator",
+    "media.transport.icon",
+    "media.mute.surface",
+    "media.mute.border",
+    "media.mute.inner_border",
+    "media.mute.icon",
+    "media.mute.muted_icon",
+    "media.volume.track",
+    "media.volume.fill",
+    "media.volume.outline",
+    "media.progress.track",
+    "media.progress.fill",
+    "media.progress.glow",
+    "media.progress.shadow",
+}
 
 
 def _payload(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+
+def _widget_filename_for_settings(path: Path) -> str:
+    if path.name == CANONICAL_SETTINGS_DEFAULT:
+        return CANONICAL_WIDGET_DEFAULT
+    stem = path.stem
+    stem = stem.removesuffix(" [Glass]").removesuffix(" [Acrylic]")
+    return f"{stem}.srwtheme"
 
 
 def test_every_settings_theme_has_one_stable_widget_mirror() -> None:
@@ -61,34 +89,27 @@ def test_every_settings_theme_has_one_stable_widget_mirror() -> None:
     assert len(widget_files) == len(settings_files)
     assert (WIDGET_THEME_DIR / CANONICAL_WIDGET_DEFAULT).is_file()
 
-    expected_widget_names = {
-        (CANONICAL_WIDGET_DEFAULT if path.name == CANONICAL_SETTINGS_DEFAULT else f"{path.stem}.srwtheme")
-        for path in settings_files
-    }
+    expected_widget_names = {_widget_filename_for_settings(path) for path in settings_files}
     assert {path.name for path in widget_files} == expected_widget_names
 
     for settings_path in settings_files:
-        widget_path = WIDGET_THEME_DIR / (
-            CANONICAL_WIDGET_DEFAULT
-            if settings_path.name == CANONICAL_SETTINGS_DEFAULT
-            else f"{settings_path.stem}.srwtheme"
-        )
+        widget_path = WIDGET_THEME_DIR / _widget_filename_for_settings(settings_path)
         payload = _payload(widget_path)
         assert payload["format"] == "srpss.widget-theme"
-        assert payload["schema_version"] == 2
+        assert payload["schema_version"] == 3
         expected_link = (
             "builtin:default-dark"
             if settings_path.name == CANONICAL_SETTINGS_DEFAULT
             else f"file:{settings_path.name}"
         )
         assert payload["linked_settings_theme_id"] == expected_link
-        assert payload["default_card_material_mode"] in {"normal", "glass", "acrylic"}
+        assert not payload["name"].endswith(" [Glass]")
+        assert not payload["name"].endswith(" [Acrylic]")
+        assert "default_card_material_mode" not in payload
         assert CORE_WIDGET_ROLES <= set(payload["colors"])
         if settings_path.name != CANONICAL_SETTINGS_DEFAULT:
-            # External mirrors intentionally materialize the mature shared semantic
-            # vocabulary. The compiled Default Dark remains sparse so its optional
-            # roles inherit the exact accepted family-local pixels.
             assert SHARED_SEMANTIC_ROLES <= set(payload["colors"])
+            assert MATURE_FAMILY_ROLES <= set(payload["colors"])
 
 
 def test_external_mirrors_use_explicit_non_name_matching_identity() -> None:
@@ -96,6 +117,10 @@ def test_external_mirrors_use_explicit_non_name_matching_identity() -> None:
         if path.name == CANONICAL_WIDGET_DEFAULT:
             continue
         payload = _payload(path)
-        settings_id = f"file:{path.stem}.srtheme"
-        assert payload["linked_settings_theme_id"] == settings_id
+        settings_id = payload["linked_settings_theme_id"]
+        assert isinstance(settings_id, str) and settings_id.startswith("file:")
         assert payload["theme_id"] == f"mirror:{settings_id}"
+        # Widget filenames deliberately omit Settings-window material tags, so
+        # runtime pairing can never depend on filename/display-name matching.
+        assert not path.stem.endswith(" [Glass]")
+        assert not path.stem.endswith(" [Acrylic]")

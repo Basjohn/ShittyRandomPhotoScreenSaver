@@ -92,6 +92,7 @@ DESTINATION_PROFILE = (
     "test_qtquick_runtime_reality.py",
     "test_media_generation_recreation.py",
     "test_media_event_observation.py",
+    "test_media_winrt_affinity_and_native_fault_contract.py",
     "test_media_runtime.py",
     # 2026-09-02 permanent retained-widget architecture regressions. These are
     # phase-neutral destination contracts, not one-off migration diagnostics.
@@ -100,7 +101,11 @@ DESTINATION_PROFILE = (
     "test_quick_authored_layout_mode_contract.py",
     "test_widget_theme_mirror_pack.py",
     "test_widget_theme_link_and_asset_contract.py",
-    "test_widget_material_shared_contract.py",
+    "test_widget_theme_no_material_contract.py",
+    "test_theme_completion_slice_contract.py",
+    "test_theme_expansion_light_metal_contract.py",
+    "test_settings_theme_lifetime_contract.py",
+    "test_settings_theme_qobject_lifetime.py",
     "test_reddit_exit_logic.py::TestContextMenuClickThroughSuppression::test_menu_action_arms_pointer_guard_and_reddit_open_is_refused",
     # Permanent post-H performance/freshness contracts. These are deliberately
     # phase-neutral: I/J must not regain green by weakening reaction cadence,

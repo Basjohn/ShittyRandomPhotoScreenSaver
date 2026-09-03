@@ -1,6 +1,6 @@
 # Contracts — Current Owner Map
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
 `Current_Plan.md` owns work admission. This file owns fast current/destination owner routing.
 
@@ -41,27 +41,20 @@ colour/opacity. Off = state 0. Do not conflate AccentPolicy state 3 with the doc
 `themes/dark.qss` is legacy base-stylesheet residue, not visual authority. Its audited retirement is owned by
 `Future_Cleanup.md`; do not alter native backdrop or forged-edge geometry merely to delete it.
 
-Future runtime Widget Themes are a separate visual bundle authority over widget/runtime-overlay appearance. Theme identity
-and surface material are intentionally orthogonal:
+Runtime Widget Themes are a separate semantic colour authority over retained Widget/runtime-overlay appearance. Theme identity and Settings-window backdrop material are deliberately separate:
 
 ```text
-Widget Theme (.srwtheme)
-    -> semantic runtime palette / proven visual-only values
-    -> default_card_material_mode = normal | glass | acrylic
-
-user Surface Style
-    -> card_material_override = theme | normal | glass | acrylic
-
-resolver
-    -> effective_card_material_mode
+Widget Theme (.srwtheme schema v3)
+    -> stable Widget theme identity
+    -> explicit linked Settings-theme identity
+    -> semantic runtime colours
 ```
 
-`Theme Default` is the default/no-override state. An explicit Normal/Glass/Acrylic selection overrides material only and
-retains the selected Widget Theme's colours; it does not mutate/dirty the theme or alter `Keep Synced`.
+Runtime cards are ordinary RGBA Quick surfaces. There is no Widget Theme material recommendation, Surface Style override, card-material Loader/capture path, or Settings-HWND backdrop reuse in the screensaver scene. Settings Glass/Acrylic remains owned exclusively by the Settings theme/native-window stack above.
 
 **Widget Theme palette precedence:** Widget Theme card colours are global/default baseline values. Explicit existing `widgets.<family>.card.*` values remain higher-precedence family overrides; they are not silently reclassified as theme state. The Context Menu has no family override layer and takes Widget Theme palette values directly. A per-family swatch edit therefore does not create Widget Theme `Custom`; editing a Widget-Theme-owned baseline value does.
 
-**Semantic visual-role contract (schema v2):** specialized decorative roles are sparse and inherit through one Qt-free resolver: intentional family override -> exact theme role -> shared semantic parent -> caller-supplied `local.*` current semantic value -> preserved current fallback. `local.*` tokens are runtime/presentation context only and must never serialize into `.srwtheme`, Custom or Settings. Default-valued legacy family swatches act as implicit Inherit; only a genuinely changed stored value is an explicit family override. Adding a role is therefore not permission to recolour Default Dark or to add a permanent visible Settings swatch. A bounded high-value family override **may** be exposed when users genuinely author it; such controls belong in collapsed semantic Settings buckets and still use default-valued = Inherit semantics. Slice 9 Media is the reference: `Header Appearance`, `Seek Bar`, and `Volume Control` expose the useful family overrides while lower-level transport/mute/panel/icon roles remain inherited. New retained widgets must consume this resolver rather than implement another Media/Steam/family-local theme cascade. Visualizer's specialised line/presentation system remains exempt from the generic decorative-stroke migration.
+**Semantic visual-role contract (schema v3):** specialized decorative roles are sparse and inherit through one Qt-free resolver: intentional family override -> exact theme role -> shared semantic parent -> caller-supplied `local.*` current semantic value -> preserved current fallback. `local.*` tokens are runtime/presentation context only and must never serialize into `.srwtheme`, Custom or Settings. Default-valued legacy family swatches act as implicit Inherit; only a genuinely changed stored value is an explicit family override. Adding a role is therefore not permission to recolour Default Dark or to add a permanent visible Settings swatch. A bounded high-value family override **may** be exposed when users genuinely author it; such controls belong in collapsed semantic Settings buckets and still use default-valued = Inherit semantics. Slice 9 Media is the reference: `Header Appearance`, `Seek Bar`, and `Volume Control` expose the useful family overrides while lower-level transport/mute/panel/icon roles remain inherited. New retained widgets must consume this resolver rather than implement another Media/Steam/family-local theme cascade. Visualizer's specialised line/presentation system remains exempt from the generic decorative-stroke migration.
 
 Manual editing of any Widget Theme-owned visual value has one separate deterministic contract: snapshot the complete
 currently resolved named Widget Theme into user-owned `Custom`, apply the edit to that snapshot, select `Custom`, and turn
@@ -71,9 +64,10 @@ ordinary customization never needs write access to `%ProgramData%\SRPSS\themes\w
 Theme file is a separate explicit authoring operation. Do not create hidden per-property override inheritance. Re-enabling
 Keep Synced may reselect the linked named Widget Theme but must not destroy the saved Custom snapshot.
 
-Future `Keep Synced` defaults ON and links each Settings theme to an explicit mirrored Widget Theme; sync OFF permits
-independent GUI/runtime theme combinations, and sync changes never erase an explicit surface override. Matching names may
-help author theme packs, but runtime links must use stable metadata/IDs rather than display-name heuristics.
+`Keep Synced` defaults ON and links each Settings theme to an explicit mirrored Widget Theme; sync OFF permits
+independent GUI/runtime theme combinations. Matching names may help author theme packs, but runtime links use stable
+metadata/IDs rather than display-name heuristics. Widget catalogue display labels remove trailing Settings-only
+`[Glass]` / `[Acrylic]` tags from Widget display names and Widget filenames while stable IDs and explicit Settings link IDs remain unchanged.
 
 Theme storage uses one resolved root with a Widget child:
 
@@ -93,9 +87,7 @@ ProgramData and repository/onefile/app-local theme roots into one live catalogue
 ProgramData theme files are catalogue assets, not the persistence location for automatic Custom state; `Custom` belongs
 to Settings persistence.
 
-The retained Context Menu follows the selected Widget Theme palette plus the same resolved **effective** runtime material
-because it lives in the Quick display scene; it never consumes the Settings QWidget theme/AccentPolicy backdrop directly.
-Its palette is projected once per display generation (alongside its global Card-shadow snapshot), not read on menu-open or per frame. Default Dark's context roles deliberately reproduce the accepted retained QML pixels before semantic replacement; optional indicator/arrow roles may inherit when older/sparser themes omit them. Glass/Acrylic remain scene-local Quick materials, not Settings HWND effects.
+The retained Context Menu follows the selected Widget Theme palette because it lives in the Quick display scene; it never consumes the Settings QWidget theme/AccentPolicy backdrop directly. Its palette is projected once per display generation (alongside its global Card-shadow snapshot), not read on menu-open or per frame. Default Dark's context roles deliberately reproduce the accepted retained QML pixels before semantic replacement; optional indicator/arrow roles may inherit when sparser themes omit them.
 
 ## Production runtime chain
 
@@ -187,9 +179,9 @@ Presentation destruction does not automatically mean backend destruction; shared
 
 ### Startup composition
 
-**Physical status 2026-09-01:** the attempted implementation below failed operator validation: the desktop -> first-wallpaper crossfade was not visible and the same Steam-family startup flashes remained. Treat this as the intended contract pending repair, not accepted behavior. The repair must preserve R-63 non-exact-cover/1 px overscan geometry throughout startup.
+**Physical status:** accepted in the post-H Quick runtime. The desktop -> first-wallpaper crossfade and coordinated Visualizer/widget startup reveal were physically validated after the startup-fade correction; later Settings/runtime replacement generations deliberately skip desktop recapture while retaining the independent startup gate. Preserve R-63 non-exact-cover/1 px overscan geometry throughout startup.
 
-Cold application startup (runtime generation 0) is intended to have one ordered retained presentation contract:
+Cold application startup (runtime generation 0) has one ordered retained presentation contract:
 
 ```text
 hidden selected QScreen

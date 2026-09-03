@@ -1,6 +1,6 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
 ## Start here
 
@@ -21,7 +21,7 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | durable product/architecture | `Spec.md` |
 | fast current owner map | `Docs/Contracts.md` |
 | Settings theme / Acrylic / Glass architecture | `Docs/Settings_Theme_Architecture.md` |
-| runtime Widget Theme / semantic role / card-material implementation | `Docs/QtQuick_Migration/Widget_Theme_And_Card_Material_Implementation_Plan.md` + `Docs/Contracts.md` |
+| runtime Widget Theme / semantic role / linking | `Docs/QtQuick_Migration/Widget_Theme_Implementation_Plan.md` + `Docs/Contracts.md` |
 | `dark.qss` retirement execution | `Docs/Settings_Dark_QSS_Retirement.md` |
 | physical scene/presenter architecture | `Docs/Compositor_Architecture.md` |
 | CUSTOM/edit/input/auxiliary | `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md` |
@@ -32,6 +32,8 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
 | visualizer authored/reference behavior | `Docs/Visualizer_Reference.md` |
 | Visualizer change checklist / preflight | `Docs/Visualizer_Change_Checklist.md` |
+| active Visualizer hitch attribution / optimization | `Docs/QtQuick_Migration/Visualizer_Hitch_Attribution_And_Optimization_Plan_2026-09-03.md` |
+| planned per-mode enable/dormancy + dedicated Visualizers Settings tab | `Docs/QtQuick_Migration/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md` |
 | ordinary widget authoring | `Docs/10_WIDGET_GUIDELINES.md` |
 | safety | `Docs/Guardrails.md` |
 | test inventory/retirement | `Docs/TestSuite.md` |
@@ -51,6 +53,7 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | closed True-F technical/retained-consumer evidence | `Docs/QtQuick_Migration/H_True_F_Technical_Closure.md` |
 | J final installed/physical acceptance route | `Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md` |
 | J Parity+ historical visual/interaction floor | `Docs/QtQuick_Migration/J_ParityPlus_Historical_Visual_Interaction_Reference_2026-08-30.md` |
+| J runtime-card material supersession / anti-resurrection | `Docs/QtQuick_Migration/J_Runtime_Card_Material_Supersession_2026-09-03.md` + `Docs/Historical_Bugs/Runtime_Card_Backdrop_Materials_Rejected_2026-09-02.md` |
 | J black-flash / first-visible-frame surface continuity | `Docs/QtQuick_Migration/J_Black_Flash_Surface_Continuity_Decomposition_2026-08-30.md` |
 
 Reorientation/handoff files are conversation/operator artifacts, not repository architecture. Do not add a current
@@ -72,7 +75,7 @@ Historical Glass investigation is R-61; temporary theme planning notes are not c
 
 ## Runtime Widget Themes
 
-`Docs/QtQuick_Migration/Widget_Theme_And_Card_Material_Implementation_Plan.md` owns the staged `.srwtheme`/Surface Style execution plan; `Docs/Contracts.md` and `Docs/Custom_Style_Implementation.md` own the durable precedence/Custom semantics. Schema-v2 specialized widget visuals use `ui/widget_visual_roles.py` as the one sparse semantic inheritance resolver; do not create family-local theme cascades or serialize `local.*` presentation context. `Current_Plan.md` owns which portions are implemented/awaiting validation.
+`Docs/QtQuick_Migration/Widget_Theme_Implementation_Plan.md` owns the colour-only `.srwtheme`/linking execution plan; `Docs/Contracts.md` and `Docs/Custom_Style_Implementation.md` own the durable precedence/Custom semantics. Schema-v2 specialized widget visuals use `ui/widget_visual_roles.py` as the one sparse semantic inheritance resolver; do not create family-local theme cascades or serialize `local.*` presentation context. `Current_Plan.md` owns which portions are implemented/awaiting validation.
 
 ## Closed ordinary-family migration
 
@@ -84,16 +87,14 @@ the two substantive migrated Steam families.
 
 ## G / H / I / J
 
-`Current_Plan.md` owns which phase/slice is active and which gates have closed. This index deliberately does not duplicate
-that volatile status.
+`Current_Plan.md` owns current sequencing. This index deliberately does not mirror completed slice checklists.
 
 Durable roles:
 
-- G owns retained CUSTOM/input/auxiliary/focus destination contracts and deterministic closure;
-- H is closed: final production Quick owner/orchestration cutover, old physical-host deletion and post-cutover acceptance are preserved in the H closure record;
-- I is active source-driven residue only and has no standing speculative deletion plan;
-- J owns compiled/installed/physical acceptance, including real displays, mixed refresh/DPR, off/wake, MC/screensaver input,
-  eyes-on parity, performance tails and packaging.
+- G owns retained CUSTOM/input/auxiliary/focus destination contracts;
+- H is closed: final production Quick owner/orchestration cutover and heavy-load acceptance live in the H closure record;
+- residual I-style source/test/tool truth cleanup is now a bounded non-blocking obligation tracked by `Current_Plan.md`, `Future_Cleanup.md` and `Docs/TestSuite.md`, not a reason to repopulate the live plan with old migration sub-slices;
+- J owns remaining physical/installed/frozen acceptance and the mandatory post-migration GC/general optimization tranche.
 
 ## Transitions
 
@@ -110,6 +111,8 @@ For geometry/CUSTOM work read these together:
 - `Docs/Guardrails/Performance_Optimization_Contract.md` for any performance-motivated Visualizer/runtime change
 - `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - `Docs/Visualizer_Reference.md`
+- `Docs/QtQuick_Migration/Visualizer_Hitch_Attribution_And_Optimization_Plan_2026-09-03.md` for the active P0 hitch evidence/order and Bubble+tall-Spectrum acceptance oracles
+- `Docs/QtQuick_Migration/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md` for the planned per-mode activation/dormancy + dedicated Visualizers tab work
 - `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md`
 - `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` for the bounded G4 correction record
 - `Docs/QtQuick_Migration/H5_Visualizer_Routing_And_Spectrum_Decomposition_2026-08-30.md` for closed H CUSTOM route evidence
@@ -133,3 +136,4 @@ admission or ownership and is not rewritten merely to sound current.
 - `Docs/Tooling_Audit_2026-09-01.md` — post-H operator-tool keep/delete/migrate authority; R-72 production/tool boundary.
 
 - `Docs/Historical_Bugs/R-73_Quick_Card_Shadow_Extra_Offset_Translation_And_Visualizer_Omission.md` — frame Extra Offset is directional growth, and Visualizer joins global card-shadow ownership.
+- `Docs/Historical_Bugs/Runtime_Card_Backdrop_Materials_Rejected_2026-09-02.md` — runtime Glass/Acrylic card backdrops are explicitly rejected; Settings-window native materials remain separate.

@@ -1,6 +1,6 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-08-31
+Last updated: 2026-09-03
 
 Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavior or presentation.
 
@@ -13,9 +13,39 @@ Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavio
 - `Docs/QtQuick_Migration/H5c_Visualizer_Reactivity_Parity_Audit_Decomposition_2026-08-31.md`
 - `Docs/QtQuick_Migration/Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`
 - `Current_Plan.md`
+- `Docs/QtQuick_Migration/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md` when changing mode registration/enablement/Settings composition
+- `Docs/QtQuick_Migration/Visualizer_Hitch_Attribution_And_Optimization_Plan_2026-09-03.md` for any hitch/cadence/tail optimization
 
-If source contradicts these durable destination contracts, determine whether source is missing implementation before
-weakening the contract.
+If source contradicts these durable destination contracts, determine whether source is missing implementation before weakening the contract.
+
+## 1A. Mode modularization / enable-disable preflight
+
+When changing mode registry, mode enablement, mode cycling or the planned Visualizers Settings tab:
+
+- [ ] Treat **all registered canonical modes** and **currently enabled modes** as different sets. Schema/default/preset migration may need all registered modes; runtime selection/cycling/render imports/Settings pills use enabled modes only.
+- [ ] If the Visualizer family is ON, at least one mode remains enabled, but any mode may be the sole enabled mode. Zero enabled modes is not a second family-disable mechanism.
+- [ ] Disabling a mode preserves its settings/presets/Custom state and prevents renderer/frame-runtime/Settings-body construction.
+- [ ] Disabling the currently selected mode transactionally selects another enabled mode before retirement; stale persisted requests resolve deterministically and log substitution rather than silently re-enabling the disabled mode.
+- [ ] No activation polling, per-mode timer, worker, thread, new analysis lane or second authored clock was introduced.
+- [ ] Common registry imports remain light; disabled heavy implementation modules are fresh-process dormant.
+- [ ] Existing mode-specific branches that encode real physics/render semantics were not generified merely to make the registry look uniform.
+- [ ] The existing preset slider and mode-level `Custom` system are preserved. Do not confuse mode preset Custom with global layout CUSTOM.
+- [ ] The global CUSTOM three-entry contract remains untouched: persisted/effective Custom, live Edit Layout start, and number-key saved-layout load all keep authored stacking/Media↔Visualizer adjacency dormant.
+- [ ] Media dependency remains one-way admission. If Media is disabled, the planned Visualizers tab may grey out with `Enable Media In Widgets`; it must not auto-enable or own Media.
+- [ ] Before/after evidence covers canonical + wide + tall geometry for every affected mode. Registry/UI refactoring is never permission to retune scaling/reactivity.
+
+## 1B. Hitch / delivery optimization preflight
+
+When a visible freeze, jump or flicker is reported:
+
+- [ ] Treat Bubble and extreme-tall Spectrum as sensitive **oracles**, not presumed owners. Do not damp their authored response to hide a global delivery stall.
+- [ ] Correlate logical `dt`, source age, analysis handoff, Quick sync/presentation age, frame-pacer skips, GC, usage telemetry, UI callbacks and diagnostics by timestamp before changing smoothing.
+- [ ] Separate steady-state periodic hitches from startup/recreation first-frame age.
+- [ ] Keep R-76 Spectrum height-aware temporal scaling intact while global delivery is unhealthy; retest renderer quantization/pixel pitch only after deterministic hitches are removed.
+- [ ] Keep Bubble R-69/BTF intact; no viewport compensation, radius/motion compression or lower cadence as a hitch workaround.
+- [ ] Before deep active-path optimization, complete V0-V4 behavior-floor/authority/dormancy so work from disabled modes cannot pollute the owner graph. V5-V8 Settings extraction/rehosting/dependency/future-mode work may wait.
+- [ ] A periodic diagnostics task that correlates with hitches is not exempt because it is "only diagnostics"; redesign it without losing needed observability.
+- [ ] A GC hitch is an allocation/lifetime/scheduling problem to attribute, not permission to globally disable GC or accept unbounded retention.
 
 ## 2. One authored clock
 

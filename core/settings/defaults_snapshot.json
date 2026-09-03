@@ -397,7 +397,6 @@
         }
     },
     "widget_theme": {
-        "card_material_override": "theme",
         "custom": null,
         "keep_synced": true,
         "selected_id": "default_dark"

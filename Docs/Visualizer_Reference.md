@@ -1,6 +1,6 @@
 # Visualizer Reference
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 Current visualizer behavior and accepted presentation destination.
 
@@ -16,6 +16,24 @@ Canonical current mode ids remain owned by the settings/mode registry:
 
 The mode registry may also own cheap presentation policy metadata. Do not put renderer objects or
 heavy implementation imports into it.
+
+## 1A. Registered modes vs enabled modes — planned modularization boundary
+
+Current source already has a canonical descriptor registry and some active-descriptor consumers, but per-mode product enable/disable is **not yet a complete production contract**. The planned modularization is decomposed in `Docs/QtQuick_Migration/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md`.
+
+The destination distinction is:
+
+```text
+all registered canonical modes
+    -> schema/default/migration/persisted settings authority
+
+currently enabled modes
+    -> Settings mode pills, selection/cycling, frame-runtime construction, renderer import/construction
+```
+
+Disabled modes must retain their configuration without contributing meaningful runtime work. If the Visualizer family is enabled, at least one mode remains enabled, but any current mode may be the sole enabled mode. This future admission layer must be behaviorally transparent to cadence, source freshness, presets, renderer transfer, scale/extent and Bubble/BTF.
+
+Do not treat this section as evidence that per-mode enablement is already implemented. `Current_Plan.md` owns admission.
 
 ## 2. Capability model
 

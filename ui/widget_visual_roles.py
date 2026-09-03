@@ -44,7 +44,7 @@ WIDGET_VISUAL_ROLE_PARENTS: Mapping[str, str] = {
     "widget.gradient.end": "local.gradient.end",
 
     # Context Menu detail roles. The main menu/submenu palette remains a strict
-    # core theme surface. These smaller details are schema-v2 optional so older
+    # core theme surface. These smaller details are schema-v3 optional so sparse
     # themes stay valid; they inherit from the closest menu semantic when omitted.
     "context.menu.indicator.border": "context.menu.border",
     "context.menu.indicator.fill": "context.menu.selected_surface",
@@ -89,6 +89,7 @@ WIDGET_VISUAL_ROLE_PARENTS: Mapping[str, str] = {
     "abandonment_issues.header.fill": "header.fill",
     "abandonment_issues.header.border": "header.border",
     "abandonment_issues.header.text": "header.text",
+    "abandonment_issues.accent": "widget.accent",
 
     # Media internal surfaces.  These are intentionally semantic, not GUI controls.
     "media.transport.surface": "widget.panel",

@@ -156,31 +156,72 @@ OverlayWidget {
                 width: contentColumn.width
                 height: Math.max(28.0, redditRoot.redditModel.fontSize * 1.55)
 
-                ShadowedText {
+                Item {
                     id: ageText
                     objectName: "redditPostAge_" + postRow.index
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Math.max(96.0, redditRoot.redditModel.fontSize * 6.0)
+                    width: Math.max(88.0, redditRoot.redditModel.fontSize * 5.55)
                     height: parent.height
-                    text: postRow.postAge
-                    color: redditRoot.redditModel.ageColor
-                    font.family: redditRoot.redditModel.fontFamily
-                    font.pointSize: redditRoot.redditModel.ageFontSize
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
-                    elide: Text.ElideRight
-                    shadowEnabled: redditRoot.redditModel.textShadowEnabled
-                    shadowColor: redditRoot.redditModel.textShadowColor
-                    shadowOffsetX: redditRoot.redditModel.textShadowOffsetX
-                    shadowOffsetY: redditRoot.redditModel.textShadowOffsetY
+
+                    readonly property string valueText: {
+                        const raw = String(postRow.postAge || "").trim()
+                        return raw.toUpperCase().endsWith(" AGO")
+                            ? raw.slice(0, -4).trim()
+                            : raw
+                    }
+
+                    ShadowedText {
+                        id: ageValueText
+                        objectName: "redditPostAgeValue_" + postRow.index
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.max(49.0, parent.width * 0.58)
+                        height: parent.height
+                        text: ageText.valueText
+                        color: redditRoot.redditModel.ageColor
+                        font.family: redditRoot.redditModel.fontFamily
+                        font.pointSize: redditRoot.redditModel.ageFontSize
+                        font.bold: true
+                        // Fixed left edge guarantees the first digit aligns
+                        // vertically across 03D/02HR/etc. The sub-column itself
+                        // occupies the visual centre of the time field.
+                        horizontalAlignment: Text.AlignLeft
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                        shadowEnabled: redditRoot.redditModel.textShadowEnabled
+                        shadowColor: redditRoot.redditModel.textShadowColor
+                        shadowOffsetX: redditRoot.redditModel.textShadowOffsetX
+                        shadowOffsetY: redditRoot.redditModel.textShadowOffsetY
+                    }
+
+                    ShadowedText {
+                        id: ageAgoText
+                        objectName: "redditPostAgeAgo_" + postRow.index
+                        anchors.right: parent.right
+                        anchors.rightMargin: 3.0
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.max(30.0, parent.width * 0.36)
+                        height: parent.height
+                        text: "AGO"
+                        color: redditRoot.redditModel.ageColor
+                        font.family: redditRoot.redditModel.fontFamily
+                        font.pointSize: redditRoot.redditModel.ageFontSize
+                        font.bold: true
+                        horizontalAlignment: Text.AlignRight
+                        verticalAlignment: Text.AlignVCenter
+                        shadowEnabled: redditRoot.redditModel.textShadowEnabled
+                        shadowColor: redditRoot.redditModel.textShadowColor
+                        shadowOffsetX: redditRoot.redditModel.textShadowOffsetX
+                        shadowOffsetY: redditRoot.redditModel.textShadowOffsetY
+                    }
                 }
 
                 ShadowedText {
                     id: titleText
                     objectName: "redditPostTitle_" + postRow.index
                     anchors.left: ageText.right
-                    anchors.leftMargin: 8.0
+                    anchors.leftMargin: 4.0
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     height: parent.height

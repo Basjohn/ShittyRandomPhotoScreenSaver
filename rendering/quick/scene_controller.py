@@ -132,22 +132,6 @@ class QuickSceneFactory(QObject):
                     self._overlay_card_shadow_component,
                 )
             )
-        self._overlay_card_material_mask_url = QUrl.fromLocalFile(
-            str(self._qml_root / "OverlayCardMaterialMask.qml")
-        )
-        self._overlay_card_material_mask_component = QQmlComponent(
-            self._engine, self._overlay_card_material_mask_url
-        )
-        if (
-            self._overlay_card_material_mask_component.status()
-            != QQmlComponent.Status.Ready
-        ):
-            raise RuntimeError(
-                self._component_error(
-                    "OverlayCardMaterialMask.qml failed to load",
-                    self._overlay_card_material_mask_component,
-                )
-            )
         self._ordinary_widget_family_components: dict[str, QQmlComponent] = {}
         for descriptor in ORDINARY_WIDGET_FAMILY_COMPONENTS:
             component = QQmlComponent(
@@ -265,31 +249,6 @@ class QuickSceneFactory(QObject):
             item,
             QQmlEngine.ObjectOwnership.CppOwnership,
         )
-        return item
-
-    def create_overlay_card_material_mask(
-        self,
-        initial_properties: dict[str, object],
-        context: QQmlContext,
-    ) -> QQuickItem:
-        """Create one cheap rounded geometry contributor to the shared mask."""
-
-        component = self._overlay_card_material_mask_component
-        if component.status() != QQmlComponent.Status.Ready:
-            raise RuntimeError(
-                self._component_error(
-                    "OverlayCardMaterialMask.qml is not ready", component
-                )
-            )
-        item = component.createWithInitialProperties(dict(initial_properties), context)
-        if not isinstance(item, QQuickItem):
-            raise RuntimeError(
-                self._component_error(
-                    "OverlayCardMaterialMask.qml did not create a QQuickItem",
-                    component,
-                )
-            )
-        QQmlEngine.setObjectOwnership(item, QQmlEngine.ObjectOwnership.CppOwnership)
         return item
 
     def create_ordinary_widget_family(
@@ -430,20 +389,12 @@ class QuickSceneController(QObject):
         )
         if ordinary_widget_shadow_host_item is None:
             raise RuntimeError("DisplayScene.qml has no ordinary widget shadow host")
-        ordinary_material_mask_host_item = root.findChild(
-            QQuickItem,
-            "ordinaryCardMaterialMaskHost",
-        )
-        if ordinary_material_mask_host_item is None:
-            raise RuntimeError("DisplayScene.qml has no ordinary card material-mask host")
         self._ordinary_widget_host = OrdinaryWidgetPresentationHost(
             host_item=ordinary_widget_host_item,
             shadow_host_item=ordinary_widget_shadow_host_item,
-            material_mask_host_item=ordinary_material_mask_host_item,
             context=context,
             create_overlay_item=factory.create_overlay_widget,
             create_shadow_item=factory.create_overlay_card_shadow,
-            create_material_mask_item=factory.create_overlay_card_material_mask,
             create_family_item=factory.create_ordinary_widget_family,
         )
         window.bind_semantic_double_click_hit_test(
@@ -461,16 +412,12 @@ class QuickSceneController(QObject):
         self._custom_layout_overlay = RetainedCustomLayoutOverlay(
             custom_layout_overlay_item
         )
-        background_host = root.findChild(QQuickItem, "backgroundPresentationHost")
-        if background_host is None:
-            raise RuntimeError("DisplayScene.qml has no background presentation host")
         self._background_item = BackgroundRenderItem(
-            background_host,
+            root,
             telemetry=self._telemetry,
         )
         self._background_item.setObjectName("backgroundRenderItem")
         self._background_item.setZ(0.0)
-        root.setProperty("materialBackdropSourceItem", background_host)
 
         content.widthChanged.connect(self._sync_root_width)
         content.heightChanged.connect(self._sync_root_height)
@@ -610,27 +557,6 @@ class QuickSceneController(QObject):
         for name, rgba in properties.items():
             root.setProperty(name, QColor(*rgba))
         return True
-
-    def set_card_material_mode(self, mode: str) -> str:
-        """Project the one admitted per-generation card material into the scene.
-
-        The expensive QML material Loader remains dormant in Normal.  Ordinary
-        families receive only cheap mask geometry in Glass/Acrylic, while the
-        display scene owns the sole shared capture/blur.
-        """
-
-        normalized = str(mode or "normal").strip().lower()
-        if normalized not in {"normal", "glass", "acrylic"}:
-            normalized = "normal"
-        root = self._scene_root
-        host = self._ordinary_widget_host
-        if root is not None:
-            root.setProperty("cardMaterialMode", normalized)
-        if host is not None:
-            host.set_card_material_mode(normalized)
-        if self._visualizer_root is not None:
-            self._visualizer_root.setProperty("cardMaterialMode", normalized)
-        return normalized
 
     def bind_context_menu_model(self, model: QuickContextMenuModel) -> bool:
         if not isinstance(model, QuickContextMenuModel):
@@ -1203,13 +1129,6 @@ class QuickSceneController(QObject):
 
         style = presentation.shell_style
         root.setProperty("authoredSceneOpacity", presentation.scene_fade)
-        scene_root = self._scene_root
-        material_mode = (
-            "normal"
-            if scene_root is None
-            else str(scene_root.property("cardMaterialMode") or "normal")
-        )
-        root.setProperty("cardMaterialMode", material_mode)
         root.setProperty(
             "cardShellEnabled",
             presentation.shell_policy is VisualizerShellPolicy.CARD,

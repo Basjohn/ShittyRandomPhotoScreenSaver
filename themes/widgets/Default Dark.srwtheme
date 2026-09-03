@@ -1,9 +1,8 @@
 {
   "format": "srpss.widget-theme",
-  "schema_version": 2,
+  "schema_version": 3,
   "theme_id": "default_dark",
   "name": "Default Dark",
-  "default_card_material_mode": "normal",
   "linked_settings_theme_id": "builtin:default-dark",
   "colors": {
     "card.background": [

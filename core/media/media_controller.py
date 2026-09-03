@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import math
-from typing import Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 import threading
 
 from core.logging.logger import get_logger, is_verbose_logging
@@ -259,7 +259,7 @@ class WindowsGlobalMediaController(BaseMediaController):
         # (not requested per-query as the poll path does). Tokens are detached
         # deterministically on stop/retire; a generation integer fences any native
         # callback that a swap/teardown has already superseded.
-        self._observation_lock = threading.Lock()
+        self._observation_lock = threading.RLock()
         self._event_on_dirty: Callable[[str], None] | None = None
         self._event_on_established: Callable[[bool, str], None] | None = None
         self._event_manager = None
@@ -268,6 +268,11 @@ class WindowsGlobalMediaController(BaseMediaController):
         self._session_tokens: list[tuple[Callable[[Any], None], Any]] = []
         self._observation_generation = 0
         self._observation_active = False
+        # Retained GSMTC manager/session wrappers are thread-affine.  Their full
+        # lifetime (create/subscribe/rebind/unsubscribe/release) therefore lives
+        # on one explicit ThreadManager-owned affinity lane, never on the Qt UI
+        # thread or an arbitrary IO-pool worker.
+        self._observation_lane = None
         self._init_winrt()
 
     def _init_winrt(self) -> None:
@@ -338,42 +343,152 @@ class WindowsGlobalMediaController(BaseMediaController):
         if tm is None:
             return False
         with self._observation_lock:
+            existing_lane = self._observation_lane
+            if existing_lane is not None:
+                if self._observation_active and not bool(existing_lane.is_stopped):
+                    return True
+                # A timed-out/finishing teardown keeps this handle until its owner
+                # packet actually releases the retained WinRT state. Never overlap
+                # a second manager/session transaction with that pending owner.
+                logger.error(
+                    "[MEDIA_EVENT] observation owner transaction still exists; "
+                    "refusing overlapping retained WinRT ownership"
+                )
+                return False
             self._event_on_dirty = on_dirty
             self._event_on_established = on_established
             self._observation_generation += 1
             generation = self._observation_generation
 
+        try:
+            lane = tm.create_affinity_lane(
+                lane_id=f"media_winrt_observe_{self._task_owner_id}_{generation}",
+                category="media_event_observation",
+                runtime_generation=getattr(self, "_runtime_generation", None),
+                owner=self,
+            )
+        except Exception:
+            logger.exception(
+                "[MEDIA_EVENT] failed to create retained WinRT affinity lane"
+            )
+            with self._observation_lock:
+                self._event_on_dirty = None
+                self._event_on_established = None
+            return False
+
+        with self._observation_lock:
+            if self._retired or generation != self._observation_generation:
+                lane.stop(wait=False)
+                return False
+            self._observation_lane = lane
+
         def _establish() -> None:
             self._establish_observation(generation)
 
-        _establish._srpss_runtime_generation = getattr(self, "_runtime_generation", None)
         try:
-            tm.submit_io_task(
-                _establish,
-                task_id=f"media_event_observe_{self._task_owner_id}_{generation}",
-            )
-        except TypeError:
-            tm.submit_io_task(_establish)
+            if not lane.submit(_establish):
+                raise RuntimeError("retained WinRT affinity lane rejected setup")
         except Exception:
-            logger.debug("[MEDIA_EVENT] failed to submit observation setup", exc_info=True)
+            logger.exception("[MEDIA_EVENT] failed to submit observation setup")
+            with self._observation_lock:
+                if self._observation_lane is lane:
+                    self._observation_lane = None
+                self._event_on_dirty = None
+                self._event_on_established = None
+            lane.stop(wait=False)
             return False
         return True
 
     def stop_event_observation(self) -> None:
+        """Fence callbacks, then detach/release retained WinRT state on its owner lane."""
+
         with self._observation_lock:
-            # Bump first so any in-flight native callback fences itself out.
+            # Bump first so in-flight native callbacks become inert before teardown
+            # is queued.  Callback functions themselves touch no retained WinRT
+            # object after this fence.
             self._observation_generation += 1
+            teardown_generation = self._observation_generation
             self._observation_active = False
+            self._event_on_dirty = None
+            self._event_on_established = None
+            lane = self._observation_lane
+
+        if lane is None:
+            # No affinity owner means there must not be retained COM/WinRT state.
+            # Never "clean up" such state on the caller thread: that is the exact
+            # RPC_E_WRONG_THREAD failure this contract prevents.
+            with self._observation_lock:
+                if (
+                    self._event_manager is not None
+                    or self._event_session is not None
+                    or self._manager_tokens
+                    or self._session_tokens
+                ):
+                    logger.critical(
+                        "[MEDIA_EVENT] retained WinRT state exists without its "
+                        "affinity lane; refusing wrong-thread release"
+                    )
+            return
+
+        def _teardown() -> None:
+            try:
+                self._teardown_observation_on_owner_thread(teardown_generation)
+            finally:
+                # If the synchronous caller times out, the eventual owner-thread
+                # completion still closes new lane admission, releases the logical
+                # lane, and only then removes this transaction handle. Until that
+                # point start_event_observation() must refuse a second owner.
+                lane.stop(wait=False)
+                with self._observation_lock:
+                    if self._observation_lane is lane:
+                        self._observation_lane = None
+
+        try:
+            lane.call(_teardown, timeout=2.0)
+        except Exception:
+            # Keep the lane handle retained.  The queued/active callable retains
+            # this controller until it can clear native state on the owner thread;
+            # deliberately do not assign the WinRT wrappers to None here.
+            logger.exception(
+                "[MEDIA_EVENT] retained WinRT teardown did not complete on its "
+                "affinity lane"
+            )
+            return
+
+        if not lane.stop(wait=True, timeout=1.0):
+            logger.error(
+                "[MEDIA_EVENT] retained WinRT affinity lane did not drain after teardown"
+            )
+            return
+        with self._observation_lock:
+            if self._observation_lane is lane:
+                self._observation_lane = None
+
+    def _teardown_observation_on_owner_thread(self, generation: int) -> None:
+        """Detach subscriptions and release wrappers on the creating OS thread."""
+
+        logger.info(
+            "[MEDIA_EVENT][AFFINITY] teardown provider=%s generation=%s thread=%s",
+            self._provider_id,
+            generation,
+            threading.get_ident(),
+        )
+        with self._observation_lock:
             self._detach_session_tokens_locked()
             self._detach_manager_tokens_locked()
             self._event_session = None
             self._event_manager = None
-            self._event_on_dirty = None
-            self._event_on_established = None
+            self._observation_active = False
 
     def _establish_observation(self, generation: int) -> None:
         if self._retired or generation != self._observation_generation:
             return
+        logger.info(
+            "[MEDIA_EVENT][AFFINITY] establish provider=%s generation=%s thread=%s",
+            self._provider_id,
+            generation,
+            threading.get_ident(),
+        )
         on_established = self._event_on_established
         try:
             mgr = self._run_coro_in_isolated_loop(
@@ -483,16 +598,35 @@ class WindowsGlobalMediaController(BaseMediaController):
 
     def _make_manager_handler(self, generation: int, reason: str):
         def _handler(_sender, _args) -> None:
-            try:
-                if self._retired or generation != self._observation_generation:
-                    return
-                with self._observation_lock:
+            # WinRT may invoke this callback on an arbitrary native thread.  It may
+            # only capture the dirty edge and queue any manager/session access back
+            # to the retained affinity owner.
+            if self._retired or generation != self._observation_generation:
+                return
+            with self._observation_lock:
+                lane = self._observation_lane
+            if lane is None or bool(lane.is_stopped):
+                return
+
+            def _rebind_and_emit() -> None:
+                try:
                     if self._retired or generation != self._observation_generation:
                         return
-                    self._bind_current_session_locked(generation)
-                self._emit_dirty(reason, generation)
-            except Exception:
-                logger.debug("[MEDIA_EVENT] manager handler failed", exc_info=True)
+                    with self._observation_lock:
+                        if self._retired or generation != self._observation_generation:
+                            return
+                        self._bind_current_session_locked(generation)
+                    self._emit_dirty(reason, generation)
+                except Exception:
+                    logger.debug(
+                        "[MEDIA_EVENT] manager owner-lane handler failed",
+                        exc_info=True,
+                    )
+
+            if not lane.submit(_rebind_and_emit):
+                logger.debug(
+                    "[MEDIA_EVENT] manager dirty edge rejected by stopped affinity lane"
+                )
         return _handler
 
     def _make_session_handler(self, generation: int, reason: str):

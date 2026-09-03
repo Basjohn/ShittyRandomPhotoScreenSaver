@@ -242,7 +242,7 @@ class AbandonmentIssuesPresentationConfig:
             config.accent_color,
         )
         accent_color = resolve_rgba_role(
-            "widget.accent",
+            "abandonment_issues.accent",
             local_roles={"local.accent": config.accent_color},
             fallback=config.accent_color,
             explicit=accent_override,

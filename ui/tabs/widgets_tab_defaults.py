@@ -85,21 +85,14 @@ def _sync_general_widget_theme_controls(tab: "WidgetsTab") -> None:
 
     surface_btn = getattr(tab, "widget_card_surface_btn", None)
     border_btn = getattr(tab, "widget_card_border_btn", None)
-    style_combo = getattr(tab, "widget_surface_style_combo", None)
-    if surface_btn is None and border_btn is None and style_combo is None:
+    if surface_btn is None and border_btn is None:
         return
     state, resolved = _resolved_widget_theme_for_tab(tab)
     if surface_btn is not None:
         surface_btn.set_color(_rgba_to_qcolor(resolved.theme.color("card.background")))
     if border_btn is not None:
         border_btn.set_color(_rgba_to_qcolor(resolved.theme.color("card.border")))
-    if style_combo is not None:
-        blocker = QSignalBlocker(style_combo)
-        try:
-            index = style_combo.findData(state.card_material_override)
-            style_combo.setCurrentIndex(index if index >= 0 else 0)
-        finally:
-            del blocker
+
 
 
 def _bind_general_widget_theme_controls(tab: "WidgetsTab") -> None:
@@ -168,32 +161,6 @@ def _edit_shared_widget_theme_color(
     elif token == "card.border":
         tab.widget_card_border_btn.set_color(_rgba_to_qcolor(snapshot.color(token)))
 
-
-def _on_widget_surface_style_changed(tab: "WidgetsTab", _index: int) -> None:
-    """Persist the orthogonal material override without creating Custom."""
-
-    if getattr(tab, "_loading", False):
-        return
-    combo = getattr(tab, "widget_surface_style_combo", None)
-    if combo is None:
-        return
-    override = str(combo.currentData() or "theme").strip().lower()
-    if override not in {"theme", "normal", "glass", "acrylic"}:
-        override = "theme"
-    state = read_widget_theme_state(tab._settings)
-    if override == state.card_material_override:
-        return
-    next_state = WidgetThemeState(
-        selected_id=state.selected_id,
-        keep_synced=state.keep_synced,
-        card_material_override=override,
-        custom_payload=state.custom_payload,
-    )
-    activate_widget_theme_state(
-        tab._settings,
-        next_state,
-        settings_theme_id=read_persisted_theme_id(tab._settings),
-    )
 
 def _finalize_bucket_body(toggle, body: QWidget) -> None:
     expanded = bool(toggle.isChecked())
@@ -537,6 +504,15 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         on_toggle=lambda checked: tab.set_widget_bucket_state("defaults", "appearance", checked),
         defer_initial_visibility=True,
     )
+    style_overrides_toggle, style_overrides_body, style_overrides_layout = build_bucket_toggle(
+        content_layout,
+        "Style Overrides",
+        expanded=tab.get_widget_bucket_state("defaults", "style_overrides", default=True),
+        on_toggle=lambda checked: tab.set_widget_bucket_state(
+            "defaults", "style_overrides", checked
+        ),
+        defer_initial_visibility=True,
+    )
     layout_toggle, layout_body, layout_settings_layout = build_bucket_toggle(
         content_layout,
         "Layout",
@@ -552,6 +528,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         defer_initial_visibility=True,
     )
     tab._general_appearance_toggle = appearance_toggle
+    tab._general_style_overrides_toggle = style_overrides_toggle
     tab._general_layout_toggle = layout_toggle
     tab._general_cache_toggle = cache_toggle
 
@@ -693,7 +670,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     layout_settings_layout.addLayout(row)
 
     surface_row, _ = add_aligned_row(
-        appearance_layout,
+        style_overrides_layout,
         "Card Surface:",
         label_width=label_width,
         wrap=False,
@@ -703,7 +680,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         show_alpha=True,
     )
     tab.widget_card_surface_btn.setToolTip(
-        "Shared Widget Theme card surface. Editing it creates/updates the Settings-persisted Custom Widget Theme and applies across widget families unless that family has an explicit override."
+        "Theme-owned card surface. Editing this colour forks the selected named Widget Theme into persisted Custom; explicit per-family card overrides still win."
     )
     tab.widget_card_surface_btn.color_changed.connect(
         lambda color, owner=tab: _edit_shared_widget_theme_color(owner, "card.background", color)
@@ -712,7 +689,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     surface_row.addStretch()
 
     card_border_row, _ = add_aligned_row(
-        appearance_layout,
+        style_overrides_layout,
         "Card Border:",
         label_width=label_width,
         wrap=False,
@@ -722,7 +699,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         show_alpha=True,
     )
     tab.widget_card_border_btn.setToolTip(
-        "Shared Widget Theme card border colour/alpha. Explicit family overrides remain higher precedence."
+        "Theme-owned card border. Editing this colour forks the selected named Widget Theme into persisted Custom; explicit per-family overrides remain higher precedence."
     )
     tab.widget_card_border_btn.color_changed.connect(
         lambda color, owner=tab: _edit_shared_widget_theme_color(owner, "card.border", color)
@@ -730,37 +707,20 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     card_border_row.addWidget(tab.widget_card_border_btn)
     card_border_row.addStretch()
 
-    material_row, _ = add_aligned_row(
-        appearance_layout,
-        "Surface Style:",
-        label_width=label_width,
-        wrap=False,
-    )
-    tab.widget_surface_style_combo = StyledComboBox()
-    tab.widget_surface_style_combo.addItem("Theme Default", "theme")
-    tab.widget_surface_style_combo.addItem("Normal", "normal")
-    tab.widget_surface_style_combo.addItem("Glass", "glass")
-    tab.widget_surface_style_combo.addItem("Acrylic", "acrylic")
-    tab.widget_surface_style_combo.setToolTip(
-        "Material is independent of Widget Theme colours. Theme Default follows the selected Widget Theme recommendation; an explicit choice overrides material only."
-    )
-    tab.widget_surface_style_combo.currentIndexChanged.connect(
-        lambda index, owner=tab: _on_widget_surface_style_changed(owner, index)
-    )
-    material_row.addWidget(tab.widget_surface_style_combo)
-    material_row.addStretch()
-
     _sync_general_widget_theme_controls(tab)
     _bind_general_widget_theme_controls(tab)
 
     border_row, _ = add_aligned_row(
-        appearance_layout,
+        style_overrides_layout,
         "Card Border Width:",
         label_width=label_width,
         wrap=False,
     )
     tab.card_border_width_spin = QSpinBox()
     tab.card_border_width_spin.setRange(0, 12)
+    tab.card_border_width_spin.setToolTip(
+        "Global card geometry override. This changes border width without editing or forking the selected Widget Theme."
+    )
     tab.card_border_width_spin.setValue(tab._global_card_border_width)
     tab.card_border_width_spin.valueChanged.connect(tab._on_global_border_width_changed)
     border_row.addWidget(tab.card_border_width_spin)
@@ -831,6 +791,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     for toggle, body in (
         (appearance_toggle, appearance_body),
+        (style_overrides_toggle, style_overrides_body),
         (layout_toggle, layout_body),
         (cache_toggle, cache_body),
     ):
