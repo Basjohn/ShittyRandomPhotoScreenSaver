@@ -730,8 +730,9 @@ def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
     )
     tab = WidgetsTab(manager)
     try:
-        slider = getattr(tab, slider_attr)
-        custom_index = slider.custom_index()
+        # V5b: non-Spectrum bodies are lazy; the Custom slot index is a mode
+        # property (no need to touch the not-yet-built slider here).
+        custom_index = vp.get_custom_preset_index(mode)
         prefix = vp.MODE_KEY_PREFIXES[mode][0]
 
         widgets_cfg = manager.get("widgets", {}) or {}
@@ -749,6 +750,8 @@ def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
         manager.set("widgets", widgets_cfg)
 
         tab._load_settings()
+        # The target mode is now active, so its lazy body is constructed.
+        slider = getattr(tab, slider_attr)
         payload = tab.build_visualizer_preset_payload(mode)
         assert payload
 

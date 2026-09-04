@@ -1431,10 +1431,14 @@ def test_sine_curated_preset_survives_save_and_reload(qt_app, settings_manager):
     try:
         mode = "sine_wave"
         curated_index = 0
+
+        # V5b: the Sine body is lazy — select it so it is constructed before its
+        # preset slider is exercised.
+        tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData(mode))
+        qt_app.processEvents()
         slider = tab._sine_preset_slider
         custom_index = slider.custom_index()
 
-        tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData(mode))
         slider.set_preset_index(custom_index)
         slider._slider.setValue(curated_index)
         qt_app.processEvents()
@@ -1463,6 +1467,12 @@ def test_visualizer_mode_builders_keep_preset_scaffold_wiring(qt_app, settings_m
     try:
         tab._load_settings()
         for descriptor in iter_visualizer_mode_descriptors():
+            # V5b: non-Spectrum bodies are lazy — select each mode so it is
+            # constructed, then assert its builder still wires the scaffold.
+            tab.vis_mode_combo.setCurrentIndex(
+                tab.vis_mode_combo.findData(descriptor.mode_id)
+            )
+            qt_app.processEvents()
             slider = getattr(tab, descriptor.preset_slider_attr)
             assert slider._advanced_container is not None, descriptor.mode_id
             assert slider._technical_container is not None, descriptor.mode_id
@@ -1482,7 +1492,13 @@ def test_visualizer_sparse_mapping_uses_first_preset_fallback(qt_app, settings_m
     tab = WidgetsTab(settings_manager)
     try:
         tab._load_settings()
+        # V5b: select each mode so its lazy body is constructed, then assert the
+        # sparse mapping resolves to the first-preset fallback.
+        tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData("sine_wave"))
+        qt_app.processEvents()
         assert tab._sine_preset_slider.preset_index() == 0
+        tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData("bubble"))
+        qt_app.processEvents()
         assert tab._bubble_preset_slider.preset_index() == 0
     finally:
         tab.deleteLater()

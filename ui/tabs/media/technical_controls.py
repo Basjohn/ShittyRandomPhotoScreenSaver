@@ -1070,12 +1070,24 @@ def _collect_control_value(controls: Dict[str, object], defn: _ControlDef) -> An
     raise ValueError(f"Unsupported control kind: {defn.widget_kind}")
 
 
-def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[str, Any]]) -> None:
-    """Populate per-mode technical widgets from the config mapping."""
+def load_per_mode_technical_controls(
+    tab,
+    spotify_vis_config: Optional[Mapping[str, Any]],
+    *,
+    only_mode: str | None = None,
+) -> None:
+    """Populate per-mode technical widgets from the config mapping.
+
+    When ``only_mode`` is given, only that mode's technical controls are
+    hydrated. The lazy body factory uses this so constructing a new mode never
+    re-hydrates (and clobbers unsaved edits in) another already-built mode.
+    """
     controls_map = get_per_mode_controls(tab)
     cache = _ensure_per_mode_cache(tab)
 
     for mode_key, controls in controls_map.items():
+        if only_mode is not None and mode_key != only_mode:
+            continue
         mode_cache: Dict[str, Any] = {}
         for defn in _control_defs_for_mode(mode_key):
             if controls.get(defn.control_key) is None:

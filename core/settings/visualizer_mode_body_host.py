@@ -85,6 +85,37 @@ class VisualizerModeBodyHost:
     def _norm(mode_id: str) -> str:
         return str(mode_id or "").strip().lower()
 
+    def ensure(self, mode_id: str) -> Any:
+        """Construct a mode's body on first need and cache it; return the body.
+
+        Pure body-lifecycle: does NOT change the selected mode, so a caller that
+        already owns mode selection (e.g. the live Settings mode combo) stays the
+        single selection authority. On a cache hit the factory is not called
+        again — the existing body (and any unsaved edits in it) is returned as-is.
+        Rejects a mode outside the effective enabled set.
+        """
+        target = self._norm(mode_id)
+        if target not in self._enabled:
+            raise ValueError(f"Cannot construct disabled visualizer mode {mode_id!r}")
+        body = self._bodies.get(target)
+        if body is None:
+            body = self._factory(target)
+            self._bodies[target] = body
+        return body
+
+    def adopt(self, mode_id: str, body: Any) -> Any:
+        """Register an already-constructed body without invoking the factory.
+
+        Used for a mode that is built eagerly outside the host (the temporary
+        V5b Spectrum exception): the host still owns its lifecycle record so
+        selection/cache queries are uniform across all modes.
+        """
+        target = self._norm(mode_id)
+        if target not in self._enabled:
+            raise ValueError(f"Cannot adopt disabled visualizer mode {mode_id!r}")
+        self._bodies[target] = body
+        return body
+
     def select(self, mode_id: str) -> Any:
         """Select a mode's pill, constructing its body lazily on first need.
 
@@ -92,14 +123,8 @@ class VisualizerModeBodyHost:
         disabled mode has no pill and no body); callers resolve a disabled/stale
         request through the effective-mode resolver *before* selecting.
         """
-        target = self._norm(mode_id)
-        if target not in self._enabled:
-            raise ValueError(f"Cannot select disabled visualizer mode {mode_id!r}")
-        body = self._bodies.get(target)
-        if body is None:
-            body = self._factory(target)
-            self._bodies[target] = body
-        self._selected = target
+        body = self.ensure(mode_id)
+        self._selected = self._norm(mode_id)
         return body
 
     def set_enabled_modes(self, enabled_modes: object) -> tuple[str, ...]:
