@@ -3,6 +3,10 @@
 Last updated: 2026-09-04
 Outside of Codex Work Began: `886e6fa419ff130ff2a9aedf5091ae6162d1e958`
 
+## PRE-V5 SETTINGS MIGRATION boundary
+
+`81019d5dd196cc5522ca9041d8773c8f2fa62df3` is the **immediate pre-V5 rollback / comparison boundary**: the last commit before any Visualizer Settings migration began. It is the reference point for before-vs-after Settings self-audits and for rolling back V5-V8 without disturbing the pre-V5/V6 gate fixes. Keep this reference distinct; do not fold it into later V5 work.
+
 ## Current checkpoint
 
 The Qt Quick production cutover is complete. This file is now a **live post-cutover plan**, not a migration diary. Completed H/I mechanism history belongs in closure/historical records and must not be recopied here.
@@ -117,11 +121,12 @@ Resolve these **immediately before** moving the Settings presentation. Do not st
 1. [x] **Startup substitution ordering.** Fixed 2026-09-04: `_construct_quick_visualizer_owner_on` now substitutes a disabled/stale persisted mode on the section via the pure `resolve_effective_visualizer_section` **before** activation/model resolution; the old `model.mode` field-patch (mode-A state on mode B) is removed. Behaviour-neutral today (all modes enabled). Tests: `tests/test_visualizer_mode_enable_resolver.py`.
 2. [x] **Deepest request admission.** Fixed 2026-09-04: `_request_quick_visualizer_mode()` itself rejects a canonical, dev-active but disabled mode for runtime/UI requests (before any activation build) — no silent route/re-enable, no second enable authority. Startup substitution stays at the startup resolver (item 1). Tests: `tests/test_visualizer_request_admission.py`.
 3. [x] **Durable no-settings-lost coverage.** Locked 2026-09-04: a partial `enabled_modes` set and a disabled mode's local state both survive `from_mapping -> to_dict -> from_settings`; `enabled_modes` round-trips canonically ordered and additive (never reset). Test: `tests/test_visualizer_settings_plumbing.py::TestSettingsModelPlumbing::test_enabled_modes_and_disabled_mode_state_survive_round_trip`. Re-verify Settings/app *recreation* survival with eyes-on at rehost time.
-4. [ ] **Settings-body dormancy.** Runtime dormancy is already proven; the future top-level Visualizers tab must also avoid constructing disabled mode Settings bodies while preserving their persisted state. This is inherently coupled to the rehost (the tab does not yet exist) — resolve as the first V5 slice, not deferred after it.
+4. [~] **Settings-body dormancy.** Runtime dormancy is already proven. The canonical lazy Settings-body **ownership contract is proven** as of 2026-09-04 (V5 opening slice): `core/settings/visualizer_mode_body_host.py::VisualizerModeBodyHost` constructs a mode's Settings body only on select, retires a body when its mode is disabled without touching persisted state, reconstructs from the sole settings/model authority on reselect, and is Qt-free (no timers/pollers/workers); the descriptor carries lazy `settings_builder_module/factory` wiring (`load_mode_settings_builder`) so importing the registry imports no builder. Tests: `tests/test_visualizer_settings_body_dormancy.py`. **NOT yet closed:** the live Settings dialog still builds all five mode bodies eagerly (`ui/tabs/widgets_tab_media.py::build_visualizers_ui`); item 4 closes only when the live Visualizers tab adopts the host and that eager path is retired (V6/V7 mechanical rehost).
 
 Then perform V5-V8:
 
-- [ ] Rehost existing Visualizer builders/preset sliders/Custom UI into a top-level `Visualizers` tab with `SETUP` plus enabled-mode pills. Rehost; do not rewrite behavior.
+- [~] **V5 opening slice landed (2026-09-04):** canonical lazy Settings-body host + descriptor Settings-builder seam + pill model + dormancy proof (10 tests). Qt-free mechanism only — the live dialog is NOT yet rewired. Do not fold the mechanical rehost into that slice.
+- [ ] **V6/V7 mechanical rehost (next):** rehost existing Visualizer builders/preset sliders/Custom UI into a top-level `Visualizers` tab with `SETUP` plus enabled-mode pills, driven by `VisualizerModeBodyHost`; retire the eager all-five `build_visualizers_ui` construction. Rehost through one canonical host (extract the WidgetsTab-free builder context first); do not rewrite behavior, do not duplicate controls into a parallel implementation. This closes gate item 4.
 - [ ] If Media is disabled at the Widgets capability/setup level, disable the Visualizers tab with tooltip **`Enable Media In Widgets`**. Do not create a second Media activation owner.
 - [ ] Prove future-mode addition needs one canonical descriptor plus isolated runtime/renderer/Settings modules and focused tests, not unrelated five-way switch edits.
 - [ ] Perform a before-vs-after Settings self-audit: controls, curated presets, Custom transitions, disabled-mode persistence, re-enable restore, selected/effective mode coherence, lazy page saving, Media-disabled state preservation, and no new timers/pollers/workers/fallback owners.

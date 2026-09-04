@@ -62,6 +62,13 @@ class VisualizerModeDescriptor:
     frame_runtime_class: str
     renderer_module: str
     renderer_factory: str = "create_visualizer_renderer"
+    # Lazy Settings-body wiring (V5): import-path/name strings only, same
+    # discipline as the frame-runtime/renderer identity above. The mode's Qt
+    # Settings builder is imported on demand only when its body is actually
+    # constructed (enabled + selected), so importing this registry — or building
+    # a disabled/unselected mode's settings — never imports its builder.
+    settings_builder_module: str = ""
+    settings_builder_factory: str = ""
 
     @property
     def preset_key(self) -> str:
@@ -78,6 +85,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         frame_runtime_module="widgets.spotify_visualizer.spectrum_frame_runtime",
         frame_runtime_class="SpectrumFrameRuntime",
         renderer_module="rendering.quick.visualizer.implementations.spectrum",
+        settings_builder_module="ui.tabs.media.spectrum_builder",
+        settings_builder_factory="build_spectrum_ui",
     ),
     VisualizerModeDescriptor(
         "oscilloscope",
@@ -88,6 +97,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         frame_runtime_module="widgets.spotify_visualizer.oscilloscope_frame_runtime",
         frame_runtime_class="OscilloscopeFrameRuntime",
         renderer_module="rendering.quick.visualizer.implementations.oscilloscope",
+        settings_builder_module="ui.tabs.media.oscilloscope_builder",
+        settings_builder_factory="build_oscilloscope_ui",
     ),
     VisualizerModeDescriptor(
         "sine_wave",
@@ -98,6 +109,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         frame_runtime_module="widgets.spotify_visualizer.sine_frame_runtime",
         frame_runtime_class="SineFrameRuntime",
         renderer_module="rendering.quick.visualizer.implementations.sine_wave",
+        settings_builder_module="ui.tabs.media.sine_wave_builder",
+        settings_builder_factory="build_sine_wave_ui",
     ),
     VisualizerModeDescriptor(
         "bubble",
@@ -108,6 +121,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         frame_runtime_module="widgets.spotify_visualizer.bubble_frame_runtime",
         frame_runtime_class="BubbleFrameRuntime",
         renderer_module="rendering.quick.visualizer.implementations.bubble",
+        settings_builder_module="ui.tabs.media.bubble_builder",
+        settings_builder_factory="build_bubble_ui",
     ),
     VisualizerModeDescriptor(
         "devcurve",
@@ -118,6 +133,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         frame_runtime_module="widgets.spotify_visualizer.devcurve_frame_runtime",
         frame_runtime_class="DevCurveFrameRuntime",
         renderer_module="rendering.quick.visualizer.implementations.devcurve",
+        settings_builder_module="ui.tabs.media.devcurve_builder",
+        settings_builder_factory="build_devcurve_ui",
     ),
 )
 
@@ -152,6 +169,24 @@ def get_visualizer_mode_descriptor(mode_id: str) -> VisualizerModeDescriptor:
         if descriptor.mode_id == mode_id:
             return descriptor
     raise KeyError(f"Unknown visualizer mode: {mode_id}")
+
+
+def load_mode_settings_builder(mode_id: str):
+    """Lazily import and return a mode's Settings-body builder callable.
+
+    Mirrors the frame-runtime/renderer lazy-wiring pattern: the descriptor holds
+    only import-path strings, so importing this registry never imports any mode's
+    Qt Settings builder. The builder module is imported on demand — only when a
+    mode's Settings body is actually constructed (enabled + selected) — which is
+    what keeps disabled/unselected mode bodies dormant.
+    """
+    from importlib import import_module
+
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    if not descriptor.settings_builder_module or not descriptor.settings_builder_factory:
+        raise KeyError(f"Mode {mode_id!r} has no Settings builder wiring")
+    module = import_module(descriptor.settings_builder_module)
+    return getattr(module, descriptor.settings_builder_factory)
 
 
 def get_default_visualizer_mode_id() -> str:
