@@ -202,6 +202,37 @@ def test_first_display_retirement_preserves_owner_until_final_lease() -> None:
     assert shared_media_volume_owner_count() == 0
 
 
+def test_browser_volume_support_follows_provider_epoch_and_exact_runtime_source() -> None:
+    manager = _ThreadManager()
+    factory = _ControllerFactory()
+    consumer = _Consumer(manager)
+    service = _lease(consumer, factory, provider="spotify_browser")
+
+    assert service.start() is True
+    assert service.current_snapshot().supported is False
+    assert service.current_snapshot().browser_process is None
+    assert manager.jobs == []
+
+    # A runtime failover to desktop Spotify becomes volume-capable immediately.
+    assert service.set_provider_runtime("spotify") is True
+    assert service.current_snapshot().provider == "spotify"
+    assert service.current_snapshot().supported is True
+    assert len(manager.jobs) == 1
+    manager.complete()
+
+    # Failing back to browser deliberately becomes inert until GSMTC identifies
+    # one exact registered browser host, then that same owner becomes supported.
+    assert service.set_provider_runtime("spotify_browser") is True
+    assert service.current_snapshot().supported is False
+    assert service.current_snapshot().browser_process is None
+    assert service.set_runtime_volume_source("spotify_browser", "firefox.exe") is True
+    snapshot = service.current_snapshot()
+    assert snapshot.provider == "spotify_browser"
+    assert snapshot.supported is True
+    assert snapshot.browser_process == "firefox.exe"
+    assert len(manager.jobs) == 1
+
+
 def test_pending_write_is_invalidated_before_provider_retarget(monkeypatch) -> None:
     manager = _ThreadManager()
     factory = _ControllerFactory()

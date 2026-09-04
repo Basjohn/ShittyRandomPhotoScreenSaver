@@ -82,6 +82,7 @@ Status: `[ ]` open, `[~]` implemented/source-proven but awaiting real-app valida
 - [~] **Achievement Pulse badge rail polish.** Core parity remains accepted; the recent-achievement badge now starts closer to the smaller unlock text and moves right only when rendered text needs clearance. Recheck this bounded rail tweak physically.
 - [x] **Steam Abandonment Issues presentation.** Source-audited and physically accepted; preserve unless a shared semantic fix genuinely applies.
 - [x] **Windows GSMTC teardown / native fault capture.** Latest both-display evidence shows same-affinity GSMTC teardown, no `0x8001010e`, bounded clean native-fault capture and clean QML shutdown.
+- [~] **Media runtime-provider failover must retarget the app-volume owner.** 2026-09-04 follow-up logs proved Firefox browser GSMTC acquisition works once `media.hardwaremediakeys.enabled = true` (opaque Firefox AUMID `308046B0AF4A39CB` selected successfully). The remaining volume-rail hole was internal: Media runtime failover changed transport/artwork provider but did not retarget the already-attached app-volume owner, so a `spotify_browser` owner could remain unsupported after failover to desktop Spotify (and the reverse could retain the wrong Core Audio target). The retained Media model now forwards every accepted runtime provider change to the existing volume service before the subsequent exact browser-source callback. Await one physical browser<->desktop failover check; no polling/process scraping/fuzzy fallback added.
 
 ## Visualizer delivery-quality tranche
 

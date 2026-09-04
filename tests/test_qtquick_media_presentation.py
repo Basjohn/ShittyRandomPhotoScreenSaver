@@ -441,6 +441,29 @@ def test_media_config_and_style_project_canonical_settings_and_direction() -> No
     assert model.progressGlowColor == QColor(45, 190, 250, 180)
 
 
+def test_media_runtime_provider_failover_retargets_existing_app_volume_owner() -> None:
+    volume_runtime = _FakeMediaVolumeRuntime()
+    model, runtime, _provider = _model(volume_runtime=volume_runtime)
+    model.activate(object())
+
+    # Runtime failover is authoritative for the whole Media family. The volume
+    # owner must move to the same provider epoch before the browser's exact GSMTC
+    # host identity arrives, otherwise a browser-configured owner can remain
+    # unsupported forever after Media itself has failed over successfully.
+    model.on_media_runtime_provider_changed(
+        "spotify_browser", "spotify", source="media_runtime_autofallback", persist=True
+    )
+    assert volume_runtime.provider_calls == ["spotify"]
+
+    model.on_media_runtime_provider_changed(
+        "spotify", "spotify_browser", source="media_runtime_autofallback", persist=True
+    )
+    assert volume_runtime.provider_calls == ["spotify", "spotify_browser"]
+
+    model.on_media_runtime_volume_target("spotify_browser", "firefox.exe")
+    assert volume_runtime.target_calls == [("spotify_browser", "firefox.exe")]
+
+
 def test_media_model_projects_and_routes_existing_app_volume_owner() -> None:
     volume_runtime = _FakeMediaVolumeRuntime()
     model, runtime, _provider = _model(volume_runtime=volume_runtime)
