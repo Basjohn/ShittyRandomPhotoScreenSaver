@@ -27,7 +27,10 @@
     },
     "input": {
         "halo_shape": "cursor_light",
-        "interaction_mode": false
+        "interaction_mode": false,
+        "widget_glow_color": null,
+        "widget_glow_on_click": false,
+        "widget_glow_on_hover": false
     },
     "mc": {},
     "queue": {

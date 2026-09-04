@@ -9,15 +9,18 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
 ## Active sequence
 
 - [x] Read backlog, current navigation/contracts and repository guardrails; preserve the clean starting tree.
-- [ ] **FW1 — Widget interaction glow:** implement the two Interaction switches and shared swatch, shared retained
-  primitive, existing input-admission integration, bounded pulse/decay and focused Settings/QML/lifecycle proof.
+- [x] **FW1 — Widget interaction glow:** two Interaction switches, theme-inheriting shared swatch, one retained
+  shader/quad and finite event-driven feedback. 64 focused tests passed; real Quick peak capture inspected.
   Detailed ownership and acceptance: `Docs/Future_Work/Widget_Interaction_Glow_Decomposition.md`.
 - [ ] **FW2 — Slide motion options:** inspect the current sealed Slide owner; commit its decomposition before
   implementation. Implement Elastic first, then Wobble/Flex where sealed coverage and exact endpoints can be proved.
   Assess true Perspective separately; do not counterfeit it with a 2D effect.
+  Decomposition: `Docs/Future_Work/Slide_Motion_Options_Decomposition.md`. Elastic/Wobble/Flex implemented;
+  final visual/pixel verification and checkpoint pending.
 - [ ] **FW3 — Deformable Sphere:** inspect current mode descriptor/runtime/renderer/Settings closure; create the
   required detailed foundation inventory and decomposition before substantial coding. Keep the experiment dormant
   by default and preserve existing modes' authored response.
+  Required decomposition committed: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
 - [ ] **FW4 — Directional Pixel Accretion:** create a decomposition, then implement a deterministic instanced
   directional translation experiment with source underlay and exact endpoints.
 - [ ] **FW5 — Glass Shatter / Exploding Tiles:** separate decompositions and isolated lazy implementations after

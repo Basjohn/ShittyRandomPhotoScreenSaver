@@ -55,6 +55,8 @@ DESTINATION_PROFILE = (
     "test_qtquick_custom_layout_overlay.py",
     "test_qtquick_h9_uniform_resize.py",
     "test_qtquick_ordinary_widget_host.py",
+    "test_qtquick_widget_glow.py",
+    "test_widget_glow_settings.py",
     "test_shadow_direction.py",
     "test_qtquick_clock_presentation.py",
     "test_qtquick_weather_presentation.py",

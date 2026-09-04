@@ -592,6 +592,16 @@ class DisplayManager(QObject):
         auxiliary.configure_pixel_shift(pixel_shift_enabled, pixel_shift_rate)
         auxiliary.set_halo_shape(settings.get("input.halo_shape", "cursor_light"))
 
+        from core.settings.models import InputSettings
+        from ui.widget_glow_style import resolve_widget_glow_color
+
+        input_options = InputSettings.from_settings(settings)
+        unit.runtime.input_controller.configure_widget_glow(
+            on_hover=input_options.widget_glow_on_hover,
+            on_click=input_options.widget_glow_on_click,
+            color=resolve_widget_glow_color(input_options.widget_glow_color),
+        )
+
         # The retained context menu is a runtime-scene overlay, so its shadow
         # follows the canonical widget Card shadow contract for this generation.
         # This is one owner-time projection, not a menu-open poll/settings read.
