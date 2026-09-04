@@ -1,4 +1,4 @@
-"""Shared WidgetsTab bindings for visualizer mode and preset UI contract."""
+"""Shared Settings bindings for visualizer mode and preset UI contract."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -14,53 +14,32 @@ from core.settings.visualizer_presets import (
 )
 
 
-def populate_visualizer_mode_combo(combo) -> None:
-    """Populate the visualizer mode combo from the shared mode registry."""
-    for descriptor in iter_visualizer_mode_descriptors():
-        combo.addItem(descriptor.display_name, descriptor.mode_id)
-
-
 def get_visualizer_mode_fallback() -> str:
     return get_default_visualizer_mode_id()
 
 
-def resolve_visualizer_mode_build_default(tab) -> str:
-    """Resolve the mode used when the combo is first constructed."""
-    fallback = get_visualizer_mode_fallback()
-    if not hasattr(tab, "_default_str"):
-        return fallback
-    mode_id = tab._default_str("spotify_visualizer", "mode", fallback)
-    return mode_id if isinstance(mode_id, str) and mode_id else fallback
-
-
-def initialize_visualizer_mode_combo(tab) -> None:
-    """Populate the visualizer mode combo and apply the canonical build default."""
-    combo = tab.vis_mode_combo
-    populate_visualizer_mode_combo(combo)
-    mode_idx = combo.findData(resolve_visualizer_mode_build_default(tab))
-    if mode_idx >= 0:
-        combo.setCurrentIndex(mode_idx)
-
-
 def load_visualizer_mode_selection(tab, spotify_vis_config: Mapping[str, Any] | None) -> None:
-    """Load the active visualizer mode from the config mapping into the combo."""
+    """Load the active visualizer mode into the shared Settings context state.
+
+    V7 mode pills are the presentation; there is no second combo selection
+    authority.
+    """
     fallback = get_visualizer_mode_fallback()
     if isinstance(spotify_vis_config, Mapping) and hasattr(tab, "_config_str"):
         mode_id = tab._config_str("spotify_visualizer", spotify_vis_config, "mode", fallback)
     else:
         mode_id = fallback
-    mode_idx = tab.vis_mode_combo.findData(mode_id)
-    if mode_idx < 0:
-        mode_idx = tab.vis_mode_combo.findData(fallback)
-    if mode_idx >= 0:
-        tab.vis_mode_combo.setCurrentIndex(mode_idx)
+    tab._active_visualizer_mode_id = mode_id or fallback
 
 
 def collect_visualizer_mode_selection(tab) -> str:
-    """Return the active visualizer mode from the combo using the shared fallback."""
-    if not hasattr(tab, "vis_mode_combo"):
-        return get_visualizer_mode_fallback()
-    current = tab.vis_mode_combo.currentData()
+    """Return the context-owned active mode using the canonical fallback."""
+    getter = getattr(tab, "_get_active_visualizer_mode", None)
+    if callable(getter):
+        current = getter()
+        if current:
+            return current
+    current = getattr(tab, "_active_visualizer_mode_id", None)
     return current or get_visualizer_mode_fallback()
 
 

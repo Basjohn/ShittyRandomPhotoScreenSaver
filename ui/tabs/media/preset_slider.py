@@ -33,6 +33,7 @@ from ui.tabs.shared_styles import (
     NoWheelSlider,
     add_section_label,
     apply_section_heading_style,
+    bind_shared_styles,
     FORM_LABEL_HEIGHT,
 )
 
@@ -163,19 +164,17 @@ class VisualizerPresetSlider(QWidget):
 
         self._edit_btn = QPushButton("Edit Preset")
         self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
-        self._edit_btn.setFixedHeight(22)
-        self._edit_btn.setFixedWidth(90)
-        self._edit_btn.setStyleSheet(
-            "QPushButton { font-size: 9pt; padding: 2px 8px; }"
+        self._edit_btn.setFixedWidth(100)
+        bind_shared_styles(
+            self._edit_btn, "COMPACT_ACTION_BUTTON_STYLE", base_style=""
         )
         self._edit_btn.clicked.connect(self._open_preset_json)
         row.addWidget(self._edit_btn)
 
         self._custom_action_btn = QPushButton("Move To Custom")
-        self._custom_action_btn.setFixedHeight(22)
-        self._custom_action_btn.setFixedWidth(130)
-        self._custom_action_btn.setStyleSheet(
-            "QPushButton { font-size: 9pt; padding: 2px 8px; }"
+        self._custom_action_btn.setFixedWidth(140)
+        bind_shared_styles(
+            self._custom_action_btn, "COMPACT_ACTION_BUTTON_STYLE", base_style=""
         )
         self._custom_action_btn.clicked.connect(self._on_custom_action_clicked)
         row.addWidget(self._custom_action_btn)
@@ -250,13 +249,16 @@ class VisualizerPresetSlider(QWidget):
         self._slider.setValue(next_idx)
 
     def _find_tab(self):
-        """Walk up the parent chain to find the WidgetsTab instance."""
+        """Walk up to the shared Visualizer Settings owner."""
         w = self.parent()
         while w is not None:
             if hasattr(w, '_preset_slider_changing'):
                 return w
-            # WidgetsTab is the top-level tab widget with _save_settings
-            if hasattr(w, '_save_settings') and hasattr(w, 'vis_mode_combo'):
+            if (
+                hasattr(w, '_save_settings')
+                and hasattr(w, '_get_active_visualizer_mode')
+                and hasattr(w, '_force_visualizer_preset_to_custom')
+            ):
                 return w
             w = w.parent()
         return None

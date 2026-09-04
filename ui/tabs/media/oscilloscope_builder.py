@@ -22,7 +22,7 @@ from ui.tabs.shared_styles import (
 from PySide6.QtCore import Qt
 
 if TYPE_CHECKING:
-    from ui.tabs.widgets_tab import WidgetsTab
+    from ui.tabs.visualizer_settings_context import VisualizerSettingsContextMixin
 
 
 def _update_osc_multi_line_visibility(tab) -> None:
@@ -53,7 +53,7 @@ def _update_osc_multi_line_visibility(tab) -> None:
             w.setVisible(bool(show_l6))
 
 
-def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
+def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxLayout) -> None:
     """Build Oscilloscope settings and add to parent_layout."""
     from ui.tabs.shared_styles import NoWheelSlider
 

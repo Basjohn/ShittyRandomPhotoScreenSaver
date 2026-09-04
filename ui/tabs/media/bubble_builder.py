@@ -24,10 +24,10 @@ from ui.tabs.shared_styles import (
 from ui.widgets import StyledComboBox
 
 if TYPE_CHECKING:
-    from ui.tabs.widgets_tab import WidgetsTab
+    from ui.tabs.visualizer_settings_context import VisualizerSettingsContextMixin
 
 
-def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
+def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxLayout) -> None:
     """Build Bubble visualizer settings and add to parent_layout."""
     from ui.tabs.shared_styles import NoWheelSlider
 

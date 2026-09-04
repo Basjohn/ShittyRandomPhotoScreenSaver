@@ -396,21 +396,22 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "media_playback_progress_enabled", "media_playback_progress_height",
             "media_playback_progress_shadow_enabled", "media_playback_progress_glow_enabled",
         ),
-        programmatic_dependency_section_ids=("visualizers", "defaults"),
+        programmatic_dependency_section_ids=("defaults",),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="visualizers",
         button_label="Visualizers",
         button_attr_name="_btn_visualizers",
         container_attr_name="_visualizers_container",
-        builder_module="ui.tabs.widgets_tab_media",
-        builder_name="build_visualizers_ui",
+        # V7: this descriptor remains the canonical Visualizer persistence
+        # binding; presentation is owned by top-level VisualizersTab, not a
+        # WidgetsTab section builder.
         loader_module="ui.tabs.widgets_tab_media",
         loader_name="load_visualizer_settings",
-        loader_guard_attrs=("visualizers_enabled", "vis_enabled_checkbox", "vis_mode_combo"),
+        loader_guard_attrs=("visualizers_enabled", "vis_enabled_checkbox"),
         saver_module="ui.tabs.widgets_tab_media",
         saver_name="save_visualizer_settings",
-        saver_guard_attrs=("visualizers_enabled", "vis_enabled_checkbox", "vis_mode_combo"),
+        saver_guard_attrs=("visualizers_enabled", "vis_enabled_checkbox"),
         persisted_widget_keys=("spotify_visualizer",),
         signal_block_attrs=(
             "visualizers_enabled", "vis_enabled_checkbox",
@@ -596,6 +597,23 @@ def get_widget_settings_section_descriptors() -> tuple[WidgetSettingsSectionDesc
     """Return the canonical WidgetsTab section registry for the current environment."""
 
     return _get_active_widget_settings_section_descriptors(_descriptor_env_signature())
+
+
+def get_widgets_tab_settings_section_descriptors() -> tuple[WidgetSettingsSectionDescriptor, ...]:
+    """Return sections physically hosted by the top-level Widgets tab.
+
+    V7 rehosts Visualizers as its own top-level Settings surface while retaining
+    the canonical ``visualizers`` descriptor as the persistence binding used by
+    :class:`VisualizersTab`.  Widgets therefore consumes the same registry with
+    that one presentation section filtered out; no duplicate descriptor/state
+    authority is introduced.
+    """
+
+    return tuple(
+        descriptor
+        for descriptor in get_widget_settings_section_descriptors()
+        if descriptor.section_id != "visualizers"
+    )
 
 
 @lru_cache(maxsize=1)

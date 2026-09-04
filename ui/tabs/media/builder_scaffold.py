@@ -12,7 +12,7 @@ from ui.tabs import shared_styles
 from ui.tabs.shared_styles import add_swatch_label
 
 if TYPE_CHECKING:
-    from ui.tabs.widgets_tab import WidgetsTab
+    from ui.tabs.visualizer_settings_context import VisualizerSettingsContextMixin
 
 
 @dataclass
@@ -28,7 +28,7 @@ class ModeScaffold:
 
 
 def bind_setting_signal(
-    tab: "WidgetsTab",
+    tab: "VisualizerSettingsContextMixin",
     signal: Any,
     *,
     updater: Callable[..., None] | None = None,
@@ -43,7 +43,7 @@ def bind_setting_signal(
 
 
 def bind_color_button(
-    tab: "WidgetsTab",
+    tab: "VisualizerSettingsContextMixin",
     button: Any,
     attr_name: str,
     *,
@@ -84,7 +84,7 @@ def add_builder_swatch_row(
 
 
 def build_collapsible_bucket(
-    tab: "WidgetsTab",
+    tab: "VisualizerSettingsContextMixin",
     target_layout: QVBoxLayout,
     *,
     mode_key: str,
@@ -156,7 +156,7 @@ def build_collapsible_bucket(
 
 
 def build_mode_scaffold(
-    tab: "WidgetsTab",
+    tab: "VisualizerSettingsContextMixin",
     parent_layout: QVBoxLayout,
     *,
     mode_key: str,

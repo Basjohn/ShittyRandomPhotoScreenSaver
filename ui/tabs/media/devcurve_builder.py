@@ -17,7 +17,7 @@ from ui.tabs.media.builder_scaffold import (
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import add_aligned_row, add_aligned_row_widget
 if TYPE_CHECKING:
-    from ui.tabs.widgets_tab import WidgetsTab
+    from ui.tabs.visualizer_settings_context import VisualizerSettingsContextMixin
 
 
 LABEL_WIDTH = 150
@@ -68,7 +68,7 @@ def _row_widget(parent_layout: QVBoxLayout, label_text: str):
 
 
 def _add_slider(
-    tab: "WidgetsTab",
+    tab: "VisualizerSettingsContextMixin",
     parent_layout: QVBoxLayout,
     *,
     attr: str,
@@ -96,7 +96,7 @@ def _add_slider(
     return slider
 
 
-def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
+def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxLayout) -> None:
     from ui.tabs.media.devcurve_shape_editor import DevCurveShapeEditor
 
     scaffold = build_mode_scaffold(

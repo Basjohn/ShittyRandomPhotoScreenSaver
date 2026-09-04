@@ -1186,6 +1186,29 @@ def _build_source_action_button_style() -> str:
 SOURCE_ACTION_BUTTON_STYLE = _build_source_action_button_style()
 
 
+def _build_compact_action_button_style() -> str:
+    """Compact canonical Settings action button for dense builder rows."""
+    return (
+        "QPushButton {"
+        " font-family: 'Jost'; font-size: 12px; font-weight: 500;"
+        f" background-color: {_theme_rgba255('control.button.surface')};"
+        f" color: {_theme_qss_color('control.button.text')};"
+        f" border: 1px solid {_theme_qss_color('control.button.border')};"
+        " border-radius: 7px; padding: 3px 10px; min-height: 22px;"
+        " }"
+        "QPushButton:hover {"
+        f" background-color: {_theme_rgba255('control.button.hover_surface')};"
+        " }"
+        "QPushButton:pressed {"
+        f" background-color: {_theme_rgba255('control.button.pressed_surface')};"
+        f" border: 1px solid {_theme_rgba255('control.button.pressed_border')};"
+        " }"
+    )
+
+
+COMPACT_ACTION_BUTTON_STYLE = _build_compact_action_button_style()
+
+
 def _build_source_ratio_active_style() -> str:
     return (
         "#ratioFrame {"
@@ -1535,6 +1558,7 @@ _THEME_STYLE_BUILDERS = {
     "TRANSITION_SETUP_ACTION_STYLE": _build_transition_setup_action_style,
     "WIDGET_SETUP_ACTION_STYLE": _build_widget_setup_action_style,
     "SOURCE_ACTION_BUTTON_STYLE": _build_source_action_button_style,
+    "COMPACT_ACTION_BUTTON_STYLE": _build_compact_action_button_style,
     "SOURCE_RATIO_ACTIVE_STYLE": _build_source_ratio_active_style,
     "SOURCE_RATIO_DISABLED_STYLE": _build_source_ratio_disabled_style,
     "RSS_INPUT_STYLE": _build_rss_input_style,
