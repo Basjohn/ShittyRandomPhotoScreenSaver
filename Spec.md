@@ -1,6 +1,6 @@
 # SRPSS Specification
 
-Last updated: 2026-09-01
+Last updated: 2026-09-04
 
 Canonical durable architecture and product-behavior contracts. `Current_Plan.md` owns sequence; independent closure
 narrative belongs under `Docs/audits/` or historical evidence.
@@ -97,6 +97,53 @@ CUSTOM X and layout-slot replay may change ordinary ON/OFF only. They never acti
 Common Quick scene/host imports must not eagerly import inactive family business/runtime/backend trees. Family
 implementation resolves at actual family caller/activation. Static presentation-only registry metadata is fine.
 Common Quick import must not bootstrap provider/controller/runtime/backend singletons.
+
+## Shared 3D rendering foundation / dormancy
+
+SRPSS already has a bounded **real-3D foundation inside the accepted Qt Quick scene**; future 3D work must inspect and
+reuse/extend this foundation where appropriate rather than creating a second renderer stack.
+
+Current proof points:
+
+- `rendering/quick/transitions/implementations/block_spins.py` is a lazy Quick renderer that owns real mesh geometry,
+  context-local VAO/VBO/program resources, source/destination textures, depth-tested rendering and explicit
+  `release_resources()` cleanup;
+- `rendering/gl_programs/blockspin_program.py` is the OpenGL-free authored mesh/shader contract and already demonstrates
+  3D positions/normals/UVs, transformed normals and bounded directional/specular treatment;
+- `rendering/quick/visualizer/implementation_registry.py` resolves a mode renderer lazily from the canonical Visualizer
+  descriptor and requires the `render()` + `release_resources()` implementation contract;
+- `rendering/quick/visualizer/render_host.py` and `rendering/quick/visualizer/clip_host.py` provide the accepted Quick GL
+  ownership/fence and preserve/restore relevant state including cull, depth and depth-write state around custom rendering;
+- `core/settings/visualizer_mode_registry.py` already defines the presentation-policy vocabulary including
+  `CARD / CARD_INTERIOR` and `FRAMELESS / VIEWPORT_RECT`; the frameless geometry/clip path is covered by
+  `tests/test_qtquick_visualizer_geometry.py` and `tools/qtquick_visualizer_clip_smoke.py`;
+- `rendering/quick/render/gl_resources.py` and the existing implementation modules are the starting point for bounded
+  context-local shader/program resource ownership.
+
+This is a **substrate**, not a general-purpose scene engine. Reusable low-level primitives may include static mesh/buffer
+ownership, small aspect-correct projection/MVP helpers, GL resource lifetime helpers, safe depth-state composition and
+presentation-neutral direction/light math. Feature semantics remain local: deformation fields, fracture logic, material
+identities, audio mapping, per-effect physics/easing and authored visual behavior do not move into a generic 3D framework
+merely because two features both contain Z coordinates. Extract shared primitives when a real consumer justifies them;
+defer speculative abstraction until another concrete consumer proves it.
+
+3D work inherits the existing clock rule. `VisualizerLogicalRuntime` remains the mode-general authored Visualizer clock;
+a mode-owned logical/frame runtime may produce compact 3D state, but render refresh never becomes simulation cadence.
+Transitions similarly consume their one canonical monotonic run rather than creating an effect-local clock.
+
+**3D dormancy is mandatory for meaningful cost.** If every admitted mode/effect that needs additional 3D machinery is
+dormant, the project must not keep 3D-only shader programs compiled, meshes/VAOs/VBOs allocated, effect-specific GPU
+resources retained, depth-specific per-frame work running, workers alive, or a separate 3D cadence ticking. Heavy
+implementation modules resolve at the consuming renderer boundary and context-local assets retire with that renderer or
+context. There is no background "3D subsystem" owner.
+
+Cheap/import-safe pure math, immutable types, tiny contracts/helpers and canonical catalog metadata may remain shared or
+eager when their cost is effectively nil and doing so prevents duplication. Dormancy protects meaningful work/resources;
+it is not a requirement to hide zero-cost helpers behind artificial import machinery.
+
+Future 3D modes/effects should therefore begin by inventorying the files above, then add the smallest missing substrate
+needed by the real vertical feature. Do not cargo-cult Block Spins' transition-specific projection/math, and do not distort
+an existing helper merely to claim reuse.
 
 ## Ordinary widgets
 
