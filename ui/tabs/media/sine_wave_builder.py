@@ -23,7 +23,7 @@ from PySide6.QtCore import Qt
 from ui.widgets import StyledComboBox
 
 if TYPE_CHECKING:
-    from ui.tabs.widgets_tab import WidgetsTab
+    from ui.tabs.visualizer_settings_context import VisualizerSettingsContextMixin
 
 
 def _update_sine_multi_line_visibility(tab) -> None:
@@ -63,7 +63,7 @@ def _update_sine_multi_line_visibility(tab) -> None:
             w.setVisible(bool(show_l6))
 
 
-def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
+def build_sine_wave_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxLayout) -> None:
     """Build Sine Wave settings and add to parent_layout."""
     from ui.tabs.shared_styles import NoWheelSlider
 

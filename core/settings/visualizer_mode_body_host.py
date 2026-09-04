@@ -88,9 +88,9 @@ class VisualizerModeBodyHost:
     def ensure(self, mode_id: str) -> Any:
         """Construct a mode's body on first need and cache it; return the body.
 
-        Pure body-lifecycle: does NOT change the selected mode, so a caller that
-        already owns mode selection (e.g. the live Settings mode combo) stays the
-        single selection authority. On a cache hit the factory is not called
+        Pure body-lifecycle: does NOT change the selected mode, so the caller
+        remains the single selection authority. On a cache hit the factory is not
+        called
         again — the existing body (and any unsaved edits in it) is returned as-is.
         Rejects a mode outside the effective enabled set.
         """
@@ -101,19 +101,6 @@ class VisualizerModeBodyHost:
         if body is None:
             body = self._factory(target)
             self._bodies[target] = body
-        return body
-
-    def adopt(self, mode_id: str, body: Any) -> Any:
-        """Register an already-constructed body without invoking the factory.
-
-        Used for a mode that is built eagerly outside the host (the temporary
-        V5b Spectrum exception): the host still owns its lifecycle record so
-        selection/cache queries are uniform across all modes.
-        """
-        target = self._norm(mode_id)
-        if target not in self._enabled:
-            raise ValueError(f"Cannot adopt disabled visualizer mode {mode_id!r}")
-        self._bodies[target] = body
         return body
 
     def select(self, mode_id: str) -> Any:

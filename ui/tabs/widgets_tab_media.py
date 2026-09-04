@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox,
     QSlider, QWidget, QPushButton,
-    QGraphicsDropShadowEffect, QSizePolicy,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
@@ -34,7 +33,6 @@ from ui.styled_popup import ColorSwatchButton
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
-    add_section_label,
     add_swatch_label,
     style_group_box,
     LABEL_WIDTH,  # Promoted to module-level constant
@@ -76,13 +74,13 @@ from ui.tabs.media.visualizer_mode_binding import (
     collect_visualizer_mode_selection,
     collect_visualizer_preset_indices,
     collect_visualizer_rainbow_state,
-    initialize_visualizer_mode_combo,
     load_visualizer_preset_indices,
     load_visualizer_mode_selection,
     load_visualizer_rainbow_state,
 )
 
 if TYPE_CHECKING:
+    from ui.tabs.visualizer_settings_context import VisualizerSettingsContextMixin
     from ui.tabs.widgets_tab import WidgetsTab
 
 logger = get_logger(__name__)
@@ -919,7 +917,7 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
         slider.set_preset_index(resolve_preset_index_from_mapping(mode_id, cfg))
 
 
-def _install_visualizer_body_host(tab, controls_layout) -> None:
+def _install_visualizer_body_host(tab, controls_layout, *, retire_body=None) -> None:
     """Create the lazy-body host + production factory on the tab.
 
     All five modes (Spectrum included, V6a) are lazy — none is pre-built or
@@ -958,7 +956,11 @@ def _install_visualizer_body_host(tab, controls_layout) -> None:
     enabled = resolve_effective_enabled_modes(
         section.get("enabled_modes") if isinstance(section, dict) else None
     )
-    tab._vis_body_host = VisualizerModeBodyHost(body_factory=_factory, enabled_modes=enabled)
+    tab._vis_body_host = VisualizerModeBodyHost(
+        body_factory=_factory,
+        retire_body=retire_body,
+        enabled_modes=enabled,
+    )
 
 
 def ensure_visualizer_mode_body(tab, mode_id: str) -> None:
@@ -979,189 +981,6 @@ def ensure_visualizer_mode_body(tab, mode_id: str) -> None:
         # actionable. The host only caches on a successful factory return, so a
         # raised body is never recorded as constructed.
         host.ensure(mode)
-
-
-def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
-    """Build the Visualizers widget UI section (separate toggle)."""
-
-    from ui.tabs.shared_styles import NoWheelSlider
-
-    visualizers_group = QGroupBox("Visualizers")
-    style_group_box(visualizers_group)
-    visualizers_layout = QVBoxLayout(visualizers_group)
-
-    tab.visualizers_enabled = QCheckBox("Enable Visualizers")
-    tab.visualizers_enabled.setProperty("circleIndicator", True)
-    tab.visualizers_enabled.setChecked(tab._default_bool('spotify_visualizer', 'visualizers_enabled', True))
-    tab.visualizers_enabled.setToolTip("Master switch for all visualizer controls.")
-    tab.visualizers_enabled.stateChanged.connect(tab._save_settings)
-    tab.visualizers_enabled.stateChanged.connect(lambda: _update_visualizers_enabled_visibility(tab))
-    visualizers_layout.addWidget(tab.visualizers_enabled)
-
-    tab._visualizers_controls_container = QWidget()
-    _viz_ctrls = QVBoxLayout(tab._visualizers_controls_container)
-    _viz_ctrls.setContentsMargins(0, 0, 0, 0)
-    _viz_ctrls.setSpacing(8)
-
-    # --- Beat Visualizer Group ---
-    spotify_vis_group = QGroupBox("Beat Visualizer")
-    spotify_vis_group.setObjectName("beatVisualizerGroup")
-    style_group_box(spotify_vis_group)
-    spotify_vis_group.setStyleSheet(
-        spotify_vis_group.styleSheet() +
-        "\nQGroupBox#beatVisualizerGroup::title { font-size: 15px; }"
-    )
-    spotify_vis_layout = QVBoxLayout(spotify_vis_group)
-
-    spotify_vis_enable_row = QHBoxLayout()
-    tab.vis_enabled_checkbox = QCheckBox("Enable Beat Visualizer")
-    tab.vis_enabled_checkbox.setProperty("circleIndicator", True)
-    tab.vis_enabled_checkbox.setChecked(tab._default_bool('spotify_visualizer', 'enabled', True))
-    tab.vis_enabled_checkbox.setToolTip(
-        "Shows a thin bar visualizer tied to Spotify playback, positioned just above the Spotify widget."
-    )
-    tab.vis_enabled_checkbox.stateChanged.connect(tab._save_settings)
-    spotify_vis_enable_row.addWidget(tab.vis_enabled_checkbox)
-
-    spotify_vis_enable_row.addStretch()
-    spotify_vis_layout.addLayout(spotify_vis_enable_row)
-
-    # Container for all visualizer controls gated by enable checkbox
-    tab._vis_controls_container = QWidget()
-    _svctl = QVBoxLayout(tab._vis_controls_container)
-    _svctl.setContentsMargins(0, 0, 0, 0)
-    _svctl.setSpacing(4)
-
-    # --- Taste The Rainbow (per-mode hue shift) ---
-    tab._rainbow_controls_container = QWidget()
-    _rainbow_bucket_layout = QVBoxLayout(tab._rainbow_controls_container)
-    _rainbow_bucket_layout.setContentsMargins(0, 0, 0, 0)
-    _rainbow_bucket_layout.setSpacing(4)
-    # Cache dict: stores {mode: (enabled, speed)} so mode switches are instant.
-    tab._rainbow_per_mode: dict = {}
-    rainbow_row = QHBoxLayout()
-    rainbow_row.setContentsMargins(0, 0, 0, 0)
-    rainbow_row.setSpacing(6)
-    rainbow_row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-
-    tab.rainbow_enabled = QCheckBox("Taste The Rainbow")
-    tab.rainbow_enabled.setProperty("circleIndicator", True)
-    tab.rainbow_enabled.setAccessibleName("Taste The Rainbow")
-    tab.rainbow_enabled.setToolTip(
-        "Slowly shift the hue of visualiser colours through the spectrum. "
-        "Saved independently per visualizer mode."
-    )
-    tab.rainbow_enabled.setChecked(False)
-    tab.rainbow_enabled.setCursor(Qt.CursorShape.PointingHandCursor)
-    tab.rainbow_enabled.stateChanged.connect(tab._save_settings)
-    tab.rainbow_enabled.stateChanged.connect(
-        lambda _: tab._update_rainbow_visibility()
-    )
-    tab.rainbow_enabled.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-    rainbow_row.addWidget(tab.rainbow_enabled)
-
-    glow_effect = QGraphicsDropShadowEffect(tab.rainbow_enabled)
-    glow_effect.setColor(QColor(255, 255, 255, 160))
-    glow_effect.setBlurRadius(26.0)
-    glow_effect.setOffset(0, 0)
-    glow_effect.setEnabled(False)
-    tab.rainbow_enabled.setGraphicsEffect(glow_effect)
-
-    tab._rainbow_plain_label = tab.rainbow_enabled
-    tab._rainbow_glow_effect = glow_effect
-    tab._rainbow_label_stack = None
-    tab._rainbow_glow_label = None
-
-    rainbow_row.addStretch()
-    _rainbow_bucket_layout.addLayout(rainbow_row)
-
-    # Rainbow speed slider (conditional on checkbox)
-    tab._rainbow_speed_container = QWidget()
-    _rsc_layout = QHBoxLayout(tab._rainbow_speed_container)
-    _rsc_layout.setContentsMargins(0, 0, 0, 0)
-    _rsc_layout.setSpacing(6)
-    add_section_label(_rsc_layout, "Speed:", LABEL_WIDTH)
-
-    speed_content = QHBoxLayout()
-    speed_content.setContentsMargins(0, 0, 0, 0)
-    speed_content.setSpacing(6)
-    _rsc_layout.addLayout(speed_content, 1)
-    tab.rainbow_speed_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.rainbow_speed_slider.setRange(1, 100)
-    tab.rainbow_speed_slider.setValue(50)
-    tab.rainbow_speed_slider.setToolTip("How fast the hue cycles through the spectrum.")
-    tab.rainbow_speed_slider.valueChanged.connect(tab._save_settings)
-    tab.rainbow_speed_label = QLabel("0.50")
-    tab.rainbow_speed_slider.valueChanged.connect(
-        lambda v: tab.rainbow_speed_label.setText(f"{v / 100.0:.2f}")
-    )
-    speed_content.addWidget(tab.rainbow_speed_slider, 1)
-    speed_content.addWidget(tab.rainbow_speed_label)
-    _rainbow_bucket_layout.addWidget(tab._rainbow_speed_container)
-    tab._rainbow_speed_container.setVisible(False)
-
-    # --- Visualizer Type Selector ---
-    vis_type_row = QHBoxLayout()
-    vis_type_row.setContentsMargins(0, 0, 0, 0)
-    vis_type_row.setSpacing(6)
-    vis_type_row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-    add_section_label(vis_type_row, "Visualizer Type:", LABEL_WIDTH)
-    vis_type_content = QHBoxLayout()
-    vis_type_content.setContentsMargins(9, 0, 0, 0)
-    vis_type_content.setSpacing(6)
-    tab.vis_mode_combo = StyledComboBox(size_variant="hero")
-    tab.vis_mode_combo.setMinimumWidth(160)
-    import os as _os
-    _dev_features = _os.getenv('SRPSS_ENABLE_DEV', 'false').lower() == 'true'
-    initialize_visualizer_mode_combo(tab)
-    tab.vis_mode_combo.setToolTip(
-        "Select the visualization style. Spectrum is the classic segmented bar display."
-    )
-    # Construct-on-select MUST run before save so a newly selected lazy mode's
-    # body exists before any save collects its controls (V6a). Connection order
-    # is emission order for direct connections.
-    tab.vis_mode_combo.currentIndexChanged.connect(
-        lambda _: tab._update_vis_mode_sections()
-    )
-    tab.vis_mode_combo.currentIndexChanged.connect(tab._save_settings)
-    vis_type_content.addWidget(tab.vis_mode_combo)
-    vis_type_content.addStretch()
-    vis_type_row.addLayout(vis_type_content, 1)
-    _svctl.addLayout(vis_type_row)
-    _svctl.addWidget(tab._rainbow_controls_container)
-
-    # ==========================================
-    # Per-visualizer settings (V6a). The shared Bar Fill/Border colour + Border
-    # Opacity controls are built eagerly and owned outside any mode body, so they
-    # persist and save/load even while every mode is unbuilt. All five modes —
-    # Spectrum included — are now built lazily on first selection; Spectrum places
-    # these shared rows when it constructs. ``_vis_loaded_config`` starts unset so
-    # the build-time visibility pass constructs no un-hydratable body.
-    # ==========================================
-    from ui.tabs.media.shared_appearance_controls import (
-        build_shared_visualizer_appearance_controls,
-    )
-
-    tab._vis_loaded_config = None
-    build_shared_visualizer_appearance_controls(tab)
-    _install_visualizer_body_host(tab, _svctl)
-
-    spotify_vis_layout.addWidget(tab._vis_controls_container)
-    tab.vis_enabled_checkbox.stateChanged.connect(lambda: _update_spotify_vis_enabled_visibility(tab))
-    _update_spotify_vis_enabled_visibility(tab)
-
-    _viz_ctrls.addWidget(spotify_vis_group)
-    visualizers_layout.addWidget(tab._visualizers_controls_container)
-    _update_visualizers_enabled_visibility(tab)
-
-    # Initial visibility
-    tab._update_vis_mode_sections()
-
-    container = QWidget()
-    container_layout = QVBoxLayout(container)
-    container_layout.setContentsMargins(0, 20, 0, 0)
-    container_layout.addWidget(visualizers_group)
-    return container
 
 
 def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
@@ -1357,19 +1176,69 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     _update_media_enabled_visibility(tab)
 
 
-def load_visualizer_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
-    """Load Spotify visualizer settings from the widgets config dict."""
+def load_shared_visualizer_appearance_settings(
+    tab: "VisualizerSettingsContextMixin",
+    spotify_vis_config: dict,
+    active_vis_mode: str,
+) -> None:
+    """Hydrate the stable SETUP-owned shared appearance controls for one mode.
 
-    def _apply_color_to_button(btn_attr: str, color_attr: str) -> None:
-        btn = getattr(tab, btn_attr, None)
-        color = getattr(tab, color_attr, None)
-        if btn is not None and color is not None and hasattr(btn, "set_color"):
-            try:
-                btn.set_color(color)
-            except Exception:
-                logger.debug(
-                    "[MEDIA_TAB] Failed to sync %s with %s", btn_attr, color_attr, exc_info=True
-                )
+    Fill/border/opacity are physically shared controls whose values are stored
+    per active mode.  V7 keeps the widgets under SETUP permanently and swaps only
+    their values when mode selection changes, so retiring a mode body can never
+    delete these controls.
+    """
+    fill_color_key = f'{active_vis_mode}_bar_fill_color'
+    border_color_key = f'{active_vis_mode}_bar_border_color'
+    border_opacity_key = f'{active_vis_mode}_bar_border_opacity'
+
+    fill_color_data = spotify_vis_config.get(
+        fill_color_key,
+        tab._widget_default('spotify_visualizer', fill_color_key, [0, 255, 128, 230]),
+    )
+    try:
+        tab._spotify_vis_fill_color = QColor(*fill_color_data)
+    except Exception:
+        logger.debug(
+            "[MEDIA_TAB] Failed to set vis fill_color=%s",
+            fill_color_data,
+            exc_info=True,
+        )
+        tab._spotify_vis_fill_color = QColor(0, 255, 128, 230)
+
+    border_color_data = spotify_vis_config.get(
+        border_color_key,
+        tab._widget_default('spotify_visualizer', border_color_key, [255, 255, 255, 230]),
+    )
+    try:
+        tab._spotify_vis_border_color = QColor(*border_color_data)
+    except Exception:
+        logger.debug(
+            "[MEDIA_TAB] Failed to set vis border_color=%s",
+            border_color_data,
+            exc_info=True,
+        )
+        tab._spotify_vis_border_color = QColor(255, 255, 255, 230)
+
+    _apply_vis_color_to_button(tab, 'vis_fill_color_btn', '_spotify_vis_fill_color')
+    _apply_vis_color_to_button(tab, 'vis_border_color_btn', '_spotify_vis_border_color')
+
+    border_opacity_pct = int(
+        tab._config_float(
+            'spotify_visualizer', spotify_vis_config, border_opacity_key, 0.85
+        ) * 100
+    )
+    tab.vis_border_opacity.setValue(border_opacity_pct)
+    tab.vis_border_opacity_label.setText(f"{border_opacity_pct}%")
+
+
+def load_visualizer_settings(
+    tab: "VisualizerSettingsContextMixin",
+    widgets: dict | None,
+    *,
+    construct_active_body: bool = False,
+) -> None:
+    """Load Spotify visualizer settings from the widgets config dict."""
 
     widgets = widgets or {}
     raw_spotify_vis_config = (
@@ -1380,6 +1249,17 @@ def load_visualizer_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         if isinstance(raw_spotify_vis_config, dict)
         else {}
     )
+    # V7: resolve stale/disabled persisted modes before any preset/body hydration.
+    # The persisted mapping remains the authority; this only resolves the
+    # effective Settings presentation state and keeps the mode/enable set coherent.
+    from core.settings.visualizer_mode_registry import resolve_effective_visualizer_section
+
+    (
+        spotify_vis_config,
+        _mode_substituted,
+        _requested_mode,
+        _effective_mode,
+    ) = resolve_effective_visualizer_section(spotify_vis_config)
     active_vis_mode = (
         str(spotify_vis_config.get('mode', 'spectrum')).strip().lower()
         or 'spectrum'
@@ -1405,49 +1285,26 @@ def load_visualizer_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
             active_preset_index,
         )
     spotify_vis_config = resolved_spotify_vis_config
-    # Canonical hydration source for lazy mode bodies constructed on first select
-    # (V5b). Stashed before mode selection so the construct-on-select path below
+    # Canonical hydration source for lazy mode bodies constructed on first select.
+    # Stashed before mode selection so the construct-on-select path below
     # can hydrate a freshly-built body from exactly this resolved config.
     tab._vis_loaded_config = spotify_vis_config
+    if hasattr(tab, 'visualizers_enabled'):
+        tab.visualizers_enabled.setChecked(
+            tab._config_bool(
+                'spotify_visualizer', spotify_vis_config, 'visualizers_enabled', True
+            )
+        )
     tab.vis_enabled_checkbox.setChecked(
         tab._config_bool('spotify_visualizer', spotify_vis_config, 'enabled', True)
     )
     load_per_mode_technical_controls(tab, spotify_vis_config)
 
-    fill_color_key = f'{active_vis_mode}_bar_fill_color'
-    border_color_key = f'{active_vis_mode}_bar_border_color'
-    border_opacity_key = f'{active_vis_mode}_bar_border_opacity'
-
-    fill_color_data = spotify_vis_config.get(
-        fill_color_key,
-        tab._widget_default('spotify_visualizer', fill_color_key, [0, 255, 128, 230]),
+    load_shared_visualizer_appearance_settings(
+        tab, spotify_vis_config, active_vis_mode
     )
-    try:
-        tab._spotify_vis_fill_color = QColor(*fill_color_data)
-    except Exception:
-        logger.debug("[MEDIA_TAB] Failed to set vis fill_color=%s", fill_color_data, exc_info=True)
-        tab._spotify_vis_fill_color = QColor(0, 255, 128, 230)
 
-    border_color_data = spotify_vis_config.get(
-        border_color_key,
-        tab._widget_default('spotify_visualizer', border_color_key, [255, 255, 255, 230]),
-    )
-    try:
-        tab._spotify_vis_border_color = QColor(*border_color_data)
-    except Exception:
-        logger.debug("[MEDIA_TAB] Failed to set vis border_color=%s", border_color_data, exc_info=True)
-        tab._spotify_vis_border_color = QColor(255, 255, 255, 230)
-
-    _apply_color_to_button('vis_fill_color_btn', '_spotify_vis_fill_color')
-    _apply_color_to_button('vis_border_color_btn', '_spotify_vis_border_color')
-
-    border_opacity_pct = int(
-        tab._config_float('spotify_visualizer', spotify_vis_config, border_opacity_key, 0.85) * 100
-    )
-    tab.vis_border_opacity.setValue(border_opacity_pct)
-    tab.vis_border_opacity_label.setText(f"{border_opacity_pct}%")
-
-    # Visualizer mode combobox
+    # Context-owned mode selection (V7 pills are presentation only).
     load_visualizer_mode_selection(tab, spotify_vis_config)
 
     # No mode loader runs eagerly here (V6a): an *unbuilt* mode is built +
@@ -1463,9 +1320,11 @@ def load_visualizer_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         for _built_mode in _vis_host.constructed_modes():
             _hydrate_visualizer_mode_body(tab, _built_mode, spotify_vis_config)
 
-    # Update per-mode section visibility. For any active mode this
-    # constructs + hydrates that one body from the config stashed above.
-    tab._update_vis_mode_sections()
+    # V7 lands on SETUP and constructs *zero* mode bodies until a mode pill is
+    # explicitly selected. Focused callers may opt into active-body admission,
+    # but descriptor/full-reload paths remain dormant by default.
+    if construct_active_body:
+        tab._update_vis_mode_sections()
 
     load_visualizer_rainbow_state(tab, spotify_vis_config)
 
@@ -1529,7 +1388,7 @@ def save_media_settings(tab: WidgetsTab) -> dict:
     return media_config
 
 
-def save_visualizer_settings(tab: WidgetsTab) -> dict:
+def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
     """Return spotify_visualizer config from current UI state."""
     current_mode = collect_visualizer_mode_selection(tab)
     spotify_vis_config = {
@@ -1553,6 +1412,10 @@ def save_visualizer_settings(tab: WidgetsTab) -> dict:
         'rainbow_enabled': tab.rainbow_enabled.isChecked() if hasattr(tab, 'rainbow_enabled') else False,
         'rainbow_speed': (tab.rainbow_speed_slider.value() if hasattr(tab, 'rainbow_speed_slider') else 50) / 100.0,
     }
+    _host = getattr(tab, '_vis_body_host', None)
+    if _host is not None:
+        spotify_vis_config['enabled_modes'] = list(_host.enabled_modes)
+
     # Spectrum-owned ghost controls: only present when Spectrum's body is built
     # (V6a lazy). When Spectrum is unbuilt its persisted ghost state stays
     # authoritative via the save merge and is never synthesized here.
@@ -1563,9 +1426,8 @@ def save_visualizer_settings(tab: WidgetsTab) -> dict:
     collect_visualizer_rainbow_state(tab, spotify_vis_config)
     
     # Option A: only collect settings for the CURRENT visualizer mode to prevent
-    # cross-mode pollution. Under lazy bodies (V6a) the current mode may not be
-    # built yet (e.g. a save fires from the mode-combo signal before the body is
-    # constructed); collecting an unbuilt mode would require QWidgets that do not
+    # cross-mode pollution. Under lazy bodies the current mode may be unbuilt
+    # while SETUP is active; collecting an unbuilt mode would require QWidgets that do not
     # exist. Skip it — the mode's persisted state stays authoritative via the
     # save merge, never synthesized here.
     _cur_mode = current_mode

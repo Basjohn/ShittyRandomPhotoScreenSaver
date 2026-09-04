@@ -20,10 +20,6 @@ from ui.tabs.media.builder_scaffold import (
     build_collapsible_bucket,
     build_mode_scaffold,
 )
-from ui.tabs.media.shared_appearance_controls import (
-    place_shared_appearance_border_opacity,
-    place_shared_appearance_fill_border,
-)
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
     add_aligned_row_widget as shared_add_aligned_row_widget,
@@ -31,7 +27,7 @@ from ui.tabs.shared_styles import (
 )
 
 if TYPE_CHECKING:
-    from ui.tabs.widgets_tab import WidgetsTab
+    from ui.tabs.visualizer_settings_context import VisualizerSettingsContextMixin
 
 
 def _update_ghost_visibility(tab) -> None:
@@ -41,7 +37,7 @@ def _update_ghost_visibility(tab) -> None:
         container.setVisible(bool(show))
 
 
-def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
+def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxLayout) -> None:
     """Build Spectrum-only settings and add to parent_layout."""
     from ui.tabs.shared_styles import NoWheelSlider
 
@@ -125,11 +121,6 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         )
         return content
 
-    # Shared Bar Fill/Border colour rows are owned by the shared appearance
-    # module so they exist even when Spectrum is unbuilt; place the exact same
-    # pre-built rows here in their original position (no recreation/duplication).
-    place_shared_appearance_fill_border(tab, appearance_bucket)
-
     glow_toggle_row = _aligned_row(appearance_bucket, "")
     tab.spectrum_glow_enabled = QCheckBox("Enable Rim Glow")
     tab.spectrum_glow_enabled.setProperty("circleIndicator", True)
@@ -192,10 +183,6 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab.spectrum_glow_enabled.stateChanged.connect(_update_spectrum_glow_visibility)
     _update_spectrum_glow_visibility()
-
-    # Shared Border Opacity row (owned by the shared appearance module); placed
-    # here in its original position after the glow controls.
-    place_shared_appearance_border_opacity(tab, appearance_bucket)
 
     # Ghosting controls
     ghost_toggle_row = _aligned_row(ghost_bucket, "")

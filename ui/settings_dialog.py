@@ -25,6 +25,7 @@ from core.logging.logger import get_log_dir, get_logger, is_perf_metrics_enabled
 from core.build_profile import is_diagnostic_build
 from core.mc import is_mc_build
 from core.settings.settings_manager import SettingsManager
+from core.settings.capability_activation import is_widget_family_activated
 from core.threading.manager import ThreadManager
 from core.settings.visualizer_preset_transfer import (
     export_visualizer_presets_zip,
@@ -33,7 +34,10 @@ from core.settings.visualizer_preset_transfer import (
     import_visualizer_presets_folder,
 )
 from core.animation import AnimationManager
-from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab, ThemesTab
+from ui.tabs import (
+    SourcesTab, TransitionsTab, WidgetsTab, VisualizersTab,
+    DisplayTab, AccessibilityTab, ThemesTab,
+)
 from ui.styled_popup import StyledPopup
 from ui.tabs import shared_styles
 from ui.widgets.control_shadow import (
@@ -589,7 +593,7 @@ class SettingsDialog(QDialog):
                 except (TypeError, ValueError):
                     pass
         self._suppress_scroll_capture: bool = False
-        self._tab_keys = ["sources", "display", "transitions", "widgets", "accessibility", "themes", "about"]
+        self._tab_keys = ["sources", "display", "transitions", "widgets", "visualizers", "accessibility", "themes", "about"]
         self._force_initial_sources_tab = os.getenv(
             "SRPSS_SETTINGS_FORCE_INITIAL_TAB_SOURCES", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
@@ -657,7 +661,42 @@ class SettingsDialog(QDialog):
             index = 0
         if index < 0 or index >= len(self._tab_keys):
             index = 0
-        self._initial_tab_index = index
+        self._initial_tab_index = self._admit_top_level_tab_index(index)
+
+    def _visualizers_tab_eligibility(self) -> tuple[bool, str]:
+        """Return capability admission + user-facing reason without owning it."""
+        widgets = self._settings.get("widgets", {})
+        widgets = widgets if isinstance(widgets, dict) else {}
+        if not is_widget_family_activated(widgets, "media"):
+            return False, "Enable Media In Widgets"
+        if not is_widget_family_activated(widgets, "visualizers"):
+            return False, "Enable Visualizers In Widgets"
+        return True, ""
+
+    def _admit_top_level_tab_index(self, index: int) -> int:
+        """Reject capability-disabled top-level tabs before construction."""
+        if index < 0 or index >= len(self._tab_keys):
+            return 0
+        available, _tooltip = self._visualizers_tab_eligibility()
+        if self._tab_keys[index] == "visualizers" and not available:
+            widgets_index = self._tab_index_for_key("widgets")
+            return widgets_index if widgets_index >= 0 else 0
+        return index
+
+    def _refresh_visualizers_tab_eligibility(self) -> None:
+        """Mirror Widgets capability state without acquiring activation authority."""
+        available, tooltip = self._visualizers_tab_eligibility()
+        button = getattr(self, "visualizers_tab_btn", None)
+        if button is not None:
+            button.setEnabled(available)
+            button.setToolTip(tooltip)
+        tab = self.__dict__.get("visualizers_tab")
+        if tab is not None:
+            tab.set_family_capability_available(available)
+
+    def _on_settings_capability_changed(self, key: str, _value: object) -> None:
+        if str(key or "") == "widgets" or str(key or "").startswith("widgets."):
+            self._refresh_visualizers_tab_eligibility()
     
     def _setup_window(self) -> None:
         """Setup window properties."""
@@ -861,6 +900,7 @@ class SettingsDialog(QDialog):
         self.display_tab_btn = TabButton("Display", "🖥")
         self.transitions_tab_btn = TabButton("Transitions", "✨")
         self.widgets_tab_btn = TabButton("Widgets", "🕐")
+        self.visualizers_tab_btn = TabButton("Visualizers", "📊")
         # Accessibility icon: wheelchair symbol for universal accessibility
         self.accessibility_tab_btn = TabButton("Accessibility", "♿")
         self.themes_tab_btn = TabButton("Themes", "🎨")
@@ -871,6 +911,7 @@ class SettingsDialog(QDialog):
             "display": self.display_tab_btn,
             "transitions": self.transitions_tab_btn,
             "widgets": self.widgets_tab_btn,
+            "visualizers": self.visualizers_tab_btn,
             "accessibility": self.accessibility_tab_btn,
             "themes": self.themes_tab_btn,
             "about": self.about_tab_btn,
@@ -902,6 +943,11 @@ class SettingsDialog(QDialog):
                     self._tab_state_cache.get("widgets", {}).get("view_state", {})
                 ) if isinstance(self._tab_state_cache.get("widgets", {}).get("view_state", {}), dict) else None,
             ),
+            "visualizers": lambda: VisualizersTab(
+                self._settings,
+                parent=self.content_stack,
+                widget_defaults=cache.widget_defaults,
+            ),
             "accessibility": lambda: AccessibilityTab(self._settings, parent=self.content_stack),
             "themes": lambda: ThemesTab(self._settings, parent=self.content_stack),
             "about": self._create_about_tab,
@@ -912,6 +958,8 @@ class SettingsDialog(QDialog):
             self.content_stack.addWidget(placeholder)
             self._tab_widgets[key] = placeholder
 
+        self._refresh_visualizers_tab_eligibility()
+        self._initial_tab_index = self._admit_top_level_tab_index(self._initial_tab_index)
         self._ensure_tab_built(self._initial_tab_index)
         self._hydrate_remaining_tabs_async()
 
@@ -970,7 +1018,7 @@ class SettingsDialog(QDialog):
         if index < 0:
             return None
         self._ensure_tab_built(index)
-        return getattr(self, f"{key}_tab", None)
+        return self.__dict__.get(f"{key}_tab")
 
     def _tab_index_for_key(self, key: str) -> int:
         try:
@@ -984,6 +1032,10 @@ class SettingsDialog(QDialog):
         if index < 0 or index >= len(self._tab_keys):
             return
         key = self._tab_key_for_index(index)
+        if key == "visualizers":
+            available, _tooltip = self._visualizers_tab_eligibility()
+            if not available:
+                return
         widget = self._build_tab_by_key(key, index)
         self._built_tab_indices.add(index)
         self._style_tab_widget(widget)
@@ -1024,7 +1076,7 @@ class SettingsDialog(QDialog):
         return widget
 
     def _hydrate_remaining_tabs_async(self) -> None:
-        # Widgets is intentionally excluded from background hydration.
+        # Widgets and Visualizers are intentionally excluded from background hydration.
         # Its constructor is large enough that hidden/off-screen builds can
         # stall the visible shell and confuse persisted subtab/bucket state
         # restoration. Build it only when explicitly selected or restored
@@ -1033,7 +1085,7 @@ class SettingsDialog(QDialog):
             i
             for i in range(len(self._tab_keys))
             if i not in self._built_tab_indices
-            and self._tab_key_for_index(i) != "widgets"
+            and self._tab_key_for_index(i) not in {"widgets", "visualizers"}
         ]
         if not remaining:
             return
@@ -1128,6 +1180,7 @@ class SettingsDialog(QDialog):
                 continue
             index = self._tab_index_for_key(key)
             btn.clicked.connect(lambda _checked=False, idx=index: self._switch_tab(idx))
+        self._settings.settings_changed.connect(self._on_settings_capability_changed)
         
 
     def _switch_tab(self, index: int, animate: bool = True) -> None:
@@ -1137,6 +1190,10 @@ class SettingsDialog(QDialog):
         Args:
             index: Tab index
         """
+        if index < 0 or index >= len(self.tab_buttons):
+            return
+        if self._admit_top_level_tab_index(index) != index:
+            return
         self._ensure_tab_built(index)
         previous_index = self.content_stack.currentIndex()
         if previous_index >= 0:
@@ -1345,6 +1402,7 @@ class SettingsDialog(QDialog):
         index = self._read_persisted_tab_index()
         if index < 0 or index >= len(self.tab_buttons):
             index = 0
+        index = self._admit_top_level_tab_index(index)
         self._suppress_scroll_capture = True
         try:
             self._switch_tab(index, animate=False)
@@ -1439,30 +1497,30 @@ class SettingsDialog(QDialog):
             self._on_exit_without_sources()
     
     def _reload_all_tab_settings(self) -> None:
-        """Reload settings in all tabs after preset change."""
-        tab_attrs = [
-            (0, "sources_tab"),
-            (1, "display_tab"),
-            (2, "transitions_tab"),
-            (3, "widgets_tab"),
-            (4, "accessibility_tab"),
-        ]
-
-        for idx, attr in tab_attrs:
-            tab = getattr(self, attr, None)
+        """Reload settings in already-built tabs after preset change."""
+        for key in (
+            "sources",
+            "display",
+            "transitions",
+            "widgets",
+            "visualizers",
+            "accessibility",
+        ):
+            tab = self.__dict__.get(f"{key}_tab")
             if tab is None:
                 continue
             if hasattr(tab, 'load_from_settings'):
                 try:
                     tab.load_from_settings()
                 except Exception as e:
-                    logger.debug("[SETTINGS] Failed to reload tab %d: %s", idx, e)
+                    logger.debug("[SETTINGS] Failed to reload tab %s: %s", key, e)
             elif hasattr(tab, 'refresh'):
                 try:
                     tab.refresh()
                 except Exception as e:
-                    logger.debug("[SETTINGS] Failed to refresh tab %d: %s", idx, e)
+                    logger.debug("[SETTINGS] Failed to refresh tab %s: %s", key, e)
 
+        self._refresh_visualizers_tab_eligibility()
         logger.debug("[SETTINGS] Reloaded tab settings after preset change")
     
     def _on_add_default_sources(self) -> None:
