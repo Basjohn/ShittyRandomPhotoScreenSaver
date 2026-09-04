@@ -17,6 +17,15 @@ Item {
     property real startupRevealOpacity: 1.0
     property bool workingVisible: true
     property bool semanticDoubleClickEnabled: false
+    // Resolved once at admission/Settings/input edges; no pointer-time reads.
+    property bool widgetGlowAdmitted: false
+    property bool widgetGlowOnHover: false
+    property bool widgetGlowOnClick: false
+    property color widgetGlowColor: "transparent"
+    function pulseWidgetGlow() {
+        if (interactionGlowLoader.item)
+            interactionGlowLoader.item.pulseClick()
+    }
     opacity: fadeOpacity * startupRevealOpacity
     // Never clip the composed card/text shadows or their negative offsets.
     clip: false
@@ -167,6 +176,30 @@ Item {
         transformOrigin: Item.Center
         scale: overlayWidget.presentationScale
         clip: false
+
+        Loader {
+            id: interactionGlowLoader
+            objectName: "widgetInteractionGlowLoader"
+            anchors.fill: card
+            z: 3
+            active: overlayWidget.widgetGlowAdmitted && overlayWidget.visible
+                && (overlayWidget.widgetGlowOnHover || overlayWidget.widgetGlowOnClick)
+            sourceComponent: WidgetInteractionGlow {
+                hoverEnabled: overlayWidget.widgetGlowOnHover
+                clickEnabled: overlayWidget.widgetGlowOnClick
+                hovered: interactionHover.hovered
+                glowColor: overlayWidget.widgetGlowColor
+                cornerRadius: overlayWidget.cardCornerRadius
+            }
+        }
+
+        // Hover is passive. Discrete clicks arrive from the existing window
+        // input owner, so feedback never competes with family MouseAreas.
+        HoverHandler {
+            id: interactionHover
+            enabled: interactionGlowLoader.active && overlayWidget.widgetGlowOnHover
+            blocking: false
+        }
 
         OverlayCard {
             id: card

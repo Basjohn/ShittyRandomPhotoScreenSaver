@@ -310,7 +310,9 @@ def test_host_module_is_presentation_only() -> None:
     source = (ROOT / "rendering" / "quick" / "widgets" / "host.py").read_text(
         encoding="utf-8"
     )
-    allowed_from = {"__future__", "collections.abc", "dataclasses"}
+    allowed_from = {
+        "__future__", "collections.abc", "dataclasses", "rendering.quick.state"
+    }
     tree = ast.parse(source)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):

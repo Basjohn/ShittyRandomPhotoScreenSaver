@@ -15,6 +15,22 @@ if TYPE_CHECKING:
     from core.settings.settings_manager import SettingsManager
 
 
+def _coerce_widget_glow_color(value: Any) -> Optional[List[int]]:
+    """Validate an authored colour while preserving ``None`` as Use Theme."""
+
+    if value is None:
+        return None
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        raise ValueError("widget glow colour requires four RGBA channels or None")
+    try:
+        channels = [int(channel) for channel in value]
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("widget glow colour requires numeric RGBA channels") from exc
+    if any(channel < 0 or channel > 255 for channel in channels):
+        raise ValueError("widget glow colour channels must be in [0, 255]")
+    return channels
+
+
 @dataclass
 class DisplaySettings:
     """Display-related settings."""
@@ -94,6 +110,9 @@ class InputSettings:
     """Input-related settings."""
     interaction_mode: bool = False
     halo_shape: str = "circle"
+    widget_glow_on_hover: bool = False
+    widget_glow_on_click: bool = False
+    widget_glow_color: Optional[List[int]] = None
 
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "InputSettings":
@@ -101,6 +120,15 @@ class InputSettings:
         return cls(
             interaction_mode=settings.get("input.interaction_mode", False),
             halo_shape=str(settings.get("input.halo_shape", "circle")).lower(),
+            widget_glow_on_hover=settings.to_bool(
+                settings.get("input.widget_glow_on_hover", False), False
+            ),
+            widget_glow_on_click=settings.to_bool(
+                settings.get("input.widget_glow_on_click", False), False
+            ),
+            widget_glow_color=_coerce_widget_glow_color(
+                settings.get("input.widget_glow_color", None)
+            ),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -108,6 +136,13 @@ class InputSettings:
         return {
             "input.interaction_mode": self.interaction_mode,
             "input.halo_shape": self.halo_shape,
+            "input.widget_glow_on_hover": self.widget_glow_on_hover,
+            "input.widget_glow_on_click": self.widget_glow_on_click,
+            "input.widget_glow_color": (
+                None
+                if self.widget_glow_color is None
+                else list(self.widget_glow_color)
+            ),
         }
 
 

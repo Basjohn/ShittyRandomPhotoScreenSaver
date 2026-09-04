@@ -512,6 +512,18 @@ class QuickSceneController(QObject):
         root.setProperty("pixelShiftY", float(state.pixel_shift_y))
         return True
 
+    def apply_widget_glow_press(self, state: QuickInputState, scene_position: Any) -> bool:
+        """Observe an admitted discrete press without participating in actions."""
+
+        if (
+            not isinstance(state, QuickInputState)
+            or not self._readiness.admission_open
+            or state.runtime_generation != self._readiness.runtime_generation
+            or state.screen_index != self._window.screen_index
+        ):
+            return False
+        return self.ordinary_widget_host.pulse_widget_glow_at(state, scene_position)
+
     def apply_context_menu_shadow_style(
         self, style: QuickContextMenuShadowStyle
     ) -> bool:

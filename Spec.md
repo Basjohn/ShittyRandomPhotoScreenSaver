@@ -182,6 +182,12 @@ content width.
 
 ## State / actions
 
+Ordinary widgets support optional **Widget Glow on Hover** and **Widget Glow on Click** under Display -> Interaction.
+One shared swatch inherits the active Widget Theme's `card.border` semantic by default (`input.widget_glow_color=null`);
+an explicit RGBA choice persists until **Use Theme** clears it. Existing interaction/Ctrl/context-menu admission gates
+the shared retained glow. Hover edges and admitted discrete presses trigger finite Quick animations; there is no new
+poller, timer, worker or visualizer clock. Runtime theme colours resolve with the existing generation configuration.
+
 Producers integrate work then publish coherent accepted current state. Presentation consumes bounded latest state with
 generation/request fencing. No producer wait for paint, paint acknowledgement, FIFO render backlog, catch-up replay or
 display-rate division of authored cadence.
@@ -358,4 +364,5 @@ The H closure record is `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md`. 
 - `Docs/TestSuite.md`: live test inventory/status ledger;
 - `Future_Cleanup.md`: deferred deletion/debt;
 - `Future_Work.md`: deferred features;
+- `FWPlan.md`: operator-activated Future Work implementation and validation checklists;
 - historical records: history only.

@@ -17,6 +17,7 @@ class QuickInputController(RuntimeInputOwner):
     """Apply shared product input policy without hot-path Settings/provider reads."""
 
     input_state_changed = Signal(object)
+    widget_glow_pressed = Signal(object, object)
     custom_layout_save_requested = Signal()
     custom_layout_cancel_requested = Signal()
 
@@ -84,6 +85,21 @@ class QuickInputController(RuntimeInputOwner):
     def is_interaction_mode_enabled(self) -> bool:
         return bool(self._state.interaction_mode_enabled)
 
+    def configure_widget_glow(
+        self, *, on_hover: bool, on_click: bool, color: tuple[int, int, int, int]
+    ) -> bool:
+        """Cache resolved presentation options at the Settings event boundary."""
+
+        if not self._state.admission_open:
+            return False
+        if len(color) != 4 or any(not 0 <= channel <= 255 for channel in color):
+            raise ValueError("widget glow requires four RGBA channels in [0, 255]")
+        return self._publish_state(
+            widget_glow_on_hover=bool(on_hover),
+            widget_glow_on_click=bool(on_click),
+            widget_glow_color=tuple(int(channel) for channel in color),
+        )
+
     def set_ctrl_held(self, held: bool) -> None:
         """Publish this display's Ctrl contribution to the shared coordinator."""
 
@@ -134,7 +150,16 @@ class QuickInputController(RuntimeInputOwner):
     ) -> bool:
         if not self._state.admission_open:
             return True
-        return super().handle_mouse_press(event, global_ctrl_held)
+        handled = super().handle_mouse_press(event, global_ctrl_held)
+        state = self._state
+        if (
+            not handled and state.widget_glow_on_click
+            and state.admission_open and not state.exiting
+            and not state.context_menu_active
+            and (state.interaction_mode_enabled or state.ctrl_held)
+        ):
+            self.widget_glow_pressed.emit(state, event.position())
+        return handled
 
     def handle_mouse_move(
         self,

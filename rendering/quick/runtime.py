@@ -192,6 +192,7 @@ class QuickDisplayRuntime(QObject):
             self._input.set_context_menu_active
         )
         self._input.input_state_changed.connect(self._scene.apply_input_state)
+        self._input.widget_glow_pressed.connect(self._scene.apply_widget_glow_press)
         self._scene.apply_input_state(self._input.input_state)
         self._transition.run_changed.connect(self._scene.set_transition_run)
         self._input.input_state_changed.connect(self.input_state_changed.emit)

@@ -1,6 +1,6 @@
 # Widget interaction glow
 
-Status: implementation pending. Live sequencing: `FWPlan.md`.
+Status: implemented; automated/capture proof complete, operator acceptance pending. Live sequencing: `FWPlan.md`.
 Pre-implementation comparison/rollback HEAD: `0fd64b3d002834614131b46581e41fe497d5cbc5`.
 
 ## Existing foundation and owning boundaries
@@ -19,7 +19,9 @@ Pre-implementation comparison/rollback HEAD: `0fd64b3d002834614131b46581e41fe497
 ## Contract and ownership
 
 Two independent booleans, `input.widget_glow_on_hover` and `input.widget_glow_on_click`, default false.
-`input.widget_glow_color` is one shared RGBA colour, default `[130, 205, 255, 255]`. Settings owns persistence;
+`input.widget_glow_color` is one optional shared RGBA override, default `null` (inherit the major Widget Theme
+`card.border` semantic). The swatch displays the resolved colour without persisting it; **Use Theme** clears an
+explicit override, including one authored equal to the current theme. Settings owns persistence;
 QML receives primitive resolved state only. No runtime Settings reads on pointer motion.
 
 The existing input snapshot carries presentation configuration and admits feedback only while interaction/Ctrl
@@ -27,11 +29,17 @@ is active, admission is open, and exit/context-menu suppression is absent. Exist
 authoritative. The host projects the shared properties for every ordinary family, including new/adopted/transferred
 items; per-family semantic action admission remains unchanged.
 
-One reusable retained QML primitive owns transient hover/press/pulse pixels. It observes pointer events passively,
-never substitutes for or consumes a family action. Finite Qt Quick property animations may run only in response
+One reusable retained QML primitive owns transient hover/press/pulse pixels. Hover is a passive shell handler;
+discrete clicks are observed at the existing window/input boundary and generation-fenced by the scene/host.
+A foreground QML click handler was rejected because real pointer tests proved it could consume a child action.
+Finite Qt Quick property animations may run only in response
 to an actual state edge and must stop at rest. No Timer, worker, poller, independent frame request or perpetual loop.
 Disabled/retired/hidden items cannot keep pulse work alive. The item uses current card geometry/radius/scale and
 inherits whole-widget/startup fades. No artwork capture, extra window or per-frame CPU/GPU resource creation.
+One hollow distance-field shader/quad gives a smooth edge without blur textures. GLSL and its baked OpenGL QSB
+ship together in the existing QML data directory; the bake command is in the shader source. Runtime generation
+recreation resolves theme changes; the Settings swatch alone subscribes to existing theme publication and unsubscribes
+on destruction. Capture evidence: `logs/evidence_chest/fw_glow/glow_peak.png`.
 
 The primitive is **justified reusable presentation infrastructure** because all ordinary families consume it.
 Glow colours and input options are **feature-local**; generalized animation managers, per-family glow controllers,
@@ -40,11 +48,12 @@ new style-theme roles and a Visualizer glow policy are **speculative reuse defer
 ## Resumable checkpoints
 
 - [x] Inspect source/ownership and commit this decomposition with the live FW plan.
-- [ ] Add canonical InputSettings/defaults, the two Interaction controls and shared swatch; prove roundtrip/reload.
-- [ ] Project configuration through existing input state and retained host; prove cold adoption, updates, transfer,
+- [x] Add canonical InputSettings/defaults, the two Interaction controls and shared swatch; prove roundtrip/reload.
+- [x] Project configuration through existing input state and retained host; prove cold adoption, updates, transfer,
   rejection of stale generation and retirement.
-- [ ] Implement shared retained pixels and finite passive hover/click feedback; prove actions still receive events.
-- [ ] Run focused tests, inspect diff and commit/push the coherent vertical feature; reconcile current docs.
+- [x] Implement shared retained pixels and finite hover/click feedback; prove actions still receive events.
+- [x] Run focused tests (64 passed), inspect real Quick capture and reconcile current docs.
+- [ ] **Awaiting operator validation:** subtlety on real backgrounds, mixed-DPR/CUSTOM and installed shader payload.
 
 ## Acceptance bars
 

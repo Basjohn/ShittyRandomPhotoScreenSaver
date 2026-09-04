@@ -8,15 +8,20 @@ Allows users to configure display settings:
 - Image rotation interval
 - Shuffle mode
 """
+import weakref
 from typing import Optional, List
+
+import shiboken6
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox, QScrollArea, QComboBox,
     QButtonGroup, QPushButton,
 )
 from PySide6.QtCore import Signal, Qt
+from PySide6.QtGui import QColor
 
 from core.settings.settings_manager import SettingsManager
+from core.settings.models import InputSettings
 from core.logging.logger import get_logger
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
@@ -26,6 +31,9 @@ from ui.tabs.shared_styles import (
 )
 from ui.flow_layout import FlowContainer
 from ui.widgets import StyledComboBox
+from ui.styled_popup import ColorSwatchButton
+from ui.widget_glow_style import resolve_widget_glow_color
+from ui.widget_theme_active import get_active_widget_theme, subscribe_widget_theme
 from utils.monitors import get_screen_count
 
 logger = get_logger(__name__)
@@ -52,8 +60,10 @@ class DisplayTab(QWidget):
         self.settings_manager = settings  # Also expose as property for tests
         self._is_mc_profile = settings.get_application_name() == "Screensaver_MC"
         self._loading: bool = False
+        self._widget_glow_color_override: Optional[List[int]] = None
         self._setup_ui()
         self._load_settings()
+        self._bind_widget_glow_theme()
 
         logger.debug("DisplayTab created")
 
@@ -385,7 +395,123 @@ class DisplayTab(QWidget):
         halo_row.addWidget(self.halo_shape_combo)
         halo_row.addStretch()
 
+        widget_glow_hover_row, _ = add_aligned_row(
+            layout,
+            "",
+            label_width=self._LABEL_WIDTH,
+            wrap=False,
+        )
+        self.widget_glow_on_hover_check = QCheckBox("Widget Glow on Hover")
+        self.widget_glow_on_hover_check.setProperty("circleIndicator", True)
+        self.widget_glow_on_hover_check.setToolTip(
+            "Show a subtle glow while the pointer is over an ordinary widget."
+        )
+        self.widget_glow_on_hover_check.stateChanged.connect(self._save_settings)
+        widget_glow_hover_row.addWidget(self.widget_glow_on_hover_check)
+        widget_glow_hover_row.addStretch()
+
+        widget_glow_click_row, _ = add_aligned_row(
+            layout,
+            "",
+            label_width=self._LABEL_WIDTH,
+            wrap=False,
+        )
+        self.widget_glow_on_click_check = QCheckBox("Widget Glow on Click")
+        self.widget_glow_on_click_check.setProperty("circleIndicator", True)
+        self.widget_glow_on_click_check.setToolTip(
+            "Pulse a subtle glow when an ordinary widget receives a click."
+        )
+        self.widget_glow_on_click_check.stateChanged.connect(self._save_settings)
+        widget_glow_click_row.addWidget(self.widget_glow_on_click_check)
+        widget_glow_click_row.addStretch()
+
+        widget_glow_color_row, _ = add_aligned_row(
+            layout,
+            "Widget Glow Color:",
+            label_width=self._LABEL_WIDTH,
+            wrap=False,
+        )
+        self.widget_glow_color_btn = ColorSwatchButton(
+            title="Choose Widget Glow Color",
+            show_alpha=True,
+        )
+        self.widget_glow_color_btn.setToolTip(
+            "Shared RGBA colour used by hover and click widget glow feedback. "
+            "Use Theme follows the active Widget Theme card border."
+        )
+        self.widget_glow_color_btn.color_changed.connect(
+            self._on_widget_glow_color_changed
+        )
+        widget_glow_color_row.addWidget(self.widget_glow_color_btn)
+        self.widget_glow_use_theme_btn = QPushButton("Use Theme")
+        self.widget_glow_use_theme_btn.setFixedHeight(30)
+        self.widget_glow_use_theme_btn.setToolTip(
+            "Clear the explicit glow colour and inherit the active Widget Theme card border."
+        )
+        shared_styles.bind_shared_styles(
+            self.widget_glow_use_theme_btn,
+            "GHOST_ACTION_BUTTON_STYLE",
+            base_style="",
+        )
+        self.widget_glow_use_theme_btn.clicked.connect(
+            self._use_widget_theme_glow_color
+        )
+        widget_glow_color_row.addWidget(self.widget_glow_use_theme_btn)
+        widget_glow_color_row.addStretch()
+
         return group
+
+    def _refresh_widget_glow_swatch(self, theme=None) -> None:
+        """Show the resolved glow colour without changing persistence."""
+
+        color = resolve_widget_glow_color(
+            self._widget_glow_color_override,
+            theme if theme is not None else get_active_widget_theme(),
+        )
+        self.widget_glow_color_btn.set_color(QColor(*color))
+
+    def _on_widget_glow_color_changed(self, color: QColor) -> None:
+        """Capture a swatch edit as an explicit persisted RGBA override."""
+
+        if getattr(self, "_loading", False):
+            return
+        self._widget_glow_color_override = list(color.getRgb())
+        self._save_settings()
+
+    def _use_widget_theme_glow_color(self) -> None:
+        """Clear the explicit override and persist the Use Theme choice."""
+
+        if getattr(self, "_loading", False):
+            return
+        self._widget_glow_color_override = None
+        self._refresh_widget_glow_swatch()
+        self._save_settings()
+
+    def _bind_widget_glow_theme(self) -> None:
+        """Refresh this Settings swatch from Widget Theme publishes."""
+
+        if getattr(self, "_widget_glow_theme_unsubscribe", None) is not None:
+            return
+        tab_ref = weakref.ref(self)
+
+        def _theme_changed(theme) -> None:
+            owner = tab_ref()
+            if owner is None or not shiboken6.isValid(owner):
+                return
+            owner._refresh_widget_glow_swatch(theme)
+
+        unsubscribe = subscribe_widget_theme(
+            _theme_changed,
+            call_immediately=True,
+        )
+        self._widget_glow_theme_unsubscribe = unsubscribe
+
+        # Capture only the subscription callback. The listener itself retains
+        # the tab weakly, so theme lifetime cannot retain this Settings page.
+        def _unsubscribe(_obj=None, callback=unsubscribe) -> None:
+            callback()
+
+        self.destroyed.connect(_unsubscribe)
 
     def _load_settings(self) -> None:
         """Load settings from settings manager."""
@@ -402,6 +528,8 @@ class DisplayTab(QWidget):
         self.sharpen_check.blockSignals(True)
         # Block input toggles
         self.interaction_mode_check.blockSignals(True)
+        self.widget_glow_on_hover_check.blockSignals(True)
+        self.widget_glow_on_click_check.blockSignals(True)
         
         try:
             # Monitor selection (new canonical: display.show_on_monitors)
@@ -497,6 +625,21 @@ class DisplayTab(QWidget):
             self.halo_shape_combo.setCurrentIndex(shape_map.get(halo_shape, 0))
             self.halo_shape_combo.blockSignals(False)
 
+            # Widget interaction glow
+            input_options = InputSettings.from_settings(self._settings)
+            self.widget_glow_on_hover_check.setChecked(
+                input_options.widget_glow_on_hover
+            )
+            self.widget_glow_on_click_check.setChecked(
+                input_options.widget_glow_on_click
+            )
+            self._widget_glow_color_override = (
+                None
+                if input_options.widget_glow_color is None
+                else list(input_options.widget_glow_color)
+            )
+            self._refresh_widget_glow_swatch()
+
             # Renderer backend — always OpenGL, normalize legacy values
             backend_mode_raw = self._settings.get('display.render_backend_mode', 'opengl')
             backend_mode = str(backend_mode_raw).lower()
@@ -515,6 +658,8 @@ class DisplayTab(QWidget):
             self.lanczos_check.blockSignals(False)
             self.sharpen_check.blockSignals(False)
             self.interaction_mode_check.blockSignals(False)
+            self.widget_glow_on_hover_check.blockSignals(False)
+            self.widget_glow_on_click_check.blockSignals(False)
             self._loading = False
     
     def _save_settings(self) -> None:
@@ -574,6 +719,22 @@ class DisplayTab(QWidget):
         ]
         halo_idx = self.halo_shape_combo.currentIndex()
         self._settings.set('input.halo_shape', shape_names[halo_idx] if 0 <= halo_idx < len(shape_names) else 'circle')
+
+        # Widget interaction glow
+        self._settings.set(
+            'input.widget_glow_on_hover',
+            self.widget_glow_on_hover_check.isChecked(),
+        )
+        self._settings.set(
+            'input.widget_glow_on_click',
+            self.widget_glow_on_click_check.isChecked(),
+        )
+        self._settings.set(
+            'input.widget_glow_color',
+            None
+            if self._widget_glow_color_override is None
+            else list(self._widget_glow_color_override),
+        )
 
         # Renderer backend — always OpenGL
         self._settings.set('display.render_backend_mode', 'opengl')
