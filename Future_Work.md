@@ -1,13 +1,13 @@
 # Future Work
 
-Last updated: 2026-09-03
+Last updated: 2026-09-04
 
 Long-horizon feature / new-implementation backlog.
 
 ## Authority / activation rule
 
-`Future_Work.md` is **not active sequencing** and must not interrupt work owned by `Current_Plan.md` or
-`Future_Cleanup.md`.
+`Future_Work.md` is **not active sequencing by default**. Normal work continues to be owned by
+`Current_Plan.md` and `Future_Cleanup.md` unless the operator deliberately selects a future item.
 
 An agent may implement work from this file only when **either**:
 
@@ -15,6 +15,12 @@ An agent may implement work from this file only when **either**:
 2. `Current_Plan.md` contains no remaining important active work and no **READY** cleanup row in
    `Future_Cleanup.md` is scheduled ahead of the feature. `DELETE AFTER HORIZON` / `J EXIT` rows are dormant
    gates and do not block unrelated future work merely by existing.
+
+**Operator override:** an explicit request for a named `Future_Work.md` item overrides the normal sequencing above.
+Unfinished `Current_Plan.md` or `Future_Cleanup.md` work is not, by itself, permission to refuse or defer that named
+future item. Only a genuine technical prerequisite required to implement the requested item safely may block direct
+implementation. Where practical, satisfy that prerequisite as the opening subphase of the requested work instead of
+deferring the feature wholesale. Preserve unrelated active work and its rollback boundaries while doing so.
 
 Merely encountering, reading, indexing or cross-linking this file is **not** permission to begin one
 of these features.
@@ -31,6 +37,28 @@ Future_Work.md new features / experiments
 
 This file exists so good ideas survive without expanding current scope. Technical notes are deliberately
 provisional; future implementation must inspect the **current** Qt Quick architecture before coding.
+
+### Decomposition rule for large / architecturally unique work
+
+When a requested implementation is long, sizeable, or architecturally unique, create and commit a detailed
+implementation decomposition **before substantial coding** if a current one does not already exist. The decomposition
+is a continuation artifact, not ceremony: a later agent must be able to resume safely if the original implementer runs
+out of quota or stops mid-slice.
+
+At minimum it must:
+
+1. inventory the current relevant foundation and point to the real source/tests that already own it;
+2. pin a pre-implementation rollback/comparison HEAD;
+3. define state, cadence, Settings, presentation, GPU/resource and retirement ownership;
+4. classify new primitives as **feature-local**, **justified reusable infrastructure**, or **speculative reuse deferred**
+   until another concrete consumer proves the abstraction;
+5. decompose the work into resumable checkpoints that leave the repository coherent whenever practical;
+6. define deterministic/source-level, lifecycle/resource, performance and eyes-on visual acceptance bars separately;
+7. keep an explicit landed/remaining status so partial completion is not mistaken for finished architecture.
+
+Do not spend a first implementation pass building speculative infrastructure merely because later features might need it.
+Build the requested vertical feature, extract only reuse justified by the real implementation, and record attractive but
+unproven abstractions in the decomposition for a later second-consumer decision.
 
 Runtime Widget Themes, their semantic resolver/linking/Custom model and the shared Style Overrides surface
 are **landed current architecture**, not future work. Their durable contract belongs in `Spec.md` and the
@@ -88,6 +116,23 @@ A failed visual experiment should be removable by deleting/modifying its isolate
 implementation and tests.
 
 This remains internal plugin-shaped architecture, not a third-party plugin SDK.
+
+### Shared 3D dormancy rule
+
+Future 3D support follows the same admission/dormancy contract as the feature that consumes it. If every admitted
+3D-dependent Visualizer mode / transition implementation is dormant, **meaningful 3D-only overhead must also be dormant**.
+Do not compile 3D-only shaders, allocate meshes/VAOs/VBOs, retain effect-specific GPU resources, perform depth-specific
+per-frame work, start workers, or create another cadence merely because reusable 3D code exists in the repository.
+Heavy implementation modules should continue to resolve lazily at the consuming renderer boundary.
+
+Cheap/import-safe pure math, immutable types, tiny shader/resource contracts and canonical catalog metadata may remain
+shared/eager when their runtime/resource cost is effectively nil and centralizing them prevents duplication. Do not contort
+the architecture to make zero-cost helpers artificially lazy. The boundary is **meaningful owned work/resources**, not a
+ritual requirement that every helper live behind an import gate.
+
+Shared 3D infrastructure should therefore be dependency-light at import, while context-local programs, meshes and other
+costly assets belong to the admitted renderer and are released on retirement/context loss. There must never be a hidden
+"3D subsystem" ticking or holding heavy resources in the background when all of its real consumers are disabled/dormant.
 
 For a **deactivated** transition: keep cheap metadata available, exclude it from Random/Cycle, do not
 import heavy implementation solely for catalog construction, do not compile effect shaders, do not
@@ -362,6 +407,77 @@ It should appear as a free-standing 3D object with no rectangular card fill, fra
 shadow. It still renders inside the normal visualizer Quick item/QSGRenderNode, participates in the
 same fade/lifecycle/generation ownership, and stays inside its assigned transparent viewport.
 
+### 7.1A Existing foundation — inspect before inventing
+
+The Sphere is deliberately ambitious, but it does **not** start from an empty renderer. Before designing new substrate,
+inspect the current architecture below. These are reconnaissance pointers, **not mandated reuse**: reuse current contracts
+that fit, extend them minimally where the Sphere proves a need, and do not cargo-cult transition-specific projection/math
+or distort an existing helper merely to claim reuse.
+
+1. **Static mesh allocation/lifetime** — start with
+   `rendering/quick/transitions/implementations/block_spins.py` and the OpenGL-free authored mesh/shader contract in
+   `rendering/gl_programs/blockspin_program.py`. Block Spins already proves static vertex data, VAO/VBO ownership and
+   explicit release inside the Quick scene.
+2. **Perspective / aspect-correct projection** — start with the current Visualizer presentation/geometry/render-frame
+   contract and `FRAMELESS + VIEWPORT_RECT`. Block Spins is a useful shallow-3D transform precedent, but the Sphere should
+   add only the minimal true-perspective/aspect-correct projection actually required rather than copying transition math.
+3. **Model/view/projection transforms** — inspect the current Quick matrix handoff in
+   `rendering/quick/visualizer/render_contract.py` and the transformed 3D geometry in
+   `rendering/gl_programs/blockspin_program.py`; introduce a reusable MVP helper only if the Sphere makes that boundary real.
+4. **Depth-state handling** — inspect `rendering/quick/visualizer/render_host.py`,
+   `rendering/quick/visualizer/clip_host.py`, and `rendering/quick/transitions/implementations/block_spins.py`. The common
+   Qt Quick GL-state fence already owns preservation/restoration of depth/cull/depth-write state.
+5. **Shader program/resource ownership** — follow the lazy Visualizer implementation contract in
+   `rendering/quick/visualizer/implementation_registry.py`, the render host, existing Visualizer implementation modules,
+   and `rendering/quick/render/gl_resources.py`. Shader programs/resources remain context-local renderer ownership.
+6. **Proper resource retirement/recreation** — reuse the renderer `release_resources()` contract and current lazy
+   implementation/context lifecycle. Retirement/context loss must leave no Sphere mesh/program resource behind.
+7. **Vertex-shader deformation** — new Sphere-local authored work initially. Reuse shader/program conventions, not a new
+   simulation owner; never upload rebuilt sphere topology every frame.
+8. **Deformed normals** — new Sphere-local shader work initially. Keep tangent-offset/normal reconstruction local unless a
+   later concrete deforming-mesh consumer proves a reusable primitive.
+9. **Directional lighting** — `rendering/gl_programs/blockspin_program.py` is a current normal/light/specular precedent.
+   Resolve the project's existing direction vocabulary into Sphere configuration rather than creating a live dependency on
+   Widget shadow state.
+10. **Fresnel/specular/material parameters** — Block Spins supplies only precedent for bounded lit 3D shader treatment.
+    Sphere material semantics remain Sphere-local initially; shared lighting helpers are justified only when they are truly
+    presentation-neutral.
+11. **Viewport resize behavior** — inspect `VisualizerModePresentationPolicy`, `VisualizerShellPolicy.FRAMELESS`,
+    `VisualizerClipPolicy.VIEWPORT_RECT`, `tests/test_qtquick_visualizer_geometry.py`, and
+    `tools/qtquick_visualizer_clip_smoke.py`. Preserve the existing whole-scale vs viewport-extent contract.
+12. **Deterministic authored-time animation rather than render-frame physics** — preserve `VisualizerLogicalRuntime` and
+    the isolated mode-owned logical/frame runtime as the clock/state authority. The Sphere renderer consumes authored
+    state/time; render refresh never advances simulation.
+
+### 7.1B First-consumer reusable-infrastructure policy
+
+Treat the Sphere as the first **demanding consumer** of reusable SRPSS 3D rendering primitives, not as permission to build
+an SRPSS general-purpose 3D engine before the object exists.
+
+Likely reusable candidates, **if the Sphere implementation actually justifies them**, include:
+
+- static mesh/buffer ownership and context-local release helpers;
+- aspect-correct perspective and small model/view/projection math helpers;
+- safe depth/cull/depth-write state handling that composes with the existing Quick fence;
+- common shader/program/resource lifetime helpers;
+- a bounded presentation-neutral lighting-direction resolver;
+- tiny lit-mesh shader/math utilities only where they do not encode Sphere semantics.
+
+Keep Sphere-specific deformation fields, spherical-harmonic/lobe/noise choices, audio-to-deformation mapping,
+deformed-sphere normal strategy, material identities (**Chrome / Obsidian / Magma / Silver**) and authored behavior local to
+the mode unless a later second concrete consumer proves an abstraction worthwhile.
+
+Do **not** pre-build a general scene graph, camera framework, material-class hierarchy, 3D object system or generic physics
+engine. When reuse looks plausible but is not yet justified, record the candidate in the Sphere decomposition rather than
+abstracting speculatively.
+
+The shared-3D dormancy rule above applies recursively: if Sphere and every other future consumer of an extracted 3D helper
+are dormant, any meaningful-cost helper-owned resources/work must also be absent. Cheap pure math/types may stay shared.
+
+Before implementation, if no current detailed Sphere implementation decomposition exists, create and commit one first per
+the decomposition rule above. It must include this foundation inventory, the rollback boundary, ownership/lifetime map,
+reusable-vs-local decisions, resumable checkpoints and separate deterministic/performance/eyes-on acceptance bars.
+
 Visualizer viewport resizing is a current destination requirement. Any future sphere must therefore use aspect-correct
 projection so wider/taller viewports reveal or reframe more space without turning the sphere into an ellipse. Whole-size
 corner/scroll resize scales it uniformly; edge viewport resize changes framing/aspect.
@@ -481,8 +597,9 @@ single existing implementation/descriptor rather than manufacturing a new transi
 
 # 9. Current idea priority — not active sequencing
 
-This is priority **inside Future Work only**. `Current_Plan.md` and any scheduled **READY** cleanup still
-outrank it; dormant compatibility-horizon/J-exit rows do not.
+This is priority **inside Future Work only**. Unless the operator explicitly selects a named item under the
+**Operator override** above, `Current_Plan.md` and any scheduled **READY** cleanup still outrank it; dormant
+compatibility-horizon/J-exit rows do not.
 
 1. **Widget hover/click glow** — operator-requested bounded interaction polish; shared swatch, event-driven
    hover/click pulse, no polling/timers/thread owner;
@@ -528,4 +645,3 @@ The current shared artwork/metadata fades are landed and belong to current physi
 architecture work. A true outgoing+incoming two-texture artwork crossfade is a separate optional experiment
 only if eyes-on validation proves the current fade insufficient. Measure texture residency and transition
 cost before keeping it.
-
