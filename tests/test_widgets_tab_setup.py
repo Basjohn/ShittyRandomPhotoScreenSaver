@@ -182,7 +182,7 @@ def test_visualizers_row_present_and_depends_on_media(qt_app, settings_manager):
         assert media_cb.isChecked() is True
         assert vis_cb.isEnabled() is True
 
-        # Deactivate Media -> Visualizers forced off, disabled, pill hidden.
+        # Deactivate Media -> Visualizers forced off, disabled.
         media_cb.setChecked(False)
         tab._save_settings_now()
         assert vis_cb.isChecked() is False
@@ -190,8 +190,9 @@ def test_visualizers_row_present_and_depends_on_media(qt_app, settings_manager):
         cfg = settings_manager.get("widgets", {})
         assert is_widget_family_activated(cfg, "visualizers") is False
         assert is_widget_family_activated(cfg, "media") is False
-        vis_family = get_widget_family_descriptor("visualizers")
-        assert _family_pill(tab, vis_family).isHidden() is True
+        # V7: Visualizers is a top-level Settings tab, not a WidgetsTab settings
+        # pill, so there is no WidgetsTab pill to hide here. The family activation
+        # + media-dependency invariant above remains the current contract.
 
         # Reactivate Media -> Visualizers row enabled again but NOT auto-on.
         media_cb.setChecked(True)

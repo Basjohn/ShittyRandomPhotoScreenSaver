@@ -305,3 +305,148 @@ def test_switch_flushes_outgoing_edit_before_new_mode_becomes_authoritative(
         assert tab.spectrum_drop_speed.value() == edited
     finally:
         tab.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# Invariants migrated from the retired pre-V7 WidgetsTab-hosted visualizer tests
+# (test_widgets_tab.py, deleted). Each exercises a Settings-UI behavior that the
+# shared builders/context still own, now proven against the VisualizersTab host.
+# ---------------------------------------------------------------------------
+
+
+def _bucket_titles(container) -> list[str]:
+    layout = container.layout()
+    titles: list[str] = []
+    for idx in range(layout.count()):
+        widget = layout.itemAt(idx).widget()
+        if widget is not None:
+            title = widget.property("bucketTitle")
+            if title:
+                titles.append(title)
+    return titles
+
+
+def test_spectrum_body_uses_authored_bucket_order_and_render_mode_buttons(
+    qt_app, settings_manager
+):
+    tab = _make_tab(settings_manager, "spectrum")
+    try:
+        tab._select_mode_page("spectrum")
+        assert _bucket_titles(tab._spectrum_normal) == ["Appearance", "Shape"]
+        assert _bucket_titles(tab._spectrum_advanced) == ["Render", "Audio", "Ghost"]
+        assert set(tab.spectrum_render_mode_buttons.keys()) == {"segment", "bars"}
+        assert tab.spectrum_render_mode_buttons["bars"].text() == "BAR"
+        assert tab.spectrum_render_mode_buttons["segment"].text() == "SEGMENTS"
+        assert tab._spectrum_render_mode in {"bars", "segment"}
+    finally:
+        tab.deleteLater()
+
+
+def test_spectrum_technical_bucket_visibility_persists_per_mode(qt_app, settings_manager):
+    """Technical subsection visibility toggles persist per mode across recreation."""
+    from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
+
+    tab = _make_tab(settings_manager, "spectrum")
+    try:
+        tab._select_mode_page("spectrum")
+        controls = get_per_mode_controls_for_mode(tab, "spectrum")
+        assert controls is not None
+        agc_toggle = controls.get("agc_visibility_toggle")
+        transient_toggle = controls.get("transient_visibility_toggle")
+        assert agc_toggle is not None
+        assert transient_toggle is not None
+
+        agc_toggle.setChecked(True)
+        transient_toggle.setChecked(False)
+        qt_app.processEvents()
+
+        assert tab.get_visualizer_tech_bucket_state("spectrum", "agc", False) is True
+        assert tab.get_visualizer_tech_bucket_state("spectrum", "transient", True) is False
+    finally:
+        tab.deleteLater()
+
+    reloaded = VisualizersTab(settings_manager)
+    try:
+        reloaded._select_mode_page("spectrum")
+        reloaded_controls = get_per_mode_controls_for_mode(reloaded, "spectrum")
+        assert reloaded_controls is not None
+        assert reloaded_controls.get("agc_visibility_toggle").isChecked() is True
+        assert reloaded_controls.get("transient_visibility_toggle").isChecked() is False
+    finally:
+        reloaded.deleteLater()
+
+
+def test_editing_advanced_control_auto_switches_bubble_preset_to_custom(
+    qt_app, settings_manager
+):
+    settings_manager.set(
+        "widgets",
+        {
+            "spotify_visualizer": {
+                "enabled": True,
+                "visualizers_enabled": True,
+                "mode": "bubble",
+                "preset_bubble": 0,
+            }
+        },
+    )
+    tab = VisualizersTab(settings_manager)
+    try:
+        tab._select_mode_page("bubble")
+        slider = tab._bubble_preset_slider
+        slider.set_preset_index(0)  # a curated preset, not Custom
+        assert slider.preset_index() != slider.custom_index()
+
+        pulse = tab.bubble_big_bass_pulse
+        pulse.setValue(min(pulse.maximum(), pulse.value() + 5))
+        qt_app.processEvents()
+
+        # Editing an advanced (mode-owned) control forks the curated preset to Custom.
+        assert slider.preset_index() == slider.custom_index()
+    finally:
+        tab.deleteLater()
+
+
+def test_bubble_swirl_toggle_hides_conflicting_direction_rows(qt_app, settings_manager):
+    tab = _make_tab(settings_manager, "bubble")
+    try:
+        tab._select_mode_page("bubble")
+
+        tab.bubble_swirl_enabled.setChecked(True)
+        qt_app.processEvents()
+        assert tab._bubble_stream_direction_row_widget.isHidden() is True
+        assert tab._bubble_drift_direction_row_widget.isHidden() is True
+        assert tab._bubble_swirl_direction_row_widget.isHidden() is False
+
+        tab.bubble_swirl_enabled.setChecked(False)
+        qt_app.processEvents()
+        assert tab._bubble_stream_direction_row_widget.isHidden() is False
+        assert tab._bubble_drift_direction_row_widget.isHidden() is False
+        assert tab._bubble_swirl_direction_row_widget.isHidden() is True
+    finally:
+        tab.deleteLater()
+
+
+def test_bubble_stream_reactivity_load_clamps_to_slider_maximum(qt_app, settings_manager):
+    from core.settings.visualizer_presets import get_custom_preset_index
+
+    settings_manager.set(
+        "widgets",
+        {
+            "spotify_visualizer": {
+                "enabled": True,
+                "visualizers_enabled": True,
+                "mode": "bubble",
+                "preset_bubble": get_custom_preset_index("bubble"),
+                "bubble_stream_reactivity": 2.75,
+            }
+        },
+    )
+    tab = VisualizersTab(settings_manager)
+    try:
+        tab._select_mode_page("bubble")
+        assert tab.bubble_stream_reactivity.maximum() == 200
+        assert tab.bubble_stream_reactivity.value() == 200
+        assert tab.bubble_stream_reactivity_label.text() == "200%"
+    finally:
+        tab.deleteLater()

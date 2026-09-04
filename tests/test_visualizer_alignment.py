@@ -117,7 +117,12 @@ def test_advanced_toggle_hides_only_advanced(
             build_shared_visualizer_appearance_controls,
         )
 
-        build_shared_visualizer_appearance_controls(tab)
+        # The shared Bar Fill/Border/Opacity controls are owned outside the mode
+        # bodies and need their own host layout (VisualizersTab passes its Bar
+        # Appearance group's layout here). Build them into a throwaway host so the
+        # mode builder below can find the shared control attributes on ``tab``.
+        shared_host = QWidget()
+        build_shared_visualizer_appearance_controls(tab, QVBoxLayout(shared_host))
         container = QWidget()
         layout = QVBoxLayout(container)
         builder(tab, layout)
@@ -128,6 +133,7 @@ def test_advanced_toggle_hides_only_advanced(
             owned = []
             tab._owned_containers = owned
         owned.append(container)
+        owned.append(shared_host)
         return (
             getattr(tab, normal_attr),
             getattr(tab, adv_attr),
