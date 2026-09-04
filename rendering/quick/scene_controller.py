@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from typing import Any
 import math
@@ -39,6 +39,7 @@ from .context_menu import (
 from .custom_layout_overlay import (
     CustomLayoutOverlayModel,
     GeometryResolver,
+    MoveFinishedHandler,
     ResizeBeginHandler,
     ResizeUpdateHandler,
     ResizeWheelHandler,
@@ -312,6 +313,7 @@ class QuickSceneController(QObject):
         self._background_item: BackgroundRenderItem | None = None
         self._ordinary_widget_host: OrdinaryWidgetPresentationHost | None = None
         self._custom_layout_overlay: RetainedCustomLayoutOverlay | None = None
+        self._custom_layout_guide_underlay: QQuickItem | None = None
         self._custom_layout_session: CustomLayoutSession | None = None
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
@@ -412,6 +414,13 @@ class QuickSceneController(QObject):
         self._custom_layout_overlay = RetainedCustomLayoutOverlay(
             custom_layout_overlay_item
         )
+        custom_layout_guide_underlay = root.findChild(
+            QQuickItem,
+            "customLayoutGuideUnderlay",
+        )
+        if custom_layout_guide_underlay is None:
+            raise RuntimeError("DisplayScene.qml has no CUSTOM layout guide underlay")
+        self._custom_layout_guide_underlay = custom_layout_guide_underlay
         self._background_item = BackgroundRenderItem(
             root,
             telemetry=self._telemetry,
@@ -593,6 +602,7 @@ class QuickSceneController(QObject):
         resize_begin_handler: ResizeBeginHandler | None = None,
         resize_update_handler: ResizeUpdateHandler | None = None,
         resize_wheel_handler: ResizeWheelHandler | None = None,
+        move_finished_handler: MoveFinishedHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         """Bind this display's retained pixels to shared CUSTOM working state."""
 
@@ -613,7 +623,7 @@ class QuickSceneController(QObject):
         self._custom_layout_visualizer_baseline = current_visualizer
         if self._visualizer_item is not None:
             self._visualizer_item.set_custom_layout_presentation_authority(True)
-        return self.custom_layout_overlay.bind_session(
+        model = self.custom_layout_overlay.bind_session(
             session,
             display_identity=identity,
             display_origin=self._custom_layout_display_origin,
@@ -622,12 +632,57 @@ class QuickSceneController(QObject):
             resize_begin_handler=resize_begin_handler,
             resize_update_handler=resize_update_handler,
             resize_wheel_handler=resize_wheel_handler,
+            move_finished_handler=move_finished_handler,
         )
+        underlay = self._custom_layout_guide_underlay
+        if underlay is not None:
+            underlay.setProperty("verticalCenterGuides", [])
+            underlay.setProperty("horizontalCenterGuides", [])
+            underlay.setProperty("editActive", True)
+        return model
 
     def refresh_custom_layout_session(self) -> None:
         """Reproject current session state onto the same retained items."""
 
         self.custom_layout_overlay.model.refresh()
+
+    def set_custom_layout_guides(
+        self,
+        *,
+        vertical: Sequence[tuple[int, str]] = (),
+        horizontal: Sequence[tuple[int, str]] = (),
+    ) -> None:
+        """Project one move sample's edge/centre guides onto the edit layers."""
+
+        center_kinds = {"display_center", "peer_center"}
+        vertical_edges = tuple(
+            (int(position), str(kind))
+            for position, kind in vertical
+            if str(kind) not in center_kinds
+        )
+        horizontal_edges = tuple(
+            (int(position), str(kind))
+            for position, kind in horizontal
+            if str(kind) not in center_kinds
+        )
+        vertical_centers = [
+            {"position": int(position), "kind": str(kind)}
+            for position, kind in vertical
+            if str(kind) in center_kinds
+        ]
+        horizontal_centers = [
+            {"position": int(position), "kind": str(kind)}
+            for position, kind in horizontal
+            if str(kind) in center_kinds
+        ]
+        self.custom_layout_overlay.set_guides(
+            vertical=vertical_edges,
+            horizontal=horizontal_edges,
+        )
+        underlay = self._custom_layout_guide_underlay
+        if underlay is not None:
+            underlay.setProperty("verticalCenterGuides", vertical_centers)
+            underlay.setProperty("horizontalCenterGuides", horizontal_centers)
 
     def transfer_ordinary_widget_to(
         self,
@@ -661,6 +716,10 @@ class QuickSceneController(QObject):
         if self._visualizer_root is not None:
             self._visualizer_root.setProperty("customLayoutWorkingVisible", True)
             self._visualizer_root.setProperty("volumeWheelEnabled", True)
+        self.set_custom_layout_guides()
+        underlay = self._custom_layout_guide_underlay
+        if underlay is not None:
+            underlay.setProperty("editActive", False)
         self.custom_layout_overlay.clear_session()
         if self._visualizer_item is not None:
             self._visualizer_item.set_custom_layout_presentation_authority(False)
@@ -1624,6 +1683,7 @@ class QuickSceneController(QObject):
         self._background_item = None
         self._ordinary_widget_host = None
         self._custom_layout_overlay = None
+        self._custom_layout_guide_underlay = None
         self._visualizer_item = None
         self._visualizer_bridge = None
         self._visualizer_content_host = None

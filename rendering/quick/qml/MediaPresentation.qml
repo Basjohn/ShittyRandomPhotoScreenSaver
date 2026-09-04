@@ -38,8 +38,20 @@ OverlayWidget {
             + mediaRoot.shellInset,
         headerFrame.implicitWidth + mediaRoot.shellInset
     )
-    rightAccessoryExtent: mediaModel.appVolumeAvailable ? 48.0 : 0.0
-    preferredContentWidth: preferredCardWidth + rightAccessoryExtent
+    readonly property real volumeAccessoryExtent:
+        mediaModel.appVolumeAvailable ? 48.0 : 0.0
+    // Keep the external rail on the side with more remaining display space.
+    // Comparing the retained outer-rect centre to the display centre is exactly
+    // equivalent for a fixed-width widget, and stays event/binding driven: no
+    // polling, timer, persisted side state, or second geometry owner. CUSTOM
+    // movement inherits the same rule automatically as the retained x changes.
+    readonly property bool appVolumeOnLeft:
+        mediaModel.appVolumeAvailable
+            && mediaRoot.parent !== null
+            && (mediaRoot.x + mediaRoot.width / 2.0) > mediaRoot.parent.width / 2.0
+    accessorySide: appVolumeOnLeft ? "left" : "right"
+    accessoryExtent: volumeAccessoryExtent
+    preferredContentWidth: preferredCardWidth + volumeAccessoryExtent
     preferredContentHeight: Math.max(220.0, mediaModel.artworkSize + 60.0)
 
     function appVolumeLevelAt(y, height) {
@@ -609,7 +621,7 @@ OverlayWidget {
         }
     }
 
-    rightAccessoryContent: [
+    accessoryContent: [
         Item {
                 id: appVolumeSlider
                 objectName: "mediaAppVolumeSlider"
