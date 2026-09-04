@@ -193,6 +193,56 @@ class TestSettingsModelPlumbing:
 
         assert model.visualizers_enabled is False
 
+    def test_enabled_modes_and_disabled_mode_state_survive_round_trip(self):
+        """Pre-V5/V6 durable no-settings-lost gate.
+
+        A partial ``enabled_modes`` selection and a *disabled* mode's own local
+        state both survive ``from_mapping -> to_dict -> from_settings``:
+        ``enabled_modes`` is preserved (additive, canonically ordered) and never
+        reset to all, and a disabled mode's authored colours/floors are not
+        dropped merely because it is not the active/enabled mode.
+        """
+        from core.settings.models import SpotifyVisualizerSettings
+
+        class _DummySettings:
+            def __init__(self, data):
+                self._data = data
+
+            def get(self, key, default=None):
+                return self._data.get(key, default)
+
+        # Active mode bubble; only spectrum+bubble enabled -> oscilloscope,
+        # sine_wave and devcurve are disabled. devcurve carries authored local
+        # state that must not be lost merely because it is disabled.
+        payload = {
+            "mode": "bubble",
+            "enabled_modes": ["bubble", "spectrum"],
+            "bubble_manual_floor": 0.27,
+            "devcurve_bar_fill_color": [21, 22, 23, 24],
+            "devcurve_manual_floor": 0.19,
+            "devcurve_active_layer": "mids",
+        }
+
+        from_mapping = SpotifyVisualizerSettings.from_mapping(
+            payload, apply_preset_overlay=False
+        )
+        persisted = from_mapping.to_dict()
+        from_settings = SpotifyVisualizerSettings.from_settings(
+            _DummySettings(persisted)
+        )
+
+        for model in (from_mapping, from_settings):
+            # enabled_modes preserved as the stored subset, canonically ordered
+            # (never silently widened back to all modes).
+            assert list(model.enabled_modes) == ["spectrum", "bubble"]
+            assert model.mode == "bubble"
+            # Disabled mode (devcurve) local state survives the round trip.
+            assert model.devcurve_bar_fill_color == [21, 22, 23, 24]
+            assert model.resolve_manual_floor("devcurve") == pytest.approx(0.19)
+            assert model.devcurve_active_layer == "mids"
+            # The active enabled mode's authored value also survives.
+            assert model.resolve_manual_floor("bubble") == pytest.approx(0.27)
+
     def test_active_mode_visual_and_technical_state_match_between_mapping_and_settings(self):
         from core.settings.models import SpotifyVisualizerSettings
 
