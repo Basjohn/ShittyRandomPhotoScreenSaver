@@ -527,17 +527,40 @@ def _layout(presentation, count=16):
 
 
 def test_spectrum_layout_uniformly_scales_and_reflows_wide_tall_viewports() -> None:
-    canonical = _layout(_presentation())
-    scaled = _layout(_presentation(scale=0.65))
-    wide = _layout(_presentation(extent=(560.0, 280.0)))
-    tall = _layout(_presentation(extent=(420.0, 420.0)))
+    count = 16
+    canonical_pres = _presentation()
+    scaled_pres = _presentation(scale=0.65)
+    canonical = _layout(canonical_pres, count)
+    scaled = _layout(scaled_pres, count)
+    wide = _layout(_presentation(extent=(560.0, 280.0)), count)
+    tall = _layout(_presentation(extent=(420.0, 420.0)), count)
 
-    assert scaled.bars_left == pytest.approx(canonical.bars_left * 0.65)
-    assert scaled.bar_width == pytest.approx(canonical.bar_width * 0.65)
+    # Visible border obeys the bounded/non-linear stroke rule: authored 4px clamps
+    # to 3.3px at 0.65x, not a naive 2.6px. Pure scale-derived bar metrics still
+    # scale uniformly; anything derived from the border-inset content geometry
+    # differs from a naive 0.65x by exactly the bounded border delta.
+    assert canonical_pres.border_width == pytest.approx(4.0)
+    assert scaled_pres.border_width == pytest.approx(3.3)
+    border_delta = scaled_pres.border_width - canonical_pres.border_width * 0.65
+    assert border_delta == pytest.approx(0.7)
+
+    # bar_gap is a pure function of visual scale, so it scales uniformly, as do the
+    # scale-only segment/height metrics.
     assert scaled.bar_gap == pytest.approx(canonical.bar_gap * 0.65)
-    assert scaled.bar_span == pytest.approx(canonical.bar_span * 0.65)
     assert scaled.segment_count == canonical.segment_count
     assert scaled.height_scale == pytest.approx(canonical.height_scale)
+
+    # bars_left = content-origin (the border inset) + scale-derived margins, so it
+    # shifts from a naive 0.65x by exactly +border_delta.
+    assert scaled.bars_left == pytest.approx(canonical.bars_left * 0.65 + border_delta)
+
+    # The bar field lives inside content_width (= outer - 2*border), whose only
+    # non-uniform term is the bounded border. bar_span carries the whole -2*delta;
+    # bar_width carries that same content-width delta shared across the bars.
+    assert scaled.bar_span == pytest.approx(canonical.bar_span * 0.65 - 2.0 * border_delta)
+    assert scaled.bar_width == pytest.approx(
+        canonical.bar_width * 0.65 - (2.0 * border_delta) / count
+    )
 
     assert wide.bar_width > canonical.bar_width
     assert wide.bar_gap == pytest.approx(canonical.bar_gap)
@@ -616,7 +639,7 @@ def test_spectrum_shader_separates_fill_border_and_ghost_rainbow_participation()
     assert "ghost = apply_spectrum_rainbow(ghost, bar_index)" in source
 
 
-def test_organs_preset_keeps_black_fill_out_of_rainbow_only() -> None:
+def test_organs_preset_keeps_black_fill_static_while_border_and_ghost_ride_rainbow() -> None:
     import json
     from pathlib import Path
 
@@ -628,6 +651,10 @@ def test_organs_preset_keeps_black_fill_out_of_rainbow_only() -> None:
     values = preset["snapshot"]["widgets"]["spotify_visualizer"]
     assert values["spectrum_rainbow_enabled"] is True
     assert values["spectrum_unique_colors"] is True
+    # The near-black bar FILL stays out of the rainbow so the bar bodies read dark.
     assert values["spectrum_rainbow_fill"] is False
-    assert values["spectrum_rainbow_border"] is False
+    # The later visual-parity/customization pass opted the white BORDER into the
+    # rainbow (the shader keeps fill/border/ghost participation independent). The
+    # curated preset is authoritative for this design choice.
+    assert values["spectrum_rainbow_border"] is True
     assert values["spectrum_ghosting_enabled"] is True

@@ -476,13 +476,30 @@ def _layout(presentation):
 
 
 def test_bubble_layout_scales_uniformly_and_keeps_circle_radii_isotropic() -> None:
-    canonical = _layout(_presentation())
-    scaled = _layout(_presentation(scale=0.65))
+    canonical_pres = _presentation()
+    scaled_pres = _presentation(scale=0.65)
+    canonical = _layout(canonical_pres)
+    scaled = _layout(scaled_pres)
     wide = _layout(_presentation(extent=(560.0, 280.0)))
     tall = _layout(_presentation(extent=(420.0, 420.0)))
 
-    assert scaled.content_rect[2] == pytest.approx(canonical.content_rect[2] * 0.65)
-    assert scaled.content_rect[3] == pytest.approx(canonical.content_rect[3] * 0.65)
+    # Visible border obeys the bounded/non-linear stroke rule: a 0.65x card keeps a
+    # 3.3px frame (authored 4px clamped to -1px), NOT a naive 0.65 * 4 = 2.6px
+    # stroke, so the content rect it insets is not a perfect uniform scaling.
+    assert canonical_pres.border_width == pytest.approx(4.0)
+    assert scaled_pres.border_width == pytest.approx(3.3)
+    border_delta = scaled_pres.border_width - canonical_pres.border_width * 0.65
+    assert border_delta == pytest.approx(0.7)
+
+    # content extent = outer - 2*border. The outer rect scales uniformly, so the
+    # content extent differs from a naive 0.65x by EXACTLY twice the bounded border
+    # delta on each axis — an exact geometric identity, not a widened tolerance.
+    assert scaled.content_rect[2] == pytest.approx(
+        canonical.content_rect[2] * 0.65 - 2.0 * border_delta
+    )
+    assert scaled.content_rect[3] == pytest.approx(
+        canonical.content_rect[3] * 0.65 - 2.0 * border_delta
+    )
     assert wide.aspect_ratio > canonical.aspect_ratio > tall.aspect_ratio
     radius = 0.04
     for layout in (canonical, scaled, wide, tall):

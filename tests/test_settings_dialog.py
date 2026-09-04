@@ -152,17 +152,31 @@ def test_settings_dialog_has_title_bar(qapp, settings_manager, animation_manager
 
 
 def test_settings_dialog_has_tabs(qapp, settings_manager, animation_manager):
-    """Test dialog has all tab buttons."""
+    """Dialog exposes the current top-level tab set, including Visualizers."""
     dialog = SettingsDialog(settings_manager, animation_manager)
-    
-    assert hasattr(dialog, 'sources_tab_btn')
-    assert hasattr(dialog, 'display_tab_btn')
-    assert hasattr(dialog, 'transitions_tab_btn')
-    assert hasattr(dialog, 'widgets_tab_btn')
-    assert hasattr(dialog, 'about_tab_btn')
 
-    expected = 7 if "presets" in dialog._tab_keys else 6
-    assert len(dialog.tab_buttons) == expected
+    # V7 promoted Visualizers to its own top-level tab, sitting after Widgets.
+    expected_keys = [
+        "sources",
+        "display",
+        "transitions",
+        "widgets",
+        "visualizers",
+        "accessibility",
+        "themes",
+        "about",
+    ]
+    assert dialog._tab_keys == expected_keys
+
+    for key in expected_keys:
+        assert hasattr(dialog, f"{key}_tab_btn"), key
+
+    # One button per key, in key order; the count follows _tab_keys rather than a
+    # hard-coded number so adding/removing a tab updates in one place.
+    assert len(dialog.tab_buttons) == len(dialog._tab_keys)
+    assert dialog.tab_buttons == [
+        dialog._tab_button_by_key[key] for key in dialog._tab_keys
+    ]
 
 
 def test_settings_dialog_has_content_stack(qapp, settings_manager, animation_manager):
@@ -486,10 +500,37 @@ def test_settings_dialog_restores_persisted_top_level_tab(qapp, settings_manager
     assert dialog.widgets_tab_btn.isChecked() is True
 
 
-def test_settings_dialog_background_hydration_skips_widgets_tab_build():
-    """Widgets tab should not be built off-screen during background hydration."""
-    source = inspect.getsource(SettingsDialog._hydrate_remaining_tabs_async)
-    assert 'self._tab_key_for_index(i) != "widgets"' in source
+def test_settings_dialog_background_hydration_skips_widgets_and_visualizers(
+    qapp, settings_manager, animation_manager
+):
+    """Widgets and Visualizers are excluded from off-screen background hydration,
+    and the Visualizers tab (once built) keeps every mode body dormant."""
+    dialog = SettingsDialog(settings_manager, animation_manager)
+
+    # The dialog is never shown in the test, so background hydration is queued but
+    # not drained by timers: the queue is a deterministic view of what WOULD be
+    # built off-screen. Widgets and Visualizers must not appear in it, while other
+    # non-initial tabs do.
+    queued_keys = {dialog._tab_key_for_index(i) for i in dialog._background_tab_queue}
+    assert "widgets" not in queued_keys
+    assert "visualizers" not in queued_keys
+    assert {"display", "transitions", "accessibility", "themes"} <= queued_keys
+
+    # Neither excluded tab has been constructed: their stacked-widget slots are
+    # still the placeholders installed at setup.
+    for key in ("widgets", "visualizers"):
+        idx = dialog._tab_keys.index(key)
+        assert dialog.__dict__.get(f"{key}_tab") is None
+        assert dialog.content_stack.widget(idx).objectName() == f"{key}_placeholder"
+
+    # Building the Visualizers tab on demand must not eagerly construct any mode
+    # body: no per-mode preset slider exists until a mode pill is selected.
+    from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+
+    vis = dialog.visualizers_tab
+    assert vis is not None
+    for descriptor in iter_visualizer_mode_descriptors():
+        assert getattr(vis, descriptor.preset_slider_attr, None) is None
 
 
 def test_settings_dialog_builds_widgets_tab_in_lazy_mode():
@@ -508,10 +549,11 @@ def test_settings_dialog_exposes_widgets_tab_via_lazy_accessor(qapp, settings_ma
     assert dialog._tab_key_for_index(dialog.content_stack.currentIndex()) == "sources"
 
 
-def test_settings_dialog_widgets_tab_accessor_keeps_visualizers_restore_hydrated(
+def test_settings_dialog_restores_media_on_widgets_and_visualizer_on_visualizers_tab(
     qapp, settings_manager, animation_manager
 ):
-    settings_manager.set("ui.tab_state", {"widgets": {"view_state": {"subtab_id": "visualizers"}}})
+    """Media stays on WidgetsTab; the visualizer enable + active mode restore on
+    the canonical top-level VisualizersTab owner (V7 rehost)."""
     settings_manager.set("widgets", {
         "media": {"enabled": True, "position": "Bottom Right", "monitor": "ALL"},
         "spotify_visualizer": {"enabled": False, "visualizers_enabled": True, "mode": "bubble"},
@@ -521,11 +563,15 @@ def test_settings_dialog_widgets_tab_accessor_keeps_visualizers_restore_hydrated
 
     dialog = SettingsDialog(settings_manager, animation_manager)
 
-    tab = dialog.widgets_tab
+    # Media capability remains owned by WidgetsTab.
+    assert dialog.widgets_tab.media_enabled.isChecked() is True
 
-    assert tab.media_enabled.isChecked() is True
-    assert tab.vis_enabled_checkbox.isChecked() is False
-    assert tab.vis_mode_combo.currentData() == "bubble"
+    # The Beat-Visualizer enable checkbox and the active mode now live on the
+    # top-level VisualizersTab; the retired vis_mode_combo is gone, so the active
+    # mode is read from the context-owned canonical id instead.
+    vis = dialog.visualizers_tab
+    assert vis.vis_enabled_checkbox.isChecked() is False
+    assert vis._get_active_visualizer_mode() == "bubble"
 
 
 def test_settings_dialog_hidden_close_skips_no_sources_popup(qapp, settings_manager, animation_manager):
