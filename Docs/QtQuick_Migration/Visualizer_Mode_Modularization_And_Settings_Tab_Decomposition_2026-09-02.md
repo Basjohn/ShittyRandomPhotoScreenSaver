@@ -10,6 +10,22 @@ full no-settings-lost audit; cycling/context-menu/initial-mode route through the
 effective enabled set; dormancy is proven in a fresh interpreter. Behavior is
 transparent today because every mode is enabled by default (no disable UI until V5-V8).
 
+**PRE-V5 boundary:** `81019d5dd196cc5522ca9041d8773c8f2fa62df3` is the immediate
+pre-V5 Settings-migration rollback/comparison boundary (pre-V5/V6 gate items 1-3
+fixed; no Settings migration yet). Keep it distinct from later V5 work.
+
+**V5 opening slice (2026-09-04):** the canonical lazy Settings-body ownership
+contract is built and proven ahead of the pixel move — `VisualizerModeBodyHost`
+(`core/settings/visualizer_mode_body_host.py`, Qt-free) owns per-mode body
+lifecycle (construct-on-select, retire-on-disable preserving persisted state,
+reconstruct-from-authority on reselect, single state authority, no
+timers/pollers/workers); the descriptor gains lazy `settings_builder_module/
+factory` wiring (`load_mode_settings_builder`) so no builder imports on registry
+import. Tests: `tests/test_visualizer_settings_body_dormancy.py`. This proves the
+ownership contract for pre-V5/V6 gate item 4 but does NOT rewire the live dialog —
+`build_visualizers_ui` still builds all five bodies eagerly. The mechanical rehost
+that adopts the host and retires the eager path is V6/V7 and closes gate item 4.
+
 This document decomposes a future refactor that makes each Visualizer mode genuinely optional/dormant and then moves Visualizer Settings out of the overloaded Widgets tab into a dedicated top-level Visualizers tab.
 
 The work is worthwhile because the existing architecture is already partly mode-modular, but it is **not yet safe** to treat individual modes like fully plugin-like components. The UI move must come **after** activation/dormancy is made real.
