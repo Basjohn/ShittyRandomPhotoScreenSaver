@@ -69,6 +69,7 @@ class QuickBubbleLayout:
     trail_axis_scale: tuple[float, float]
     trail_radial_scale: float
     large_viewport_stroke_bonus_px: float
+    specular_reference_aspect: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +127,14 @@ def compute_quick_bubble_layout(
         0.0,
         min(1.0, (vertical_scale - 1.75) / 0.75),
     )
+    # Specular mutation and ellipse orientation were authored at canonical
+    # content aspect. Recover that content size at the current uniform scale
+    # and resolved inset, so an edge resize cannot stretch a bubble-local light.
+    # The shader uses a one-pixel height floor in its aspect metric as well.
+    excluded_width = max(0.0, extent[0] * scale - content[2])
+    excluded_height = max(0.0, extent[1] * scale - content[3])
+    reference_width = max(1e-6, baseline[0] * scale - excluded_width)
+    reference_height = max(1.0, baseline[1] * scale - excluded_height)
     return QuickBubbleLayout(
         content_rect=content,  # type: ignore[arg-type]
         aspect_ratio=content[2] / content[3],
@@ -133,6 +142,7 @@ def compute_quick_bubble_layout(
         trail_axis_scale=trail_axis_scale,
         trail_radial_scale=trail_radial_scale,
         large_viewport_stroke_bonus_px=large_viewport_stroke_bonus_px,
+        specular_reference_aspect=reference_width / reference_height,
     )
 
 
@@ -230,6 +240,9 @@ class QuickBubbleRenderer:
         gl.glUniform1i(uniforms["u_quick_item_coords"], 1)
         gl.glUniform4f(uniforms["u_content_rect"], *layout.content_rect)
         gl.glUniform1f(uniforms["u_visual_scale"], layout.visual_scale)
+        gl.glUniform1f(
+            uniforms["u_specular_reference_aspect"], layout.specular_reference_aspect,
+        )
         gl.glUniform1f(uniforms["u_border_width"], presentation.border_width)
         gl.glUniform1f(uniforms["u_fade"], presentation.content_fade)
         gl.glUniform1i(uniforms["u_bubble_count"], payload.bubble_count)
@@ -398,6 +411,7 @@ class QuickBubbleRenderer:
                 "u_quick_item_coords",
                 "u_content_rect",
                 "u_visual_scale",
+                "u_specular_reference_aspect",
                 "u_border_width",
                 "u_fade",
                 "u_bubble_count",
