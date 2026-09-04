@@ -76,6 +76,7 @@ _MODE_NORMAL_ATTR = {
     "sine_wave": "_sine_normal",
     "bubble": "_bubble_normal",
     "devcurve": "_devcurve_normal",
+    "sphere": "_sphere_normal",
 }
 
 

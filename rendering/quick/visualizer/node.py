@@ -78,6 +78,11 @@ class VisualizerRenderNode(QSGRenderNode):
     def render_host(self) -> QuickVisualizerRenderHost:
         return self._render_host
 
+    def release_inactive_implementations(self, active_mode_id: str | None) -> None:
+        """Release inactive mode resources on the current Quick render thread."""
+
+        self._render_host.release_inactive_implementations(active_mode_id)
+
     def synchronize(
         self,
         *,

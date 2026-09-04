@@ -37,10 +37,13 @@ def _controller(*, generation: int = 0) -> VisualizerRuntimeController:
 def test_current_modes_resolve_their_proven_carded_presentation_policy() -> None:
     for mode_id in VISUALIZER_MODE_IDS:
         policy = get_visualizer_mode_descriptor(mode_id).presentation_policy
-        assert policy.shell_policy is VisualizerShellPolicy.CARD
-        assert policy.clip_policy is VisualizerClipPolicy.CARD_INTERIOR
-        # All five modes (Bubble included after its logical reflow) are
-        # viewport-resize-capable.
+        if mode_id == "sphere":
+            assert policy.shell_policy is VisualizerShellPolicy.FRAMELESS
+            assert policy.clip_policy is VisualizerClipPolicy.VIEWPORT_RECT
+        else:
+            # The five original modes retain their card presentation contract.
+            assert policy.shell_policy is VisualizerShellPolicy.CARD
+            assert policy.clip_policy is VisualizerClipPolicy.CARD_INTERIOR
         assert policy.viewport_resize_capable is True
 
 

@@ -579,10 +579,18 @@ def test_spectrum_layout_uniformly_scales_and_reflows_wide_tall_viewports() -> N
     assert right_guard == pytest.approx(11.0)
 
 
-def test_all_five_modes_claim_viewport_resize_capability() -> None:
+def test_all_registered_modes_claim_viewport_resize_capability() -> None:
     # G4 deterministic reflow is complete for every mode, including Bubble's
-    # baseline-relative logical domain, so all five are viewport-resize-capable.
-    for mode_id in ("spectrum", "oscilloscope", "sine_wave", "devcurve", "bubble"):
+    # baseline-relative logical domain, so every registered mode is
+    # viewport-resize-capable, including frameless Sphere.
+    for mode_id in (
+        "spectrum",
+        "oscilloscope",
+        "sine_wave",
+        "devcurve",
+        "bubble",
+        "sphere",
+    ):
         assert get_visualizer_presentation_policy(mode_id).viewport_resize_capable
 
 
@@ -599,6 +607,7 @@ def test_quick_spectrum_registry_is_static_and_lazy() -> None:
         "sine_wave",
         "bubble",
         "devcurve",
+        "sphere",
     )
     assert all(isinstance(descriptor.module_name, str) for descriptor in descriptors)
     renderer = resolve_quick_visualizer_renderer("spectrum")
@@ -621,6 +630,10 @@ def test_quick_spectrum_registry_is_static_and_lazy() -> None:
     assert devcurve is not None
     assert devcurve.mode_id == "devcurve"
     assert devcurve.has_resources is False
+    sphere = resolve_quick_visualizer_renderer("sphere")
+    assert sphere is not None
+    assert sphere.mode_id == "sphere"
+    assert sphere.has_resources is False
 
 
 

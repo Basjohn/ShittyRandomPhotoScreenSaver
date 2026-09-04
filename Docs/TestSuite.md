@@ -138,7 +138,7 @@ The full test pack exposed additional current-authority drift that is also repai
 - `test_qtquick_h9_uniform_resize.py` includes Gmail in the whole-card uniform-transform family;
 - `test_qtquick_gmail_presentation.py` pins truthful asymmetric preferred-size semantics;
 - `test_visualizer_viewport_scaling_contracts.py` pins the R-69 golden prohibition on second viewport compression of Bubble head/Ghost state;
-- `test_spectrum_presentation_smoothing.py` remains historical/compatibility coverage; R-76 supersedes its old larger-axis rule with height-only temporal scaling, and `test_spectrum_viewport_temporal_scaling.py` pins the live Quick owner without a second cadence;
+- `test_spectrum_viewport_temporal_scaling.py` pins the live Quick owner and height-only temporal scaling without a second cadence; the removed legacy smoothing test is not profile membership;
 - `test_runtime_perf_policy_contracts.py` pins the R-63 no-hardcoded-monitor rule while preserving the non-exact-cover principle.
 
 `tests/run_chunked.py` now exposes canonical `destination` and includes the surviving permanent R4-R7/Media/audio/freshness targets that were missing from the old H list. The current 2026-09-02 profile contains **110 unique targets** in the canonical full repository. GOD overlay ZIPs intentionally carry only tests/docs added or modified in their work slice, so unchanged profile targets remain supplied by the destination repository. Do not publish an aggregate pass count until this exact profile runs in the user environment.
@@ -290,7 +290,7 @@ Changed/current permanent contracts in the closure patch:
 | `tests/test_qtquick_visualizer_item.py` | Current presentation mismatch fencing + R-68 active-CUSTOM presentation rebase. |
 | `tests/test_visualizer_viewport_scaling_contracts.py` | R4/R5 viewport projection plus R-69 golden Bubble head/Ghost no-second-compression guard. |
 | `tests/test_bubble_viewport_reflow.py` | Current card-relative radius / expanded collision-world invariant. |
-| `tests/test_spectrum_presentation_smoothing.py` | Compatibility/history-facing Spectrum smoothing path; R-76 requires height-only scaling (wide canonical-height is unchanged) and no independent cadence. |
+| `tests/test_spectrum_viewport_temporal_scaling.py` | Current Spectrum height-only temporal scaling (wide canonical-height unchanged) without an independent cadence. |
 | `tests/test_spectrum_viewport_temporal_scaling.py` | **R-76 live Quick contract:** canonical/wide exact temporal response, tall-only bar-field compensation, bounded physical jump growth, and viewport-invariant solid hysteresis domain. |
 | `tests/test_qtquick_h9_uniform_resize.py` | Reddit/Reddit2/Media/Gmail whole-card transform and Visualizer isolation. |
 | `tests/test_qtquick_gmail_presentation.py` | Gmail outer-width vs row-height+shell-inset baseline truth. |
@@ -385,6 +385,8 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_transition_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_transition_implementations.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_slide_motion.py` | **KEEP — MIGRATION PERMANENT** | Frozen Slide motion-style resolution, dense cardinal ownership/endpoints, bounded Elastic settlement, lazy Settings persistence, and an offscreen real-GL anti-edge-smear probe. |
+| `tests/test_qtquick_sphere_rendering.py` / `tests/test_sphere_mode_integration.py` | **KEEP — DESTINATION** | Disabled-by-default Sphere, owner/capture/source fencing, Settings persistence, true mesh/bump/material pixels, aspect/clip/depth and static upload proof. |
+| `tests/test_qtquick_visualizer_mode_retirement.py` | **KEEP — DESTINATION** | Event-only inactive GL retirement, coalesced latest admission, failure retry and no empty-sync scheduling loop. |
 | `tests/test_qtquick_transition_parameter_defaults.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_transition_parameter_resolution.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_transition_request_resolution.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | One Settings-authored transition spec per accepted image batch, fail-closed Random admission and frozen direction/parameter values. |
@@ -453,7 +455,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_sine_line4_persistence.py` | **KEEP — MIGRATION PERMANENT** | Current binder colour/glow + normalized `sine_line4_shift` collect/load contract. |
 | `tests/test_sine_line4_ui_simulation.py` | **KEEP — MIGRATION PERMANENT** | Central `ColorSwatchButton` + builder binding contract; programmatic load is non-saving, user signal updates/saves. |
 | `tests/test_sine_wave_gl_fix.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
-| `tests/test_spectrum_presentation_smoothing.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
+| `tests/test_spectrum_presentation_smoothing.py` | **REMOVED — STALE PLUMBING** | Deleted by `a3e4ec17`; stale destination-profile membership removed. Live temporal-scale proof is `test_spectrum_viewport_temporal_scaling.py`. |
 | `tests/test_spectrum_shaping.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_spotify_overlay_repaint_contract.py` | **I RECONCILIATION — OLD PHYSICAL OWNER** | Scheduling contract survives; SpotifyBarsGLOverlay/display-compositor owner does not. |
 | `tests/test_spotify_visualizer_integration.py` | **I RECONCILIATION — OLD PHYSICAL OWNER** | Require equivalent Quick-owner coverage before deleting/re-homing stale legacy-owner assertions in I. |

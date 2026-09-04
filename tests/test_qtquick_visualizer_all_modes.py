@@ -36,12 +36,14 @@ from widgets.spotify_visualizer.render_state import (
     DevCurveFrame,
     OscilloscopeFrame,
     SineFrame,
+    SphereFrame,
     SpectrumFrame,
     VisualizerCommonState,
     VisualizerEnergyState,
     VisualizerLogicalFrame,
     VisualizerTransientState,
     compose_visualizer_render_snapshot,
+    freeze_render_fields,
 )
 from widgets.spotify_visualizer.runtime_controller import (
     VisualizerRuntimeController,
@@ -50,6 +52,7 @@ from widgets.spotify_visualizer.sine_frame_runtime import SineFrameRuntime
 from widgets.spotify_visualizer.spectrum_frame_runtime import (
     SpectrumFrameRuntime,
 )
+from widgets.spotify_visualizer.sphere_frame_runtime import SphereFrameRuntime
 
 
 _MODE_STATES = {
@@ -58,6 +61,7 @@ _MODE_STATES = {
     "sine_wave": SineFrame,
     "bubble": BubbleFrame,
     "devcurve": DevCurveFrame,
+    "sphere": SphereFrame,
 }
 _MODE_IDS = tuple(
     descriptor.mode_id
@@ -92,6 +96,8 @@ def _runtime(mode_id: str):
         return BubbleFrameRuntime(simulation_factory=_BubbleSimulation)
     if mode_id == "devcurve":
         return DevCurveFrameRuntime()
+    if mode_id == "sphere":
+        return SphereFrameRuntime()
     raise AssertionError(f"unhandled test mode: {mode_id}")
 
 
@@ -189,6 +195,23 @@ def _drive_runtime(
             parameters={},
             **identity,
         )
+    if mode_id == "sphere":
+        resolved = runtime.resolve(
+            now_ts=now_ts,
+            energy=VisualizerEnergyState(bass=0.5, mid=0.4, high=0.3, overall=0.4),
+            parameters=freeze_render_fields({"sphere_material": "Chrome"}),
+            runtime_generation=identity["runtime_generation"],
+            engine_generation=identity["engine_generation"],
+            activation_id=identity["activation_id"],
+        )
+        if resolved is None:
+            return None
+        # Sphere keeps source identity on the enclosing logical frame rather
+        # than duplicating it in its authored payload.
+        return SimpleNamespace(
+            frame=resolved,
+            reactive_source_ready=bool(fresh_source and playing),
+        )
     raise AssertionError(f"unhandled test mode: {mode_id}")
 
 
@@ -203,7 +226,7 @@ def _has_current_source(resolved: Any) -> bool:
 
 
 @pytest.mark.parametrize("mode_id", _MODE_IDS)
-def test_all_five_modes_keep_one_runtime_across_pause_play_and_retire_terminally(
+def test_all_registered_modes_keep_one_runtime_across_pause_play_and_retire_terminally(
     mode_id: str,
 ) -> None:
     controller = VisualizerRuntimeController(
@@ -294,7 +317,7 @@ def _snapshot(
 
 
 @pytest.mark.parametrize("mode_id", _MODE_IDS)
-def test_all_five_modes_apply_generic_source_admission_without_dispatch(
+def test_all_registered_modes_apply_generic_source_admission_without_dispatch(
     mode_id: str,
 ) -> None:
     paused = _snapshot(
@@ -340,6 +363,7 @@ def test_one_render_host_lazily_resolves_all_modes_once_and_releases_every_owner
 ) -> None:
     host = QuickVisualizerRenderHost()
     renderers: dict[str, _FakeRenderer] = {}
+    renderer_instances: list[_FakeRenderer] = []
     resolutions: list[str] = []
     restores: list[bool] = []
     deleted_buffers: list[tuple[object, ...]] = []
@@ -349,6 +373,7 @@ def test_one_render_host_lazily_resolves_all_modes_once_and_releases_every_owner
         resolutions.append(mode_id)
         renderer = _FakeRenderer(mode_id)
         renderers[mode_id] = renderer
+        renderer_instances.append(renderer)
         return renderer
 
     def _ensure_quad() -> None:
@@ -405,21 +430,18 @@ def test_one_render_host_lazily_resolves_all_modes_once_and_releases_every_owner
             matrix_values=(1.0,) * 16,
         ) == mode_id
 
-    assert resolutions == list(_MODE_IDS)
-    assert host.resolved_mode_ids == frozenset(_MODE_IDS)
-    assert renderers["spectrum"].render_count == 2
-    assert all(
-        renderer.render_count == 1
-        for mode_id, renderer in renderers.items()
-        if mode_id != "spectrum"
-    )
+    assert resolutions == [*_MODE_IDS, "spectrum"]
+    assert host.resolved_mode_ids == frozenset({"spectrum"})
+    assert renderers["spectrum"].render_count == 1
+    assert all(renderer.release_count == 1 for renderer in renderer_instances[:-1])
+    assert renderer_instances[-1].release_count == 0
     assert len(restores) == len(sequence)
     assert host.has_resources is True
 
     host.release_resources()
 
-    assert all(renderer.release_count == 1 for renderer in renderers.values())
-    assert all(renderer.has_resources is False for renderer in renderers.values())
+    assert all(renderer.release_count == 1 for renderer in renderer_instances)
+    assert all(renderer.has_resources is False for renderer in renderer_instances)
     assert host.resolved_mode_ids == frozenset()
     assert host.has_resources is False
     assert deleted_buffers == [(1, [12])]

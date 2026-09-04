@@ -336,6 +336,7 @@ def test_quick_sine_registry_is_lazy_and_resource_dormant(monkeypatch) -> None:
         "sine_wave",
         "bubble",
         "devcurve",
+        "sphere",
     )
     assert imported == []
 
@@ -452,5 +453,4 @@ def _sine_widget(controller, engine):
         _sine_density=1.2,
         _sine_displacement=0.3,
     )
-
 

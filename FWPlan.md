@@ -16,10 +16,15 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
   per-run style resolution, exact endpoints and real-GL coverage. Perspective remains a separately designed feature;
   do not counterfeit it with a 2D effect.
   Decomposition: `Docs/Future_Work/Slide_Motion_Options_Decomposition.md`.
-- [ ] **FW3 — Deformable Sphere:** inspect current mode descriptor/runtime/renderer/Settings closure; create the
-  required detailed foundation inventory and decomposition before substantial coding. Keep the experiment dormant
-  by default and preserve existing modes' authored response.
-  Required decomposition committed: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
+- [x] **FW3 — Deformable Sphere:** dormant-by-default 3D mesh, five material presets including Water,
+  bump/detail controls, source-fenced immutable capture, lazy Settings and event-only inactive GPU retirement.
+  Real Quick captures inspected and relevant automatic gates passed; physical acceptance remains separate.
+  Detailed evidence: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
+- [ ] **Next after Sphere acceptance — Bubble aspect/reactivity:** read Bubble/optimization work in
+  `Current_Plan.md`; trace why wider extents suppress response and narrow extents amplify size/response.
+  Document the owning calculation before an obvious fix; preserve canonical square/rectangular behavior,
+  consume-once events and the existing cadence. Start this investigation only after Sphere visuals and
+  implementation earn retention (operator sequencing, 2026-09-05).
 - [ ] **FW4 — Directional Pixel Accretion:** create a decomposition, then implement a deterministic instanced
   directional translation experiment with source underlay and exact endpoints.
 - [ ] **FW5 — Glass Shatter / Exploding Tiles:** separate decompositions and isolated lazy implementations after
@@ -32,8 +37,8 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
 
 - [ ] For each landed slice: compile changed Python, run focused falsifying tests, inspect diff, update this live
   checklist and durable navigation/contracts, then narrow commit + push.
-- [ ] Run the maintained destination profile at a meaningful integration checkpoint; classify unrelated failures
-  in `Current_Plan.md` / `Future_Cleanup.md` without reviving obsolete owners.
+- [x] Ran all 115 maintained destination targets; fixed new-feature failures and documented nine unrelated
+  red targets in `Future_Cleanup.md`. Focused reruns close changed contracts; the whole profile is not green.
 - [ ] Keep physical/installed/visual acceptance open where automated evidence cannot close it.
 
 ## Awaiting validation

@@ -18,6 +18,7 @@ from PySide6.QtCore import QObject, QPoint, QRect, QSize
 from PySide6.QtGui import QPixmap
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+from core.settings.settings_manager import SettingsManager
 import engine.engine_handlers as engine_handlers_module
 import engine.display_manager as display_manager_module
 import engine.screensaver_engine as screensaver_engine_module
@@ -344,6 +345,10 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
                     return default
                 value = value[part]
             return value
+
+        @staticmethod
+        def to_bool(value, default: bool = False) -> bool:
+            return SettingsManager.to_bool(value, default)
 
         def set(self, key: str, value) -> None:
             if key == "visualizer_custom_presets":
@@ -692,6 +697,10 @@ def test_display_manager_populates_and_routes_retained_context_menu(
                     return default
                 value = value[part]
             return value
+
+        @staticmethod
+        def to_bool(value, default: bool = False) -> bool:
+            return SettingsManager.to_bool(value, default)
 
         def set(self, key: str, value) -> None:
             target = self.data

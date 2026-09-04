@@ -300,6 +300,12 @@ an active CUSTOM session may provide a temporary working override. Save promotes
 restores the old committed value, and ending CUSTOM removes only the override. Inactive CUSTOM does not imply canonical
 `(420,280)`.
 
+Sphere is an opt-in descriptor with FRAMELESS + VIEWPORT_RECT policy. Its compact configure-owned parameters and
+activation-relative time share the existing visualizer clock; only current playing source energy drives deformation.
+A single static mesh uses aspect-correct perspective and material-local bump/lighting. Renderer resources belong to
+their Quick window/context and retire through one-shot render events on admission changes, independently of whether
+the replacement mode obtains a frame. Sync and pointer movement create no cleanup polling or repeated frame requests.
+
 ## Geometry / CUSTOM
 
 `CustomLayoutSession` owns working geometry/state independent of QWidget. Geometry keys include display identity and

@@ -1,0 +1,15 @@
+{
+  "mode": "sphere",
+  "name": "Preset 2 (Obsidian)",
+  "preset_index": 1,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "sphere",
+  "snapshot": {"widgets": {"spotify_visualizer": {
+    "sphere_material": "Obsidian", "sphere_deformation": 0.9,
+    "sphere_rotation_speed": 0.25, "sphere_gloss": 0.65,
+    "sphere_specular": 0.7, "sphere_light_direction": "NW",
+    "sphere_idle_motion": 0.08, "sphere_surface_detail": 1.0,
+    "mode": "sphere"
+  }}},
+  "description": "Dark volcanic glass with a measured textured finish."
+}

@@ -102,6 +102,7 @@ class QuickVisualizerRenderHost:
         self._quad_vao = 0
         self._quad_vbo = 0
         self._implementations: dict[str, QuickVisualizerRenderer] = {}
+        self._last_render_mode_id: str | None = None
 
     @property
     def has_resources(self) -> bool:
@@ -127,6 +128,14 @@ class QuickVisualizerRenderHost:
         matrix_values: tuple[float, ...],
     ) -> str:
         mode_id = snapshot.logical.mode_id
+        # A mode switch is observed on the render thread, where the GL context
+        # is legal.  Retire every previously resolved inactive implementation
+        # before lazily resolving the new one.
+        if (
+            mode_id != self._last_render_mode_id
+            or len(self._implementations) > 1
+        ):
+            self.release_inactive_implementations(mode_id)
         implementation = self._implementations.get(mode_id)
         if implementation is None:
             implementation = resolve_quick_visualizer_renderer(mode_id)
@@ -160,7 +169,49 @@ class QuickVisualizerRenderHost:
             implementation.render(frame)
         finally:
             inherited.restore()
+        self._last_render_mode_id = mode_id
         return mode_id
+
+    def release_inactive_implementations(self, active_mode_id: str | None) -> None:
+        """Release cached renderers that cannot draw the current snapshot.
+
+        This method is intentionally render-thread-only.  A failed renderer
+        cleanup remains cached so a later legal render or explicit teardown can
+        retry it; successfully released implementations are removed immediately.
+        The shared quad belongs to the host and remains available for the active
+        mode.
+        """
+
+        active = (
+            None
+            if active_mode_id is None
+            else str(active_mode_id).strip().lower()
+        )
+        inactive = tuple(
+            (mode_id, implementation)
+            for mode_id, implementation in self._implementations.items()
+            if mode_id != active
+        )
+        if not inactive:
+            return
+        if QOpenGLContext.currentContext() is None:
+            raise RuntimeError(
+                "visualizer inactive render resources released without a current GL context"
+            )
+        errors: list[str] = []
+        for mode_id, implementation in inactive:
+            try:
+                implementation.release_resources()
+            except Exception as exc:
+                errors.append(f"{mode_id}:{type(exc).__name__}:{exc}")
+                continue
+            if not implementation.has_resources:
+                self._implementations.pop(mode_id, None)
+        if errors:
+            raise RuntimeError(
+                "Quick visualizer inactive cleanup incomplete: "
+                + " | ".join(errors)
+            )
 
     def release_resources(self) -> None:
         if not self.has_resources:
@@ -183,7 +234,8 @@ class QuickVisualizerRenderHost:
             self._quad_vbo = 0
         if self._quad_vao:
             gl.glDeleteVertexArrays(1, [self._quad_vao])
-            self._quad_vao = 0
+        self._quad_vao = 0
+        self._last_render_mode_id = None
         if errors:
             raise RuntimeError(
                 "Quick visualizer cleanup incomplete: " + " | ".join(errors)

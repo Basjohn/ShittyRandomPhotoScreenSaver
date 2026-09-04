@@ -24,6 +24,11 @@
     "spectrum/preset_1_organs.json",
     "spectrum/preset_2_Tetris.json",
     "spectrum/preset_3_Mono.json",
-    "spectrum/preset_4_pillars.json"
+    "spectrum/preset_4_pillars.json",
+    "sphere/preset_1_chrome.json",
+    "sphere/preset_2_obsidian.json",
+    "sphere/preset_3_magma.json",
+    "sphere/preset_4_silver.json",
+    "sphere/preset_5_water.json"
   ]
 }

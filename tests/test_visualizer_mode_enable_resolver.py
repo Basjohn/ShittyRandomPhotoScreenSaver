@@ -16,14 +16,14 @@ from core.settings.visualizer_mode_registry import (
 )
 
 
-def test_absent_selection_enables_all_modes_migration_default():
-    assert resolve_effective_enabled_modes(None) == VISUALIZER_MODE_IDS
+def test_absent_selection_enables_descriptor_defaults_only():
+    assert resolve_effective_enabled_modes(None) == VISUALIZER_MODE_IDS[:-1]
 
 
 def test_empty_or_garbage_selection_never_disables_the_family():
-    assert resolve_effective_enabled_modes([]) == VISUALIZER_MODE_IDS
-    assert resolve_effective_enabled_modes(["nope", "xxx"]) == VISUALIZER_MODE_IDS
-    assert resolve_effective_enabled_modes(123) == VISUALIZER_MODE_IDS
+    assert resolve_effective_enabled_modes([]) == VISUALIZER_MODE_IDS[:-1]
+    assert resolve_effective_enabled_modes(["nope", "xxx"]) == VISUALIZER_MODE_IDS[:-1]
+    assert resolve_effective_enabled_modes(123) == VISUALIZER_MODE_IDS[:-1]
 
 
 def test_selection_is_deduped_and_canonically_ordered():
@@ -192,4 +192,4 @@ def test_apply_disable_never_widens_to_all_modes():
 def test_admissible_modes_intersect_enabled_with_dev_active():
     # With every dev gate open (today), admissible == effective enabled.
     assert resolve_admissible_enabled_modes(["bubble", "spectrum"]) == ("spectrum", "bubble")
-    assert resolve_admissible_enabled_modes(None) == VISUALIZER_MODE_IDS
+    assert resolve_admissible_enabled_modes(None) == VISUALIZER_MODE_IDS[:-1]

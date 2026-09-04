@@ -33,13 +33,13 @@ from typing import Any
 
 # Every authored mode may present while playback is idle.
 _IDLE_REVEAL = frozenset(
-    {"bubble", "spectrum", "sine_wave", "oscilloscope", "devcurve"}
+    {"bubble", "spectrum", "sine_wave", "oscilloscope", "devcurve", "sphere"}
 )
 
 # Modes whose paused motion is generated from engine ticks, so a paused tick may
 # stop waiting for a fresh engine frame.
 _IDLE_SELF_ANIMATING = frozenset(
-    {"bubble", "sine_wave", "oscilloscope", "devcurve"}
+    {"bubble", "sine_wave", "oscilloscope", "devcurve", "sphere"}
 )
 
 # Modes whose idle scene is produced entirely by presentation and needs no

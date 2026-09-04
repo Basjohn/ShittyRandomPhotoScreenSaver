@@ -1,6 +1,6 @@
 # Deformable Sphere visualizer
 
-Status: reconnaissance/decomposition. Live sequencing: `FWPlan.md`.
+Status: implemented and automatic/visual prototype checks passed; operator acceptance remains below. Live sequencing: `FWPlan.md`.
 Pre-implementation comparison/rollback HEAD: `f8def8ee8cbd99527b513494bb2068417144452c`.
 The operator explicitly requested an ambitious 3D item after Glow and Slide. This is a new experiment;
 it does not claim to reconstruct the lost historical Blob.
@@ -49,7 +49,7 @@ The renderer consumes immutable time/energy/configuration and never advances sim
 
 Payload interface: `SphereFrame(authored_time: float, parameters: FrozenFields)` under `logical.mode_state`;
 reactive energy is `logical.common.energy`. Generation/source/fades stay on the enclosing established snapshot.
-Sphere parameters are bounded `sphere_*` values: material (Chrome/Obsidian/Magma/Silver), deformation strength,
+Sphere parameters are bounded `sphere_*` values: material (Chrome/Obsidian/Magma/Silver/Water), deformation strength,
 rotation speed, gloss/specular and key-light direction. Initial defaults are feature-local and do not alter existing
 mode defaults, presets, shared colour controls or logical parameters.
 
@@ -82,16 +82,45 @@ failure and context recreation. No meaningful 3D work survives retirement/deacti
 ## Resumable checkpoints
 
 - [x] Inventory current owners and commit decomposition before substantial coding.
-- [ ] **S1 — admission/state:** descriptor default-enabled policy, frozen Sphere payload, lazy frame runtime/capture,
-  production source/config propagation, tests of source identity and independent dormancy.
-- [ ] **S2 — geometry/render:** modest static sphere mesh, analytic deformation/normals, arbitrary rotation,
-  perspective, material/key-light uniforms, depth/resource cleanup and focused CPU/fake-GL proof.
-- [ ] **S3 — real Quick prototype:** deterministic frame fixtures and actual GL capture; inspect geometry, band
-  response, four materials, shell transparency and aspect variants; measure bounded callback cost/resources.
-- [ ] **S4 — Settings:** isolated lazy body and defaults/config roundtrip; no eager body or preset destruction.
-  Add polished options only after the prototype earns retention. Existing modes' shared controls remain intact.
-- [ ] **S5 — integration:** focused current-mode regression floor + destination gate, durable docs/navigation,
-  compact FW status, commit/push coherent slices. Separate automatic results from operator acceptance.
+- [x] **S1 — admission/state:** descriptor default-enabled policy, frozen Sphere payload, lazy runtime/capture,
+  configure-owned immutable parameters, current playing source identity and independent dormancy tests.
+- [x] **S2 — geometry/render:** vectorized static 5,120-triangle icosphere, analytic deformation/deformed normals,
+  arbitrary-axis rotation, perspective, five materials, surface-gradient bump mapping and filtered microdetail.
+  Depth clears intersect projected viewport/inherited scissor; depth/cull/scissor state and partial resources restore.
+- [x] **S3 — real Quick prototype:** inspected five-material capture and separate 1080p/4K fixtures; all modes draw
+  and retire on the same legal context. Hidden items release mode resources before scene invalidation.
+- [x] **S4 — Settings:** isolated lazy body, material/lighting/motion/detail controls, five real curated presets,
+  Custom restore and zero-value/unbuilt-body preservation. Mode body hides/shows correctly after first construction.
+- [x] **S5 — integration:** focused contract gates and destination run completed; new-mode fixture closure and real
+  lifecycle fault fixed. Remaining unrelated destination failures are actionable in `Future_Cleanup.md`.
+
+## Implementation evidence and boundaries
+
+`tools/qtquick_sphere_smoke.py` drives bounded fixture frames from swap events, captures asynchronously and checks
+inactive GL release before invalidation. `logs/evidence_chest/fw_sphere/materials_final.png` is the inspected capture
+(Chrome, Obsidian, Magma / Silver, Water). Probe callbacks are measurements, not physical-refresh acceptance. A fixed-size capture subtree preserves
+projection when Windows clamps an oversized native window; the report records actual native size/DPR separately.
+The corrected 4K Water capture is `logs/evidence_chest/fw_sphere/water_4k_final.png`.
+The only probe timer is a failure deadline; production adds no timer, poller, source lane or per-frame mesh upload.
+
+The nominal pixel radius is 0.28 of the canonical 280px height. The summed maximum radial displacement is 1.64
+sphere units; fixed-camera perspective projects its full envelope below 138px at baseline scale. Thus canonical
+framing reserves room for all supported deformation/idle settings. Deliberately smaller CUSTOM viewports retain
+normal clipping; edge resize changes framing and whole-scale resize changes one common X/Y pixel metric.
+
+Chrome/Silver have restrained metal microdetail, Obsidian has fractured stone relief, Magma has recessed emissive
+fissures with authored-time flow, and Water has animated ripple bump, caustic accents and Fresnel transparency.
+Surface Detail controls bump strength. These are procedural materials and studio reflections; Water does not sample
+or refract the live background. Its visible surface alone blends, with back-face culling and the existing depth target.
+
+Inactive resources retire on one-shot `beforeRendering` events, with invalidation as the context completion edge.
+Window rebind detaches the old node and leaves cleanup on its old window. Ordinary sync never schedules cleanup.
+A Qt-owned QRunnable prototype caused a reproducible native heap failure on the pinned binding; it was removed.
+The event equivalent is documented by [Qt's QQuickWindow contract](https://doc.qt.io/qtforpython-6/PySide6/QtQuick/QQuickWindow.html#PySide6.QtQuick.QQuickWindow.scheduleRenderJob).
+Real runtime-reality (4 tests), hotkey (12 tests), and retirement/item/runtime (18 tests) pass after that correction.
+The mesh/source/Settings/dormancy/packaging focused group passed 64 tests. The initial destination run executed all
+115 targets; new-feature fixture failures and native retirement faults were corrected with focused reruns. Nine
+unrelated existing targets remain red (see cleanup ledger); do not report the entire profile as green.
 
 ## Acceptance bars
 
@@ -106,3 +135,8 @@ failure and context recreation. No meaningful 3D work survives retirement/deacti
 - **Eyes-on/operator:** it reads as a deforming 3D body with normals/specular following dents/bulges; materials differ
   meaningfully, no clipping surprises, responsive real music/idle, 60/165 Hz and mixed-DPR/recreation acceptance.
   Retain this checklist as Awaiting Validation when automation cannot honestly close it.
+
+## Awaiting operator validation
+
+- [ ] Inspect real music response and the five material presets at representative display sizes.
+- [ ] Verify physical 60/165 Hz, mixed-DPR transfer and installed/frozen context recreation.

@@ -1,0 +1,15 @@
+{
+  "mode": "sphere",
+  "name": "Preset 5 (Water)",
+  "preset_index": 4,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "sphere",
+  "snapshot": {"widgets": {"spotify_visualizer": {
+    "sphere_material": "Water", "sphere_deformation": 1.15,
+    "sphere_rotation_speed": 0.4, "sphere_gloss": 0.9,
+    "sphere_specular": 1.35, "sphere_light_direction": "W",
+    "sphere_idle_motion": 0.22, "sphere_surface_detail": 1.0,
+    "mode": "sphere"
+  }}},
+  "description": "Glossy water with flowing detail and gentle idle movement."
+}

@@ -1,0 +1,15 @@
+{
+  "mode": "sphere",
+  "name": "Preset 3 (Magma)",
+  "preset_index": 2,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "sphere",
+  "snapshot": {"widgets": {"spotify_visualizer": {
+    "sphere_material": "Magma", "sphere_deformation": 1.35,
+    "sphere_rotation_speed": 0.48, "sphere_gloss": 0.35,
+    "sphere_specular": 0.9, "sphere_light_direction": "SE",
+    "sphere_idle_motion": 0.2, "sphere_surface_detail": 1.2,
+    "mode": "sphere"
+  }}},
+  "description": "Active molten surface with stronger rhythmic deformation."
+}

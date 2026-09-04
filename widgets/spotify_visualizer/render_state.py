@@ -274,6 +274,27 @@ class SpectrumFrame:
 
 
 @dataclass(frozen=True, slots=True)
+class SphereFrame:
+    """Small immutable Sphere payload; reactive energy stays in ``common``."""
+
+    authored_time: float = 0.0
+    parameters: FrozenFields = FrozenFields()
+
+    def __post_init__(self) -> None:
+        authored_time = _finite(self.authored_time, name="sphere authored time")
+        if authored_time < 0.0:
+            raise ValueError("sphere authored time must be non-negative")
+        object.__setattr__(self, "authored_time", authored_time)
+        object.__setattr__(
+            self, "parameters", _coerce_frozen_fields(self.parameters, name="sphere parameters")
+        )
+
+    @property
+    def mode_id(self) -> str:
+        return "sphere"
+
+
+@dataclass(frozen=True, slots=True)
 class OscilloscopeFrame:
     previous_waveform: tuple[float, ...] = ()
     ghost_waveforms: tuple[tuple[float, ...], ...] = ()
@@ -449,7 +470,7 @@ class DevCurveFrame:
 
 
 ModeFrame: TypeAlias = (
-    SpectrumFrame | OscilloscopeFrame | SineFrame | BubbleFrame | DevCurveFrame
+    SpectrumFrame | SphereFrame | OscilloscopeFrame | SineFrame | BubbleFrame | DevCurveFrame
 )
 
 
@@ -526,7 +547,7 @@ class VisualizerLogicalFrame:
             raise TypeError("common state must be VisualizerCommonState")
         if not isinstance(
             self.mode_state,
-            (SpectrumFrame, OscilloscopeFrame, SineFrame, BubbleFrame, DevCurveFrame),
+            (SpectrumFrame, SphereFrame, OscilloscopeFrame, SineFrame, BubbleFrame, DevCurveFrame),
         ):
             raise TypeError("mode state must be one of the canonical immutable frames")
         edges = tuple(self.protected_edges)
@@ -708,6 +729,7 @@ __all__ = [
     "OscilloscopeFrame",
     "ResolvedVisualizerPresentation",
     "SineFrame",
+    "SphereFrame",
     "SpectrumFrame",
     "VisualizerCommonState",
     "VisualizerEnergyState",

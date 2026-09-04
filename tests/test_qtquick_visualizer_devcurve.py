@@ -393,6 +393,7 @@ def test_quick_devcurve_registry_is_static_lazy_and_resource_dormant(
         "sine_wave",
         "bubble",
         "devcurve",
+        "sphere",
     )
     imported: list[str] = []
     real_import = implementation_registry.import_module

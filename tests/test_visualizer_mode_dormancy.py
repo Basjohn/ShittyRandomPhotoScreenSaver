@@ -39,6 +39,7 @@ _ALL_FRAME_RUNTIME_MODULES = {
     "sine_wave": "widgets.spotify_visualizer.sine_frame_runtime",
     "bubble": "widgets.spotify_visualizer.bubble_frame_runtime",
     "devcurve": "widgets.spotify_visualizer.devcurve_frame_runtime",
+    "sphere": "widgets.spotify_visualizer.sphere_frame_runtime",
 }
 
 
@@ -133,6 +134,7 @@ _FRAME_RUNTIME_MODULES = {
     "sine_wave": "widgets.spotify_visualizer.sine_frame_runtime",
     "bubble": "widgets.spotify_visualizer.bubble_frame_runtime",
     "devcurve": "widgets.spotify_visualizer.devcurve_frame_runtime",
+    "sphere": "widgets.spotify_visualizer.sphere_frame_runtime",
 }
 
 
@@ -246,6 +248,7 @@ runtimes = {
     "sine_wave": "widgets.spotify_visualizer.sine_frame_runtime",
     "bubble": "widgets.spotify_visualizer.bubble_frame_runtime",
     "devcurve": "widgets.spotify_visualizer.devcurve_frame_runtime",
+    "sphere": "widgets.spotify_visualizer.sphere_frame_runtime",
 }
 print(repr({m: (mod in sys.modules) for m, mod in runtimes.items()}))
 """

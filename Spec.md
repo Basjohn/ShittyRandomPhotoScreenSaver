@@ -298,6 +298,14 @@ Committed viewport extent is ordinary runtime truth. While CUSTOM is active, its
 that committed value. Ending CUSTOM removes the temporary override: Save leaves the newly committed extent authoritative;
 Cancel restores the pre-edit committed extent. "No active CUSTOM session" is not synonymous with canonical `(420,280)`.
 
+Sphere is an experimental, independently enabled sixth mode; existing profiles retain the original five enabled
+modes. Its frameless transparent viewport contains a static 3D mesh with authored-time deformation, reconstructed
+normals and material-specific bump/roughness. Chrome, Obsidian, Magma, Silver and Water have curated presets plus
+Custom. Settings normalize parameters once; current playing source identity gates musical energy, while idle motion
+continues on the existing logical clock. A fixed camera/common pixel scale preserves aspect and reserves the full
+canonical deformation envelope. Inactive renderer resources retire on one-shot render-context events, including a
+mode change that never receives its first source frame. Detail and validation: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
+
 ## Visualizer interactions
 
 Double-click inside the active retained Visualizer advances to the next visualizer mode. Middle-click is a separate action:
