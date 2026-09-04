@@ -1908,6 +1908,9 @@ def test_spectrum_builder_uses_real_bucket_order_and_collapsible_sections(qt_app
 def test_spectrum_builder_uses_explicit_bar_segment_render_mode_buttons(qt_app, settings_manager):
     tab = WidgetsTab(settings_manager)
     try:
+        # V6a: Spectrum is lazy — select it so its body (render buttons) is built.
+        tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData("spectrum"))
+        qt_app.processEvents()
         assert set(tab.spectrum_render_mode_buttons.keys()) == {"segment", "bars"}
         assert tab.spectrum_render_mode_buttons["bars"].text() == "BAR"
         assert tab.spectrum_render_mode_buttons["segment"].text() == "SEGMENTS"
@@ -2587,6 +2590,9 @@ def test_visualizer_technical_bucket_visibility_roundtrip(qt_app, settings_manag
     tab = WidgetsTab(settings_manager)
     try:
         tab._load_settings()
+        # V6a: Spectrum is lazy — select it so its technical controls are built.
+        tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData("spectrum"))
+        qt_app.processEvents()
         controls = get_per_mode_controls_for_mode(tab, "spectrum")
         assert controls is not None
 
@@ -2607,6 +2613,10 @@ def test_visualizer_technical_bucket_visibility_roundtrip(qt_app, settings_manag
         reloaded = WidgetsTab(settings_manager)
         try:
             reloaded._load_settings()
+            reloaded.vis_mode_combo.setCurrentIndex(
+                reloaded.vis_mode_combo.findData("spectrum")
+            )
+            qt_app.processEvents()
             reloaded_controls = get_per_mode_controls_for_mode(reloaded, "spectrum")
             assert reloaded_controls is not None
             reloaded_agc = reloaded_controls.get("agc_visibility_toggle")

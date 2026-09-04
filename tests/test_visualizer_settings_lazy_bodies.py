@@ -84,22 +84,27 @@ def _select_mode(tab: WidgetsTab, mode: str) -> None:
     tab._update_vis_mode_sections()
 
 
-def test_open_with_bubble_active_builds_only_spectrum_and_bubble(qt_app, settings_manager, monkeypatch):
+def test_open_with_bubble_active_builds_only_bubble(qt_app, settings_manager, monkeypatch):
     counts = _install_counters(monkeypatch)
     tab = _make_tab(settings_manager, "bubble")
     try:
-        # A: Spectrum (eager exception) + the active mode (Bubble) are built;
-        # the three other lazy modes are not.
-        assert counts["spectrum"] == 1
+        # V6a: every mode is lazy. Opening with Bubble active builds ONLY Bubble;
+        # Spectrum (no longer eager) and the other three modes stay unbuilt.
         assert counts["bubble"] == 1
+        assert counts["spectrum"] == 0
         assert counts["oscilloscope"] == 0
         assert counts["sine_wave"] == 0
         assert counts["devcurve"] == 0
-        assert hasattr(tab, _CONTAINER_ATTR["spectrum"])
         assert hasattr(tab, _CONTAINER_ATTR["bubble"])
+        assert not hasattr(tab, _CONTAINER_ATTR["spectrum"])
         assert not hasattr(tab, _CONTAINER_ATTR["oscilloscope"])
         assert not hasattr(tab, _CONTAINER_ATTR["sine_wave"])
         assert not hasattr(tab, _CONTAINER_ATTR["devcurve"])
+        # The shared appearance controls exist even though NO Spectrum body was
+        # constructed — they are owned outside every mode body.
+        assert hasattr(tab, "vis_fill_color_btn")
+        assert hasattr(tab, "vis_border_color_btn")
+        assert hasattr(tab, "vis_border_opacity")
         # Bubble was hydrated from the resolved config at construction: its slider
         # matches the config-derived value (computed exactly as the loader does).
         cfg = tab._vis_loaded_config
@@ -107,6 +112,66 @@ def test_open_with_bubble_active_builds_only_spectrum_and_bubble(qt_app, setting
             tab._config_float("spotify_visualizer", cfg, "bubble_big_bass_pulse", 0.5) * 100
         )))
         assert tab.bubble_big_bass_pulse.value() == expected
+    finally:
+        tab.deleteLater()
+
+
+def test_spectrum_is_lazy_and_constructs_on_select(qt_app, settings_manager, monkeypatch):
+    # V6a: Spectrum is no longer eager. Opening with Bubble active leaves Spectrum
+    # unbuilt; selecting Spectrum constructs exactly it, once, and hydrates it.
+    counts = _install_counters(monkeypatch)
+    tab = _make_tab(settings_manager, "bubble")
+    try:
+        assert counts["spectrum"] == 0
+        assert not hasattr(tab, _CONTAINER_ATTR["spectrum"])
+
+        _select_mode(tab, "spectrum")
+        assert counts["spectrum"] == 1
+        assert hasattr(tab, _CONTAINER_ATTR["spectrum"])
+        # A Spectrum-owned control now exists (was absent while Spectrum unbuilt).
+        assert hasattr(tab, "vis_ghost_enabled")
+
+        _select_mode(tab, "spectrum")  # cached
+        assert counts["spectrum"] == 1
+    finally:
+        tab.deleteLater()
+
+
+def test_unsaved_spectrum_edit_survives_switch_away_and_back(qt_app, settings_manager, monkeypatch):
+    _install_counters(monkeypatch)
+    tab = _make_tab(settings_manager, "spectrum")
+    try:
+        slider = tab.spectrum_drop_speed
+        hydrated = slider.value()
+        edited = slider.maximum() if hydrated != slider.maximum() else slider.minimum()
+        slider.setValue(edited)
+
+        _select_mode(tab, "bubble")
+        _select_mode(tab, "spectrum")
+
+        # Spectrum was not rebuilt and its unsaved edit was not re-hydrated.
+        assert tab.spectrum_drop_speed is slider
+        assert tab.spectrum_drop_speed.value() == edited
+    finally:
+        tab.deleteLater()
+
+
+def test_saving_while_spectrum_unbuilt_preserves_its_persisted_state(qt_app, settings_manager, monkeypatch):
+    # Active Bubble, Spectrum unbuilt: save must not require Spectrum QWidgets and
+    # must not synthesize fallback Spectrum keys (ghost / preset stay persisted).
+    from ui.tabs.widgets_tab_media import save_visualizer_settings
+
+    _install_counters(monkeypatch)
+    tab = _make_tab(settings_manager, "bubble")
+    try:
+        assert not tab._vis_body_host.is_constructed("spectrum")
+        result = save_visualizer_settings(tab)
+        assert result["mode"] == "bubble"
+        # Spectrum-owned ghost + preset keys are not synthesized while unbuilt.
+        assert "spectrum_ghosting_enabled" not in result
+        assert "spectrum_ghost_alpha" not in result
+        assert "spectrum_ghost_decay" not in result
+        assert "preset_spectrum" not in result
     finally:
         tab.deleteLater()
 

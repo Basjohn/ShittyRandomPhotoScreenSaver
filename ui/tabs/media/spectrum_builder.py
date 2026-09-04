@@ -15,11 +15,14 @@ from PySide6.QtGui import QColor
 
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.media.builder_scaffold import (
-    add_builder_swatch_row,
     bind_color_button,
     bind_setting_signal,
     build_collapsible_bucket,
     build_mode_scaffold,
+)
+from ui.tabs.media.shared_appearance_controls import (
+    place_shared_appearance_border_opacity,
+    place_shared_appearance_fill_border,
 )
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
@@ -122,35 +125,10 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         )
         return content
 
-    def _swatch_row(parent_layout: QVBoxLayout, label_text: str):
-        _, content, _ = add_builder_swatch_row(
-            parent_layout,
-            label_text,
-            label_width=LABEL_WIDTH,
-        )
-        return content
-
-    spotify_vis_fill_row = _swatch_row(appearance_bucket, "Bar Fill Color:")
-    tab.vis_fill_color_btn = ColorSwatchButton(title="Choose Beat Bar Fill Color")
-    bind_color_button(
-        tab,
-        tab.vis_fill_color_btn,
-        '_spotify_vis_fill_color',
-        initial_color=tab._spotify_vis_fill_color,
-    )
-    spotify_vis_fill_row.addWidget(tab.vis_fill_color_btn)
-    spotify_vis_fill_row.addStretch()
-
-    spotify_vis_border_color_row = _swatch_row(appearance_bucket, "Bar Border Color:")
-    tab.vis_border_color_btn = ColorSwatchButton(title="Choose Beat Bar Border Color")
-    bind_color_button(
-        tab,
-        tab.vis_border_color_btn,
-        '_spotify_vis_border_color',
-        initial_color=tab._spotify_vis_border_color,
-    )
-    spotify_vis_border_color_row.addWidget(tab.vis_border_color_btn)
-    spotify_vis_border_color_row.addStretch()
+    # Shared Bar Fill/Border colour rows are owned by the shared appearance
+    # module so they exist even when Spectrum is unbuilt; place the exact same
+    # pre-built rows here in their original position (no recreation/duplication).
+    place_shared_appearance_fill_border(tab, appearance_bucket)
 
     glow_toggle_row = _aligned_row(appearance_bucket, "")
     tab.spectrum_glow_enabled = QCheckBox("Enable Rim Glow")
@@ -215,24 +193,9 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_glow_enabled.stateChanged.connect(_update_spectrum_glow_visibility)
     _update_spectrum_glow_visibility()
 
-    spotify_vis_border_opacity_row = _aligned_row(appearance_bucket, "Bar Border Opacity:")
-    tab.vis_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.vis_border_opacity.setMinimum(0)
-    tab.vis_border_opacity.setMaximum(100)
-    spotify_vis_border_opacity_pct = int(
-        tab._default_float('spotify_visualizer', 'spectrum_bar_border_opacity', 0.85) * 100
-    )
-    tab.vis_border_opacity.setValue(spotify_vis_border_opacity_pct)
-    tab.vis_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.vis_border_opacity.setTickInterval(5)
-    bind_setting_signal(
-        tab,
-        tab.vis_border_opacity.valueChanged,
-        updater=lambda v: tab.vis_border_opacity_label.setText(f"{v}%"),
-    )
-    spotify_vis_border_opacity_row.addWidget(tab.vis_border_opacity)
-    tab.vis_border_opacity_label = QLabel(f"{spotify_vis_border_opacity_pct}%")
-    spotify_vis_border_opacity_row.addWidget(tab.vis_border_opacity_label)
+    # Shared Border Opacity row (owned by the shared appearance module); placed
+    # here in its original position after the glow controls.
+    place_shared_appearance_border_opacity(tab, appearance_bucket)
 
     # Ghosting controls
     ghost_toggle_row = _aligned_row(ghost_bucket, "")
