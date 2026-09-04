@@ -69,6 +69,9 @@ def test_weather_vertical_breathing_room_is_part_of_preferred_height() -> None:
 
     assert "readonly property real legacyVerticalInset: 8.0" in source
     assert "+ 2.0 * weatherRoot.legacyVerticalInset" in source
+    assert "readonly property real readyContentFitScale:" in source
+    assert "weatherContent.height" in source
+    assert "scale: weatherRoot.readyContentFitScale" in source
 
 
 def test_abandonment_rotation_fades_values_not_static_archive_chrome() -> None:

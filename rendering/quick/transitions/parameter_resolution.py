@@ -393,6 +393,8 @@ def _resolve_particle(
 def _normalized_glow_color(
     value: object,
     fallback: object = (255, 140, 30, 255),
+    *,
+    field_name: str = "glow_color",
 ) -> tuple[float, float, float, float]:
     candidate = value
     if not isinstance(candidate, (tuple, list)) or len(candidate) != 4:
@@ -401,11 +403,11 @@ def _normalized_glow_color(
         candidate = (255, 140, 30, 255)
     channels = tuple(_number(channel, 0.0) for channel in candidate)
     if any(channel < 0.0 for channel in channels):
-        raise ValueError("Burn glow_color channels must be non-negative")
+        raise ValueError(f"Burn {field_name} channels must be non-negative")
     if max(channels) <= 1.0:
         return channels
     if max(channels) > 255.0:
-        raise ValueError("Burn glow_color channels must be <= 255")
+        raise ValueError(f"Burn {field_name} channels must be <= 255")
     return tuple(channel / 255.0 for channel in channels)
 
 
@@ -441,6 +443,7 @@ def _resolve_burn(
     default_ash_enabled = _bool(defaults.get("ash_enabled", True), True)
     default_ash_density = _number(defaults.get("ash_density", 0.5), 0.5)
     default_glow_color = defaults.get("glow_color", (255, 140, 30, 255))
+    default_ember_color = defaults.get("ember_color", (230, 64, 13, 255))
 
     return _finish(
         None,
@@ -469,6 +472,11 @@ def _resolve_burn(
             "glow_color": _normalized_glow_color(
                 _value(cfg, defaults, "glow_color", default_glow_color),
                 default_glow_color,
+            ),
+            "ember_color": _normalized_glow_color(
+                _value(cfg, defaults, "ember_color", default_ember_color),
+                default_ember_color,
+                field_name="ember_color",
             ),
             "char_width": max(
                 0.1,

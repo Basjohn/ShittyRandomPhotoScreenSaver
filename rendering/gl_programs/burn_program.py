@@ -53,7 +53,8 @@ uniform float u_progress;
 uniform int   u_direction;      // 0=L->R, 1=R->L, 2=T->B, 3=B->T
 uniform float u_jaggedness;     // 0.0-1.0 edge waviness amplitude
 uniform float u_glow_intensity; // 0.0-1.0
-uniform vec4  u_glow_color;     // RGBA primary glow colour (warm orange)
+uniform vec4  u_glow_color;     // RGBA primary glow colour
+uniform vec4  u_ember_color;    // RGBA ember/char ramp colour
 uniform float u_char_width;     // 0.1-1.0 controls dark zone width
 uniform int   u_smoke_enabled;  // 1 = sparks + smoke on
 uniform float u_smoke_density;  // smoke/spark intensity multiplier
@@ -228,10 +229,13 @@ void main() {
         float behind = (-sd) - core_w;
         float ct = smoothstep(0.0, 1.0, behind / char_w);
 
-        // Ember gradient: deep red → dark brown → charred black
-        vec3 ember_hot  = vec3(0.9, 0.25, 0.05);
-        vec3 ember_cool = vec3(0.15, 0.04, 0.01);
-        vec3 charred    = vec3(0.02, 0.01, 0.005);
+        // Ember gradient is independently themeable from the front glow.
+        // The per-channel darkening factors reproduce the historical default
+        // ramp exactly while allowing non-orange hues to carry through the
+        // hot/cooling/charred zones instead of leaking fixed red/orange.
+        vec3 ember_hot  = u_ember_color.rgb;
+        vec3 ember_cool = u_ember_color.rgb * vec3(1.0 / 6.0, 0.16, 0.20);
+        vec3 charred    = u_ember_color.rgb * vec3(1.0 / 45.0, 0.04, 0.10);
 
         vec3 ember_col;
         if (ct < 0.3) {
@@ -376,7 +380,7 @@ void main() {
         names = [
             "u_progress", "uOldTex", "uNewTex",
             "u_direction", "u_jaggedness", "u_glow_intensity",
-            "u_glow_color", "u_char_width",
+            "u_glow_color", "u_ember_color", "u_char_width",
             "u_smoke_enabled", "u_smoke_density",
             "u_ash_enabled", "u_ash_density",
             "u_time", "u_seed",
@@ -404,6 +408,7 @@ void main() {
         jaggedness = float(getattr(state, "jaggedness", 0.5))
         glow_intensity = float(getattr(state, "glow_intensity", 0.7))
         glow_color = getattr(state, "glow_color", (1.0, 0.55, 0.12, 1.0))
+        ember_color = getattr(state, "ember_color", (0.9, 0.25, 0.05, 1.0))
         char_width = float(getattr(state, "char_width", 0.5))
         smoke_enabled = int(getattr(state, "smoke_enabled", True))
         smoke_density = float(getattr(state, "smoke_density", 0.5))
@@ -438,6 +443,11 @@ void main() {
             if loc_gc != -1:
                 r, g, b, a = (float(c) for c in glow_color)
                 gl.glUniform4f(loc_gc, r, g, b, a)
+
+            loc_ec = uniforms.get("u_ember_color", -1)
+            if loc_ec != -1:
+                r, g, b, a = (float(c) for c in ember_color)
+                gl.glUniform4f(loc_ec, r, g, b, a)
 
             loc_old = uniforms.get("uOldTex", -1)
             if loc_old != -1:

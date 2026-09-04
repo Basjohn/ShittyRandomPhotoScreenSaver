@@ -617,6 +617,11 @@ class TransitionsTab(QWidget):
                 self._burn_glow_color = QColor(int(glow_col[0]), int(glow_col[1]), int(glow_col[2]),
                                                int(glow_col[3]) if len(glow_col) > 3 else 255)
                 self._apply_burn_glow_color_btn()
+            ember_col = burn.get('ember_color', canonical_burn.get('ember_color', [230, 64, 13, 255]))
+            if isinstance(ember_col, (list, tuple)) and len(ember_col) >= 3:
+                self._burn_ember_color = QColor(int(ember_col[0]), int(ember_col[1]), int(ember_col[2]),
+                                                int(ember_col[3]) if len(ember_col) > 3 else 255)
+                self._apply_burn_ember_color_btn()
             self.burn_smoke_check.setChecked(bool(burn.get('smoke_enabled', canonical_burn.get('smoke_enabled', True))))
             smoke_d = int(round(burn.get('smoke_density', canonical_burn.get('smoke_density', 0.5)) * 100))
             self.burn_smoke_density_slider.setValue(max(0, min(100, smoke_d)))
@@ -986,6 +991,20 @@ class TransitionsTab(QWidget):
         self.burn_glow_color_btn.clicked.connect(self._pick_burn_glow_color)
         burn_color_row.addWidget(self.burn_glow_color_btn)
         burn_color_row.addStretch()
+
+        burn_ember_color_row = _swatch_row(burn_layout, "Ember Colour:")
+        self.burn_ember_color_btn = ColorSwatchButton(
+            title="Choose Burn Ember Colour", show_alpha=True, auto_picker=False
+        )
+        self._burn_ember_color = QColor(230, 64, 13, 255)
+        self._apply_burn_ember_color_btn()
+        self.burn_ember_color_btn.setFixedSize(60, 24)
+        self.burn_ember_color_btn.setToolTip(
+            "Secondary ember/char colour behind the burn front"
+        )
+        self.burn_ember_color_btn.clicked.connect(self._pick_burn_ember_color)
+        burn_ember_color_row.addWidget(self.burn_ember_color_btn)
+        burn_ember_color_row.addStretch()
 
         burn_smoke_row = _aligned_row(burn_layout, "", wrap=False)
         self.burn_smoke_check = QCheckBox("Sparks")
@@ -1467,6 +1486,27 @@ class TransitionsTab(QWidget):
             self._apply_burn_glow_color_btn()
             self._save_settings()
 
+    def _apply_burn_ember_color_btn(self) -> None:
+        """Reflect the independently authored burn ember/char colour."""
+        c = self._burn_ember_color
+        try:
+            self.burn_ember_color_btn.set_color(c)
+        except Exception:
+            pass
+
+    def _pick_burn_ember_color(self) -> None:
+        """Open colour picker for the burn ember/char colour."""
+        color = StyledColorPicker.get_color(
+            self._burn_ember_color,
+            self,
+            "Burn Ember Colour",
+            show_alpha=True,
+        )
+        if color is not None:
+            self._burn_ember_color = color
+            self._apply_burn_ember_color_btn()
+            self._save_settings()
+
     def _refresh_hw_dependent_options(self) -> None:
         """No-op — renderer is always GL, all transitions available."""
         pass
@@ -1583,6 +1623,12 @@ class TransitionsTab(QWidget):
                     self._burn_glow_color.green(),
                     self._burn_glow_color.blue(),
                     self._burn_glow_color.alpha(),
+                ],
+                'ember_color': [
+                    self._burn_ember_color.red(),
+                    self._burn_ember_color.green(),
+                    self._burn_ember_color.blue(),
+                    self._burn_ember_color.alpha(),
                 ],
                 'smoke_enabled': self.burn_smoke_check.isChecked(),
                 'smoke_density': self.burn_smoke_density_slider.value() / 100.0,

@@ -121,6 +121,9 @@ def test_sparse_burn_uses_canonical_glow_colour_and_controls():
     glow = tuple(float(value) for value in defaults.get("glow_color", [255, 140, 30, 255]))
     expected_glow = glow if max(glow) <= 1.0 else tuple(value / 255.0 for value in glow)
     assert resolved["glow_color"] == pytest.approx(expected_glow)
+    ember = tuple(float(value) for value in defaults.get("ember_color", [230, 64, 13, 255]))
+    expected_ember = ember if max(ember) <= 1.0 else tuple(value / 255.0 for value in ember)
+    assert resolved["ember_color"] == pytest.approx(expected_ember)
     assert resolved["jaggedness"] == pytest.approx(
         float(defaults.get("jaggedness", 0.5))
     )

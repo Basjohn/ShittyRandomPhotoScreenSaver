@@ -343,6 +343,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 4
                           'char_width': 0.1,
                           'direction': 'Random',
                           'glow_color': [255, 162, 0, 255],
+                          'ember_color': [230, 64, 13, 255],
                           'glow_intensity': 1.0,
                           'jaggedness': 1.0,
                           'smoke_density': 0.8,

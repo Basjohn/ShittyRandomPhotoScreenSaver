@@ -22,6 +22,7 @@ class _BurnParameters:
     jaggedness: float
     glow_intensity: float
     glow_color: tuple[float, float, float, float]
+    ember_color: tuple[float, float, float, float]
     char_width: float
     smoke_enabled: bool
     smoke_density: float
@@ -47,17 +48,22 @@ def _boolean(parameters: Mapping[str, object], name: str) -> bool:
     return raw
 
 
-def _glow_color(parameters: Mapping[str, object]) -> tuple[float, float, float, float]:
-    raw = parameters.get("glow_color")
+def _burn_color(
+    parameters: Mapping[str, object],
+    name: str,
+) -> tuple[float, float, float, float]:
+    raw = parameters.get(name)
     if not isinstance(raw, tuple) or len(raw) != 4:
-        raise ValueError("Burn requires resolved normalized RGBA tuple parameter 'glow_color'")
+        raise ValueError(
+            f"Burn requires resolved normalized RGBA tuple parameter {name!r}"
+        )
     channels: list[float] = []
     for channel in raw:
         if isinstance(channel, bool) or not isinstance(channel, (int, float)):
-            raise ValueError("Burn glow_color channels must be numeric")
+            raise ValueError(f"Burn {name} channels must be numeric")
         value = float(channel)
         if not math.isfinite(value) or not 0.0 <= value <= 1.0:
-            raise ValueError("Burn glow_color channels must be finite and between 0 and 1")
+            raise ValueError(f"Burn {name} channels must be finite and between 0 and 1")
         channels.append(value)
     return tuple(channels)  # type: ignore[return-value]
 
@@ -91,7 +97,8 @@ def _burn_parameters(parameters: Mapping[str, object]) -> _BurnParameters:
         direction=direction_raw,
         jaggedness=jaggedness,
         glow_intensity=glow_intensity,
-        glow_color=_glow_color(parameters),
+        glow_color=_burn_color(parameters, "glow_color"),
+        ember_color=_burn_color(parameters, "ember_color"),
         char_width=char_width,
         smoke_enabled=_boolean(parameters, "smoke_enabled"),
         smoke_density=smoke_density,
@@ -136,6 +143,7 @@ class QuickBurnRenderer:
         gl.glUniform1f(uniforms["u_jaggedness"], params.jaggedness)
         gl.glUniform1f(uniforms["u_glow_intensity"], params.glow_intensity)
         gl.glUniform4f(uniforms["u_glow_color"], *params.glow_color)
+        gl.glUniform4f(uniforms["u_ember_color"], *params.ember_color)
         gl.glUniform1f(uniforms["u_char_width"], params.char_width)
         gl.glUniform1i(uniforms["u_smoke_enabled"], 1 if params.smoke_enabled else 0)
         gl.glUniform1f(uniforms["u_smoke_density"], params.smoke_density)
@@ -171,7 +179,7 @@ class QuickBurnRenderer:
             required = (
                 "uMatrix", "uItemSize", "u_progress", "uOldTex", "uNewTex",
                 "u_direction", "u_jaggedness", "u_glow_intensity",
-                "u_glow_color", "u_char_width", "u_smoke_enabled",
+                "u_glow_color", "u_ember_color", "u_char_width", "u_smoke_enabled",
                 "u_smoke_density", "u_ash_enabled", "u_ash_density",
                 "u_time", "u_seed",
             )

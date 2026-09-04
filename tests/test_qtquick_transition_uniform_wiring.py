@@ -323,6 +323,7 @@ def _burn_params(**overrides) -> dict:
         "jaggedness": 0.3,
         "glow_intensity": 0.6,
         "glow_color": (0.1, 0.2, 0.3, 1.0),
+        "ember_color": (0.7, 0.1, 0.9, 1.0),
         "char_width": 0.4,
         "smoke_enabled": True,
         "smoke_density": 0.5,
@@ -348,6 +349,7 @@ def test_burn_covers_all_authored_uniforms_and_run_clock_time(monkeypatch):
     assert recorder.uniforms["u_jaggedness"] == pytest.approx(0.3)
     assert recorder.uniforms["u_glow_intensity"] == pytest.approx(0.6)
     assert recorder.uniforms["u_glow_color"] == pytest.approx((0.1, 0.2, 0.3, 1.0))
+    assert recorder.uniforms["u_ember_color"] == pytest.approx((0.7, 0.1, 0.9, 1.0))
     assert recorder.uniforms["u_char_width"] == pytest.approx(0.4)
     assert recorder.uniforms["u_smoke_enabled"] == 1
     assert recorder.uniforms["u_smoke_density"] == pytest.approx(0.5)
