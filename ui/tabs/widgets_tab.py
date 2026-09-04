@@ -2187,6 +2187,21 @@ class WidgetsTab(QWidget):
         except Exception:
             mode = _DEFAULT_VISUALIZER_MODE
 
+        # V5b: construct + hydrate the selected mode's lazy body once, before
+        # toggling visibility. No-op for Spectrum (eager) and for an already-built
+        # cached body (so unsaved edits are never re-hydrated); unbuilt modes stay
+        # dormant until selected.
+        try:
+            from ui.tabs.widgets_tab_media import ensure_visualizer_mode_body
+
+            ensure_visualizer_mode_body(self, mode)
+        except Exception:
+            logger.debug(
+                "[WIDGETS_TAB] ensure visualizer mode body failed mode=%s",
+                mode,
+                exc_info=True,
+            )
+
         # Save scroll position for the previous mode before switching
         prev_mode = getattr(self, '_last_vis_mode_section', None)
         if prev_mode and prev_mode != mode:

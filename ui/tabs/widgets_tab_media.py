@@ -828,6 +828,150 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     return container
 
 
+# ---------------------------------------------------------------------------
+# V5b lazy Settings-body construction (Option-1: Spectrum eager exception)
+# ---------------------------------------------------------------------------
+#
+# Spectrum is built eagerly because it hosts the genuinely shared Bar Fill/Border
+# colour + Border Opacity controls physically nested in its Appearance bucket
+# (extracting them is a V6 pixel move). Oscilloscope / Sine / Bubble / DevCurve
+# are constructed lazily on first selection and hydrated ONCE at construction.
+_LAZY_VISUALIZER_MODES = ("oscilloscope", "sine_wave", "bubble", "devcurve")
+
+_VIS_MODE_CONTAINER_ATTR = {
+    "spectrum": "_spectrum_settings_container",
+    "oscilloscope": "_osc_settings_container",
+    "sine_wave": "_sine_wave_settings_container",
+    "bubble": "_bubble_settings_container",
+    "devcurve": "_devcurve_settings_container",
+}
+
+
+def _apply_vis_color_to_button(tab, btn_attr: str, color_attr: str) -> None:
+    """Sync a colour swatch button with its stored QColor.
+
+    Module-level so the lazy hydrate path can reuse it outside the local
+    closure in ``load_visualizer_settings``.
+    """
+    btn = getattr(tab, btn_attr, None)
+    color = getattr(tab, color_attr, None)
+    if btn is not None and color is not None and hasattr(btn, "set_color"):
+        try:
+            btn.set_color(color)
+        except Exception:
+            logger.debug(
+                "[MEDIA_TAB] Failed to sync %s with %s", btn_attr, color_attr, exc_info=True
+            )
+
+
+def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
+    """Hydrate exactly one freshly-constructed mode body from the canonical config.
+
+    Called ONCE at construction (never on reselection of a cached body), so
+    unsaved in-session edits are never overwritten. Uses the same loaders +
+    arguments the eager path used, so it is behaviour-neutral.
+    """
+    from core.settings.visualizer_mode_registry import get_preset_slider_attr
+    from core.settings.visualizer_presets import resolve_preset_index_from_mapping
+
+    cfg = config or {}
+
+    def _sync(btn_attr, color_attr):
+        _apply_vis_color_to_button(tab, btn_attr, color_attr)
+
+    if mode_id == "oscilloscope":
+        load_oscilloscope_mode_settings(
+            tab,
+            cfg,
+            sync_color_button=_sync,
+            load_extra_color_bindings=_load_osc_multi_line_color_bindings,
+            update_multi_line_visibility=_update_osc_multi_line_visibility,
+        )
+    elif mode_id == "sine_wave":
+        load_sine_wave_mode_settings(
+            tab,
+            cfg,
+            sync_color_button=_sync,
+            update_multi_line_visibility=_update_sine_multi_line_visibility,
+        )
+    elif mode_id == "bubble":
+        load_bubble_mode_settings(tab, cfg, sync_color_button=_sync)
+    elif mode_id == "devcurve":
+        load_devcurve_mode_settings(tab, cfg, sync_color_button=_sync)
+    else:
+        return
+
+    # The section-level technical-controls loader runs before this body existed,
+    # so hydrate this freshly-built mode's technical controls now. Scoped to this
+    # mode only, so building it never re-hydrates (and clobbers unsaved edits in)
+    # another already-built mode.
+    load_per_mode_technical_controls(tab, cfg, only_mode=mode_id)
+
+    slider = getattr(tab, get_preset_slider_attr(mode_id), None)
+    if slider is not None:
+        slider.set_preset_index(resolve_preset_index_from_mapping(mode_id, cfg))
+
+
+def _install_visualizer_body_host(tab, controls_layout) -> None:
+    """Create the lazy-body host + production factory on the tab.
+
+    Spectrum is already built and is adopted so lifecycle queries stay uniform.
+    The factory builds a lazy mode's controls into ``controls_layout`` and
+    hydrates it once from ``tab._vis_loaded_config``; it returns the mode's
+    container (a stable non-None body so the host caches it).
+    """
+    from core.settings.visualizer_mode_body_host import VisualizerModeBodyHost
+    from core.settings.visualizer_mode_registry import (
+        load_mode_settings_builder,
+        resolve_effective_enabled_modes,
+    )
+
+    def _factory(mode_id):
+        builder = load_mode_settings_builder(mode_id)
+        builder(tab, controls_layout)
+        _hydrate_visualizer_mode_body(
+            tab, mode_id, getattr(tab, "_vis_loaded_config", None)
+        )
+        container = getattr(tab, _VIS_MODE_CONTAINER_ATTR.get(mode_id, ""), None)
+        return container if container is not None else object()
+
+    widgets_value = tab._settings.get("widgets", {}) if hasattr(tab, "_settings") else {}
+    section = widgets_value.get("spotify_visualizer", {}) if isinstance(widgets_value, dict) else {}
+    enabled = resolve_effective_enabled_modes(
+        section.get("enabled_modes") if isinstance(section, dict) else None
+    )
+    tab._vis_body_host = VisualizerModeBodyHost(body_factory=_factory, enabled_modes=enabled)
+    spectrum_container = getattr(tab, _VIS_MODE_CONTAINER_ATTR["spectrum"], None)
+    if spectrum_container is not None and "spectrum" in enabled:
+        tab._vis_body_host.adopt("spectrum", spectrum_container)
+
+
+def ensure_visualizer_mode_body(tab, mode_id: str) -> None:
+    """Construct + hydrate a lazy mode body on first selection (idempotent).
+
+    No-op for Spectrum (eager) and before the section has loaded
+    (``_vis_loaded_config`` unset — the hydration source is not yet available),
+    so build-time visibility passes never construct an un-hydratable body.
+    """
+    mode = str(mode_id or "").strip().lower()
+    if mode == "spectrum":
+        return
+    if getattr(tab, "_vis_loaded_config", None) is None:
+        return
+    host = getattr(tab, "_vis_body_host", None)
+    if host is None:
+        return
+    try:
+        if mode in host.enabled_modes:
+            host.ensure(mode)
+    except Exception:
+        logger.debug(
+            "[MEDIA_TAB] lazy visualizer body construction failed mode=%s",
+            mode,
+            exc_info=True,
+        )
+
+
 def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     """Build the Visualizers widget UI section (separate toggle)."""
 
@@ -975,19 +1119,16 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     _svctl.addWidget(tab._rainbow_controls_container)
 
     # ==========================================
-    # Per-visualizer settings — delegated to builder modules
+    # Per-visualizer settings — Spectrum eager (hosts the shared fill/border/
+    # opacity controls); the other four modes are built lazily on first select
+    # (V5b). ``_vis_loaded_config`` starts unset so the build-time visibility
+    # pass below constructs no un-hydratable lazy body.
     # ==========================================
     from ui.tabs.media.spectrum_builder import build_spectrum_ui
-    from ui.tabs.media.oscilloscope_builder import build_oscilloscope_ui
-    from ui.tabs.media.sine_wave_builder import build_sine_wave_ui
-    from ui.tabs.media.bubble_builder import build_bubble_ui
-    from ui.tabs.media.devcurve_builder import build_devcurve_ui
 
+    tab._vis_loaded_config = None
     _run_visualizer_settings_step("build_spectrum_ui", lambda: build_spectrum_ui(tab, _svctl))
-    _run_visualizer_settings_step("build_oscilloscope_ui", lambda: build_oscilloscope_ui(tab, _svctl))
-    _run_visualizer_settings_step("build_sine_wave_ui", lambda: build_sine_wave_ui(tab, _svctl))
-    _run_visualizer_settings_step("build_bubble_ui", lambda: build_bubble_ui(tab, _svctl))
-    _run_visualizer_settings_step("build_devcurve_ui", lambda: build_devcurve_ui(tab, _svctl))
+    _install_visualizer_body_host(tab, _svctl)
 
     spotify_vis_layout.addWidget(tab._vis_controls_container)
     tab.vis_enabled_checkbox.stateChanged.connect(lambda: _update_spotify_vis_enabled_visibility(tab))
@@ -1248,6 +1389,10 @@ def load_visualizer_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
             active_preset_index,
         )
     spotify_vis_config = resolved_spotify_vis_config
+    # Canonical hydration source for lazy mode bodies constructed on first select
+    # (V5b). Stashed before mode selection so the construct-on-select path below
+    # can hydrate a freshly-built body from exactly this resolved config.
+    tab._vis_loaded_config = spotify_vis_config
     tab.vis_enabled_checkbox.setChecked(
         tab._config_bool('spotify_visualizer', spotify_vis_config, 'enabled', True)
     )
@@ -1289,16 +1434,11 @@ def load_visualizer_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     # Visualizer mode combobox
     load_visualizer_mode_selection(tab, spotify_vis_config)
 
-    _run_visualizer_settings_step(
-        "load_oscilloscope_mode_settings",
-        lambda: load_oscilloscope_mode_settings(
-            tab,
-            spotify_vis_config,
-            sync_color_button=_apply_color_to_button,
-            load_extra_color_bindings=_load_osc_multi_line_color_bindings,
-            update_multi_line_visibility=_update_osc_multi_line_visibility,
-        ),
-    )
+    # Spectrum is eager (V5b exception) and hydrated here. Oscilloscope / Sine /
+    # Bubble / DevCurve are NOT hydrated here: each is built + hydrated once on
+    # first selection through the lazy body factory (construct-on-select via
+    # ``_update_vis_mode_sections`` -> ``ensure_visualizer_mode_body``), so an
+    # unbuilt mode runs no loader and requires no QWidget.
     _run_visualizer_settings_step(
         "load_spectrum_mode_settings",
         lambda: load_spectrum_mode_settings(
@@ -1309,36 +1449,11 @@ def load_visualizer_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         ),
     )
 
-    _run_visualizer_settings_step(
-        "load_sine_wave_mode_settings",
-        lambda: load_sine_wave_mode_settings(
-            tab,
-            spotify_vis_config,
-            sync_color_button=_apply_color_to_button,
-            update_multi_line_visibility=_update_sine_multi_line_visibility,
-        ),
-    )
-
-    # Update per-mode section visibility
+    # Update per-mode section visibility. For a non-Spectrum active mode this
+    # constructs + hydrates that one body from the config stashed above.
     tab._update_vis_mode_sections()
 
     load_visualizer_rainbow_state(tab, spotify_vis_config)
-    _run_visualizer_settings_step(
-        "load_bubble_mode_settings",
-        lambda: load_bubble_mode_settings(
-            tab,
-            spotify_vis_config,
-            sync_color_button=_apply_color_to_button,
-        ),
-    )
-    _run_visualizer_settings_step(
-        "load_devcurve_mode_settings",
-        lambda: load_devcurve_mode_settings(
-            tab,
-            spotify_vis_config,
-            sync_color_button=_apply_color_to_button,
-        ),
-    )
 
     load_visualizer_preset_indices(tab, spotify_vis_config)
 
