@@ -457,6 +457,44 @@ def test_bubble_frame_freezes_compact_geometry_diagnostics() -> None:
     assert frozen["domain_h"] == pytest.approx(2.7601113172541742)
 
 
+def test_quick_bubble_payload_retains_frozen_arrays_and_follows_newest_frame() -> None:
+    old = _snapshot(trails=(0.2, 0.4, 0.8) * 3)
+    latest = _snapshot(positions=(0.7, 0.6, 0.09, 1.0), trails=(0.6, 0.5, 0.7) * 3)
+    for snapshot in (old, old, latest):
+        payload = resolve_quick_bubble_payload(snapshot)
+        frame = snapshot.logical.mode_state
+        assert payload.positions is frame.positions
+        assert payload.extras is frame.extras
+        assert payload.trails is frame.trails
+    assert resolve_quick_bubble_payload(latest).positions[0] == 0.7
+
+
+@pytest.mark.parametrize("fields", (
+    {"positions": (0.1,)},
+    {"extras": ()},
+    {"trails": (0.2, 0.4, 0.8)},
+))
+def test_quick_bubble_payload_still_rejects_short_active_arrays(fields) -> None:
+    with pytest.raises(ValueError, match="arrays do not match"):
+        resolve_quick_bubble_payload(_snapshot(**fields))
+
+
+def test_quick_bubble_payload_bounds_oversized_arrays_without_mutating_source() -> None:
+    frame = BubbleFrame(
+        positions=(0.5, 0.5, 0.04, 1.0) * 111,
+        extras=(0.8, 0.0, 0.0, 0.0) * 111,
+        trails=(0.2, 0.4, 0.8) * 333,
+        bubble_count=111,
+    )
+    snapshot = SimpleNamespace(logical=SimpleNamespace(mode_state=frame))
+    payload = resolve_quick_bubble_payload(snapshot)
+    assert payload.bubble_count == 110
+    assert payload.positions == frame.positions[:440]
+    assert payload.extras == frame.extras[:440]
+    assert payload.trails == frame.trails[:990]
+    assert len(frame.positions) == 444 and len(frame.trails) == 999
+
+
 def _layout(presentation):
     outer_x, outer_y, _width, _height = presentation.outer_rect
     content_x, content_y, content_width, content_height = (
