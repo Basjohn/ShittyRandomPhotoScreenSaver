@@ -592,13 +592,20 @@ def test_slide_partition_has_full_coverage_at_authored_and_missed_frame_samples(
 
 
 def test_slide_shader_uses_one_shared_sample_without_a_background_branch():
-    assert "vec2 localUv = fract(uv - u_direction * t);" in _SLIDE_FRAGMENT_SOURCE
+    assert "vec2 shiftedUv = uv - u_direction * travel;" in _SLIDE_FRAGMENT_SOURCE
     assert "texture(uOldTex, localUv)" in _SLIDE_FRAGMENT_SOURCE
     assert "texture(uNewTex, localUv)" in _SLIDE_FRAGMENT_SOURCE
     assert "FragColor = mix(oldColor, newColor, destinationOwns);" in (
         _SLIDE_FRAGMENT_SOURCE
     )
     assert "vec4(0.0" not in _SLIDE_FRAGMENT_SOURCE
+
+
+def test_slide_shader_has_explicit_exact_image_endpoints():
+    assert "if (t <= 0.0)" in _SLIDE_FRAGMENT_SOURCE
+    assert "FragColor = texture(uOldTex, uv);" in _SLIDE_FRAGMENT_SOURCE
+    assert "if (t >= 1.0)" in _SLIDE_FRAGMENT_SOURCE
+    assert "FragColor = texture(uNewTex, uv);" in _SLIDE_FRAGMENT_SOURCE
 
 
 @pytest.mark.parametrize(

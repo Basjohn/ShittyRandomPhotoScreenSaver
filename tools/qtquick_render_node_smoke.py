@@ -251,6 +251,11 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
         "--transition-direction",
         choices=_TRANSITION_DIRECTION_CHOICES,
     )
+    parser.add_argument(
+        "--slide-motion-style",
+        choices=("Linear", "Elastic", "Wobble", "Flex"),
+        default="Linear",
+    )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     if args.windows < 1:
@@ -281,6 +286,8 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
             f"--transition-direction {args.transition_direction!r} is invalid for "
             f"{args.transition_id}"
         )
+    if args.transition_id != "slide" and args.slide_motion_style != "Linear":
+        parser.error("--slide-motion-style applies only to --transition-id slide")
     return args
 
 
@@ -1446,6 +1453,11 @@ class _SmokeRunner(QObject):
                             self._args.transition_id,
                             {},
                         ),
+                        **(
+                            {"motion_style": self._args.slide_motion_style}
+                            if self._args.transition_id == "slide"
+                            else {}
+                        ),
                     },
                     source_image=probe.presentation_image,
                     destination_image=probe.replacement_image,
@@ -2190,6 +2202,7 @@ class _SmokeRunner(QObject):
             "requested_topology_recreate": self._args.topology_recreate,
             "requested_transition_id": self._args.transition_id,
             "requested_transition_direction": self._args.transition_direction,
+            "requested_slide_motion_style": self._args.slide_motion_style,
             "exit_sequence": self._exit_sequence,
             "runtime_root_destruction_barriers": (
                 self._runtime_root_destruction_barriers

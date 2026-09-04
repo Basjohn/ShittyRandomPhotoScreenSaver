@@ -420,11 +420,11 @@ class TransitionsTab(QWidget):
     # its pill is selected (doc 07 E2), not eagerly at tab construction. A
     # deactivated transition's page is never built; deactivating a built page
     # retires it; reactivation restores the pill without rebuilding until it is
-    # selected again. Directionless transitions (Crossfade, Warp Dissolve, and
-    # the directional Slide/Wipe which use the shared Direction group) have no
-    # entry here.
+    # selected again. Crossfade and Warp Dissolve have no specific page; Wipe
+    # uses only the shared Direction group, while Slide has a lazy motion page.
 
     _TRANSITION_PAGE_BUILDERS = {
+        "Slide": "_build_slide_group",
         "Block Puzzle Flip": "_build_flip_group",
         "3D Block Spins": "_build_blockspin_group",
         "Blinds": "_build_blinds_group",
@@ -436,6 +436,7 @@ class TransitionsTab(QWidget):
     }
 
     _SPECIFIC_GROUP_ATTRS = {
+        "Slide": "slide_group",
         "Block Puzzle Flip": "flip_group",
         "3D Block Spins": "blockspin_group",
         "Blinds": "blinds_group",
@@ -497,6 +498,13 @@ class TransitionsTab(QWidget):
         an unbuilt page never touches non-existent controls. Callers set
         ``self._loading`` so control signals do not trigger saves during hydration.
         """
+        if hasattr(self, 'slide_group'):
+            canonical_slide = canonical_transitions.get('slide', {})
+            slide = transitions_config.get('slide', {})
+            style = slide.get('motion_style', canonical_slide.get('motion_style', 'Linear'))
+            index = self.slide_motion_style_combo.findText(str(style))
+            self.slide_motion_style_combo.setCurrentIndex(max(0, index))
+
         if hasattr(self, 'flip_group'):
             canonical_block_flip = canonical_transitions.get('block_flip', {})
             block_flip = transitions_config.get('block_flip', {})
@@ -672,6 +680,19 @@ class TransitionsTab(QWidget):
         flip_dir_row.addStretch()
 
         self._specific_group_host_layout.addWidget(self.flip_group)
+
+    def _build_slide_group(self) -> None:
+        self.slide_group = QGroupBox("Slide Motion")
+        self._style_group_box(self.slide_group)
+        slide_layout = QVBoxLayout(self.slide_group)
+        slide_layout.setContentsMargins(0, 12, 0, 0)
+        motion_row = self._aligned_row(slide_layout, "Motion Style:")
+        self.slide_motion_style_combo = StyledComboBox(size_variant="compact")
+        self.slide_motion_style_combo.addItems(["Linear", "Elastic", "Wobble", "Flex"])
+        self.slide_motion_style_combo.currentTextChanged.connect(self._save_settings)
+        motion_row.addWidget(self.slide_motion_style_combo)
+        motion_row.addStretch()
+        self._specific_group_host_layout.addWidget(self.slide_group)
 
     def _build_blockspin_group(self) -> None:
         _aligned_row = self._aligned_row
@@ -1258,6 +1279,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'transition_combo', None),
             getattr(self, 'duration_slider', None),
             getattr(self, 'direction_combo', None),
+            getattr(self, 'slide_motion_style_combo', None),
             getattr(self, 'grid_rows_spin', None),
             getattr(self, 'grid_cols_spin', None),
             getattr(self, 'blockflip_direction_combo', None),
@@ -1645,7 +1667,17 @@ class TransitionsTab(QWidget):
             'pool': dict(self._pool_by_type),
             'activation': dict(self._activation_by_type),
             'random_always': use_random,
-            'slide': {'direction': self._dir_slide},
+            'slide': (
+                {
+                    'direction': self._dir_slide,
+                    'motion_style': self.slide_motion_style_combo.currentText(),
+                }
+                if hasattr(self, 'slide_group')
+                else {
+                    **_existing_subdict('slide'),
+                    'direction': self._dir_slide,
+                }
+            ),
             'wipe': {'direction': self._dir_wipe},
             'blockspin': {'direction': self._dir_blockspin},
             'block_flip': block_flip,

@@ -84,6 +84,7 @@ _WIPE_DIRECTION_MAP = {
     "Diagonal TL-BR": "diag_tl_br",
     "Diagonal TR-BL": "diag_tr_bl",
 }
+_SLIDE_MOTION_STYLES = frozenset({"Linear", "Elastic", "Wobble", "Flex"})
 
 
 def _mapping(value: object) -> Mapping[str, Any]:
@@ -207,6 +208,10 @@ def resolve_quick_transition_spec(
             mapping=_DIRECTION_MAP,
             rng=rng,
         )
+        motion_style = cfg.get("motion_style", "Linear")
+        if not isinstance(motion_style, str) or motion_style not in _SLIDE_MOTION_STYLES:
+            raise ValueError(f"unknown Slide motion style: {motion_style!r}")
+        parameters = {"motion_style": motion_style}
     elif transition_id == "wipe":
         cfg = _section(transitions, defaults, "wipe")
         direction = _resolve_direction(

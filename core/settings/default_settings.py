@@ -400,7 +400,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 4
                  'random_always': True,
                  'random_choice': 'Ripple',
                  'ripple': {'ripple_count': 3},
-                 'slide': {'direction': 'Random'},
+                 'slide': {'direction': 'Random', 'motion_style': 'Linear'},
                  'type': '3D Block Spins',
                  'wipe': {'direction': 'Bottom to Top', 'last_direction': 'Bottom to Top'}},
  'ui': {'dialog_geometry': {'height': 758, 'width': 1362, 'x': 195, 'y': 57},

@@ -384,6 +384,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_scene_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_transition_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_transition_implementations.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
+| `tests/test_qtquick_slide_motion.py` | **KEEP — MIGRATION PERMANENT** | Frozen Slide motion-style resolution, dense cardinal ownership/endpoints, bounded Elastic settlement, lazy Settings persistence, and an offscreen real-GL anti-edge-smear probe. |
 | `tests/test_qtquick_transition_parameter_defaults.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_transition_parameter_resolution.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_qtquick_transition_request_resolution.py` | **KEEP — MIGRATION PERMANENT / H-ORIGIN** | One Settings-authored transition spec per accepted image batch, fail-closed Random admission and frozen direction/parameter values. |
