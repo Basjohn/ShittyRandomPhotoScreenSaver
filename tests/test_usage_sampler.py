@@ -59,6 +59,9 @@ def test_collector_partitions_system_wide_enumerations_to_heavy_cadence():
     assert proc.num_threads_calls == 1
     assert first.threads_app == 17
     assert first.rss_app_mb > 0.0
+    # With only the main process, the per-process handle split equals the total.
+    assert first.handles_app == 500
+    assert first.handles_main == 500
 
     # Samples 1..3 are light: no children()/num_threads() calls, and the thread
     # count carries forward even though the underlying value changed.
@@ -174,6 +177,7 @@ class _ProcessCollector:
             vms_app_mb=800.0,
             threads_app=17,
             handles_app=640,
+            handles_main=560,
             io_read_mb=12.0,
             io_write_mb=3.0,
             cpu_primed=True,
@@ -247,6 +251,8 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
 
     sample = next(record.message for record in caplog.records if "[USAGE] sample " in record.message)
     assert "cpu_app_pct=42.5" in sample
+    assert "handles_app=640" in sample
+    assert "handles_main=560" in sample
     assert "rss_app_mb=420.0" in sample
     assert "rss_children_mb=70.0" in sample
     assert "private_main_mb=320.0" in sample
@@ -280,6 +286,7 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert lifecycle["private_app_mb"] == 380.0
     assert lifecycle["private_main_mb"] == 320.0
     assert lifecycle["uss_app_mb"] == 360.0
+    assert lifecycle["handles_main"] == 560
     assert lifecycle["vram_dedicated_mb"] == 512.0
     assert lifecycle["sample_age_ms"] >= 0.0
 

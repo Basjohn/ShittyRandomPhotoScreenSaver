@@ -1369,12 +1369,29 @@ def log_audio_latency_metrics(
     pending = getattr(widget, "_mode_transition_pending", None)
     pending_mode = getattr(pending, "name", None) if pending is not None else None
 
+    # A source frame produced before the current playback epoch is stale age
+    # carried across a pause->resume boundary, not processing latency. On resume
+    # ``get_latest_authoritative_frame`` keeps returning the pre-pause frame until
+    # the first fresh frame lands, so ``now - source_ts`` measures the entire
+    # paused gap (observed 2026-09-04 soak: lag_ms=26,120,276 ~= 7.26 h). These
+    # are classified ``stale_source`` and kept off the WARNING lane instead of
+    # reporting an impossible multi-hour "high" latency. Real post-resume latency
+    # rides a fresh frame (source_ts after the epoch) and is still surfaced
+    # normally. Diagnostics only; no runtime state is read or mutated.
+    playback_epoch_ts = float(getattr(engine, "_last_playback_state_ts", 0.0) or 0.0)
+    stale_source_carry = 0.0 < source_ts < playback_epoch_ts
+
     if lag_ms < widget._latency_warn_ms:
         # A recovered healthy sample re-arms one future bounded warning.
         widget._latency_last_signature = None
         return
 
-    severity = "high" if lag_ms >= widget._latency_error_ms else "elevated"
+    if stale_source_carry:
+        severity = "stale_source"
+    elif lag_ms >= widget._latency_error_ms:
+        severity = "high"
+    else:
+        severity = "elevated"
     signature = (
         mode,
         current_generation,
@@ -1405,8 +1422,12 @@ def log_audio_latency_metrics(
         )
     )
     # Source-frame age is diagnostic evidence, not proof that presentation is
-    # stale. Actual presentation-staleness owners may still log ERROR.
-    logger.warning(msg)
+    # stale. Actual presentation-staleness owners may still log ERROR. A stale
+    # pre-resume carry frame is not a latency fault, so it stays at DEBUG.
+    if stale_source_carry:
+        logger.debug(msg)
+    else:
+        logger.warning(msg)
 
     widget._latency_last_log_ts = now_ts
 

@@ -22,6 +22,7 @@ Durable references when mechanism detail is needed:
 
 - `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md`
 - `Docs/QtQuick_Migration/Visualizer_Hitch_Attribution_And_Optimization_Plan_2026-09-03.md`
+- `Docs/QtQuick_Migration/Resource_Plateau_Soak_Closure_2026-09-04.md`
 - `Docs/QtQuick_Migration/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md`
 - `Docs/Tooling_Audit_2026-09-01.md`
 - `Docs/TestSuite.md`
@@ -30,7 +31,7 @@ Durable references when mechanism detail is needed:
 ## Immediate sequence
 
 1. [SUSPECTED DONE - CHECK] **Finish shared Widget colour-authority cleanup and physical check.** Apply the Style Overrides/header cleanup, run **Reset All Colours to Theme** once on the current profile when desired, and verify Media/Reddit/Gmail/Steam branded headers resolve cohesively from the selected Widget Theme/shared override. No hidden family colour should survive merely because its GUI swatch was removed.
-2. **Visualizer recreation-specific delivery quality.** Deterministic steady-state hitch owners are closed; remaining performance work is generation replacement/re-admission freshness/latency, then resource plateau. Bubble and extreme-tall Spectrum remain co-equal physical oracles. Do not lower cadence, accept stale frames, or damp authored response.
+2. **Visualizer recreation-specific delivery quality.** Deterministic steady-state hitch owners are closed and owned-resource plateau is proven (2026-09-04 soak); remaining performance work is generation replacement/re-admission freshness/latency, plus the bounded Windows handle-drift attribution (AWAITING NEW SOAK). Bubble and extreme-tall Spectrum remain co-equal physical oracles. Do not lower cadence, accept stale frames, or damp authored response.
 3. **V5-V8 Visualizer Settings rehost.** Only after the hard pre-V5/V6 gate below is satisfied: deepest enabled-mode admission, correct startup substitution ordering, durable no-settings-lost coverage, and Settings-body dormancy.
 4. **Theme-switch slowdown + narrow theme fragility audit.** Attribute duplicate QWidget refresh/repolish work first, then audit only real edge contracts: stale wrappers, lazy Settings pages, linked-theme transactions, catalogue/install roots, retained recreation, live failure propagation, and hidden lifetime owners.
 5. **J cleanup/optimization/acceptance.** Reconcile stale tests/tools, restore broad-suite signal, finish remaining bounded parity/snap polish, run resource/CPU/GPU ownership passes, then compiled/frozen/installed acceptance.
@@ -95,6 +96,7 @@ Closed evidence does not need re-investigation without a new symptom:
 - [x] stable-set Gen2 GC attribution and `gc.freeze()` lifecycle validation;
 - [x] first-publish cold-import relocation, with V4 dormancy hole corrected at the canonical descriptor seam;
 - [x] analysis/handoff tails closed as not a visible steady-state owner.
+- [x] resource plateau for owned resources — the 2026-09-04 ~7h53m soak (`logs/evidence_chest/09_04_soak`) proves non-accumulation across RSS/USS/private commit/VRAM/threads/tracked+GL resources/shm/task lanes/logging, with clean topology retire+restore and large downward RAM reclamation. Only a bounded Windows handle drift remains open (below). See `Docs/QtQuick_Migration/Resource_Plateau_Soak_Closure_2026-09-04.md`.
 
 Still live:
 
@@ -103,8 +105,8 @@ Still live:
   - E2 (fresh source -> retained presentation) **attributed via instrumented run (2026-09-04); presentation path exonerated.** `kind=recreation`/`playback` T3..T6 split (commit 615833cf) shows: T3==T5 always (logical path instant); **recreation T3->T6 med ~4 ms (max 16)** — the O(1) bridge + ~90 Hz pacer are healthy, NOT the ~70-75 ms owner. The earlier "~70-75 ms recreation" was **warm-resume**, dominated by **capture wake** (edge->T3 med ~66 ms — audio pipeline first fresh frame after `engine.wake()`), which is upstream of fresh-source availability. Run carried `cpu_main_pct ~80-108 %` (main-thread saturated) with only 1 startup dt spike, so resume maxima (edge->T3 162 / T3->T6 63) are load/`--usage` contention, not architecture. **No presentation-path fix warranted.** Capture-wake lane **audited -> attributed-not-reducible**: `wake()` no-ops on a warm resume (restarts only when stale), the analysis lane keeps up inline (`rejected_busy=0`, `completed==published`), so the ~66 ms is inherent OS audio-capture latency (WASAPI shared-mode block + stream latency) delivering the first *post-edge* frame, plus this run's `cpu_main ~80-108 %` contention. Not safely reducible without a user-facing `audio_block_size` latency/CPU tradeoff or re-opening first-frame-poison risk (forbidden); E1 already makes the window quiet-not-stale. Minor ~29 ms resume sync + unmeasured T6->T7 paint are load/optional-only. See attribution doc lead E2 + capture-wake audit.
 - [x] **Gen2 GC pre-freeze race (lead B follow-up) — physically validated (2026-09-04).** First expensive gen2 (~124 ms) could land just before the fixed 45 s freeze under realistic load. Fixed by deferring only the gen2 trigger during warmup (×10) and restoring active thresholds at freeze — contract-neutral (freeze pins the same set). Run evidence: warmup applied at start, `Froze 133802` at ~45 s with "restored active", and the **only** gen2 all run was **post-freeze** (10.85 ms) — no pre-freeze gen2 raced the freeze. Commit 258e0a23; tests/test_runtime_perf_policy_contracts.py.
 - [ ] **Pacer/UI/logging attribution only if the physical oracle still shows gaps.** Async writer lag is not automatically caller/presentation latency.
-- [ ] **Resource plateau.** Soak recreation/topology changes and track RSS/USS, VRAM, threads, handles, caches/workers and retained resources.
-- [ ] **Physical Bubble + extreme-tall Spectrum acceptance after remaining latency work.** Preserve R-69/R-76 authored response.
+- [ ] **[AWAITING NEW SOAK] Windows handle drift.** Owned-resource plateau is proven (moved to closed evidence above). The single residual is `handles_app` drifting ~+9/hour across the stable single-display window while every owned resource stays flat — bounded, not attributed. Source-first pass exonerated the psutil path (handles are cached on long-lived `Process` objects) and found the PDH GPU/VRAM rebuild cadence only loosely correlated (~0.68 handle/rebuild, 80 rebuilds); no owner was guessed and no lifetime architecture changed. Next soak discriminators (no new runtime cadence): the new `handles_main` split localizes main vs image-worker; a `--usage`-off run tests PDH/perflib self-attribution; existing `gpu_status=warming` samples give the rebuild timeline. No new soak expected today. See closure doc.
+- [ ] **Physical Bubble + extreme-tall Spectrum acceptance after remaining latency work.** Preserve R-69/R-76 authored response. (Soak ran Bubble healthily for hours with no delivery degradation; final verdict still requires eyes-on.)
 
 Never solve any of these by reducing logical cadence, adding per-mode clocks/QML timers/catch-up FIFOs/paint acknowledgements, increasing source age, or globally compressing Bubble/Spectrum authored response.
 
@@ -153,7 +155,7 @@ H/P0 proved architecture and removed known deterministic stalls; J still require
 - [ ] **CPU/GPU/QML pass.** Frame tails, overdraw/offscreen work, binding churn, hidden animations, unnecessary invalidation and duplicate work.
 - [ ] **Ownership/contention pass.** Remaining timers/pollers, worker/thread cardinality, locks/queues and duplicate event ownership. Prefer event-driven ownership and fewer owners over reduced authored rates.
 - [ ] **Allocation/lifetime pass.** Measure current allocation churn and GC/lifetime tails before touching `RuntimeGCPolicy`; preserve the proven stable-generation freeze contract unless new evidence requires change. The caller-dead pre-Quick `GCController` facade is cleanup residue, not runtime authority.
-- [ ] **Resource plateau.** Soak recreation/topology changes and prove non-accumulation across RSS/USS, VRAM, threads, handles, caches/workers and retained resources.
+- [x] **Resource plateau (owned resources).** Proven by the 2026-09-04 ~7h53m soak across RSS/USS/private commit/VRAM/threads/caches/workers/retained resources with clean topology recreation. Only the bounded Windows handle drift remains open under the delivery-quality tranche (AWAITING NEW SOAK). See `Docs/QtQuick_Migration/Resource_Plateau_Soak_Closure_2026-09-04.md`.
 - [ ] **Quality recheck.** Modest and representative-heavy runs must preserve cadence, freshness, authored amplitude/motion and visible fidelity.
 
 ## Final J acceptance obligations
