@@ -201,6 +201,37 @@ def test_save_with_lazy_modes_unbuilt_preserves_their_persisted_state(qt_app, se
         tab.deleteLater()
 
 
+def test_missing_container_fails_loudly_and_leaves_mode_unconstructed(
+    qt_app, settings_manager, monkeypatch
+):
+    # If a builder runs but does not create its settings container, the factory
+    # must raise a contract error (no placeholder body) and the host must not
+    # record the mode as constructed. The failure is not swallowed by
+    # ensure_visualizer_mode_body.
+    from ui.tabs.widgets_tab_media import ensure_visualizer_mode_body
+    import ui.tabs.media.oscilloscope_builder as osc_mod
+
+    tab = _make_tab(settings_manager, "bubble")
+    try:
+        # A builder that violates the container contract (creates nothing).
+        monkeypatch.setattr(osc_mod, "build_oscilloscope_ui", lambda _tab, _layout: None)
+
+        with pytest.raises(RuntimeError):
+            ensure_visualizer_mode_body(tab, "oscilloscope")
+
+        # Not cached as success, and no half-built container attribute.
+        assert not tab._vis_body_host.is_constructed("oscilloscope")
+        assert not hasattr(tab, _CONTAINER_ATTR["oscilloscope"])
+
+        # The host is not poisoned: a well-behaved mode still constructs.
+        monkeypatch.undo()
+        _select_mode(tab, "sine_wave")
+        assert tab._vis_body_host.is_constructed("sine_wave")
+        assert hasattr(tab, _CONTAINER_ATTR["sine_wave"])
+    finally:
+        tab.deleteLater()
+
+
 def test_settings_recreation_keeps_lazy_modes_unbuilt(qt_app, settings_manager, monkeypatch):
     # F: a fresh WidgetsTab (dialog recreation) with Spectrum active builds only
     # Spectrum; every lazy mode stays unbuilt until selected.
