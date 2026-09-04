@@ -508,21 +508,16 @@ def test_gmail_semantic_actions_require_active_interaction_and_owned_row() -> No
     assert model.request_open("oauth") is False
 
 
-def test_gmail_open_is_refused_during_context_menu_gesture_suppression() -> None:
-    """A phantom Gmail open on a context-menu click-through must be refused.
+def test_gmail_open_is_refused_during_action_menu_gesture_suppression() -> None:
+    """The retained Gmail action popup must not click through into a message row.
 
-    Regression bar for the context-menu click-through bug: a retained-menu item
-    tap is also recognised by the message row's TapHandler beneath it (Qt Quick
-    passive grabs), which fired a browser open in the same gesture that opened
-    Settings. The menu-action boundary now arms the shared pointer guard; this
-    proves request_open honours it. If either the guard check here or the arming
-    is removed, the phantom open reaches the runtime service again.
+    The popup can overlap another Gmail row. Qt Quick TapHandlers use passive
+    grabs, so the same release that activates/dismisses the popup can also reach
+    the covered row. The popup pointer boundary arms the shared monotonic guard
+    and request_open consumes it before browser dispatch.
     """
 
-    from rendering.runtime_input import (
-        clear_runtime_pointer_input_suppression,
-        suppress_runtime_pointer_input,
-    )
+    from rendering.runtime_input import clear_runtime_pointer_input_suppression
 
     clear_runtime_pointer_input_suppression()
     try:
@@ -537,9 +532,10 @@ def test_gmail_open_is_refused_during_context_menu_gesture_suppression() -> None
         assert model.request_open("oauth") is True
         assert service.opens == ["oauth"]
 
-        # A context-menu action arms the shared pointer guard. The phantom open
-        # on the same release must now be refused - no second service open.
-        suppress_runtime_pointer_input(700, reason="context_menu_action")
+        # The retained action-popup pointer boundary itself arms the same shared
+        # guard used by the global context menu. The phantom row open on that
+        # release is then refused - no second browser open.
+        RetainedGmailPresentation._arm_action_menu_pointer_guard()
         assert model.request_open("oauth") is False
         assert service.opens == ["oauth"]
 
@@ -822,6 +818,9 @@ def test_gmail_qml_is_presentation_only_and_keeps_popup_height_independent() -> 
     ):
         assert marker not in qml
     assert "onDoubleTapped: gmailRoot.refreshRequested()" in qml
+    assert "signal actionMenuPointerGesture()" in qml
+    assert "actionMenuPointerGesture()\n        dismissActionMenu()" in qml
+    assert "gmailRoot.actionMenuPointerGesture()" in qml
     assert "committedContentHeight: gmailModel.contentHeight" in qml
     # H9/R-67: Gmail is a whole-card uniform-transform family. The content-driven
     # term is already outer width and excludes the shell inset; Reusable Headers
