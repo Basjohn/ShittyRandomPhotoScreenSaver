@@ -428,6 +428,51 @@ def test_dirty_edge_triggers_one_shared_refresh_and_reason_is_counted() -> None:
     assert telemetry["refresh_sources"]["event"] >= 1
 
 
+def test_idle_activity_cannot_manufacture_refresh_only_real_events_do() -> None:
+    """Idle application time must not manufacture a media_refresh submission.
+
+    Soak evidence (2026-09-04, ``logs/evidence_chest/09_04_soak``): Media refresh
+    submissions stayed completely flat across ~7 h of idle single-display runtime
+    and resumed only on real later activity. This falsifies any hidden poll or
+    generic-activity path that could turn idle into a refresh, while proving a
+    real native dirty edge still triggers exactly one shared refresh. No timers
+    or cadence exist here beyond the single bounded reconcile watchdog.
+    """
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track(title="Live")})
+    consumer = _Consumer(tm)
+    service = _lease(consumer, factory)
+    assert service.start() is True
+    owner = service.shared_owner
+    assert owner is not None
+    controller = factory.controllers[0][1]
+
+    # Settle the one-time activation query so the runtime is quiescent.
+    tm.complete()
+    consumer.snapshots.clear()
+
+    # No native dirty edge has fired: event-sourced refreshes are zero and the
+    # work queue is empty.
+    assert owner.event_telemetry()["refresh_sources"].get("event", 0) == 0
+    assert len(tm.jobs) == 0
+
+    # Idle application activity (time passing, repeated telemetry reads) must not
+    # enqueue a refresh or arm any cadence beyond the single reconcile watchdog.
+    for _ in range(5):
+        owner.event_telemetry()
+        assert len(tm.jobs) == 0
+    assert len(tm.timers) == 1
+    assert tm.timers[0].interval == owner._RECONCILE_INTERVAL_MS
+    assert owner.event_telemetry()["refresh_sources"].get("event", 0) == 0
+
+    # A real native media event still triggers exactly one shared refresh.
+    controller.fire_dirty("playback")
+    assert len(tm.jobs) == 1
+    tm.complete()
+    assert owner.event_telemetry()["refresh_sources"]["event"] >= 1
+    assert [snapshot.info.title for snapshot in consumer.snapshots] == ["Live"]
+
+
 def test_event_storm_coalesces_to_one_inflight_and_one_pending() -> None:
     tm = _ThreadManager()
     factory = _ControllerFactory({"spotify": _track()})
