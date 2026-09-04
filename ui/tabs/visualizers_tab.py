@@ -2,10 +2,11 @@
 
 The tab rehosts the existing Visualizer Settings builders without acquiring any
 runtime or Media activation authority. SETUP owns family-level controls and mode
-admission. Stable Spectrum bar-appearance controls and shared rainbow controls live
-on the mode page outside retireable bodies; mode-specific bodies stay lazy under
-:class:`VisualizerModeBodyHost` and are constructed only when their visible mode
-pill is selected.
+admission. Stable Spectrum bar-appearance and Rainbow widgets are presented inside
+the selected mode's Custom controls. Their tab-owned references are evacuated before
+a retireable mode body is destroyed; mode-specific bodies stay lazy under
+:class:`VisualizerModeBodyHost` and are constructed only when their visible mode pill
+is selected.
 """
 from __future__ import annotations
 
@@ -52,6 +53,7 @@ from ui.tabs import shared_styles
 from ui.tabs.media.shared_appearance_controls import (
     build_shared_visualizer_appearance_controls,
 )
+from ui.tabs.media.visualizer_mode_binding import load_visualizer_rainbow_state
 from ui.tabs.visualizer_settings_context import (
     DEFAULT_VISUALIZER_MODE,
     VisualizerSettingsContextMixin,
@@ -67,6 +69,14 @@ from ui.tabs.widgets_tab_media import (
 from ui.tabs.shared_styles import NoWheelSlider, add_section_label, style_group_box
 
 logger = get_logger(__name__)
+
+_MODE_NORMAL_ATTR = {
+    "spectrum": "_spectrum_normal",
+    "oscilloscope": "_osc_normal",
+    "sine_wave": "_sine_normal",
+    "bubble": "_bubble_normal",
+    "devcurve": "_devcurve_normal",
+}
 
 
 class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
@@ -289,31 +299,36 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
-        # These controls historically appeared only with Spectrum. Keep their
-        # widgets permanently owned by the stable mode page so Spectrum retirement
-        # cannot destroy them, but do not expose the old shared-ownership mechanism
-        # as user-facing SETUP/UI.
-        self._base_appearance_group = QGroupBox("Bar Appearance")
-        style_group_box(self._base_appearance_group)
-        base_appearance_layout = QVBoxLayout(self._base_appearance_group)
-        base_appearance_layout.setContentsMargins(18, 18, 18, 18)
-        base_appearance_layout.setSpacing(4)
-        build_shared_visualizer_appearance_controls(self, base_appearance_layout)
-        layout.addWidget(self._base_appearance_group)
-
         # Detailed mode controls preserve the old Beat-Visualizer enable gate.
         self._vis_controls_container = QWidget()
         controls_layout = QVBoxLayout(self._vis_controls_container)
         controls_layout.setContentsMargins(0, 0, 0, 0)
         controls_layout.setSpacing(8)
 
-        self._build_rainbow_controls(controls_layout)
-
         self._mode_body_host_widget = QWidget()
         self._mode_body_layout = QVBoxLayout(self._mode_body_host_widget)
         self._mode_body_layout.setContentsMargins(0, 0, 0, 0)
         self._mode_body_layout.setSpacing(4)
         controls_layout.addWidget(self._mode_body_host_widget)
+
+        # These controls historically belong to Spectrum Custom. They are created
+        # once by the tab, then physically placed inside the selected mode's Custom
+        # normal-layout. Before body retirement they are evacuated back to the
+        # stable mode page so Qt destruction cannot take them with a retired body.
+        self._base_appearance_group = QGroupBox("Bar Appearance")
+        style_group_box(self._base_appearance_group)
+        base_appearance_layout = QVBoxLayout(self._base_appearance_group)
+        base_appearance_layout.setContentsMargins(18, 18, 18, 18)
+        base_appearance_layout.setSpacing(4)
+        build_shared_visualizer_appearance_controls(self, base_appearance_layout)
+        self._base_appearance_group.setVisible(False)
+        controls_layout.addWidget(self._base_appearance_group)
+
+        # Rainbow is likewise a Custom tweakable, not a mode-global strip. It is
+        # physically moved into the selected mode's Custom normal-layout and is
+        # evacuated before switching/retiring bodies.
+        self._build_rainbow_controls(controls_layout)
+
         layout.addWidget(self._vis_controls_container)
         layout.addStretch()
 
@@ -327,9 +342,10 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         return page
 
     def _build_rainbow_controls(self, parent_layout: QVBoxLayout) -> None:
-        self._rainbow_controls_container = QWidget()
+        self._rainbow_controls_container = QGroupBox("Rainbow")
+        style_group_box(self._rainbow_controls_container)
         bucket_layout = QVBoxLayout(self._rainbow_controls_container)
-        bucket_layout.setContentsMargins(0, 0, 0, 0)
+        bucket_layout.setContentsMargins(18, 18, 18, 18)
         bucket_layout.setSpacing(4)
         self._rainbow_per_mode: dict[str, tuple[bool, int]] = {}
 
@@ -347,7 +363,12 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         )
         self.rainbow_enabled.setChecked(False)
         self.rainbow_enabled.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.rainbow_enabled.stateChanged.connect(self._save_settings)
+        # This is a discrete Custom toggle, not slider chatter. Persist it
+        # immediately so closing Settings straight after clicking cannot lose the
+        # newly acknowledged runtime state.
+        self.rainbow_enabled.stateChanged.connect(
+            lambda _state: self._save_settings_now()
+        )
         self.rainbow_enabled.stateChanged.connect(
             lambda _state: self._update_rainbow_visibility()
         )
@@ -393,7 +414,52 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         bucket_layout.addWidget(self._rainbow_speed_container)
         self._rainbow_speed_container.setVisible(False)
 
+        self._rainbow_controls_container.setVisible(False)
         parent_layout.addWidget(self._rainbow_controls_container)
+
+    def _update_rainbow_visibility(self) -> None:
+        """Apply shared Rainbow visibility plus Spectrum's Custom accessory gate."""
+        super()._update_rainbow_visibility()
+        appearance = getattr(self, "_base_appearance_group", None)
+        if appearance is not None:
+            appearance.setVisible(
+                self._get_active_visualizer_mode() == "spectrum"
+                and self._active_visualizer_preset_is_custom()
+            )
+
+    def _park_custom_accessories(self) -> None:
+        """Keep stable Custom widgets alive outside any retireable mode body."""
+        mode_page = getattr(self, "_mode_page", None)
+        if mode_page is None:
+            return
+        for widget in (
+            getattr(self, "_base_appearance_group", None),
+            getattr(self, "_rainbow_controls_container", None),
+        ):
+            if widget is None:
+                continue
+            widget.hide()
+            parent = widget.parentWidget()
+            parent_layout = parent.layout() if parent is not None else None
+            if parent_layout is not None:
+                parent_layout.removeWidget(widget)
+            widget.setParent(mode_page)
+
+    def _place_custom_accessories(self, mode_id: str) -> None:
+        """Place stable Custom buckets inside the selected mode's normal controls."""
+        self._park_custom_accessories()
+        normal_attr = _MODE_NORMAL_ATTR.get(str(mode_id or "").strip().lower())
+        normal_widget = getattr(self, normal_attr, None) if normal_attr else None
+        normal_layout = normal_widget.layout() if normal_widget is not None else None
+        if normal_layout is None:
+            raise RuntimeError(
+                f"Visualizer mode {mode_id!r} has no Custom normal-layout for accessories"
+            )
+
+        if mode_id == "spectrum":
+            normal_layout.addWidget(self._base_appearance_group)
+        normal_layout.addWidget(self._rainbow_controls_container)
+        self._update_rainbow_visibility()
 
     def set_family_capability_available(self, available: bool) -> None:
         """Mirror external Widget-family capability without owning that state.
@@ -406,10 +472,10 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         available = bool(available)
         if not available:
             self._flush_pending_visualizer_save()
+            self._select_setup_page()
             host = getattr(self, "_vis_body_host", None)
             if host is not None:
                 host.retire_all()
-            self._select_setup_page()
         self.setEnabled(available)
 
     # ------------------------------------------------------------------
@@ -417,6 +483,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
     # ------------------------------------------------------------------
 
     def _select_setup_page(self, _checked: bool = False) -> None:
+        self._park_custom_accessories()
         self._setup_pill.setChecked(True)
         self._page_stack.setCurrentWidget(self._setup_page)
 
@@ -441,18 +508,21 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
 
             # Pills are the actual selection authority. The host records selection;
             # the shared context then handles visibility/scroll/rainbow on the same
-            # cached body without a second selector. Programmatic hydration is kept
-            # inside the load guard so it cannot schedule duplicate writes.
+            # cached body without a second selector. Park stable Custom accessories
+            # before construction so even a fail-loud builder error cannot strand
+            # them under the previously selected retireable body.
+            self._park_custom_accessories()
             host.select(target)
+            self._place_custom_accessories(target)
+            # The target body's preset slider now exists and has been hydrated from
+            # ``resolved``. Load that same resolved preset's per-mode Rainbow state
+            # before Custom-only accessory visibility is evaluated.
+            load_visualizer_rainbow_state(self, resolved)
             self._update_vis_mode_sections()
         finally:
             self._loading = previous_loading
 
-        # V6a's fill/border rows were user-visible only in Spectrum. Preserve that
-        # presentation contract while keeping their lifetime outside its retireable
-        # body. Other modes use their own authored appearance controls.
-        self._base_appearance_group.setVisible(target == "spectrum")
-
+        self._update_rainbow_visibility()
         self._page_stack.setCurrentWidget(self._mode_page)
         self._mode_pills[target].setChecked(True)
         # A mode change is a discrete authority change, not slider chatter: persist
@@ -545,9 +615,18 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
     def _retire_visualizer_mode_body(self, mode_id: str, body: QWidget) -> None:
         """Destroy one disabled mode body and clear stale QWidget wrappers.
 
-        Persisted state is untouched. Shared appearance controls cannot be
-        descendants here because V7 owns them permanently under SETUP.
+        Persisted state is untouched. Stable Custom accessories are evacuated
+        first if this is the body currently presenting them.
         """
+        for stable_widget in (
+            getattr(self, "_base_appearance_group", None),
+            getattr(self, "_rainbow_controls_container", None),
+        ):
+            if stable_widget is not None and (
+                stable_widget is body or body.isAncestorOf(stable_widget)
+            ):
+                self._park_custom_accessories()
+                break
         body.hide()
         self._mode_body_layout.removeWidget(body)
 
@@ -642,6 +721,10 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             )
         finally:
             self._writing_settings = False
+
+    def flush_pending_changes(self) -> None:
+        """Commit this tab's coalesced UI edits before a Settings durability boundary."""
+        self._flush_pending_visualizer_save()
 
     def _load_settings(self, *, construct_active_body: bool = False) -> None:
         widgets = self._settings.get("widgets", {})

@@ -313,8 +313,6 @@ def _devcurve_parameter_snapshot(widget: Any) -> dict[str, object]:
         "devcurve_foreground_specular_crest_bias": float(
             getattr(widget, "_devcurve_foreground_specular_crest_bias", 1.05)
         ),
-        "rainbow_enabled": bool(getattr(widget, "_rainbow_enabled", False)),
-        "rainbow_speed": float(getattr(widget, "_rainbow_speed", 0.5)),
     }
     for index, name in enumerate(_DEVCURVE_LAYERS):
         defaults = _DEVCURVE_LAYER_DEFAULTS[name]

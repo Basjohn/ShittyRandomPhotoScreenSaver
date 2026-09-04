@@ -1438,6 +1438,26 @@ class SettingsDialog(QDialog):
         except Exception:
             logger.debug("Failed to save dialog geometry on close", exc_info=True)
 
+        # First let already-built tabs commit any tab-local coalesced edits.
+        # Never use _get_tab_instance here: close must not construct a dormant
+        # Settings tab merely to flush it.  Visualizers uses this boundary for
+        # slider chatter (for example Rainbow Speed) that may still be inside
+        # its short UI coalescer when the user closes Settings.
+        for key in self._tab_keys:
+            tab = self.__dict__.get(f"{key}_tab")
+            if tab is None:
+                continue
+            flush_tab = getattr(tab, "flush_pending_changes", None)
+            if not callable(flush_tab):
+                continue
+            try:
+                flush_tab()
+            except Exception:
+                logger.exception(
+                    "[SETTINGS_PERSIST] Failed to flush built tab %s on close",
+                    key,
+                )
+
         # Settings completion is an explicit durability boundary.  Routine
         # control changes only enqueue persistence; one bounded close flush
         # prevents the standalone config process or a runtime rebuild from
@@ -1555,14 +1575,12 @@ class SettingsDialog(QDialog):
         try:
             self._settings.reset_to_defaults()
 
-            # Reload all tabs so the UI reflects the new canonical defaults
-            # immediately, avoiding a confusing mismatch between on-disk
-            # configuration and visible controls.
+            # Reload already-built tabs only. In particular, do not construct a
+            # dormant Visualizers tab merely because defaults were reset; if it
+            # already exists its explicit load_from_settings path returns it to
+            # SETUP while preserving the lazy-body contract.
             try:
-                for key in ("sources", "display", "transitions", "widgets"):
-                    tab = self._get_tab_instance(key)
-                    if tab and hasattr(tab, '_load_settings'):
-                        tab._load_settings()
+                self._reload_all_tab_settings()
             except Exception:
                 logger.debug("Failed to reload settings tabs after reset_to_defaults", exc_info=True)
 
@@ -1724,12 +1742,17 @@ class SettingsDialog(QDialog):
             )
 
     def _refresh_visualizer_import_state(self) -> None:
+        # V7 moved Visualizer preset presentation out of Widgets. Refresh the
+        # top-level owner only if it already exists; importing presets must not
+        # defeat lazy top-level admission by constructing a dormant tab.
         try:
-            tab = self._get_tab_instance('widgets')
-            if tab and hasattr(tab, '_load_settings'):
-                tab._load_settings()
+            tab = self.__dict__.get('visualizers_tab')
+            if tab is not None:
+                reload_settings = getattr(tab, 'load_from_settings', None)
+                if callable(reload_settings):
+                    reload_settings()
         except Exception:
-            logger.debug("Failed to reload widgets tab after visualizer import", exc_info=True)
+            logger.debug("Failed to reload Visualizers tab after visualizer import", exc_info=True)
 
         try:
             notice = getattr(self, "reset_notice_label", None)

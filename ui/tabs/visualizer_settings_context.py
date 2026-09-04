@@ -713,27 +713,11 @@ class VisualizerSettingsContextMixin:
         if prev_mode != mode:
             self.restore_scroll_position(mode)
 
-        # --- Per-mode rainbow sync ---
-        # Stash the outgoing mode's rainbow state, restore the incoming mode's.
-        cache = getattr(self, '_rainbow_per_mode', None)
-        if cache is not None and hasattr(self, 'rainbow_enabled') and hasattr(self, 'rainbow_speed_slider'):
-            if prev_mode and prev_mode != mode:
-                cache[prev_mode] = (
-                    self.rainbow_enabled.isChecked(),
-                    self.rainbow_speed_slider.value(),
-                )
-            if mode in cache:
-                enabled, speed = cache[mode]
-            else:
-                enabled, speed = False, 50
-            self.rainbow_enabled.blockSignals(True)
-            self.rainbow_speed_slider.blockSignals(True)
-            self.rainbow_enabled.setChecked(enabled)
-            self.rainbow_speed_slider.setValue(speed)
-            self.rainbow_speed_label.setText(f"{speed / 100.0:.2f}")
-            self.rainbow_enabled.blockSignals(False)
-            self.rainbow_speed_slider.blockSignals(False)
-            self._update_rainbow_visibility()
+        # Rainbow controls are stable presentation-owned widgets. V7 reloads
+        # their active-mode state from the same resolved config used to hydrate
+        # the selected lazy body; ordinary section visibility must never invent
+        # or restore a second cache authority here.
+        self._update_rainbow_visibility()
 
     def _update_rainbow_visibility(self) -> None:
         """Show/hide rainbow speed slider and apply rainbow text easter egg."""

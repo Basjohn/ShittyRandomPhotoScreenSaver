@@ -506,6 +506,9 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
 
     # --- Rainbow (per-mode keys fall back to the global key) ---------
     _mode_str = getattr(host, '_vis_mode_str', None) or ''
+    if not _mode_str:
+        controller = getattr(host, 'runtime_controller', None)
+        _mode_str = getattr(controller, 'mode_id', None) or ''
     _pm_re = f'{_mode_str}_rainbow_enabled' if _mode_str else ''
     _pm_rs = f'{_mode_str}_rainbow_speed' if _mode_str else ''
     if _pm_re and _pm_re in kwargs:

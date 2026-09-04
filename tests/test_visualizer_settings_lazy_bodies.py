@@ -105,31 +105,90 @@ def test_selecting_mode_pill_constructs_only_that_mode_once(
         tab.deleteLater()
 
 
-def test_base_appearance_is_contextual_but_never_a_mode_body_descendant(
+def test_custom_accessories_live_inside_custom_and_evacuate_before_retirement(
     qt_app, settings_manager, monkeypatch
 ):
     _install_counters(monkeypatch)
     tab = _make_tab(settings_manager, "spectrum")
     try:
-        # Stable appearance controls belong to the mode page presentation, not
-        # SETUP and never to a retireable Spectrum body.
+        # Stable controls start parked on the mode page: they are not SETUP UI and
+        # opening Settings still constructs no mode merely to own them.
         assert tab._base_appearance_group.isAncestorOf(tab._shared_vis_fill_row)
         assert not tab._setup_page.isAncestorOf(tab._shared_vis_fill_row)
 
         tab._select_mode_page("spectrum")
-        assert tab._base_appearance_group.isVisible()
         body = tab._vis_body_host.body("spectrum")
         assert body is not None
+        assert tab._spectrum_normal.isAncestorOf(tab._base_appearance_group)
+        assert tab._spectrum_normal.isAncestorOf(tab._rainbow_controls_container)
+
+        # The stored fixture is curated. Custom-only buckets are physically in the
+        # mode's normal/Custom section but are not presented until Custom is chosen.
+        assert tab._spectrum_preset_slider.preset_index() != tab._spectrum_preset_slider.custom_index()
+        assert tab._base_appearance_group.isHidden()
+        assert tab._rainbow_controls_container.isHidden()
+
+        old_loading = tab._loading
+        tab._loading = True
+        try:
+            tab._spectrum_preset_slider.set_preset_index(
+                tab._spectrum_preset_slider.custom_index()
+            )
+        finally:
+            tab._loading = old_loading
+        tab._update_rainbow_visibility()
+        assert not tab._base_appearance_group.isHidden()
+        assert not tab._rainbow_controls_container.isHidden()
+
+        # Switching modes moves Rainbow into that mode's Custom section and parks
+        # the Spectrum-only appearance bucket outside the cached Spectrum body.
+        tab._select_mode_page("bubble")
+        assert tab._bubble_normal.isAncestorOf(tab._rainbow_controls_container)
+        assert not body.isAncestorOf(tab._base_appearance_group)
         assert not body.isAncestorOf(tab._shared_vis_fill_row)
-        assert not body.isAncestorOf(tab._shared_vis_border_row)
-        assert not body.isAncestorOf(tab._shared_vis_border_opacity_row)
-        assert tab._shared_vis_fill_row.parent() is not body
         assert not hasattr(tab, "_shared_vis_appearance_holder")
 
-        # The old V6a presentation exposed these rows only with Spectrum; other
-        # mode builders have their own authored appearance controls.
+        tab._select_setup_page()
+        assert not body.isAncestorOf(tab._rainbow_controls_container)
+        assert not body.isAncestorOf(tab._base_appearance_group)
+    finally:
+        tab.deleteLater()
+
+
+def test_rainbow_custom_toggle_persists_immediately_and_speed_is_custom_only(
+    qt_app, settings_manager, monkeypatch
+):
+    _install_counters(monkeypatch)
+    tab = _make_tab(settings_manager, "bubble")
+    try:
         tab._select_mode_page("bubble")
-        assert not tab._base_appearance_group.isVisible()
+        slider = tab._bubble_preset_slider
+        old_loading = tab._loading
+        tab._loading = True
+        try:
+            slider.set_preset_index(slider.custom_index())
+        finally:
+            tab._loading = old_loading
+        tab._update_rainbow_visibility()
+
+        assert tab._bubble_normal.isAncestorOf(tab._rainbow_controls_container)
+        assert not tab._rainbow_controls_container.isHidden()
+        assert tab._rainbow_speed_container.isHidden()
+
+        tab.rainbow_enabled.setChecked(True)
+        persisted = settings_manager.get("widgets", {})["spotify_visualizer"]
+        assert persisted["bubble_rainbow_enabled"] is True
+        assert not tab._rainbow_speed_container.isHidden()
+
+        old_loading = tab._loading
+        tab._loading = True
+        try:
+            slider.set_preset_index(0)
+        finally:
+            tab._loading = old_loading
+        tab._update_rainbow_visibility()
+        assert tab._rainbow_controls_container.isHidden()
+        assert tab._rainbow_speed_container.isHidden()
     finally:
         tab.deleteLater()
 

@@ -345,9 +345,12 @@ def _capture_spectrum(
             getattr(widget, "_spectrum_ghosting_enabled", True)
         ),
         ghost_decay=float(getattr(widget, "_spectrum_ghost_decay", 0.4)),
+        # Rainbow is presentation-owned.  The logical host intentionally does
+        # not receive renderer styling, so drive Spectrum's existing animation
+        # clock from the presentation snapshot already captured in ``extra``.
         animation_enabled=bool(
-            getattr(widget, "_rainbow_enabled", False)
-            or getattr(widget, "_rainbow_per_bar", False)
+            extra.get("rainbow_enabled", False)
+            or extra.get("rainbow_per_bar", False)
         ),
     )
     if resolved is None:
@@ -735,6 +738,18 @@ def _capture_devcurve(
             resolved.logical_timestamp,
             resolved.playing,
         )
+    # DevCurve's solver parameters are authored-logical, but rainbow is a pure
+    # presentation style owned by VisualizerPresentationState.  Do not read it
+    # from the logical tick host (which intentionally never receives renderer
+    # styling); merge the presentation-owned values only at immutable-frame
+    # capture, matching the other Quick renderers' ownership boundary.
+    renderer_parameters = dict(resolved.parameters)
+    renderer_parameters["rainbow_enabled"] = bool(
+        extra.get("rainbow_enabled", False)
+    )
+    renderer_parameters["rainbow_speed"] = float(
+        extra.get("rainbow_speed", 0.5) or 0.5
+    )
     return (
         DevCurveFrame(
             curves=resolved.curves,
@@ -742,7 +757,7 @@ def _capture_devcurve(
             draw_order=resolved.draw_order,
             foreground_layer_id=resolved.foreground_layer_id,
             specular_slots=resolved.specular_slots,
-            parameters=resolved.parameters,
+            parameters=_render_parameters(renderer_parameters),
         ),
         extra,
     )

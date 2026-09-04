@@ -176,6 +176,15 @@ class QuickDisplayVisualizerOwner:
             apply_presentation_vis_mode_kwargs(
                 controller.presentation_state, presentation_kwargs
             )
+        if is_viz_diagnostics_enabled():
+            presentation_state = controller.presentation_state
+            logger.debug(
+                "[VIS_RAINBOW] stage=CONFIG reason=%s mode=%s enabled=%s speed=%.3f",
+                reason,
+                controller.mode_id,
+                bool(getattr(presentation_state, "_rainbow_enabled", False)),
+                float(getattr(presentation_state, "_rainbow_speed", 0.5) or 0.5),
+            )
         controller.enabled = True
         controller.playing = bool(playing)
         if thread_manager is not None:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from core.settings.visualizer_mode_registry import (
@@ -11,6 +13,8 @@ from rendering.quick.visualizer.implementations.devcurve import (
     QuickDevCurveRenderer,
     compute_quick_devcurve_layout,
 )
+from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+from widgets.spotify_visualizer.logical_frame_capture import capture_visualizer_logical_frame
 from widgets.spotify_visualizer.devcurve_frame_runtime import (
     DevCurveFrameRuntime,
 )
@@ -113,6 +117,46 @@ def _advance(
         layer_shape_nodes=_nodes(),
         parameters=_parameters() if parameters is None else parameters,
     )
+
+
+def test_devcurve_frame_capture_uses_presentation_owned_rainbow_state() -> None:
+    controller = VisualizerRuntimeController(
+        runtime_generation=2,
+        initial_mode="devcurve",
+    )
+    runtime = DevCurveFrameRuntime()
+    controller.resolve_logical_mode_state("devcurve", lambda: runtime)
+    assert _advance(
+        runtime,
+        now_ts=5.0,
+        parameters=_parameters(),
+    ) is not None
+
+    apply_presentation_vis_mode_kwargs(
+        controller.presentation_state,
+        {"devcurve_rainbow_enabled": True, "devcurve_rainbow_speed": 0.8},
+    )
+    widget = SimpleNamespace(
+        _vis_mode_str="devcurve",
+        runtime_controller=controller,
+        presentation_config_host=controller.presentation_state,
+        _engine=None,
+        _runtime_generation=2,
+        _spotify_playing=True,
+        _has_pushed_first_frame=True,
+        _display_bars_source_generation=5,
+        _display_bars_source_activation=7,
+    )
+
+    frame = capture_visualizer_logical_frame(
+        widget,
+        now_ts=5.1,
+        changed=True,
+        mode_reveal_ready=True,
+    )
+    assert frame is not None
+    assert frame.mode_state.parameters["rainbow_enabled"] is True
+    assert frame.mode_state.parameters["rainbow_speed"] == pytest.approx(0.8)
 
 
 def test_devcurve_runtime_freezes_layers_tuning_and_source_identity() -> None:
