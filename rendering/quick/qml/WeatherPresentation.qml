@@ -15,6 +15,10 @@ OverlayWidget {
     // every ordinary-widget family.
     readonly property real legacyHorizontalInset: 10.0
     readonly property real legacyTextInset: 6.0
+    // The centred ready column otherwise fills the card content box exactly, so
+    // the top row hugs the frame and bottom-row descenders escape the lower
+    // border. Reserve a small symmetric top/bottom breathing margin.
+    readonly property real legacyVerticalInset: 8.0
 
     // Content-driven outer size (H option A). Width honours the historical
     // ordinary-card minimum footprint (BaseOverlayWidget.DEFAULT_CARD_MIN_WIDTH =
