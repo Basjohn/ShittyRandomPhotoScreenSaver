@@ -20,11 +20,12 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
   bump/detail controls, source-fenced immutable capture, lazy Settings and event-only inactive GPU retirement.
   Real Quick captures inspected and relevant automatic gates passed; physical acceptance remains separate.
   Detailed evidence: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
-- [ ] **Next after Sphere acceptance — Bubble aspect/reactivity:** read Bubble/optimization work in
+- [~] **Active — Bubble aspect/reactivity and presentation cost:** read Bubble/optimization work in
   `Current_Plan.md`; trace why wider extents suppress response and narrow extents amplify size/response.
   Document the owning calculation before an obvious fix; preserve canonical square/rectangular behavior,
   consume-once events and the existing cadence. Start this investigation only after Sphere visuals and
-  implementation earn retention (operator sequencing, 2026-09-05).
+  implementation earn retention (operator sequencing, 2026-09-05). Sphere checkpoint `66be7344` satisfies
+  that prerequisite. Live technical checklist: `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md`.
 - [ ] **FW4 — Directional Pixel Accretion:** create a decomposition, then implement a deterministic instanced
   directional translation experiment with source underlay and exact endpoints.
 - [ ] **FW5 — Glass Shatter / Exploding Tiles:** separate decompositions and isolated lazy implementations after
