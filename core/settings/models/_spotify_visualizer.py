@@ -157,6 +157,7 @@ _SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "spectrum_visual_smoothing_enabled": bool,
     "spectrum_visual_smoothing": float,
     "spectrum_unique_colors": bool,
+    "spectrum_rainbow_fill": bool,
     "spectrum_rainbow_border": bool,
     "spectrum_border_radius": float,
     "spectrum_link_fill_border": bool,
@@ -297,6 +298,7 @@ _CORE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
 _SPECTRUM_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
     "spectrum_visual_smoothing_enabled": (True, bool),
     "spectrum_visual_smoothing": (0.5, float),
+    "spectrum_rainbow_fill": (True, bool),
     "spectrum_rainbow_border": (False, bool),
     "spectrum_border_radius": (0.0, float),
     "spectrum_link_fill_border": (False, bool),
@@ -1147,6 +1149,7 @@ class SpotifyVisualizerSettings:
     spectrum_visual_smoothing_enabled: bool = True
     spectrum_visual_smoothing: float = 0.5
     spectrum_unique_colors: bool = True
+    spectrum_rainbow_fill: bool = True
     spectrum_rainbow_border: bool = False
     spectrum_border_radius: float = 0.0
     spectrum_link_fill_border: bool = False

@@ -33,6 +33,7 @@ uniform float u_spectrum_glow_intensity;
 uniform vec4 u_spectrum_glow_color;
 uniform float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
 uniform int u_rainbow_per_bar;      // 1 = unique colour per bar, 0 = single shifting colour
+uniform int u_rainbow_fill;         // 1 = bar fill participates, 0 = preserve configured fill
 uniform int u_rainbow_border;       // 1 = borders participate in rainbow, 0 = borders keep base colour
 uniform float u_bars_left;
 uniform float u_bar_width_px;
@@ -399,8 +400,13 @@ void main() {
         if (!sp_is_border) {
             sp_color = blend_spectrum_rim_glow(sp_color, rim_alpha);
         }
-        // Border pixels participate in rainbow only when u_rainbow_border is set.
-        bool sp_apply_rainbow = !sp_is_border || (u_rainbow_border == 1);
+        // Fill and border participation are independent.  The ghost above is
+        // deliberately pre-rainbowed from the border colour when per-bar colour
+        // is enabled, so disabling fill rainbow can preserve black Organs while
+        // retaining its rainbow ghost.
+        bool sp_apply_rainbow = sp_is_border
+            ? (u_rainbow_border == 1)
+            : (u_rainbow_fill == 1);
         fragColor = sp_apply_rainbow ? apply_spectrum_rainbow(sp_color, bar_index) : sp_color;
         return;
     }
@@ -582,7 +588,9 @@ void main() {
         out_color = blend_spectrum_rim_glow(out_color, seg_rim_alpha);
     }
 
-    // Border pixels participate in rainbow only when u_rainbow_border is set.
-    bool seg_apply_rainbow = !seg_is_border || (u_rainbow_border == 1);
+    // Same independent fill/border participation contract as solid bars.
+    bool seg_apply_rainbow = seg_is_border
+        ? (u_rainbow_border == 1)
+        : (u_rainbow_fill == 1);
     fragColor = seg_apply_rainbow ? apply_spectrum_rainbow(out_color, bar_index) : out_color;
 }

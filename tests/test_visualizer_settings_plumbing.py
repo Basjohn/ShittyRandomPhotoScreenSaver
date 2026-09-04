@@ -52,6 +52,19 @@ class TestCardHeight:
         from widgets.spotify_visualizer.card_height import DEFAULT_GROWTH
         assert DEFAULT_GROWTH.get("bubble", 0) >= 2.5
 
+def test_spectrum_rainbow_fill_setting_is_plumbed():
+    from core.settings.models._spotify_visualizer import SpotifyVisualizerSettings
+
+    model = SpotifyVisualizerSettings(spectrum_rainbow_fill=False)
+    assert model.spectrum_rainbow_fill is False
+
+    from widgets.spotify_visualizer.config_applier import _populate_shared_visualizer_extras
+    host = type("Host", (), {"_spectrum_rainbow_fill": False})()
+    extra = {}
+    _populate_shared_visualizer_extras(extra, host)
+    assert extra["spectrum_rainbow_fill"] is False
+
+
 class TestRainbowGreyscaleFix:
     """Regression: rainbow hue shift invisible on white/grey because saturation=0."""
 
@@ -2308,6 +2321,7 @@ class TestSpectrumSettingsBinding:
                 self.spectrum_visual_smoothing = _Slider()
                 self.spectrum_visual_smoothing_label = _Label()
                 self.spectrum_rainbow_per_bar = _Check()
+                self.spectrum_rainbow_fill = _Check()
                 self.spectrum_rainbow_border = _Check()
                 self.spectrum_wave_amplitude = _Slider()
                 self.spectrum_wave_amplitude_label = _Label()
@@ -2349,6 +2363,7 @@ class TestSpectrumSettingsBinding:
                 "spectrum_visual_smoothing_enabled": False,
                 "spectrum_visual_smoothing": 0.72,
                 "spectrum_unique_colors": True,
+                "spectrum_rainbow_fill": False,
                 "spectrum_rainbow_border": True,
                 "spectrum_lane_strengths_mirrored": {"Mid": 0.52, "Vocal": 0.67, "Low-Mid": 0.72, "Bass": 0.88},
                 "spectrum_lane_strengths_linear": {"Bass": 0.63, "Low-Mid": 0.54, "Vocal": 0.46, "Hi-Mid": 0.71, "Treble": 0.93},
@@ -2378,6 +2393,7 @@ class TestSpectrumSettingsBinding:
         assert tab.spectrum_visual_smoothing.value == 72
         assert tab.spectrum_visual_smoothing_label.text == "72%"
         assert tab.spectrum_rainbow_per_bar.checked is True
+        assert tab.spectrum_rainbow_fill.checked is False
         assert tab.spectrum_rainbow_border.checked is True
         assert tab.spectrum_wave_amplitude.value == 55
         assert tab.spectrum_profile_floor.value == 17
@@ -2443,6 +2459,7 @@ class TestSpectrumSettingsBinding:
             spectrum_visual_smoothing_enabled = _Check(False)
             spectrum_visual_smoothing = _Slider(64)
             spectrum_rainbow_per_bar = _Check(False)
+            spectrum_rainbow_fill = _Check(False)
             spectrum_rainbow_border = _Check(True)
             spectrum_border_radius = _Slider(6)
             spectrum_glow_enabled = _Check(True)
@@ -2464,6 +2481,7 @@ class TestSpectrumSettingsBinding:
         assert payload["spectrum_visual_smoothing_enabled"] is False
         assert payload["spectrum_visual_smoothing"] == pytest.approx(0.64)
         assert payload["spectrum_unique_colors"] is False
+        assert payload["spectrum_rainbow_fill"] is False
         assert payload["spectrum_rainbow_border"] is True
         assert payload["spectrum_border_radius"] == pytest.approx(6.0)
         assert payload["spectrum_glow_enabled"] is True

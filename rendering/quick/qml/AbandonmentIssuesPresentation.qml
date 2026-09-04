@@ -18,6 +18,11 @@ OverlayWidget {
         Math.min(width / authoredWidth, height / authoredHeight)
     )
 
+    // Rotation fades only data that actually changes. Archive chrome, shelves,
+    // separators, labels (including LAST VISIT), and artwork framing remain stable;
+    // artwork owns its independent readiness-gated crossfade.
+    property real dynamicContentOpacity: 1.0
+
     // Content-driven outer size (H option A): this card is a self-contained
     // authored canvas, so its preferred content size is the authored dimension
     // directly (no shell inset - it draws its own frame). Size only; Python owns
@@ -158,30 +163,28 @@ OverlayWidget {
             SequentialAnimation {
                 id: archiveTransition
 
-                // Drive continuous frames while the content fade runs, event-driven,
-                // so the threaded scene renders the fade instead of flashing.
+                // Drive continuous frames while only changing values fade. The
+                // archive shell itself never disappears during a game rotation.
                 onRunningChanged: {
                     if (typeof widgetFrameDemand !== 'undefined' && widgetFrameDemand)
                         widgetFrameDemand.setAnimationActive(archiveTransition, running)
                 }
 
                 NumberAnimation {
-                    target: archiveContent
-                    property: "opacity"
-                    from: 1.0
+                    target: abandonmentRoot
+                    property: "dynamicContentOpacity"
                     to: 0.0
-                    duration: 130
+                    duration: 160
                     easing.type: Easing.InOutQuad
                 }
                 ScriptAction {
                     script: abandonmentRoot.abandonmentModel.commitPendingPresentation()
                 }
                 NumberAnimation {
-                    target: archiveContent
-                    property: "opacity"
-                    from: 0.0
+                    target: abandonmentRoot
+                    property: "dynamicContentOpacity"
                     to: 1.0
-                    duration: 170
+                    duration: 240
                     easing.type: Easing.InOutQuad
                 }
             }
@@ -336,11 +339,10 @@ OverlayWidget {
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
                             cache: true
-                            // The archive transition commits the new model at
-                            // parent opacity zero. The shared primitive now loads
-                            // replacement art without first fading out the old
-                            // texture, so skip only the redundant hidden fade-in.
-                            fadeInDuration: archiveContent.opacity <= 0.001 ? 0 : 340
+                            // Artwork remains independent from the text/value
+                            // rotation fade: keep the accepted texture visible until
+                            // the replacement is Ready, then crossfade normally.
+                            fadeInDuration: 340
                             layer.enabled: true
                             layer.effect: MultiEffect {
                                 maskEnabled: true
@@ -375,6 +377,7 @@ OverlayWidget {
                     width: normalContent.textWidth
                     height: 46.0
                     text: abandonmentRoot.abandonmentModel.title
+                    opacity: abandonmentRoot.dynamicContentOpacity
                     color: abandonmentRoot.abandonmentModel.textColor
                     font.family: abandonmentRoot.abandonmentModel.fontFamily
                     font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 1.45
@@ -396,6 +399,7 @@ OverlayWidget {
                     width: normalContent.textWidth
                     height: 34.0
                     text: abandonmentRoot.abandonmentModel.subtitle
+                    opacity: abandonmentRoot.dynamicContentOpacity
                     color: Qt.rgba(
                         abandonmentRoot.abandonmentModel.textColor.r,
                         abandonmentRoot.abandonmentModel.textColor.g,
@@ -468,6 +472,7 @@ OverlayWidget {
                         width: parent.width * 0.56 - 7.0
                         height: parent.height
                         text: abandonmentRoot.abandonmentModel.metricValue
+                        opacity: abandonmentRoot.dynamicContentOpacity
                         color: abandonmentRoot.abandonmentModel.textColor
                         font.family: abandonmentRoot.abandonmentModel.fontFamily
                         font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 0.95
@@ -557,6 +562,7 @@ OverlayWidget {
                             width: (parent.width - 13.0) * 0.45
                             height: parent.height
                             text: fieldValue.toUpperCase()
+                            opacity: abandonmentRoot.dynamicContentOpacity
                             color: abandonmentRoot.abandonmentModel.textColor
                             font.family: abandonmentRoot.abandonmentModel.fontFamily
                             font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 0.68
