@@ -446,7 +446,12 @@ class QuickDisplayVisualizerOwner:
         self._controller.commit_presentation_metrics(
             self._resolve_current_presentation()
         )
-        self._committed_layout_extent = None
+        # Keep the persisted extent as a one-shot recreation hydration fence
+        # until the first retained presentation is actually committed.  A
+        # same-process replacement can otherwise briefly republish canonical
+        # metrics between construction and first presentation, which leaves
+        # viewport-sensitive Bubble presentation scaling wrong until a cold
+        # restart.  This is state-only and adds no cadence/polling owner.
 
     def _activation_scene_fade(self) -> float:
         """Return the authored 0 -> 1 first-appearance scene fade progress.
@@ -493,11 +498,16 @@ class QuickDisplayVisualizerOwner:
         if dpr <= 0.0:
             dpr = 1.0
         committed_rect = self._committed_layout_rect
-        viewport_extent = (
-            self._committed_layout_extent
-            if self._committed_layout_extent is not None
-            else self._controller.presentation_viewport_extent
-        )
+        # A live CUSTOM working override remains the strongest temporary
+        # authority.  Otherwise, a freshly rehydrated persisted extent wins
+        # only until the first retained presentation consumes it; after that
+        # the controller's committed extent is authoritative as before.
+        if self._controller.has_custom_viewport_override:
+            viewport_extent = self._controller.presentation_viewport_extent
+        elif self._committed_layout_extent is not None:
+            viewport_extent = self._committed_layout_extent
+        else:
+            viewport_extent = self._controller.presentation_viewport_extent
         if committed_rect is None:
             outer_origin = self._authored_outer_origin
             uniform_scale = 1.0
@@ -530,6 +540,10 @@ class QuickDisplayVisualizerOwner:
             active=True,
         )
         self._controller.commit_presentation_metrics(presentation)
+        # The retained scene has now consumed one coherent presentation.  Drop
+        # the one-shot persisted-layout hydration fence so later live CUSTOM
+        # edits / transfers continue to follow the controller normally.
+        self._committed_layout_extent = None
 
     def sync_present(self) -> bool:
         if self._retired or self._sync is None:

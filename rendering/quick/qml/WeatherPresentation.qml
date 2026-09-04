@@ -37,6 +37,7 @@ OverlayWidget {
     preferredContentHeight: Math.max(
         60.0, readyColumn.childrenRect.height
     ) + weatherRoot.shellInset
+        + 2.0 * weatherRoot.legacyVerticalInset
 
     TapHandler {
         enabled: weatherRoot.weatherModel.viewState !== "missing"

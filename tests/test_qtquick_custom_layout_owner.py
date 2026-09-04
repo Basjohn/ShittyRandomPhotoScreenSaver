@@ -424,8 +424,20 @@ def test_visualizer_custom_transfer_retargets_same_owner_publication(qt_app) -> 
             local_rect=(120.0, 80.0, 630.0, 280.0),
             viewport_extent=(630.0, 280.0),
         )
+        # Recreation regression: if an intermediate construction publication
+        # temporarily commits canonical metrics, the persisted CUSTOM extent must
+        # still hydrate the first retained presentation. A cold app restart was
+        # masking this by rebuilding directly from persisted truth.
+        owner.controller.commit_presentation_metrics(
+            resolve_visualizer_presentation(
+                policy=owner.controller.presentation_policy,
+                display_size=(1920.0, 1080.0),
+                viewport_extent=(420.0, 280.0),
+            )
+        )
         owner.bind(engine_generation=3, activation_id=5)
         first = owner._resolve_current_presentation()
+        assert first.viewport_extent == (630.0, 280.0)
         owner._apply_resolved_presentation(first)
         admission = object()
         middle_admission = object()

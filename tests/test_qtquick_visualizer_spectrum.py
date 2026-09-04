@@ -407,3 +407,34 @@ def test_quick_spectrum_registry_is_static_and_lazy() -> None:
     assert devcurve.has_resources is False
 
 
+
+
+def test_spectrum_shader_separates_fill_border_and_ghost_rainbow_participation() -> None:
+    from widgets.spotify_visualizer.shaders import load_fragment_shader
+
+    source = load_fragment_shader("spectrum")
+    assert source is not None
+    assert "uniform int u_rainbow_fill" in source
+    assert "? (u_rainbow_border == 1)" in source
+    assert ": (u_rainbow_fill == 1)" in source
+    # Ghost keeps the explicit per-bar rainbow path even when fill participation
+    # is disabled, which is the Preset 1 Organs contract.
+    assert "ghost_base = apply_spectrum_rainbow(ghost_base, bar_index)" in source
+    assert "ghost = apply_spectrum_rainbow(ghost, bar_index)" in source
+
+
+def test_organs_preset_keeps_black_fill_out_of_rainbow_only() -> None:
+    import json
+    from pathlib import Path
+
+    preset = json.loads(
+        (Path(__file__).resolve().parents[1]
+         / "presets" / "visualizer_modes" / "spectrum" / "preset_1_organs.json")
+        .read_text(encoding="utf-8")
+    )
+    values = preset["snapshot"]["widgets"]["spotify_visualizer"]
+    assert values["spectrum_rainbow_enabled"] is True
+    assert values["spectrum_unique_colors"] is True
+    assert values["spectrum_rainbow_fill"] is False
+    assert values["spectrum_rainbow_border"] is False
+    assert values["spectrum_ghosting_enabled"] is True

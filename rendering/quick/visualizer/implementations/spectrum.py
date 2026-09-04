@@ -270,6 +270,12 @@ class QuickSpectrumRenderer:
             1 if rainbow_per_bar else 0,
         )
         gl.glUniform1i(
+            uniforms["u_rainbow_fill"],
+            1
+            if bool(parameter(parameters, "spectrum_rainbow_fill", True))
+            else 0,
+        )
+        gl.glUniform1i(
             uniforms["u_rainbow_border"],
             1
             if bool(
@@ -331,6 +337,7 @@ class QuickSpectrumRenderer:
                 "u_spectrum_glow_color",
                 "u_rainbow_hue_offset",
                 "u_rainbow_per_bar",
+                "u_rainbow_fill",
                 "u_rainbow_border",
                 "u_bars_left",
                 "u_bar_width_px",

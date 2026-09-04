@@ -150,6 +150,10 @@ def load_spectrum_mode_settings(
         tab.spectrum_rainbow_per_bar.setChecked(
             bool(config.get("spectrum_unique_colors", config.get("spectrum_rainbow_per_bar", False)))
         )
+    if hasattr(tab, "spectrum_rainbow_fill"):
+        tab.spectrum_rainbow_fill.setChecked(
+            bool(config.get("spectrum_rainbow_fill", True))
+        )
     if hasattr(tab, "spectrum_rainbow_border"):
         tab.spectrum_rainbow_border.setChecked(
             bool(config.get("spectrum_rainbow_border", False))
@@ -267,6 +271,9 @@ def collect_spectrum_mode_settings(tab) -> dict[str, Any]:
         ) / 100.0,
         "spectrum_unique_colors": (
             tab.spectrum_rainbow_per_bar.isChecked() if hasattr(tab, "spectrum_rainbow_per_bar") else False
+        ),
+        "spectrum_rainbow_fill": (
+            tab.spectrum_rainbow_fill.isChecked() if hasattr(tab, "spectrum_rainbow_fill") else True
         ),
         "spectrum_rainbow_border": (
             tab.spectrum_rainbow_border.isChecked() if hasattr(tab, "spectrum_rainbow_border") else False

@@ -432,6 +432,8 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         host._rainbow_per_bar = bool(kwargs['spectrum_unique_colors'])
     elif 'spectrum_rainbow_per_bar' in kwargs:
         host._rainbow_per_bar = bool(kwargs['spectrum_rainbow_per_bar'])
+    if 'spectrum_rainbow_fill' in kwargs:
+        host._spectrum_rainbow_fill = bool(kwargs['spectrum_rainbow_fill'])
     if 'spectrum_rainbow_border' in kwargs:
         host._spectrum_rainbow_border = bool(kwargs['spectrum_rainbow_border'])
     if 'spectrum_border_radius' in kwargs:
@@ -565,6 +567,7 @@ def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> No
     extra['rainbow_enabled'] = getattr(pres, '_rainbow_enabled', False)
     extra['rainbow_speed'] = getattr(pres, '_rainbow_speed', 0.5)
     extra['rainbow_per_bar'] = getattr(pres, '_rainbow_per_bar', False)
+    extra['spectrum_rainbow_fill'] = getattr(pres, '_spectrum_rainbow_fill', True)
     extra['spectrum_rainbow_border'] = getattr(pres, '_spectrum_rainbow_border', False)
     extra['spectrum_glow_enabled'] = getattr(pres, '_spectrum_glow_enabled', False)
     extra['spectrum_glow_intensity'] = getattr(pres, '_spectrum_glow_intensity', 0.55)

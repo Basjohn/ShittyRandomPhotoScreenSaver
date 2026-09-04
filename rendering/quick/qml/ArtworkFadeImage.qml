@@ -199,6 +199,10 @@ Item {
         fillMode: fadeImage.fillMode
         asynchronous: fadeImage.asynchronous
         cache: fadeImage.cache
+        // The inactive buffer is always the incoming texture. Keep it above the
+        // active texture so A->B and B->A both visibly fade instead of every
+        // other replacement animating underneath an opaque sibling.
+        z: fadeImage._activeIndex === 0 ? 0 : 1
         opacity: 0.0
 
         onStatusChanged: {
@@ -214,6 +218,9 @@ Item {
         fillMode: fadeImage.fillMode
         asynchronous: fadeImage.asynchronous
         cache: fadeImage.cache
+        // Inverse of imageA: whichever sibling is inactive/incoming is the top
+        // layer for the readiness-gated fade-in.
+        z: fadeImage._activeIndex === 0 ? 1 : 0
         opacity: 0.0
 
         onStatusChanged: {

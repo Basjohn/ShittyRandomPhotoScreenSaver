@@ -80,6 +80,9 @@ Item {
         id: currentColumn
         width: parent.width
         spacing: 7.0
+        // Incoming metadata must paint above the outgoing snapshot so its fade-in
+        // is visible immediately instead of being hidden under an opaque sibling.
+        z: 1
 
         ShadowedText {
             objectName: "mediaTitle"
@@ -151,6 +154,7 @@ Item {
         visible: metadataFade._outgoingVisible
         width: parent.width
         spacing: 7.0
+        z: 0
 
         ShadowedText {
             width: outgoingColumn.width

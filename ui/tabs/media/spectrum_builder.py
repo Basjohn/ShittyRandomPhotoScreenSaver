@@ -404,6 +404,24 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     rainbow_row.addWidget(tab.spectrum_rainbow_per_bar)
     rainbow_row.addStretch()
 
+    # Rainbow Fill Participation. Defaults on to preserve the current grayscale
+    # rainbow fix; individual presets (Organs) can deliberately keep authored
+    # black/neutral fills while their rainbow ghost remains active.
+    rb_fill_row = _aligned_row(render_bucket, "")
+    tab.spectrum_rainbow_fill = QCheckBox("Rainbow Fill")
+    tab.spectrum_rainbow_fill.setProperty("circleIndicator", True)
+    tab.spectrum_rainbow_fill.setChecked(
+        tab._default_bool('spotify_visualizer', 'spectrum_rainbow_fill', True)
+    )
+    tab.spectrum_rainbow_fill.setToolTip(
+        "When rainbow/unique colours are active: bar fill participates in the "
+        "colour shift. Off = keep the configured fill colour while rainbow ghost "
+        "and optional rainbow borders remain independent."
+    )
+    bind_setting_signal(tab, tab.spectrum_rainbow_fill.stateChanged)
+    rb_fill_row.addWidget(tab.spectrum_rainbow_fill)
+    rb_fill_row.addStretch()
+
     # Rainbow Border Participation
     rb_border_row = _aligned_row(render_bucket, "")
     tab.spectrum_rainbow_border = QCheckBox("Rainbow Borders")
