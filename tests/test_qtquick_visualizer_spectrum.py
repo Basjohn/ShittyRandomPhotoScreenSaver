@@ -10,6 +10,8 @@ from core.settings.visualizer_mode_registry import (
     get_visualizer_presentation_policy,
 )
 from widgets.spotify_visualizer import mode_capabilities
+from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+from widgets.spotify_visualizer.logical_frame_capture import capture_visualizer_logical_frame
 from rendering.quick.visualizer import (
     VisualizerRenderNode,
     snapshot_has_current_reactive_source,
@@ -110,6 +112,52 @@ def _snapshot(**logical_kwargs):
         logical_revision=1,
     )
 
+
+def test_spectrum_frame_capture_advances_rainbow_from_presentation_owner() -> None:
+    controller = VisualizerRuntimeController(
+        runtime_generation=2,
+        initial_mode="spectrum",
+    )
+    apply_presentation_vis_mode_kwargs(
+        controller.presentation_state,
+        {"spectrum_rainbow_enabled": True, "spectrum_rainbow_speed": 0.7},
+    )
+    widget = SimpleNamespace(
+        _vis_mode_str="spectrum",
+        runtime_controller=controller,
+        presentation_config_host=controller.presentation_state,
+        _engine=None,
+        _runtime_generation=2,
+        _spotify_playing=True,
+        _has_pushed_first_frame=True,
+        _display_bars=(0.2, 0.6, 0.9, 0.4),
+        _bar_count=4,
+        _display_bars_source_generation=5,
+        _display_bars_source_activation=7,
+        _spectrum_visual_smoothing_enabled=False,
+        _spectrum_visual_smoothing=0.5,
+        _spectrum_single_piece=False,
+        _spectrum_ghosting_enabled=False,
+        _spectrum_ghost_decay=0.4,
+    )
+
+    first = capture_visualizer_logical_frame(
+        widget,
+        now_ts=1.0,
+        changed=True,
+        mode_reveal_ready=True,
+    )
+    second = capture_visualizer_logical_frame(
+        widget,
+        now_ts=1.5,
+        changed=True,
+        mode_reveal_ready=True,
+    )
+
+    assert first is not None and second is not None
+    assert first.mode_state.parameters["rainbow_enabled"] is True
+    assert second.mode_state.parameters["rainbow_speed"] == pytest.approx(0.7)
+    assert second.mode_state.animation_time > first.mode_state.animation_time
 
 
 def _resolve_runtime_frame(

@@ -3,19 +3,26 @@
 from __future__ import annotations
 
 import threading
+from collections import defaultdict
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from core.settings.visualizer_mode_registry import (
     get_visualizer_presentation_policy,
 )
+import rendering.quick.visualizer.implementations.bubble as quick_bubble_module
 from rendering.quick.visualizer.implementations.bubble import (
     QuickBubbleRenderer,
     compute_quick_bubble_layout,
     resolve_quick_bubble_payload,
 )
 from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
+from widgets.spotify_visualizer.config_applier import (
+    _populate_shared_visualizer_extras,
+    apply_presentation_vis_mode_kwargs,
+)
 from widgets.spotify_visualizer.presentation_geometry import (
     resolve_visualizer_presentation,
 )
@@ -97,6 +104,25 @@ def _snapshot(**logical_kwargs):
         _presentation(),
         logical_revision=1,
     )
+
+
+def test_bubble_rainbow_uses_controller_owned_presentation_state() -> None:
+    controller = VisualizerRuntimeController(
+        runtime_generation=2,
+        initial_mode="bubble",
+    )
+    apply_presentation_vis_mode_kwargs(
+        controller.presentation_state,
+        {"bubble_rainbow_enabled": True, "bubble_rainbow_speed": 0.35},
+    )
+    extra: dict[str, object] = {}
+    _populate_shared_visualizer_extras(
+        extra,
+        SimpleNamespace(presentation_config_host=controller.presentation_state),
+    )
+
+    assert extra["rainbow_enabled"] is True
+    assert extra["rainbow_speed"] == pytest.approx(0.35)
 
 
 def test_bubble_frame_runtime_freezes_one_authored_step_and_visible_event() -> None:
@@ -496,6 +522,77 @@ def test_quick_bubble_registry_is_static_lazy_and_resource_dormant() -> None:
     renderer = resolve_quick_visualizer_renderer("bubble")
     assert isinstance(renderer, QuickBubbleRenderer)
     assert renderer.has_resources is False
+
+
+def test_quick_bubble_bulk_uniforms_use_reused_float32_transport(monkeypatch) -> None:
+    """PyOpenGL must never recursively convert immutable Bubble tuples in render."""
+    renderer = QuickBubbleRenderer()
+    renderer._program = 1
+    renderer._uniforms = defaultdict(int)
+
+    uniform4_calls = []
+    uniform3_calls = []
+
+    for name in (
+        "glUseProgram",
+        "glUniformMatrix4fv",
+        "glUniform2f",
+        "glUniform1f",
+        "glUniform1i",
+        "glUniform4f",
+        "glBindVertexArray",
+        "glDrawArrays",
+    ):
+        monkeypatch.setattr(quick_bubble_module.gl, name, lambda *_args, **_kwargs: None)
+
+    def _uniform4(_location, count, values):
+        uniform4_calls.append((count, values))
+
+    def _uniform3(_location, count, values):
+        uniform3_calls.append((count, values))
+
+    monkeypatch.setattr(quick_bubble_module.gl, "glUniform4fv", _uniform4)
+    monkeypatch.setattr(quick_bubble_module.gl, "glUniform3fv", _uniform3)
+
+    frame = SimpleNamespace(
+        snapshot=_snapshot(
+            trails=(
+                0.25, 0.50, 0.040,
+                0.24, 0.49, 0.038,
+                0.23, 0.48, 0.036,
+            )
+        ),
+        matrix_values=tuple(float(i == j) for i in range(4) for j in range(4)),
+        logical_size=(420.0, 280.0),
+        quad_vao=1,
+    )
+
+    renderer.render(frame)
+    assert len(uniform4_calls) == 2
+    assert len(uniform3_calls) == 1
+    first_ids = tuple(id(values) for _count, values in (*uniform4_calls, *uniform3_calls))
+    for _count, values in (*uniform4_calls, *uniform3_calls):
+        assert isinstance(values, np.ndarray)
+        assert values.dtype == np.float32
+        assert values.flags.c_contiguous
+
+    assert uniform4_calls[0][0] == 1
+    assert uniform4_calls[1][0] == 1
+    assert uniform3_calls[0][0] == 3
+    np.testing.assert_allclose(
+        uniform4_calls[0][1][:4],
+        np.asarray((0.25, 0.5, 0.04, 1.0), dtype=np.float32),
+    )
+    np.testing.assert_allclose(
+        uniform3_calls[0][1][:9],
+        np.asarray(frame.snapshot.logical.mode_state.trails, dtype=np.float32),
+    )
+
+    uniform4_calls.clear()
+    uniform3_calls.clear()
+    renderer.render(frame)
+    second_ids = tuple(id(values) for _count, values in (*uniform4_calls, *uniform3_calls))
+    assert second_ids == first_ids
 
 
 def test_quick_bubble_renderer_has_no_live_widget_or_simulation_dependency() -> None:

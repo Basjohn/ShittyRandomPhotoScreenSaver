@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
+import numpy as np
 from OpenGL import GL as gl
 
 from core.settings.bubble_gradient_semantics import (
@@ -27,6 +28,37 @@ from ..render_contract import (
 
 
 _MAX_BUBBLES = 110
+_BUBBLE_POS_SIZE = _MAX_BUBBLES * 4
+_BUBBLE_EXTRA_SIZE = _MAX_BUBBLES * 4
+_BUBBLE_TRAIL_SIZE = _MAX_BUBBLES * 3 * 3
+
+
+def _copy_uniform_float_buffer(
+    buffer: np.ndarray,
+    source: Sequence[object],
+    *,
+    active_size: int,
+) -> np.ndarray:
+    """Copy immutable Bubble payload values into one persistent float32 buffer.
+
+    PyOpenGL recursively converts Python tuple/list inputs in ``arrays.lists`` on
+    every uniform upload.  The old Bubble compositor already avoids that hot-path
+    converter with persistent NumPy transport buffers; Quick keeps immutable tuple
+    snapshots as its ownership contract and performs the same transport-only copy
+    here on the render thread.
+    """
+    active = max(0, min(int(active_size), int(buffer.size)))
+    if len(source) < active:
+        raise ValueError("Bubble uniform payload is shorter than its active size")
+    if active:
+        # Quick payload tuples are already exact-length for the active Bubble count,
+        # so avoid slicing/allocating another tuple in the normal render path.
+        if len(source) == active:
+            buffer[:active] = source
+        else:
+            buffer[:active] = source[:active]
+    return buffer
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +194,11 @@ class QuickBubbleRenderer:
     def __init__(self) -> None:
         self._program = 0
         self._uniforms: dict[str, int] = {}
+        # Persistent render-thread transport. Immutable authored snapshots remain
+        # tuples; only the OpenGL upload representation is mutable/reused.
+        self._position_uniform_buffer = np.zeros(_BUBBLE_POS_SIZE, dtype=np.float32)
+        self._extra_uniform_buffer = np.zeros(_BUBBLE_EXTRA_SIZE, dtype=np.float32)
+        self._trail_uniform_buffer = np.zeros(_BUBBLE_TRAIL_SIZE, dtype=np.float32)
 
     @property
     def has_resources(self) -> bool:
@@ -212,15 +249,25 @@ class QuickBubbleRenderer:
         gl.glUniform1f(uniforms["u_fade"], presentation.content_fade)
         gl.glUniform1i(uniforms["u_bubble_count"], payload.bubble_count)
         if payload.bubble_count:
+            position_buffer = _copy_uniform_float_buffer(
+                self._position_uniform_buffer,
+                payload.positions,
+                active_size=payload.bubble_count * 4,
+            )
+            extra_buffer = _copy_uniform_float_buffer(
+                self._extra_uniform_buffer,
+                payload.extras,
+                active_size=payload.bubble_count * 4,
+            )
             gl.glUniform4fv(
                 uniforms["u_bubbles_pos"],
                 payload.bubble_count,
-                payload.positions,
+                position_buffer,
             )
             gl.glUniform4fv(
                 uniforms["u_bubbles_extra"],
                 payload.bubble_count,
-                payload.extras,
+                extra_buffer,
             )
 
         trail_strength = max(
@@ -238,10 +285,15 @@ class QuickBubbleRenderer:
             ),
         )
         if payload.trails and payload.bubble_count:
+            trail_buffer = _copy_uniform_float_buffer(
+                self._trail_uniform_buffer,
+                payload.trails,
+                active_size=payload.bubble_count * 9,
+            )
             gl.glUniform3fv(
                 uniforms["u_bubbles_trail"],
                 payload.bubble_count * 3,
-                payload.trails,
+                trail_buffer,
             )
         else:
             trail_strength = 0.0

@@ -426,6 +426,55 @@ def test_settings_dialog_close_flushes_after_geometry_save(
     assert order == ["geometry", ("flush", 2.0)]
 
 
+def test_settings_dialog_close_flushes_built_tab_before_manager_without_lazy_build(
+    qapp,
+    settings_manager,
+    animation_manager,
+    monkeypatch,
+):
+    """Tab-local coalesced edits must cross the close durability boundary first."""
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    order = []
+
+    class _BuiltTab:
+        def flush_pending_changes(self):
+            order.append("tab")
+
+    dialog.visualizers_tab = _BuiltTab()
+    monkeypatch.setattr(dialog, "_has_image_sources", lambda: True)
+    monkeypatch.setattr(dialog, "_save_geometry", lambda: order.append("geometry"))
+    monkeypatch.setattr(
+        dialog,
+        "_get_tab_instance",
+        lambda *_args, **_kwargs: pytest.fail("close must not build dormant tabs"),
+    )
+
+    def _flush(*, timeout):
+        order.append(("manager", timeout))
+        return True
+
+    monkeypatch.setattr(settings_manager, "flush", _flush)
+
+    event = QCloseEvent()
+    dialog.closeEvent(event)
+
+    assert event.isAccepted() is True
+    assert order == ["geometry", "tab", ("manager", 2.0)]
+
+
+def test_visualizer_preset_import_refreshes_only_existing_top_level_owner() -> None:
+    source = inspect.getsource(SettingsDialog._refresh_visualizer_import_state)
+    assert "self.__dict__.get('visualizers_tab')" in source
+    assert "_get_tab_instance('widgets')" not in source
+    assert "load_from_settings" in source
+
+
+def test_reset_defaults_reuses_built_only_reload_path() -> None:
+    source = inspect.getsource(SettingsDialog._on_reset_to_defaults_clicked)
+    assert "self._reload_all_tab_settings()" in source
+    assert "_get_tab_instance(key)" not in source
+
+
 def test_settings_dialog_restores_persisted_top_level_tab(qapp, settings_manager, animation_manager):
     """Persisted top-level tab selection should remain authoritative."""
     settings_manager.set('ui.last_tab_index', 3)

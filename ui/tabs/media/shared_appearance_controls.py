@@ -4,13 +4,13 @@ Bar Fill colour, Bar Border colour and Border Opacity are owned by the shared
 visualizer save/load path even though the authored Settings presentation has
 historically exposed them with Spectrum. Their stored keys remain mode-qualified.
 Historically their *widgets* were created inside the Spectrum builder, which
-forced Spectrum to stay eagerly constructed. V6a extracted their logical owner;
-V7 keeps them permanently under the stable top-level Visualizers mode page. They
-are never descendants of a retireable mode body.
+forced Spectrum to stay eagerly constructed. V6a extracted their logical owner.
+V7 keeps one tab-owned widget set, presents it physically inside Spectrum Custom,
+and explicitly evacuates the stable group back to the top-level mode page before
+mode switch/SETUP/retirement so Qt body destruction cannot take it.
 
-The row widgets are created exactly once. Mode builders must not recreate or
-reparent them. V7 shows this stable group only with Spectrum, preserving the old
-user-facing scope while keeping the lifecycle ownership invisible.
+The row widgets are created exactly once. Mode builders must not recreate them;
+the top-level Visualizers owner alone controls their temporary Custom placement.
 """
 from __future__ import annotations
 

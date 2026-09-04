@@ -1326,9 +1326,10 @@ def load_visualizer_settings(
     if construct_active_body:
         tab._update_vis_mode_sections()
 
-    load_visualizer_rainbow_state(tab, spotify_vis_config)
-
+    # Preset selection is needed before Custom-only accessory visibility is
+    # resolved (Rainbow / stable Spectrum bar appearance).
     load_visualizer_preset_indices(tab, spotify_vis_config)
+    load_visualizer_rainbow_state(tab, spotify_vis_config)
 
     _update_spotify_vis_enabled_visibility(tab)
     _update_visualizers_enabled_visibility(tab)
