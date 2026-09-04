@@ -870,6 +870,7 @@ class DisplayManager(QObject):
         from core.settings.visualizer_mode_registry import (
             coerce_visualizer_mode_id,
             is_mode_active,
+            resolve_effective_enabled_modes,
         )
         from core.settings.visualizer_presets import (
             resolve_visualizer_activation_payload,
@@ -881,6 +882,21 @@ class DisplayManager(QObject):
             return False
         section = settings.get("widgets.spotify_visualizer", {})
         if not isinstance(section, dict):
+            return False
+        # Deepest request-admission gate (pre-V5/V6): a normal runtime/UI request
+        # must never silently route to, or re-enable, a mode outside the effective
+        # enabled set — that would create a second enable authority. Startup/stale
+        # persisted selection substitutes at the startup resolver with an explicit
+        # log; this seam rejects instead. With every mode enabled (today's
+        # default) this never rejects.
+        enabled_modes = resolve_effective_enabled_modes(section.get("enabled_modes"))
+        if target not in enabled_modes:
+            logger.info(
+                "[VISUALIZER] Rejected runtime request for disabled mode=%s "
+                "(enabled=%s)",
+                target,
+                ",".join(enabled_modes),
+            )
             return False
         candidate = dict(section)
         candidate["mode"] = target
@@ -2091,9 +2107,28 @@ class DisplayManager(QObject):
 
         from core.settings.models import SpotifyVisualizerSettings
         from core.settings.settings_manager import SettingsManager
+        from core.settings.visualizer_mode_registry import (
+            resolve_effective_visualizer_section,
+        )
         from core.settings.visualizer_presets import (
             resolve_visualizer_activation_payload,
         )
+
+        # Resolve a disabled/stale persisted mode to an enabled one BEFORE the
+        # activation/model payload is resolved (pre-V5/V6 startup-substitution
+        # ordering gate): re-enter the canonical resolver for the substitute so
+        # mode-A activation/preset state is never field-patched onto mode B. With
+        # every mode enabled (today's default) this is a no-op.
+        section, mode_substituted, requested_mode, effective_mode = (
+            resolve_effective_visualizer_section(section)
+        )
+        if mode_substituted:
+            logger.info(
+                "[SPOTIFY_VIS] Persisted visualizer mode %r is not enabled; "
+                "starting enabled mode %r instead",
+                requested_mode,
+                effective_mode,
+            )
 
         activation = resolve_visualizer_activation_payload(section)
         model = SpotifyVisualizerSettings.from_mapping(
@@ -2121,23 +2156,6 @@ class DisplayManager(QObject):
             build_technical_cache,
         )
 
-        # Resolve a disabled/stale persisted mode to an enabled one before
-        # construction (V3): never silently re-enable a user-disabled mode to
-        # satisfy a stale selected id. With every mode enabled (today's default)
-        # this is a no-op.
-        from core.settings.visualizer_mode_registry import resolve_effective_mode
-
-        _effective_mode, _mode_substituted = resolve_effective_mode(
-            model.mode, model.enabled_modes
-        )
-        if _mode_substituted:
-            logger.info(
-                "[SPOTIFY_VIS] Persisted visualizer mode %r is not enabled; "
-                "starting enabled mode %r instead",
-                model.mode,
-                _effective_mode,
-            )
-            model.mode = _effective_mode
         mode = str(model.mode)
         technical_cache = build_technical_cache(None, model)
         shadows = widgets.get("shadows", {})

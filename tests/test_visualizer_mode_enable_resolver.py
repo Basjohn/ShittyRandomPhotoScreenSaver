@@ -12,6 +12,7 @@ from core.settings.visualizer_mode_registry import (
     get_default_visualizer_mode_id,
     resolve_effective_enabled_modes,
     resolve_effective_mode,
+    resolve_effective_visualizer_section,
 )
 
 
@@ -99,3 +100,60 @@ def test_cycling_restricted_to_enabled_modes_v3():
     # Never lands on a disabled mode regardless of the current id.
     for current in VISUALIZER_MODE_IDS:
         assert next_visualizer_mode_id(current, enabled) in tuple(enabled)
+
+
+# ---------------------------------------------------------------------------
+# resolve_effective_visualizer_section: pre-V5/V6 startup substitution ordering
+# ---------------------------------------------------------------------------
+
+
+def test_effective_section_passes_enabled_mode_through_unchanged():
+    section = {"mode": "spectrum", "enabled_modes": ["spectrum", "bubble"], "foo": 1}
+    effective, substituted, requested, resolved = (
+        resolve_effective_visualizer_section(section)
+    )
+    assert substituted is False
+    assert requested == "spectrum"
+    assert resolved == "spectrum"
+    assert effective["mode"] == "spectrum"
+    assert effective["foo"] == 1
+    # Pure: the input section is never mutated.
+    assert section["mode"] == "spectrum"
+
+
+def test_effective_section_substitutes_disabled_mode_before_activation():
+    # oscilloscope is canonical but disabled; canonical walk skips sine_wave
+    # (disabled) and lands on bubble. The returned section carries the
+    # substitute so the activation/model payload resolves for mode B, not A.
+    section = {"mode": "oscilloscope", "enabled_modes": ["spectrum", "bubble"]}
+    effective, substituted, requested, resolved = (
+        resolve_effective_visualizer_section(section)
+    )
+    assert substituted is True
+    assert requested == "oscilloscope"
+    assert resolved == "bubble"
+    assert effective["mode"] == "bubble"
+    assert effective["enabled_modes"] == ["spectrum", "bubble"]
+    # Input untouched.
+    assert section["mode"] == "oscilloscope"
+
+
+def test_effective_section_absent_selection_keeps_mode_all_enabled():
+    # No enabled_modes -> all modes enabled (migration default) -> no substitution.
+    section = {"mode": "bubble"}
+    effective, substituted, requested, resolved = (
+        resolve_effective_visualizer_section(section)
+    )
+    assert substituted is False
+    assert resolved == "bubble"
+    assert effective["mode"] == "bubble"
+
+
+def test_effective_section_non_mapping_yields_default_mode():
+    effective, substituted, requested, resolved = (
+        resolve_effective_visualizer_section(None)
+    )
+    assert effective == {}
+    assert substituted is False
+    assert requested == ""
+    assert resolved == get_default_visualizer_mode_id()

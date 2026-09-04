@@ -289,3 +289,32 @@ def resolve_effective_mode(
     if default_mode in enabled:
         return default_mode, True
     return enabled[0], True
+
+
+def resolve_effective_visualizer_section(
+    section: object,
+) -> tuple[dict, bool, str, str]:
+    """Return a section whose ``mode`` is the effective enabled mode.
+
+    Resolves a disabled/stale persisted mode to an enabled substitute **before**
+    the activation/model payload is resolved from the section, so mode-A
+    activation/preset state is never field-patched onto mode B. Pure: the input
+    section is not mutated; on substitution a shallow copy with the effective
+    mode is returned.
+
+    Returns ``(effective_section, substituted, requested_mode, effective_mode)``.
+    A non-mapping input yields an empty section and the default mode.
+    """
+
+    if not hasattr(section, "get"):
+        default_mode = get_default_visualizer_mode_id()
+        return {}, False, "", default_mode
+
+    requested_mode = str(section.get("mode") or "").strip().lower()
+    effective_mode, substituted = resolve_effective_mode(
+        requested_mode, section.get("enabled_modes")
+    )
+    if not substituted:
+        return dict(section), False, requested_mode, effective_mode
+    effective_section = {**section, "mode": effective_mode}
+    return effective_section, True, requested_mode, effective_mode
