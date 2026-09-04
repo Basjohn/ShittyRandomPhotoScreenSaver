@@ -63,6 +63,7 @@ class ProcessUsageSnapshot:
     vms_app_mb: float
     threads_app: int
     handles_app: int | None
+    handles_main: int | None
     io_read_mb: float | None
     io_write_mb: float | None
     cpu_primed: bool
@@ -168,6 +169,7 @@ class ProcessUsageCollector:
         vms_app = 0
         threads_app = 0
         handles_app = 0
+        handles_main = 0
         handles_available = True
         io_read = 0
         io_write = 0
@@ -220,9 +222,13 @@ class ProcessUsageCollector:
                     pass
 
             try:
-                handles_app += int(process.num_handles())
+                proc_handles = int(process.num_handles())
             except (psutil.Error, OSError, AttributeError):
                 handles_available = False
+            else:
+                handles_app += proc_handles
+                if process.pid == self._main.pid:
+                    handles_main = proc_handles
 
             try:
                 io = process.io_counters()
@@ -265,6 +271,7 @@ class ProcessUsageCollector:
             vms_app_mb=_mb(vms_app),
             threads_app=threads_app,
             handles_app=handles_app if handles_available else None,
+            handles_main=handles_main if handles_available else None,
             io_read_mb=_mb(io_read) if io_available else None,
             io_write_mb=_mb(io_write) if io_available else None,
             cpu_primed=self._sample_count > 0,
@@ -630,6 +637,7 @@ class UsageTelemetryService:
                 "vms_app_mb": process.vms_app_mb,
                 "threads_app": process.threads_app,
                 "handles_app": process.handles_app,
+                "handles_main": process.handles_main,
                 "vram_supported": gpu.vram_supported,
                 "vram_dedicated_mb": gpu.vram_dedicated_mb,
                 "vram_shared_mb": gpu.vram_shared_mb,
@@ -642,7 +650,7 @@ class UsageTelemetryService:
                 "rss_children_mb=%s "
                 "private_app_mb=%s private_main_mb=%s private_children_mb=%s "
                 "uss_app_mb=%s uss_main_mb=%s uss_children_mb=%s "
-                "vms_app_mb=%s threads_app=%d handles_app=%s "
+                "vms_app_mb=%s threads_app=%d handles_app=%s handles_main=%s "
                 "io_read_mb=%s io_write_mb=%s gpu_supported=%d gpu_active=%d "
                 "gpu_status=%s gpu_busy_pct=%s gpu_engine_sum_pct=%s "
                 "vram_supported=%d vram_dedicated_mb=%s vram_shared_mb=%s "
@@ -686,6 +694,7 @@ class UsageTelemetryService:
                 _fmt(process.vms_app_mb),
                 process.threads_app,
                 _fmt(process.handles_app),
+                _fmt(process.handles_main),
                 _fmt(process.io_read_mb),
                 _fmt(process.io_write_mb),
                 int(gpu.supported),
