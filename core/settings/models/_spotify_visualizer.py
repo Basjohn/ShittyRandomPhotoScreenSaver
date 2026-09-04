@@ -612,6 +612,16 @@ _DEVCURVE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "devcurve_foreground_specular_crest_bias": float,
 }
 
+_SPHERE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
+    "sphere_material": ("Chrome", str), "sphere_deformation": (1.0, float),
+    "sphere_rotation_speed": (0.35, float), "sphere_gloss": (0.65, float),
+    "sphere_specular": (0.8, float), "sphere_light_direction": ("NW", str),
+    "sphere_idle_motion": (0.12, float), "sphere_surface_detail": (1.0, float),
+}
+_SPHERE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
+    key: caster for key, (_default, caster) in _SPHERE_BUILD_SPECS.items()
+}
+
 _DEVCURVE_ACTIVE_LAYERS = {"bass", "vocals", "mids", "transients"}
 _DEVCURVE_OUTLINE_WIDTH_LIMITS: Dict[str, Tuple[float, float]] = {
     "devcurve_layer_bass_outline_width": (0.001, 0.020),
@@ -693,6 +703,7 @@ def _build_visualizer_model_kwargs(
             bubble_stream_speed_cap_default=bubble_stream_speed_cap_default,
         ),
         _build_visualizer_devcurve_kwargs(read_value),
+        _build_visualizer_sphere_kwargs(read_value),
         preset_kwargs,
     )
 
@@ -811,6 +822,12 @@ def _build_visualizer_devcurve_kwargs(
     read_value: Callable[[str, Any], Any],
 ) -> Dict[str, Any]:
     return _build_read_value_map(read_value, _DEVCURVE_BUILD_SPECS)
+
+
+def _build_visualizer_sphere_kwargs(
+    read_value: Callable[[str, Any], Any],
+) -> Dict[str, Any]:
+    return _build_read_value_map(read_value, _SPHERE_BUILD_SPECS)
 
 
 def _build_settings_readers(
@@ -1117,9 +1134,9 @@ class SpotifyVisualizerSettings:
     mode: str = "bubble"
     # V2 persisted per-mode enable set. Default = every registered mode enabled,
     # which preserves today's behavior and is the migration default for existing
-    # users (an absent key resolves to all modes). Disabling a mode never
+    # users (an absent key resolves to descriptor defaults). Disabling a mode never
     # deletes its settings/presets; it only removes it from this list.
-    enabled_modes: list = field(default_factory=lambda: list(VISUALIZER_MODE_IDS))
+    enabled_modes: list = field(default_factory=lambda: list(resolve_effective_enabled_modes(None)))
     osc_glow_enabled: bool = True
     osc_glow_intensity: float = 0.5
     osc_glow_reactivity: float = 1.0
@@ -1331,12 +1348,21 @@ class SpotifyVisualizerSettings:
     devcurve_foreground_specular_width: float = 0.022
     devcurve_foreground_specular_offset: float = 0.028
     devcurve_foreground_specular_crest_bias: float = 1.05
+    sphere_material: str = "Chrome"
+    sphere_deformation: float = 1.0
+    sphere_rotation_speed: float = 0.35
+    sphere_gloss: float = 0.65
+    sphere_specular: float = 0.8
+    sphere_light_direction: str = "NW"
+    sphere_idle_motion: float = 0.12
+    sphere_surface_detail: float = 1.0
     # Visualizer presets (0=Preset 1/Default, 1=Preset 2, 2=Preset 3, 3=Custom)
     preset_spectrum: int = field(default_factory=lambda: get_missing_preset_fallback_index("spectrum"))
     preset_oscilloscope: int = field(default_factory=lambda: get_missing_preset_fallback_index("oscilloscope"))
     preset_sine_wave: int = field(default_factory=lambda: get_missing_preset_fallback_index("sine_wave"))
     preset_bubble: int = field(default_factory=lambda: get_missing_preset_fallback_index("bubble"))
     preset_devcurve: int = field(default_factory=lambda: get_missing_preset_fallback_index("devcurve"))
+    preset_sphere: int = field(default_factory=lambda: get_missing_preset_fallback_index("sphere"))
 
     def __post_init__(self):
         self._apply_core_visual_defaults()
@@ -1344,6 +1370,7 @@ class SpotifyVisualizerSettings:
         self._apply_sine_defaults()
         self._apply_bubble_defaults()
         self._apply_devcurve_defaults()
+        self._apply_sphere_defaults()
 
     def _apply_list_default(self, attr: str, value: list[int]) -> None:
         if getattr(self, attr) is None:
@@ -1399,6 +1426,16 @@ class SpotifyVisualizerSettings:
         for attr in _DEVCURVE_SHAPE_NODE_ATTRS:
             self._ensure_non_empty_nodes(attr, _DEVCURVE_DEFAULT_SHAPE_NODES)
         _normalize_ranked_attrs(self, _DEVCURVE_ORDER_ATTRS)
+
+    def _apply_sphere_defaults(self) -> None:
+        self.sphere_material = str(self.sphere_material).strip().title()
+        if self.sphere_material not in {"Chrome", "Obsidian", "Magma", "Silver", "Water"}:
+            raise ValueError(f"invalid sphere material {self.sphere_material!r}")
+        self.sphere_light_direction = str(self.sphere_light_direction).strip().upper()
+        if self.sphere_light_direction not in {"N", "NE", "E", "SE", "S", "SW", "W", "NW"}:
+            raise ValueError(f"invalid sphere light direction {self.sphere_light_direction!r}")
+        for attr, low, high in (("sphere_deformation", 0.0, 2.0), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_idle_motion", 0.0, 1.0), ("sphere_surface_detail", 0.0, 2.0)):
+            _clamp_attr_range(self, attr, low, high)
 
     @classmethod
     def _build_constructor_kwargs_from_mode_state(
@@ -1536,6 +1573,7 @@ class SpotifyVisualizerSettings:
             self._serialize_sine_settings(prefix),
             self._serialize_bubble_settings(prefix),
             self._serialize_devcurve_settings(prefix),
+            self._serialize_sphere_settings(prefix),
             self._serialize_preset_indices(prefix),
             self._serialize_per_mode_technical_settings(prefix),
             self._serialize_transient_mix_settings(prefix),
@@ -1584,6 +1622,9 @@ class SpotifyVisualizerSettings:
 
     def _serialize_devcurve_settings(self, prefix: str) -> Dict[str, Any]:
         return _serialize_prefixed_fields(self, prefix, _DEVCURVE_SERIALIZERS)
+
+    def _serialize_sphere_settings(self, prefix: str) -> Dict[str, Any]:
+        return _serialize_prefixed_fields(self, prefix, _SPHERE_SERIALIZERS)
 
     @staticmethod
     def _normalize_mode_name(mode: str) -> str:
@@ -1662,4 +1703,3 @@ class SpotifyVisualizerSettings:
 
     def resolve_oscilloscope_transient_width_mix(self) -> float:
         return float(self.oscilloscope_transient_width_mix)
-

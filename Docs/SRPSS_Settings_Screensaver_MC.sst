@@ -1281,6 +1281,14 @@
         "devcurve_transient_pulse_gain": 1.0,
         "enabled": true,
         "mode": "devcurve",
+        "sphere_material": "Chrome",
+        "sphere_deformation": 1.0,
+        "sphere_rotation_speed": 0.35,
+        "sphere_gloss": 0.65,
+        "sphere_specular": 0.8,
+        "sphere_light_direction": "NW",
+        "sphere_idle_motion": 0.12,
+        "sphere_surface_detail": 1.0,
         "monitor": "ALL",
         "osc_ghost_decay": 0.4,
         "osc_ghost_intensity": 0.4,
@@ -1672,7 +1680,8 @@
         "spectrum_visual_smoothing": 0.5,
         "spectrum_visual_smoothing_enabled": true,
         "spectrum_wave_amplitude": 0.5,
-        "visualizers_enabled": true
+        "visualizers_enabled": true,
+        "preset_sphere": 0
       },
       "steam": {
         "enabled": false,

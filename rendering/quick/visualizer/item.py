@@ -24,23 +24,117 @@ from .telemetry import VisualizerRenderNodeTelemetry
 logger = get_logger(__name__)
 
 
+class _RetirementEvent:
+    """One legal render-context event, disconnected before executing its work.
+
+    QQuickWindow documents beforeRendering as the signal equivalent of a
+    one-shot render job. Using its event directly avoids native QRunnable
+    ownership transfer across the pinned PySide binding.
+    """
+
+    def __init__(self, window, callback) -> None:
+        self._lock = threading.RLock()
+        self._window = window
+        self._callback = callback
+        with self._lock:
+            window.beforeRendering.connect(self.run, Qt.ConnectionType.DirectConnection)
+            window.sceneGraphInvalidated.connect(self.run, Qt.ConnectionType.DirectConnection)
+
+    def cancel(self) -> None:
+        with self._lock:
+            window, self._window = self._window, None
+            if window is None:
+                return
+            for signal in (window.beforeRendering, window.sceneGraphInvalidated):
+                try:
+                    signal.disconnect(self.run)
+                except (RuntimeError, TypeError):
+                    pass  # The native window may already be disconnecting at destruction.
+
+    def run(self) -> None:
+        with self._lock:
+            if self._window is None:
+                return
+            self.cancel()
+        self._callback(self)
+
+
 class _RenderNodeRetirement:
-    """Direct render-thread invalidation owner for the current node."""
+    """Event-only inactive and invalidation cleanup on the owning Quick context."""
 
     def __init__(self, telemetry: VisualizerRenderNodeTelemetry) -> None:
         self._telemetry = telemetry
         self._lock = threading.Lock()
         self._node: VisualizerRenderNode | None = None
+        self._window: QQuickWindow | None = None
+        self._latest_mode_id: str | None = None
+        self._pending_event: _RetirementEvent | None = None
 
-    def set_node(self, node: VisualizerRenderNode) -> None:
+    def set_window(self, window: QQuickWindow | None) -> None:
+        with self._lock:
+            if window is self._window:
+                return
+            old_window, old_node = self._window, self._node
+            pending, self._pending_event = self._pending_event, None
+            self._node = None
+            self._window = window
+        if pending is not None:
+            pending.cancel()
+        if old_window is not None and old_node is not None:
+            # Capture the detached node, never consult the new window's node.
+            # Both completion events belong exclusively to the old GL context.
+            def retire_detached(_event):
+                try:
+                    old_node.releaseResources()
+                except Exception as exc:
+                    self._telemetry.note_error(f"visualizer detached retirement failed: {exc}")
+                    logger.exception("[QUICK] Detached visualizer retirement failed")
+            _RetirementEvent(old_window, retire_detached)
+            old_window.update()
+
+    def set_node(self, node: VisualizerRenderNode, *, active_mode_id: str | None) -> None:
         with self._lock:
             self._node = node
+            self._latest_mode_id = active_mode_id
+        # Sync never schedules work. A newly constructed node has no inactive
+        # resources; subsequent admission changes request their own event.
+
+    def update_latest_mode(self, mode_id: str | None) -> None:
+        with self._lock:
+            self._latest_mode_id = mode_id
+
+    def request_inactive_release(self, *, window: QQuickWindow | None,
+                                 active_mode_id: str | None) -> None:
+        with self._lock:
+            self._latest_mode_id = active_mode_id
+            if window is None or self._node is None or self._pending_event is not None:
+                return
+            if window is not self._window:
+                raise RuntimeError("visualizer retirement window does not own the node")
+            self._pending_event = _RetirementEvent(window, self._release_inactive)
+        window.update()
+
+    def _release_inactive(self, event: _RetirementEvent) -> None:
+        with self._lock:
+            if event is not self._pending_event:
+                return
+            self._pending_event = None
+            node, mode_id = self._node, self._latest_mode_id
+        if node is not None:
+            try:
+                node.release_inactive_implementations(mode_id)
+            except Exception as exc:
+                self._telemetry.note_error(f"visualizer inactive retirement failed: {exc}")
+                logger.exception("[QUICK] Visualizer inactive retirement failed")
 
     def invalidate(self) -> None:
         self._telemetry.note_invalidation()
         with self._lock:
-            node = self._node
-            self._node = None
+            node, self._node = self._node, None
+            pending, self._pending_event = self._pending_event, None
+            self._latest_mode_id = None
+        if pending is not None:
+            pending.cancel()
         if node is not None:
             node.releaseResources()
 
@@ -98,8 +192,14 @@ class VisualizerRenderItem(QQuickItem):
             raise TypeError("visualizer item requires a VisualizerRenderIdentity")
         if bridge.identity != identity:
             raise ValueError("visualizer bridge is not open for the requested identity")
+        if bridge is self._bridge and identity == self._identity:
+            return
         self._bridge = bridge
         self._identity = identity
+        self._retirement.request_inactive_release(
+            window=self._bound_window,
+            active_mode_id=identity.mode_id,
+        )
         self.update()
 
     def clear_render_source(self) -> None:
@@ -107,6 +207,10 @@ class VisualizerRenderItem(QQuickItem):
             return
         self._bridge = None
         self._identity = None
+        self._retirement.request_inactive_release(
+            window=self._bound_window,
+            active_mode_id=None,
+        )
         self.update()
 
     def set_custom_layout_presentation_authority(self, enabled: bool) -> None:
@@ -136,6 +240,13 @@ class VisualizerRenderItem(QQuickItem):
             self.setY(0.0)
             self.setWidth(width)
             self.setHeight(height)
+            if self._identity is not None:
+                self._retirement.update_latest_mode(self._identity.mode_id)
+        else:
+            self._retirement.request_inactive_release(
+                window=self._bound_window,
+                active_mode_id=None,
+            )
         self.update()
 
     @Slot(QQuickWindow)
@@ -150,6 +261,7 @@ class VisualizerRenderItem(QQuickItem):
             except (RuntimeError, TypeError):
                 pass
         self._bound_window = window
+        retirement.set_window(window)
         if window is not None:
             window.sceneGraphInvalidated.connect(
                 retirement.invalidate,
@@ -339,7 +451,10 @@ class VisualizerRenderItem(QQuickItem):
             device_pixel_ratio=(1.0 if presentation is None else presentation.dpr),
             clear_snapshot=clear_snapshot,
         )
-        self._retirement.set_node(node)
+        self._retirement.set_node(
+            node,
+            active_mode_id=(None if clear_snapshot or identity is None else identity.mode_id),
+        )
         return node
 
 

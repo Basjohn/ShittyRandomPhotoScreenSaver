@@ -69,6 +69,11 @@ class VisualizerModeDescriptor:
     # a disabled/unselected mode's settings — never imports its builder.
     settings_builder_module: str = ""
     settings_builder_factory: str = ""
+    # Capture is lazy for the same reason as render/runtime wiring: importing a
+    # disabled experiment must not instantiate or import its solver.
+    capture_module: str = ""
+    capture_factory: str = ""
+    default_enabled: bool = True
 
     @property
     def preset_key(self) -> str:
@@ -135,6 +140,25 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_module="rendering.quick.visualizer.implementations.devcurve",
         settings_builder_module="ui.tabs.media.devcurve_builder",
         settings_builder_factory="build_devcurve_ui",
+    ),
+    VisualizerModeDescriptor(
+        "sphere",
+        "Sphere (Experimental)",
+        "_sphere_preset_slider",
+        ("sphere_",),
+        VisualizerModePresentationPolicy(
+            shell_policy=VisualizerShellPolicy.FRAMELESS,
+            clip_policy=VisualizerClipPolicy.VIEWPORT_RECT,
+            viewport_resize_capable=True,
+        ),
+        frame_runtime_module="widgets.spotify_visualizer.sphere_frame_runtime",
+        frame_runtime_class="SphereFrameRuntime",
+        renderer_module="rendering.quick.visualizer.implementations.sphere",
+        settings_builder_module="ui.tabs.media.sphere_builder",
+        settings_builder_factory="build_sphere_ui",
+        capture_module="widgets.spotify_visualizer.sphere_capture",
+        capture_factory="capture_sphere",
+        default_enabled=False,
     ),
 )
 
@@ -253,23 +277,28 @@ def resolve_effective_enabled_modes(
     Keeps only canonical mode ids, de-duplicates, and preserves canonical
     ``VISUALIZER_MODE_IDS`` order regardless of stored order. Enforces the V2
     invariant that a live Visualizer family has at least one enabled mode: an
-    absent, empty, or fully-invalid selection resolves to **all** registered
-    modes (this is also the migration default for existing users, preserving
-    today's behavior where every mode is reachable).
+    absent, empty, or fully-invalid selection resolves to descriptor
+    ``default_enabled`` modes. This preserves the established five-mode
+    profile while new experiments remain explicitly opt-in.
 
     This is intentionally about the *registered* canonical set, not dev gates:
     enable-state is persisted product configuration, separate from ``is_mode_active``.
     """
 
+    default_modes = tuple(
+        descriptor.mode_id
+        for descriptor in _ALL_DESCRIPTORS
+        if descriptor.default_enabled
+    )
     if requested is None:
-        return VISUALIZER_MODE_IDS
+        return default_modes
 
     if isinstance(requested, str):
         raw_items: tuple[object, ...] = (requested,)
     elif isinstance(requested, (list, tuple, set, frozenset)):
         raw_items = tuple(requested)
     else:
-        return VISUALIZER_MODE_IDS
+        return default_modes
 
     selected = {
         str(item or "").strip().lower()
@@ -280,7 +309,7 @@ def resolve_effective_enabled_modes(
     )
     if not ordered:
         # Never let a stale/garbage selection disable the whole family.
-        return VISUALIZER_MODE_IDS
+        return default_modes
     return ordered
 
 

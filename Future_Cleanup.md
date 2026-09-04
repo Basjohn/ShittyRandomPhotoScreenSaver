@@ -36,6 +36,24 @@ stale tests that still import/assert against deleted presentation owners such as
 - [ ] Restore the broad whole-tree suite to useful signal without weakening the canonical `destination`
       profile or resurrecting museum architecture.
 
+## READY — Future Work destination gate reconciliation
+
+The 2026-09-05 115-target destination run exposed these surviving unrelated reds after Glow/Slide/Sphere-related
+fixtures and the new retirement native fault were corrected. Evidence: `logs/pytest_destination_group_{1,2,3,4}.log`.
+The native runtime-reality and hotkey targets now pass after replacing Qt-owned runnable cleanup with render events;
+do not leave those as unresolved native failures. The missing legacy Spectrum smoothing target was already deleted
+by `a3e4ec17`; its stale profile entry was removed rather than restoring retired plumbing.
+
+- [ ] Reconcile `test_qtquick_media_presentation.py` against current border/volume colour/artwork aspect/title/mask
+  contracts, and `test_media_external_volume_contract.py` against current Settings bucket names.
+- [ ] Reconcile current weather/achievement border, layout and theme expectations in
+  `test_qtquick_weather_presentation.py` and `test_qtquick_achievement_pulse_presentation.py`.
+- [ ] Resolve Widget Theme catalogue/assets counts and layout markers in `test_widget_theme_no_material_contract.py`,
+  `test_theme_completion_slice_contract.py` and `test_theme_expansion_light_metal_contract.py`; do not synthesize
+  missing theme assets solely to bless a count.
+- [ ] Update obsolete phase prose assertions in `test_visualizer_doc_references.py` against the current destination.
+- [ ] Resolve caller-proven quarantine/debris listed by `test_tooling_ownership.py` without restoring removed tools.
+
 ## READY — temporary `h-destination` profile alias
 
 Current repo search shows `h-destination` has no live automation/script caller outside its own

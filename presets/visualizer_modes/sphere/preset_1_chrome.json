@@ -1,0 +1,15 @@
+{
+  "mode": "sphere",
+  "name": "Preset 1 (Chrome)",
+  "preset_index": 0,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "sphere",
+  "snapshot": {"widgets": {"spotify_visualizer": {
+    "sphere_material": "Chrome", "sphere_deformation": 1.0,
+    "sphere_rotation_speed": 0.35, "sphere_gloss": 0.82,
+    "sphere_specular": 1.1, "sphere_light_direction": "NW",
+    "sphere_idle_motion": 0.12, "sphere_surface_detail": 0.6,
+    "mode": "sphere"
+  }}},
+  "description": "Bright polished chrome with restrained surface detail."
+}

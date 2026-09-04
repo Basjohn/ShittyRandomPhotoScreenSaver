@@ -295,6 +295,7 @@ def test_quick_oscilloscope_registry_is_static_lazy_and_resource_dormant(
         "sine_wave",
         "bubble",
         "devcurve",
+        "sphere",
     )
     assert all(isinstance(descriptor.module_name, str) for descriptor in descriptors)
 
@@ -464,5 +465,4 @@ def _osc_widget(controller, engine, waveform):
         _sine_line6_glow_color=(255, 255, 255, 255),
         _waveform_source=waveform,
     )
-
 

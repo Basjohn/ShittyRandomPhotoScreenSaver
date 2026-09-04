@@ -39,7 +39,7 @@ def test_every_current_mode_resolves_the_same_baseline_geometry() -> None:
         for mode_id in VISUALIZER_MODE_IDS
     )
 
-    assert len(presentations) == 5
+    assert len(presentations) == 6
     assert {state.outer_rect for state in presentations} == {
         (120.0, 90.0, 420.0, 280.0)
     }

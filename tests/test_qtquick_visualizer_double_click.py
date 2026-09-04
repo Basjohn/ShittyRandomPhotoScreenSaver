@@ -8,6 +8,7 @@ from rendering.quick.visualizer.double_click_admission import (
     next_visualizer_mode_id,
 )
 from core.settings.visualizer_mode_registry import (
+    get_default_visualizer_mode_id,
     iter_visualizer_mode_descriptors,
 )
 
@@ -17,9 +18,12 @@ def test_next_mode_matches_registry_cycle_order() -> None:
     assert len(ids) >= 2
     for idx, mode_id in enumerate(ids):
         assert next_visualizer_mode_id(mode_id) == ids[(idx + 1) % len(ids)]
-    # Wraps at the end and starts at the front for an unknown id.
+    # The unknown-id path normalizes through the canonical default before
+    # advancing, so it must remain derived from registry order.
     assert next_visualizer_mode_id(ids[-1]) == ids[0]
-    assert next_visualizer_mode_id("not_a_mode") == ids[0]
+    default_index = ids.index(get_default_visualizer_mode_id())
+    expected_unknown = ids[(default_index + 1) % len(ids)]
+    assert next_visualizer_mode_id("not_a_mode") == expected_unknown
 
 
 def test_double_click_inside_region_cycles_and_consumes() -> None:

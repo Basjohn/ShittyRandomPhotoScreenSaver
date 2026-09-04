@@ -55,6 +55,7 @@ _VISUALIZER_ADVANCED_ROOT_ATTRS = {
     "sine_wave": ("_sine_advanced", "_sine_advanced_host"),
     "bubble": ("_bubble_advanced",),
     "devcurve": ("_devcurve_normal", "_devcurve_advanced", "_devcurve_advanced_host"),
+    "sphere": ("_sphere_normal", "_sphere_advanced", "_sphere_advanced_host"),
 }
 
 
@@ -688,7 +689,10 @@ class VisualizerSettingsContextMixin:
         # cached-body contract, so unsaved edits are never re-hydrated on a normal
         # reselect and unbuilt modes stay dormant until selected. A construction
         # failure is deliberately NOT swallowed — it must stay visible/actionable.
-        from ui.tabs.widgets_tab_media import ensure_visualizer_mode_body
+        from ui.tabs.widgets_tab_media import (
+            _VIS_MODE_CONTAINER_ATTR,
+            ensure_visualizer_mode_body,
+        )
 
         ensure_visualizer_mode_body(self, mode)
 
@@ -699,11 +703,8 @@ class VisualizerSettingsContextMixin:
         self._last_vis_mode_section = mode
 
         containers = {
-            'spectrum': getattr(self, '_spectrum_settings_container', None),
-            'oscilloscope': getattr(self, '_osc_settings_container', None),
-            'sine_wave': getattr(self, '_sine_wave_settings_container', None),
-            'bubble': getattr(self, '_bubble_settings_container', None),
-            'devcurve': getattr(self, '_devcurve_settings_container', None),
+            mode_id: getattr(self, container_attr, None)
+            for mode_id, container_attr in _VIS_MODE_CONTAINER_ATTR.items()
         }
         for m, container in containers.items():
             if container is not None:
@@ -745,4 +746,3 @@ class VisualizerSettingsContextMixin:
                 plain_label.setPalette(palette)
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-

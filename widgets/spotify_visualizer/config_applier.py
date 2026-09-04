@@ -17,6 +17,7 @@ from core.settings.bubble_gradient_semantics import (
     normalize_bubble_specular_direction,
 )
 from core.settings.visualizer_settings_contract import normalize_spectrum_render_mode
+from widgets.spotify_visualizer.render_state import FrozenFields, freeze_render_fields
 
 logger = get_logger(__name__)
 
@@ -33,6 +34,24 @@ _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR = {
     "Hi-Mid": 0.80,
     "Treble": 1.00,
 }
+
+SPHERE_DEFAULT_PARAMETERS = freeze_render_fields({
+    "sphere_material": "Chrome", "sphere_deformation": 1.0,
+    "sphere_rotation_speed": 0.35, "sphere_gloss": 0.65,
+    "sphere_specular": 0.8, "sphere_light_direction": "NW",
+    "sphere_idle_motion": 0.12, "sphere_surface_detail": 1.0,
+})
+_SPHERE_PARAMETER_KEYS = tuple(SPHERE_DEFAULT_PARAMETERS)
+
+
+def _sphere_bounded(value: object, minimum: float, maximum: float, key: str) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{key} must be numeric") from exc
+    if number != number or number in (float("inf"), float("-inf")):
+        raise ValueError(f"{key} must be finite")
+    return max(minimum, min(maximum, number))
 
 
 def _color_or_none(value: Any) -> QColor | None:
@@ -99,6 +118,37 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     in ``apply_presentation_vis_mode_kwargs``.
     """
 
+    # Sphere is fully logical-frame configuration. Normalize and freeze this
+    # once at configuration ownership; capture/runtime only transport it.
+    if 'sphere_material' in kwargs:
+        material = str(kwargs['sphere_material']).strip().title()
+        if material not in {'Chrome', 'Obsidian', 'Magma', 'Silver', 'Water'}:
+            raise ValueError(f"invalid sphere material {material!r}")
+        host._sphere_material = material
+    if 'sphere_deformation' in kwargs:
+        host._sphere_deformation = _sphere_bounded(kwargs['sphere_deformation'], 0.0, 2.0, 'sphere_deformation')
+    if 'sphere_rotation_speed' in kwargs:
+        host._sphere_rotation_speed = _sphere_bounded(kwargs['sphere_rotation_speed'], 0.0, 2.0, 'sphere_rotation_speed')
+    if 'sphere_gloss' in kwargs:
+        host._sphere_gloss = _sphere_bounded(kwargs['sphere_gloss'], 0.0, 1.0, 'sphere_gloss')
+    if 'sphere_specular' in kwargs:
+        host._sphere_specular = _sphere_bounded(kwargs['sphere_specular'], 0.0, 2.0, 'sphere_specular')
+    if 'sphere_light_direction' in kwargs:
+        direction = str(kwargs['sphere_light_direction']).strip().upper()
+        if direction not in {'N','NE','E','SE','S','SW','W','NW'}:
+            raise ValueError(f"invalid sphere light direction {direction!r}")
+        host._sphere_light_direction = direction
+    if 'sphere_idle_motion' in kwargs:
+        host._sphere_idle_motion = _sphere_bounded(kwargs['sphere_idle_motion'], 0.0, 1.0, 'sphere_idle_motion')
+    if 'sphere_surface_detail' in kwargs:
+        host._sphere_surface_detail = _sphere_bounded(kwargs['sphere_surface_detail'], 0.0, 2.0, 'sphere_surface_detail')
+    if any(key in kwargs for key in _SPHERE_PARAMETER_KEYS):
+        host._sphere_parameters = freeze_render_fields({
+            key: getattr(host, f"_{key}", SPHERE_DEFAULT_PARAMETERS[key])
+            for key in _SPHERE_PARAMETER_KEYS
+        })
+    elif not isinstance(getattr(host, "_sphere_parameters", None), FrozenFields):
+        host._sphere_parameters = SPHERE_DEFAULT_PARAMETERS
     if 'sine_heartbeat' in kwargs:
         host._sine_heartbeat = max(0.0, min(1.0, float(kwargs['sine_heartbeat'])))
     if 'bubble_big_bass_pulse' in kwargs:
@@ -707,9 +757,3 @@ def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['bubble_trail_strength'] = getattr(widget, '_bubble_trail_strength', 0.0)
     extra['bubble_tail_opacity'] = getattr(pres, '_bubble_tail_opacity', 0.0)
     extra['bubble_count'] = getattr(widget, '_bubble_count', 0)
-
-
-
-
-
-

@@ -92,7 +92,7 @@ def _source_identity(
     engine: Any,
     mode_id: str,
 ) -> tuple[int, int, float | None]:
-    if mode_id == "bubble":
+    if mode_id in {"bubble", "sphere"}:
         getter = getattr(engine, "get_latest_authoritative_frame", None)
         if callable(getter):
             try:
@@ -768,13 +768,27 @@ ModeCapture = Callable[
     tuple[ModeFrame, dict[str, Any]] | None,
 ]
 
-_MODE_CAPTURE: dict[str, ModeCapture] = {
+_BUILTIN_MODE_CAPTURE: dict[str, ModeCapture] = {
     "spectrum": _capture_spectrum,
     "oscilloscope": _capture_oscilloscope,
     "sine_wave": _capture_sine,
     "bubble": _capture_bubble,
     "devcurve": _capture_devcurve,
 }
+
+
+def _mode_capture(mode_id: str) -> ModeCapture | None:
+    """Resolve descriptor-owned capture lazily, retaining established callbacks."""
+    capture = _BUILTIN_MODE_CAPTURE.get(mode_id)
+    if capture is not None:
+        return capture
+    from importlib import import_module
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    if not descriptor.capture_module or not descriptor.capture_factory:
+        return None
+    return getattr(import_module(descriptor.capture_module), descriptor.capture_factory)
 
 
 def _common_style(widget: Any) -> dict[str, object]:
@@ -803,7 +817,7 @@ def capture_visualizer_logical_frame(
     """Copy one old-runtime step, or discard it after concurrent replacement."""
 
     mode_id = mode_capabilities.widget_mode_key(widget)
-    capture = _MODE_CAPTURE.get(mode_id)
+    capture = _mode_capture(mode_id)
     if capture is None:
         raise ValueError(f"unsupported visualizer mode: {mode_id}")
 
