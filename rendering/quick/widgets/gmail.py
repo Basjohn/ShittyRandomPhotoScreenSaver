@@ -931,6 +931,7 @@ class RetainedGmailPresentation:
         self._connect("openMessageRequested", model.request_open)
         self._connect("refreshRequested", model.request_refresh)
         self._connect("authRequested", model.request_auth)
+        self._connect("actionMenuPointerGesture", self._arm_action_menu_pointer_guard)
         self._connect("actionRequested", model.request_action)
 
     def _connect(self, signal_name: str, callback: Callable[..., Any]) -> None:
@@ -996,6 +997,17 @@ class RetainedGmailPresentation:
         )
         self._model.apply_style(style)
         self._retained.set_card_style(style.card_style)
+
+    @staticmethod
+    def _arm_action_menu_pointer_guard() -> None:
+        """Suppress same-gesture click-through from Gmail's retained action popup."""
+
+        from rendering.runtime_input import suppress_runtime_pointer_input
+
+        # Match the retained context-menu action boundary. This is only a
+        # monotonic deadline flag consumed by existing open guards; it owns no
+        # timer, polling loop, pointer-motion cadence, or presentation lifetime.
+        suppress_runtime_pointer_input(700, reason="gmail_action_menu")
 
     def _handle_open_inbox_requested(self) -> bool:
         # Same context-menu click-through guard as request_open: the inbox/header

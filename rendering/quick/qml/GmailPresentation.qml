@@ -39,9 +39,15 @@ OverlayWidget {
     signal openMessageRequested(string messageId)
     signal refreshRequested()
     signal authRequested()
+    signal actionMenuPointerGesture()
     signal actionRequested(string action, string messageId)
 
     function dispatchAction(action, messageId) {
+        // Arm the shared same-gesture click-through guard before dismissing the
+        // retained popup. The action may overlap another Gmail row, and Quick
+        // TapHandlers use passive grabs, so that row can otherwise see this same
+        // release after the menu action has already fired.
+        actionMenuPointerGesture()
         dismissActionMenu()
         actionRequested(action, messageId)
     }
@@ -431,7 +437,13 @@ OverlayWidget {
 
         TapHandler {
             acceptedButtons: Qt.LeftButton
-            onTapped: gmailRoot.dismissActionMenu()
+            onTapped: {
+                // Dismissing the overlay is still a pointer gesture over live
+                // Gmail content; guard it for the same passive-grab reason as
+                // action activation so dismissal cannot open a covered row.
+                gmailRoot.actionMenuPointerGesture()
+                gmailRoot.dismissActionMenu()
+            }
         }
     }
 
