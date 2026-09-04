@@ -889,6 +889,21 @@ class MediaPresentationModel(QObject):
         del old_provider, source, persist
         if not self.is_active:
             return
+
+        # Media provider failover is runtime-authoritative for the whole Media
+        # family, including the shared app-volume owner. Previously the
+        # transport/artwork runtime could switch (for example
+        # spotify_browser -> spotify) while the volume owner stayed configured
+        # for the original Settings provider. Browser volume begins
+        # deliberately unsupported until GSMTC supplies an exact host identity,
+        # so that stale provider left the external rail permanently absent even
+        # after Media had a valid fallback session. Keep the volume owner on
+        # the same provider epoch; the subsequent volume-target callback supplies
+        # the exact browser process when the new provider is spotify_browser.
+        volume_service = self._volume_runtime_service
+        if volume_service is not None:
+            volume_service.set_provider_runtime(provider)
+
         self._release_artwork()
         self._replace_snapshot(
             replace(
