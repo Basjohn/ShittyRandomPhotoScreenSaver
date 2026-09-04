@@ -41,6 +41,7 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | logging / Qt-QML observability | `Docs/Logging_Guide.md` + `Docs/Qt_QML_Observability.md` |
 | deferred deletion/debt | `Future_Cleanup.md` |
 | deferred features | `Future_Work.md` |
+| operator-activated Future Work implementation / live checklists | `FWPlan.md` |
 | G4 durable scale/extent contract | `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` |
 | G4 post-checkpoint correction playbook | `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` |
 | G7/G8 auxiliary/focus implementation route | `Docs/QtQuick_Migration/Remaining_G7_G8_Auxiliary_Focus_Decomposition.md` |
