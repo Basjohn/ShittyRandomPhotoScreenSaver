@@ -44,6 +44,7 @@ uniform float u_large_viewport_stroke_bonus_px; // up to +1 authored px at extre
 
 // --- Styling ---
 uniform vec2 u_specular_dir;       // normalised direction to light source
+uniform float u_specular_reference_aspect; // canonical content at this scale/inset (Quick)
 uniform vec2 u_gradient_dir;       // gradient direction helper vector
 uniform int u_gradient_mode;       // 0=directional, 1=center_out, 2=center_out_reverse
 uniform vec4 u_outline_color;      // bubble outline colour (RGBA 0-1)
@@ -142,6 +143,8 @@ void main() {
     // Remap to 0..1 within inner rect
     vec2 uv = vec2((fc.x - inner_x) / inner_w, (fc.y - inner_y) / inner_h);
     float aspect = inner_w / max(inner_h, 1.0);
+    float specular_aspect = (u_quick_item_coords == 1)
+        ? u_specular_reference_aspect : aspect;
     
     // Pixel size in normalised coords (for anti-aliasing)
     float px = authored_scale / max(inner_h, 1.0);
@@ -407,7 +410,7 @@ void main() {
         // Offset from bubble center toward light source, with per-bubble mutation
         float spec_offset = r * 0.35;
         vec2 spec_center = bxy + vec2(u_specular_dir.x / aspect, -u_specular_dir.y) * spec_offset
-                         + vec2(spec_ox * r, spec_oy * r);
+                         + vec2(spec_ox * r * (specular_aspect / aspect), spec_oy * r);
         
         vec2 spec_delta = uv - spec_center;
         spec_delta.x *= aspect;
@@ -418,8 +421,10 @@ void main() {
         
         // Crescent shape: elongate in the light direction for larger bubbles
         // For the crescent effect, use an ellipse stretched perpendicular to light
-        // Use aspect-corrected direction matching spec_delta coordinate space
-        vec2 adj_dir = vec2(u_specular_dir.x * aspect, -u_specular_dir.y);
+        // Preserve the canonical local highlight as the viewport changes shape.
+        // spec_delta is already isotropic; another current-aspect multiplier
+        // would rotate the light ellipse during a width-only edge resize.
+        vec2 adj_dir = vec2(u_specular_dir.x * specular_aspect, -u_specular_dir.y);
         vec2 spec_dir_norm = normalize(adj_dir);
         vec2 spec_perp = vec2(-spec_dir_norm.y, spec_dir_norm.x);
         

@@ -437,6 +437,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_bubble_btf_coalescing.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_bubble_viewport_config_route.py` | **KEEP — MIGRATION PERMANENT / G4** | Live/coalesced viewport configuration route into each authored Bubble step; extend for committed-vs-CUSTOM override lifecycle. |
 | `tests/test_bubble_viewport_reflow.py` | **KEEP — G4/BTF PERMANENT / RECONCILED** | Current card-relative radius and expanded collision/spawn-world projection; no retired radius helper. |
+| `tests/test_bubble_aspect_pixels.py` | **KEEP — DESTINATION / BTF** | Real GL head diameter/delta versus occupancy across width/height, uniform scale and fit; local specular pixel invariance across width. |
 | `tests/test_bubble_cadence.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_runtime_preset_cycle.py` | **KEEP — MIGRATION PERMANENT / H8** | All-five same-mode wrap, curated replace semantics, lossless Custom round-trip, first-use snapshot seeding and flat-cache migration. |
 | `tests/test_bubble_reactivity.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract, including same-body consume-once transient stream/drift displacement with exact pulse/radius isolation; retain as permanent current coverage. |

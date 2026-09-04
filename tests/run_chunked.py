@@ -131,6 +131,7 @@ DESTINATION_PROFILE = (
     "test_bubble_lifecycle_fades.py",
     "test_bubble_viewport_config_route.py",
     "test_bubble_viewport_reflow.py",
+    "test_bubble_aspect_pixels.py",
     "test_qtquick_phase_c_registry_parity.py",
     "test_qtquick_transition_controller.py",
     "test_qtquick_transition_implementations.py",

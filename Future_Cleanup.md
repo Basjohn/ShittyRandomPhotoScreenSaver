@@ -1,6 +1,6 @@
 # Future Cleanup — Active Deletion / Compatibility Ledger
 
-Last updated: 2026-09-03
+Last updated: 2026-09-05
 
 This file contains only **surviving cleanup/deletion debt**. Completed migration history belongs in
 `Docs/QtQuick_Migration/`, historical bug records and source-control history; it must not remain here as
@@ -53,6 +53,13 @@ by `a3e4ec17`; its stale profile entry was removed rather than restoring retired
   missing theme assets solely to bless a count.
 - [ ] Update obsolete phase prose assertions in `test_visualizer_doc_references.py` against the current destination.
 - [ ] Resolve caller-proven quarantine/debris listed by `test_tooling_ownership.py` without restoring removed tools.
+
+## AUDIT — GPU timing CLI versus Quick ownership
+
+- [ ] Reconcile `main.py`/logging's advertised `--gpu-timing` owner-context query capability with current
+  Quick production: exact search finds no Quick GL timer-query consumer. Preserve useful PERF logging;
+  remove stale claims or deliberately implement measured, bounded owner-context diagnostics when a real
+  attribution task needs them. Do not restore the retired compositor to make this switch truthful.
 
 ## READY — temporary `h-destination` profile alias
 

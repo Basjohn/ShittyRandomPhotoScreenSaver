@@ -313,6 +313,11 @@ Bubble is a canary for shared timing and must not receive mode-specific cadence 
 presentation defects.
 
 Viewport geometry changes are spatial configuration, not logical cadence authority.
+Bubble radius and response remain authored fractions of content height. At unchanged height, width
+changes fractional occupancy rather than per-head pixel amplitude. Bubble-local specular offsets and
+ellipse orientation retain the canonical content aspect at the same scale/inset. The Quick payload
+retains the already validated immutable BubbleFrame tuples; native uploads still use persistent
+render-thread float32 buffers.
 
 Consume-once kick/snare/vocal events forward-carry a bounded motion accent through Bubble's existing stream-burst state.
 This affects stream/drift displacement, not authored motion settings, pulse/radius authority, cadence, or clock ownership.

@@ -39,9 +39,10 @@ Durable references when mechanism detail is needed:
 Operator-activated `Future_Work.md` implementation is sequenced separately in `FWPlan.md`; preserve the unrelated
 work and physical/log validation below.
 
-- [~] **Operator-activated Bubble aspect/response investigation after Sphere:** detailed live checks and
-  owner diagnosis are in `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md`. Separate
-  geometry response from the 60 Hz presentation-tail question below; preserve BTF/R-69 and event cadence.
+- [ ] **Awaiting Validation / Logs — Bubble after Sphere:** per-head aspect response is source/GL-proven;
+  local-highlight aspect correction and measured tuple-allocation removal are implemented. Match the
+  operator's actual resize/preset case and capture the 60 Hz baseline below. Detailed evidence and live
+  checks: `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md`; preserve BTF/R-69 and cadence.
 
 1. [SUSPECTED DONE - CHECK] **Finish shared Widget colour-authority cleanup and physical check.** Apply the Style Overrides/header cleanup, run **Reset All Colours to Theme** once on the current profile when desired, and verify Media/Reddit/Gmail/Steam branded headers resolve cohesively from the selected Widget Theme/shared override. No hidden family colour should survive merely because its GUI swatch was removed.
 2. **Close V7 Visualizer Settings acceptance.** Automated reconciliation is green (277 passed / 1 skipped) and physical testing has already proved Custom snapshotting plus disabled-active Sine -> Bubble substitution. Finish the remaining product contract: the top-level Visualizers navigation button must mirror Media/Visualizers capability state immediately, grey/disable without constructing bodies, preserve state, and restore without eager construction; then re-run Rainbow/Custom, retirement/re-enable, Settings recreation and theme/glass inheritance physically. Future-mode descriptor/module closure remains a separate final V8 proof.

@@ -292,6 +292,8 @@ authority. Motion diagnostics report renderer-normalized, pre-collision stream/d
 still be changed by the existing impulse and collision stages.
 
 The all-five-mode viewport capability policy is part of the destination contract and the core Bubble reflow path has landed.
+Bubble's per-head specular mutation and light ellipse use the canonical content aspect at the current
+uniform scale/inset; edge resizing changes playroom without stretching or rotating the local highlight.
 Do not reintroduce a Bubble false capability gate to conceal a viewport ownership or spatial-domain defect. **R-69 is golden:** wide/tall geometry may not globally compress renderer-facing Bubble head radius, already-normalized Ghost/history displacement, or another mode's authored musical response/freshness. If an extreme Bubble full-expansion tail is too large, fix only that proven tail.
 
 Committed viewport extent is ordinary runtime truth. While CUSTOM is active, its working extent may temporarily override

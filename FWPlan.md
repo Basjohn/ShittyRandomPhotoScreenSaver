@@ -20,12 +20,14 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
   bump/detail controls, source-fenced immutable capture, lazy Settings and event-only inactive GPU retirement.
   Real Quick captures inspected and relevant automatic gates passed; physical acceptance remains separate.
   Detailed evidence: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
-- [~] **Active — Bubble aspect/reactivity and presentation cost:** read Bubble/optimization work in
-  `Current_Plan.md`; trace why wider extents suppress response and narrow extents amplify size/response.
-  Document the owning calculation before an obvious fix; preserve canonical square/rectangular behavior,
-  consume-once events and the existing cadence. Start this investigation only after Sphere visuals and
-  implementation earn retention (operator sequencing, 2026-09-05). Sphere checkpoint `66be7344` satisfies
-  that prerequisite. Live technical checklist: `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md`.
+- [x] **Bubble aspect/response investigation and bounded optimization:** after Sphere checkpoint `66be7344`,
+  traced/documented height-based radius versus field occupancy, fixed the proven local-highlight aspect defect,
+  and removed measured immutable-tuple reconstruction (`139aed21`). Preserved canonical pixels, authored
+  response, consume-once events and cadence. Evidence and remaining physical/log checks:
+  `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md`.
+- [ ] **Awaiting Validation / Logs — Bubble:** match the operator's resize operation and same-preset
+  canonical/wide/narrow feel; obtain a 60 Hz `--perf --viz` baseline without `--usage` before further
+  presentation-tail tuning. Per-head GL response is preserved; the original live complaint is not declared closed.
 - [ ] **FW4 — Directional Pixel Accretion:** create a decomposition, then implement a deterministic instanced
   directional translation experiment with source underlay and exact endpoints.
 - [ ] **FW5 — Glass Shatter / Exploding Tiles:** separate decompositions and isolated lazy implementations after

@@ -580,6 +580,15 @@ def test_quick_bubble_registry_is_static_lazy_and_resource_dormant() -> None:
     assert renderer.has_resources is False
 
 
+@pytest.mark.parametrize("scale", (0.4, 0.65, 1.0, 2.0))
+def test_bubble_local_specular_reference_preserves_canonical_scale_and_inset(scale) -> None:
+    canonical = _layout(_presentation(scale=scale))
+    assert canonical.specular_reference_aspect == pytest.approx(canonical.aspect_ratio)
+    for width in (140.0, 280.0, 630.0, 840.0):
+        resized = _layout(_presentation(scale=scale, extent=(width, 280.0)))
+        assert resized.specular_reference_aspect == pytest.approx(canonical.aspect_ratio)
+
+
 def test_quick_bubble_bulk_uniforms_use_reused_float32_transport(monkeypatch) -> None:
     """PyOpenGL must never recursively convert immutable Bubble tuples in render."""
     renderer = QuickBubbleRenderer()
