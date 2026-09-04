@@ -917,8 +917,10 @@ def _install_visualizer_body_host(tab, controls_layout) -> None:
 
     Spectrum is already built and is adopted so lifecycle queries stay uniform.
     The factory builds a lazy mode's controls into ``controls_layout`` and
-    hydrates it once from ``tab._vis_loaded_config``; it returns the mode's
-    container (a stable non-None body so the host caches it).
+    hydrates it once from ``tab._vis_loaded_config``; it returns the mode's real
+    settings container. The container is a hard contract: if the builder fails to
+    create it the factory raises rather than returning a placeholder, so the host
+    never caches a failed construction as success.
     """
     from core.settings.visualizer_mode_body_host import VisualizerModeBodyHost
     from core.settings.visualizer_mode_registry import (
@@ -929,11 +931,20 @@ def _install_visualizer_body_host(tab, controls_layout) -> None:
     def _factory(mode_id):
         builder = load_mode_settings_builder(mode_id)
         builder(tab, controls_layout)
+        container_attr = _VIS_MODE_CONTAINER_ATTR.get(mode_id, "")
+        container = getattr(tab, container_attr, None) if container_attr else None
+        if container is None:
+            # Contract violation: the builder ran but did not create the mode's
+            # settings container. Fail loudly (and hydrate nothing) rather than
+            # returning a placeholder the host would cache as a real body.
+            raise RuntimeError(
+                f"Visualizer mode {mode_id!r} builder did not create its settings "
+                f"container attribute {container_attr!r}"
+            )
         _hydrate_visualizer_mode_body(
             tab, mode_id, getattr(tab, "_vis_loaded_config", None)
         )
-        container = getattr(tab, _VIS_MODE_CONTAINER_ATTR.get(mode_id, ""), None)
-        return container if container is not None else object()
+        return container
 
     widgets_value = tab._settings.get("widgets", {}) if hasattr(tab, "_settings") else {}
     section = widgets_value.get("spotify_visualizer", {}) if isinstance(widgets_value, dict) else {}
@@ -961,15 +972,11 @@ def ensure_visualizer_mode_body(tab, mode_id: str) -> None:
     host = getattr(tab, "_vis_body_host", None)
     if host is None:
         return
-    try:
-        if mode in host.enabled_modes:
-            host.ensure(mode)
-    except Exception:
-        logger.debug(
-            "[MEDIA_TAB] lazy visualizer body construction failed mode=%s",
-            mode,
-            exc_info=True,
-        )
+    if mode in host.enabled_modes:
+        # No swallow: a construction/hydration failure must stay visible and
+        # actionable. The host only caches on a successful factory return, so a
+        # raised body is never recorded as constructed.
+        host.ensure(mode)
 
 
 def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
