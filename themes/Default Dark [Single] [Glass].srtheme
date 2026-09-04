@@ -463,9 +463,9 @@
       230
     ],
     "control.ghost_action.text": [
-      255,
-      255,
-      255,
+      28,
+      28,
+      28,
       255
     ],
     "control.ghost_action.border": [
@@ -493,10 +493,10 @@
       230
     ],
     "control.ghost_action.disabled_text": [
-      255,
-      255,
-      255,
-      90
+      92,
+      92,
+      92,
+      200
     ],
     "control.ghost_action.disabled_surface": [
       255,

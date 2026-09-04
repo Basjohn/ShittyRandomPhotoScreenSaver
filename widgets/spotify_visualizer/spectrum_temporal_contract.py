@@ -26,6 +26,14 @@ SPECTRUM_MAX_TIME_CONSTANT_SECONDS = 0.014
 SPECTRUM_STALL_SNAP_SECONDS = 0.100
 SPECTRUM_SETTLED_EPSILON = 1.0e-4
 
+# Paused Spectrum owns a deliberately gentle handoff into its resting scene.
+# This is presentation-only state advanced by the existing logical clock; it
+# never retunes BeatEngine/DSP decay and therefore cannot affect a natural
+# low-energy passage while playback remains active.
+SPECTRUM_PAUSE_TO_IDLE_SECONDS = 1.60
+SPECTRUM_IDLE_TRAVEL_BARS_PER_SECOND = 0.90
+SPECTRUM_IDLE_TRAVEL_AMPLITUDE = 0.030
+
 # Spectrum's shader reserves 6 authored px at both top and bottom of the bar
 # field.  Use the same logical span here rather than raw card height so the
 # temporal ratio tracks the distance a bar can actually traverse.
@@ -61,6 +69,74 @@ def idle_spectrum_baseline(bar_count: int) -> list[float]:
         _IDLE_BASELINE_MIN + span * math.sin((index / (count - 1)) * math.pi)
         for index in range(count)
     ]
+
+
+def idle_spectrum_travel_scene(
+    bar_count: int,
+    travel_position: object,
+) -> list[float]:
+    """Return the resting scene plus one very gentle left-to-right energy pulse.
+
+    ``travel_position`` is measured in bar indices.  A one-bar cosine bell means
+    the next bar begins to rise as the current bar falls.  The caller advances
+    the position from the existing Spectrum logical clock; no timer or secondary
+    cadence owner is introduced here.
+    """
+
+    baseline = idle_spectrum_baseline(bar_count)
+    if not baseline:
+        return baseline
+    try:
+        position = float(travel_position)
+    except (TypeError, ValueError):
+        position = -1.0
+    if not math.isfinite(position):
+        position = -1.0
+
+    resolved: list[float] = []
+    for index, floor in enumerate(baseline):
+        distance = abs(float(index) - position)
+        if distance >= 1.0:
+            pulse = 0.0
+        else:
+            pulse = 0.5 * (1.0 + math.cos(math.pi * distance))
+        resolved.append(
+            _clamp01(floor + SPECTRUM_IDLE_TRAVEL_AMPLITUDE * pulse)
+        )
+    return resolved
+
+
+def advance_idle_spectrum_travel_position(
+    current_position: object,
+    *,
+    bar_count: int,
+    dt_seconds: object,
+) -> float:
+    """Advance the paused idle pulse without owning cadence or wall-clock work."""
+
+    count = max(0, int(bar_count))
+    if count <= 0:
+        return -1.0
+    try:
+        position = float(current_position)
+    except (TypeError, ValueError):
+        position = -1.0
+    if not math.isfinite(position):
+        position = -1.0
+    try:
+        dt = float(dt_seconds)
+    except (TypeError, ValueError):
+        dt = 0.0
+    if not math.isfinite(dt) or dt <= 0.0 or dt >= 1.0:
+        return position
+
+    position += dt * SPECTRUM_IDLE_TRAVEL_BARS_PER_SECOND
+    # One authored empty-bar margin on each end gives the last bar time to fall
+    # before the left edge starts its next very slow rise.
+    cycle_span = float(count + 2)
+    while position > float(count):
+        position -= cycle_span
+    return position
 
 
 def spectrum_vertical_temporal_ratio(viewport_height: object) -> float:
@@ -124,11 +200,16 @@ def spectrum_visual_alpha(
 
 
 __all__ = [
+    "SPECTRUM_IDLE_TRAVEL_AMPLITUDE",
+    "SPECTRUM_IDLE_TRAVEL_BARS_PER_SECOND",
     "SPECTRUM_MAX_TIME_CONSTANT_SECONDS",
     "SPECTRUM_MIN_TIME_CONSTANT_SECONDS",
+    "SPECTRUM_PAUSE_TO_IDLE_SECONDS",
     "SPECTRUM_SETTLED_EPSILON",
     "SPECTRUM_STALL_SNAP_SECONDS",
+    "advance_idle_spectrum_travel_position",
     "idle_spectrum_baseline",
+    "idle_spectrum_travel_scene",
     "spectrum_vertical_temporal_ratio",
     "spectrum_visual_alpha",
     "spectrum_visual_time_constant",

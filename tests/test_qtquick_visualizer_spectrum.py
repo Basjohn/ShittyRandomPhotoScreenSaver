@@ -9,6 +9,7 @@ import pytest
 from core.settings.visualizer_mode_registry import (
     get_visualizer_presentation_policy,
 )
+from widgets.spotify_visualizer import mode_capabilities
 from rendering.quick.visualizer import (
     VisualizerRenderNode,
     snapshot_has_current_reactive_source,
@@ -108,6 +109,150 @@ def _snapshot(**logical_kwargs):
         _presentation(),
         logical_revision=1,
     )
+
+
+
+def _resolve_runtime_frame(
+    runtime: SpectrumFrameRuntime,
+    bars,
+    *,
+    now_ts: float,
+    playing: bool,
+    first_frame: bool = False,
+    smoothing_enabled: bool = False,
+):
+    return runtime.resolve(
+        bars,
+        bar_count=len(bars),
+        now_ts=now_ts,
+        runtime_generation=2,
+        engine_generation=5,
+        activation_id=7,
+        source_generation=5 if playing else -1,
+        source_activation_id=7 if playing else -1,
+        playing=playing,
+        first_frame=first_frame,
+        smoothing_enabled=smoothing_enabled,
+        smoothing_strength=0.5,
+        single_piece=False,
+        segments=53,
+        ghosting_enabled=False,
+        ghost_decay=0.4,
+        animation_enabled=False,
+    )
+
+
+def test_spectrum_pause_edge_falls_slowly_but_natural_active_drop_is_unchanged() -> None:
+    runtime = SpectrumFrameRuntime()
+    live = _resolve_runtime_frame(
+        runtime, [0.92, 0.78, 0.64, 0.50], now_ts=1.0, playing=True, first_frame=True
+    )
+    natural_drop = _resolve_runtime_frame(
+        runtime, [0.18, 0.16, 0.14, 0.12], now_ts=1.016, playing=True
+    )
+    assert natural_drop.bars == pytest.approx((0.18, 0.16, 0.14, 0.12))
+
+    # Rebuild a high live scene, then only the explicit playing->paused edge gets
+    # the deliberately slow presentation-owned fall.
+    live_again = _resolve_runtime_frame(
+        runtime, [0.90, 0.80, 0.70, 0.60], now_ts=1.032, playing=True
+    )
+    paused_edge = _resolve_runtime_frame(
+        runtime, [0.0, 0.0, 0.0, 0.0], now_ts=1.048, playing=False
+    )
+    paused_mid = _resolve_runtime_frame(
+        runtime, [0.0, 0.0, 0.0, 0.0], now_ts=1.448, playing=False
+    )
+    paused_later = _resolve_runtime_frame(
+        runtime, [0.0, 0.0, 0.0, 0.0], now_ts=2.038, playing=False
+    )
+    paused_settled = _resolve_runtime_frame(
+        runtime, [0.0, 0.0, 0.0, 0.0], now_ts=2.738, playing=False
+    )
+
+    assert paused_edge.bars == pytest.approx(live_again.bars)
+    assert paused_mid.bars[0] > 0.70
+    assert paused_later.bars[0] < paused_mid.bars[0]
+    assert max(paused_settled.bars) < 0.30
+    assert paused_settled.changed is True
+
+
+def test_spectrum_resume_mid_pause_descent_waits_for_fresh_source_then_hands_back_cleanly() -> None:
+    runtime = SpectrumFrameRuntime()
+    live = _resolve_runtime_frame(
+        runtime, [0.88, 0.72, 0.56, 0.40], now_ts=1.0, playing=True, first_frame=True
+    )
+    _resolve_runtime_frame(
+        runtime, [0.0, 0.0, 0.0, 0.0], now_ts=1.016, playing=False
+    )
+    descending = _resolve_runtime_frame(
+        runtime, [0.0, 0.0, 0.0, 0.0], now_ts=1.616, playing=False
+    )
+
+    # Resume before a current-activation source exists: keep the presentation
+    # exactly where the pause handoff left it and do not grant reactive authority.
+    waiting = runtime.resolve(
+        [0.99, 0.99, 0.99, 0.99],
+        bar_count=4,
+        now_ts=1.632,
+        runtime_generation=2,
+        engine_generation=5,
+        activation_id=7,
+        source_generation=4,
+        source_activation_id=7,
+        playing=True,
+        first_frame=False,
+        smoothing_enabled=True,
+        smoothing_strength=0.5,
+        single_piece=False,
+        segments=53,
+        ghosting_enabled=False,
+        ghost_decay=0.4,
+        animation_enabled=False,
+    )
+    assert waiting.bars == pytest.approx(descending.bars)
+    assert waiting.reactive_source_ready is False
+
+    # The first fresh source owns presentation immediately; no pause animation
+    # survives across the fresh-source authority boundary.
+    fresh = _resolve_runtime_frame(
+        runtime, [0.62, 0.48, 0.34, 0.20], now_ts=1.648, playing=True
+    )
+    assert fresh.bars == pytest.approx((0.62, 0.48, 0.34, 0.20))
+    assert fresh.reactive_source_ready is True
+    assert fresh.bars != pytest.approx(live.bars)
+
+
+def test_paused_spectrum_idle_energy_travels_left_to_right_on_existing_clock() -> None:
+    runtime = SpectrumFrameRuntime()
+    initial = _resolve_runtime_frame(
+        runtime, [0.0] * 6, now_ts=1.0, playing=False, first_frame=True
+    )
+    left_rising = _resolve_runtime_frame(
+        runtime, [0.0] * 6, now_ts=1.5, playing=False
+    )
+    left_peak = _resolve_runtime_frame(
+        runtime, [0.0] * 6, now_ts=2.1, playing=False
+    )
+    handoff = _resolve_runtime_frame(
+        runtime, [0.0] * 6, now_ts=2.65, playing=False
+    )
+    second_peak = _resolve_runtime_frame(
+        runtime, [0.0] * 6, now_ts=3.2, playing=False
+    )
+
+    assert left_rising.bars[0] > initial.bars[0]
+    assert left_peak.bars[0] > left_rising.bars[0]
+    assert handoff.bars[0] > initial.bars[0]
+    assert handoff.bars[1] > initial.bars[1]
+    assert second_peak.bars[1] > handoff.bars[1]
+    assert second_peak.bars[0] < handoff.bars[0]
+
+
+def test_spectrum_idle_motion_stays_presentation_owned_for_mode_isolation() -> None:
+    assert mode_capabilities.has_presentation_owned_idle_scene("spectrum") is True
+    assert mode_capabilities.is_idle_self_animating("spectrum") is False
+    assert mode_capabilities.requires_authoritative_first_source("spectrum") is True
 
 
 def test_paused_spectrum_authors_visible_idle_without_source_identity() -> None:

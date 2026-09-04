@@ -14,9 +14,12 @@ from widgets.spotify_visualizer.render_state import (
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
 )
 from widgets.spotify_visualizer.spectrum_temporal_contract import (
+    SPECTRUM_PAUSE_TO_IDLE_SECONDS,
     SPECTRUM_SETTLED_EPSILON,
     SPECTRUM_STALL_SNAP_SECONDS,
+    advance_idle_spectrum_travel_position,
     idle_spectrum_baseline,
+    idle_spectrum_travel_scene,
     spectrum_visual_alpha,
 )
 from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
@@ -73,6 +76,10 @@ class SpectrumFrameRuntime(RetirableFrameRuntime):
         self._last_peak_ts = 0.0
         self._animation_time = 0.0
         self._last_animation_ts = 0.0
+        self._last_playing: bool | None = None
+        self._pause_transition_started_ts = 0.0
+        self._pause_transition_origin: list[float] = []
+        self._idle_travel_position = -1.0
         self._activation_identity: tuple[int, int, int] | None = None
         reset_spectrum_solid_hysteresis_state(self)
 
@@ -84,6 +91,10 @@ class SpectrumFrameRuntime(RetirableFrameRuntime):
         self._last_peak_ts = 0.0
         self._animation_time = 0.0
         self._last_animation_ts = 0.0
+        self._last_playing = None
+        self._pause_transition_started_ts = 0.0
+        self._pause_transition_origin = []
+        self._idle_travel_position = -1.0
         self._activation_identity = None
         reset_spectrum_solid_hysteresis_state(self)
 
@@ -139,11 +150,66 @@ class SpectrumFrameRuntime(RetirableFrameRuntime):
         )
 
         previous_bars = list(self._presentation_bars)
-        if not playing:
-            baseline = idle_spectrum_baseline(count)
-            values = [max(value, floor) for value, floor in zip(values, baseline)]
-            resolved_bars = values
+        is_playing = bool(playing)
+        pause_edge = self._last_playing is True and not is_playing
+        idle_dt = (
+            timestamp - self._presentation_last_ts
+            if self._presentation_last_ts > 0.0
+            and 0.0 < timestamp - self._presentation_last_ts < 1.0
+            else 0.0
+        )
+
+        if not is_playing:
+            # Spectrum's idle scene is presentation-owned. On a real playback
+            # pause edge only, preserve the last live bars and ease them slowly
+            # into that scene. Natural low-energy drops while `playing` remains
+            # true stay on the existing source/smoothing path below.
+            if pause_edge and len(previous_bars) == count:
+                self._pause_transition_started_ts = timestamp
+                self._pause_transition_origin = list(previous_bars)
+                self._idle_travel_position = -1.0
+            elif self._last_playing is None:
+                # Cold/initial paused presentation is already idle; do not fake
+                # a pause transition from an absent source.
+                self._pause_transition_started_ts = 0.0
+                self._pause_transition_origin = []
+                self._idle_travel_position = -1.0
+
+            self._idle_travel_position = advance_idle_spectrum_travel_position(
+                self._idle_travel_position,
+                bar_count=count,
+                dt_seconds=idle_dt,
+            )
+            idle_scene = idle_spectrum_travel_scene(
+                count,
+                self._idle_travel_position,
+            )
+            if (
+                self._pause_transition_started_ts > 0.0
+                and len(self._pause_transition_origin) == count
+            ):
+                elapsed = max(0.0, timestamp - self._pause_transition_started_ts)
+                progress = min(
+                    1.0,
+                    elapsed / max(SPECTRUM_PAUSE_TO_IDLE_SECONDS, 1.0e-6),
+                )
+                # Smoothstep gives the pause edge a deliberately soft initial
+                # release without changing the steady-state/natural drop law.
+                eased = progress * progress * (3.0 - 2.0 * progress)
+                resolved_bars = [
+                    origin + (target - origin) * eased
+                    for origin, target in zip(
+                        self._pause_transition_origin, idle_scene
+                    )
+                ]
+                if progress >= 1.0:
+                    self._pause_transition_started_ts = 0.0
+                    self._pause_transition_origin = []
+            else:
+                resolved_bars = idle_scene
         elif not source_ready:
+            self._pause_transition_started_ts = 0.0
+            self._pause_transition_origin = []
             # Keep the presentation-owned resting scene while Play waits for a
             # real current-activation frame.  The source identity remains
             # absent/stale and the render admission guard will not treat these
@@ -154,8 +220,12 @@ class SpectrumFrameRuntime(RetirableFrameRuntime):
                 else idle_spectrum_baseline(count)
             )
         elif not smoothing_enabled or strength <= 0.0:
+            self._pause_transition_started_ts = 0.0
+            self._pause_transition_origin = []
             resolved_bars = values
         else:
+            self._pause_transition_started_ts = 0.0
+            self._pause_transition_origin = []
             last_ts = self._presentation_last_ts
             dt = timestamp - last_ts
             reset_boundary = bool(
@@ -245,6 +315,7 @@ class SpectrumFrameRuntime(RetirableFrameRuntime):
             or bool(animation_dt > 0.0 and playing and animation_enabled)
         )
         ghost_bars = tuple(peaks) if ghosting_enabled else ()
+        self._last_playing = is_playing
         return SpectrumResolvedFrame(
             bars=tuple(resolved_bars),
             peaks=tuple(peaks),
