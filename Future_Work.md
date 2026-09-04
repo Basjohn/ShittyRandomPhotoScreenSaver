@@ -4,6 +4,9 @@ Last updated: 2026-09-04
 
 Long-horizon feature / new-implementation backlog.
 
+The operator has activated backlog implementation (2026-09-05). `FWPlan.md` owns that selected work's live
+checklists and links to detailed decompositions; this document retains feature intent and relative priority.
+
 ## Authority / activation rule
 
 `Future_Work.md` is **not active sequencing by default**. Normal work continues to be owned by
