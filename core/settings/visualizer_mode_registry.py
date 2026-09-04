@@ -284,6 +284,53 @@ def resolve_effective_enabled_modes(
     return ordered
 
 
+def resolve_admissible_enabled_modes(enabled_modes: object) -> tuple[str, ...]:
+    """Return effective enabled modes intersected with dev-active descriptors.
+
+    UI pill/body admission must never expose or construct a currently dev-gated
+    inactive mode, even if persisted ``enabled_modes`` still lists it. Persisted
+    canonical enable-state is preserved untouched — this is a read-only
+    admission view, not a mutation. With all gates open (today) it equals
+    :func:`resolve_effective_enabled_modes`.
+    """
+    return tuple(
+        mode_id
+        for mode_id in resolve_effective_enabled_modes(enabled_modes)
+        if is_mode_active(mode_id)
+    )
+
+
+def can_disable_visualizer_mode(enabled_modes: object, mode_id: str) -> bool:
+    """Whether *mode_id* may be toggled off while the family stays ON.
+
+    The family invariant is at least one enabled mode. Disabling the final
+    enabled mode is rejected here so a UI toggle can be blocked *before* it
+    produces an empty set — which :func:`resolve_effective_enabled_modes` would
+    otherwise widen back to all modes. Turning the whole family OFF is a
+    separate control, not this path.
+    """
+    effective = resolve_effective_enabled_modes(enabled_modes)
+    target = str(mode_id or "").strip().lower()
+    if target not in effective:
+        return False
+    return len(effective) > 1
+
+
+def apply_visualizer_mode_disable(enabled_modes: object, mode_id: str) -> tuple[str, ...]:
+    """Return the enabled set with *mode_id* removed, or unchanged if it is last.
+
+    Never returns an empty set while the family is ON: if *mode_id* is the sole
+    enabled mode the current effective set is returned unchanged (the caller
+    should also disable the toggle via :func:`can_disable_visualizer_mode`). The
+    result is always the canonical-ordered effective set, never widened to all.
+    """
+    effective = resolve_effective_enabled_modes(enabled_modes)
+    if not can_disable_visualizer_mode(enabled_modes, mode_id):
+        return effective
+    target = str(mode_id or "").strip().lower()
+    return tuple(mode for mode in effective if mode != target)
+
+
 def resolve_effective_mode(
     requested_mode: object,
     enabled_modes: object,

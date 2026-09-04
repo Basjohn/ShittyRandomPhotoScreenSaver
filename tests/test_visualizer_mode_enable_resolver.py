@@ -157,3 +157,39 @@ def test_effective_section_non_mapping_yields_default_mode():
     assert substituted is False
     assert requested == ""
     assert resolved == get_default_visualizer_mode_id()
+
+
+# ---------------------------------------------------------------------------
+# V5b guards: last-enabled-mode + dev-gate vs enabled admission
+# ---------------------------------------------------------------------------
+
+from core.settings.visualizer_mode_registry import (  # noqa: E402
+    apply_visualizer_mode_disable,
+    can_disable_visualizer_mode,
+    resolve_admissible_enabled_modes,
+)
+
+
+def test_cannot_disable_the_final_enabled_mode():
+    # Two enabled -> either may be disabled.
+    assert can_disable_visualizer_mode(["spectrum", "bubble"], "spectrum") is True
+    # One enabled -> the last mode may not be disabled while the family is ON.
+    assert can_disable_visualizer_mode(["bubble"], "bubble") is False
+    # A mode that is not enabled cannot be "disabled".
+    assert can_disable_visualizer_mode(["bubble"], "spectrum") is False
+
+
+def test_apply_disable_never_widens_to_all_modes():
+    # Disabling a non-final mode narrows the set.
+    assert apply_visualizer_mode_disable(["spectrum", "bubble"], "spectrum") == ("bubble",)
+    # Disabling the final mode is refused: the set is returned unchanged, and
+    # crucially NOT widened back to every mode by empty-set normalization.
+    result = apply_visualizer_mode_disable(["bubble"], "bubble")
+    assert result == ("bubble",)
+    assert result != VISUALIZER_MODE_IDS
+
+
+def test_admissible_modes_intersect_enabled_with_dev_active():
+    # With every dev gate open (today), admissible == effective enabled.
+    assert resolve_admissible_enabled_modes(["bubble", "spectrum"]) == ("spectrum", "bubble")
+    assert resolve_admissible_enabled_modes(None) == VISUALIZER_MODE_IDS

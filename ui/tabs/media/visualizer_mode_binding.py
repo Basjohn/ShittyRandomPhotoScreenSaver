@@ -10,7 +10,6 @@ from core.settings.visualizer_mode_registry import (
     iter_visualizer_mode_descriptors,
 )
 from core.settings.visualizer_presets import (
-    get_missing_preset_fallback_index,
     resolve_preset_index_from_mapping,
 )
 
@@ -76,14 +75,21 @@ def load_visualizer_preset_indices(tab, spotify_vis_config: Mapping[str, Any] | 
 
 
 def collect_visualizer_preset_indices(tab, spotify_vis_config: dict[str, Any]) -> None:
-    """Write per-mode preset slider selections into the config mapping."""
+    """Write per-mode preset slider selections into the config mapping.
+
+    Under lazy mode bodies (V5), an absent preset slider means the mode's
+    Settings body was never constructed — NOT that its preset setting is missing.
+    An unbuilt mode must contribute no replacement preset key: its persisted
+    preset index stays authoritative through the save merge. Writing a
+    fallback index here would silently reset an unbuilt mode's preset on an
+    unrelated save (cf. R-13 cross-mode loss / R-32 lazy-save hydration), so a
+    missing slider is skipped rather than defaulted.
+    """
     for descriptor in iter_visualizer_mode_descriptors():
         slider = getattr(tab, descriptor.preset_slider_attr, None)
-        spotify_vis_config[descriptor.preset_key] = (
-            slider.preset_index()
-            if slider is not None
-            else get_missing_preset_fallback_index(descriptor.mode_id)
-        )
+        if slider is None:
+            continue
+        spotify_vis_config[descriptor.preset_key] = slider.preset_index()
 
 
 def load_visualizer_rainbow_state(tab, spotify_vis_config: Mapping[str, Any] | None) -> None:
