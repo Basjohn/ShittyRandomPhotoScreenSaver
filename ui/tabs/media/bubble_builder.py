@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     """Build Bubble visualizer settings and add to parent_layout."""
-    from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.shared_styles import NoWheelSlider
 
     scaffold = build_mode_scaffold(
         tab,

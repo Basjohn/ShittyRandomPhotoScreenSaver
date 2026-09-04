@@ -55,7 +55,7 @@ def _update_osc_multi_line_visibility(tab) -> None:
 
 def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     """Build Oscilloscope settings and add to parent_layout."""
-    from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.shared_styles import NoWheelSlider
 
     scaffold = build_mode_scaffold(
         tab,

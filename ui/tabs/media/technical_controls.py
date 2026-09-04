@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import RecommendedMarkSlider, add_section_label
-from ui.tabs.widgets_tab import NoWheelSlider
+from ui.tabs.shared_styles import NoWheelSlider
 from ui.widgets import StyledComboBox
 
 
