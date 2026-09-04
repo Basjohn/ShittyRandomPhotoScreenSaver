@@ -156,7 +156,8 @@
         "ripple_count": 3
       },
       "slide": {
-        "direction": "Random"
+        "direction": "Random",
+        "motion_style": "Linear"
       },
       "type": "3D Block Spins",
       "wipe": {

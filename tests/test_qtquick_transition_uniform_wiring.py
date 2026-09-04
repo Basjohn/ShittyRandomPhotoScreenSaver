@@ -22,6 +22,7 @@ from rendering.quick.transitions.implementations import crumble as crumble_modul
 from rendering.quick.transitions.implementations import diffuse as diffuse_module
 from rendering.quick.transitions.implementations import particle as particle_module
 from rendering.quick.transitions.implementations import ripple as ripple_module
+from rendering.quick.transitions.implementations import slide as slide_module
 
 
 _IDENTITY_MATRIX = (
@@ -133,6 +134,7 @@ def _frame(
     linear: float = 0.5,
     viewport=(0, 0, 1920, 1080),
     logical_size=(1920.0, 1080.0),
+    direction=None,
 ) -> QuickTransitionRenderFrame:
     request = TransitionRequest(
         runtime_generation=3,
@@ -140,7 +142,7 @@ def _frame(
         requested_name=requested_name,
         selected_from_random=False,
         duration_ms=duration_ms,
-        direction=None,
+        direction=direction,
         parameters=parameters,
         source_image=_image("old"),
         destination_image=_image("new"),
@@ -194,6 +196,17 @@ def test_ripple_request_parameters_reach_intended_uniforms(monkeypatch):
     assert recorder.uniforms["u_progress"] == pytest.approx(
         frame.sample.eased_progress
     )
+
+
+def test_slide_frozen_motion_style_reaches_the_renderer(monkeypatch):
+    recorder = _RecordingGL()
+    _install(monkeypatch, slide_module, recorder)
+    frame = _frame(
+        "slide", "Slide", {"motion_style": "Elastic"}, direction="left"
+    )
+    slide_module.QuickSlideRenderer().render(frame)
+    assert recorder.uniforms["u_motionStyle"] == 1
+    assert recorder.uniforms["u_progress"] == pytest.approx(frame.sample.eased_progress)
 
 
 def _crumble_params(**overrides) -> dict:

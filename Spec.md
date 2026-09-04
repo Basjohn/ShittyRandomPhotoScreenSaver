@@ -324,6 +324,11 @@ another display must not require or construct a duplicate Media presentation on 
 Transitions resolve canonical settings/admission into immutable request/run state and lazy Quick rendering. Old
 `GLCompositor*Transition` pixels are not destination authority after caller proof.
 
+Slide has one canonical identity and four cardinal directions. Its frozen per-run `motion_style` is one of Linear,
+Elastic, Wobble or Flex: endpoints sample the unmodified source/destination, each pixel has one image owner, and
+Elastic's bounded late-arrival settlement samples destination coordinates relative to arrival without wrap strips.
+Slide adds no effect-local timer, clock, worker or resource owner; true Perspective remains a separate 3D feature.
+
 ## Lifecycle
 
 Old generation loses admission before replacement gains authority; generation 0 is valid. GPU resources are

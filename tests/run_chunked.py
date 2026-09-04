@@ -135,6 +135,7 @@ DESTINATION_PROFILE = (
     "test_qtquick_phase_c_registry_parity.py",
     "test_qtquick_transition_controller.py",
     "test_qtquick_transition_implementations.py",
+    "test_qtquick_slide_motion.py",
     "test_qtquick_transition_parameter_defaults.py",
     "test_qtquick_transition_parameter_resolution.py",
     "test_qtquick_transition_request_resolution.py",

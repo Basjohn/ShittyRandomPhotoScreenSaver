@@ -57,7 +57,7 @@ def test_manual_transition_resolves_canonical_duration_and_direction() -> None:
     assert spec.selected_from_random is False
     assert spec.duration_ms == 321
     assert spec.direction == "right"
-    assert spec.parameters == ()
+    assert dict(spec.parameters) == {"motion_style": "Linear"}
 
 
 def test_random_direction_is_resolved_once_into_the_batch_value() -> None:

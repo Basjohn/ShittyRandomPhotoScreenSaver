@@ -86,6 +86,28 @@ def test_default_transition_type_and_direction(qapp, settings_manager, qtbot):
     assert wipe_cfg.get('direction') == canonical['wipe']['direction']
 
 
+def test_slide_motion_style_is_lazy_hydrated_and_unbuilt_saves_preserve_it(
+    qapp, settings_manager, qtbot,
+):
+    transitions = settings_manager.get('transitions', {})
+    transitions['slide'] = {'direction': 'Right to Left', 'motion_style': 'Flex'}
+    settings_manager.set('transitions', transitions)
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+
+    assert not hasattr(tab, 'slide_group')
+    tab._save_settings()
+    assert settings_manager.get('transitions', {})['slide']['motion_style'] == 'Flex'
+
+    tab._on_nav_selected('Slide')
+    assert tab.slide_motion_style_combo.currentText() == 'Flex'
+    tab.slide_motion_style_combo.setCurrentText('Wobble')
+    tab._save_settings()
+    assert settings_manager.get('transitions', {})['slide'] == {
+        'direction': 'Right to Left', 'motion_style': 'Wobble',
+    }
+
+
 def test_transition_combo_uses_registry_order(qapp, settings_manager, qtbot):
     tab = TransitionsTab(settings_manager)
     qtbot.addWidget(tab)
