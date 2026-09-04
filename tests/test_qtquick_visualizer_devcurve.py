@@ -346,13 +346,31 @@ def _layout(presentation):
 
 
 def test_devcurve_layout_reflows_domain_and_keeps_authored_stroke_scale() -> None:
-    canonical = _layout(_presentation())
-    scaled = _layout(_presentation(scale=0.65))
+    canonical_pres = _presentation()
+    scaled_pres = _presentation(scale=0.65)
+    canonical = _layout(canonical_pres)
+    scaled = _layout(scaled_pres)
     wide = _layout(_presentation(extent=(560.0, 280.0)))
     tall = _layout(_presentation(extent=(420.0, 420.0)))
 
-    assert scaled.content_rect[2] == pytest.approx(canonical.content_rect[2] * 0.65)
-    assert scaled.content_rect[3] == pytest.approx(canonical.content_rect[3] * 0.65)
+    # Visible border obeys the bounded/non-linear stroke rule (authored 4px clamped
+    # to 3.3px at 0.65x, not a naive 2.6px), so the content extent it insets is not
+    # a perfect uniform scaling of the canonical content extent.
+    assert canonical_pres.border_width == pytest.approx(4.0)
+    assert scaled_pres.border_width == pytest.approx(3.3)
+    border_delta = scaled_pres.border_width - canonical_pres.border_width * 0.65
+    assert border_delta == pytest.approx(0.7)
+
+    # content extent = outer - 2*border; the outer rect scales uniformly, so each
+    # content axis differs from a naive 0.65x by EXACTLY twice the bounded border
+    # delta. The domain normalization below still recovers a 1.0 scale because the
+    # baseline content extent de-scales the same bounded stroke.
+    assert scaled.content_rect[2] == pytest.approx(
+        canonical.content_rect[2] * 0.65 - 2.0 * border_delta
+    )
+    assert scaled.content_rect[3] == pytest.approx(
+        canonical.content_rect[3] * 0.65 - 2.0 * border_delta
+    )
     assert canonical.normalized_x_scale == pytest.approx(1.0)
     assert canonical.normalized_y_scale == pytest.approx(1.0)
     assert scaled.normalized_x_scale == pytest.approx(1.0)

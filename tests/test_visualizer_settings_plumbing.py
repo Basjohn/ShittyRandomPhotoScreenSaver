@@ -1427,134 +1427,24 @@ class TestVisualizerSettingsSnapshotNormalization:
 
 
 class TestVisualizerModeBinding:
-    def test_populate_visualizer_mode_combo_uses_registry_order(self):
-        from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
-        from ui.tabs.media.visualizer_mode_binding import populate_visualizer_mode_combo
-
-        class _Combo:
-            def __init__(self):
-                self.items = []
-
-            def addItem(self, label, data):
-                self.items.append((label, data))
-
-        combo = _Combo()
-        populate_visualizer_mode_combo(combo)
-
-        assert combo.items == [
-            (descriptor.display_name, descriptor.mode_id)
-            for descriptor in iter_visualizer_mode_descriptors()
-        ]
-
-    def test_initialize_visualizer_mode_combo_uses_shared_build_default(self):
-        from ui.tabs.media.visualizer_mode_binding import initialize_visualizer_mode_combo
-
-        class _Combo:
-            def __init__(self):
-                self.items = []
-                self._index = -1
-
-            def addItem(self, label, data):
-                self.items.append((label, data))
-
-            def findData(self, value):
-                for idx, (_label, data) in enumerate(self.items):
-                    if data == value:
-                        return idx
-                return -1
-
-            def setCurrentIndex(self, index):
-                self._index = index
-
-            def currentData(self):
-                if 0 <= self._index < len(self.items):
-                    return self.items[self._index][1]
-                return None
-
-        class _Tab:
-            def __init__(self):
-                self.vis_mode_combo = _Combo()
-
-            def _default_str(self, *_args):
-                return "bubble"
-
-        tab = _Tab()
-        initialize_visualizer_mode_combo(tab)
-
-        assert tab.vis_mode_combo.currentData() == "bubble"
-
-    def test_load_visualizer_mode_selection_falls_back_when_saved_mode_is_unknown(self):
-        from ui.tabs.media.visualizer_mode_binding import (
-            get_visualizer_mode_fallback,
-            initialize_visualizer_mode_combo,
-            load_visualizer_mode_selection,
-        )
-
-        class _Combo:
-            def __init__(self):
-                self.items = []
-                self._index = -1
-
-            def addItem(self, label, data):
-                self.items.append((label, data))
-
-            def findData(self, value):
-                for idx, (_label, data) in enumerate(self.items):
-                    if data == value:
-                        return idx
-                return -1
-
-            def setCurrentIndex(self, index):
-                self._index = index
-
-            def currentData(self):
-                if 0 <= self._index < len(self.items):
-                    return self.items[self._index][1]
-                return None
-
-        class _Tab:
-            def __init__(self):
-                self.vis_mode_combo = _Combo()
-
-            def _default_str(self, *_args):
-                return "bubble"
-
-            def _config_str(self, _section, config, key, default):
-                return config.get(key, default)
-
-        tab = _Tab()
-        initialize_visualizer_mode_combo(tab)
-        load_visualizer_mode_selection(tab, {"mode": "not_a_real_mode"})
-
-        assert tab.vis_mode_combo.currentData() == get_visualizer_mode_fallback()
+    # V7 retired the Widgets-hosted ``vis_mode_combo`` and its
+    # ``populate_visualizer_mode_combo`` / ``initialize_visualizer_mode_combo``
+    # bindings; mode selection is now driven by top-level Visualizer pills. The
+    # three fossil tests that exercised those combo helpers (registry ordering,
+    # shared-default selection, unknown-mode fallback) were deleted rather than
+    # rewritten: their intent is covered without duplication by the effective
+    # enabled-mode / substitution resolver contract in
+    # ``tests/test_visualizer_mode_enable_resolver.py`` (see
+    # ``test_selection_is_deduped_and_canonically_ordered``,
+    # ``test_unknown_mode_prefers_configured_default_when_enabled`` and
+    # ``test_effective_section_non_mapping_yields_default_mode``). The two
+    # rainbow load/collect tests below still exercise live binding functions and
+    # were rewritten to set the active mode directly instead of via the combo.
 
     def test_load_visualizer_rainbow_state_uses_registry_modes_and_active_selection(self):
         from ui.tabs.media.visualizer_mode_binding import (
-            initialize_visualizer_mode_combo,
             load_visualizer_rainbow_state,
         )
-
-        class _Combo:
-            def __init__(self):
-                self.items = []
-                self._index = -1
-
-            def addItem(self, label, data):
-                self.items.append((label, data))
-
-            def findData(self, value):
-                for idx, (_label, data) in enumerate(self.items):
-                    if data == value:
-                        return idx
-                return -1
-
-            def setCurrentIndex(self, index):
-                self._index = index
-
-            def currentData(self):
-                if 0 <= self._index < len(self.items):
-                    return self.items[self._index][1]
-                return None
 
         class _Check:
             def __init__(self):
@@ -1579,14 +1469,13 @@ class TestVisualizerModeBinding:
 
         class _Tab:
             def __init__(self):
-                self.vis_mode_combo = _Combo()
+                # V7: mode selection is context-owned, not combo-owned. The active
+                # mode is the canonical id the pills write.
+                self._active_visualizer_mode_id = "bubble"
                 self.rainbow_enabled = _Check()
                 self.rainbow_speed_slider = _Slider()
                 self.rainbow_speed_label = _Label()
                 self.rainbow_updates = 0
-
-            def _default_str(self, *_args):
-                return "bubble"
 
             def _config_bool(self, _section, config, key, default):
                 return config.get(key, default)
@@ -1598,7 +1487,6 @@ class TestVisualizerModeBinding:
                 self.rainbow_updates += 1
 
         tab = _Tab()
-        initialize_visualizer_mode_combo(tab)
         load_visualizer_rainbow_state(
             tab,
             {
@@ -1616,30 +1504,7 @@ class TestVisualizerModeBinding:
     def test_collect_visualizer_rainbow_state_writes_known_mode_keys_from_active_mode(self):
         from ui.tabs.media.visualizer_mode_binding import (
             collect_visualizer_rainbow_state,
-            initialize_visualizer_mode_combo,
         )
-
-        class _Combo:
-            def __init__(self):
-                self.items = []
-                self._index = -1
-
-            def addItem(self, label, data):
-                self.items.append((label, data))
-
-            def findData(self, value):
-                for idx, (_label, data) in enumerate(self.items):
-                    if data == value:
-                        return idx
-                return -1
-
-            def setCurrentIndex(self, index):
-                self._index = index
-
-            def currentData(self):
-                if 0 <= self._index < len(self.items):
-                    return self.items[self._index][1]
-                return None
 
         class _Check:
             def __init__(self, checked):
@@ -1657,18 +1522,15 @@ class TestVisualizerModeBinding:
 
         class _Tab:
             def __init__(self):
-                self.vis_mode_combo = _Combo()
+                # V7: the active mode is the context-owned canonical id.
+                self._active_visualizer_mode_id = "bubble"
                 self.rainbow_enabled = _Check(True)
                 self.rainbow_speed_slider = _Slider(63)
                 self._rainbow_per_mode = {
                     "spectrum": (False, 20),
                 }
 
-            def _default_str(self, *_args):
-                return "bubble"
-
         tab = _Tab()
-        initialize_visualizer_mode_combo(tab)
         payload = {}
         collect_visualizer_rainbow_state(tab, payload)
 

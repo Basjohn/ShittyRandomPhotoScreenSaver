@@ -11,7 +11,7 @@ from core.settings import visualizer_presets as vp
 from core.settings.settings_manager import SettingsManager
 from core.settings import sst_io
 from tools import visualizer_preset_repair as repair
-from ui.tabs.widgets_tab import WidgetsTab
+from ui.tabs.visualizers_tab import VisualizersTab
 
 
 @pytest.fixture(autouse=True)
@@ -728,10 +728,11 @@ def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
         application=f"PresetSaveOverwrite_{uuid.uuid4().hex}",
         storage_base_dir=tmp_path / "settings",
     )
-    tab = WidgetsTab(manager)
+    tab = VisualizersTab(manager)
     try:
-        # V5b: non-Spectrum bodies are lazy; the Custom slot index is a mode
-        # property (no need to touch the not-yet-built slider here).
+        # V7: Visualizer Settings are rehosted on the top-level VisualizersTab and
+        # every mode body stays lazy. The Custom slot index is a mode property, so
+        # it can be resolved before the not-yet-built slider exists.
         custom_index = vp.get_custom_preset_index(mode)
         prefix = vp.MODE_KEY_PREFIXES[mode][0]
 
@@ -750,7 +751,9 @@ def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
         manager.set("widgets", widgets_cfg)
 
         tab._load_settings()
-        # The target mode is now active, so its lazy body is constructed.
+        # Explicitly select the target mode's pill so its lazy body is constructed
+        # and hydrated from the stored config — Visualizers never build eagerly.
+        tab._select_mode_page(mode)
         slider = getattr(tab, slider_attr)
         payload = tab.build_visualizer_preset_payload(mode)
         assert payload

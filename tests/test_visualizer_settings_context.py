@@ -1,6 +1,7 @@
 """V7a contracts for the WidgetsTab-free Visualizer Settings owner seam."""
 from __future__ import annotations
 
+import ast
 from copy import deepcopy
 from pathlib import Path
 
@@ -29,10 +30,40 @@ class _ContextHarness(VisualizerSettingsContextMixin):
 
 
 def test_context_module_has_no_widgetstab_import_dependency():
-    """The extracted owner seam must remain usable without importing WidgetsTab."""
+    """The extracted owner seam must not depend on WidgetsTab itself.
+
+    This is an AST-level import check, not a substring scan: the shared lazy-body
+    helper ``ui.tabs.widgets_tab_media`` is explicitly allowed (the old substring
+    guard collided with it), while importing the ``ui.tabs.widgets_tab`` module or
+    the ``WidgetsTab`` class from anywhere is rejected.
+    """
     source = Path("ui/tabs/visualizer_settings_context.py").read_text(encoding="utf-8")
-    assert "ui.tabs.widgets_tab" not in source
-    assert "from ui.tabs.widgets_tab" not in source
+    tree = ast.parse(source)
+
+    def _is_widgets_tab_module(name: str) -> bool:
+        # Exactly the WidgetsTab module or a submodule of it, but NOT the distinct
+        # ``widgets_tab_media`` helper (which does not start with "widgets_tab.").
+        return name == "ui.tabs.widgets_tab" or name.startswith("ui.tabs.widgets_tab.")
+
+    offending: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if _is_widgets_tab_module(module):
+                offending.append(f"from {module} import ...")
+            for alias in node.names:
+                if alias.name == "WidgetsTab":
+                    offending.append(f"from {module} import {alias.name}")
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if _is_widgets_tab_module(alias.name):
+                    offending.append(f"import {alias.name}")
+
+    assert not offending, (
+        "Visualizer Settings context must not import WidgetsTab: " + ", ".join(offending)
+    )
+    # The shared lazy-body helper remains a permitted dependency.
+    assert "ui.tabs.widgets_tab_media" in source
 
 
 def test_unhydrated_visualizer_merge_preserves_stored_mapping_exactly():
