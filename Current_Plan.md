@@ -11,7 +11,7 @@ Current source truth at this checkpoint:
 
 - The deterministic Visualizer hitch owners already attributed in P0 are closed: diagnostics usage sampling, stable-set Gen2 rescans, first-publish cold import, and analysis/handoff tails. `gc.freeze()` remains the accepted stable-generation policy; post-freeze recreated generations collect normally and the pre-freeze cyclic pin is bounded until shutdown.
 - V0-V4 Visualizer authority/dormancy work is complete. The 2026-09-03 audit hole where `logical_frame_capture` eagerly imported all five frame runtimes is fixed through the canonical descriptor seam; warming the common capture chain imports no disabled mode runtime.
-- Achievement Pulse core parity is physically accepted; the new bounded recent-badge rail polish awaits eyes-on confirmation. Abandonment Issues presentation, including its corrected rotation fade, is physically accepted. Reddit's remaining time-column tweak is bounded and awaiting eyes-on confirmation.
+- Achievement Pulse core parity is physically accepted; the new bounded recent-badge rail polish awaits eyes-on confirmation. Abandonment Issues is physically accepted. Reddit's remaining time-column tweak is bounded and awaiting eyes-on confirmation.
 - Runtime Widget Themes are colour-only schema-v3. Runtime card Glass/Acrylic is rejected/removed and must not return. Settings-window Glass/Acrylic remains valid and separate.
 - Settings Theme Foundry and Widget Theme Foundry are current authoring tools. Ordinary Widget Settings now defaults to shared semantic/theme authority for branded headers instead of family-local header palettes; family-specific swatches remain only where a real family-level colour contract still exists.
 - Widgets -> General -> **Style Overrides** is the shared ordinary-widget override surface: Card Surface, Card Border, Header Fill, Card Border Width, plus an explicit **Reset All Colours to Theme** action. Family-specific header colour swatches are retired. Media's lone `Show Header Pill` toggle belongs in its normal Appearance bucket, not a special Header Appearance bucket.
@@ -29,11 +29,10 @@ Durable references when mechanism detail is needed:
 ## Immediate sequence
 
 1. **Finish shared Widget colour-authority cleanup and physical check.** Apply the Style Overrides/header cleanup, run **Reset All Colours to Theme** once on the current profile when desired, and verify Media/Reddit/Gmail/Steam branded headers resolve cohesively from the selected Widget Theme/shared override. No hidden family colour should survive merely because its GUI swatch was removed.
-2. **Weather parity.** Weather is the next substantial widget visual target. Use current Quick source and the pre-migration visual oracle; do not compensate for theme defects with family-local styling hacks.
-3. **Visualizer recreation-specific delivery quality.** Deterministic steady-state hitch owners are closed; remaining performance work is generation replacement/re-admission freshness/latency, then resource plateau. Bubble and extreme-tall Spectrum remain co-equal physical oracles. Do not lower cadence, accept stale frames, or damp authored response.
-4. **V5-V8 Visualizer Settings rehost.** Only after the hard pre-V5/V6 gate below is satisfied: deepest enabled-mode admission, correct startup substitution ordering, durable no-settings-lost coverage, and Settings-body dormancy.
-5. **Theme-switch slowdown + narrow theme fragility audit.** Attribute duplicate QWidget refresh/repolish work first, then audit only real edge contracts: stale wrappers, lazy Settings pages, linked-theme transactions, catalogue/install roots, retained recreation, live failure propagation, and hidden lifetime owners.
-6. **J cleanup/optimization/acceptance.** Reconcile stale tests/tools, restore broad-suite signal, finish remaining bounded parity/snap polish, run resource/CPU/GPU ownership passes, then compiled/frozen/installed acceptance.
+2. **Visualizer recreation-specific delivery quality.** Deterministic steady-state hitch owners are closed; remaining performance work is generation replacement/re-admission freshness/latency, then resource plateau. Bubble and extreme-tall Spectrum remain co-equal physical oracles. Do not lower cadence, accept stale frames, or damp authored response.
+3. **V5-V8 Visualizer Settings rehost.** Only after the hard pre-V5/V6 gate below is satisfied: deepest enabled-mode admission, correct startup substitution ordering, durable no-settings-lost coverage, and Settings-body dormancy.
+4. **Theme-switch slowdown + narrow theme fragility audit.** Attribute duplicate QWidget refresh/repolish work first, then audit only real edge contracts: stale wrappers, lazy Settings pages, linked-theme transactions, catalogue/install roots, retained recreation, live failure propagation, and hidden lifetime owners.
+5. **J cleanup/optimization/acceptance.** Reconcile stale tests/tools, restore broad-suite signal, finish remaining bounded parity/snap polish, run resource/CPU/GPU ownership passes, then compiled/frozen/installed acceptance.
 
 ## User-environment validation gate
 
@@ -61,7 +60,6 @@ Status: `[ ]` open, `[~]` implemented/source-proven but awaiting real-app valida
 
 - [~] **Shared Widget Style Overrides / reset.** Card Surface, Card Border and Header Fill must apply coherently through Widget Theme `Custom`; `Reset All Colours to Theme` must remove ordinary family colour/alpha overrides only, without touching Visualizer-authored colours, geometry, fonts, shadows, providers or feature toggles. Media `Show Header Pill` sits in Media -> Appearance. No family Header Appearance colour bucket remains.
 - [~] **Reddit time rail parity.** `AGO` is a rigid aligned column shifted **14 authored px left from the original position** while the age-value column and title start remain fixed. Validate short/long ages and title spacing physically.
-- [~] **Weather parity.** The prior preferred-height-only fix could not affect a committed CUSTOM rectangle because CUSTOM geometry is authoritative. Weather now keeps the authored 8 px head/foot inset in fixed CUSTOM geometry by applying a bounded whole-content fit scale only when the intrinsic ready column would otherwise overflow; anchored/non-CUSTOM presentation remains 1.0. Recheck the full details+forecast card physically.
 - [~] **Global CUSTOM dormancy.** Stacking and Media<->Visualizer adjacency stay off for persisted/effective CUSTOM, live Edit Layout, and number-key saved-layout load/rebuild.
 - [~] **Media<->Visualizer ordinary adjacency + wheel routing.** Only outside global CUSTOM. Whole Media and ordinary Visualizer may forward discrete volume steps through the existing app-volume owner; CUSTOM resize-wheel ownership wins absolutely.
 - [~] **Context Menu interaction edges.** Settings click-through suppression and submenu crossing use event/deadline ownership only; no sticky lifetime, timer or poller.
@@ -69,7 +67,7 @@ Status: `[ ]` open, `[~]` implemented/source-proven but awaiting real-app valida
 - [~] **Bidirectional linked-theme UX.** Locked Settings/Widget theme selection uses stable IDs in both directions and never implicitly unlocks. Widget `Custom` remains Independent-only.
 - [~] **Theme authoring tools physical smoke.** Theme Foundry's simplified Everyday/All Roles workflow and Widget Theme Foundry's sparse semantic editor must open/save/strict-reload correctly in the real PySide6 environment.
 - [~] **Media artwork/header alignment.** Preserve the accepted narrow artwork width/crop while extending its height upward so the artwork border aligns with the branded-header top; lower boundary remains unchanged.
-- [~] **Burn dual-colour authoring.** Primary edge Glow Colour and secondary Ember Colour are independently persisted/resolved/uploaded; the ember/char ramp must follow the second swatch without leaking the historical fixed orange/red when Glow Colour changes hue.
+- [~] **Spectrum paused presentation polish.** Only an explicit `playing -> paused` edge eases the last live Spectrum bars down to idle over the Spectrum-owned presentation state; natural low-energy drops while playback remains active keep the existing response law. Settled idle adds one very gentle left-to-right bar-energy pulse advanced by the sole logical clock. Keep Spectrum classified as presentation-owned idle (not generic idle-self-animating), with no timer/poller/new cadence or source/DSP authority. Physically validate pause, natural quiet, settled idle travel and mid-descent resume.
 - [~] **Visualizer frame visible-stroke scaling.** CUSTOM resize/screen-fit/cross-display reprojection must retain bounded scale-aware card-border thickness and must not compound a previously reduced border toward subpixel invisibility.
 - [x] **Non-CUSTOM smart stacking collision solver.** Pathological overlap case physically accepted; preserve deterministic spill and zero steady-state cadence cost.
 - [~] **Achievement Pulse badge rail polish.** Core parity remains accepted; the recent-achievement badge now starts closer to the smaller unlock text and moves right only when rendered text needs clearance. Recheck this bounded rail tweak physically.
@@ -159,7 +157,7 @@ H/P0 proved architecture and removed known deterministic stalls; J still require
 
 ## Final J acceptance obligations
 
-- [ ] Finish Weather and any remaining bounded family visual-parity work against the pre/post migration oracle where useful.
+- [ ] Finish any remaining bounded family visual-parity work against the pre/post migration oracle where useful.
 - [ ] Complete remaining alignment/snap-guide and bounded presentation polish.
 - [ ] Complete compiled/frozen/installed 1/2/N-display, DPR, topology and Media Center/screensaver acceptance.
 - [ ] Reconcile historical-bug/migration records worth preserving after the three live planning authorities are clean.

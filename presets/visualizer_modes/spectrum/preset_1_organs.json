@@ -7,14 +7,13 @@
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "monitor": "2",
         "spectrum_growth": 5.0,
         "spectrum_render_mode": "bars",
         "spectrum_visual_smoothing_enabled": true,
         "spectrum_visual_smoothing": 0.5,
         "spectrum_unique_colors": true,
         "spectrum_rainbow_fill": false,
-        "spectrum_rainbow_border": false,
+        "spectrum_rainbow_border": true,
         "spectrum_border_radius": 2.0,
         "spectrum_link_fill_border": false,
         "spectrum_glow_enabled": true,
