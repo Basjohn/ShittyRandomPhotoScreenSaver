@@ -1,7 +1,10 @@
 from types import SimpleNamespace
 
 from core.cache_maintenance import CacheClearResult
-from rendering.widget_descriptors import get_widget_settings_section_descriptors
+from rendering.widget_descriptors import (
+    get_widget_settings_section_descriptors,
+    get_widgets_tab_settings_section_descriptors,
+)
 from ui.tabs import widgets_tab_defaults as general_tab
 from ui.tabs.widgets_tab import WidgetsTab
 
@@ -16,9 +19,11 @@ def test_general_section_renames_only_user_facing_defaults_surface(qt_app, setti
         descriptor = next(
             item for item in get_widget_settings_section_descriptors() if item.section_id == "defaults"
         )
+        # V7 scoped Visualizers out of WidgetsTab; its subtabs follow the
+        # WidgetsTab-scoped descriptor list.
         labels = [
             tab._subtab_group.button(index).text()
-            for index in range(len(get_widget_settings_section_descriptors()))
+            for index in range(len(get_widgets_tab_settings_section_descriptors()))
         ]
         assert descriptor.button_label == "General"
         assert labels[-1] == "General"
