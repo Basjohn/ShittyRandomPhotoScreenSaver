@@ -292,7 +292,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     Returns the media container widget.
     """
-    from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.shared_styles import NoWheelSlider
 
     def _aligned_row(
         parent: QVBoxLayout,
@@ -831,7 +831,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     """Build the Visualizers widget UI section (separate toggle)."""
 
-    from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.shared_styles import NoWheelSlider
 
     visualizers_group = QGroupBox("Visualizers")
     style_group_box(visualizers_group)

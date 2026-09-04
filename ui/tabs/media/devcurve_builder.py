@@ -79,7 +79,7 @@ def _add_slider(
     fmt,
     auto_switch: bool = True,
 ):
-    from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.shared_styles import NoWheelSlider
 
     row_widget, r = _row_widget(parent_layout, label)
     slider = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -184,7 +184,7 @@ def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.devcurve_active_layer_color_btn = ColorSwatchButton(title="Choose Active Spline Curve Layer Color")
     tab.devcurve_active_layer_color_btn.setToolTip(_TOOLTIP_LAYER_COLOR)
     active_color_row.addWidget(tab.devcurve_active_layer_color_btn)
-    from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.shared_styles import NoWheelSlider
     tab.devcurve_active_layer_order = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.devcurve_active_layer_order.setMinimum(1)
     tab.devcurve_active_layer_order.setMaximum(4)
