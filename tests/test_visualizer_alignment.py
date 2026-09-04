@@ -111,6 +111,13 @@ def test_advanced_toggle_hides_only_advanced(
     mode_name,
 ):
     def _build_tab(tab):
+        # V6a: the shared Bar Fill/Border/Opacity controls are owned outside the
+        # mode bodies and placed by Spectrum, so build them before any builder.
+        from ui.tabs.media.shared_appearance_controls import (
+            build_shared_visualizer_appearance_controls,
+        )
+
+        build_shared_visualizer_appearance_controls(tab)
         container = QWidget()
         layout = QVBoxLayout(container)
         builder(tab, layout)
