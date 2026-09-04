@@ -151,6 +151,7 @@ def test_burn_normalizes_user_rgba_and_resolves_random_direction_and_seed():
                 "jaggedness": 1.0,
                 "glow_intensity": 1.0,
                 "glow_color": [255, 162, 0, 255],
+                "ember_color": [230, 64, 13, 255],
                 "char_width": 0.1,
                 "smoke_enabled": True,
                 "smoke_density": 0.8,
@@ -163,6 +164,7 @@ def test_burn_normalizes_user_rgba_and_resolves_random_direction_and_seed():
     params = resolved.parameter_dict()
     assert params["direction"] == 5
     assert params["glow_color"] == pytest.approx((1.0, 162.0 / 255.0, 0.0, 1.0))
+    assert params["ember_color"] == pytest.approx((230.0 / 255.0, 64.0 / 255.0, 13.0 / 255.0, 1.0))
     assert params["seed"] == pytest.approx(125.0)
 
 

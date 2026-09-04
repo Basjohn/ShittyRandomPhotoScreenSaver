@@ -34,6 +34,7 @@ def _params(**updates):
         "jaggedness": 0.55,
         "glow_intensity": 0.72,
         "glow_color": (1.0, 140.0 / 255.0, 30.0 / 255.0, 1.0),
+        "ember_color": (230.0 / 255.0, 64.0 / 255.0, 13.0 / 255.0, 1.0),
         "char_width": 0.5,
         "smoke_enabled": True,
         "smoke_density": 0.5,
@@ -113,12 +114,15 @@ def test_burn_rejects_unresolved_or_invalid_direction():
 def test_burn_requires_normalized_user_glow_color_and_full_effect_controls():
     params = _burn_parameters(_params())
     assert params.glow_color == pytest.approx((1.0, 140.0 / 255.0, 30.0 / 255.0, 1.0))
+    assert params.ember_color == pytest.approx((230.0 / 255.0, 64.0 / 255.0, 13.0 / 255.0, 1.0))
     assert params.smoke_enabled is True
     assert params.ash_enabled is True
     with pytest.raises(ValueError, match="normalized RGBA tuple"):
         _burn_parameters(_params(glow_color=(1.0, 0.5, 0.1)))
     with pytest.raises(ValueError, match="between 0 and 1"):
         _burn_parameters(_params(glow_color=(255.0, 140.0, 30.0, 255.0)))
+    with pytest.raises(ValueError, match="normalized RGBA tuple"):
+        _burn_parameters(_params(ember_color=(0.9, 0.25, 0.05)))
     with pytest.raises(ValueError, match="resolved boolean parameter 'smoke_enabled'"):
         _burn_parameters(_params(smoke_enabled=1))
     with pytest.raises(ValueError, match="char_width must be between 0.1 and 1"):
@@ -153,6 +157,7 @@ def test_burn_reuses_exact_authored_shader_and_complete_visual_stack():
         "Smoke wisps",
         "tail_fade",
         "u_glow_color",
+        "u_ember_color",
         "u_seed",
         "u_time",
     ):

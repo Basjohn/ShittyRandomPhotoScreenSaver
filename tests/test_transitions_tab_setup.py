@@ -354,3 +354,21 @@ def test_e26_legacy_type_random_normalized_on_load(qapp, settings_manager, qtbot
     # UI reflects it.
     assert tab._use_random_checkbox.isChecked() is True
     assert tab.transition_combo.currentText() != "Random"
+
+def test_burn_exposes_and_persists_independent_ember_colour(qapp, settings_manager, qtbot):
+    from PySide6.QtGui import QColor
+
+    tab = _make(qapp, settings_manager, qtbot)
+    tab._on_nav_selected("Burn")
+    assert hasattr(tab, "burn_glow_color_btn")
+    assert hasattr(tab, "burn_ember_color_btn")
+
+    tab._burn_ember_color = QColor(20, 90, 210, 240)
+    tab._apply_burn_ember_color_btn()
+    tab._save_settings()
+
+    burn = settings_manager.get("transitions", {}).get("burn", {})
+    assert burn.get("ember_color") == [20, 90, 210, 240]
+    # The primary edge glow remains independently authored.
+    assert burn.get("glow_color") != burn.get("ember_color")
+

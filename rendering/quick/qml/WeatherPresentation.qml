@@ -19,6 +19,18 @@ OverlayWidget {
     // the top row hugs the frame and bottom-row descenders escape the lower
     // border. Reserve a small symmetric top/bottom breathing margin.
     readonly property real legacyVerticalInset: 8.0
+    // A committed CUSTOM rect deliberately owns outer geometry and therefore
+    // ignores preferredContentHeight.  If that fixed rect is slightly shorter
+    // than Weather's intrinsic column, fit the *whole* ready presentation just
+    // enough to preserve the same authored head/foot inset rather than letting
+    // forecast descenders escape the card.  This is a retained binding only:
+    // no timer, no polling, and anchored/non-CUSTOM cards remain exactly 1.0.
+    readonly property real readyContentFitScale: {
+        const intrinsic = Math.max(1.0, readyColumn.childrenRect.height)
+        const available = Math.max(1.0, weatherContent.height
+            - 2.0 * weatherRoot.legacyVerticalInset)
+        return Math.min(1.0, available / intrinsic)
+    }
 
     // Content-driven outer size (H option A). Width honours the historical
     // ordinary-card minimum footprint (BaseOverlayWidget.DEFAULT_CARD_MIN_WIDTH =
@@ -55,6 +67,8 @@ OverlayWidget {
             objectName: "weatherReadyContent"
             width: Math.max(1.0, parent.width - 2.0 * weatherRoot.legacyHorizontalInset)
             anchors.centerIn: parent
+            transformOrigin: Item.Center
+            scale: weatherRoot.readyContentFitScale
             spacing: 4.0
             visible: weatherRoot.weatherModel.viewState === "ready"
 
