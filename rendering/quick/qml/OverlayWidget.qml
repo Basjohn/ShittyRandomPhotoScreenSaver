@@ -30,8 +30,9 @@ Item {
     // remaining authored width while the accessory stays inside the same retained
     // widget root/lifecycle/scale. Zero is the inert default for every existing
     // family. The accessory never becomes a second geometry or lifecycle owner.
-    property real rightAccessoryExtent: 0.0
-    property alias rightAccessoryContent: rightAccessoryLayer.data
+    property real accessoryExtent: 0.0
+    property string accessorySide: "right"
+    property alias accessoryContent: accessoryLayer.data
 
     // Content-driven outer geometry (H option A): each family binds its stable
     // *preferred* content size here from its intrinsic QML content (text implicit
@@ -133,12 +134,18 @@ Item {
     // whole-card uniform transform. The external underlay binds these values so
     // letterboxed CUSTOM geometry still shadows the actual rendered card, not
     // the larger assigned outer rectangle.
+    readonly property bool accessoryOnLeft:
+        String(accessorySide).toLowerCase() === "left"
+    readonly property real authoredCardX:
+        accessoryOnLeft ? Math.max(0.0, accessoryExtent) : 0.0
     readonly property real authoredCardWidth: Math.max(
-        0.0, authoredRoot.width - Math.max(0.0, rightAccessoryExtent)
+        0.0, authoredRoot.width - Math.max(0.0, accessoryExtent)
     )
     readonly property real cardShadowVisualWidth: authoredCardWidth * presentationScale
     readonly property real cardShadowVisualHeight: authoredRoot.height * presentationScale
-    readonly property real cardShadowVisualX: (width - authoredRoot.width * presentationScale) / 2.0
+    readonly property real cardShadowVisualX:
+        (width - authoredRoot.width * presentationScale) / 2.0
+            + authoredCardX * presentationScale
     readonly property real cardShadowVisualY: (height - cardShadowVisualHeight) / 2.0
 
     Item {
@@ -165,6 +172,7 @@ Item {
             id: card
             objectName: "overlayWidgetCard"
             anchors.left: parent.left
+            anchors.leftMargin: overlayWidget.authoredCardX
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             width: overlayWidget.authoredCardWidth
@@ -181,12 +189,12 @@ Item {
         }
 
         Item {
-            id: rightAccessoryLayer
-            objectName: "overlayRightAccessoryLayer"
+            id: accessoryLayer
+            objectName: "overlayAccessoryLayer"
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            anchors.right: parent.right
-            width: Math.max(0.0, overlayWidget.rightAccessoryExtent)
+            width: Math.max(0.0, overlayWidget.accessoryExtent)
+            x: overlayWidget.accessoryOnLeft ? 0.0 : parent.width - width
             clip: false
             z: 2
         }

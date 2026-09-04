@@ -168,6 +168,7 @@ class QuickCustomLayoutOwner:
                     resize_begin_handler=self.begin_resize,
                     resize_update_handler=self.update_resize,
                     resize_wheel_handler=self.resize_wheel,
+                    move_finished_handler=self.clear_move_guides,
                 )
         except Exception:
             for binding in bindings.values():
@@ -318,12 +319,14 @@ class QuickCustomLayoutOwner:
             proposed.height(),
         )
         peers = self._peer_local_rects(item, target)
-        resolved = resolve_snap_local_rect_for_edit(
+        resolution = resolve_snap_local_rect_for_edit(
             local,
             target.geometry.size(),
             peer_rects=peers,
             min_size=quick_custom_minimum_size(item),
-        ).rect
+        )
+        self._publish_move_guides(target.identity, resolution)
+        resolved = resolution.rect
         if target.identity != item.current_display_identity:
             item.set_current_display(
                 target.identity,
@@ -335,6 +338,57 @@ class QuickCustomLayoutOwner:
             resolved.width(),
             resolved.height(),
         )
+
+    def clear_move_guides(self) -> None:
+        """Clear transient alignment guides on every retained display."""
+
+        for binding in tuple(self._bindings.values()):
+            try:
+                binding.unit.runtime.scene_controller.set_custom_layout_guides()
+            except (RuntimeError, AttributeError):
+                logger.debug(
+                    "[CUSTOM_LAYOUT] Failed clearing transient guides display=%s",
+                    binding.identity,
+                    exc_info=True,
+                )
+
+    def _publish_move_guides(self, display_identity: str, resolution: Any) -> None:
+        """Publish only peer-edge/centering assists for the active move sample."""
+
+        allowed_kinds = {"peer", "peer_center", "display_center"}
+
+        def _collect(primary: object, assists: object) -> tuple[tuple[int, str], ...]:
+            result: list[tuple[int, str]] = []
+            seen: set[tuple[int, str]] = set()
+            for guide in tuple(primary or ()) + tuple(assists or ()):
+                kind = str(getattr(guide, "kind", "") or "")
+                if kind not in allowed_kinds:
+                    continue
+                entry = (int(getattr(guide, "position", 0)), kind)
+                if entry in seen:
+                    continue
+                seen.add(entry)
+                result.append(entry)
+            return tuple(result)
+
+        vertical = _collect(
+            getattr(resolution, "vertical_guides", ()),
+            getattr(resolution, "vertical_assists", ()),
+        )
+        horizontal = _collect(
+            getattr(resolution, "horizontal_guides", ()),
+            getattr(resolution, "horizontal_assists", ()),
+        )
+        target_identity = str(display_identity or "")
+        for identity, binding in tuple(self._bindings.items()):
+            scene = binding.unit.runtime.scene_controller
+            if identity == target_identity:
+                scene.set_custom_layout_guides(
+                    vertical=vertical,
+                    horizontal=horizontal,
+                )
+            else:
+                scene.set_custom_layout_guides()
 
     def begin_resize(
         self,

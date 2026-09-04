@@ -175,6 +175,72 @@ def test_uniform_custom_admission_uses_visible_card_envelope_not_dead_letterbox(
     assert item.resize_scale == 1.0
 
 
+def test_custom_owner_publishes_peer_and_center_guides_from_snap_resolution() -> None:
+    class _GuideScene:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, tuple[tuple[int, str], ...]]] = []
+
+        def set_custom_layout_guides(self, *, vertical=(), horizontal=()) -> None:
+            self.calls.append({
+                "vertical": tuple(vertical),
+                "horizontal": tuple(horizontal),
+            })
+
+    def _binding(identity: str, scene: _GuideScene) -> _DisplayBinding:
+        return _DisplayBinding(
+            identity=identity,
+            monitor_route="1",
+            unit=SimpleNamespace(
+                runtime=SimpleNamespace(scene_controller=scene),
+            ),
+            screen=None,
+            geometry=QRect(0, 0, 800, 600),
+        )
+
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    active = _GuideScene()
+    other = _GuideScene()
+    owner._bindings = {
+        "display:a": _binding("display:a", active),
+        "display:b": _binding("display:b", other),
+    }
+    guide = lambda position, kind: SimpleNamespace(position=position, kind=kind)
+    resolution = SimpleNamespace(
+        vertical_guides=(
+            guide(260, "peer"),
+            guide(400, "display_center"),
+            guide(240, "grid"),
+        ),
+        vertical_assists=(
+            guide(260, "peer"),  # duplicate is deliberately collapsed
+            guide(310, "peer_center"),
+        ),
+        horizontal_guides=(guide(300, "peer_center"),),
+        horizontal_assists=(guide(24, "gutter"),),
+    )
+
+    owner._publish_move_guides("display:a", resolution)
+
+    assert active.calls == [{
+        "vertical": (
+            (260, "peer"),
+            (400, "display_center"),
+            (310, "peer_center"),
+        ),
+        "horizontal": ((300, "peer_center"),),
+    }]
+    assert other.calls == [{"vertical": (), "horizontal": ()}]
+
+    owner.clear_move_guides()
+    assert active.calls[-1] == {"vertical": (), "horizontal": ()}
+    assert other.calls[-1] == {"vertical": (), "horizontal": ()}
+
+
 def test_single_quick_custom_owner_cancel_restores_same_retained_item(qt_app) -> None:
     widgets = _clock_widgets()
     settings = _Settings(widgets)

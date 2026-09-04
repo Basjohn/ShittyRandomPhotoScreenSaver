@@ -9,8 +9,6 @@ Item {
 
     property bool editActive: false
     property var sessionModel: null
-    property int gridStep: 24
-    property int gridGutter: 24
     property var verticalGuides: []
     property var horizontalGuides: []
 
@@ -25,45 +23,6 @@ Item {
     enabled: editActive
     clip: false
 
-    function isCenterGuide(kind) {
-        return kind === "display_center" || kind === "peer_center"
-    }
-
-    Repeater {
-        model: customLayoutOverlay.editActive
-               ? Math.floor(customLayoutOverlay.width / customLayoutOverlay.gridStep) + 1
-               : 0
-        delegate: Rectangle {
-            required property int index
-            x: index * customLayoutOverlay.gridStep
-            width: 1
-            height: customLayoutOverlay.height
-            color: index % 4 === 0 ? "#3affffff" : "#1cffffff"
-        }
-    }
-
-    Repeater {
-        model: customLayoutOverlay.editActive
-               ? Math.floor(customLayoutOverlay.height / customLayoutOverlay.gridStep) + 1
-               : 0
-        delegate: Rectangle {
-            required property int index
-            y: index * customLayoutOverlay.gridStep
-            width: customLayoutOverlay.width
-            height: 1
-            color: index % 4 === 0 ? "#3affffff" : "#1cffffff"
-        }
-    }
-
-    Rectangle {
-        objectName: "customLayoutSafeGutter"
-        anchors.fill: parent
-        anchors.margins: customLayoutOverlay.gridGutter
-        color: "transparent"
-        border.width: 1
-        border.color: "#74b46eff"
-    }
-
     Repeater {
         model: customLayoutOverlay.verticalGuides
         delegate: Rectangle {
@@ -71,9 +30,9 @@ Item {
             objectName: "customLayoutVerticalGuide"
             property string guideKind: String(modelData.kind)
             x: Number(modelData.position)
-            width: 3
+            width: 2
             height: customLayoutOverlay.height
-            color: customLayoutOverlay.isCenterGuide(guideKind) ? "#ffff3b30" : "#ebb46eff"
+            color: "#aa5ea8ff"
         }
     }
 
@@ -85,8 +44,8 @@ Item {
             property string guideKind: String(modelData.kind)
             y: Number(modelData.position)
             width: customLayoutOverlay.width
-            height: 3
-            color: customLayoutOverlay.isCenterGuide(guideKind) ? "#ffff3b30" : "#ebb46eff"
+            height: 2
+            color: "#aa5ea8ff"
         }
     }
 
@@ -192,6 +151,7 @@ Item {
                 property real pressOffsetY: 0
 
                 onPressed: function(mouse) {
+                    customLayoutOverlay.sessionModel.finishMove()
                     const point = moveArea.mapToItem(customLayoutOverlay, mouse.x, mouse.y)
                     pressOffsetX = point.x - editFrame.x
                     pressOffsetY = point.y - editFrame.y
@@ -208,6 +168,8 @@ Item {
                         point.y
                     )
                 }
+                onReleased: customLayoutOverlay.sessionModel.finishMove()
+                onCanceled: customLayoutOverlay.sessionModel.finishMove()
                 onWheel: function(wheel) {
                     if (!editFrame.resizable)
                         return

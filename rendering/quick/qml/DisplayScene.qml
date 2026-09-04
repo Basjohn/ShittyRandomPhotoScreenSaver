@@ -55,6 +55,12 @@ Item {
         z: 1
     }
 
+    CustomLayoutGuideUnderlay {
+        id: customLayoutGuideUnderlay
+        anchors.fill: parent
+        z: 4
+    }
+
     Item {
         id: pixelShiftLayer
         objectName: "pixelShiftLayer"

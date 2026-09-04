@@ -11,20 +11,26 @@ def _text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_overlay_widget_has_one_scene_local_right_accessory_lane() -> None:
+def test_overlay_widget_has_one_scene_local_bidirectional_accessory_lane() -> None:
     qml = _text("rendering/quick/qml/OverlayWidget.qml")
-    assert "property real rightAccessoryExtent: 0.0" in qml
-    assert "property alias rightAccessoryContent: rightAccessoryLayer.data" in qml
-    assert "authoredRoot.width - Math.max(0.0, rightAccessoryExtent)" in qml
-    assert 'objectName: "overlayRightAccessoryLayer"' in qml
+    assert "property real accessoryExtent: 0.0" in qml
+    assert 'property string accessorySide: "right"' in qml
+    assert "property alias accessoryContent: accessoryLayer.data" in qml
+    assert "authoredRoot.width - Math.max(0.0, accessoryExtent)" in qml
+    assert 'objectName: "overlayAccessoryLayer"' in qml
+    assert "authoredCardX" in qml
+    assert "cardShadowVisualX" in qml
 
 
 def test_media_volume_is_external_to_card_and_card_reclaims_old_width() -> None:
     qml = _text("rendering/quick/qml/MediaPresentation.qml")
     assert "readonly property real preferredCardWidth" in qml
-    assert "rightAccessoryExtent: mediaModel.appVolumeAvailable ? 48.0 : 0.0" in qml
-    assert "preferredContentWidth: preferredCardWidth + rightAccessoryExtent" in qml
-    assert "rightAccessoryContent:" in qml
+    assert "readonly property real volumeAccessoryExtent:" in qml
+    assert "readonly property bool appVolumeOnLeft:" in qml
+    assert 'accessorySide: appVolumeOnLeft ? "left" : "right"' in qml
+    assert "accessoryExtent: volumeAccessoryExtent" in qml
+    assert "preferredContentWidth: preferredCardWidth + volumeAccessoryExtent" in qml
+    assert "accessoryContent:" in qml
     assert 'objectName: "mediaAppVolumeSlider"' in qml
     assert "anchors.rightMargin: appVolumeSlider.visible ? 48.0 : 0.0" not in qml
 

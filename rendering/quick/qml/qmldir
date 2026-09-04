@@ -1,6 +1,7 @@
 # Package-owned QML import/data root.
 DisplayScene 1.0 DisplayScene.qml
 CustomLayoutOverlay 1.0 CustomLayoutOverlay.qml
+CustomLayoutGuideUnderlay 1.0 CustomLayoutGuideUnderlay.qml
 ClockPresentation 1.0 ClockPresentation.qml
 ClockDigitalFace 1.0 ClockDigitalFace.qml
 ClockAnalogueFace 1.0 ClockAnalogueFace.qml

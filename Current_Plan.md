@@ -68,8 +68,11 @@ Status: `[ ]` open, `[~]` implemented/source-proven but awaiting real-app valida
 - [~] **Reddit time rail parity.** `AGO` is a rigid aligned column shifted **14 authored px left from the original position** while the age-value column and title start remain fixed. Validate short/long ages and title spacing physically.
 - [~] **Global CUSTOM dormancy.** Stacking and Media<->Visualizer adjacency stay off for persisted/effective CUSTOM, live Edit Layout, and number-key saved-layout load/rebuild.
 - [~] **Media<->Visualizer ordinary adjacency + wheel routing.** Only outside global CUSTOM. Whole Media and ordinary Visualizer may forward discrete volume steps through the existing app-volume owner; CUSTOM resize-wheel ownership wins absolutely.
+- [~] **Media external app-volume side selection.** When the app-volume rail is external, keep it on the side of Media with more display space: Media on the right half -> rail on the left; Media on the left half -> rail on the right. The retained position drives this automatically in CUSTOM too; keep one accessory lane/lifecycle owner and no polling/timer/persisted side authority.
+- [~] **CUSTOM alignment-guide restoration.** During Edit Layout, peer-edge snaps publish gentle-blue transient guides above retained widgets; display/peer centering publishes gentle-purple guides below retained widgets; the absolute display-centre cross is stronger than the ordinary grid but remains below widgets. Transient guides clear on release/cancel/new drag and reuse the existing snap-resolution metadata (no second geometry authority/cadence).
 - [~] **Context Menu interaction edges.** Settings click-through suppression and submenu crossing use event/deadline ownership only; no sticky lifetime, timer or poller.
 - [~] **Gmail action-menu click-through guard.** Three-dot action activation and pointer-dismissal arm the existing shared monotonic pointer guard before the retained popup disappears, so a passive-grab release cannot also open the Gmail row underneath. No timer, poller or new pointer cadence; physically validate action-over-row and outside-dismiss-over-row.
+- [ ] **MusicBee Home play/pause double-toggle — evidence first.** Operator sees a rapid play-then-pause only with MusicBee when Home is also remapped to Play/Pause by PowerToys; Spotify does not reproduce. Do not alter shared Media transport yet. A later short repro should distinguish duplicate Home/autorepeat from the external PowerToys/system-media injection path using existing runtime/media-command logs, then apply only a proven narrow fix.
 - [~] **Settings Theme live recreation.** Repeated Settings recreation and Glass/Acrylic switching must not reintroduce stale `SettingsDialog` wrapper failures; live renderer failures must still propagate transactionally.
 - [~] **Bidirectional linked-theme UX.** Locked Settings/Widget theme selection uses stable IDs in both directions and never implicitly unlocks. Widget `Custom` remains Independent-only.
 - [~] **Theme authoring tools physical smoke.** Theme Foundry's simplified Everyday/All Roles workflow and Widget Theme Foundry's sparse semantic editor must open/save/strict-reload correctly in the real PySide6 environment.
@@ -167,7 +170,7 @@ H/P0 proved architecture and removed known deterministic stalls; J still require
 ## Final J acceptance obligations
 
 - [ ] Finish any remaining bounded family visual-parity work against the pre/post migration oracle where useful.
-- [ ] Complete remaining alignment/snap-guide and bounded presentation polish.
+- [ ] Physically validate the restored CUSTOM alignment/snap-guide lines and complete remaining bounded presentation polish.
 - [ ] Complete compiled/frozen/installed 1/2/N-display, DPR, topology and Media Center/screensaver acceptance.
 - [ ] Reconcile historical-bug/migration records worth preserving after the three live planning authorities are clean.
 - [ ] Run final maintained destination + broad-suite gates and reconcile source/docs/tests before J closes.

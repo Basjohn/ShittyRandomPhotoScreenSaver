@@ -330,7 +330,7 @@ def test_visualizer_scene_coordinator_rejects_occupied_target_and_rolls_back() -
 
 
 @pytest.mark.qt
-def test_display_scene_has_one_retained_overlay_with_red_center_guides(qt_app) -> None:
+def test_display_scene_layers_peer_edges_above_and_center_guides_below_widgets(qt_app) -> None:
     owner = QObject()
     factory = QuickSceneFactory()
     context, root = factory.create_display_root(
@@ -340,42 +340,76 @@ def test_display_scene_has_one_retained_overlay_with_red_center_guides(qt_app) -
     )
     root.setWidth(800.0)
     root.setHeight(600.0)
+
     overlay_items = root.findChildren(QQuickItem, "customLayoutOverlay")
+    underlay_items = root.findChildren(QQuickItem, "customLayoutGuideUnderlay")
+    pixel_layers = root.findChildren(QQuickItem, "pixelShiftLayer")
     assert len(overlay_items) == 1
+    assert len(underlay_items) == 1
+    assert len(pixel_layers) == 1
+
     overlay_item = overlay_items[0]
+    underlay_item = underlay_items[0]
+    pixel_layer = pixel_layers[0]
+    assert underlay_item.z() < pixel_layer.z() < overlay_item.z()
+
     retained_identity = id(overlay_item)
     overlay = RetainedCustomLayoutOverlay(overlay_item)
-
     session = CustomLayoutSession()
     clock = _item("clock", "display:a", QRect(20, 30, 180, 80))
     session.add_item(clock)
     overlay.bind_session(session, display_identity="display:a")
-    overlay.set_guides(
-        vertical=((400, "display_center"), (260, "peer")),
-        horizontal=((300, "peer_center"),),
+
+    # Peer-edge lines live in the high edit overlay; centering lines are projected
+    # into the low underlay so they cannot paint over retained widget content.
+    overlay.set_guides(vertical=((260, "peer"),), horizontal=())
+    underlay_item.setProperty(
+        "verticalCenterGuides",
+        [{"position": 400, "kind": "display_center"}],
     )
+    underlay_item.setProperty(
+        "horizontalCenterGuides",
+        [{"position": 300, "kind": "peer_center"}],
+    )
+    underlay_item.setProperty("editActive", True)
     qt_app.processEvents()
 
     assert overlay_item.property("editActive") is True
     assert overlay_item.isVisible() is True
+    assert underlay_item.property("editActive") is True
+    assert underlay_item.isVisible() is True
     assert id(overlay.item) == retained_identity
     assert _quick_items_named(overlay_item, "customLayoutEditFrame-clock")
 
-    vertical = _quick_items_named(overlay_item, "customLayoutVerticalGuide")
-    horizontal = _quick_items_named(overlay_item, "customLayoutHorizontalGuide")
-    assert {line.property("guideKind") for line in vertical} == {
-        "display_center",
-        "peer",
-    }
-    center_vertical = next(
-        line for line in vertical if line.property("guideKind") == "display_center"
+    vertical_edges = _quick_items_named(overlay_item, "customLayoutVerticalGuide")
+    assert len(vertical_edges) == 1
+    assert vertical_edges[0].property("guideKind") == "peer"
+    assert vertical_edges[0].property("color") == QColor(94, 168, 255, 170)
+    assert not _quick_items_named(overlay_item, "customLayoutHorizontalGuide")
+
+    vertical_centers = _quick_items_named(
+        underlay_item, "customLayoutVerticalCenterGuide"
     )
-    peer_vertical = next(
-        line for line in vertical if line.property("guideKind") == "peer"
+    horizontal_centers = _quick_items_named(
+        underlay_item, "customLayoutHorizontalCenterGuide"
     )
-    assert center_vertical.property("color") == QColor("#ff3b30")
-    assert peer_vertical.property("color") == QColor(180, 110, 255, 235)
-    assert horizontal[0].property("color") == QColor("#ff3b30")
+    assert len(vertical_centers) == 1
+    assert len(horizontal_centers) == 1
+    assert vertical_centers[0].property("guideKind") == "display_center"
+    assert horizontal_centers[0].property("guideKind") == "peer_center"
+    assert vertical_centers[0].property("color") == QColor(180, 110, 255, 168)
+    assert horizontal_centers[0].property("color") == QColor(180, 110, 255, 168)
+
+    absolute_vertical = _quick_items_named(
+        underlay_item, "customLayoutAbsoluteCenterVertical"
+    )
+    absolute_horizontal = _quick_items_named(
+        underlay_item, "customLayoutAbsoluteCenterHorizontal"
+    )
+    assert len(absolute_vertical) == 1
+    assert len(absolute_horizontal) == 1
+    assert absolute_vertical[0].property("color") == QColor(255, 255, 255, 112)
+    assert absolute_horizontal[0].property("color") == QColor(255, 255, 255, 112)
 
     overlay.model.moveItem(0, 70.0, 90.0, 85.0, 105.0)
     qt_app.processEvents()
@@ -390,6 +424,7 @@ def test_display_scene_has_one_retained_overlay_with_red_center_guides(qt_app) -
     assert id(overlay.item) == retained_identity
 
     overlay.clear_session()
+    underlay_item.setProperty("editActive", False)
     assert overlay_item.property("editActive") is False
     assert id(overlay.item) == retained_identity
 

@@ -29,6 +29,7 @@ ItemChangePublisher = Callable[[CustomLayoutSessionItem], None]
 ResizeBeginHandler = Callable[[CustomLayoutSessionItem, str, QPoint], bool]
 ResizeUpdateHandler = Callable[[CustomLayoutSessionItem, str, QPoint, bool], bool]
 ResizeWheelHandler = Callable[[CustomLayoutSessionItem, int], bool]
+MoveFinishedHandler = Callable[[], None]
 
 # Semantic edge-handle ids for the viewport-extent (aspect/world) operation.
 # Corner ids (``top_left`` .. ``bottom_right``) drive the uniform whole-size
@@ -67,6 +68,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         resize_begin_handler: ResizeBeginHandler | None = None,
         resize_update_handler: ResizeUpdateHandler | None = None,
         resize_wheel_handler: ResizeWheelHandler | None = None,
+        move_finished_handler: MoveFinishedHandler | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -80,6 +82,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._resize_begin_handler = resize_begin_handler
         self._resize_update_handler = resize_update_handler
         self._resize_wheel_handler = resize_wheel_handler
+        self._move_finished_handler = move_finished_handler
         self._items: list[CustomLayoutSessionItem] = []
         session.subscribe_changes(self._on_session_item_changed)
         self.refresh()
@@ -179,6 +182,14 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         if session is not None:
             session.notify_item_changed(item)
 
+    @Slot()
+    def finishMove(self) -> None:
+        """Clear transient alignment guides at a move ownership boundary."""
+
+        handler = self._move_finished_handler
+        if handler is not None:
+            handler()
+
     @Slot(int)
     def closeItem(self, row: int) -> None:
         """Apply edit-mode X to working state only."""
@@ -261,6 +272,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._resize_begin_handler = None
         self._resize_update_handler = None
         self._resize_wheel_handler = None
+        self._move_finished_handler = None
         self.endResetModel()
 
     def _resizable_item(self, row: int) -> CustomLayoutSessionItem | None:
@@ -370,6 +382,7 @@ class RetainedCustomLayoutOverlay:
         resize_begin_handler: ResizeBeginHandler | None = None,
         resize_update_handler: ResizeUpdateHandler | None = None,
         resize_wheel_handler: ResizeWheelHandler | None = None,
+        move_finished_handler: MoveFinishedHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         self.clear_session()
         model = CustomLayoutOverlayModel(
@@ -381,6 +394,7 @@ class RetainedCustomLayoutOverlay:
             resize_begin_handler=resize_begin_handler,
             resize_update_handler=resize_update_handler,
             resize_wheel_handler=resize_wheel_handler,
+            move_finished_handler=move_finished_handler,
             parent=self.item,
         )
         self._model = model
