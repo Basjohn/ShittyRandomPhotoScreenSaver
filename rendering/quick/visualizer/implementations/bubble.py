@@ -136,31 +136,6 @@ def compute_quick_bubble_layout(
     )
 
 
-def _payload(
-    positions: Sequence[object],
-    extras: Sequence[object],
-    trails: Sequence[object],
-    count: object,
-    *,
-    protected: bool,
-) -> QuickBubblePayload | None:
-    bubble_count = max(0, min(_MAX_BUBBLES, int(count)))
-    required = bubble_count * 4
-    if len(positions) < required or len(extras) < required:
-        return None
-    required_trails = bubble_count * 9
-    trail_values = tuple(float(value) for value in trails[:required_trails])
-    if trail_values and len(trail_values) < required_trails:
-        return None
-    return QuickBubblePayload(
-        positions=tuple(float(value) for value in positions[:required]),
-        extras=tuple(float(value) for value in extras[:required]),
-        trails=trail_values,
-        bubble_count=bubble_count,
-        protected=protected,
-    )
-
-
 def resolve_quick_bubble_payload(
     snapshot: VisualizerRenderSnapshot,
 ) -> QuickBubblePayload:
@@ -175,16 +150,26 @@ def resolve_quick_bubble_payload(
     mode_state = snapshot.logical.mode_state
     if not isinstance(mode_state, BubbleFrame):
         raise TypeError("Bubble payload resolver received another mode frame")
-    current = _payload(
-        mode_state.positions,
-        mode_state.extras,
-        mode_state.trails,
-        mode_state.bubble_count,
-        protected=False,
-    )
-    if current is None:
+    bubble_count = min(_MAX_BUBBLES, mode_state.bubble_count)
+    required = bubble_count * 4
+    required_trails = bubble_count * 9
+    positions, extras, trails = mode_state.positions, mode_state.extras, mode_state.trails
+    if (
+        len(positions) < required
+        or len(extras) < required
+        or (trails and len(trails) < required_trails)
+    ):
         raise ValueError("Bubble immutable arrays do not match bubble_count")
-    return current
+    # BubbleFrame already freezes and validates finite float tuples at publication.
+    # Retain those immutable objects instead of recasting every element every draw.
+    # Only the bounded active prefix of an oversized frame needs a new tuple; the
+    # native upload still copies into renderer-owned persistent float32 buffers.
+    return QuickBubblePayload(
+        positions=positions if len(positions) == required else positions[:required],
+        extras=extras if len(extras) == required else extras[:required],
+        trails=trails if len(trails) <= required_trails else trails[:required_trails],
+        bubble_count=bubble_count,
+    )
 
 
 
