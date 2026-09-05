@@ -4,8 +4,9 @@ Bubble runs in a baseline-relative logical domain: canonical (420x280) is a
 strict 1x1 no-op that leaves the legacy unit-square path and render arrays
 exactly unchanged; a wide/tall committed extent expands the logical world while
 authored population and Bubble personality stay unchanged through ordinary
-wide/tall cards. Only the extreme-wide presentation tail adds a bounded +1 big
-/ +3 small density assist and up to +20% stream baseline/cap. The render seam
+wide/tall cards. A cached geometry gradient adds at most +1 big / +3 small and
++20% stream baseline/cap at extreme width, while extreme vertical geometry removes
+at most one big / one small and lowers only the stream cap by 30%. The render seam
 normalizes positions/trails back to
 [0,1], retains historical card-height-normalized radius, maps that radius back
 into expanded-world collision units, and lets the shader keep circles round.
@@ -27,6 +28,9 @@ import pytest
 from widgets.spotify_visualizer.bubble_simulation import (
     BubbleSimulation,
     BubbleState,
+)
+from widgets.spotify_visualizer.bubble_viewport_profile import (
+    resolve_bubble_viewport_profile,
 )
 
 
@@ -121,15 +125,44 @@ def test_population_is_unchanged_until_extreme_wide_tail() -> None:
     assert _counts(measured_extreme_wide) == (7, 23)
 
 
-def test_extreme_wide_tail_is_bounded_to_requested_stream_and_population_boosts() -> None:
-    source = Path(
-        "widgets/spotify_visualizer/bubble_simulation.py"
-    ).read_text(encoding="utf-8")
-    assert "wide_speed_scale = 1.0 + 0.20 * wide_tail" in source
-    assert "extra_big = int(math.floor(wide_tail + 0.5))" in source
-    assert "extra_small = int(math.floor(wide_tail * 3.0 + 0.5))" in source
-    assert "relative_aspect - 2.25" in source
-    assert "3.50 - 2.25" in source
+def test_viewport_gradient_is_bounded_and_cached_by_simulation_domain() -> None:
+    canonical = resolve_bubble_viewport_profile((420.0, 280.0))
+    ordinary_wide = resolve_bubble_viewport_profile((840.0, 280.0))
+    measured_extreme_wide = resolve_bubble_viewport_profile((1174.0, 187.0))
+    measured_extreme_tall = resolve_bubble_viewport_profile((187.0, 1174.0))
+
+    assert canonical.wide_tail == pytest.approx(0.0)
+    assert canonical.tall_tail == pytest.approx(0.0)
+    assert ordinary_wide.wide_tail > 0.0
+    assert ordinary_wide.wide_tail < 0.5  # speed begins gently before counts change
+    assert measured_extreme_wide.wide_tail == pytest.approx(1.0)
+    assert measured_extreme_wide.wide_stream_scale == pytest.approx(1.20)
+    assert measured_extreme_tall.tall_tail == pytest.approx(1.0)
+    assert measured_extreme_tall.tall_stream_cap_scale == pytest.approx(0.70)
+
+    sim = BubbleSimulation()
+    first_profile = sim._viewport_profile
+    sim._apply_viewport_domain((420.0, 280.0))
+    assert sim._viewport_profile is first_profile
+    sim._apply_viewport_domain((1174.0, 187.0))
+    changed_profile = sim._viewport_profile
+    assert changed_profile is not first_profile
+    sim._apply_viewport_domain((1174.0, 187.0))
+    assert sim._viewport_profile is changed_profile
+
+
+def test_extreme_wide_zero_big_population_stays_zero() -> None:
+    sim = _run((1174.0, 187.0), bubble_big_count=0, bubble_small_count=20)
+    big = sum(1 for bubble in sim._bubbles if bubble.is_big)
+    small = sum(1 for bubble in sim._bubbles if not bubble.is_big)
+    assert (big, small) == (0, 23)
+
+
+def test_extreme_vertical_reduces_population_by_one() -> None:
+    sim = _run((187.0, 1174.0), bubble_big_count=6, bubble_small_count=20)
+    big = sum(1 for bubble in sim._bubbles if bubble.is_big)
+    small = sum(1 for bubble in sim._bubbles if not bubble.is_big)
+    assert (big, small) == (5, 19)
 
 
 class _OneShotSnareScheduler:

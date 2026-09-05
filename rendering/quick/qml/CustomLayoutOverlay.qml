@@ -310,9 +310,12 @@ Item {
                     radius: 3
                     x: leftSide ? -width / 2 : editFrame.width - width / 2
                     y: topSide ? -height / 2 : editFrame.height - height / 2
-                    color: "#fff4f4f4"
+                    // Visualizer corners are a distinct two-axis viewport-extent
+                    // gesture; use a deeper blue than the one-axis side strips so
+                    // the edit affordance communicates the semantic difference.
+                    color: editFrame.viewportResizeCapable ? "#e73b7fbe" : "#fff4f4f4"
                     border.width: 1
-                    border.color: "#ff222222"
+                    border.color: editFrame.viewportResizeCapable ? "#ff0b2a46" : "#ff222222"
 
                     MouseArea {
                         anchors.fill: parent
@@ -359,9 +362,10 @@ Item {
                 }
             }
 
-            // Viewport-extent edge handles. Distinct from the uniform corner
-            // handles above: left/right change viewport width only, top/bottom
-            // change viewport height only, at constant uniform scale. Only the
+            // Viewport-extent edge handles. Left/right change viewport width
+            // only and top/bottom change viewport height only at constant uniform
+            // scale. The Visualizer corners above change both axes simultaneously;
+            // only the wheel owns uniform whole-Visualizer scale. Only the
             // viewport-resize-capable visualizer shows these; QML emits the
             // semantic edge id and Python owns all geometry/aspect math.
             Repeater {

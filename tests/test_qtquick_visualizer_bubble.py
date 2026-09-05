@@ -21,6 +21,7 @@ from rendering.quick.visualizer.implementations.bubble import (
 from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
 from widgets.spotify_visualizer.config_applier import (
     _populate_shared_visualizer_extras,
+    apply_logical_vis_mode_kwargs,
     apply_presentation_vis_mode_kwargs,
 )
 from widgets.spotify_visualizer.presentation_geometry import (
@@ -557,13 +558,29 @@ def test_bubble_layout_scales_uniformly_and_keeps_circle_radii_isotropic() -> No
     assert tall.trail_axis_scale[0] == pytest.approx(1.0)
     assert tall.trail_axis_scale[1] < 1.0
     assert tall.trail_radial_scale < 1.0
-    assert canonical.large_viewport_stroke_bonus_px == pytest.approx(0.0)
+    assert canonical.viewport_stroke_extra_half_px == pytest.approx(0.0)
+    moderate_wide = _layout(_presentation(extent=(840.0, 280.0)))
+    extreme_wide = _layout(_presentation(extent=(1174.0, 187.0)))
+    extreme_tall = _layout(_presentation(extent=(187.0, 1174.0)))
+    assert 0.0 < moderate_wide.viewport_stroke_extra_half_px < 1.25
+    assert moderate_wide.viewport_stroke_extra_half_px < extreme_wide.viewport_stroke_extra_half_px
+    assert extreme_tall.viewport_stroke_extra_half_px > 0.0
+    assert extreme_wide.viewport_stroke_extra_half_px <= 1.25
 
     shader = Path("widgets/spotify_visualizer/shaders/bubble.frag").read_text(
         encoding="utf-8"
     )
-    assert "stroke - 0.5 / inner_h" in shader
-    assert "stroke - 0.5 * (1.0 + large_viewport_stroke_bonus_px)" not in shader
+    assert "float stroke = max(0.80 * px" in shader
+    assert "stroke + viewport_stroke_extra_half_px * px" in shader
+    assert "min(2.35 * px" in shader
+    assert "stroke - 0.5 / inner_h" not in shader
+
+
+
+def test_bubble_zero_big_count_is_valid_authored_state() -> None:
+    host = SimpleNamespace()
+    apply_logical_vis_mode_kwargs(host, {"bubble_big_count": 0})
+    assert host._bubble_big_count == 0
 
 
 def test_quick_bubble_registry_is_static_lazy_and_resource_dormant() -> None:

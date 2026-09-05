@@ -976,9 +976,9 @@ class QuickSceneController(QObject):
                 max(1.0, float(self._window.width())),
                 max(1.0, float(self._window.height())),
             )
-        # CUSTOM carries two independent operations: wheel/corner resize has
-        # already changed the working QRect, while an edge drag changes the
-        # logical extent.  The QRect is the retained edit authority, including
+        # CUSTOM carries two independent operations: wheel changes uniform
+        # visual scale, while Visualizer side/corner handles change one/two
+        # logical viewport axes. The QRect is the retained edit authority, including
         # after a normal publication refreshed baseline from committed state.
         effective_extent = active_item.current_viewport_extent or baseline.viewport_extent
         relative_scale = _custom_visualizer_relative_scale(
@@ -1190,6 +1190,36 @@ class QuickSceneController(QObject):
             return bool(root.contains(local))
         except (TypeError, RuntimeError):
             return False
+
+    def discard_unowned_visualizer_admission(self) -> VisualizerRenderIdentity | None:
+        """Clear one manager-proven orphaned retained Visualizer admission.
+
+        This is *not* a normal retirement or display-transfer path. The CUSTOM
+        owner may call it only after product-level ``DisplayManager`` authority
+        proves this scene's display unit owns no Visualizer lifecycle owner while
+        another unit owns the single live controller. In that state any retained
+        render identity here is an orphaned presentation shell from an earlier
+        activation/transfer edge. Clear only scene-local routes so the upcoming
+        live transfer can reuse the retained QML shell without recreating the
+        logical runtime, BeatEngine, cadence, or owner.
+        """
+
+        item = self._visualizer_item
+        identity = None if item is None else item.render_identity
+        if identity is None:
+            return None
+        root = self._visualizer_root
+        if root is not None:
+            root.setProperty("customLayoutWorkingVisible", False)
+            root.setProperty("presentationActive", False)
+        item.clear_render_source()
+        self._visualizer_bridge = None
+        self._visualizer_double_click_admission = None
+        self._visualizer_middle_click_admission = None
+        self._visualizer_volume_wheel_handler = None
+        self._visualizer_viewport_config_sink = None
+        self._custom_layout_visualizer_baseline = None
+        return identity
 
     def transfer_visualizer_to(
         self,

@@ -93,8 +93,9 @@ class CustomLayoutSessionItem:
     current_display_identity: str = ""
     source_monitor_route: str = "ALL"
     current_monitor_route: str = ""
-    # Viewport-extent (edge) resize working state. ``resize_scale`` above stays
-    # the uniform (wheel/corner) operation and is never repurposed as extent.
+    # Viewport-extent resize working state. ``resize_scale`` above stays the
+    # uniform wheel operation and is never repurposed as extent; Visualizer side
+    # handles change one world axis and Visualizer corners change both axes.
     # These carry the visualizer's logical world width/height so uniform scale
     # and viewport extent resolve independently; ``None`` means the canonical
     # baseline aspect. Only viewport-resize-capable items populate them.

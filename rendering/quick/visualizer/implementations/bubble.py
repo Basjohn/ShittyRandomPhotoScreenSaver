@@ -15,6 +15,9 @@ from core.settings.bubble_gradient_semantics import (
     get_bubble_specular_shader_vector,
 )
 from rendering.quick.render.gl_resources import compile_program
+from widgets.spotify_visualizer.bubble_viewport_profile import (
+    resolve_bubble_viewport_profile,
+)
 from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
     VisualizerRenderSnapshot,
@@ -69,7 +72,7 @@ class QuickBubbleLayout:
     visual_scale: float
     trail_axis_scale: tuple[float, float]
     trail_radial_scale: float
-    large_viewport_stroke_bonus_px: float
+    viewport_stroke_extra_half_px: float
     specular_reference_aspect: float
     response_radius_scale: float
     effect_scale: float
@@ -126,12 +129,12 @@ def compute_quick_bubble_layout(
     response_height = math.sqrt(content[2] * content[3] / (baseline[0] / baseline[1]))
     effect_scale = response_height / baseline[1]
 
-    # The same extreme-size presentation benefits from a slightly firmer edge.
-    # Ramp to one authored pixel rather than branching the simulation or adding
-    # geometry. At normal sizes this is exactly zero.
-    large_viewport_stroke_bonus_px = max(
-        0.0,
-        min(1.0, (effect_scale - 1.75) / 0.75),
+    # Resolve the same continuous geometry profile used by the simulation.  The
+    # result is physical half-stroke pixels, independent of effect scale, so
+    # extreme shapes firm up gradually without the old late accelerating ramp.
+    viewport_profile = resolve_bubble_viewport_profile(
+        extent,
+        baseline_viewport_size=baseline,
     )
     # Specular mutation and ellipse orientation were authored at canonical
     # content aspect. Recover that content size at the current uniform scale
@@ -147,7 +150,7 @@ def compute_quick_bubble_layout(
         visual_scale=scale,
         trail_axis_scale=trail_axis_scale,
         trail_radial_scale=trail_radial_scale,
-        large_viewport_stroke_bonus_px=large_viewport_stroke_bonus_px,
+        viewport_stroke_extra_half_px=viewport_profile.stroke_extra_half_px,
         specular_reference_aspect=reference_width / reference_height,
         response_radius_scale=response_height / content[3],
         effect_scale=effect_scale,
@@ -202,6 +205,8 @@ class QuickBubbleRenderer:
         self._position_uniform_buffer = np.zeros(_BUBBLE_POS_SIZE, dtype=np.float32)
         self._extra_uniform_buffer = np.zeros(_BUBBLE_EXTRA_SIZE, dtype=np.float32)
         self._trail_uniform_buffer = np.zeros(_BUBBLE_TRAIL_SIZE, dtype=np.float32)
+        self._layout_cache_key: tuple[object, ...] | None = None
+        self._layout_cache: QuickBubbleLayout | None = None
 
     @property
     def has_resources(self) -> bool:
@@ -217,17 +222,27 @@ class QuickBubbleRenderer:
         content_x, content_y, content_width, content_height = (
             presentation.content_rect
         )
-        layout = compute_quick_bubble_layout(
-            local_content_rect=(
-                content_x - outer_x,
-                content_y - outer_y,
-                content_width,
-                content_height,
-            ),
-            visual_scale=presentation.uniform_visual_scale,
-            viewport_extent=presentation.viewport_extent,
-            baseline_viewport_size=presentation.baseline_viewport_size,
+        local_content_rect = (
+            content_x - outer_x,
+            content_y - outer_y,
+            content_width,
+            content_height,
         )
+        layout_key = (
+            local_content_rect,
+            presentation.uniform_visual_scale,
+            presentation.viewport_extent,
+            presentation.baseline_viewport_size,
+        )
+        if self._layout_cache_key != layout_key or self._layout_cache is None:
+            self._layout_cache = compute_quick_bubble_layout(
+                local_content_rect=local_content_rect,
+                visual_scale=presentation.uniform_visual_scale,
+                viewport_extent=presentation.viewport_extent,
+                baseline_viewport_size=presentation.baseline_viewport_size,
+            )
+            self._layout_cache_key = layout_key
+        layout = self._layout_cache
         payload = resolve_quick_bubble_payload(snapshot)
         if not self._program:
             self._initialize()
@@ -310,8 +325,8 @@ class QuickBubbleRenderer:
         gl.glUniform2f(uniforms["u_trail_axis_scale"], *layout.trail_axis_scale)
         gl.glUniform1f(uniforms["u_trail_radial_scale"], layout.trail_radial_scale)
         gl.glUniform1f(
-            uniforms["u_large_viewport_stroke_bonus_px"],
-            layout.large_viewport_stroke_bonus_px,
+            uniforms["u_viewport_stroke_extra_half_px"],
+            layout.viewport_stroke_extra_half_px,
         )
 
         specular_direction = get_bubble_specular_shader_vector(
@@ -432,7 +447,7 @@ class QuickBubbleRenderer:
                 "u_tail_opacity",
                 "u_trail_axis_scale",
                 "u_trail_radial_scale",
-                "u_large_viewport_stroke_bonus_px",
+                "u_viewport_stroke_extra_half_px",
                 "u_specular_dir",
                 "u_gradient_dir",
                 "u_gradient_mode",

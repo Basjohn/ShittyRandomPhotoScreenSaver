@@ -33,10 +33,10 @@ MoveFinishedHandler = Callable[[], None]
 DisplayTransferCapability = Callable[[CustomLayoutSessionItem, str], bool]
 DisplayTransferHandler = Callable[[CustomLayoutSessionItem, str], bool]
 
-# Semantic edge-handle ids for the viewport-extent (aspect/world) operation.
-# Corner ids (``top_left`` .. ``bottom_right``) drive the uniform whole-size
-# operation; the four edges below change one viewport axis at constant uniform
-# scale. QML emits these verbatim; only Python owns the geometry math.
+# Semantic edge-handle ids for the one-axis viewport-extent operation. Visualizer
+# corners are also viewport gestures, but their two-axis dispatch is owned by the
+# Python layout owner; ordinary corners remain the existing uniform-widget resize.
+# QML emits handle ids verbatim and never owns the geometry math.
 _VIEWPORT_EDGE_HANDLES = frozenset({"left", "right", "top", "bottom"})
 
 
@@ -328,10 +328,10 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     ) -> CustomLayoutSessionItem | None:
         """Gate a resize handle by its semantic role.
 
-        Corner handles use the uniform (whole-size) resize role; the four
-        viewport edges use the distinct viewport-extent role. The two are
-        separate so an ordinary resizable widget never gains edge (aspect)
-        handles.
+        The four side handles require viewport capability. Corners remain
+        available to every resizable item; the owner interprets Visualizer corners
+        as two-axis viewport extent and ordinary corners as uniform widget resize.
+        This keeps the semantic split without giving ordinary widgets side handles.
         """
 
         if not 0 <= int(row) < len(self._items):

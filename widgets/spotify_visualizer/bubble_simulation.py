@@ -22,6 +22,10 @@ from core.logging.logger import (
     is_verbose_logging,
     is_viz_diagnostics_enabled,
 )
+from widgets.spotify_visualizer.bubble_viewport_profile import (
+    BubbleViewportProfile,
+    resolve_bubble_viewport_profile,
+)
 from widgets.spotify_visualizer.render_state import (
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
 )
@@ -120,34 +124,6 @@ def _smoothstep01(value: float) -> float:
 
     x = _clamp01(value)
     return x * x * (3.0 - 2.0 * x)
-
-
-def _extreme_wide_viewport_factor(domain_w: float, domain_h: float) -> float:
-    """Return the presentation-only 0..1 compensation tail for extreme width.
-
-    Bubble's baseline-relative domain already preserves authored motion at normal
-    aspect changes.  Very wide committed cards are a separate visual-density
-    tail: the same authored population and speed are perceptually sparse/slow
-    once horizontal world stretch is several times larger than vertical stretch.
-    Keep ordinary wide/tall cards as a strict no-op, then ease to full
-    compensation only beyond roughly 3.4:1 physical aspect and reach it by
-    roughly 5.25:1 (canonical Bubble is 1.5:1).
-    """
-
-    try:
-        width = float(domain_w)
-        height = float(domain_h)
-    except (TypeError, ValueError, OverflowError):
-        return 0.0
-    if (
-        not math.isfinite(width)
-        or not math.isfinite(height)
-        or width <= 0.0
-        or height <= 0.0
-    ):
-        return 0.0
-    relative_aspect = width / height
-    return _smoothstep01((relative_aspect - 2.25) / (3.50 - 2.25))
 
 
 def _content_axis_distance(value: float, domain_axis: float) -> float:
@@ -297,14 +273,16 @@ class BubbleSimulation:
         # Baseline-relative logical domain. 1x1 is the canonical 420x280 world
         # and is a strict no-op path: every spatial site reduces to the exact
         # legacy unit-square values and the render arrays are emitted unchanged.
-        # A non-baseline committed viewport extent widens/heightens this domain:
-        # the logical world expands while authored population and Bubble
-        # personality remain unchanged (so a larger world is naturally less
-        # dense). The render seam normalizes positions/trails back to [0,1];
+        # A non-baseline committed viewport extent widens/heightens this domain.
+        # Bubble personality remains authored; only the separately cached
+        # geometry profile may apply the bounded extreme-wide/tall population
+        # and stream modifiers documented in Spec. The render seam normalizes
+        # positions/trails back to [0,1];
         # authored render radius stays card-height-normalized and the shader's
         # aspect correction keeps circles round.
         self._domain_w: float = 1.0
         self._domain_h: float = 1.0
+        self._viewport_profile: BubbleViewportProfile = resolve_bubble_viewport_profile(None)
         self._big_size_max: float = 0.038
         self._small_size_max: float = 0.018
         self._diag_tick_count: int = 0
@@ -354,6 +332,7 @@ class BubbleSimulation:
         self._runtime_spawn_fade_seconds = RUNTIME_SPAWN_FADE_ACTIVE_S
         self._domain_w = 1.0
         self._domain_h = 1.0
+        self._viewport_profile = resolve_bubble_viewport_profile(None)
         self._diag_tick_count = 0
         self._smoothed_speed_energy = 0.0
         self._sustained_loud_energy = 0.0
@@ -410,29 +389,40 @@ class BubbleSimulation:
         return dict(self._last_perf_diag)
 
     def _apply_viewport_domain(self, extent: object) -> None:
-        """Set the baseline-relative logical domain from the committed extent.
+        """Commit Bubble's logical domain and cached shape profile.
 
-        ``None`` / a canonical ``(420, 280)`` extent yields exactly ``1.0 x 1.0``
-        so the whole tick stays on the legacy unit-square path. A non-canonical
-        extent widens/heightens the logical world proportionally.
+        The geometry gradients are resolved only when the committed extent
+        actually changes.  Normal ticks therefore consume cached scalars rather
+        than reclassifying area/aspect at audio cadence.
         """
 
-        if extent is None:
-            self._domain_w = 1.0
-            self._domain_h = 1.0
-            return
-        try:
-            extent_w = float(extent[0])
-            extent_h = float(extent[1])
-        except (TypeError, ValueError, IndexError):
-            self._domain_w = 1.0
-            self._domain_h = 1.0
-            return
         baseline_w, baseline_h = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+        if extent is None:
+            extent_w, extent_h = baseline_w, baseline_h
+        else:
+            try:
+                extent_w = float(extent[0])
+                extent_h = float(extent[1])
+            except (TypeError, ValueError, IndexError):
+                extent_w, extent_h = baseline_w, baseline_h
+            if (
+                not math.isfinite(extent_w)
+                or not math.isfinite(extent_h)
+                or extent_w <= 0.0
+                or extent_h <= 0.0
+            ):
+                extent_w, extent_h = baseline_w, baseline_h
+
         domain_w = extent_w / baseline_w if baseline_w > 0.0 else 1.0
         domain_h = extent_h / baseline_h if baseline_h > 0.0 else 1.0
-        self._domain_w = domain_w if (math.isfinite(domain_w) and domain_w > 0.0) else 1.0
-        self._domain_h = domain_h if (math.isfinite(domain_h) and domain_h > 0.0) else 1.0
+        domain_w = domain_w if (math.isfinite(domain_w) and domain_w > 0.0) else 1.0
+        domain_h = domain_h if (math.isfinite(domain_h) and domain_h > 0.0) else 1.0
+        if self._domain_w == domain_w and self._domain_h == domain_h:
+            return
+
+        self._domain_w = domain_w
+        self._domain_h = domain_h
+        self._viewport_profile = resolve_bubble_viewport_profile((extent_w, extent_h))
 
     def _is_baseline_domain(self) -> bool:
         """True on the canonical 1x1 world - the strict legacy no-op path."""
@@ -504,24 +494,39 @@ class BubbleSimulation:
             settings.get("bubble_stream_speed", 2.0),
         ))
 
-        # Extreme-wide tail compensation only.  The baseline-relative logical
-        # domain intentionally remains the sole geometry authority; this small
-        # presentation modifier restores perceived density/travel in very wide
-        # cards without globally compressing or rewriting Bubble reactivity.
-        wide_tail = _extreme_wide_viewport_factor(self._domain_w, self._domain_h)
+        # Consume the cached viewport gradient.  Geometry classification happens
+        # only when the committed extent changes; normal audio ticks perform only
+        # these bounded scalar/count adjustments.  Wide keeps the accepted density
+        # + travel assist, while extreme verticals gently reduce density and cap
+        # travel.  An authored zero big-Bubble population stays zero.
+        big_target = max(0, big_target)
+        small_target = max(0, small_target)
+        profile = self._viewport_profile
+        wide_tail = profile.wide_tail
         if wide_tail > 0.0:
-            extra_big = int(math.floor(wide_tail + 0.5))
+            extra_big = (
+                int(math.floor(wide_tail + 0.5))
+                if big_target > 0
+                else 0
+            )
             extra_small = int(math.floor(wide_tail * 3.0 + 0.5))
-            authored_total = max(0, big_target) + max(0, small_target)
+            authored_total = big_target + small_target
             remaining_slots = max(0, MAX_BUBBLES - authored_total)
             extra_big = min(extra_big, remaining_slots)
             remaining_slots -= extra_big
             extra_small = min(extra_small, remaining_slots)
             big_target += extra_big
             small_target += extra_small
-            wide_speed_scale = 1.0 + 0.20 * wide_tail
-            stream_const *= wide_speed_scale
-            stream_cap *= wide_speed_scale
+            stream_const *= profile.wide_stream_scale
+            stream_cap *= profile.wide_stream_scale
+
+        tall_tail = profile.tall_tail
+        if tall_tail > 0.0:
+            remove_big = int(math.floor(tall_tail + 0.5))
+            remove_small = int(math.floor(tall_tail + 0.5))
+            big_target = max(0, big_target - remove_big)
+            small_target = max(0, small_target - remove_small)
+            stream_cap *= profile.tall_stream_cap_scale
         stream_reactivity = float(settings.get("bubble_stream_reactivity", 0.5))
         rotation_amount = float(settings.get("bubble_rotation_amount", 0.5))
         drift_amount_authored = float(settings.get("bubble_drift_amount", 0.5))
