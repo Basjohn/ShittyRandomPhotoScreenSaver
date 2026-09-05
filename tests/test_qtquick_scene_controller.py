@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from dataclasses import replace
 import json
 from pathlib import Path
@@ -230,7 +232,9 @@ def test_scene_controller_keeps_all_custom_edge_wheel_cancel_and_save_geometry(
     owner._bindings["test-display"] = _DisplayBinding(
         identity="test-display",
         monitor_route="1",
-        unit=None,
+        unit=SimpleNamespace(
+            runtime=SimpleNamespace(scene_controller=controller),
+        ),
         screen=screen,
         geometry=QRect(screen_geometry),
     )
@@ -271,6 +275,8 @@ def test_scene_controller_keeps_all_custom_edge_wheel_cancel_and_save_geometry(
     assert owner.resize_wheel(item, 120) is True
     assert item.current_global_rect.width() > baseline_rect.width()
     assert item.current_global_rect.height() > baseline_rect.height()
+    # Wheel preserves the edge-edited world and applies its whole-card scale
+    # uniformly; only an edge drag changes the corresponding world axis.
     assert item.current_viewport_extent == (480.0, 160.0)
     publish_and_interleave_normal_frame()
 

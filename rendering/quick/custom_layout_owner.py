@@ -43,6 +43,7 @@ from rendering.quick.custom_layout_hydration import (
     resolve_quick_custom_entry,
 )
 from rendering.quick.custom_layout_scene import QuickCustomLayoutSceneCoordinator
+from rendering.quick.widgets.host import OverlayWidgetGeometry
 from rendering.quick.custom_layout_size import (
     CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
     CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY,
@@ -86,6 +87,7 @@ class _ResizeOrigin:
     cursor: QPoint
     scale: float
     viewport_extent: tuple[float, float] | None
+    visualizer_uniform_scale: float | None
 
 
 class QuickCustomLayoutOwner:
@@ -108,6 +110,7 @@ class QuickCustomLayoutOwner:
         self._bindings: dict[str, _DisplayBinding] = {}
         self._descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
         self._resize_origins: dict[CustomLayoutKey, _ResizeOrigin] = {}
+        self._deferred_topology_reconciliation_reason: str | None = None
         self._active = False
         self._retired = False
 
@@ -200,7 +203,7 @@ class QuickCustomLayoutOwner:
         logger.info("[CUSTOM_LAYOUT] Cancelled Quick session")
         return True
 
-    def save(self, *, request_reload: bool = True) -> bool:
+    def save(self, *, defer_topology_reconciliation: bool = False) -> bool:
         if not self._active or self._session is None:
             return False
         widgets = self._settings_manager.get_widgets_map()
@@ -254,12 +257,36 @@ class QuickCustomLayoutOwner:
         write_custom_layout_map(widgets, custom_map)
         self._settings_manager.set_widgets_map(widgets, emit_change=False)
         self._settings_manager.save()
-        self._promote_visualizer_commit()
+        topology_reason = self._live_commit_topology_reason()
+        if topology_reason is None:
+            self._promote_live_geometry_commit()
+        else:
+            logger.info(
+                "[CUSTOM_LAYOUT] Save retains generation reconciliation reason=%s",
+                topology_reason,
+            )
         self._finish()
-        if request_reload:
-            self._reload_request("save_continue")
+        # Geometry-only Save remains in this retained generation. A layout-slot
+        # transaction can explicitly defer topology replacement until its slot
+        # attempt completes; no caller gets an ignored compatibility flag.
+        if topology_reason is not None:
+            if defer_topology_reconciliation:
+                self._deferred_topology_reconciliation_reason = topology_reason
+                logger.info(
+                    "[CUSTOM_LAYOUT] Deferred topology reconciliation reason=%s",
+                    topology_reason,
+                )
+            else:
+                self._reload_request("save_continue")
         logger.info("[CUSTOM_LAYOUT] Saved one Quick session")
         return True
+
+    def take_deferred_topology_reconciliation(self) -> str | None:
+        """Consume one layout-slot topology replacement reason after persistence."""
+
+        reason = self._deferred_topology_reconciliation_reason
+        self._deferred_topology_reconciliation_reason = None
+        return reason
 
     def reset_to_authored(self) -> bool:
         if not self._active or self._session is None:
@@ -402,11 +429,23 @@ class QuickCustomLayoutOwner:
                 return False
         elif not item.resize_capable:
             return False
+        uniform_scale = None
+        if item.viewport_resize_capable:
+            binding = self._bindings[item.current_display_identity]
+            render_item = binding.unit.runtime.scene_controller.visualizer_item
+            presentation = None if render_item is None else render_item.presentation
+            if (
+                presentation is None
+                or presentation.viewport_extent != item.current_viewport_extent
+            ):
+                raise RuntimeError("CUSTOM visualizer resize has no current retained presentation")
+            uniform_scale = float(presentation.uniform_visual_scale)
         self._resize_origins[item.source_key] = _ResizeOrigin(
             rect=QRect(item.current_global_rect),
             cursor=QPoint(cursor),
             scale=float(item.resize_scale),
             viewport_extent=item.current_viewport_extent,
+            visualizer_uniform_scale=uniform_scale,
         )
         return True
 
@@ -704,11 +743,39 @@ class QuickCustomLayoutOwner:
             minimum_scale,
             legacy_payload_floor,
         )
+        viewport_extent = item.current_viewport_extent
+        visualizer_world = item.viewport_resize_capable and viewport_extent is not None
+        if visualizer_world:
+            render_item = binding.unit.runtime.scene_controller.visualizer_item
+            presentation = None if render_item is None else render_item.presentation
+            if presentation is None or presentation.viewport_extent != viewport_extent:
+                raise RuntimeError("CUSTOM visualizer wheel has no current retained presentation")
+            current_width = max(1.0, float(viewport_extent[0]) * presentation.uniform_visual_scale)
+            current_height = max(1.0, float(viewport_extent[1]) * presentation.uniform_visual_scale)
+            current_resize_scale = max(1.0e-6, float(item.resize_scale))
+            max_scale = current_resize_scale * min(
+                float(binding.geometry.width()) / current_width,
+                float(binding.geometry.height()) / current_height,
+            )
+            minimum = quick_custom_minimum_size(item)
+            floor_scale = max(
+                floor_scale,
+                current_resize_scale * max(
+                    float(minimum.width()) / current_width,
+                    float(minimum.height()) / current_height,
+                ),
+            )
         scale = min(max_scale, max(floor_scale, float(requested_scale)))
         if abs(scale - item.resize_scale) < 1e-6:
             return False
-        width = max(1, int(round(reference_width * scale)))
-        height = max(1, int(round(reference_height * scale)))
+        relative_to_current = scale / max(1.0e-6, float(item.resize_scale))
+        if visualizer_world:
+            assert viewport_extent is not None
+            width = max(1, int(round(float(viewport_extent[0]) * presentation.uniform_visual_scale * relative_to_current)))
+            height = max(1, int(round(float(viewport_extent[1]) * presentation.uniform_visual_scale * relative_to_current)))
+        else:
+            width = max(1, int(round(reference_width * scale)))
+            height = max(1, int(round(reference_height * scale)))
         center_x = float(anchor_rect.x()) + float(anchor_rect.width()) / 2.0
         local = QRect(
             int(round(center_x - width / 2.0)) - binding.geometry.x(),
@@ -730,16 +797,31 @@ class QuickCustomLayoutOwner:
             item.baseline_size_payload,
             payload_scale,
         )
-        item.set_geometry(
-            QRect(
-                binding.geometry.x() + local.x(),
-                binding.geometry.y() + local.y(),
-                local.width(),
-                local.height(),
-            ),
-            size_payload=payload,
-            resize_scale=scale,
+        if visualizer_world:
+            payload.update(
+                width=local.width(),
+                height=local.height(),
+                viewport_extent=[viewport_extent[0], viewport_extent[1]],
+            )
+        geometry = QRect(
+            binding.geometry.x() + local.x(),
+            binding.geometry.y() + local.y(),
+            local.width(),
+            local.height(),
         )
+        if visualizer_world:
+            item.set_geometry(
+                geometry,
+                size_payload=payload,
+                resize_scale=scale,
+                viewport_extent=viewport_extent,
+            )
+        else:
+            item.set_geometry(
+                geometry,
+                size_payload=payload,
+                resize_scale=scale,
+            )
         return True
 
     def _resize_uniform_drag(
@@ -771,13 +853,20 @@ class QuickCustomLayoutOwner:
         edge: str,
         cursor: QPoint,
     ) -> bool:
+        binding = self._bindings[item.current_display_identity]
         extent = origin.viewport_extent
         if extent is None:
             extent = (
                 float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[0]),
                 float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1]),
             )
-        pixels_per_world = max(1e-6, float(origin.rect.width()) / float(extent[0]))
+        # The working QRect is independently rounded.  Its width is not a
+        # reliable world conversion after repeated edge edits; the retained
+        # presentation captured at gesture start carries the exact uniform
+        # projection for every update in this drag.
+        if origin.visualizer_uniform_scale is None:
+            raise RuntimeError("CUSTOM visualizer edge has no retained scale")
+        pixels_per_world = max(1e-6, float(origin.visualizer_uniform_scale))
         rect = QRect(origin.rect)
         dx = cursor.x() - origin.cursor.x()
         dy = cursor.y() - origin.cursor.y()
@@ -794,7 +883,6 @@ class QuickCustomLayoutOwner:
             rect.setHeight(bottom - rect.y())
         else:
             rect.setHeight(max(minimum.height(), origin.rect.height() + dy))
-        binding = self._bindings[item.current_display_identity]
         local = clamp_local_rect_to_bounds(
             QRect(
                 rect.x() - binding.geometry.x(),
@@ -811,10 +899,10 @@ class QuickCustomLayoutOwner:
             local.width(),
             local.height(),
         )
-        next_extent = (
-            float(rect.width()) / pixels_per_world,
-            float(rect.height()) / pixels_per_world,
-        )
+        if edge in {"left", "right"}:
+            next_extent = (float(rect.width()) / pixels_per_world, float(extent[1]))
+        else:
+            next_extent = (float(extent[0]), float(rect.height()) / pixels_per_world)
         payload = dict(item.current_size_payload)
         payload.update(
             width=rect.width(),
@@ -937,15 +1025,57 @@ class QuickCustomLayoutOwner:
                 widgets[key] = section
             section["monitor"] = str(monitor_route or "ALL")
 
-    def _promote_visualizer_commit(self) -> None:
-        owner, unit = self._visualizer_provider()
-        if owner is None or unit is None:
-            return
-        runtime = getattr(owner, "presentation_runtime", unit.runtime)
-        render_item = runtime.scene_controller.visualizer_item
-        presentation = None if render_item is None else render_item.presentation
-        if presentation is not None:
-            owner.controller.commit_presentation_metrics(presentation)
+    def _live_commit_topology_reason(self) -> str | None:
+        """Return the explicit reason a Save must retain replacement semantics."""
+
+        session = self._session
+        if session is None:
+            raise RuntimeError("CUSTOM live-commit admission requires a session")
+        for item in session.items():
+            if item.removed or not item.current_enabled or not item.baseline_enabled:
+                return "family_presence_changed"
+            if item.current_display_identity != item.source_key.display_identity:
+                return "display_transfer"
+            if item.current_monitor_route != item.source_monitor_route:
+                return "monitor_route_changed"
+        return None
+
+    def _promote_live_geometry_commit(self) -> None:
+        """Promote all already-retained geometry before CUSTOM clears it."""
+
+        session = self._session
+        if session is None:
+            raise RuntimeError("CUSTOM live geometry promotion requires a session")
+        owner, visualizer_unit = self._visualizer_provider()
+        for item in session.items():
+            binding = self._bindings.get(item.current_display_identity)
+            if binding is None:
+                raise RuntimeError(
+                    f"CUSTOM live geometry has no display binding: {item.current_display_identity!r}"
+                )
+            rect = item.current_global_rect
+            local = OverlayWidgetGeometry(
+                float(rect.x() - binding.geometry.x()),
+                float(rect.y() - binding.geometry.y()),
+                float(rect.width()),
+                float(rect.height()),
+            )
+            if item.model_identity == "spotify_visualizer":
+                if owner is None or visualizer_unit is None:
+                    raise RuntimeError("CUSTOM live geometry has no visualizer owner")
+                extent = item.current_viewport_extent
+                if extent is None:
+                    raise RuntimeError("CUSTOM live visualizer geometry has no viewport extent")
+                owner.commit_live_custom_layout(
+                    local_rect=(local.x, local.y, local.width, local.height),
+                    viewport_extent=extent,
+                )
+                continue
+            binding.unit.presenter.commit_live_custom_layout_item(
+                item.model_identity,
+                local,
+                item.current_size_payload,
+            )
 
     def _finish(self) -> None:
         # Closing the retained edit overlay can leave the release/click that

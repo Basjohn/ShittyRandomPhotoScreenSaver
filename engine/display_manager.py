@@ -1302,10 +1302,14 @@ class DisplayManager(QObject):
         settings = self.settings_manager
         if settings is None:
             return False
+        custom_save_completed = False
         try:
             if self._quick_custom_layout_owner.is_active:
-                if not self._quick_custom_layout_owner.save(request_reload=False):
+                if not self._quick_custom_layout_owner.save(
+                    defer_topology_reconciliation=True
+                ):
                     return False
+                custom_save_completed = True
             from core.settings.layout_slots import save_layout_slot
 
             widgets_map = settings.get_widgets_map()
@@ -1326,6 +1330,17 @@ class DisplayManager(QObject):
                 exc_info=True,
             )
             return False
+        finally:
+            if custom_save_completed:
+                topology_reason = (
+                    self._quick_custom_layout_owner.take_deferred_topology_reconciliation()
+                )
+                if topology_reason is not None:
+                    logger.info(
+                        "[LAYOUT_SLOT] Reconcile persisted CUSTOM topology after slot attempt reason=%s",
+                        topology_reason,
+                    )
+                    self._request_custom_layout_runtime_reload("save_continue")
 
     def _load_layout_slot(self, slot_id: str) -> bool:
         """Apply one saved layout slot and request a fenced runtime rebuild."""

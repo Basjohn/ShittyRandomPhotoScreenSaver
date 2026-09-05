@@ -268,10 +268,9 @@ class QuickDisplayPresenter:
                     variant_geometry, size_payload = state
                     seed_variant(variant, variant_geometry, size_payload)
 
-            # For an active committed CUSTOM Clock, dynamic mode switching must
-            # replace this binding's committed rect as well as the pixels. That
-            # keeps later preferred-size publication from replaying the stale
-            # prior-mode rect. Anchored/non-CUSTOM families keep normal policy.
+            # An already committed Clock needs its variant switch to update the
+            # retained binding. Authored clocks retain their anchor policy until
+            # CUSTOM is explicitly promoted at Save.
             set_commit_handler = getattr(
                 presentation, "set_geometry_commit_handler", None
             )
@@ -329,6 +328,51 @@ class QuickDisplayPresenter:
         if reflow and self._stacking_enabled:
             self._reflow_non_custom_layout()
         return changed
+
+    def commit_live_custom_layout_item(
+        self,
+        widget_id: str,
+        geometry: OverlayWidgetGeometry,
+        size_payload: Mapping[str, object],
+    ) -> None:
+        """Promote one retained geometry-only CUSTOM edit into its binding.
+
+        The edit overlay applies pixels directly while active.  Its existing
+        preferred-size binding must receive the same committed rectangle before
+        CUSTOM ends, otherwise a later QML size signal can replay the pre-edit
+        policy rectangle over the retained item.
+        """
+
+        if self._retired:
+            raise RuntimeError("cannot commit CUSTOM layout on a retired presenter")
+        identity = str(widget_id or "").strip()
+        binding = next(
+            (
+                candidate
+                for candidate_id, candidate in self._geometry_bindings
+                if candidate_id == identity
+            ),
+            None,
+        )
+        if binding is None:
+            raise RuntimeError(f"CUSTOM layout has no retained binding: {identity!r}")
+        retained = self._runtime.scene_controller.ordinary_widget_host.presentation_for_model_identity(
+            identity
+        )
+        apply_payload = (
+            None
+            if retained is None
+            else retained.apply_custom_layout_size_payload
+        )
+        if not callable(apply_payload):
+            raise RuntimeError(f"CUSTOM layout has no retained payload owner: {identity!r}")
+        family = self.presentation_for_widget_id(identity)
+        set_commit_handler = getattr(family, "set_geometry_commit_handler", None)
+        if callable(set_commit_handler):
+            set_commit_handler(binding.set_committed_rect)
+        apply_payload(dict(size_payload))
+        self._custom_widget_ids.add(identity)
+        binding.set_committed_rect(geometry)
 
     def set_layout_observer(
         self, observer: Callable[[str, OverlayWidgetGeometry], None] | None

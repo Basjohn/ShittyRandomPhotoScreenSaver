@@ -5,8 +5,11 @@ from __future__ import annotations
 from copy import deepcopy
 from types import SimpleNamespace
 
+import pytest
 from PySide6.QtCore import QEvent, QPoint, QRect, Qt
 from PySide6.QtGui import QKeyEvent
+
+from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
 
 from engine.display_manager import DisplayManager
 from rendering.custom_layout_contract import (
@@ -31,6 +34,7 @@ from rendering.quick.widgets.host import OverlayWidgetGeometry
 from widgets.spotify_visualizer.presentation_geometry import (
     resolve_visualizer_presentation,
 )
+from widgets.spotify_visualizer import tick_pipeline
 from widgets.spotify_visualizer.quick_display_visualizer_owner import (
     QuickDisplayVisualizerOwner,
 )
@@ -114,6 +118,37 @@ def _clock_unit(
     )
     apply_quick_committed_payloads(unit, widgets)
     return unit, factory
+
+
+def test_authored_clock_switch_stays_anchored_until_custom_save_installs_binding(qt_app) -> None:
+    """Authored mode changes keep anchors; CUSTOM Save installs variant replay."""
+    widgets = _clock_widgets()
+    unit, factory = _clock_unit(qt_app, widgets, generation=809)
+    settings = _Settings(widgets)
+    owner = QuickCustomLayoutOwner(
+        settings_manager=settings, participants_provider=lambda: (unit,),
+        visualizer_provider=lambda: (None, None), reload_request=lambda _kind: None,
+    )
+    try:
+        family = unit.presenter.presentation_for_widget_id("clock")
+        assert family is not None
+        binding = next(entry for widget_id, entry in unit.presenter._geometry_bindings if widget_id == "clock")
+        assert binding.policy.has_committed_rect is False
+        assert family.set_display_mode("analog") is True
+        assert binding.policy.has_committed_rect is False
+        assert owner.start() is True
+        assert owner.save() is True
+        assert binding.policy.has_committed_rect is True
+        handler = family._geometry_commit_handler
+        assert handler is not None
+        assert handler.__self__ is binding
+        assert family.set_display_mode("digital") is True
+        assert binding.policy.has_committed_rect is True
+    finally:
+        owner.retire()
+        unit.retire()
+        factory.deleteLater()
+        qt_app.processEvents()
 
 
 def test_uniform_custom_admission_uses_visible_card_envelope_not_dead_letterbox(qt_app) -> None:
@@ -325,7 +360,7 @@ def test_single_quick_custom_owner_save_commits_geometry_size_and_enabled(
 
         assert owner.save() is True
         assert settings.save_calls == 1
-        assert reloads == ["save_continue"]
+        assert reloads == []
         assert settings.widgets["clock"]["position"] == "Custom"
         assert settings.widgets["clock"]["monitor"] == "ALL"
         custom_map = load_custom_layout_map(settings.widgets)
@@ -355,6 +390,20 @@ def test_single_quick_custom_owner_save_commits_geometry_size_and_enabled(
         assert committed.y == target.y() - screen.y()
         assert committed.width == target.width()
         assert committed.height == target.height()
+        # A later preferred-size publication must use the live-promoted binding
+        # rather than replay the pre-edit committed rectangle.
+        binding = next(
+            entry
+            for widget_id, entry in unit.presenter._geometry_bindings
+            if widget_id == "clock"
+        )
+        binding.update_content_size((240.0, 72.0))
+        assert unit.presenter.geometry_for("clock") == OverlayWidgetGeometry(
+            float(committed.x),
+            float(committed.y),
+            float(committed.width),
+            float(committed.height),
+        )
     finally:
         owner.retire()
         unit.retire()
@@ -388,6 +437,41 @@ def test_quick_custom_singleton_x_is_working_off_and_save_is_ordinary_off(
 
         assert owner.save() is True
         assert settings.widgets["clock"]["enabled"] is False
+    finally:
+        owner.retire()
+        unit.retire()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+def test_custom_save_persistence_failure_keeps_the_live_edit_session(qt_app) -> None:
+    class _FailingSettings(_Settings):
+        def save(self) -> None:
+            raise OSError("disk unavailable")
+
+    widgets = _clock_widgets()
+    settings = _FailingSettings(widgets)
+    unit, factory = _clock_unit(qt_app, widgets, generation=913)
+    owner = QuickCustomLayoutOwner(
+        settings_manager=settings,
+        participants_provider=lambda: (unit,),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    try:
+        assert owner.start() is True
+        session = owner.session
+        assert session is not None
+        item = session.items()[0]
+        target = QRect(item.current_global_rect)
+        target.translate(40, 30)
+        item.set_geometry(target, size_payload={"font_size": 64})
+        session.notify_item_changed(item)
+        with pytest.raises(OSError, match="disk unavailable"):
+            owner.save()
+        assert owner.is_active is True
+        assert owner.session is session
+        assert item.current_global_rect == target
     finally:
         owner.retire()
         unit.retire()
@@ -455,6 +539,189 @@ def test_display_manager_menu_routes_one_quick_custom_owner(qt_app) -> None:
     finally:
         manager.displays = []
         manager.retire_runtime()
+        unit.retire()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+class _LiveCommitEngine:
+    """Complete immutable-capture fake for a real started owner."""
+
+    def acquire(self): pass
+    def release(self): pass
+    def set_playback_state(self, _playing): pass
+    def get_activation_id(self): return 5
+    def get_generation_id(self): return 3
+    def get_latest_generation_with_frame(self): return 3
+    def get_latest_generation_with_waveform(self): return 3
+    def get_latest_authoritative_frame(self): return (0.0, 3, 5)
+    def get_waveform(self): return (0.0, 0.1, -0.1, 0.05)
+    def get_waveform_count(self): return 4
+    def get_energy_bands(self): return SimpleNamespace(bass=.2, mid=.1, high=.05, overall=.15)
+    def get_bubble_energy_bands(self): return self.get_energy_bands()
+    def get_transient_energy_bands(self): return SimpleNamespace(bass_transient=0., mid_transient=0., high_transient=0., onset_detected=False, onset_type="", onset_strength=0.)
+    def get_event_scheduler(self): return None
+    def get_floor_snapshot(self): return None
+    def get_perf_diagnostics(self): return {}
+
+
+@pytest.mark.parametrize("mode_id", VISUALIZER_MODE_IDS)
+@pytest.mark.parametrize("edge", ("left", "right", "top", "bottom"))
+@pytest.mark.parametrize(
+    ("initial_rect", "initial_extent"),
+    (
+        ((80.0, 60.0, 412.5, 147.5), (137.5, 49.25)),
+        ((80.0, 60.0, 412.0, 79.0), (8240.0, 1579.0)),
+    ),
+    ids=("fractional-world", "huge-world"),
+)
+def test_live_visualizer_session_save_preserves_visible_projection_and_identity(
+    qt_app, monkeypatch, mode_id, edge, initial_rect, initial_extent,
+) -> None:
+    """A real CUSTOM QRect edit promotes the retained projection before Save clears it."""
+    monkeypatch.setattr(tick_pipeline, "consume_engine_bars", lambda _o, _n: (True, True))
+    monkeypatch.setattr(tick_pipeline, "process_heartbeat", lambda _o, _n: None)
+    monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda _o, _n: None)
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    factory = QuickSceneFactory()
+    unit = create_quick_display_unit(
+        screen=screen, screen_index=0, runtime_generation=917,
+        scene_factory=factory,
+        window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+        ctrl_coordinator=SharedCtrlCoordinator(), adapters=(),
+    )
+    visualizer = QuickDisplayVisualizerOwner(
+        unit.runtime, bar_count=24, initial_mode=mode_id,
+        engine_factory=lambda _count: _LiveCommitEngine(),
+    )
+    unit.attach_visualizer_owner(visualizer)
+    settings = _Settings({"spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "1"}})
+    layout = QuickCustomLayoutOwner(
+        settings_manager=settings, participants_provider=lambda: (unit,),
+        visualizer_provider=lambda: (visualizer, unit), reload_request=lambda _kind: None,
+    )
+    try:
+        visualizer.configure(playing=True)
+        # Fractional extent forces the same independent-QRect rounding envelope
+        # used in production; old 1e-4 equality rejects this legitimate save.
+        visualizer.configure_committed_layout(
+            local_rect=initial_rect,
+            viewport_extent=initial_extent,
+        )
+        identity = visualizer.bind(engine_generation=3, activation_id=5)
+        visualizer._apply_resolved_presentation(visualizer._resolve_current_presentation())
+        visualizer.start(interval_s=10.0)
+        state = visualizer.controller.logical_tick_state
+        state._mode_teardown_block_until_ready = False
+        state._mode_transition_ready = True
+        state._waiting_for_fresh_engine_frame = False
+        state._display_bars_source_generation = 3
+        state._display_bars_source_activation = 5
+        assert tick_pipeline.logical_tick(state) is not None
+        assert visualizer.sync_present() is True
+        old_state = visualizer.controller.peek_logical_mode_state(mode_id)
+        assert old_state is not None
+        last_revision = 0
+
+        assert layout.start() is True
+        session = layout.session
+        assert session is not None
+        item = next(entry for entry in session.items() if entry.model_identity == "spotify_visualizer")
+        before = unit.runtime.scene_controller.visualizer_item.presentation
+        assert before is not None
+        def resize_live(handle: str) -> None:
+            nonlocal last_revision
+            rect = QRect(item.current_global_rect)
+            start = QPoint(rect.center())
+            cursor = QPoint(start)
+            preview = QPoint(start)
+            if handle == "left":
+                cursor.setX(rect.left() - 17)
+                preview.setX(rect.left() - 8)
+            elif handle == "right":
+                cursor.setX(rect.right() + 17)
+                preview.setX(rect.right() + 8)
+            elif handle == "top":
+                cursor.setY(rect.top() - 13)
+                preview.setY(rect.top() - 6)
+            else:
+                cursor.setY(rect.bottom() + 13)
+                preview.setY(rect.bottom() + 6)
+            assert layout.begin_resize(item, handle, start)
+            assert layout.update_resize(item, handle, preview, False)
+            session.notify_item_changed(item)
+            assert tick_pipeline.logical_tick(state) is not None
+            assert visualizer.sync_present() is True
+            assert layout.update_resize(item, handle, cursor, True)
+            session.notify_item_changed(item)
+            visible = unit.runtime.scene_controller.visualizer_item.presentation
+            assert visible is not None
+            assert visible.viewport_extent == item.current_viewport_extent
+            working_rect = item.current_global_rect
+            assert visible.outer_rect[0] == pytest.approx(float(working_rect.x() - screen.geometry().x()), abs=0.500001)
+            assert visible.outer_rect[1] == pytest.approx(float(working_rect.y() - screen.geometry().y()), abs=0.500001)
+            assert visible.outer_rect[2] == pytest.approx(float(working_rect.width()), abs=0.500001)
+            assert visible.outer_rect[3] == pytest.approx(float(working_rect.height()), abs=0.500001)
+            snapshot = visualizer.controller.render_bridge.take_for_render(
+                runtime_generation=identity.runtime_generation,
+                engine_generation=identity.engine_generation,
+                activation_id=identity.activation_id,
+                mode_id=identity.mode_id,
+                required_presentation=visible,
+                allow_presentation_rebase=True,
+            )
+            assert snapshot is not None
+            assert snapshot.logical_revision > last_revision
+            last_revision = snapshot.logical_revision
+
+        # Real edits are a sequence, not one isolated drag: alternate axes so
+        # rounded pixels cannot become the next world-conversion authority.
+        resize_live(edge)
+        resize_live("bottom" if edge in {"left", "right"} else "right")
+        resize_live("bottom_right")
+        extent_before_wheel = item.current_viewport_extent
+        assert layout.resize_wheel(item, 120)
+        assert item.current_viewport_extent == extent_before_wheel
+        session.notify_item_changed(item)
+        working = unit.runtime.scene_controller.visualizer_item.presentation
+        assert working is not None
+        # Cancel must discard the working world even after edit-time normal
+        # publications, then the same running owner returns to its baseline.
+        assert layout.cancel() is True
+        assert tick_pipeline.logical_tick(state) is not None
+        assert visualizer.sync_present() is True
+        restored = unit.runtime.scene_controller.visualizer_item.presentation
+        assert restored is not None
+        assert restored.viewport_extent == initial_extent
+        assert restored.outer_rect == pytest.approx(before.outer_rect)
+
+        assert layout.start() is True
+        session = layout.session
+        assert session is not None
+        item = next(entry for entry in session.items() if entry.model_identity == "spotify_visualizer")
+        resize_live(edge)
+        extent_before_wheel = item.current_viewport_extent
+        assert layout.resize_wheel(item, 120)
+        assert item.current_viewport_extent == extent_before_wheel
+        session.notify_item_changed(item)
+        working = unit.runtime.scene_controller.visualizer_item.presentation
+        assert working is not None
+        assert layout.save() is True
+        assert visualizer.render_identity is identity
+        assert visualizer.controller.peek_logical_mode_state(mode_id) is old_state
+        assert unit.runtime.scene_controller.visualizer_item.presentation is not None
+        assert visualizer.controller.committed_viewport_extent == working.viewport_extent
+        # The next ordinary frame resolves the exact retained floating footprint,
+        # not the independently rounded edit QRect or a second display fit.
+        assert tick_pipeline.logical_tick(state) is not None
+        assert visualizer.sync_present() is True
+        normal = unit.runtime.scene_controller.visualizer_item.presentation
+        assert normal is not None
+        assert normal.outer_rect == pytest.approx(working.outer_rect)
+        assert normal.viewport_extent == working.viewport_extent
+    finally:
+        layout.retire()
         unit.retire()
         factory.deleteLater()
         qt_app.processEvents()
