@@ -24,6 +24,19 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
   stroke/glow and screen-fit independently; do not hide large/extreme errors with arbitrary damping.
 - [ ] Awaiting physical validation — inspect actual Quick preview captures and document remaining physical validation.
 
+### Reopened live-edit failure and extreme main outlines
+
+- [~] Fix the operator's Bubble freeze during Edit and after Save. The archived 03:24–03:26 run in
+  `logs/evidence_chest/fw_bubble_edit_freeze_2026_09_05_new` keeps advancing fresh logical Bubble states
+  through 03:26:59, but rejects incoherent working rectangle/extent pairs during resizing. Trace repeated
+  moves within one gesture, integer rounding and interleaved publication; preserve independent extent/scale.
+- [ ] Prove visible snapshot revisions continue through repeated drag updates and Save, with unchanged
+  generation/source ownership. Do not hide projection rejection by relaxing coherence or restarting Bubble.
+- [x] Reduce full main-outline width by one additional logical pixel at extreme visible sizes. Reuse the
+  existing area-based large-stroke ramp (zero through 1.75x canonical linear scale, full at 2.5x) for a
+  continuous reduction. Keep Ghost and small/canonical widths; retain derivative coverage and radius response.
+- [ ] Awaiting physical validation of freeze recovery and requested extreme-size outline weight.
+
 ## E2 — richer customizable Sphere
 
 - [x] Inventory five material presets, current energy transfer/defaults/maxima and existing mesh/shader
@@ -82,3 +95,27 @@ replace it at the dragged origin. Independently rounded X/Y dimensions are valid
 possible uniform-scale intervals, so narrow/tall integer rounding does not spuriously reject a valid edit.
 The per-mode geometry audit (87 focused checks) found no additional duplicate scale or hidden extent cap.
 Physical live-preview acceptance remains open against the supplied Spectrum screenshot.
+
+## Missing Sine/Oscilloscope glow — active source-to-visible correction
+
+The later screenshot shows bright cores with almost no broad halo in both ordinary playback and editing.
+The short 03:16:49–03:17:09 run is archived in `fw_missing_line_glow_2026_09_05`; resolved playing bands are
+substantial (~0.45–0.50), so absence of audio is not the cause. Settings retain enabled, opaque glow colours.
+QColor is correctly frozen into RGBA tuples; do not add an unreachable conversion fallback to the renderer.
+
+Source identifies two spatial losses. Gaussian glow uses vertical distance from the curve, so its width measured
+perpendicular to a steep segment collapses. Its width also follows the tiny authored uniform scale even when a
+huge saved world fills a large visible viewport (the inspected profile resolves ~8239.7x5861.8 to 894x636 at
+0.1085 scale). The AA core has independent fragment coverage, making that narrow halo still harder to distinguish.
+
+- [x] Preserve user screenshot/logs; trace settings -> frozen snapshot -> actual GL output separately from line AA.
+- [x] Project glow distance in framebuffer-normal coordinates using the signed-distance gradient. Leave core
+  coverage and amplitude equations intact; a glow-on test cannot substitute for the glow-off AA oracle.
+- [x] Derive glow style width from the actual content footprint relative to the canonical 420x280 area,
+  preserving canonical style, DPR and whole-widget scaling. Do not replace it with a fixed device-pixel radius.
+  Equal visible footprints must not get different glow widths because their saved world encoding differs.
+- [x] Review canonical flat-segment math (8 logical-pixel sigma) and prove whole 2x resize, DPR 1.5,
+  steep-segment halo pixels and huge saved-world geometry on an opaque background. Before/after captures at
+  the actual primary profile geometry are inspected; 14 focused GL/glow/coverage tests pass.
+- [x] Focused checks and durable contract update. The operator confirms visible glows; final large-scale
+  balance remains Awaiting Physical Validation.

@@ -304,6 +304,10 @@ Cancel restores the pre-edit committed extent. "No active CUSTOM session" is not
 During a live edit, the working rectangle also owns its preview scale. Normal logical-frame publications cannot
 restore the saved size at the new dragged origin; independently rounded axes must admit the same uniform scale.
 
+Sine/Oscilloscope glow spreads perpendicular to the curve and scales with visible content area relative to
+420x280. A huge saved world at a small uniform scale must not weaken a halo on the same visible footprint.
+Glow size/intensity and line-core antialiasing remain independent.
+
 Sphere is an experimental, independently enabled sixth mode; existing profiles retain the original five enabled
 modes. Its frameless transparent viewport contains a static 3D mesh with authored-time deformation, reconstructed
 normals and material-specific bump/roughness. Chrome, Obsidian, Magma, Silver and Water have curated presets plus
