@@ -668,6 +668,60 @@ def test_display_manager_menu_routes_one_quick_custom_owner(qt_app) -> None:
         qt_app.processEvents()
 
 
+def test_cross_display_transfer_coherence_gate_is_fail_safe() -> None:
+    """Interactive Save may live-commit a cross-display Visualizer move only when
+    the transfer already left a fully target-owned graph.
+
+    This is the safety gate that keeps a partially moved graph (the historic
+    split that produced the retained-scene-admission warning storm and shutdown
+    barrier timeout) on the reconciliation path. It is pure decision logic, so it
+    runs without a real display.
+    """
+
+    owner = object()
+    source_unit = object()
+    target_unit = object()
+
+    def _item(model: str, current_display: str, source_display: str):
+        return SimpleNamespace(
+            model_identity=model,
+            current_display_identity=current_display,
+            source_key=SimpleNamespace(display_identity=source_display),
+        )
+
+    bindings = {
+        "display:a": SimpleNamespace(unit=source_unit),
+        "display:b": SimpleNamespace(unit=target_unit),
+    }
+
+    def _stub(items, provider_unit):
+        return SimpleNamespace(
+            _session=SimpleNamespace(items=lambda: items),
+            _bindings=bindings,
+            _visualizer_provider=lambda: (owner, provider_unit),
+        )
+
+    check = QuickCustomLayoutOwner._cross_display_transfer_is_coherent
+    moved = [_item("spotify_visualizer", "display:b", "display:a")]
+
+    # Coherent: visualizer moved a -> b and the provider now reports target unit.
+    assert check(_stub(moved, target_unit)) is True
+    # Incoherent: provider still reports the source unit -> must reconcile.
+    assert check(_stub(moved, source_unit)) is False
+    # No admitted owner/unit -> must reconcile.
+    assert check(
+        SimpleNamespace(
+            _session=SimpleNamespace(items=lambda: moved),
+            _bindings=bindings,
+            _visualizer_provider=lambda: (None, None),
+        )
+    ) is False
+    # A non-visualizer family moving displays cannot live-commit yet -> reconcile.
+    assert check(_stub([_item("clock", "display:b", "display:a")], target_unit)) is False
+    # No cross-display item at all -> nothing blocks a live commit.
+    assert check(_stub([_item("spotify_visualizer", "display:a", "display:a")], source_unit)) is True
+
+
 class _LiveCommitEngine:
     """Complete immutable-capture fake for a real started owner."""
 
