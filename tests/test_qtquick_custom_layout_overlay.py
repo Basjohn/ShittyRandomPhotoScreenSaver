@@ -520,22 +520,31 @@ def test_scene_controller_owns_overlay_for_exact_display_generation(qt_app) -> N
     assert item.parentItem() is controller.scene_root
 
     # Two-phase retirement (2026-09-05 cross-display lifecycle work): quiesce
-    # closes state admission but must NOT delete QML objects while the render
-    # scene graph is still live -- "item deletion waits for legal invalidation".
-    # Actual QML deletion (qml_objects_retired -> True) only happens once the
-    # window's scene graph is invalidated under a real render loop; that terminal
-    # path is owned by the threaded runtime teardown tests. Offscreen keeps the
-    # scene graph initialized, so here we pin the render-safe *deferral*: admission
-    # is closed, QML retirement is still pending, finalize refuses until scene
-    # invalidation, and the controller still owns its exact overlay generation.
+    # closes state admission and may only delete QML objects once the window has
+    # no live render scene graph -- "item deletion waits for legal invalidation".
+    # The window is never shown here, so whether quiesce can retire inline depends
+    # purely on the platform's scene-graph timing: the offscreen platform keeps the
+    # scene graph initialized (retirement defers), while a real windows platform
+    # leaves an unshown window's scene graph uninitialized (quiesce retires inline).
+    # Assert the render-safe invariant in whichever state this platform produces;
+    # the terminal deletion under a live render loop is owned by the threaded
+    # runtime teardown tests.
     controller.quiesce_for_retirement()
     assert controller.readiness.admission_open is False
-    assert controller.readiness.qml_objects_retired is False
-    assert window.isSceneGraphInitialized() is True
-    with pytest.raises(RuntimeError, match="before scene invalidation"):
-        controller.finalize_retirement()
-    assert overlay.item is item
-    assert controller.custom_layout_overlay is overlay
+    if window.isSceneGraphInitialized():
+        # Deferred: retirement waits for scene-graph invalidation, finalize refuses
+        # until then, and the controller still owns its exact overlay generation.
+        assert controller.readiness.qml_objects_retired is False
+        with pytest.raises(RuntimeError, match="before scene invalidation"):
+            controller.finalize_retirement()
+        assert overlay.item is item
+        assert controller.custom_layout_overlay is overlay
+    else:
+        # No live scene graph: quiesce safely retired the QML objects inline, and
+        # the retired overlay accessors refuse further use.
+        assert controller.readiness.qml_objects_retired is True
+        with pytest.raises(RuntimeError):
+            _ = controller.custom_layout_overlay
 
     window.deleteLater()
     factory.deleteLater()
