@@ -89,9 +89,16 @@ float spectrum_rim_alpha(float side_dist_px, float top_dist_px) {
     float authored_scale = (u_quick_item_coords == 1)
         ? max(u_visual_scale, 0.01) : 1.0;
     float spread = (3.0 + glow_strength * 4.0) * authored_scale;
-    float core_end = max(1.5, spread * 0.35);           // bright inner core
-    float inner_core = 1.0 - smoothstep(0.0, core_end, edge_dist);
-    float inner_falloff = 1.0 - smoothstep(core_end, spread, edge_dist);
+    // ``u_visual_scale`` controls authored styling, but it can make the
+    // styled rim narrower than one framebuffer pixel.  Keep the authored
+    // spread and derive only the coverage feather from actual fragment
+    // derivatives.  In particular, do not impose a 1.5px authored core:
+    // below that scale it exceeds ``spread`` and reverses smoothstep's edges,
+    // which is undefined and can wash the entire black Organs fill white.
+    float coverage_px = max(fwidth(edge_dist), 0.0001);
+    float core_end = spread * 0.35;
+    float inner_core = 1.0 - smoothstep(0.0, max(core_end, coverage_px), edge_dist);
+    float inner_falloff = 1.0 - smoothstep(core_end, spread + coverage_px, edge_dist);
     float rim = max(inner_core * 0.90, inner_falloff * 0.55);
     float color_alpha = clamp(u_spectrum_glow_color.a, 0.0, 1.0);
     return rim * clamp(color_alpha * (0.55 + glow_strength * 0.40), 0.0, 0.95);

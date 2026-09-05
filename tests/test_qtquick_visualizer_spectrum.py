@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from types import SimpleNamespace
 
 import pytest
@@ -20,6 +21,7 @@ from rendering.quick.visualizer import (
 from rendering.quick.visualizer.implementations.spectrum import (
     compute_quick_spectrum_layout,
 )
+from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
 from widgets.spotify_visualizer.presentation_geometry import (
     resolve_visualizer_presentation,
 )
@@ -671,3 +673,198 @@ def test_organs_preset_keeps_black_fill_static_while_border_and_ghost_ride_rainb
     # curated preset is authoritative for this design choice.
     assert values["spectrum_rainbow_border"] is True
     assert values["spectrum_ghosting_enabled"] is True
+
+
+@pytest.fixture
+def _real_spectrum_gl(qt_app):
+    """Render the production Spectrum host into a real offscreen FBO."""
+    from OpenGL import GL as gl
+    from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
+
+    width, height = 1380, 280
+    fmt = QSurfaceFormat()
+    fmt.setRenderableType(QSurfaceFormat.OpenGL)
+    fmt.setProfile(QSurfaceFormat.CoreProfile)
+    fmt.setVersion(4, 1)
+    context = QOpenGLContext()
+    context.setFormat(fmt)
+    if not context.create():
+        pytest.skip("OpenGL 4.1 context unavailable")
+    surface = QOffscreenSurface()
+    surface.setFormat(fmt)
+    surface.create()
+    if not surface.isValid() or not context.makeCurrent(surface):
+        surface.destroy()
+        pytest.skip("offscreen OpenGL context unavailable")
+
+    fbo = color = depth = 0
+    host = QuickVisualizerRenderHost()
+    try:
+        color = gl.glGenTextures(1)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, color)
+        gl.glTexImage2D(
+            gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0,
+            gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None,
+        )
+        depth = gl.glGenRenderbuffers(1)
+        gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, depth)
+        gl.glRenderbufferStorage(
+            gl.GL_RENDERBUFFER, gl.GL_DEPTH_COMPONENT24, width, height,
+        )
+        fbo = gl.glGenFramebuffers(1)
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+        gl.glFramebufferTexture2D(
+            gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D,
+            color, 0,
+        )
+        gl.glFramebufferRenderbuffer(
+            gl.GL_FRAMEBUFFER, gl.GL_DEPTH_ATTACHMENT, gl.GL_RENDERBUFFER,
+            depth,
+        )
+        assert gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) == gl.GL_FRAMEBUFFER_COMPLETE
+
+        def render(snapshot):
+            gl.glViewport(0, 0, width, height)
+            gl.glDisable(gl.GL_SCISSOR_TEST)
+            gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+            matrix = (
+                2 / width, 0, 0, 0, 0, 2 / height, 0, 0, 0, 0, 1, 0,
+                -1, -1, 0, 1,
+            )
+            assert host.render(
+                snapshot=snapshot,
+                viewport=(0, 0, width, height),
+                logical_size=(float(width), float(height)),
+                matrix_values=matrix,
+            ) == "spectrum"
+            return bytes(gl.glReadPixels(
+                0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE,
+            ))
+
+        yield render
+    finally:
+        host.release_resources()
+        if fbo:
+            gl.glDeleteFramebuffers(1, [fbo])
+        if depth:
+            gl.glDeleteRenderbuffers(1, [depth])
+        if color:
+            gl.glDeleteTextures([color])
+        context.doneCurrent()
+        surface.destroy()
+
+
+@pytest.mark.qt
+def test_real_gl_organs_preset_keeps_dark_fill_when_screen_fit_shrinks_glow(
+    _real_spectrum_gl,
+) -> None:
+    """Organs' real production route must not turn the black bar body white."""
+    from core.settings.models import SpotifyVisualizerSettings
+    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from widgets.spotify_visualizer.config_applier import (
+        _populate_shared_visualizer_extras,
+        apply_presentation_vis_mode_kwargs,
+    )
+
+    payload = resolve_visualizer_activation_payload(
+        {"mode": "spectrum", "preset_spectrum": 0}, mode="spectrum",
+    )
+    settings = SpotifyVisualizerSettings.from_mapping(
+        payload.resolved_config, apply_preset_overlay=False,
+    )
+    resolved = asdict(settings)
+    controller = VisualizerRuntimeController(
+        runtime_generation=2, initial_mode="spectrum",
+    )
+    apply_presentation_vis_mode_kwargs(controller.presentation_state, resolved)
+    capture_host = SimpleNamespace(
+        presentation_config_host=controller.presentation_state,
+        _spectrum_ghosting_enabled=resolved["spectrum_ghosting_enabled"],
+        _spectrum_ghost_decay=resolved["spectrum_ghost_decay"],
+        _osc_ghosting_enabled=False,
+        _osc_ghost_intensity=0.4,
+        _osc_ghost_decay=0.4,
+        _sine_ghosting_enabled=False,
+        _sine_ghost_alpha=0.0,
+        _sine_ghost_decay=0.4,
+        _sine_heartbeat=0.0,
+        _heartbeat_intensity=0.0,
+    )
+    parameters: dict[str, object] = {}
+    _populate_shared_visualizer_extras(parameters, capture_host)
+    assert parameters["spectrum_rainbow_fill"] is False
+    assert parameters["spectrum_rainbow_border"] is True
+
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("spectrum"),
+        display_size=(1380.0, 280.0),
+        viewport_extent=(8240.0, 1579.0),
+        border_width=4.0,
+        corner_radius=8.0,
+    )
+    assert presentation.uniform_visual_scale == pytest.approx(0.16748, abs=0.00001)
+    logical = VisualizerLogicalFrame(
+        runtime_generation=2,
+        engine_generation=5,
+        activation_id=7,
+        source_generation=5,
+        source_activation_id=7,
+        mode_id="spectrum",
+        playing=True,
+        logical_timestamp=1.0,
+        source_timestamp=1.0,
+        changed=True,
+        present_frame=True,
+        mode_reveal_ready=True,
+        common=VisualizerCommonState(
+            bars=(1.0,) * resolved["spectrum_bar_count"],
+            bar_count=resolved["spectrum_bar_count"],
+            style=freeze_render_fields({
+                "fill_color": resolved["bar_fill_color"],
+                "border_color": resolved["bar_border_color"],
+                "single_piece": True,
+                "border_radius": resolved["spectrum_border_radius"],
+            }),
+        ),
+        mode_state=SpectrumFrame(
+            peaks=(1.0,) * resolved["spectrum_bar_count"],
+            parameters=freeze_render_fields(parameters),
+        ),
+    )
+    snapshot = compose_visualizer_render_snapshot(logical, presentation, logical_revision=1)
+    pixels = _real_spectrum_gl(snapshot)
+    layout = _layout(presentation, resolved["spectrum_bar_count"])
+
+    # Sample the centre of every solid, fully-active bar.  Those pixels are
+    # neither rainbow borders nor ghosts, and must retain Organs' dark fill.
+    dark_samples = []
+    rainbow_border_samples = []
+    sample_y = int(presentation.content_rect[1] + presentation.content_rect[3] * 0.5)
+    for index in range(resolved["spectrum_bar_count"]):
+        sample_x = int(layout.bars_left + (index + 0.5) * (layout.bar_width + layout.bar_gap))
+        offset = (sample_y * 1380 + sample_x) * 4
+        dark_samples.append(pixels[offset:offset + 4])
+        # The field begins at a fractional logical coordinate; sample the
+        # first covered framebuffer pixel, not the pixel just outside it.
+        border_x = int(layout.bars_left + index * (layout.bar_width + layout.bar_gap)) + 1
+        border_offset = (sample_y * 1380 + border_x) * 4
+        rainbow_border_samples.append(pixels[border_offset:border_offset + 4])
+    assert all(
+        sample[3] >= 220 and max(sample[:3]) < 35
+        for sample in dark_samples
+    ), dark_samples
+    # Organs opts its border, but not its fill, into per-bar rainbow.  This
+    # confirms the visible rainbow treatment survives alongside black bodies.
+    visible_rainbow_samples = [
+        sample for sample in rainbow_border_samples if sample[3] >= 250
+    ]
+    rainbow_colours = {tuple(sample[:3]) for sample in visible_rainbow_samples}
+    # The sampled first-covered pixels traverse all hue sectors.  Some are
+    # intentionally omitted by the card clip at either extreme, so this is a
+    # diversity floor rather than a one-sample-per-bar count.
+    assert len(rainbow_colours) >= 16, rainbow_colours
+    assert all(
+        max(sample[:3]) - min(sample[:3]) > 60
+        for sample in visible_rainbow_samples
+    ), visible_rainbow_samples

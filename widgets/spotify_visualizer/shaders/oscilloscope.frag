@@ -221,7 +221,14 @@ vec4 eval_line(
     float dist_px = dist * inner_height;
 
     float line_width = 2.0 * authored_visual_scale();
-    float line_alpha = 1.0 - smoothstep(0.0, line_width, dist_px);
+    // Coverage is a framebuffer concern.  Keep ``line_width`` as the authored
+    // style value, then include the local device-pixel footprint so a tiny
+    // uniform-scale line and a steep waveform segment cannot disappear between
+    // samples.
+    float line_footprint_px = max(fwidth(dist_px), 1e-4);
+    float line_alpha = 1.0 - smoothstep(
+        0.0, line_width + line_footprint_px, dist_px
+    );
 
     float glow_alpha = 0.0;
     if (u_glow_enabled == 1 && glowSigmaBase > 0.0) {

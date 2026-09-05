@@ -241,7 +241,16 @@ vec4 eval_line(
     float dtf = density_thickness_factor();
     float line_width = (2.0 + bass_width_boost * 6.0)
         * authored_visual_scale() * dtf;
-    float line_alpha = 1.0 - smoothstep(0.0, line_width, dist_px);
+    // ``dist_px`` is in logical content pixels, while fragments land on the
+    // framebuffer.  At a small CUSTOM uniform scale the authored line may be
+    // narrower than one device pixel; use the local derivative only for the
+    // coverage ramp so the authored width above remains the style authority.
+    // The derivative also widens the ramp on steep wave segments, where one
+    // framebuffer pixel crosses more vertical distance than a horizontal one.
+    float line_footprint_px = max(fwidth(dist_px), 1e-4);
+    float line_alpha = 1.0 - smoothstep(
+        0.0, line_width + line_footprint_px, dist_px
+    );
 
     float glow_alpha = 0.0;
     if (u_glow_enabled == 1 && glowSigmaBase > 0.0) {

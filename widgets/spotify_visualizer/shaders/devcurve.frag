@@ -118,9 +118,13 @@ vec3 _apply_rainbow(vec3 rgb) {
 
 vec4 _draw_layer(float yCurve, vec4 color, vec4 outlineColor, int enabled, float alphaScale, float x, float y, float aa, float ow) {
     if (enabled == 0) return vec4(0.0);
+    // ``aa`` provides the minimum one-device-pixel vertical coverage.  The
+    // derivative adds the horizontal contribution for steep curves without
+    // changing the authored outline width or normalized geometry.
+    float edgeAA = max(aa, fwidth(y - yCurve));
     // Fill below the curve (liquid body sits under the spline line).
-    float inside = smoothstep(-aa, aa, y - yCurve);
-    float edge = 1.0 - smoothstep(ow, ow + aa, abs(y - yCurve));
+    float inside = smoothstep(-edgeAA, edgeAA, y - yCurve);
+    float edge = 1.0 - smoothstep(ow, ow + edgeAA, abs(y - yCurve));
     float fillA = inside * clamp(alphaScale, 0.0, 1.0) * clamp(color.a, 0.0, 1.0);
     float lineA = edge * clamp(outlineColor.a, 0.0, 1.0);
     vec3 rgb = _apply_rainbow(color.rgb);
@@ -321,13 +325,14 @@ void main() {
     int fgId = clamp(u_devcurve_foreground_layer_id, -1, 3);
     if (fgId >= 0 && _layer_enabled_by_id(fgId) != 0) {
         float yFg = _sample_curve_by_id(fgId, uv.x, sampleCount);
-        float fgInside = smoothstep(-aa, aa, uv.y - yFg);
+        float fgAA = max(aa, fwidth(uv.y - yFg));
+        float fgInside = smoothstep(-fgAA, fgAA, uv.y - yFg);
         vec4 fgColor = _layer_color_by_id(fgId);
         float fgAlpha = clamp(_layer_alpha_by_id(fgId), 0.0, 1.0) * clamp(fgColor.a, 0.0, 1.0);
 
         if (u_devcurve_foreground_shadow_enabled != 0) {
             float shadowY = yFg + clamp(u_devcurve_foreground_shadow_offset, 0.0, _quick_norm_y(0.45));
-            float shadowInside = smoothstep(-aa, aa, uv.y - shadowY);
+            float shadowInside = smoothstep(-fgAA, fgAA, uv.y - shadowY);
             float shadowA = shadowInside * clamp(u_devcurve_foreground_shadow_alpha, 0.0, 1.0) * fgAlpha;
             vec3 shadowRgb = fgColor.rgb * (1.0 - clamp(u_devcurve_foreground_shadow_darken, 0.0, 1.0));
             col = _blend_over(col, vec4(shadowRgb, shadowA));
