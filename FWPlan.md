@@ -18,6 +18,8 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
 - [~] **Visualizer glow regression — Sine/Oscilloscope:** operator reports absent visualizer glows after
   line improvements. Trace actual preset/configuration through the immutable draw state and shader at small,
   normal and large scales; repair the owning seam with a real GL coverage test while preserving line AA/colour.
+  Confirmed in both playback and Edit Layout. Latest screenshot/short-run evidence is archived under
+  `logs/evidence_chest/fw_missing_line_glow_2026_09_05`; test-only glow alpha is not visual acceptance.
 - [~] **Edit exit without teardown — assessment:** live geometry is operator-described as almost perfect.
   Inventory the Save/Cancel exit teardown and its current responsibilities; measure/check stale frame, age,
   source fencing and geometry. If safe, preserve the existing visualizer state/resources across ordinary edit
@@ -98,6 +100,9 @@ effective extent = newly committed extent
   checklist and durable navigation/contracts, then narrow commit + push.
 - [x] Ran all 115 maintained destination targets; fixed new-feature failures and documented nine unrelated
   red targets in `Future_Cleanup.md`. Focused reruns close changed contracts; the whole profile is not green.
+- [x] Later 117-target run completed (105 passed / 12 failed): nine known unrelated targets plus the active
+  CUSTOM change, a midpoint-capture fixture race and one non-reproduced native S-hotkey fault. Resolve changed
+  contracts with focused reruns; keep the native fault Awaiting Logs. The whole profile is still not green.
 - [ ] Keep physical/installed/visual acceptance open where automated evidence cannot close it.
 
 ## Awaiting validation
