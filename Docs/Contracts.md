@@ -290,7 +290,7 @@ uniform_visual_scale     # wheel/corners
 viewport_extent          # left/right width; top/bottom height
 ```
 
-All five current modes must support viewport extent and the core capability policy is now all-five-mode capable. Bubble is
+All six current modes must support viewport extent and the core capability policy is now all-six-mode capable. Bubble is
 not a destination exception and must not be re-gated to hide a defect. Preserve focused BTF/reflow proof, including equal
 renderer-content stream/drift head/trail travel for the same consume-once transient at canonical, wide and tall extents.
 Bubble presentation now uses `sqrt(content_width * content_height / 1.5)` as its response-height reference,
@@ -304,8 +304,9 @@ restores the old committed value, and ending CUSTOM removes only the override. I
 `(420,280)`.
 
 Sphere is an opt-in descriptor with FRAMELESS + VIEWPORT_RECT policy. Its compact configure-owned parameters and
-activation-relative time share the existing visualizer clock; only current playing source energy drives deformation.
-A single static mesh uses aspect-correct perspective and material-local bump/lighting. Renderer resources belong to
+activation-relative time share the existing visualizer clock; only current playing source energy/transients drive
+deformation, size pulse and reactive bump. A static body mesh uses aspect-correct perspective and material-local
+bump/lighting; Magma/Water may lazily allocate bounded static effect geometry. Renderer resources belong to
 their Quick window/context and retire through one-shot render events on admission changes, independently of whether
 the replacement mode obtains a frame. Sync and pointer movement create no cleanup polling or repeated frame requests.
 

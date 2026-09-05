@@ -37,10 +37,10 @@ def build_sphere_ui(tab, parent_layout) -> None:
     bind_setting_signal(tab, tab.sphere_light_direction.currentTextChanged, auto_switch=True)
     content.addWidget(tab.sphere_light_direction); content.addStretch()
 
-    def slider(layout, attr, key, label, maximum, default, suffix, divisor=100.0):
+    def slider(layout, attr, key, label, maximum, default, suffix, divisor=100.0, minimum=0):
         _widget, content = row(layout, label)
         control = NoWheelSlider(Qt.Orientation.Horizontal)
-        control.setRange(0, maximum)
+        control.setRange(minimum, maximum)
         control.setValue(round(float(tab._default_float("spotify_visualizer", key, default)) * divisor))
         value = QLabel()
         def update(number): value.setText(f"{number / divisor:.2f}{suffix}")
@@ -52,8 +52,21 @@ def build_sphere_ui(tab, parent_layout) -> None:
 
     slider(surface, "sphere_gloss", "sphere_gloss", "Gloss:", 100, .65, "")
     slider(surface, "sphere_specular", "sphere_specular", "Specular:", 200, .8, "", 100.0)
-    slider(surface, "sphere_surface_detail", "sphere_surface_detail", "Surface Detail:", 200, 1.0, "", 100.0)
+    slider(surface, "sphere_surface_detail", "sphere_surface_detail", "Bump Strength:", 200, 1.15, "", 100.0)
+    tab.sphere_surface_detail.setToolTip("Controls the strength of the procedural relief.")
     slider(motion, "sphere_deformation", "sphere_deformation", "Deformation:", 200, 1.0, "", 100.0)
+    slider(motion, "sphere_size_response", "sphere_size_response", "Size Response:", 200, 1.5, "", 100.0)
+    tab.sphere_size_response.setToolTip("Controls whole-sphere growth and shrink from musical transients independently of surface Deformation.")
+    slider(motion, "sphere_bass_response", "sphere_bass_response", "Bass Response:", 200, 1.0, "", 100.0)
+    slider(motion, "sphere_mid_response", "sphere_mid_response", "Mid Response:", 200, 1.0, "", 100.0)
+    slider(motion, "sphere_high_response", "sphere_high_response", "High Response:", 200, 1.0, "", 100.0)
+    slider(motion, "sphere_vocal_response", "sphere_vocal_response", "Vocal Response:", 200, 1.4, "", 100.0)
+    tab.sphere_vocal_response.setToolTip("Shapes the vocal-frequency range (a mid/high blend); it does not isolate voices.")
+    slider(motion, "sphere_bump_reactivity", "sphere_bump_reactivity", "Bump Reactivity:", 200, .65, "", 100.0)
+    tab.sphere_bump_reactivity.setToolTip("Controls added relief from music; zero retains the set base relief.")
+    slider(motion, "sphere_energy_curve", "sphere_energy_curve", "Energy Curve:", 200, .60, "", 100.0, minimum=20)
+    tab.sphere_energy_curve.setToolTip("Lower values make quiet music more responsive; higher values emphasize louder passages.")
+    slider(surface, "sphere_material_fx", "sphere_material_fx", "Material Effects:", 200, 1.0, "", 100.0)
     slider(motion, "sphere_rotation_speed", "sphere_rotation_speed", "Rotation:", 200, .35, "x", 100.0)
     slider(motion, "sphere_idle_motion", "sphere_idle_motion", "Idle Motion:", 100, .12, "", 100.0)
 

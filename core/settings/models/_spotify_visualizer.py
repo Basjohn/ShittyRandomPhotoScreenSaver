@@ -616,7 +616,13 @@ _SPHERE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
     "sphere_material": ("Chrome", str), "sphere_deformation": (1.0, float),
     "sphere_rotation_speed": (0.35, float), "sphere_gloss": (0.65, float),
     "sphere_specular": (0.8, float), "sphere_light_direction": ("NW", str),
-    "sphere_idle_motion": (0.12, float), "sphere_surface_detail": (1.0, float),
+    "sphere_idle_motion": (0.12, float), "sphere_surface_detail": (1.15, float),
+    "sphere_bass_response": (1.0, float), "sphere_mid_response": (1.0, float),
+    "sphere_high_response": (1.0, float), "sphere_vocal_response": (1.4, float),
+    "sphere_bump_reactivity": (0.65, float),
+    "sphere_size_response": (1.5, float),
+    "sphere_energy_curve": (0.60, float),
+    "sphere_material_fx": (1.0, float),
 }
 _SPHERE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     key: caster for key, (_default, caster) in _SPHERE_BUILD_SPECS.items()
@@ -1355,7 +1361,15 @@ class SpotifyVisualizerSettings:
     sphere_specular: float = 0.8
     sphere_light_direction: str = "NW"
     sphere_idle_motion: float = 0.12
-    sphere_surface_detail: float = 1.0
+    sphere_surface_detail: float = 1.15
+    sphere_bass_response: float = 1.0
+    sphere_mid_response: float = 1.0
+    sphere_high_response: float = 1.0
+    sphere_vocal_response: float = 1.4
+    sphere_bump_reactivity: float = 0.65
+    sphere_size_response: float = 1.5
+    sphere_energy_curve: float = 0.60
+    sphere_material_fx: float = 1.0
     # Visualizer presets (0=Preset 1/Default, 1=Preset 2, 2=Preset 3, 3=Custom)
     preset_spectrum: int = field(default_factory=lambda: get_missing_preset_fallback_index("spectrum"))
     preset_oscilloscope: int = field(default_factory=lambda: get_missing_preset_fallback_index("oscilloscope"))
@@ -1434,7 +1448,7 @@ class SpotifyVisualizerSettings:
         self.sphere_light_direction = str(self.sphere_light_direction).strip().upper()
         if self.sphere_light_direction not in {"N", "NE", "E", "SE", "S", "SW", "W", "NW"}:
             raise ValueError(f"invalid sphere light direction {self.sphere_light_direction!r}")
-        for attr, low, high in (("sphere_deformation", 0.0, 2.0), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_idle_motion", 0.0, 1.0), ("sphere_surface_detail", 0.0, 2.0)):
+        for attr, low, high in (("sphere_deformation", 0.0, 2.0), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_idle_motion", 0.0, 1.0), ("sphere_surface_detail", 0.0, 2.0), ("sphere_bass_response", 0.0, 2.0), ("sphere_mid_response", 0.0, 2.0), ("sphere_high_response", 0.0, 2.0), ("sphere_vocal_response", 0.0, 2.0), ("sphere_bump_reactivity", 0.0, 2.0), ("sphere_size_response", 0.0, 2.0), ("sphere_energy_curve", 0.2, 2.0), ("sphere_material_fx", 0.0, 2.0)):
             _clamp_attr_range(self, attr, low, high)
 
     @classmethod

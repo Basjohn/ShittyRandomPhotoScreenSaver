@@ -1,6 +1,8 @@
 """Production-shaped admission, configuration, and dormant capture tests for Sphere."""
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from core.settings.models._spotify_visualizer import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_registry import (
     VisualizerClipPolicy, VisualizerShellPolicy, get_visualizer_mode_descriptor,
@@ -35,7 +37,9 @@ def test_sphere_curated_presets_load_and_custom_restore_owns_all_surface_fields(
     assert get_custom_preset_index("sphere") == 5
     magma = apply_preset_to_config("sphere", 2, {"mode": "sphere"})
     assert magma["sphere_material"] == "Magma"
-    assert magma["sphere_surface_detail"] == 1.2
+    assert magma["sphere_surface_detail"] == 1.35
+    assert magma["sphere_bump_reactivity"] == .85
+    assert magma["sphere_size_response"] == 1.6
 
     restored = {"mode": "sphere", **magma}
     assert restore_visualizer_snapshot("sphere", restored, {
@@ -53,18 +57,64 @@ def test_sphere_config_round_trips_and_applies_at_logical_owner():
         "mode": "sphere", "enabled_modes": ["sphere"], "preset_sphere": 5, "sphere_material": "Magma",
         "sphere_deformation": 3.0, "sphere_rotation_speed": .5, "sphere_gloss": .2,
         "sphere_specular": 1.6, "sphere_light_direction": "se", "sphere_idle_motion": .3,
-        "sphere_surface_detail": 0.0,
+        "sphere_surface_detail": 0.0, "sphere_bump_reactivity": .9, "sphere_size_response": 1.7, "sphere_bass_response": 1.7,
+        "sphere_mid_response": .8, "sphere_high_response": .4,
+        "sphere_vocal_response": 1.75, "sphere_energy_curve": .55, "sphere_material_fx": 1.3,
     })
     assert settings.sphere_deformation == 2.0
     serialized = settings.to_dict()
     assert serialized["widgets.spotify_visualizer.sphere_material"] == "Magma"
     assert serialized["widgets.spotify_visualizer.sphere_surface_detail"] == 0.0
+    assert serialized["widgets.spotify_visualizer.sphere_bump_reactivity"] == .9
+    assert serialized["widgets.spotify_visualizer.sphere_size_response"] == 1.7
+    assert serialized["widgets.spotify_visualizer.sphere_vocal_response"] == 1.75
+    assert serialized["widgets.spotify_visualizer.sphere_energy_curve"] == .55
 
     class Host: pass
     host = Host()
     apply_logical_vis_mode_kwargs(host, settings.__dict__)
     assert (host._sphere_material, host._sphere_deformation, host._sphere_light_direction) == ("Magma", 2.0, "SE")
     assert host._sphere_parameters["sphere_surface_detail"] == 0.0
+    assert host._sphere_parameters["sphere_bump_reactivity"] == .9
+    assert host._sphere_parameters["sphere_size_response"] == 1.7
+    assert host._sphere_parameters["sphere_bass_response"] == 1.7
+    assert host._sphere_parameters["sphere_vocal_response"] == 1.75
+    assert host._sphere_parameters["sphere_material_fx"] == 1.3
+
+
+def test_sphere_response_controls_are_frozen_bounded_and_default_dormant():
+    from widgets.spotify_visualizer.config_applier import SPHERE_DEFAULT_PARAMETERS, apply_logical_vis_mode_kwargs
+
+    assert SPHERE_DEFAULT_PARAMETERS["sphere_energy_curve"] == .60
+    assert SPHERE_DEFAULT_PARAMETERS["sphere_material_fx"] == 1.0
+    assert SPHERE_DEFAULT_PARAMETERS["sphere_vocal_response"] == 1.4
+    assert SPHERE_DEFAULT_PARAMETERS["sphere_bump_reactivity"] == .65
+    assert SPHERE_DEFAULT_PARAMETERS["sphere_size_response"] == 1.5
+    host = SimpleNamespace()
+    apply_logical_vis_mode_kwargs(host, {
+        "sphere_deformation": 0.0,
+        "sphere_bass_response": 3.0,
+        "sphere_mid_response": -1.0,
+        "sphere_high_response": .75,
+        "sphere_vocal_response": 3.0,
+        "sphere_bump_reactivity": 3.0,
+        "sphere_size_response": 3.0,
+        "sphere_energy_curve": .55,
+        "sphere_material_fx": 0.0,
+    })
+    assert host._sphere_deformation == 0.0
+    assert host._sphere_parameters["sphere_bass_response"] == 2.0
+    assert host._sphere_parameters["sphere_mid_response"] == 0.0
+    assert host._sphere_parameters["sphere_high_response"] == .75
+    assert host._sphere_parameters["sphere_vocal_response"] == 2.0
+    assert host._sphere_parameters["sphere_bump_reactivity"] == 2.0
+    assert host._sphere_parameters["sphere_size_response"] == 2.0
+    assert host._sphere_parameters["sphere_energy_curve"] == .55
+    assert host._sphere_parameters["sphere_material_fx"] == 0.0
+    apply_logical_vis_mode_kwargs(host, {"sphere_vocal_response": -1.0, "sphere_bump_reactivity": -1.0, "sphere_size_response": -1.0})
+    assert host._sphere_parameters["sphere_vocal_response"] == 0.0
+    assert host._sphere_parameters["sphere_bump_reactivity"] == 0.0
+    assert host._sphere_parameters["sphere_size_response"] == 0.0
 
 
 def test_sphere_runtime_fences_activation_and_carries_only_frozen_parameters():
@@ -162,10 +212,22 @@ def test_sphere_settings_body_is_lazy_and_persists_when_explicitly_enabled(qt_ap
         assert tab._vis_body_host.is_constructed("sphere")
         tab.sphere_material.setCurrentText("Water")
         tab.sphere_gloss.setValue(40)
+        tab.sphere_bass_response.setValue(165)
+        tab.sphere_vocal_response.setValue(175)
+        tab.sphere_bump_reactivity.setValue(85)
+        tab.sphere_size_response.setValue(170)
+        tab.sphere_energy_curve.setValue(55)
+        tab.sphere_material_fx.setValue(120)
         tab._save_settings_now()
         saved = settings_manager.get("widgets", {})["spotify_visualizer"]
         assert saved["sphere_material"] == "Water"
         assert saved["sphere_gloss"] == .4
+        assert saved["sphere_bass_response"] == 1.65
+        assert saved["sphere_vocal_response"] == 1.75
+        assert saved["sphere_bump_reactivity"] == .85
+        assert saved["sphere_size_response"] == 1.7
+        assert saved["sphere_energy_curve"] == .55
+        assert saved["sphere_material_fx"] == 1.2
         assert "sphere" in saved["enabled_modes"]
     finally:
         tab.deleteLater()
@@ -229,7 +291,7 @@ def test_owner_publishes_sphere_without_constructing_another_mode_runtime(qt_app
         def get_waveform(self): return ()
         def get_waveform_count(self): return 0
         def get_energy_bands(self): return SimpleNamespace(bass=.4, mid=.2, high=.1, overall=.25)
-        def get_transient_energy_bands(self): return None
+        def get_transient_energy_bands(self): return SimpleNamespace(bass_transient=.7, mid_transient=.9, high_transient=.1)
         def get_floor_snapshot(self): return None
         def get_event_scheduler(self): return None
         def get_perf_diagnostics(self): return {}
@@ -264,6 +326,7 @@ def test_owner_publishes_sphere_without_constructing_another_mode_runtime(qt_app
         assert first_snapshot.logical_revision > 0
         assert first_snapshot.logical.mode_state.authored_time == 0.0
         assert first_snapshot.logical.common.energy.bass == .4
+        assert first_snapshot.logical.common.transient.mid == .9
 
         later = tick_pipeline.logical_tick(state)
         assert later is not None
@@ -280,6 +343,8 @@ def test_owner_publishes_sphere_without_constructing_another_mode_runtime(qt_app
         stale = tick_pipeline.logical_tick(state)
         assert stale is not None and stale.source_generation == 4
         assert stale.common.energy.bass == 0.0
+        assert stale.common.transient.bass == 0.0
+        assert stale.common.transient.mid == 0.0
         assert owner.sync_present() is True
         assert owner.retire() is True
     finally:

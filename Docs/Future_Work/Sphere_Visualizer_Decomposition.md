@@ -5,36 +5,14 @@ Pre-implementation comparison/rollback HEAD: `f8def8ee8cbd99527b513494bb20684171
 The operator explicitly requested an ambitious 3D item after Glow and Slide. This is a new experiment;
 it does not claim to reconstruct the lost historical Blob.
 
-## Current foundation inventory
+## Current foundation
 
-1. `core/settings/visualizer_mode_registry.py`: cheap canonical descriptor, runtime/renderer/builder import strings,
-   shell/clip policy and enabled-mode resolution. Missing/invalid enabled lists currently mean every registered mode;
-   that must become descriptor-default-enabled selection so adding an experiment cannot activate it in old profiles.
-2. `widgets/spotify_visualizer/quick_display_visualizer_owner.py`: existing controller, shared BeatEngine lease,
-   generation/activation lifecycle and lazy `_mode_runtime_factory`; no Sphere-owned audio or source lane.
-3. `widgets/spotify_visualizer/logical_runtime.py`, `tick_pipeline.py`: the sole authored logical clock. Existing
-   mode-specific dispatches gate themselves; Sphere may advance at its lazy logical capture seam, as other frame
-   modes already do, without running Bubble/DevCurve solvers or introducing a sixth ticking owner.
-4. `logical_frame_capture.py`: immutable shared/source context and current five-way capture dispatch. Extend the
-   descriptor to carry lazy capture wiring rather than add a new unrelated central mode switch.
-5. `render_state.py`: immutable `VisualizerLogicalFrame`, `VisualizerCommonState.energy`, `FrozenFields`,
-   geometry/fades and concrete mode payload validation. Add only a small frozen Sphere payload and its validation.
-6. `config_applier.py`, `core/settings/models/_spotify_visualizer.py`, Settings snapshot/preset normalization:
-   distinguish logical vs presentation options; retain Sphere parameters through the actual production path.
-7. `ui/tabs/visualizers_tab.py`, `ui/tabs/media/visualizer_mode_binding.py`, `visualizer_mode_body_host.py`:
-   existing enabled-mode navigation and lazy bodies; inspect remaining mode-specific binding seams before changing.
-8. `rendering/quick/visualizer/implementation_registry.py`, `render_host.py`: lazy context-local renderer, shared
-   quad and GL-state fence, resource retirement. Fence currently preserves depth enable/write, but new depth function,
-   clear value and face state changes must be restored locally or added only where actually required.
-9. `rendering/quick/transitions/implementations/block_spins.py`, `rendering/gl_programs/blockspin_program.py`:
-   proven static VAO/VBO, true Z, shader transforms, depth-tested geometry and partial-failure cleanup precedent.
-10. `VisualizerModePresentationPolicy`, `VisualizerShellPolicy.FRAMELESS`, `VisualizerClipPolicy.VIEWPORT_RECT`,
-    `rendering/quick/visualizer/clip_host.py`: existing transparent same-scene shell and clipping. No new window/FBO.
-11. `core/settings/shadow_direction.py`: eight-way direction vocabulary/sign resolver. Resolve Sphere key-light
-    configuration once; no dependency on live Widget shadow state or per-frame Settings reads.
-12. `tests/test_qtquick_visualizer_geometry.py`, `test_visualizer_mode_dormancy.py`,
-    `test_visualizer_mode_enable_resolver.py`, `test_visualizer_settings_lazy_bodies.py`,
-    `tools/qtquick_visualizer_clip_smoke.py`: existing contract/lifecycle/real-Quick evidence routes.
+The canonical mode descriptor owns default dormancy, lazy runtime/capture/renderer/builder resolution and
+FRAMELESS + VIEWPORT_RECT policy. The existing Quick display owner owns the shared BeatEngine lease and
+activation lifecycle. Capture publishes compact immutable Sphere state through the normal render bridge;
+no other mode is instantiated to support Sphere. Settings and curated presets use the shared normalization
+and Custom persistence path. The existing render host owns the GL fence and context retirement, with
+Sphere restoring its additional depth/scissor/cull state locally.
 
 ## State, cadence and lifetime
 
@@ -48,7 +26,7 @@ stale generation/activation data cannot become fresh response. No FFT, source su
 The renderer consumes immutable time/energy/configuration and never advances simulation or reads the engine.
 
 Payload interface: `SphereFrame(authored_time: float, parameters: FrozenFields)` under `logical.mode_state`;
-reactive energy is `logical.common.energy`. Generation/source/fades stay on the enclosing established snapshot.
+reactive inputs are `logical.common.energy` and `logical.common.transient`. Generation/source/fades stay on the enclosing established snapshot.
 Sphere parameters are bounded `sphere_*` values: material (Chrome/Obsidian/Magma/Silver/Water), deformation strength,
 rotation speed, gloss/specular and key-light direction. Initial defaults are feature-local and do not alter existing
 mode defaults, presets, shared colour controls or logical parameters.
@@ -104,17 +82,75 @@ projection when Windows clamps an oversized native window; the report records ac
 The corrected 4K Water capture is `logs/evidence_chest/fw_sphere/water_4k_final.png`.
 The only probe timer is a failure deadline; production adds no timer, poller, source lane or per-frame mesh upload.
 
-The nominal pixel radius is now 0.28 of the shorter actual content axis. The old canonical-height *
-uniform-scale mapping produced ~13px radius inside the operator's ~1400x268 viewport; the corrected
-radius is ~75px. Uniform resize now enlarges the object, independent of large saved extent encoding.
-Real GL at that exact geometry proves substantial occupied pixels plus time/bass changes; the operator
-confirms it animates and reacts. Stronger reaction/material detail and live edit geometry are active in
-`Visualizer_Edit_Geometry_And_Sphere_Materials.md`. Do not treat prototype acceptance as final quality.
+The nominal radius is 0.245 of the shorter actual content axis, with fixed camera distance 4.6.
+This reserves the maximum combined size pulse/deformation envelope. The original canonical-height *
+uniform-scale defect produced ~13px radius inside the operator's ~1400x268 viewport; the resolved-content
+radius is now ~66px before musical expansion. Uniform resize enlarges the object independently of saved
+extent encoding. Real GL tests exercise that exact geometry and every mode's live edit projection.
 
 Chrome/Silver have restrained metal microdetail, Obsidian has fractured stone relief, Magma has recessed emissive
 fissures with authored-time flow, and Water has animated ripple bump, caustic accents and Fresnel transparency.
-Surface Detail controls bump strength. These are procedural materials and studio reflections; Water does not sample
+Bump Strength controls base relief; Bump Reactivity controls added musical relief. These are procedural materials and studio reflections; Water does not sample
 or refract the live background. Its visible surface alone blends, with back-face culling and the existing depth target.
+
+## E2 material and reactivity contract
+
+Sphere consumes existing immutable bands, decaying transient envelopes and activation-relative authored time.
+It receives no waveform, audio job or source subscription. Current playing source identity gates both bands
+and transients, including valid generation/activation zero. Stale or stopped sources cannot retain a size pulse.
+
+- Deformation (0..2) controls local musical displacement, independent of Idle Motion (0..1).
+- Bass/Mid/High Response (0..2 each) shape independent bands. Vocal Response (0..2, default 1.4) adds
+  broad low-order lobes from the established 0.62 mid / 0.38 high frequency blend; it does not isolate voices.
+- Energy Curve (0.2..2, default 0.60) makes ordinary low bands visible without flattening combined lobes.
+- Size Response (0..2, default 1.5) adds uniform whole-body breathing independently of Deformation.
+  Drive is the maximum of the existing decaying transient bands, 0.25 overall energy and 0.35 bass energy,
+  clamped to 0..1. Radius addition is `0.10 * size_response * drive ** energy_curve`, at most 0.20.
+  TransientBus already owns decay; the renderer adds no mutable filter or clock. Zero disables size response.
+- Bump Strength (0..2, default 1.15) controls base material relief. Bump Reactivity (0..2, default 0.65)
+  adds energy-driven relief without changing the silhouette; zero retains the configured base relief.
+- Material Effects (0..2) controls the bounded Magma/Water secondary geometry; zero omits its draws.
+
+The vertex shader applies `1-exp(-2.8*pow(band, curve)*response)` per independent field. Absolute displacement
+coefficients sum to 0.27 before the 0..2 Deformation control, without clipping the combined moving field.
+Maximum radius is `1 + 0.20 + 0.10 + 2 * 0.27 = 1.84`. At camera distance 4.6 and 0.245 shorter-axis radius,
+its canonical 280px projection remains below 138px. This fixed reserve does not damp audio at extreme extents.
+
+Magma and Water lazily create a 320-triangle effect mesh once per GL context; Magma additionally creates one immutable
+six-vertex fire quad. Their positions are deterministic shader functions of `gl_InstanceID`, immutable energy and
+authored time. Magma has lit falling teardrops with a hot core, cooling skin and highlight; their standard alpha
+composition preserves finite-life and global fades while their visible front surface owns depth. A separate additive
+soft-alpha fire pass rises from the body. Water has rounded, irregular 3D blobs with shape-derived normals,
+Fresnel/specular light and a transmitted cyan tint. Each finite life fades to zero before its mathematical cycle wraps,
+so it retires and condenses without a visible teleport. Water has no pointed drip neck; Magma retains one. Water lanes are deliberately separated, then use ordinary alpha
+blending with no overlap-order claim; no live-background refraction is claimed. There is no texture, CPU particle state,
+per-frame upload, timer, worker or source subscription. Partial lazy effect allocation is discarded before a clean retry.
+Magma reuses its one fire quad for four filtered procedural smoke wisps and six ash/ember flakes, drawn with ordinary
+alpha blending before the additive flame pass. Closed lava and Water meshes retain back-face culling; only the
+camera-facing quad passes disable it. The renderer restores blend factors/enabled state, depth-write and cull state
+before returning.
+
+At FX=2, the final warm-cloud world-Y bound is 1.526, smoke 1.588 and ash 1.287. With camera-Z at
+most 0.42, their projected upper extent is at most 1.747 base-radius units; maximum projected lateral
+extent is 1.339. Falling lava and rounded Water blobs remain within the same conservative 1.90 projected
+reserve. This fits the 0.245 shorter-axis framing without FBO clipping. The upper clouds were moved above
+the active growing body after actual preset captures exposed depth occlusion at the original positions.
+Real GL samples their finite lives at FX=2, compares against effects disabled, and checks visible pixels,
+colour, finite bounds, global fade/depth and unchanged upload count.
+
+E2 evidence: `e2_presets_effects_raised.png` and `e2_presets_quiet.png` under
+`logs/evidence_chest/fw_sphere/` use actual normalized presets and a retained checkerboard. The background
+is visibly transmitted through Water and its rounded blobs; Magma's smoke/ash/fire blend over it. The 4K
+Water and exact 8240x1579 saved-world Magma captures also pass context retirement. Current local capture
+DPR is 1.5; physical mixed-DPR/60/165Hz checks remain open. Warm callback medians in the bounded single-mode
+fixtures were 2.47ms (4K Water) and 3.41ms (extreme Magma); these include Python/GL submission and are neither
+GPU-time measurements nor physical cadence acceptance. Captures ran alongside test work.
+
+215 focused rendering/settings/defaults/dormancy/preset tests passed. The silhouette test isolates size
+response from surface deformation: a maximum pure transient grows diameter by over 17%, intermediate
+transient decay gives an intermediate size, and zero returns exactly to rest. Vocal-range deformation
+and bump reactivity have separate pixel assertions. Canonical regeneration also corrected three preexisting
+missing defaults-snapshot fields (Spectrum rainbow fill and Sphere rainbow enable/speed).
 
 Inactive resources retire on one-shot `beforeRendering` events, with invalidation as the context completion edge.
 Window rebind detaches the old node and leaves cleanup on its old window. Ordinary sync never schedules cleanup.
@@ -133,8 +169,9 @@ unrelated existing targets remain red (see cleanup ledger); do not report the en
   only Sphere; disable/mode switch/recreation retires its program/buffers; failure cleanup preserves recoverability.
 - **Geometry:** fixed pixel metric on both axes across wide/tall extents; whole-scale uniformity; viewport clipping;
   no card fill/border/shadow. Preserve the five established modes' R-69/BTF behavior exactly.
-- **Performance:** one mesh upload per renderer/context lifetime, one sphere draw, constant bounded uniform transport,
-  no per-frame topology/upload/source jobs. Measure 1080p/4K/extents separately; callbacks are not physical cadence proof.
+- **Performance:** one body upload plus lazily bounded effect-mesh/fire-quad uploads per renderer/context lifetime,
+  constant bounded uniform transport and no per-frame topology/upload/source jobs. Measure 1080p/4K/extents separately;
+  callbacks are not physical cadence proof.
 - **Eyes-on/operator:** it reads as a deforming 3D body with normals/specular following dents/bulges; materials differ
   meaningfully, no clipping surprises, responsive real music/idle, 60/165 Hz and mixed-DPR/recreation acceptance.
   Retain this checklist as Awaiting Validation when automation cannot honestly close it.

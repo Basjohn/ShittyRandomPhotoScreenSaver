@@ -26,24 +26,25 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
 
 ## E2 — richer customizable Sphere
 
-- [ ] Inventory five material presets, current energy transfer/defaults/maxima and existing mesh/shader
+- [x] Inventory five material presets, current energy transfer/defaults/maxima and existing mesh/shader
   constraints. Identify why current live bands produce barely visible displacement.
-- [ ] Define stronger independent bass/mid/high deformation, preserving a quiet/idle state and controls
+- [x] Define stronger independent bass/mid/high and vocal-range deformation, preserving a quiet/idle state and controls
   that can return to restraint. Derive a finite maximum envelope and fit/framing contract explicitly.
-- [ ] Magma: flowing detailed emissive fissures, visible fiery effects and coherent downward lava drips.
-- [ ] Water: visibly translucent depth/edge treatment, rolling surface detail and separating falling blobs.
-- [ ] Chrome/Silver/Obsidian: detailed material-specific relief with readable light on stronger deformation.
-- [ ] Keep topology static and GPU-owned. Reuse authored time/energy for bounded analytical motion and
+- [x] Add independently adjustable whole-body transient growth/contraction, base bump and bump reactivity.
+- [x] Magma: flowing detailed emissive fissures, diffuse smoke-like fire, smoke/ash and downward lava drips.
+- [x] Water: translucent depth/edge treatment, rolling detail and rounded irregular falling 3D blobs (no drip neck).
+- [x] Chrome/Silver/Obsidian: detailed material-specific relief with readable light on stronger deformation.
+- [x] Keep topology static and GPU-owned. Reuse authored time/energy for bounded analytical motion and
   any fixed-count instanced secondary geometry; no per-frame CPU topology, simulation timer or jobs.
-- [ ] Add only settings with a real user-visible effect, shared through canonical schema, lazy builder,
+- [x] Add only settings with a real user-visible effect, shared through canonical schema, lazy builder,
   immutable frame/uniforms and curated preset/Custom round-trip. Preserve default dormancy.
-- [ ] Real GL/Quick captures at quiet/active/transient states and small/large/extreme extents; inspect
+- [x] Real GL/Quick captures at quiet/active/transient states and small/large/extreme extents; inspect
   transparency, deformation, detached effects and material identity. Profile bounded draw cost.
-- [ ] Source/identity, zero controls, settings persistence, GL fence/retirement and amplitude tests.
+- [x] Source/identity, zero controls, settings persistence, GL fence/retirement and amplitude tests.
 
 ## E3 — checkpoints and acceptance
 
-- [ ] Update Spec/Index and focused contracts alongside landed geometry/material changes.
+- [x] Update Spec/Index and focused contracts alongside landed geometry/material changes.
 - [ ] Focused tests and relevant shared destination gates; classify unrelated debris in Future_Cleanup.
 - [ ] Commit/push each validated slice. Keep physical 60/165Hz, mixed-DPR and installed tests explicit.
 - [ ] Awaiting operator validation: live adjustment stability, Bubble outline/response, stronger Sphere
@@ -51,6 +52,13 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
 
 ## Discovered follow-ups (after active geometry/material work)
 
+- [~] Sine/Oscilloscope missing visualizer glow: trace actual frozen parameters and shader coverage at
+  different scales. Restore glow independently of the current AA line core; add falsifying GL evidence.
+- [~] Edit exit teardown assessment: inventory its current owners/resets, source freshness and stale-frame
+  evidence. Decompose and implement ordinary Save/Cancel without teardown if those contracts can be retained.
+  Preserve activation/disable/transfer retirement where identities or actual render ownership change.
+  Source audit confirms stale committed rectangles are currently concealed by replacement. Implementation:
+  `Docs/Future_Work/Edit_Layout_Live_Commit.md`.
 - [~] Sine/Spline pulse coverage: operator sees improved AA but jagged edges during pulses in Wobble
   Groove. Reproduce with the actual curated preset and strong pulse; inspect signed-distance footprint
   before any amplitude or temporal filtering change. Signed-distance derivatives now avoid cusp

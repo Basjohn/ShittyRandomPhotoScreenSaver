@@ -258,7 +258,7 @@ authored packing only when no effective route remains `Custom`. This boundary is
 `VisualizerLogicalRuntime` remains sole mode-general authored visualizer clock. Quick presentation does not own
 simulation cadence.
 
-All five current modes share a default/baseline 1.5 aspect and support two distinct CUSTOM operations:
+All six current modes share a default/baseline 1.5 aspect and support two distinct CUSTOM operations:
 
 ```text
 uniform_visual_scale
@@ -269,8 +269,8 @@ viewport_extent
     top/bottom edge -> height only
 ```
 
-Viewport extent is world/layout playroom, not final-pixel X/Y stretch. All five current modes—Spectrum,
-Oscilloscope, Sine, Bubble and DevCurve—must reflow/adapt to wide/tall extents. Bubble's viewport bounds are spatial
+Viewport extent is world/layout playroom, not final-pixel X/Y stretch. All six current modes—Spectrum,
+Oscilloscope, Sine, Bubble, DevCurve and Sphere—must reflow/adapt to wide/tall extents. Bubble's viewport bounds are spatial
 configuration to its logical side; changing them must preserve round geometry, motion/collision semantics and BTF and
 must not create another clock. Bubble position/trail coordinates normalize from that expanded world. Stream/drift deltas
 are renderer-content-relative: each nonbaseline movement axis projects once onto the corresponding expanded domain axis,
@@ -293,7 +293,7 @@ stream-burst state. They must not add a clock, mutate authored motion settings, 
 authority. Motion diagnostics report renderer-normalized, pre-collision stream/drift contributions; final trajectory can
 still be changed by the existing impulse and collision stages.
 
-The all-five-mode viewport capability policy is part of the destination contract and the core Bubble reflow path has landed.
+The all-six-mode viewport capability policy is part of the destination contract and the core Bubble reflow path has landed.
 Bubble's per-head specular mutation and light ellipse use the canonical content aspect at the current
 uniform scale/inset; edge resizing changes playroom without stretching or rotating the local highlight.
 Do not reintroduce a Bubble false capability gate to conceal a viewport ownership or spatial-domain defect. **R-69 is golden for optimization:** wide/tall geometry may not globally compress renderer-facing Bubble head radius, already-normalized Ghost/history displacement, or another mode's authored musical response/freshness. If an extreme Bubble full-expansion tail is too large, fix only that proven tail.
@@ -301,11 +301,16 @@ Do not reintroduce a Bubble false capability gate to conceal a viewport ownershi
 Committed viewport extent is ordinary runtime truth. While CUSTOM is active, its working extent may temporarily override
 that committed value. Ending CUSTOM removes the temporary override: Save leaves the newly committed extent authoritative;
 Cancel restores the pre-edit committed extent. "No active CUSTOM session" is not synonymous with canonical `(420,280)`.
+During a live edit, the working rectangle also owns its preview scale. Normal logical-frame publications cannot
+restore the saved size at the new dragged origin; independently rounded axes must admit the same uniform scale.
 
 Sphere is an experimental, independently enabled sixth mode; existing profiles retain the original five enabled
 modes. Its frameless transparent viewport contains a static 3D mesh with authored-time deformation, reconstructed
 normals and material-specific bump/roughness. Chrome, Obsidian, Magma, Silver and Water have curated presets plus
-Custom. Settings normalize parameters once; current playing source identity gates musical energy, while idle motion
+Custom. Independent controls shape band/vocal-range deformation, whole-body transient size response, base bump and
+reactive bump. Magma adds diffuse fire, smoke, ash and lava drips; Water transmits the existing background and sheds
+rounded 3D blobs. Static effect geometry is allocated only for an admitted material that uses it. Settings normalize
+parameters once; current playing source identity gates both musical and transient energy, while idle motion
 continues on the existing logical clock. A fixed camera/common pixel scale preserves aspect and reserves the full
 canonical deformation envelope. Inactive renderer resources retire on one-shot render-context events, including a
 mode change that never receives its first source frame. Detail and validation: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.

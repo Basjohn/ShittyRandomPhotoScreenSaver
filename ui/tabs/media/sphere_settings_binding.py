@@ -5,7 +5,13 @@ from __future__ import annotations
 _DEFAULTS = {
     "sphere_material": "Chrome", "sphere_deformation": 1.0,
     "sphere_rotation_speed": .35, "sphere_gloss": .65, "sphere_specular": .8,
-    "sphere_light_direction": "NW", "sphere_idle_motion": .12, "sphere_surface_detail": 1.0,
+    "sphere_light_direction": "NW", "sphere_idle_motion": .12, "sphere_surface_detail": 1.15,
+    "sphere_bass_response": 1.0, "sphere_mid_response": 1.0,
+    "sphere_high_response": 1.0, "sphere_vocal_response": 1.4,
+    "sphere_bump_reactivity": .65,
+    "sphere_size_response": 1.5,
+    "sphere_energy_curve": .60,
+    "sphere_material_fx": 1.0,
 }
 
 
@@ -31,4 +37,12 @@ def collect_sphere_mode_settings(tab) -> dict:
         "sphere_specular": tab.sphere_specular.value() / 100.0,
         "sphere_idle_motion": tab.sphere_idle_motion.value() / 100.0,
         "sphere_surface_detail": tab.sphere_surface_detail.value() / 100.0,
+        "sphere_size_response": tab.sphere_size_response.value() / 100.0,
+        "sphere_bass_response": tab.sphere_bass_response.value() / 100.0,
+        "sphere_mid_response": tab.sphere_mid_response.value() / 100.0,
+        "sphere_high_response": tab.sphere_high_response.value() / 100.0,
+        "sphere_vocal_response": tab.sphere_vocal_response.value() / 100.0,
+        "sphere_bump_reactivity": tab.sphere_bump_reactivity.value() / 100.0,
+        "sphere_energy_curve": tab.sphere_energy_curve.value() / 100.0,
+        "sphere_material_fx": tab.sphere_material_fx.value() / 100.0,
     }

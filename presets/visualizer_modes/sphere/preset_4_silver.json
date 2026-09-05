@@ -8,7 +8,9 @@
     "sphere_material": "Silver", "sphere_deformation": 0.75,
     "sphere_rotation_speed": 0.3, "sphere_gloss": 0.55,
     "sphere_specular": 1.25, "sphere_light_direction": "NE",
-    "sphere_idle_motion": 0.1, "sphere_surface_detail": 0.8,
+    "sphere_idle_motion": 0.1, "sphere_surface_detail": 0.95,
+    "sphere_bass_response": 0.95, "sphere_mid_response": 1.30,
+    "sphere_high_response": 0.70, "sphere_vocal_response": 1.60, "sphere_bump_reactivity": 0.40, "sphere_size_response": 1.40, "sphere_energy_curve": 0.62, "sphere_material_fx": 0.0,
     "mode": "sphere"
   }}},
   "description": "Soft silver highlights with a calm, fine-grained surface."
