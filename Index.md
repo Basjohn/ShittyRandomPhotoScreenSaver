@@ -43,6 +43,7 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | deferred features | `Future_Work.md` |
 | operator-activated Future Work implementation / live checklists | `FWPlan.md` |
 | active Bubble aspect response / bounded presentation-cost diagnosis | `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md` |
+| active operator-rejected visualizer appearance / Bubble / Sphere repair | `Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md` |
 | experimental Sphere ownership, materials and validation | `Docs/Future_Work/Sphere_Visualizer_Decomposition.md` |
 | G4 durable scale/extent contract | `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` |
 | G4 post-checkpoint correction playbook | `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` |

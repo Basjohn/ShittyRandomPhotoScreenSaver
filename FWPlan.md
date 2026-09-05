@@ -8,6 +8,11 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
 
 ## Active sequence
 
+- [~] **Priority — operator-reported visual regressions (all modes/Bubble/Sphere):** reopen visual
+  acceptance, restore authored colours/glows/AA, correct Bubble aspect response/outlines and Sphere
+  size/motion through the actual production path. All later Future Work waits. Live decomposition:
+  `Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md`.
+
 - [x] Read backlog, current navigation/contracts and repository guardrails; preserve the clean starting tree.
 - [x] **FW1 — Widget interaction glow:** two Interaction switches, theme-inheriting shared swatch, one retained
   shader/quad and finite event-driven feedback. 64 focused tests passed; real Quick peak capture inspected.
@@ -16,11 +21,11 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
   per-run style resolution, exact endpoints and real-GL coverage. Perspective remains a separately designed feature;
   do not counterfeit it with a 2D effect.
   Decomposition: `Docs/Future_Work/Slide_Motion_Options_Decomposition.md`.
-- [x] **FW3 — Deformable Sphere:** dormant-by-default 3D mesh, five material presets including Water,
+- [~] **FW3 — Deformable Sphere — runtime acceptance rejected:** dormant-by-default 3D mesh, five material presets including Water,
   bump/detail controls, source-fenced immutable capture, lazy Settings and event-only inactive GPU retirement.
   Real Quick captures inspected and relevant automatic gates passed; physical acceptance remains separate.
   Detailed evidence: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
-- [x] **Bubble aspect/response investigation and bounded optimization:** after Sphere checkpoint `66be7344`,
+- [~] **Bubble aspect/response — operator reports unresolved; optimization remains landed:** after Sphere checkpoint `66be7344`,
   traced/documented height-based radius versus field occupancy, fixed the proven local-highlight aspect defect,
   and removed measured immutable-tuple reconstruction (`139aed21`). Preserved canonical pixels, authored
   response, consume-once events and cadence. Evidence and remaining physical/log checks:
