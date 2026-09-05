@@ -8,6 +8,14 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
 
 ## Active sequence
 
+- [~] **Priority — Bubble freezes during Edit and after Save:** archived the new 03:24–03:26 run in
+  `logs/evidence_chest/fw_bubble_edit_freeze_2026_09_05_new`. Fresh audio and simulation continue after Save,
+  while live rectangle/extent pairs repeatedly fail projection coherence. Fix the gesture owner and prove
+  repeated drag updates plus normal-frame publication through Save before admitting no-teardown completion.
+- [x] **Bubble main outlines at extremes:** reduced full main-outline width by another logical pixel at
+  large sizes through the existing visible-area transition. Small/canonical and Ghost styling remain intact.
+  Three real-GL tests pass, including same-area wide/tall outlines; physical weight acceptance remains open.
+
 - [~] **Priority — Visualizer geometry/glow and Sphere validation:** live edit geometry is nearly correct
   by operator report. Sphere now has vocal deformation, independent size pulse, adjustable base/reactive bump,
   diffuse fire/smoke/ash/lava and translucent Water with rounded blobs. Focused GL/settings checks and actual
