@@ -52,10 +52,19 @@ def build_sphere_mesh(subdivisions: int = 4) -> np.ndarray:
 
 
 def sphere_pixel_geometry(presentation) -> tuple[float, float, float]:
-    """Viewport edits change framing; whole-scale changes one shared pixel metric."""
+    """Resolve Sphere geometry from the actual assigned content footprint.
+
+    A CUSTOM viewport may represent a very large logical world at a small
+    uniform scale.  The old canonical-height-times-scale metric then made the
+    mesh microscopic even though its current visible content rectangle was
+    perfectly usable.  Sphere is a presentation-local object, so derive one
+    finite, isotropic pixel metric from that resolved rectangle.  Whole-scale
+    edits change this rectangle and therefore the mesh; edge edits resize the object when they change the shorter content axis
+    and otherwise change its available framing.
+    """
     x, y, width, height = presentation.content_rect
     outer_x, outer_y, _, _ = presentation.outer_rect
-    radius = presentation.baseline_viewport_size[1] * presentation.uniform_visual_scale * SPHERE_RADIUS_FRACTION
+    radius = min(width, height) * SPHERE_RADIUS_FRACTION
     return x - outer_x + width * 0.5, y - outer_y + height * 0.5, radius
 
 

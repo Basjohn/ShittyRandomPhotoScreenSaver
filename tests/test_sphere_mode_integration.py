@@ -125,6 +125,28 @@ def test_capture_publishes_sphere_payload_and_common_energy_at_snapshot_seam():
     assert frame.common.energy.bass == .3
 
 
+def test_sphere_capture_keeps_first_valid_generation_energy():
+    """Generation/activation zero is live source identity, never an idle alias."""
+    from types import SimpleNamespace
+    from widgets.spotify_visualizer.logical_frame_capture import capture_visualizer_logical_frame
+    from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
+
+    class Engine:
+        def get_generation_id(self): return 0
+        def get_activation_id(self): return 0
+        def get_energy_bands(self): return SimpleNamespace(bass=.7, mid=.4, high=.2, overall=.5)
+        def get_latest_authoritative_frame(self): return (9.9, 0, 0)
+
+    controller = VisualizerRuntimeController(runtime_generation=0, initial_mode="sphere")
+    widget = SimpleNamespace(_vis_mode_str="sphere", runtime_controller=controller, _engine=Engine(),
+        _runtime_generation=0, _spotify_playing=True, _has_pushed_first_frame=True)
+    apply_logical_vis_mode_kwargs(widget, {"sphere_material": "Chrome"})
+    frame = capture_visualizer_logical_frame(widget, now_ts=10.0, changed=True, mode_reveal_ready=True)
+    assert frame is not None
+    assert frame.source_generation == frame.source_activation_id == 0
+    assert frame.common.energy == VisualizerEnergyState(bass=.7, mid=.4, high=.2, overall=.5)
+
+
 def test_sphere_settings_body_is_lazy_and_persists_when_explicitly_enabled(qt_app, settings_manager):
     from ui.tabs.visualizers_tab import VisualizersTab
 
@@ -215,6 +237,8 @@ def test_owner_publishes_sphere_without_constructing_another_mode_runtime(qt_app
     monkeypatch.setattr(tick_pipeline, "consume_engine_bars", lambda _owner, _now: (True, True))
     monkeypatch.setattr(tick_pipeline, "process_heartbeat", lambda _owner, _now: None)
     monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda _owner, _now: None)
+    clock_values = iter(float(value) for value in range(10, 40))
+    monkeypatch.setattr(tick_pipeline.time, "time", lambda: next(clock_values))
     factory = QuickSceneFactory()
     runtime = QuickDisplayRuntime(screen_index=0, runtime_generation=91, screen=qt_app.primaryScreen(),
         scene_factory=factory, window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False))
@@ -234,6 +258,21 @@ def test_owner_publishes_sphere_without_constructing_another_mode_runtime(qt_app
         assert frame.common.energy.bass == .4
         assert owner.controller.peek_logical_mode_state("sphere") is not None
         assert owner.controller.peek_logical_mode_state("bubble") is None
+        assert owner.sync_present() is True
+        first_snapshot = owner.controller.render_bridge.peek()
+        assert first_snapshot is not None
+        assert first_snapshot.logical_revision > 0
+        assert first_snapshot.logical.mode_state.authored_time == 0.0
+        assert first_snapshot.logical.common.energy.bass == .4
+
+        later = tick_pipeline.logical_tick(state)
+        assert later is not None
+        assert owner.sync_present() is True
+        later_snapshot = owner.controller.render_bridge.peek()
+        assert later_snapshot is not None
+        assert later_snapshot.logical_revision > first_snapshot.logical_revision
+        assert later_snapshot.logical.mode_state.authored_time > first_snapshot.logical.mode_state.authored_time
+        assert later_snapshot.logical.common.energy.bass == .4
         # Sphere remains legitimately idle/self-animating while a source frame
         # becomes stale; its musical energy must drop to zero.
         engine.latest_frame_generation = 4
