@@ -11,21 +11,24 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
 - [x] **Geometry-only Edit Save continuity:** retained geometry/extent is promoted in place and the operator reports
   Save is flowing extremely well without teardown, stale re-entry, or a visible restart. Keep this as the normal
   same-display path; topology-changing operations remain explicit reconciliation.
-- [~] **Priority — Visualizer cross-display ownership transfer:** the 03:40-03:45 run produced 432 occupied-target QML
-  warnings plus one surviving `QuickDisplayVisualizerOwner` at the destruction barrier. Source repair moves the active
-  runtime/frame-pacer/bind/retirement edge with the retained scene and permits one crossing per pointer gesture. A small
-  theme-palette left/right arrow control is now also present on the Visualizer CUSTOM frame; it routes through the same Python
-  owner seam and preserves shape/relative placement without inventing another transfer authority. Await physical proof of both
-  drag and button transfer. Do **not** add source/target fades until the operator run shows they improve the experience.
-- [x] **Bubble main outlines at extremes:** reduced full main-outline width by another logical pixel at
-  large sizes through the existing visible-area transition. Small/canonical and Ghost styling remain intact.
-  Three real-GL tests pass, including same-area wide/tall outlines; physical weight acceptance remains open.
+- [x] **Visualizer cross-display live Save continuity:** current supplied tree is physically reported good: live
+  transfer moves the running Visualizer and Save commits without teardown/reinit. Preserve this as a hard UX contract;
+  numbered layout-slot reload remains the explicit hot-swap/reconciliation boundary.
+- [~] **Bubble extreme-wide presentation checkpoint — SOURCE IMPLEMENTED / PHYSICAL VALIDATION OPEN:** remove the stale
+  coupling that subtracted additional main-outline thickness as the large/extreme viewport ramp rose. Canonical/small
+  behaviour and the positive firmness protection remain. Ordinary wide/tall logical domains keep authored population and
+  speed; only an extreme-wide eased tail reaches +1 big / +3 small bubbles and +20% stream baseline/cap. The measured
+  1174x187 (6.28:1) operator viewport is full-tail. This is presentation-tail compensation only: no head-radius, Ghost,
+  reaction amplitude, drift or cadence compression.
 
-- [~] **Priority — Visualizer geometry/glow and Sphere validation:** live edit geometry is nearly correct
-  by operator report. Sphere now has vocal deformation, independent size pulse, adjustable base/reactive bump,
-  diffuse fire/smoke/ash/lava and translucent Water with rounded blobs. Focused GL/settings checks and actual
-  preset captures pass; physical music/appearance acceptance remains open. Close the glow and edit-exit rows
-  below before queued Slide/widget-glow refinements. Live decomposition:
+- [~] **Priority — Visualizer geometry/glow and Sphere validation:** live Edit Save and cross-display Visualizer Save
+  are operator-accepted no-teardown paths; preserve them. Checkpoint 2 now raises Sphere Deformation to 4.5 and Size
+  Response to 3.0/+0.90 pulse, adds persisted local-AA and lighting-opposed analytical cast-shadow controls, turns major
+  Magma fissures into real radius depressions, and replaces detached side-lane liquid staging with shared body-surface
+  anchors plus a body bulge / attached neck / pinch-off / gravity sequence. Geometry slots additionally capture the active
+  Visualizer `mode` and continue to use the explicit fenced rebuild on slot **load**. The pre-existing 1px discrete display-hop
+  projection drift is source-fixed with a floating geometric centre. PySide6/OpenGL and physical appearance validation remain
+  open; exact required tests are mirrored in `Current_Plan.md`. Live decomposition:
   `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md`.
 
 - [x] **Visualizer glow regression — Sine/Oscilloscope:** repaired curve-normal halo distance and visible-area
@@ -71,17 +74,13 @@ Immediately after clearing:
 
 effective extent = newly committed extent
 
-- [~] **Widget interaction glow hold/fade controls — SOURCE IMPLEMENTED / PHYSICAL ACCEPTANCE OPEN:**
-  `input.widget_glow_intensity` is now a settings-owned 0-100% slider projected once into the immutable Quick
-  input snapshot. Hover fades in on the existing `HoverHandler` edge, remains settled while hovered, and fades
-  gently only when hover state ends. Click is no longer a self-decaying one-shot pulse: one admitted window
-  press selects the top retained ordinary card as `widgetGlowClicked`; it remains settled as the last-clicked
-  target until another admitted press selects another card or empty space, then fades out. Child semantic actions
-  still own their click; the observer adds no foreground MouseArea. Physical follow-up found 100% too weak and missing
-  on the Visualizer plus incorrectly framed on shell-less Digital Clock. The follow-up therefore strengthens the same
-  event-held primitive, projects it around the retained Visualizer viewport/frame, and lets Digital Clock use intrinsic
-  content bounds when its card shell is absent. No Timer, poller, worker, frame loop or new persistence/cadence owner.
-  Real Quick strength/geometry still needs operator eyes.
+- [~] **Widget interaction glow controls — SOURCE IMPLEMENTED / PHYSICAL ACCEPTANCE OPEN:**
+  `input.widget_glow_intensity` remains the 0-100% opacity owner. New `input.widget_glow_distance` is a persisted 6-48 px
+  spread control, default 14 px (old fixed analytical extent was 12 px). The existing baked distance-field QSB is mapped
+  through a configurable coordinate scale, broadening both travel and softness without an extra blur/capture/render loop.
+  Ordinary widgets and Visualizer receive the value through the same immutable Quick input snapshot. Display -> Interaction
+  keeps Hover/Click switches visible but hides Intensity/Distance/Color whenever both triggers are off. Hover/click still
+  settle between finite state-edge fades; no Timer, poller, worker, frame loop or new cadence owner.
 
 - [x] Read backlog, current navigation/contracts and repository guardrails; preserve the clean starting tree.
 - [x] **FW1 — Widget interaction glow:** two Interaction switches, theme-inheriting shared swatch, one retained
@@ -97,9 +96,11 @@ effective extent = newly committed extent
   bump/detail controls, source-fenced immutable capture, lazy Settings and event-only inactive GPU retirement.
   Real Quick captures inspected and relevant automatic gates passed; physical acceptance remains separate.
   Detailed evidence: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`. Current follow-up moves whole-body growth into
-  a logical-cadence elastic/breathing spring with a much larger high-setting ceiling and makes Magma fissure bump relief
-  explicitly inward. Operator acceptance says the new size motion feels substantially better; Deformation and Vocal
-  Response now expose a 3.0 upper range (50% above the prior 2.0 cap) while defaults remain unchanged. `Future_Work.md` now records Block Spins + Sphere as the two-consumer proof for a small dormant 3D
+  a logical-cadence elastic/breathing spring with a much larger high-setting ceiling. Operator acceptance says the motion
+  feels substantially better. Current Checkpoint 2 extends Deformation again from 3.0 to 4.5, extends Size Response from
+  2.0 to 3.0/+0.90 pulse, preserves the already-expanded Vocal Response 3.0 ceiling, gives Magma real macro-fissure geometry,
+  and makes Water/Magma liquid visibly originate from their rotating/deforming body surface before detachment. Defaults remain
+  unchanged. `Future_Work.md` now records Block Spins + Sphere as the two-consumer proof for a small dormant 3D
   renderer substrate; transition/Visualizer lifecycle owners remain separate.
 - [~] **Bubble aspect/response — awaiting physical validation:** equal-area response replaces the rejected
   height-only coupling; outlines are one pixel thinner with derivative coverage. Live edit preview uses the

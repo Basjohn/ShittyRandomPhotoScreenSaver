@@ -12,6 +12,9 @@ _DEFAULTS = {
     "sphere_size_response": 1.5,
     "sphere_energy_curve": .60,
     "sphere_material_fx": 1.0,
+    "sphere_antialiasing": True,
+    "sphere_shadow_enabled": True,
+    "sphere_shadow_strength": .62,
 }
 
 
@@ -23,6 +26,8 @@ def load_sphere_mode_settings(tab, config) -> None:
         value = config.get(key, default)
         if hasattr(control, "setCurrentText"):
             control.setCurrentText(str(value))
+        elif hasattr(control, "setChecked"):
+            control.setChecked(bool(value))
         else:
             control.setValue(round(float(value) * 100))
 
@@ -45,4 +50,7 @@ def collect_sphere_mode_settings(tab) -> dict:
         "sphere_bump_reactivity": tab.sphere_bump_reactivity.value() / 100.0,
         "sphere_energy_curve": tab.sphere_energy_curve.value() / 100.0,
         "sphere_material_fx": tab.sphere_material_fx.value() / 100.0,
+        "sphere_antialiasing": tab.sphere_antialiasing.isChecked(),
+        "sphere_shadow_enabled": tab.sphere_shadow_enabled.isChecked(),
+        "sphere_shadow_strength": tab.sphere_shadow_strength.value() / 100.0,
     }

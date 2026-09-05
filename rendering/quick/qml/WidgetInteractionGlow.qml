@@ -11,6 +11,11 @@ Item {
     property bool clicked: false
     property color glowColor: "transparent"
     property real cornerRadius: 8.0
+    // Settings-owned physical travel distance. The baked analytical shader has
+    // a 12-unit halo; scaling its coordinate domain maps that same stable falloff
+    // to the requested retained-scene pixels without another blur pass or QSB.
+    property real distancePx: 14.0
+    readonly property real distanceScale: Math.max(0.5, distancePx / 12.0)
     // Settings-owned 0..1 multiplier. The authored hover/click relationship
     // stays local to this primitive; runtime input merely projects one scalar.
     property real intensityScale: 1.0
@@ -82,26 +87,34 @@ Item {
     // Two bounded passes make 100% visibly emphatic without rebaking the shader
     // or adding any cadence. Both are inert whenever the event-held level is 0.
     ShaderEffect {
-        x: -12.0
-        y: -12.0
-        width: glow.width + 24.0
-        height: glow.height + 24.0
-        property vector2d effectSize: Qt.vector2d(width, height)
-        property vector2d cardSize: Qt.vector2d(glow.width, glow.height)
-        property real cornerRadius: glow.cornerRadius
+        x: -glow.distancePx
+        y: -glow.distancePx
+        width: glow.width + glow.distancePx * 2.0
+        height: glow.height + glow.distancePx * 2.0
+        property vector2d effectSize: Qt.vector2d(
+            width / glow.distanceScale, height / glow.distanceScale
+        )
+        property vector2d cardSize: Qt.vector2d(
+            glow.width / glow.distanceScale, glow.height / glow.distanceScale
+        )
+        property real cornerRadius: glow.cornerRadius / glow.distanceScale
         property color glowColor: glow.glowColor
         opacity: glow.intensity
         visible: opacity > 0.0
         fragmentShader: "shaders/widget_glow.frag.qsb"
     }
     ShaderEffect {
-        x: -12.0
-        y: -12.0
-        width: glow.width + 24.0
-        height: glow.height + 24.0
-        property vector2d effectSize: Qt.vector2d(width, height)
-        property vector2d cardSize: Qt.vector2d(glow.width, glow.height)
-        property real cornerRadius: glow.cornerRadius
+        x: -glow.distancePx
+        y: -glow.distancePx
+        width: glow.width + glow.distancePx * 2.0
+        height: glow.height + glow.distancePx * 2.0
+        property vector2d effectSize: Qt.vector2d(
+            width / glow.distanceScale, height / glow.distanceScale
+        )
+        property vector2d cardSize: Qt.vector2d(
+            glow.width / glow.distanceScale, glow.height / glow.distanceScale
+        )
+        property real cornerRadius: glow.cornerRadius / glow.distanceScale
         property color glowColor: glow.glowColor
         opacity: glow.intensity * 0.85
         visible: opacity > 0.0

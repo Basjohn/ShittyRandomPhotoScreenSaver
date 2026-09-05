@@ -28,17 +28,18 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
 
 - [x] Geometry-only Save now promotes the live retained rectangle/extent and keeps the visualizer running in the same
   generation; the operator reports this UX path is working extremely well. No teardown is used as a geometry crutch.
-- [~] Cross-display drag is the remaining edit-lifecycle defect. The 03:40-03:45 run emitted 432 occupied-target QML
-  warnings and retained one `QuickDisplayVisualizerOwner` through the application-exit destruction barrier. Source repair
-  retargets the owner's active runtime/frame pacer with the transferred presentation and latches one display crossing per
-  move gesture. Await physical proof that no dead duplicate or seam-thrash remains.
+- [x] Cross-display Visualizer drag/Save is operator-accepted in the current authority: the retained scene plus runtime/frame
+  pacer/lifecycle ownership transfers live and Save does not rebuild or tear down that successful transfer. Numbered layout-slot
+  **load** remains the explicit fenced reconstruction/hot-swap boundary. Preserve this distinction as a hard UX contract.
 - [~] One extreme transfer gesture still produced an incoherent 439x960 rectangle against a 9520.87x25548.02 logical
   extent. Keep the coherence rejection; do not hide it by relaxing uniform-scale math. Revisit viewport scaling/reactivity
   in the next geometry session unless the transfer repair removes the reproduction.
-- [x] Reduce full main-outline width by one additional logical pixel at extreme visible sizes. Reuse the
-  existing area-based large-stroke ramp (zero through 1.75x canonical linear scale, full at 2.5x) for a
-  continuous reduction. Keep Ghost and small/canonical widths; retain derivative coverage and radius response.
-- [ ] Awaiting physical validation of freeze recovery and requested extreme-size outline weight.
+- [x] Historical extreme-outline thinning was corrected again in Checkpoint 1: the large/extreme viewport ramp may add
+  positive firmness protection but no longer participates in a subtractive main-head stroke term. Extreme wide/tall shape
+  alone therefore cannot make Bubble thinner than its canonical contract.
+- [~] Extreme-wide Bubble presentation compensation is source-landed: only a wide-tail ramp beyond ordinary card shapes
+  reaches +1 big / +3 small bubbles and +20% stream baseline/cap (full at the observed 1174x187 / 6.28:1 viewport). No
+  radius, Ghost/history, reaction amplitude, drift or logical cadence compression is used. Await physical validation.
 
 ## E2 — richer customizable Sphere
 
@@ -47,24 +48,28 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
 - [x] Define stronger independent bass/mid/high and vocal-range deformation, preserving a quiet/idle state and controls
   that can return to restraint. Derive a finite maximum envelope and fit/framing contract explicitly.
 - [x] Add independently adjustable whole-body transient growth/contraction, base bump and bump reactivity.
-- [~] Whole-body size response follow-up: move the transient growth envelope out of the render callback into
-  `SphereFrameRuntime`, using one bounded near-critical spring on the sole authored logical cadence. High Size Response
-  may now reach materially larger (~60% radius target at the maximum setting) breathing/elastic expansion instead of the
-  old ~20% ceiling; render consumes only immutable `SphereFrame.size_pulse`. Await eyes-on timing/amplitude acceptance.
-- [~] Magma fissure relief follow-up: make the glowing fissure field negative bump height while retaining modest raised
-  crust, so cracks read as cut inward rather than embossed. Colour/fire semantics stay local and unchanged. Await eyes-on.
-- [~] Magma secondary-effects visual acceptance: architecture already provides flowing emissive fissures plus bounded
-  fire/smoke/ash/drop passes, but the operator reports the current drops read as uniform fire-coloured teardrops. Future visual
-  refinement should make the ensemble clearly read as **ash + smoke + viscous leaking lava**, with lava drops/blobs carrying
-  molten-body variation rather than merely recoloured tear silhouettes. This is visual polish, not a core-transfer blocker.
-- [x] Water: translucent depth/edge treatment, rolling detail and rounded irregular falling 3D blobs (no drip neck).
+- [~] Whole-body size response follow-up: `SphereFrameRuntime` owns one bounded near-critical spring on the sole authored
+  logical cadence. Checkpoint 2 raises Size Response to 0..3 and the maximum target to +0.90 radius; render still consumes
+  only immutable `SphereFrame.size_pulse`. Deformation is 0..4.5, preserving the complete <=3.0 domain and softening only
+  the newly-added negative tail enough to prevent radius inversion. Defaults are unchanged. Await eyes-on amplitude acceptance.
+- [~] Magma fissure relief follow-up: major fissures are now genuine inward vertex-radius displacement, including the six
+  lower-hemisphere liquid vents; fine branching remains filtered bump/emissive detail. Await eyes-on depth acceptance.
+- [~] Magma/Water attached-liquid follow-up: six fixed instanced meshes now derive real rotating/deforming body anchors. The
+  body forms a matching local bulge while each liquid mesh keeps an embedded neck/cap through roughly the first half of its
+  life, then pinches off and falls under gravity. Magma is slower/narrower/viscous and its anchors are part of the fissure
+  network; Water is rounder/more elastic. The old Water side lanes are gone. Await physical proof that attachment reads
+  clearly rather than as intersecting detached particles.
+- [~] Optional Sphere local AA and lighting-derived cast shadow are persisted/preset-aware. AA is derivative-based and
+  Sphere-local; shadow is one analytical quad opposite the configured light direction with adjustable darkness. Await
+  physical edge/shadow-direction/strength acceptance.
 - [x] Chrome/Silver/Obsidian: detailed material-specific relief with readable light on stronger deformation.
 - [x] Keep topology static and GPU-owned. Reuse authored time/energy for bounded analytical motion and
   any fixed-count instanced secondary geometry; no per-frame CPU topology, simulation timer or jobs.
 - [x] Add only settings with a real user-visible effect, shared through canonical schema, lazy builder,
   immutable frame/uniforms and curated preset/Custom round-trip. Preserve default dormancy.
-- [x] Real GL/Quick captures at quiet/active/transient states and small/large/extreme extents; inspect
-  transparency, deformation, detached effects and material identity. Profile bounded draw cost.
+- [x] Historical real GL/Quick captures cover quiet/active/transient states and small/large/extreme extents.
+- [ ] Checkpoint 2 requires fresh GL/Quick captures for attached liquid, macro-fissure geometry, optional AA/shadow and the
+  4.5 Deformation / 3.0 Size Response extremes before those new visual contracts can be called automatically validated.
 - [x] Source/identity, zero controls, settings persistence, GL fence/retirement and amplitude tests.
 
 ## E3 — checkpoints and acceptance
@@ -72,16 +77,18 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
 - [x] Update Spec/Index and focused contracts alongside landed geometry/material changes.
 - [ ] Focused tests and relevant shared destination gates; classify unrelated debris in Future_Cleanup.
 - [ ] Commit/push each validated slice. Keep physical 60/165Hz, mixed-DPR and installed tests explicit.
-- [ ] Awaiting operator validation: cross-display transfer stability, Bubble extreme viewport response, the new elastic
-  Sphere size envelope and inward Magma fissure relief. Automatic tests cannot close these perception gates.
+- [ ] Awaiting operator validation: Bubble extreme-wide response, attached Water/Magma origin/neck/pinch-off, Magma macro
+  fissure depth, Sphere AA on/off, cast-shadow direction/darkness, 4.5 Deformation/3.0 Size Response extremes, and layout-slot
+  active-mode restoration. Automatic source contracts cannot close these perception gates.
 
 ## Discovered follow-ups (after active geometry/material work)
 
 - [~] Sine/Oscilloscope missing visualizer glow: trace actual frozen parameters and shader coverage at
   different scales. Restore glow independently of the current AA line core; add falsifying GL evidence.
-- [x] Geometry-only Edit Save no longer tears down the runtime: retained state is promoted before CUSTOM clears.
-  Display transfer/family topology changes remain explicit reconciliation boundaries. Implementation and remaining
-  cross-display acceptance: `Docs/Future_Work/Edit_Layout_Live_Commit.md`.
+- [x] Geometry-only Edit Save no longer tears down the runtime: retained state is promoted before CUSTOM clears. A successful
+  Visualizer cross-display transaction is also a no-teardown Save path because scene + runtime/pacer/lifecycle ownership has
+  already moved atomically. Ordinary family topology changes still reconcile; numbered layout-slot **load** deliberately
+  reconstructs because it may alter ordinary enabled/layout state and now the active Visualizer mode.
 - [~] Sine/Spline pulse coverage: operator sees improved AA but jagged edges during pulses in Wobble
   Groove. Reproduce with the actual curated preset and strong pulse; inspect signed-distance footprint
   before any amplitude or temporal filtering change. Signed-distance derivatives now avoid cusp
@@ -136,5 +143,10 @@ huge saved world fills a large visible viewport (the inspected profile resolves 
   authority now follows the retained Visualizer scene to the target display.
 - The extreme incoherent rect/extent rejection remains deliberately fail-loud and is deferred to the next geometry pass; do
   not widen tolerance to hide a genuine anisotropic owner split.
-- Sphere's elastic whole-body size response is physically reported as substantially better. Deformation and Vocal Response
-  upper bounds are raised 2.0 -> 3.0 with unchanged defaults; shader deformation remains finite/positive at the new bound.
+- Sphere's elastic whole-body size response is physically reported as substantially better. Vocal Response remains at its
+  expanded 3.0 ceiling; Checkpoint 2 further raises Deformation 3.0 -> 4.5 and Size Response 2.0 -> 3.0/+0.90 target, with
+  unchanged defaults and explicit negative-tail radius safety.
+- Geometry slots now persist the active Visualizer `mode` while deliberately excluding per-mode tuning/preset values. Slot
+  load remains the fenced rebuild boundary so the authored visible mode is reconstructed.
+- Claude's deterministic 1px discrete display-hop drift was real and pre-existing: integer `QRect.center()` biases even-size
+  rectangles one pixel. The discrete projection now uses a floating geometric centre; drag transfer math is unchanged.

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel
+from PySide6.QtWidgets import QCheckBox, QLabel
 
 from ui.tabs.media.builder_scaffold import bind_setting_signal, build_collapsible_bucket, build_mode_scaffold
 from ui.tabs.shared_styles import NoWheelSlider, add_aligned_row_widget
@@ -54,8 +54,8 @@ def build_sphere_ui(tab, parent_layout) -> None:
     slider(surface, "sphere_specular", "sphere_specular", "Specular:", 200, .8, "", 100.0)
     slider(surface, "sphere_surface_detail", "sphere_surface_detail", "Bump Strength:", 200, 1.15, "", 100.0)
     tab.sphere_surface_detail.setToolTip("Controls the strength of the procedural relief.")
-    slider(motion, "sphere_deformation", "sphere_deformation", "Deformation:", 300, 1.0, "", 100.0)
-    slider(motion, "sphere_size_response", "sphere_size_response", "Size Response:", 200, 1.5, "", 100.0)
+    slider(motion, "sphere_deformation", "sphere_deformation", "Deformation:", 450, 1.0, "", 100.0)
+    slider(motion, "sphere_size_response", "sphere_size_response", "Size Response:", 300, 1.5, "", 100.0)
     tab.sphere_size_response.setToolTip("Controls whole-sphere growth and shrink from musical transients independently of surface Deformation.")
     slider(motion, "sphere_bass_response", "sphere_bass_response", "Bass Response:", 200, 1.0, "", 100.0)
     slider(motion, "sphere_mid_response", "sphere_mid_response", "Mid Response:", 200, 1.0, "", 100.0)
@@ -67,6 +67,21 @@ def build_sphere_ui(tab, parent_layout) -> None:
     slider(motion, "sphere_energy_curve", "sphere_energy_curve", "Energy Curve:", 200, .60, "", 100.0, minimum=20)
     tab.sphere_energy_curve.setToolTip("Lower values make quiet music more responsive; higher values emphasize louder passages.")
     slider(surface, "sphere_material_fx", "sphere_material_fx", "Material Effects:", 200, 1.0, "", 100.0)
+    _widget, content = row(surface, "Anti-Aliasing:")
+    tab.sphere_antialiasing = QCheckBox("Enabled")
+    tab.sphere_antialiasing.setChecked(tab._default_bool("spotify_visualizer", "sphere_antialiasing", True))
+    tab.sphere_antialiasing.setToolTip("Softens the Sphere and liquid silhouettes locally without enabling global multisampling.")
+    bind_setting_signal(tab, tab.sphere_antialiasing.stateChanged, auto_switch=True)
+    content.addWidget(tab.sphere_antialiasing); content.addStretch()
+
+    _widget, content = row(surface, "Cast Shadow:")
+    tab.sphere_shadow_enabled = QCheckBox("Enabled")
+    tab.sphere_shadow_enabled.setChecked(tab._default_bool("spotify_visualizer", "sphere_shadow_enabled", True))
+    tab.sphere_shadow_enabled.setToolTip("Casts a soft shadow onto the Visualizer plane opposite the Sphere light direction.")
+    bind_setting_signal(tab, tab.sphere_shadow_enabled.stateChanged, auto_switch=True)
+    content.addWidget(tab.sphere_shadow_enabled); content.addStretch()
+    slider(surface, "sphere_shadow_strength", "sphere_shadow_strength", "Shadow Darkness:", 100, .62, "", 100.0)
+    tab.sphere_shadow_strength.setToolTip("Controls the opacity of the lighting-direction cast shadow.")
     slider(motion, "sphere_rotation_speed", "sphere_rotation_speed", "Rotation:", 200, .35, "x", 100.0)
     slider(motion, "sphere_idle_motion", "sphere_idle_motion", "Idle Motion:", 100, .12, "", 100.0)
 

@@ -623,6 +623,9 @@ _SPHERE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
     "sphere_size_response": (1.5, float),
     "sphere_energy_curve": (0.60, float),
     "sphere_material_fx": (1.0, float),
+    "sphere_antialiasing": (True, bool),
+    "sphere_shadow_enabled": (True, bool),
+    "sphere_shadow_strength": (0.62, float),
 }
 _SPHERE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     key: caster for key, (_default, caster) in _SPHERE_BUILD_SPECS.items()
@@ -1370,6 +1373,9 @@ class SpotifyVisualizerSettings:
     sphere_size_response: float = 1.5
     sphere_energy_curve: float = 0.60
     sphere_material_fx: float = 1.0
+    sphere_antialiasing: bool = True
+    sphere_shadow_enabled: bool = True
+    sphere_shadow_strength: float = 0.62
     # Visualizer presets (0=Preset 1/Default, 1=Preset 2, 2=Preset 3, 3=Custom)
     preset_spectrum: int = field(default_factory=lambda: get_missing_preset_fallback_index("spectrum"))
     preset_oscilloscope: int = field(default_factory=lambda: get_missing_preset_fallback_index("oscilloscope"))
@@ -1448,7 +1454,7 @@ class SpotifyVisualizerSettings:
         self.sphere_light_direction = str(self.sphere_light_direction).strip().upper()
         if self.sphere_light_direction not in {"N", "NE", "E", "SE", "S", "SW", "W", "NW"}:
             raise ValueError(f"invalid sphere light direction {self.sphere_light_direction!r}")
-        for attr, low, high in (("sphere_deformation", 0.0, 3.0), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_idle_motion", 0.0, 1.0), ("sphere_surface_detail", 0.0, 2.0), ("sphere_bass_response", 0.0, 2.0), ("sphere_mid_response", 0.0, 2.0), ("sphere_high_response", 0.0, 2.0), ("sphere_vocal_response", 0.0, 3.0), ("sphere_bump_reactivity", 0.0, 2.0), ("sphere_size_response", 0.0, 2.0), ("sphere_energy_curve", 0.2, 2.0), ("sphere_material_fx", 0.0, 2.0)):
+        for attr, low, high in (("sphere_deformation", 0.0, 4.5), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_idle_motion", 0.0, 1.0), ("sphere_surface_detail", 0.0, 2.0), ("sphere_bass_response", 0.0, 2.0), ("sphere_mid_response", 0.0, 2.0), ("sphere_high_response", 0.0, 2.0), ("sphere_vocal_response", 0.0, 3.0), ("sphere_bump_reactivity", 0.0, 2.0), ("sphere_size_response", 0.0, 3.0), ("sphere_shadow_strength", 0.0, 1.0), ("sphere_energy_curve", 0.2, 2.0), ("sphere_material_fx", 0.0, 2.0)):
             _clamp_attr_range(self, attr, low, high)
 
     @classmethod

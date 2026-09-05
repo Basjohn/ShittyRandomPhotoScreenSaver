@@ -185,7 +185,8 @@ content width.
 Ordinary widgets support optional **Widget Glow on Hover** and **Widget Glow on Click** under Display -> Interaction.
 One shared swatch inherits the active Widget Theme's `card.border` semantic by default (`input.widget_glow_color=null`);
 an explicit RGBA choice persists until **Use Theme** clears it. `input.widget_glow_intensity` is the canonical 0-100%
-strength scalar (default 100) and projects once with the other immutable input options. Existing
+opacity scalar (default 100). `input.widget_glow_distance` is the canonical 6-48 px halo travel/spread scalar (default
+14 px; the former analytical extent was fixed at 12 px). Both project once with the other immutable input options. Existing
 interaction/Ctrl/context-menu admission gates the shared retained glow. Hover uses the existing passive hover edge: it
 fades in, settles with no running animation while hovered, and only begins a gentle fade when hover ends. Admitted
 discrete presses select the last-clicked ordinary card or retained Visualizer without consuming its semantic action;
@@ -251,7 +252,10 @@ Edit-mode X changes working session only: duplicate removal or singleton ordinar
 deactivation. Save/Enter commits; Cancel restores pre-edit geometry/instances/enabled state.
 
 Layout slots save/load ordinary visible-layout state, including ordinary ON/OFF, but never capability activation or
-provider/account/source settings.
+provider/account/source settings. The Visualizer's active `mode` is part of visible layout/hot-swap state and is captured
+with its geometry; per-mode tuning/preset fields are not. Number-key slot **load** applies that map then performs the existing
+fenced runtime rebuild so the restored mode becomes runtime truth. Ordinary live Edit Save, including a successfully
+transferred cross-display Visualizer, is not a slot-load boundary and must not gain teardown/reinit from this rule.
 
 CUSTOM is a **global layout mode**. If any effective widget route is `Custom`, ordinary authored stacking and the
 non-CUSTOM Media/Visualizer adjacency projection are disabled for the entire retained layout, not selectively per
@@ -293,7 +297,11 @@ are also renderer-content distances projected once per nonbaseline axis; otherwi
 size. None of these spatial projections changes random-draw order or adds a tick. Radius is not divided by viewport-domain
 height. Collision/spawn policy remains in canonical normalized content coordinates and preserves exact canonical
 behavior; it is authored separation rather than literal pixel packing. Any contact change needs a dedicated
-rendered-overlap and event test under BTF.
+rendered-overlap and event test under BTF. Ordinary wide/tall cards keep authored population and stream speed. A narrowly
+bounded **extreme-wide presentation tail** may ease from no-op above roughly 3.4:1 physical aspect to at most +1 authored
+big bubble, +3 authored small bubbles and +20% stream baseline/cap by roughly 5.25:1; it may not alter drift, radius,
+Ghost/history displacement, reaction amplitude or cadence. Main-head outline subtraction is viewport-neutral: extreme
+wide/tall geometry must never make the outline thinner merely because the viewport-shape ramp is high.
 
 Bubble consume-once kick/snare/vocal events may accent stream and drift motion only through the existing decaying
 stream-burst state. They must not add a clock, mutate authored motion settings, replay an event, or leak into pulse/radius
@@ -319,12 +327,18 @@ Sphere is an experimental, independently enabled sixth mode; existing profiles r
 modes. Its frameless transparent viewport contains a static 3D mesh with authored-time deformation, reconstructed
 normals and material-specific bump/roughness. Chrome, Obsidian, Magma, Silver and Water have curated presets plus
 Custom. Independent controls shape band/vocal-range deformation, whole-body transient size response, base bump and
-reactive bump. Deformation and Vocal Response intentionally allow a 0.0-3.0 expressive range while their curated/default
-values remain unchanged; other response controls retain their existing bounds. Magma adds diffuse fire, smoke, ash and lava drips; Water transmits the existing background and sheds
-rounded 3D blobs. Static effect geometry is allocated only for an admitted material that uses it. Settings normalize
-parameters once; current playing source identity gates both musical and transient energy, while idle motion
-continues on the existing logical clock. A fixed camera/common pixel scale preserves aspect and reserves the full
-canonical deformation envelope. Inactive renderer resources retire on one-shot render-context events, including a
+reactive bump. Deformation allows 0.0-4.5; the complete <=3.0 authored domain is preserved and only the newly added negative
+3.0-4.5 tail is softened to protect positive radius. Vocal Response retains its already-expanded 0.0-3.0 range. Size Response
+allows 0.0-3.0 and the logical spring is bounded to +0.90 radius, 50% above the former +0.60 maximum-response ceiling; all
+default values remain unchanged. Magma adds diffuse fire/smoke/ash and real macro-fissure radius depressions; fine cracks
+remain filtered bump/emissive detail. Water/Magma liquid uses six fixed instanced meshes whose anchors resolve through the
+same rotating/deforming body surface: a body precursor bulge and embedded neck precede pinch-off/gravity fall. Water remains
+translucent. Optional Sphere-local derivative AA filters procedural/detail and silhouette coverage without global MSAA; an
+optional one-quad dark cast shadow projects opposite `sphere_light_direction`, with persisted preset/Custom strength and no
+shadow map/FBO/timer. Static effect geometry is allocated only for an admitted material that uses it. Settings normalize
+parameters once; current playing source identity gates both musical and transient energy, while idle motion continues on the
+existing logical clock. The fixed camera/common pixel scale preserves normal authored presentation; intentionally raised
+extreme response headroom is not compensated by shrinking the baseline Sphere. Inactive renderer resources retire on one-shot render-context events, including a
 mode change that never receives its first source frame. Detail and validation: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
 
 ## Visualizer interactions

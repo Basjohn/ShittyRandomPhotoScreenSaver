@@ -483,8 +483,17 @@ class QuickCustomLayoutOwner:
         rect = QRect(item.current_global_rect)
         source_width = max(1.0, float(source.geometry.width()))
         source_height = max(1.0, float(source.geometry.height()))
-        rel_center_x = (float(rect.center().x()) - float(source.geometry.x())) / source_width
-        rel_center_y = (float(rect.center().y()) - float(source.geometry.y())) / source_height
+        # QRect.center() is integer-valued and biases even-sized rectangles by
+        # one pixel toward top/left.  A discrete hop then subtracts width/2 and
+        # manufactures a deterministic 1px drift on every round-trip.  Project
+        # the true geometric centre instead; pointer transfer has always used
+        # continuous geometry and does not share this seam.
+        rel_center_x = (
+            float(rect.x()) + float(rect.width()) * 0.5 - float(source.geometry.x())
+        ) / source_width
+        rel_center_y = (
+            float(rect.y()) + float(rect.height()) * 0.5 - float(source.geometry.y())
+        ) / source_height
 
         scale = min(
             1.0,

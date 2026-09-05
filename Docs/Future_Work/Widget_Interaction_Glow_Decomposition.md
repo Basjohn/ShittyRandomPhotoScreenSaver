@@ -20,7 +20,9 @@ Pre-implementation comparison/rollback HEAD: `0fd64b3d002834614131b46581e41fe497
 
 Two independent booleans, `input.widget_glow_on_hover` and `input.widget_glow_on_click`, default false.
 `input.widget_glow_intensity` is the canonical integer percentage, clamped to 0-100 and default 100; the Quick boundary
-receives it as one 0-1 scalar. `input.widget_glow_color` is one optional shared RGBA override, default `null` (inherit
+receives it as one 0-1 opacity scalar. `input.widget_glow_distance` is the canonical retained-scene spread in pixels,
+clamped to 6-48 and default 14 (the original fixed analytical shader extent was 12). `input.widget_glow_color` is one
+optional shared RGBA override, default `null` (inherit
 the major Widget Theme `card.border` semantic). The swatch displays the resolved colour without persisting it; **Use
 Theme** clears an explicit override, including one authored equal to the current theme. Settings owns persistence; QML
 receives primitive resolved state only. No runtime Settings reads on pointer motion.
@@ -40,8 +42,11 @@ animations may run only in response to those edges and must stop at rest. No Tim
 request or perpetual loop. Disabled/retired/hidden items cannot keep glow work alive. The item uses current card
 geometry/radius/scale and inherits whole-widget/startup fades. No artwork capture, extra window or per-frame CPU/GPU
 resource creation.
-One hollow distance-field shader/quad gives a smooth edge without blur textures. GLSL and its baked OpenGL QSB
-ship together in the existing QML data directory; the bake command is in the shader source. Runtime generation
+One hollow distance-field shader/quad gives a smooth edge without blur textures. Glow Distance expands the effect bounds
+and inversely scales the baked shader's effect/card/corner coordinate domain, so its stable 12-unit analytical falloff maps
+to the requested physical pixel distance without a QSB rebake. Default 14 px is about 17% broader/softer than the former
+fixed 12 px. GLSL and its baked OpenGL QSB ship together in the existing QML data directory; the bake command is in the
+shader source. Runtime generation
 recreation resolves theme changes; the Settings swatch alone subscribes to existing theme publication and unsubscribes
 on destruction. Capture evidence: `logs/evidence_chest/fw_glow/glow_peak.png`.
 
@@ -64,7 +69,8 @@ new style-theme roles and a Visualizer glow policy are **speculative reuse defer
 
 ## Acceptance bars
 
-- **Deterministic:** independent toggles, 0-100% intensity and shared colour survive Settings reload; loading does not
+- **Deterministic:** independent toggles, 0-100% intensity, 6-48 px distance and shared colour survive Settings reload;
+  detail rows are hidden when both glow triggers are disabled; loading does not
   save defaults over existing choices; production input projection gates all ordinary roots, including cached/late-created
   items. One press resolves one last-clicked target (or empty-space clear) without taking semantic click ownership.
 - **Lifecycle/resource:** no new engine/window/timer/worker; disabling/closing/retiring stops transient activity;
@@ -82,3 +88,12 @@ misframed around shell-less Digital Clock. The same event-only ownership is pres
 input truth and QML only runs finite fades on state edges. The primitive now has a stronger held-hover target plus a second
 bounded pass of the same baked shader, VisualizerPresentation consumes the same input projection, and Digital Clock may
 override only the glow rectangle to follow intrinsic visible content. No polling, Timer, worker or independent frame loop.
+
+
+## 2026-09-05 distance/visibility follow-up
+
+Operator feedback established that intensity was being asked to solve two separate jobs: opacity and halo reach. It never
+owned reach; the shader was fixed at a 12 px analytical extent. This checkpoint keeps intensity opacity-only, adds the
+settings-owned distance control above, defaults it to 14 px for a modest softness increase, and hides Intensity/Distance/
+Color when neither Hover nor Click is enabled. The implementation reuses the existing two active-only analytical passes;
+there is still no texture capture, FBO, timer, poller or independent frame request.

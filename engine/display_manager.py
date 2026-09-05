@@ -601,6 +601,7 @@ class DisplayManager(QObject):
             on_hover=input_options.widget_glow_on_hover,
             on_click=input_options.widget_glow_on_click,
             intensity=input_options.widget_glow_intensity / 100.0,
+            distance=float(input_options.widget_glow_distance),
             color=resolve_widget_glow_color(input_options.widget_glow_color),
         )
 

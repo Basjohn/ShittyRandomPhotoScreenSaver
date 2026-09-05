@@ -27,6 +27,7 @@ from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
     create_inline_label,
     add_aligned_row,
+    add_aligned_row_widget,
     style_group_box,
 )
 from ui.flow_layout import FlowContainer
@@ -406,6 +407,9 @@ class DisplayTab(QWidget):
         self.widget_glow_on_hover_check.setToolTip(
             "Show a subtle glow while the pointer is over an ordinary widget."
         )
+        self.widget_glow_on_hover_check.stateChanged.connect(
+            self._update_widget_glow_detail_visibility
+        )
         self.widget_glow_on_hover_check.stateChanged.connect(self._save_settings)
         widget_glow_hover_row.addWidget(self.widget_glow_on_hover_check)
         widget_glow_hover_row.addStretch()
@@ -421,15 +425,20 @@ class DisplayTab(QWidget):
         self.widget_glow_on_click_check.setToolTip(
             "Pulse a subtle glow when an ordinary widget receives a click."
         )
+        self.widget_glow_on_click_check.stateChanged.connect(
+            self._update_widget_glow_detail_visibility
+        )
         self.widget_glow_on_click_check.stateChanged.connect(self._save_settings)
         widget_glow_click_row.addWidget(self.widget_glow_on_click_check)
         widget_glow_click_row.addStretch()
 
-        widget_glow_intensity_row, _ = add_aligned_row(
-            layout,
-            "Glow Intensity:",
-            label_width=self._LABEL_WIDTH,
-            wrap=False,
+        widget_glow_intensity_widget, widget_glow_intensity_row, _ = (
+            add_aligned_row_widget(
+                layout,
+                "Glow Intensity:",
+                label_width=self._LABEL_WIDTH,
+                wrap=False,
+            )
         )
         self.widget_glow_intensity_slider = shared_styles.NoWheelSlider(
             Qt.Orientation.Horizontal
@@ -451,11 +460,41 @@ class DisplayTab(QWidget):
         widget_glow_intensity_row.addWidget(self.widget_glow_intensity_label)
         widget_glow_intensity_row.addStretch()
 
-        widget_glow_color_row, _ = add_aligned_row(
-            layout,
-            "Widget Glow Color:",
-            label_width=self._LABEL_WIDTH,
-            wrap=False,
+        widget_glow_distance_widget, widget_glow_distance_row, _ = (
+            add_aligned_row_widget(
+                layout,
+                "Glow Distance:",
+                label_width=self._LABEL_WIDTH,
+                wrap=False,
+            )
+        )
+        self.widget_glow_distance_slider = shared_styles.NoWheelSlider(
+            Qt.Orientation.Horizontal
+        )
+        self.widget_glow_distance_slider.setRange(6, 48)
+        self.widget_glow_distance_slider.setValue(14)
+        self.widget_glow_distance_slider.setMinimumWidth(220)
+        self.widget_glow_distance_slider.setToolTip(
+            "How far the hover/click halo travels outside the widget in pixels. "
+            "Intensity controls opacity only; distance controls spread/softness."
+        )
+        self.widget_glow_distance_label = create_inline_label("14 px")
+        self.widget_glow_distance_label.setMinimumWidth(48)
+        self.widget_glow_distance_slider.valueChanged.connect(
+            lambda value: self.widget_glow_distance_label.setText(f"{value} px")
+        )
+        self.widget_glow_distance_slider.valueChanged.connect(self._save_settings)
+        widget_glow_distance_row.addWidget(self.widget_glow_distance_slider, 1)
+        widget_glow_distance_row.addWidget(self.widget_glow_distance_label)
+        widget_glow_distance_row.addStretch()
+
+        widget_glow_color_widget, widget_glow_color_row, _ = (
+            add_aligned_row_widget(
+                layout,
+                "Widget Glow Color:",
+                label_width=self._LABEL_WIDTH,
+                wrap=False,
+            )
         )
         self.widget_glow_color_btn = ColorSwatchButton(
             title="Choose Widget Glow Color",
@@ -485,7 +524,24 @@ class DisplayTab(QWidget):
         widget_glow_color_row.addWidget(self.widget_glow_use_theme_btn)
         widget_glow_color_row.addStretch()
 
+        self._widget_glow_detail_rows = (
+            widget_glow_intensity_widget,
+            widget_glow_distance_widget,
+            widget_glow_color_widget,
+        )
+        self._update_widget_glow_detail_visibility()
+
         return group
+
+    def _update_widget_glow_detail_visibility(self, _state=None) -> None:
+        """Show authored glow detail only while at least one trigger is enabled."""
+
+        enabled = bool(
+            self.widget_glow_on_hover_check.isChecked()
+            or self.widget_glow_on_click_check.isChecked()
+        )
+        for row in getattr(self, "_widget_glow_detail_rows", ()):
+            row.setVisible(enabled)
 
     def _refresh_widget_glow_swatch(self, theme=None) -> None:
         """Show the resolved glow colour without changing persistence."""
@@ -557,6 +613,7 @@ class DisplayTab(QWidget):
         self.widget_glow_on_hover_check.blockSignals(True)
         self.widget_glow_on_click_check.blockSignals(True)
         self.widget_glow_intensity_slider.blockSignals(True)
+        self.widget_glow_distance_slider.blockSignals(True)
         
         try:
             # Monitor selection (new canonical: display.show_on_monitors)
@@ -666,12 +723,19 @@ class DisplayTab(QWidget):
             self.widget_glow_intensity_label.setText(
                 f"{input_options.widget_glow_intensity}%"
             )
+            self.widget_glow_distance_slider.setValue(
+                input_options.widget_glow_distance
+            )
+            self.widget_glow_distance_label.setText(
+                f"{input_options.widget_glow_distance} px"
+            )
             self._widget_glow_color_override = (
                 None
                 if input_options.widget_glow_color is None
                 else list(input_options.widget_glow_color)
             )
             self._refresh_widget_glow_swatch()
+            self._update_widget_glow_detail_visibility()
 
             # Renderer backend — always OpenGL, normalize legacy values
             backend_mode_raw = self._settings.get('display.render_backend_mode', 'opengl')
@@ -694,6 +758,7 @@ class DisplayTab(QWidget):
             self.widget_glow_on_hover_check.blockSignals(False)
             self.widget_glow_on_click_check.blockSignals(False)
             self.widget_glow_intensity_slider.blockSignals(False)
+            self.widget_glow_distance_slider.blockSignals(False)
             self._loading = False
     
     def _save_settings(self) -> None:
@@ -766,6 +831,10 @@ class DisplayTab(QWidget):
         self._settings.set(
             'input.widget_glow_intensity',
             self.widget_glow_intensity_slider.value(),
+        )
+        self._settings.set(
+            'input.widget_glow_distance',
+            self.widget_glow_distance_slider.value(),
         )
         self._settings.set(
             'input.widget_glow_color',

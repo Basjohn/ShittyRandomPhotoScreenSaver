@@ -568,6 +568,7 @@ class QuickSceneController(QObject):
             "widgetGlowOnHover": bool(input_state.widget_glow_on_hover),
             "widgetGlowOnClick": bool(input_state.widget_glow_on_click),
             "widgetGlowIntensity": float(input_state.widget_glow_intensity),
+            "widgetGlowDistance": float(input_state.widget_glow_distance),
             "widgetGlowColor": QColor(*input_state.widget_glow_color),
             "widgetGlowAdmitted": admitted,
         }

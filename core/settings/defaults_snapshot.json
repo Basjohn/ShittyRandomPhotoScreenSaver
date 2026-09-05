@@ -31,7 +31,8 @@
         "widget_glow_color": null,
         "widget_glow_on_click": false,
         "widget_glow_on_hover": false,
-        "widget_glow_intensity": 100
+        "widget_glow_intensity": 100,
+        "widget_glow_distance": 14
     },
     "mc": {},
     "queue": {
@@ -1734,6 +1735,9 @@
             "sphere_light_direction": "NW",
             "sphere_material": "Chrome",
             "sphere_material_fx": 1.0,
+            "sphere_antialiasing": true,
+            "sphere_shadow_enabled": true,
+            "sphere_shadow_strength": 0.62,
             "sphere_mid_response": 1.0,
             "sphere_rainbow_enabled": false,
             "sphere_rainbow_speed": 0.5,

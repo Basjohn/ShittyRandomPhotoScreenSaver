@@ -122,6 +122,34 @@ def _smoothstep01(value: float) -> float:
     return x * x * (3.0 - 2.0 * x)
 
 
+def _extreme_wide_viewport_factor(domain_w: float, domain_h: float) -> float:
+    """Return the presentation-only 0..1 compensation tail for extreme width.
+
+    Bubble's baseline-relative domain already preserves authored motion at normal
+    aspect changes.  Very wide committed cards are a separate visual-density
+    tail: the same authored population and speed are perceptually sparse/slow
+    once horizontal world stretch is several times larger than vertical stretch.
+    Keep ordinary wide/tall cards as a strict no-op, then ease to full
+    compensation only beyond roughly 3.4:1 physical aspect and reach it by
+    roughly 5.25:1 (canonical Bubble is 1.5:1).
+    """
+
+    try:
+        width = float(domain_w)
+        height = float(domain_h)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    if (
+        not math.isfinite(width)
+        or not math.isfinite(height)
+        or width <= 0.0
+        or height <= 0.0
+    ):
+        return 0.0
+    relative_aspect = width / height
+    return _smoothstep01((relative_aspect - 2.25) / (3.50 - 2.25))
+
+
 def _content_axis_distance(value: float, domain_axis: float) -> float:
     """Project one renderer-content distance into Bubble's logical axis.
 
@@ -475,6 +503,25 @@ class BubbleSimulation:
             "bubble_stream_speed_cap",
             settings.get("bubble_stream_speed", 2.0),
         ))
+
+        # Extreme-wide tail compensation only.  The baseline-relative logical
+        # domain intentionally remains the sole geometry authority; this small
+        # presentation modifier restores perceived density/travel in very wide
+        # cards without globally compressing or rewriting Bubble reactivity.
+        wide_tail = _extreme_wide_viewport_factor(self._domain_w, self._domain_h)
+        if wide_tail > 0.0:
+            extra_big = int(math.floor(wide_tail + 0.5))
+            extra_small = int(math.floor(wide_tail * 3.0 + 0.5))
+            authored_total = max(0, big_target) + max(0, small_target)
+            remaining_slots = max(0, MAX_BUBBLES - authored_total)
+            extra_big = min(extra_big, remaining_slots)
+            remaining_slots -= extra_big
+            extra_small = min(extra_small, remaining_slots)
+            big_target += extra_big
+            small_target += extra_small
+            wide_speed_scale = 1.0 + 0.20 * wide_tail
+            stream_const *= wide_speed_scale
+            stream_cap *= wide_speed_scale
         stream_reactivity = float(settings.get("bubble_stream_reactivity", 0.5))
         rotation_amount = float(settings.get("bubble_rotation_amount", 0.5))
         drift_amount_authored = float(settings.get("bubble_drift_amount", 0.5))

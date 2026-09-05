@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from dataclasses import replace
 
 import pytest
@@ -55,6 +56,10 @@ def _snapshot(*, energy=(0.0, 0.0, 0.0), transient=0.0, size_pulse=0.0, material
         "sphere_specular": 0.8,
         "sphere_light_direction": "NW",
         "sphere_idle_motion": 0.12,
+        # Historical body/material oracles measure the Sphere itself. Shadow
+        # owns dedicated tests below so its halo cannot contaminate body bounds.
+        "sphere_shadow_enabled": False,
+        "sphere_antialiasing": True,
     })
     if overrides:
         parameters = freeze_render_fields({**dict(parameters), **overrides})
@@ -97,11 +102,16 @@ def test_sphere_mesh_is_bounded_finite_unit_outward_and_has_real_z():
         assert sum(normal[index] * centroid[index] for index in range(3)) > 0.0
 
 
-def test_magma_shader_models_fissures_as_negative_relief():
-    source = sphere_module._FRAGMENT_SOURCE
-    assert "float fissure = 1.0 - smoothstep" in source
-    assert "- 0.040*fissure" in source
-    assert "0.024*crust" in source
+def test_magma_shader_uses_real_macro_fissure_geometry_and_shared_drip_vents():
+    vertex = sphere_module._VERTEX_SOURCE
+    fragment = sphere_module._FRAGMENT_SOURCE
+    effect = sphere_module._EFFECT_VERTEX_SOURCE
+    assert "float macroFissureField(vec3 n)" in vertex
+    assert "radius -= 0.040 * min(uSurfaceDetail, 2.0) * fissure" in vertex
+    assert "0.72 * dripVentField(n)" in vertex
+    assert "float macroFissure = macroFissureField(direction);" in fragment
+    assert "float vent = dripVentField(direction);" in fragment
+    assert "vec3 bodyPoint = turn * surface(anchor);" in effect
 
 
 def test_sphere_pixel_geometry_uses_resolved_content_metric_across_aspects_and_scale():
@@ -140,14 +150,23 @@ def test_sphere_pixel_geometry_ignores_authored_extent_when_visible_footprint_ma
     assert huge_radius > 60.0
 
 
-def test_canonical_viewport_reserves_full_bounded_deformation_envelope():
-    # Sum absolute maxima of the independent shader fields, including maximum
-    # idle detail and all three bands at their maximum supported strength.
-    maximum_radius = 1.0 + 0.20 + 0.10 + 2.0 * 0.27
-    camera_distance = 4.6
-    perspective_radius = maximum_radius * camera_distance / math.sqrt(camera_distance**2 - maximum_radius**2)
-    pixels = 280.0 * sphere_module.SPHERE_RADIUS_FRACTION * perspective_radius
-    assert pixels < 138.0  # 140px half-height, with a visible safety margin.
+def test_extended_deformation_tail_preserves_positive_radius_without_shrinking_baseline():
+    # +50% Deformation intentionally adds expressive positive headroom; forcing
+    # the canonical viewport to contain every simultaneous maximum would shrink
+    # the normal Sphere and violate the authored presentation contract. Instead
+    # protect the dangerous side of that extension: the new negative tail must
+    # remain outside the origin even with maximum idle contraction and Magma's
+    # deepest geometric fissure.
+    worst_driven = -(0.060 + 0.035 + 0.025 + 0.110)
+    old_domain_negative = 3.0 * worst_driven
+    extended_negative = (4.5 - 3.0) * worst_driven * 0.25
+    max_idle_contraction = 0.20 * 0.10
+    max_magma_fissure = 0.040 * 2.0
+    minimum_radius = 1.0 + old_domain_negative + extended_negative - max_idle_contraction - max_magma_fissure
+    assert minimum_radius > 0.10
+    source = sphere_module._VERTEX_SOURCE
+    assert "if (uDeformation > 3.0 && driven < 0.0)" in source
+    assert "(uDeformation - 3.0) * driven * 0.25" in source
 
 
 def test_sphere_shader_has_bounded_independent_band_transfer_and_optional_effects():
@@ -160,9 +179,26 @@ def test_sphere_shader_has_bounded_independent_band_transfer_and_optional_effect
     assert "_FIRE_FRAGMENT_SOURCE" in sphere_module.__dict__
     assert "uEffectPass == 0" in sphere_module._FIRE_FRAGMENT_SOURCE
     assert "fwidth(noise)" in sphere_module._FIRE_FRAGMENT_SOURCE
-    assert "waterBlobShape" in sphere_module._EFFECT_VERTEX_SOURCE
-    assert "magma ? teardropShape(n) : waterBlobShape(n, id)" in sphere_module._EFFECT_VERTEX_SOURCE
-    assert "vec3(radius * 1.02, radius * 0.98, radius * 1.02)" in sphere_module._EFFECT_VERTEX_SOURCE
+    effect = sphere_module._EFFECT_VERTEX_SOURCE
+    assert "vec3 dripAnchor(float id)" in effect
+    assert "vec3 bodyPoint = turn * surface(anchor);" in effect
+    assert "float detach = smoothstep" in effect
+    assert "vec3 neckAxis = -hang;" in effect
+    assert "vec3 center = bodyPoint + hang * scale.y * 0.92 + gravity * fall;" in effect
+    assert "dripBulgeField" in sphere_module._VERTEX_SOURCE
+    assert "radius += (uMaterial == 2 ? 0.038 : (uMaterial == 4 ? 0.050 : 0.0))" in sphere_module._VERTEX_SOURCE
+    assert "waterLane" not in effect
+    assert "build_sphere_mesh(3)" in Path(sphere_module.__file__).read_text()
+
+
+def test_sphere_optional_local_aa_and_cast_shadow_have_dedicated_gpu_contracts():
+    assert "uniform int uAntialiasing;" in sphere_module._FRAGMENT_SOURCE
+    assert "smoothstep(0.0, edgeWidth, facing)" in sphere_module._FRAGMENT_SOURCE
+    assert "uniform int uAntialiasing;" in sphere_module._EFFECT_FRAGMENT_SOURCE
+    assert "_SHADOW_VERTEX_SOURCE" in sphere_module.__dict__
+    assert "_SHADOW_FRAGMENT_SOURCE" in sphere_module.__dict__
+    assert "uOffset" in sphere_module._SHADOW_VERTEX_SOURCE
+    assert "uStrength" in sphere_module._SHADOW_FRAGMENT_SOURCE
 
 
 def test_partial_effect_allocation_is_discarded_before_the_next_lazy_retry(monkeypatch):
@@ -256,7 +292,7 @@ def test_real_gl_sphere_host_is_deterministic_reactive_material_distinct_and_dep
         assert idle == repeated
         assert idle != bass and idle != mid and idle != high
         assert len(set(materials)) == 5
-        # One body and one 320-triangle effect mesh are uploaded once. The
+        # One body and one 1,280-triangle effect mesh are uploaded once. The
         # fire quad is intentionally below this size threshold; no later frame
         # is allowed to upload geometry again.
         assert uploads == 2

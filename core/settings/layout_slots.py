@@ -290,7 +290,12 @@ def _is_layout_field(section_id: str, key: str) -> bool:
     if key in _SOURCE_SECTION_KEYS:
         return False
     if section_id == "spotify_visualizer":
-        return key in {"enabled", "position", "monitor", "width", "height"}
+        # Active mode is part of the visual layout state: numbered slots are a
+        # fenced visualizer/layout hot-swap and the replacement generation must
+        # reconstruct the mode that was visible when the slot was authored.
+        # Per-mode tuning/presets remain ordinary configuration and are not
+        # duplicated into layout slots.
+        return key in {"enabled", "position", "monitor", "width", "height", "mode"}
     if any(key.startswith(prefix) for prefix in _SOURCE_KEY_PREFIXES):
         return False
     return key in _LAYOUT_SECTION_KEYS

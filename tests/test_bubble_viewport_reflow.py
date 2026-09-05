@@ -3,8 +3,10 @@
 Bubble runs in a baseline-relative logical domain: canonical (420x280) is a
 strict 1x1 no-op that leaves the legacy unit-square path and render arrays
 exactly unchanged; a wide/tall committed extent expands the logical world while
-authored population and Bubble personality stay unchanged (a larger world is
-naturally less dense). The render seam normalizes positions/trails back to
+authored population and Bubble personality stay unchanged through ordinary
+wide/tall cards. Only the extreme-wide presentation tail adds a bounded +1 big
+/ +3 small density assist and up to +20% stream baseline/cap. The render seam
+normalizes positions/trails back to
 [0,1], retains historical card-height-normalized radius, maps that radius back
 into expanded-world collision units, and lets the shader keep circles round.
 Stream/drift movement projects onto expanded domain axes once so its normalized
@@ -102,21 +104,32 @@ def test_tall_extent_expands_logical_y_and_normalizes_output() -> None:
         assert pos[idx * 4 + 1] == pytest.approx(b.y / 2.0)
 
 
-def test_authored_counts_are_unchanged_by_viewport_extent() -> None:
-    # Population is authored; a larger viewport is simply less dense, never a
-    # silently larger particle count.
+def test_population_is_unchanged_until_extreme_wide_tail() -> None:
     baseline = _run(_NO_KEY)
-    wide = _run((630.0, 280.0))
+    ordinary_wide = _run((840.0, 280.0))
     tall = _run((420.0, 560.0))
+    measured_extreme_wide = _run((1174.0, 187.0))
 
     def _counts(sim):
         big = sum(1 for b in sim._bubbles if b.is_big)
         small = sum(1 for b in sim._bubbles if not b.is_big)
         return big, small
 
-    assert _counts(wide) == _counts(baseline)
-    assert _counts(tall) == _counts(baseline)
     assert _counts(baseline) == (6, 20)
+    assert _counts(ordinary_wide) == _counts(baseline)
+    assert _counts(tall) == _counts(baseline)
+    assert _counts(measured_extreme_wide) == (7, 23)
+
+
+def test_extreme_wide_tail_is_bounded_to_requested_stream_and_population_boosts() -> None:
+    source = Path(
+        "widgets/spotify_visualizer/bubble_simulation.py"
+    ).read_text(encoding="utf-8")
+    assert "wide_speed_scale = 1.0 + 0.20 * wide_tail" in source
+    assert "extra_big = int(math.floor(wide_tail + 0.5))" in source
+    assert "extra_small = int(math.floor(wide_tail * 3.0 + 0.5))" in source
+    assert "relative_aspect - 2.25" in source
+    assert "3.50 - 2.25" in source
 
 
 class _OneShotSnareScheduler:

@@ -396,10 +396,10 @@ void main() {
         
         // Operator adjustment: one logical pixel less across the complete
         // outline (half on each side), retaining subpixel coverage at tiny sizes.
-        // Extreme main heads receive one further pixel of reduction through the
-        // existing visible-area ramp; Ghost and canonical widths stay separate.
-        stroke = max(0.3 * px,
-            stroke - 0.5 * (1.0 + large_viewport_stroke_bonus_px) / inner_h);
+        // Viewport extremity must never make the outline thinner than canonical:
+        // the positive firmness ramp above may protect large heads, but the
+        // historical subtraction itself stays viewport-neutral.
+        stroke = max(0.3 * px, stroke - 0.5 / inner_h);
 
         // --- Tiny bubble shortcut (< ~4px radius) ---
         float tiny_threshold = 4.0 * px;
