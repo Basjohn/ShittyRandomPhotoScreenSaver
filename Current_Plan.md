@@ -41,32 +41,53 @@ Durable references when mechanism detail is needed:
 Operator-activated `Future_Work.md` implementation is sequenced separately in `FWPlan.md`; preserve the unrelated
 work and physical/log validation below.
 
-- [~] **Priority — Visualizer live Edit/transfer + Sphere response:** geometry-only Save now promotes retained state and
-  is physically reported as an excellent continuous UX win. Log attribution found the remaining transfer crash one layer
-  above the already-moved scene/runtime: `DisplayManager._quick_visualizer_unit` and `QuickDisplayUnit._visualizer_owner`
-  still named the source display. The current slice moves **scene + runtime/pacer + manager unit + retirement attachment**
-  as one event-bound transaction, so later Save/slot-load teardown retires the owner only through the actual target unit.
-  WIP review then removed the remaining partial-commit hole: scene movement and lifecycle movement are no longer separate
-  session subscribers. One coordinator callback owns scene + runtime/pacer + manager unit + retirement attachment and rolls
-  the retained scene back before restoring session placement if lifecycle transfer fails. Historical contract:
-  `Docs/Historical_Bugs/Visualizer_Cross_Display_Split_Ownership_2026-09-05.md`.
-  The one-crossing-per-drag latch and theme-palette left/right hop buttons remain; physical validation decides whether a
-  later source-fade/target-fade adds anything. Slot load intentionally remains a fenced full-generation reinit because it
-  may change multiple family enable/geometry routes; the observed slot crash was not a legacy-slot parse failure.
-  The same logs exposed a separate measured waste owner: a successful visualizer sync called `VisualizerRenderItem.update()`
-  and the pacer immediately called `QQuickWindow.update()` too, producing about **120 swaps on a 60 Hz target and ~250 on
-  165 Hz** while logical revisions stayed ~90 Hz. The pacer now emits at most one presentation request per deadline, never
-  reducing logical cadence/freshness. Sphere retains the successful elastic size response; Deformation and Vocal Response
-  maxima are raised from 2.0 to 3.0 without changing defaults, and Magma fissure relief remains inward.
-  `Docs/Future_Work/Edit_Layout_Live_Commit.md` and `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md`.
-- [~] **Widget Glow physical follow-up:** 100% was physically too weak, Visualizer had no glow projection, and shell-less
-  Digital Clock outlined its invisible card allocation. The current slice raises held-hover strength, uses a second bounded
-  pass from the same baked shader at active glow only, projects the existing immutable input state onto the retained
-  Visualizer frame, and gives shell-less Digital Clock a content-sized glow rectangle. Hover/click remain finite state-edge
-  animations only; no polling/timer/frame owner is added.
-- [ ] **Awaiting Validation / Logs — Bubble:** confirm equal-area response/outline during edit and after
-  save, then match the 60 Hz steady-run tail evidence before further optimization. Detailed evidence:
-  `Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md`. Preserve BTF and cadence.
+- [x] **Visualizer live Edit/transfer continuity — physically accepted on current supplied tree:** the operator reports
+  cross-display live Edit followed by Save now preserves the running Visualizer without teardown/reinit. Preserve that
+  contract. Numbered geometry/layout-slot reload remains a separate topology/hot-swap operation and is not part of this
+  checkpoint. Do not reintroduce Save reconciliation merely because the committed monitor route changed after a successful
+  live Visualizer ownership transfer.
+- [~] **Checkpoint 1 — Bubble extreme-shape presentation tail — SOURCE IMPLEMENTED / PHYSICAL VALIDATION OPEN:** the
+  adjustment logs show healthy ~90 Hz logical cadence through the measured ~1174x187 (6.28:1) viewport, so the reported
+  slow/sparse extreme-wide feel is presentation density/travel rather than dropped simulation ticks. The main-head outline
+  no longer subtracts extra thickness from the large/extreme viewport ramp. Ordinary wide/tall cards remain unchanged; an
+  extreme-wide-only eased tail reaches **+1 big bubble, +3 small bubbles, +20% stream baseline and +20% stream cap** by
+  the measured shape. No radius/reactivity/Ghost compression, drift rewrite, timer or new cadence owner is introduced.
+  Physical validation must compare first post-transfer vertical outline weight and canonical/moderate/extreme-wide density.
+- [~] **Checkpoint 1 — Widget Glow distance/softness — SOURCE IMPLEMENTED / PHYSICAL VALIDATION OPEN:** Intensity remains
+  opacity-only. New `input.widget_glow_distance` is a persisted 6-48 px control (default 14 px versus the former fixed 12 px)
+  projected through the immutable Quick input snapshot to ordinary widgets and Visualizer. The retained analytical QSB is
+  stretched in coordinate space rather than rebaked, giving roughly 17% broader/softer default falloff with no texture/FBO
+  or recurring work. Settings hides Intensity/Distance/Color unless Hover or Click glow is enabled. Validate long-distance
+  clipping, mixed-DPR/CUSTOM scale and whether 14 px default / 48 px maximum feel useful.
+- [~] **Checkpoint 2 — Sphere + layout-slot mode persistence — SOURCE IMPLEMENTED / PHYSICAL+QT/GL VALIDATION OPEN:**
+  Sphere Deformation now exposes **0.0-4.5** (50% above the prior 3.0 ceiling) and Size Response **0.0-3.0** with a
+  **+0.90 radius pulse ceiling** (50% above the former +0.60 maximum response); defaults are unchanged and the new
+  deformation tail softens only additional negative displacement so extreme positive crests remain fully authored.
+  Water/Magma now share the body's actual rotating/deforming surface anchors: the body grows a timed lower-hemisphere
+  precursor bulge, the liquid neck is oriented back into that same anchor for a substantial attached phase, then the fixed
+  instanced mesh pinches off and falls under gravity. Magma's six outlets participate in the same fissure field and major
+  fissures are real vertex-radius depressions; fine branching remains filtered bump/emissive detail. Optional local AA and
+  a persisted optional dark cast shadow are added; shadow direction is derived opposite the existing Sphere light direction,
+  strength is preset/custom adjustable, and the shadow is one analytical quad (no FBO/texture/timer). Geometry slots now
+  capture/restore `spotify_visualizer.mode` alongside visible layout state while deliberately excluding per-mode tuning.
+  Slot **load** keeps the established fenced rebuild so the newly applied mode becomes runtime truth; ordinary live Edit Save
+  and successful cross-display Visualizer Save remain no-teardown contracts. A pre-existing deterministic 1px discrete
+  display-hop drift was also fixed at its projection seam by replacing integer `QRect.center()` with the true geometric centre;
+  pointer/drag transfer is unchanged.
+  **Checkpoint static validation completed here:** all 450 Python files AST-parse/compile, all 33 authored JSON files parse,
+  all five Sphere presets carry AA/shadow controls, composed Sphere body/effect/shadow GLSL literals have balanced structure,
+  and source contracts prove shared `surface(anchor)`, no `waterLane`, macro fissure geometry, negative-tail radius safety and
+  local-AA/shadow uniforms. Test collection in this container is **environment-blocked** by missing `PySide6` (not red).
+  **Required checkpoint validation:** run `tests/test_layout_slots.py`, `tests/test_sphere_mode_integration.py`,
+  `tests/test_qtquick_sphere_rendering.py`, `tests/test_qtquick_visualizer_reactivity_config_parity.py`, and the existing
+  `tests/test_qtquick_custom_layout_owner.py::test_visualizer_display_hop_uses_nearest_direction_and_preserves_shape` on a
+  PySide6/OpenGL-capable environment. Physically verify Water/Magma attachment before detach, Magma fissure depth, AA toggle,
+  shadow on/off + light-direction tracking/strength, 4.5 deformation/3.0 Size Response, slot mode restoration, and no
+  regression to live cross-display Edit Save.
+  **Checkpoint package:** `GODZIP_Sphere_Attached_Liquids_Slot_Mode_Checkpoint2_2026-09-05.zip`; archive CRC, duplicate-member,
+  manifest path/size/SHA-256 and selective-scope checks pass. The cumulative ChatGPT-session package carries exactly 9
+  touched tests and 4 touched Docs files; unchanged Claude-reconciled tests/docs/tools are omitted with
+  `omission_means_delete: false`.
 
 1. [SUSPECTED DONE - CHECK] **Finish shared Widget colour-authority cleanup and physical check.** Apply the Style Overrides/header cleanup, run **Reset All Colours to Theme** once on the current profile when desired, and verify Media/Reddit/Gmail/Steam branded headers resolve cohesively from the selected Widget Theme/shared override. No hidden family colour should survive merely because its GUI swatch was removed.
 2. **Close V7 Visualizer Settings acceptance.** Automated reconciliation is green (277 passed / 1 skipped) and physical testing has already proved Custom snapshotting plus disabled-active Sine -> Bubble substitution. The remaining top-level navigation mirror is now source-fixed: the Visualizers button mirrors Media/Visualizers capability state immediately, rejects admission without constructing bodies, and has an explicit semantic disabled/grey presentation including its custom child label. Physical re-run remains open for both dependency cases plus state-preserving re-enable, then Rainbow/Custom, retirement/re-enable, Settings recreation and theme/glass inheritance. Future-mode descriptor/module closure remains a separate final V8 proof.

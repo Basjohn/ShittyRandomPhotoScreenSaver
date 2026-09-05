@@ -76,6 +76,7 @@ def test_capture_layout_slot_includes_layout_state_and_excludes_sources():
         "enabled": True,
         "position": "Custom",
         "monitor": "1",
+        "mode": "bubble",
     }
     assert "layout_slots" not in payload["widgets"]
 
@@ -296,3 +297,36 @@ def test_save_layout_slot_never_recursively_captures_slots():
 
     assert payload is not None
     assert "layout_slots" not in payload["widgets"]
+
+
+def test_visualizer_layout_slot_round_trips_active_mode_without_copying_mode_tuning():
+    widgets = {
+        "spotify_visualizer": {
+            "enabled": True,
+            "position": "Custom",
+            "monitor": "2",
+            "mode": "sphere",
+            "sphere_deformation": 4.25,
+            "bubble_big_count": 17,
+        },
+    }
+
+    assert save_layout_slot(widgets, "3") is True
+    payload = get_layout_slot_payload(widgets, "3")
+    assert payload is not None
+    assert payload["widgets"]["spotify_visualizer"] == {
+        "enabled": True,
+        "position": "Custom",
+        "monitor": "2",
+        "mode": "sphere",
+    }
+
+    widgets["spotify_visualizer"].update(
+        mode="bubble", sphere_deformation=1.25, bubble_big_count=4
+    )
+    assert apply_layout_slot(widgets, "3") is True
+    assert widgets["spotify_visualizer"]["mode"] == "sphere"
+    # A geometry slot selects the visible mode, but does not become a second
+    # authority for per-mode presets/tuning.
+    assert widgets["spotify_visualizer"]["sphere_deformation"] == 1.25
+    assert widgets["spotify_visualizer"]["bubble_big_count"] == 4

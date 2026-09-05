@@ -17,7 +17,7 @@ from widgets.spotify_visualizer.render_state import (
 _SPHERE_SIZE_SPRING_STIFFNESS = 26.0
 _SPHERE_SIZE_SPRING_DAMPING = 8.5
 _SPHERE_SIZE_PULSE_GAIN = 0.30
-_SPHERE_SIZE_PULSE_LIMIT = 0.72
+_SPHERE_SIZE_PULSE_LIMIT = 0.90
 _SPHERE_SIZE_MAX_STEP_S = 0.05
 
 
@@ -37,7 +37,7 @@ def sphere_size_pulse_target(
 ) -> float:
     """Resolve the configure-owned whole-body growth target for one logical step."""
 
-    response = max(0.0, min(2.0, float(parameters.get("sphere_size_response", 1.5))))
+    response = max(0.0, min(3.0, float(parameters.get("sphere_size_response", 1.5))))
     if response <= 0.0:
         return 0.0
     curve = max(0.2, min(2.0, float(parameters.get("sphere_energy_curve", 0.60))))

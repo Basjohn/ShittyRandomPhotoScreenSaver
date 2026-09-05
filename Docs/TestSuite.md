@@ -1062,3 +1062,28 @@ The maintained destination profile includes `test_visualizer_line_coverage.py` f
 Sine/Osc/DevCurve device-pixel coverage at DPR 1.5 and extreme extent/small authored scale.
 `test_bubble_aspect_pixels.py` owns equal-area response/highlight and visible-size outline oracles;
 `test_qtquick_visualizer_spectrum.py` includes curated Organs black-fill/rainbow/glow pixels.
+
+
+### 2026-09-05 Checkpoint 2 — Sphere/material + slot-mode + discrete-hop contracts
+
+This checkpoint changes current-owner tests only; it does not resurrect deleted QWidget/native-event/media owners. The
+packaged ChatGPT-session test slice contains the four Checkpoint 1 Bubble/glow contracts plus these five Checkpoint 2 files.
+
+- `tests/test_layout_slots.py` — geometry slots persist/restore the active `spotify_visualizer.mode` while deliberately
+  excluding per-mode tuning/preset values. Slot load remains the fenced reconstruction boundary.
+- `tests/test_sphere_mode_integration.py` — 4.5 Deformation and 3.0 Size Response clamps/UI/persistence, +0.90 logical
+  size-pulse behavior, and persisted local-AA/cast-shadow controls.
+- `tests/test_qtquick_sphere_rendering.py` — shared body/effect surface anchors, attached bulge/neck/pinch-off source contract,
+  real Magma macro-fissure radial displacement, local AA, analytical shadow resource ownership, and extended negative-tail
+  radius safety without shrinking the accepted canonical Sphere. Real GL cells remain required.
+- `tests/test_qtquick_visualizer_reactivity_config_parity.py` — current immutable/config parity remains part of the Sphere
+  settings seam touched by this checkpoint.
+- `tests/test_qtquick_custom_layout_owner.py` — the deterministic discrete display-hop oracle now protects the floating
+  geometric-centre projection that removes the pre-existing even-sized `QRect.center()` 1px drift. Pointer drag transfer is
+  intentionally a separate path.
+
+Container validation for this checkpoint is source/static only: Python AST/compile and authored JSON are clean, and Sphere
+shader literals/contracts are structurally checked. This environment has no `PySide6`, so pytest collection of the focused
+Qt-bearing group stops at import and is **AWAITING PySide6/OpenGL VALIDATION**, not a test failure. In the target environment
+run the five files above (at minimum the named discrete-hop cell) and physically inspect attached Water/Magma liquid, Magma
+fissure depth, AA, lighting-derived shadow, extreme Sphere controls and layout-slot mode restoration.

@@ -46,6 +46,9 @@ SPHERE_DEFAULT_PARAMETERS = freeze_render_fields({
     "sphere_size_response": 1.5,
     "sphere_energy_curve": 0.60,
     "sphere_material_fx": 1.0,
+    "sphere_antialiasing": True,
+    "sphere_shadow_enabled": True,
+    "sphere_shadow_strength": 0.62,
 })
 _SPHERE_PARAMETER_KEYS = tuple(SPHERE_DEFAULT_PARAMETERS)
 
@@ -132,7 +135,7 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
             raise ValueError(f"invalid sphere material {material!r}")
         host._sphere_material = material
     if 'sphere_deformation' in kwargs:
-        host._sphere_deformation = _sphere_bounded(kwargs['sphere_deformation'], 0.0, 3.0, 'sphere_deformation')
+        host._sphere_deformation = _sphere_bounded(kwargs['sphere_deformation'], 0.0, 4.5, 'sphere_deformation')
     if 'sphere_rotation_speed' in kwargs:
         host._sphere_rotation_speed = _sphere_bounded(kwargs['sphere_rotation_speed'], 0.0, 2.0, 'sphere_rotation_speed')
     if 'sphere_gloss' in kwargs:
@@ -152,12 +155,17 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         ('sphere_bass_response', 2.0), ('sphere_mid_response', 2.0),
         ('sphere_high_response', 2.0), ('sphere_vocal_response', 3.0),
         ('sphere_bump_reactivity', 2.0),
-        ('sphere_size_response', 2.0),
+        ('sphere_size_response', 3.0),
+        ('sphere_shadow_strength', 1.0),
         ('sphere_energy_curve', 2.0),
         ('sphere_material_fx', 2.0),
     ):
         if key in kwargs:
             setattr(host, f"_{key}", _sphere_bounded(kwargs[key], 0.2 if key == "sphere_energy_curve" else 0.0, maximum, key))
+    if 'sphere_antialiasing' in kwargs:
+        host._sphere_antialiasing = bool(kwargs['sphere_antialiasing'])
+    if 'sphere_shadow_enabled' in kwargs:
+        host._sphere_shadow_enabled = bool(kwargs['sphere_shadow_enabled'])
     if any(key in kwargs for key in _SPHERE_PARAMETER_KEYS):
         host._sphere_parameters = freeze_render_fields({
             key: getattr(host, f"_{key}", SPHERE_DEFAULT_PARAMETERS[key])

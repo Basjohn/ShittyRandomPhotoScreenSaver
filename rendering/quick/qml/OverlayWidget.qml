@@ -23,6 +23,7 @@ Item {
     property bool widgetGlowOnClick: false
     property bool widgetGlowClicked: false
     property real widgetGlowIntensity: 1.0
+    property real widgetGlowDistance: 14.0
     property color widgetGlowColor: "transparent"
     opacity: fadeOpacity * startupRevealOpacity
     // Never clip the composed card/text shadows or their negative offsets.
@@ -204,6 +205,7 @@ Item {
                 hovered: interactionHover.hovered
                 clicked: overlayWidget.widgetGlowClicked
                 intensityScale: overlayWidget.widgetGlowIntensity
+                distancePx: overlayWidget.widgetGlowDistance
                 glowColor: overlayWidget.widgetGlowColor
                 cornerRadius: overlayWidget.interactionGlowCornerRadius
             }

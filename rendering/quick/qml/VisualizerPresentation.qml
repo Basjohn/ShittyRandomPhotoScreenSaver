@@ -22,6 +22,7 @@ Item {
     property bool widgetGlowOnClick: false
     property bool widgetGlowClicked: false
     property real widgetGlowIntensity: 1.0
+    property real widgetGlowDistance: 14.0
     property color widgetGlowColor: "transparent"
     property color cardShadowColor: "#96000000"
     property real cardShadowBlur: 18.0
@@ -58,6 +59,7 @@ Item {
             hovered: visualizerInteractionHover.hovered
             clicked: visualizerPresentationRoot.widgetGlowClicked
             intensityScale: visualizerPresentationRoot.widgetGlowIntensity
+            distancePx: visualizerPresentationRoot.widgetGlowDistance
             glowColor: visualizerPresentationRoot.widgetGlowColor
             cornerRadius: visualizerPresentationRoot.cardShellEnabled
                 ? visualizerPresentationRoot.cardCornerRadius : 4.0

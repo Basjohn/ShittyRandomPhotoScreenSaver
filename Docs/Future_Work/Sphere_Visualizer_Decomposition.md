@@ -102,36 +102,49 @@ Sphere consumes existing immutable bands, decaying transient envelopes and activ
 It receives no waveform, audio job or source subscription. Current playing source identity gates both bands
 and transients, including valid generation/activation zero. Stale or stopped sources cannot retain a size pulse.
 
-- Deformation (0..2) controls local musical displacement, independent of Idle Motion (0..1).
-- Bass/Mid/High Response (0..2 each) shape independent bands. Vocal Response (0..2, default 1.4) adds
+- Deformation (0..4.5, default 1.0) controls local musical displacement, independent of Idle Motion (0..1). The
+  accepted 0..3 domain keeps its complete authored positive/negative field. Only the *additional* 3..4.5 negative tail
+  is softened so the mesh cannot invert through its origin; the extra positive crest remains fully expressive.
+- Bass/Mid/High Response (0..2 each) shape independent bands. Vocal Response (0..3, default 1.4) adds
   broad low-order lobes from the established 0.62 mid / 0.38 high frequency blend; it does not isolate voices.
 - Energy Curve (0.2..2, default 0.60) makes ordinary low bands visible without flattening combined lobes.
-- Size Response (0..2, default 1.5) adds uniform whole-body breathing independently of Deformation.
-  Drive is the maximum of the existing decaying transient bands, 0.25 overall energy and 0.35 bass energy,
-  clamped to 0..1. Radius addition is `0.10 * size_response * drive ** energy_curve`, at most 0.20.
-  TransientBus already owns decay; the renderer adds no mutable filter or clock. Zero disables size response.
+- Size Response (0..3, default 1.5) adds uniform whole-body breathing independently of Deformation.
+  `SphereFrameRuntime` owns one bounded near-critical spring at the sole logical cadence. Its target is
+  `min(0.90, 0.30 * size_response * drive ** energy_curve)`, where drive is the maximum of the established
+  transient bands/onset, 0.25 overall energy and 0.35 bass energy. The renderer consumes only the immutable
+  `SphereFrame.size_pulse`; zero disables size response and no render-side filter/clock exists.
 - Bump Strength (0..2, default 1.15) controls base material relief. Bump Reactivity (0..2, default 0.65)
-  adds energy-driven relief without changing the silhouette; zero retains the configured base relief.
+  adds energy-driven relief without changing the broad silhouette; zero retains the configured base relief.
 - Material Effects (0..2) controls the bounded Magma/Water secondary geometry; zero omits its draws.
+- Anti-Aliasing is a persisted Sphere-local switch. It applies derivative-based filtering to the body/fissure/liquid
+  silhouettes and the analytical cast-shadow edge; it does not enable global multisampling.
+- Cast Shadow is independently persisted/enabled. Shadow Darkness is 0..1 (default 0.62). The shadow is one lazily
+  allocated analytical quad on the retained Visualizer plane, offset opposite the configured Sphere light direction.
+  It owns no FBO, texture, timer or cadence and retires through the same renderer resource fence.
 
-The vertex shader applies `1-exp(-2.8*pow(band, curve)*response)` per independent field. Absolute displacement
-coefficients sum to 0.27 before the 0..2 Deformation control, without clipping the combined moving field.
-Maximum radius is `1 + 0.20 + 0.10 + 2 * 0.27 = 1.84`. At camera distance 4.6 and 0.245 shorter-axis radius,
-its canonical 280px projection remains below 138px. This fixed reserve does not damp audio at extreme extents.
+The vertex shader applies `1-exp(-2.8*pow(band, curve)*response)` per independent field. The historical 0..3
+Deformation domain is preserved exactly. The new 3..4.5 extension keeps full positive crests but attenuates only its
+additional negative component to 25%; the explicit radius-safety oracle combines worst negative audio displacement,
+maximum idle contraction and maximum Magma fissure depth and proves the surface remains outside the origin. We do *not*
+shrink the accepted canonical Sphere merely to frame every simultaneous new positive maximum. Extreme CUSTOM extents
+still use the same 0.245 shorter-axis presentation metric and receive no viewport-dependent audio damping.
 
-Magma and Water lazily create a 320-triangle effect mesh once per GL context; Magma additionally creates one immutable
-six-vertex fire quad. Their positions are deterministic shader functions of `gl_InstanceID`, immutable energy and
-authored time. Magma has lit falling teardrops with a hot core, cooling skin and highlight; their standard alpha
-composition preserves finite-life and global fades while their visible front surface owns depth. A separate additive
-soft-alpha fire pass rises from the body. Water has rounded, irregular 3D blobs with shape-derived normals,
-Fresnel/specular light and a transmitted cyan tint. Each finite life fades to zero before its mathematical cycle wraps,
-so it retires and condenses without a visible teleport. Water has no pointed drip neck; Magma retains one. Water lanes are deliberately separated, then use ordinary alpha
-blending with no overlap-order claim; no live-background refraction is claimed. There is no texture, CPU particle state,
-per-frame upload, timer, worker or source subscription. Partial lazy effect allocation is discarded before a clean retry.
-Magma reuses its one fire quad for four filtered procedural smoke wisps and six ash/ember flakes, drawn with ordinary
-alpha blending before the additive flame pass. Closed lava and Water meshes retain back-face culling; only the
-camera-facing quad passes disable it. The renderer restores blend factors/enabled state, depth-write and cull state
-before returning.
+Magma and Water lazily create one 1,280-triangle effect mesh per GL context; Magma additionally creates one immutable
+six-vertex fire quad. Six fixed GPU instances derive lower-hemisphere anchors from the same deterministic object-space
+field as the body. Both effect and body shaders evaluate the same rotation/deformation `surface(anchor)` contract. During
+the attached phase the body develops a timed local bulge and the liquid mesh keeps a narrow cap embedded into that real
+rotating surface anchor; the hanging axis blends the outward normal toward gravity. A bounded pinch-off phase then opens
+a gap and the same fixed mesh falls under gravity. Water is rounder/more elastic; Magma is narrower/slower/more viscous.
+There are no artificial Water side lanes, CPU particle state, per-frame topology uploads, timers, workers or source
+subscriptions.
+
+Magma's large fissure network is now genuine radial vertex displacement, with the six lower-hemisphere drip vents folded
+into that same macro field. Fine branching remains derivative-filtered bump/emissive relief so mesh density need not rise
+again. Lava therefore originates from visibly recessed/bright vent regions rather than unrelated screen-space droplets.
+Magma retains its hot-core/cooling-skin liquid shading plus the one reused fire quad for bounded smoke/ash/flame passes.
+Water keeps Fresnel/specular/transmitted-cyan shading and ordinary alpha blending with no live-background refraction claim.
+Closed lava and Water meshes retain back-face culling; camera-facing atmospheric quad passes disable it. The renderer
+restores blend factors/enabled state, depth-write and cull state before returning.
 
 At FX=2, the final warm-cloud world-Y bound is 1.526, smoke 1.588 and ash 1.287. With camera-Z at
 most 0.42, their projected upper extent is at most 1.747 base-radius units; maximum projected lateral
@@ -171,7 +184,8 @@ unrelated existing targets remain red (see cleanup ledger); do not report the en
 - **Lifecycle/resource:** disabled old/default profiles import no Sphere runtime/builder/renderer; first enable resolves
   only Sphere; disable/mode switch/recreation retires its program/buffers; failure cleanup preserves recoverability.
 - **Geometry:** fixed pixel metric on both axes across wide/tall extents; whole-scale uniformity; viewport clipping;
-  no card fill/border/shadow. Preserve the five established modes' R-69/BTF behavior exactly.
+  no card fill/border ownership. Sphere may optionally cast its own lighting-derived analytical shadow onto that retained
+  plane; it is feature-local and not the shared widget-shadow system. Preserve the five established modes' R-69/BTF behavior exactly.
 - **Performance:** one body upload plus lazily bounded effect-mesh/fire-quad uploads per renderer/context lifetime,
   constant bounded uniform transport and no per-frame topology/upload/source jobs. Measure 1080p/4K/extents separately;
   callbacks are not physical cadence proof.
@@ -187,9 +201,11 @@ unrelated existing targets remain red (see cleanup ledger); do not report the en
 - [ ] Inspect real music response and the five material presets at representative display sizes.
 - [ ] Verify physical 60/165 Hz, mixed-DPR transfer and installed/frozen context recreation.
 
-## 2026-09-05 response-range follow-up
+## 2026-09-05 response/material follow-up
 
-Physical feedback accepts the new elastic/breathing whole-body size response as a major improvement. Preserve that logical
-clock-owned spring. Deformation and Vocal Response upper bounds are expanded from 2.0 to 3.0 (50%) while defaults and every
-other response bound remain unchanged. Vocal weighting remains the same bounded mid/high emphasis and shader output stays
-finite; this is expressive headroom, not a second analysis lane or cadence change.
+Physical feedback accepted the elastic/breathing whole-body size response as a major improvement. Preserve that logical
+clock-owned spring. Vocal Response remains expanded to 3.0. Checkpoint 2 subsequently extends Deformation from 3.0 to 4.5
+and Size Response from 2.0 to 3.0/+0.90 target ceiling, with unchanged defaults and no second analysis lane/cadence. It
+also adds persisted local AA and a lighting-opposed optional analytical shadow, gives Magma true macro-fissure geometry,
+and replaces detached/side-lane liquid staging with surface-owned bulge/neck/pinch-off/fall. Physical material appearance,
+shadow strength/direction, AA, new extreme ranges and attached-drip readability remain Awaiting Validation.

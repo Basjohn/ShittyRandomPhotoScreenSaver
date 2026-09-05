@@ -559,6 +559,12 @@ def test_bubble_layout_scales_uniformly_and_keeps_circle_radii_isotropic() -> No
     assert tall.trail_radial_scale < 1.0
     assert canonical.large_viewport_stroke_bonus_px == pytest.approx(0.0)
 
+    shader = Path("widgets/spotify_visualizer/shaders/bubble.frag").read_text(
+        encoding="utf-8"
+    )
+    assert "stroke - 0.5 / inner_h" in shader
+    assert "stroke - 0.5 * (1.0 + large_viewport_stroke_bonus_px)" not in shader
+
 
 def test_quick_bubble_registry_is_static_lazy_and_resource_dormant() -> None:
     from rendering.quick.visualizer.implementation_registry import (

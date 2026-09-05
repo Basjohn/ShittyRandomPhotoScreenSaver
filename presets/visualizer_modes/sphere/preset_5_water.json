@@ -10,7 +10,7 @@
     "sphere_specular": 1.35, "sphere_light_direction": "W",
     "sphere_idle_motion": 0.22, "sphere_surface_detail": 1.15,
     "sphere_bass_response": 1.20, "sphere_mid_response": 1.10,
-    "sphere_high_response": 1.20, "sphere_vocal_response": 1.70, "sphere_bump_reactivity": 0.75, "sphere_size_response": 1.70, "sphere_energy_curve": 0.55, "sphere_material_fx": 1.20,
+    "sphere_high_response": 1.20, "sphere_vocal_response": 1.70, "sphere_bump_reactivity": 0.75, "sphere_size_response": 1.70, "sphere_antialiasing": true, "sphere_shadow_enabled": true, "sphere_shadow_strength": 0.38, "sphere_energy_curve": 0.55, "sphere_material_fx": 1.20,
     "mode": "sphere"
   }}},
   "description": "Glossy water with flowing detail and gentle idle movement."

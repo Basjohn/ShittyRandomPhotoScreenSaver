@@ -39,6 +39,15 @@ def _coerce_widget_glow_intensity(value: Any) -> int:
         return 100
 
 
+def _coerce_widget_glow_distance(value: Any) -> int:
+    """Clamp the authored halo travel distance in retained-scene pixels."""
+
+    try:
+        return max(6, min(48, int(value)))
+    except (TypeError, ValueError, OverflowError):
+        return 14
+
+
 @dataclass
 class DisplaySettings:
     """Display-related settings."""
@@ -121,6 +130,7 @@ class InputSettings:
     widget_glow_on_hover: bool = False
     widget_glow_on_click: bool = False
     widget_glow_intensity: int = 100
+    widget_glow_distance: int = 14
     widget_glow_color: Optional[List[int]] = None
 
     @classmethod
@@ -138,6 +148,9 @@ class InputSettings:
             widget_glow_intensity=_coerce_widget_glow_intensity(
                 settings.get("input.widget_glow_intensity", 100)
             ),
+            widget_glow_distance=_coerce_widget_glow_distance(
+                settings.get("input.widget_glow_distance", 14)
+            ),
             widget_glow_color=_coerce_widget_glow_color(
                 settings.get("input.widget_glow_color", None)
             ),
@@ -151,6 +164,7 @@ class InputSettings:
             "input.widget_glow_on_hover": self.widget_glow_on_hover,
             "input.widget_glow_on_click": self.widget_glow_on_click,
             "input.widget_glow_intensity": self.widget_glow_intensity,
+            "input.widget_glow_distance": self.widget_glow_distance,
             "input.widget_glow_color": (
                 None
                 if self.widget_glow_color is None

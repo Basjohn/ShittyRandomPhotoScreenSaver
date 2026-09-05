@@ -15,7 +15,8 @@ from widgets.spotify_visualizer.render_state import SphereFrame
 from ..render_contract import QuickVisualizerRenderFrame
 
 
-# Reserve the canonical 280px height for every bounded deformation setting.
+# Preserve the accepted canonical Sphere size. Extended 4.5 deformation headroom is
+# radius-safe rather than globally fitted by shrinking the ordinary presentation.
 SPHERE_RADIUS_FRACTION = 0.245
 
 _MATERIAL_IDS = {"Chrome": 0, "Obsidian": 1, "Magma": 2, "Silver": 3, "Water": 4}
@@ -106,10 +107,51 @@ uniform vec3 uBandResponse;
 uniform float uEnergyCurve;
 uniform float uVocalResponse;
 uniform float uSizePulse;
+uniform float uSurfaceDetail;
+uniform float uMaterialFx;
 uniform int uMaterial;
 out vec3 vPosition;
 out vec3 vNormal;
 out vec3 vObjectPosition;
+
+float hash(float n) { return fract(sin(n * 91.17) * 43758.5453); }
+vec3 dripAnchor(float id) {
+    float angle = hash(id + 1.0) * 6.2831853;
+    float y = -mix(0.54, 0.82, hash(id + 9.0));
+    float ring = sqrt(max(0.0, 1.0 - y*y));
+    return normalize(vec3(cos(angle)*ring, y, sin(angle)*ring));
+}
+float macroFissureField(vec3 n) {
+    float line = abs(sin(5.15*n.x + 2.10*sin(3.2*n.z))
+                   + 0.72*sin(4.55*n.y - 1.75*sin(3.8*n.x)));
+    return 1.0 - smoothstep(0.075, 0.245, line);
+}
+float dripVentField(vec3 n) {
+    float field = 0.0;
+    for (int index = 0; index < 6; ++index) {
+        field = max(field, smoothstep(0.955, 0.995, dot(n, dripAnchor(float(index)))));
+    }
+    return field;
+}
+float dripBulgeField(vec3 n) {
+    if (uMaterial != 2 && uMaterial != 4) return 0.0;
+    bool magma = uMaterial == 2;
+    float bulge = 0.0;
+    for (int index = 0; index < 6; ++index) {
+        float id = float(index);
+        float speed = magma ? mix(0.105, 0.165, hash(id + 3.0))
+                            : mix(0.155, 0.245, hash(id + 3.0));
+        float phase = fract(uTime * speed + hash(id + 7.0));
+        float life = smoothstep(0.02, 0.12, phase)
+                   * (1.0 - smoothstep(0.86, 0.99, phase));
+        float detach = smoothstep(magma ? 0.56 : 0.46,
+                                  magma ? 0.70 : 0.60, phase);
+        float attached = 1.0 - detach;
+        float footprint = smoothstep(0.935, 0.995, dot(n, dripAnchor(id)));
+        bulge = max(bulge, footprint * life * attached);
+    }
+    return bulge * min(max(uMaterialFx, 0.0), 2.0);
+}
 
 vec3 surface(vec3 n) {
     float t = uTime * 0.7;
@@ -119,9 +161,6 @@ vec3 surface(vec3 n) {
                 * cos(3.0*n.z - 0.6*t);
     float ripples = sin(10.0*n.x - 2.0*t) * sin(9.0*n.y + 1.7*t)
                   * sin(8.0*n.z + t);
-    // Smooth band transfer keeps ordinary music visible and remains responsive
-    // at high settings. Never clamp the combined displacement: that clips the
-    // moving lobes into a constant radius during a strong bass passage.
     vec3 drive = pow(clamp(uEnergy, 0.0, 1.0), vec3(max(uEnergyCurve, 0.05)))
                  * max(uBandResponse, vec3(0.0));
     vec3 e = vec3(1.0) - exp(-2.8 * drive);
@@ -136,20 +175,33 @@ vec3 surface(vec3 n) {
         broad = sin(2.4*n.x + 0.8*t) * cos(3.0*n.y - 0.4*t);
     }
     float bassShape = 0.20 + 0.80 * broad;
-    // Match the existing visualizer vocal-range weighting. This is frequency
-    // emphasis, not a vocal-separation model or a second analysis lane.
     float vocalRange = dot(clamp(uEnergy.yz, 0.0, 1.0), vec2(0.62, 0.38));
     float vocal = 1.0 - exp(-2.8 * pow(vocalRange, max(uEnergyCurve, 0.05)) * uVocalResponse);
     float vocalShape = sin(2.6*n.y + 1.4*sin(2.2*n.x - 0.9*t))
                      * cos(2.0*n.z + 0.6*t);
-    // Each field and each band is independently bounded by one. Deformation is
-    // configuration-bounded to 3.0; even the strongest negative combined lobe
-    // keeps radius positive, while the enlarged upper range remains free to
-    // produce deliberately dramatic positive crests without renderer clipping.
     float driven = e.x * 0.100 * bassShape + e.y * 0.035 * lobes
                  + e.z * 0.025 * ripples + vocal * 0.110 * vocalShape;
-    float radius = 1.0 + uSizePulse + uIdleMotion * 0.10 * broad
-        + uDeformation * driven;
+
+    // Preserve the complete authored <=3.0 deformation domain. The new 3.0-
+    // 4.5 headroom keeps full positive crests, but only its additional negative
+    // tail is softened so the mesh cannot invert through the origin.
+    float deformDrive = uDeformation * driven;
+    if (uDeformation > 3.0 && driven < 0.0) {
+        deformDrive = 3.0 * driven + (uDeformation - 3.0) * driven * 0.25;
+    }
+    float radius = 1.0 + uSizePulse + uIdleMotion * 0.10 * broad + deformDrive;
+    // The body itself swells before a liquid mesh pinches off. This is what
+    // makes Water/Magma read as material leaving the Sphere instead of an
+    // unrelated particle intersecting it.
+    radius += (uMaterial == 2 ? 0.038 : (uMaterial == 4 ? 0.050 : 0.0))
+            * dripBulgeField(n);
+    if (uMaterial == 2) {
+        // Large Magma fissures are genuine geometry. Fine branching detail is
+        // still fragment bump relief, while drip vents deliberately deepen the
+        // same lower-hemisphere regions that spawn attached lava.
+        float fissure = max(macroFissureField(n), 0.72 * dripVentField(n));
+        radius -= 0.040 * min(uSurfaceDetail, 2.0) * fissure;
+    }
     return n * radius;
 }
 
@@ -174,8 +226,6 @@ void main() {
     vNormal = turn * normalize(cross(da, db));
     vPosition = turn * p;
     vObjectPosition = p;
-    // Real perspective with a common X/Y pixel metric. The homogeneous W
-    // also makes position/normal interpolation perspective-correct.
     float cameraW = (4.6 - vPosition.z) / 4.6;
     vec2 local = uGeometry.xy * cameraW
                + vec2(vPosition.x, -vPosition.y) * uGeometry.z;
@@ -194,70 +244,163 @@ uniform int uMaterial;
 uniform float uFx;
 uniform vec3 uLight;
 uniform float uFade;
+uniform float uDeformation;
+uniform float uIdleMotion;
+uniform float uRotationSpeed;
+uniform vec3 uBandResponse;
+uniform float uEnergyCurve;
+uniform float uVocalResponse;
+uniform float uSizePulse;
+uniform float uSurfaceDetail;
 out vec3 vPosition;
 out vec3 vNormal;
 out float vAlpha;
 out float vHeat;
 
 float hash(float n) { return fract(sin(n * 91.17) * 43758.5453); }
-vec3 teardropShape(vec3 n) {
-    // The narrow pole is the upper attachment. The weighted lower pole makes
-    // a falling drop bulbous below its neck, in y-up coordinates.
-    float bulb = 1.0 - smoothstep(-0.15, 0.72, n.y);
-    float neck = mix(0.34, 1.0, bulb);
-    return vec3(n.x * neck, n.y * (1.05 + 0.35 * bulb), n.z * neck);
+vec3 dripAnchor(float id) {
+    float angle = hash(id + 1.0) * 6.2831853;
+    float y = -mix(0.54, 0.82, hash(id + 9.0));
+    float ring = sqrt(max(0.0, 1.0 - y*y));
+    return normalize(vec3(cos(angle)*ring, y, sin(angle)*ring));
 }
-vec3 waterBlobShape(vec3 n, float id) {
-    // Water leaves the surface as a rounded, irregular liquid volume. Its
-    // low-order lobes avoid a pointed neck while retaining real 3D normals.
-    float lobe = 1.0 + 0.10*sin(3.0*n.x + 1.7*n.z + id*1.31)
-                 + 0.055*cos(4.0*n.y - 2.4*n.x + id*0.73);
-    return n * lobe;
+float macroFissureField(vec3 n) {
+    float line = abs(sin(5.15*n.x + 2.10*sin(3.2*n.z))
+                   + 0.72*sin(4.55*n.y - 1.75*sin(3.8*n.x)));
+    return 1.0 - smoothstep(0.075, 0.245, line);
+}
+float dripVentField(vec3 n) {
+    float field = 0.0;
+    for (int index = 0; index < 6; ++index) {
+        field = max(field, smoothstep(0.955, 0.995, dot(n, dripAnchor(float(index)))));
+    }
+    return field;
+}
+float dripBulgeField(vec3 n) {
+    bool magma = uMaterial == 2;
+    float bulge = 0.0;
+    for (int index = 0; index < 6; ++index) {
+        float id = float(index);
+        float speed = magma ? mix(0.105, 0.165, hash(id + 3.0))
+                            : mix(0.155, 0.245, hash(id + 3.0));
+        float phase = fract(uTime * speed + hash(id + 7.0));
+        float life = smoothstep(0.02, 0.12, phase)
+                   * (1.0 - smoothstep(0.86, 0.99, phase));
+        float detach = smoothstep(magma ? 0.56 : 0.46,
+                                  magma ? 0.70 : 0.60, phase);
+        float attached = 1.0 - detach;
+        float footprint = smoothstep(0.935, 0.995, dot(n, dripAnchor(id)));
+        bulge = max(bulge, footprint * life * attached);
+    }
+    return bulge * min(max(uFx, 0.0), 2.0);
+}
+vec3 surface(vec3 n) {
+    float t = uTime * 0.7;
+    float broad = sin(2.6*n.x + t) * cos(2.4*n.y - 0.7*t) * sin(2.1*n.z + 0.4*t);
+    float lobes = sin(3.2*n.x - 0.8*t) * sin(2.8*n.y + t) * cos(3.0*n.z - 0.6*t);
+    float ripples = sin(10.0*n.x - 2.0*t) * sin(9.0*n.y + 1.7*t) * sin(8.0*n.z + t);
+    vec3 drive = pow(clamp(uEnergy, 0.0, 1.0), vec3(max(uEnergyCurve, 0.05))) * max(uBandResponse, vec3(0.0));
+    vec3 e = vec3(1.0) - exp(-2.8 * drive);
+    if (uMaterial == 4) {
+        broad = sin(3.2*n.y + 1.4*sin(2.5*n.x - t)) * cos(2.0*n.z + 0.7*t);
+        lobes = 0.5*(sin(4.0*n.x + 2.0*n.z - t) + cos(4.0*n.y + 1.3*t));
+    } else if (uMaterial == 2) {
+        broad = sin(2.8*n.y + 0.9*sin(3.0*n.x + 0.5*t)) * cos(2.0*n.z - t);
+    }
+    float bassShape = 0.20 + 0.80 * broad;
+    float vocalRange = dot(clamp(uEnergy.yz, 0.0, 1.0), vec2(0.62, 0.38));
+    float vocal = 1.0 - exp(-2.8 * pow(vocalRange, max(uEnergyCurve, 0.05)) * uVocalResponse);
+    float vocalShape = sin(2.6*n.y + 1.4*sin(2.2*n.x - 0.9*t)) * cos(2.0*n.z + 0.6*t);
+    float driven = e.x * 0.100 * bassShape + e.y * 0.035 * lobes
+                 + e.z * 0.025 * ripples + vocal * 0.110 * vocalShape;
+    float deformDrive = uDeformation * driven;
+    if (uDeformation > 3.0 && driven < 0.0) {
+        deformDrive = 3.0 * driven + (uDeformation - 3.0) * driven * 0.25;
+    }
+    float radius = 1.0 + uSizePulse + uIdleMotion * 0.10 * broad + deformDrive;
+    radius += (uMaterial == 2 ? 0.038 : 0.050) * dripBulgeField(n);
+    if (uMaterial == 2) {
+        float fissure = max(macroFissureField(n), 0.72 * dripVentField(n));
+        radius -= 0.040 * min(uSurfaceDetail, 2.0) * fissure;
+    }
+    return n * radius;
+}
+mat3 rotation() {
+    vec3 angle = uTime * uRotationSpeed * vec3(0.27, 0.65, 0.31);
+    vec3 c = cos(angle), s = sin(angle);
+    mat3 rx = mat3(1,0,0, 0,c.x,s.x, 0,-s.x,c.x);
+    mat3 ry = mat3(c.y,0,-s.y, 0,1,0, s.y,0,c.y);
+    mat3 rz = mat3(c.z,s.z,0, -s.z,c.z,0, 0,0,1);
+    return rz * ry * rx;
+}
+vec3 liquidShape(vec3 n, float id, bool magma) {
+    // +Y is the embedded neck; -Y is the hanging bulb. Water keeps a rounder,
+    // slightly lobed body while Magma remains narrower and more viscous.
+    float bulb = 1.0 - smoothstep(-0.18, 0.76, n.y);
+    float neck = mix(magma ? 0.26 : 0.38, 1.0, bulb);
+    float lobe = magma ? 1.0 : 1.0 + 0.075*sin(3.0*n.x + 1.7*n.z + id*1.31);
+    return vec3(n.x * neck * lobe,
+                n.y * (1.02 + (magma ? 0.46 : 0.28) * bulb),
+                n.z * neck * lobe);
 }
 void main() {
     float id = float(gl_InstanceID);
-    float seed = hash(id + 1.0);
-    float a = seed * 6.2831853;
-    // A particle may wrap in mathematical time, but it is fully transparent
-    // at both ends of its finite life.  It therefore appears to condense from
-    // the skin and retire rather than teleporting across the viewport.
-    float phase = fract(uTime * mix(0.16, 0.28, hash(id + 3.0)) + hash(id + 7.0));
-    float life = smoothstep(0.05, 0.17, phase) * (1.0 - smoothstep(0.80, 0.98, phase));
     bool magma = uMaterial == 2;
+    float speed = magma ? mix(0.105, 0.165, hash(id + 3.0))
+                        : mix(0.155, 0.245, hash(id + 3.0));
+    float phase = fract(uTime * speed + hash(id + 7.0));
+    float life = smoothstep(0.02, 0.12, phase) * (1.0 - smoothstep(0.86, 0.99, phase));
+    float detach = smoothstep(magma ? 0.56 : 0.46, magma ? 0.70 : 0.60, phase);
+    float attached = 1.0 - detach;
     float reactive = pow(clamp(max(uEnergy.x, max(uEnergy.y, uEnergy.z)), 0.0, 1.0), 0.60);
-    float waterLane = mix(0.82, 1.04, hash(id + 11.0));
-    float side = magma ? mix(-0.72, 0.72, hash(id + 11.0))
-                       : (seed < 0.5 ? -waterLane : waterLane);
-    float wobble = sin(uTime * (1.1 + hash(id + 5.0)) + id) * 0.055;
-    // In y-up coordinates lava starts at the lower skin and falls. Water
-    // sheds from the upper skin and falls farther, with x-separated lanes so
-    // translucent drops do not rely on accidental depth ordering.
-    float startY = magma ? -0.52 + 0.08 * hash(id + 13.0) : 0.58 + 0.11 * hash(id + 13.0);
-    float fall = magma ? phase * 0.48 : phase * 1.32;
-    vec3 center = vec3(side + wobble, startY - fall, 0.42 + 0.16 * sin(a + uTime * 0.47));
-    float radius = mix(0.040, 0.078, hash(id + 19.0)) * (0.70 + 0.55 * reactive) * min(uFx, 2.0);
+
+    vec3 anchor = dripAnchor(id);
+    mat3 turn = rotation();
+    vec3 bodyPoint = turn * surface(anchor);
+    vec3 outward = normalize(turn * anchor);
+    float radius = mix(0.042, 0.074, hash(id + 19.0))
+                 * (0.72 + 0.52 * reactive) * min(uFx, 2.0);
+    float stretchPhase = smoothstep(0.08, magma ? 0.62 : 0.52, phase);
+    float stretch = mix(0.72, magma ? 2.55 : 1.85, stretchPhase);
+    vec3 scale = vec3(radius * (magma ? 0.70 : 0.92), radius * stretch,
+                      radius * (magma ? 0.70 : 0.92));
+
+    // Orient the neck back into its actual body anchor instead of keeping the
+    // teardrop world-axis aligned. The hanging axis blends the local surface
+    // normal toward gravity, so even lower-side anchors visibly remain joined.
+    vec3 gravity = vec3(0.0, -1.0, 0.0);
+    vec3 hang = normalize(mix(outward, gravity, magma ? 0.62 : 0.74));
+    vec3 neckAxis = -hang;
+    vec3 sideSeed = abs(neckAxis.z) < 0.82 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 xAxis = normalize(cross(sideSeed, neckAxis));
+    vec3 zAxis = normalize(cross(neckAxis, xAxis));
+
+    // During the attached phase, the bulb centre sits one stretched radius
+    // outside the surface while its narrow +Y cap overlaps the body bulge.
+    // Detachment then opens a gravity gap; the same fixed mesh continues down.
+    float fall = detach * detach * (magma ? 0.78 : 1.15);
+    vec3 center = bodyPoint + hang * scale.y * 0.92 + gravity * fall;
+    center.x += sin(uTime * (0.75 + hash(id + 5.0)) + id) * radius * 0.28 * detach;
+
     vec3 n = normalize(aDirection);
-    // Magma retains its attached teardrop neck; Water uses a distinct rounded
-    // irregular volume so detached liquid does not read as another drip.
-    vec3 particle = magma ? teardropShape(n) : waterBlobShape(n, id);
-    vec3 scale = magma ? vec3(radius * 0.72, radius * 1.30, radius * 0.72)
-                       : vec3(radius * 1.02, radius * 0.98, radius * 1.02);
-    vec3 p = center + particle * scale;
+    vec3 particle = liquidShape(n, id, magma);
+    vec3 p = center + xAxis * particle.x * scale.x
+                    + neckAxis * particle.y * scale.y
+                    + zAxis * particle.z * scale.z;
     float cameraW = (4.6 - p.z) / 4.6;
     vec2 local = uGeometry.xy * cameraW + vec2(p.x, -p.y) * uGeometry.z;
     gl_Position = uMatrix * vec4(local, 0.0, cameraW);
     gl_Position.z = (-p.z / 3.0) * gl_Position.w;
     vPosition = p;
-    // Both the non-affine lava neck and Water's lobed volume need normals
-    // from their real finite tangents rather than an ellipsoid shortcut.
+
     vec3 axis = abs(n.y) < 0.85 ? vec3(0,1,0) : vec3(1,0,0);
     vec3 tangent = normalize(cross(axis, n));
     vec3 bitangent = cross(n, tangent);
     vec3 na = normalize(n + 0.002*tangent), nb = normalize(n + 0.002*bitangent);
-    vec3 pa = magma ? teardropShape(na) : waterBlobShape(na, id);
-    vec3 pb = magma ? teardropShape(nb) : waterBlobShape(nb, id);
-    vec3 da = (pa - particle) * scale;
-    vec3 db = (pb - particle) * scale;
+    vec3 pa = liquidShape(na, id, magma), pb = liquidShape(nb, id, magma);
+    vec3 deltaA = pa - particle, deltaB = pb - particle;
+    vec3 da = xAxis * deltaA.x * scale.x + neckAxis * deltaA.y * scale.y + zAxis * deltaA.z * scale.z;
+    vec3 db = xAxis * deltaB.x * scale.x + neckAxis * deltaB.y * scale.y + zAxis * deltaB.z * scale.z;
     vNormal = normalize(cross(da, db));
     vAlpha = life * uFade;
     vHeat = reactive;
@@ -271,6 +414,7 @@ in float vAlpha;
 in float vHeat;
 uniform int uMaterial;
 uniform vec3 uLight;
+uniform int uAntialiasing;
 out vec4 fragColor;
 void main() {
     vec3 n = normalize(vNormal);
@@ -278,6 +422,12 @@ void main() {
     float diffuse = max(dot(n, uLight), 0.0);
     float fresnel = pow(1.0 - max(dot(n, view), 0.0), 4.0);
     float specular = pow(max(dot(n, normalize(view + uLight)), 0.0), 72.0);
+    float coverage = 1.0;
+    if (uAntialiasing != 0) {
+        float facing = max(dot(n, view), 0.0);
+        float edgeWidth = max(fwidth(facing) * 1.35, 0.006);
+        coverage = smoothstep(0.0, edgeWidth, facing);
+    }
     if (uMaterial == 2) {
         // Standard alpha compositing must receive the finite life/global fade;
         // otherwise an invisible newborn can still write depth as opaque lava.
@@ -290,13 +440,13 @@ void main() {
         vec3 core = mix(vec3(0.85, 0.055, 0.002), vec3(1.0, 0.56, 0.045), hotCore);
         vec3 color = skin * (0.18 + 0.72*diffuse) + core * (0.35 + hotCore*1.05)
                    + vec3(1.0, 0.62, 0.24) * specular * (0.32 + 0.48*hotCore);
-        fragColor = vec4(color, vAlpha);
+        fragColor = vec4(color, vAlpha * coverage);
     } else {
         vec3 transmitted = mix(vec3(0.006, 0.055, 0.09), vec3(0.05, 0.52, 0.68), 0.35 + 0.45*diffuse);
         vec3 color = transmitted * (0.55 + 0.65*diffuse)
                    + vec3(0.42, 0.91, 1.0) * fresnel
                    + vec3(0.95, 1.0, 1.0) * specular * 1.35;
-        fragColor = vec4(color, min(0.70, (0.22 + 0.42*fresnel) * vAlpha));
+        fragColor = vec4(color, min(0.70, (0.22 + 0.42*fresnel) * vAlpha) * coverage);
     }
 }
 """
@@ -406,6 +556,36 @@ void main() {
 }
 """
 
+_SHADOW_VERTEX_SOURCE = """#version 410 core
+layout(location = 0) in vec2 aCorner;
+uniform mat4 uMatrix;
+uniform vec3 uGeometry;
+uniform vec2 uOffset;
+out vec2 vUv;
+void main() {
+    vec2 local = uGeometry.xy + uOffset
+               + vec2(aCorner.x * 1.48, aCorner.y * 1.14) * uGeometry.z;
+    gl_Position = uMatrix * vec4(local, 0.0, 1.0);
+    vUv = aCorner;
+}
+"""
+
+_SHADOW_FRAGMENT_SOURCE = """#version 410 core
+in vec2 vUv;
+uniform float uStrength;
+uniform float uFade;
+uniform int uAntialiasing;
+out vec4 fragColor;
+void main() {
+    float radial = length(vec2(vUv.x * 0.86, vUv.y * 1.18));
+    float feather = uAntialiasing != 0 ? max(fwidth(radial) * 1.5, 0.008) : 0.002;
+    float body = 1.0 - smoothstep(0.18, 1.0 + feather, radial);
+    float alpha = body * uStrength * uFade;
+    if (alpha < 0.002) discard;
+    fragColor = vec4(0.0, 0.0, 0.0, alpha);
+}
+"""
+
 _FRAGMENT_SOURCE = """#version 410 core
 in vec3 vPosition;
 in vec3 vNormal;
@@ -420,7 +600,28 @@ uniform float uBumpReactivity;
 uniform vec3 uEnergy;
 uniform float uEnergyCurve;
 uniform float uTime;
+uniform int uAntialiasing;
 out vec4 fragColor;
+
+float hash(float n) { return fract(sin(n * 91.17) * 43758.5453); }
+vec3 dripAnchor(float id) {
+    float angle = hash(id + 1.0) * 6.2831853;
+    float y = -mix(0.54, 0.82, hash(id + 9.0));
+    float ring = sqrt(max(0.0, 1.0 - y*y));
+    return normalize(vec3(cos(angle)*ring, y, sin(angle)*ring));
+}
+float macroFissureField(vec3 n) {
+    float line = abs(sin(5.15*n.x + 2.10*sin(3.2*n.z))
+                   + 0.72*sin(4.55*n.y - 1.75*sin(3.8*n.x)));
+    return 1.0 - smoothstep(0.075, 0.245, line);
+}
+float dripVentField(vec3 n) {
+    float field = 0.0;
+    for (int index = 0; index < 6; ++index) {
+        field = max(field, smoothstep(0.955, 0.995, dot(n, dripAnchor(float(index)))));
+    }
+    return field;
+}
 
 float grain(vec3 p) {
     return sin(p.x + sin(1.17*p.y)) * sin(p.y + sin(0.83*p.z))
@@ -445,13 +646,17 @@ void main() {
     float footprint = max(length(dFdx(p)), length(dFdy(p)));
     float mediumGrain = filteredGrain(p, 36.0, footprint);
     float fineGrain = filteredGrain(p + vec3(0.3,1.7,2.1), 93.0, footprint);
+    vec3 direction = normalize(p);
     float cracks = abs(sin(9.0*p.x + 2.4*sin(5.0*p.z) + grain(p*7.0))
                      + sin(8.0*p.y - 1.8*sin(6.0*p.x)));
-    float crackAA = max(fwidth(cracks), 0.012);
+    float crackAA = uAntialiasing != 0 ? max(fwidth(cracks), 0.012) : 0.002;
     float crust = smoothstep(0.06-crackAA, 0.28+crackAA, cracks);
-    // Magma fissures are actual inward relief: the glowing crack field is
-    // negative height while the surrounding crust remains modestly raised.
-    float fissure = 1.0 - smoothstep(0.035-crackAA, 0.16+crackAA, cracks);
+    float fineFissure = 1.0 - smoothstep(0.035-crackAA, 0.16+crackAA, cracks);
+    float macroFissure = macroFissureField(direction);
+    float vent = dripVentField(direction);
+    // The macro network is already physical vertex displacement. Keep fragment
+    // relief/emission aligned to it and deepen the six actual lava outlets.
+    float fissure = max(fineFissure, max(macroFissure, 0.72*vent));
     float height, roughness;
     if (uMaterial == 0) {
         float brush = sin(410.0*p.y + 4.0*grain(p*14.0))
@@ -507,12 +712,13 @@ void main() {
         highlight *= 0.65;
     } else if (uMaterial == 2) {
         float flow = 0.65 + 0.35*grain(p*24.0 + vec3(0,uTime*1.8,0));
-        float fire = 1.0-crust;
-        float core = 1.0-smoothstep(0.015,0.075+crackAA,cracks);
-        float hotEdge = exp(-cracks*5.0);
+        float fire = max(1.0-crust, 0.72*macroFissure);
+        float core = max(1.0-smoothstep(0.015,0.075+crackAA,cracks), vent);
+        float hotEdge = max(exp(-cracks*5.0), 0.45*macroFissure);
         color = vec3(0.009,0.006,0.005) * (0.35+diffuse) * (0.75+0.25*mediumGrain)
               + fire*flow*vec3(3.0,0.35,0.004) + core*vec3(1.9,1.0,0.10)
               + hotEdge*vec3(0.16,0.009,0.001)
+              + vent*vec3(1.3,0.34,0.018)
               + studio*0.035*crust;
         highlight *= mix(0.8,0.08,crust);
     } else if (uMaterial == 4) {
@@ -533,6 +739,11 @@ void main() {
     }
     color += vec3(1.0,0.96,0.89)*highlight;
     color = pow(color / (vec3(1.0)+color), vec3(1.0/2.2));
+    if (uAntialiasing != 0) {
+        float facing = max(dot(normalize(vNormal), view), 0.0);
+        float edgeWidth = max(fwidth(facing) * 1.35, 0.006);
+        alpha *= smoothstep(0.0, edgeWidth, facing);
+    }
     fragColor = vec4(color, alpha);
 }
 """
@@ -548,6 +759,9 @@ class QuickSphereRenderer:
         self._effect_vao = self._effect_vbo = self._effect_vertex_count = 0
         self._fire_program = self._fire_vao = self._fire_vbo = 0
         self._fire_uniforms: dict[str, int] = {}
+        self._shadow_program = self._shadow_vao = self._shadow_vbo = 0
+        self._shadow_uniforms: dict[str, int] = {}
+        self._shadow_offset_signs = (1.0, 1.0)
         self._ready = False
         self._uniforms: dict[str, int] = {}
         self._parameters = None
@@ -558,7 +772,8 @@ class QuickSphereRenderer:
     def has_resources(self) -> bool:
         return bool(self._program or self._vao or self._vbo or self._effect_program
                     or self._effect_vao or self._effect_vbo or self._fire_program
-                    or self._fire_vao or self._fire_vbo)
+                    or self._fire_vao or self._fire_vbo or self._shadow_program
+                    or self._shadow_vao or self._shadow_vbo)
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         state = frame.snapshot.logical.mode_state
@@ -575,8 +790,11 @@ class QuickSphereRenderer:
             x, y = shadow_direction_signs(direction)
             length = math.sqrt(x*x + y*y + 2.25)
             self._light = (x / length, -y / length, 1.5 / length)
+            self._shadow_offset_signs = (-float(x), -float(y))
             self._material = _MATERIAL_IDS[material]
             self._parameters = parameters
+        if bool(parameters.get("sphere_shadow_enabled", True)) and float(parameters.get("sphere_shadow_strength", 0.62)) > 0.0:
+            self._render_shadow(frame, state)
         u = self._uniforms
         gl.glUseProgram(self._program)
         gl.glUniformMatrix4fv(u["uMatrix"], 1, False, frame.matrix_values)
@@ -609,6 +827,8 @@ class QuickSphereRenderer:
             gl.glUniform1f(u[uniform], float(parameters.get(key, default)))
         gl.glUniform3f(u["uLight"], *self._light)
         gl.glUniform1i(u["uMaterial"], self._material)
+        gl.glUniform1f(u["uMaterialFx"], max(0.0, min(2.0, float(parameters.get("sphere_material_fx", 1.0)))))
+        gl.glUniform1i(u["uAntialiasing"], 1 if bool(parameters.get("sphere_antialiasing", True)) else 0)
         p = frame.snapshot.presentation
         gl.glUniform1f(u["uFade"], p.scene_fade * p.content_fade)
         previous_function = int(gl.glGetIntegerv(gl.GL_DEPTH_FUNC))
@@ -641,7 +861,7 @@ class QuickSphereRenderer:
             if self._material in (_MATERIAL_IDS["Magma"], _MATERIAL_IDS["Water"]):
                 fx = max(0.0, min(2.0, float(parameters.get("sphere_material_fx", 1.0))))
                 if fx > 0.0:
-                    self._render_effects(frame, state.authored_time, energy, fx)
+                    self._render_effects(frame, state, energy, fx)
         finally:
             # The common host restores enable/write; these are Sphere-only state.
             gl.glDepthFunc(previous_function)
@@ -661,7 +881,7 @@ class QuickSphereRenderer:
         try:
             names = ("uMatrix", "uGeometry", "uTime", "uEnergy", "uDeformation",
                      "uIdleMotion", "uRotationSpeed", "uLight", "uGloss", "uSpecular",
-                     "uMaterial", "uFade", "uSurfaceDetail", "uBumpReactivity", "uBandResponse", "uEnergyCurve", "uVocalResponse", "uSizePulse")
+                     "uMaterial", "uFade", "uSurfaceDetail", "uMaterialFx", "uBumpReactivity", "uBandResponse", "uEnergyCurve", "uVocalResponse", "uSizePulse", "uAntialiasing")
             self._uniforms = {name: int(gl.glGetUniformLocation(self._program, name)) for name in names}
             missing = [name for name, location in self._uniforms.items() if location < 0]
             if missing:
@@ -681,6 +901,120 @@ class QuickSphereRenderer:
         except Exception:
             self.release_resources()
             raise
+
+    def _ensure_shadow_resources(self) -> None:
+        """Create the one-quad analytical cast-shadow resources lazily."""
+
+        if not self._shadow_program:
+            self._shadow_program = compile_program(
+                _SHADOW_VERTEX_SOURCE, _SHADOW_FRAGMENT_SOURCE, label="Quick Sphere shadow"
+            )
+            names = ("uMatrix", "uGeometry", "uOffset", "uStrength", "uFade", "uAntialiasing")
+            self._shadow_uniforms = {
+                name: int(gl.glGetUniformLocation(self._shadow_program, name))
+                for name in names
+            }
+            missing = [name for name, location in self._shadow_uniforms.items() if location < 0]
+            if missing:
+                raise RuntimeError("Quick Sphere shadow uniforms are incomplete: " + ", ".join(missing))
+        if not self._shadow_vao:
+            corners = np.array((
+                -1.0, -1.0,  1.0, -1.0,  1.0,  1.0,
+                -1.0, -1.0,  1.0,  1.0, -1.0,  1.0,
+            ), dtype=np.float32)
+            self._shadow_vao = int(gl.glGenVertexArrays(1))
+            self._shadow_vbo = int(gl.glGenBuffers(1))
+            if not self._shadow_vao or not self._shadow_vbo:
+                raise RuntimeError("Quick Sphere shadow mesh creation failed")
+            gl.glBindVertexArray(self._shadow_vao)
+            gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self._shadow_vbo)
+            gl.glBufferData(
+                gl.GL_ARRAY_BUFFER, len(corners) * corners.itemsize,
+                corners.tobytes(), gl.GL_STATIC_DRAW,
+            )
+            gl.glEnableVertexAttribArray(0)
+            gl.glVertexAttribPointer(0, 2, gl.GL_FLOAT, False, 8, ctypes.c_void_p(0))
+
+    def _render_shadow(self, frame: QuickVisualizerRenderFrame, state: SphereFrame) -> None:
+        """Cast one soft lighting-direction shadow onto the retained card plane."""
+
+        try:
+            self._ensure_shadow_resources()
+        except Exception:
+            # Shadow is optional presentation detail, but a partial allocation
+            # must never be silently retained as a false-ready resource graph.
+            for attribute, deleter in (
+                ("_shadow_vbo", lambda resource: gl.glDeleteBuffers(1, [resource])),
+                ("_shadow_vao", lambda resource: gl.glDeleteVertexArrays(1, [resource])),
+                ("_shadow_program", gl.glDeleteProgram),
+            ):
+                resource = getattr(self, attribute)
+                if resource:
+                    try:
+                        deleter(resource)
+                    finally:
+                        setattr(self, attribute, 0)
+            self._shadow_uniforms.clear()
+            raise
+
+        parameters = state.parameters
+        center_x, center_y, radius = sphere_pixel_geometry(frame.snapshot.presentation)
+        deformation = max(0.0, min(4.5, float(parameters.get("sphere_deformation", 1.0))))
+        body_scale = 1.0 + 0.55 * max(0.0, state.size_pulse) + 0.025 * deformation
+        shadow_radius = radius * body_scale
+        sign_x, sign_y = self._shadow_offset_signs
+        offset_x = sign_x * shadow_radius * 0.28
+        offset_y = sign_y * shadow_radius * 0.28
+        p = frame.snapshot.presentation
+
+        old_src_rgb = int(gl.glGetIntegerv(gl.GL_BLEND_SRC_RGB))
+        old_dst_rgb = int(gl.glGetIntegerv(gl.GL_BLEND_DST_RGB))
+        old_src_alpha = int(gl.glGetIntegerv(gl.GL_BLEND_SRC_ALPHA))
+        old_dst_alpha = int(gl.glGetIntegerv(gl.GL_BLEND_DST_ALPHA))
+        old_depth_write = bool(gl.glGetBooleanv(gl.GL_DEPTH_WRITEMASK))
+        old_blend_enabled = bool(gl.glIsEnabled(gl.GL_BLEND))
+        old_depth_enabled = bool(gl.glIsEnabled(gl.GL_DEPTH_TEST))
+        old_cull_enabled = bool(gl.glIsEnabled(gl.GL_CULL_FACE))
+        try:
+            gl.glUseProgram(self._shadow_program)
+            u = self._shadow_uniforms
+            gl.glUniformMatrix4fv(u["uMatrix"], 1, False, frame.matrix_values)
+            gl.glUniform3f(u["uGeometry"], center_x, center_y, shadow_radius)
+            gl.glUniform2f(u["uOffset"], offset_x, offset_y)
+            gl.glUniform1f(
+                u["uStrength"],
+                max(0.0, min(1.0, float(parameters.get("sphere_shadow_strength", 0.62)))),
+            )
+            gl.glUniform1f(u["uFade"], p.scene_fade * p.content_fade)
+            gl.glUniform1i(
+                u["uAntialiasing"],
+                1 if bool(parameters.get("sphere_antialiasing", True)) else 0,
+            )
+            gl.glEnable(gl.GL_BLEND)
+            gl.glBlendFuncSeparate(
+                gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA,
+                gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA,
+            )
+            gl.glDisable(gl.GL_DEPTH_TEST)
+            gl.glDisable(gl.GL_CULL_FACE)
+            gl.glDepthMask(gl.GL_FALSE)
+            gl.glBindVertexArray(self._shadow_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 6)
+        finally:
+            gl.glBlendFuncSeparate(old_src_rgb, old_dst_rgb, old_src_alpha, old_dst_alpha)
+            gl.glDepthMask(gl.GL_TRUE if old_depth_write else gl.GL_FALSE)
+            if old_blend_enabled:
+                gl.glEnable(gl.GL_BLEND)
+            else:
+                gl.glDisable(gl.GL_BLEND)
+            if old_depth_enabled:
+                gl.glEnable(gl.GL_DEPTH_TEST)
+            else:
+                gl.glDisable(gl.GL_DEPTH_TEST)
+            if old_cull_enabled:
+                gl.glEnable(gl.GL_CULL_FACE)
+            else:
+                gl.glDisable(gl.GL_CULL_FACE)
 
     def _discard_effect_resources(self) -> None:
         """Retire an incomplete lazy effect allocation before its next retry."""
@@ -711,15 +1045,18 @@ class QuickSphereRenderer:
         """Create effect-only immutable meshes lazily in the owning GL context."""
         if not self._effect_program:
             self._effect_program = compile_program(_EFFECT_VERTEX_SOURCE, _EFFECT_FRAGMENT_SOURCE, label="Quick Sphere effects")
-            names = ("uMatrix", "uGeometry", "uTime", "uEnergy", "uMaterial", "uFx", "uLight", "uFade")
+            names = ("uMatrix", "uGeometry", "uTime", "uEnergy", "uMaterial", "uFx", "uLight", "uFade",
+                     "uDeformation", "uIdleMotion", "uRotationSpeed", "uBandResponse",
+                     "uEnergyCurve", "uVocalResponse", "uSizePulse", "uSurfaceDetail",
+                     "uAntialiasing")
             self._effect_uniforms = {name: int(gl.glGetUniformLocation(self._effect_program, name)) for name in names}
             missing = [name for name, location in self._effect_uniforms.items() if location < 0]
             if missing:
                 raise RuntimeError("Quick Sphere effect uniforms are incomplete: " + ", ".join(missing))
         if not self._effect_vao:
-            # 320 triangles are smooth enough at FX=2 but are a bounded static
-            # cost, replacing eight copies of the 5,120-triangle body mesh.
-            mesh = build_sphere_mesh(2)
+            # 1,280 triangles keep attached necks and detached liquid silhouettes
+            # smooth at large CUSTOM scales while remaining a tiny fixed GPU cost.
+            mesh = build_sphere_mesh(3)
             self._effect_vertex_count = len(mesh) // 3
             self._effect_vao = int(gl.glGenVertexArrays(1))
             self._effect_vbo = int(gl.glGenBuffers(1))
@@ -751,8 +1088,10 @@ class QuickSphereRenderer:
             gl.glEnableVertexAttribArray(0)
             gl.glVertexAttribPointer(0, 2, gl.GL_FLOAT, False, 8, ctypes.c_void_p(0))
 
-    def _render_effects(self, frame: QuickVisualizerRenderFrame, authored_time: float, energy, fx: float) -> None:
-        """Draw finite falling drops and Magma's separate rising soft flames."""
+    def _render_effects(self, frame: QuickVisualizerRenderFrame, state: SphereFrame, energy, fx: float) -> None:
+        """Draw surface-owned attached/falling liquid and Magma's soft atmosphere."""
+        authored_time = state.authored_time
+        parameters = state.parameters
         try:
             self._ensure_effect_resources()
         except Exception:
@@ -770,6 +1109,20 @@ class QuickSphereRenderer:
         gl.glUniform1i(u["uMaterial"], self._material)
         gl.glUniform1f(u["uFx"], fx)
         gl.glUniform3f(u["uLight"], *self._light)
+        gl.glUniform1f(u["uDeformation"], float(parameters.get("sphere_deformation", 1.0)))
+        gl.glUniform1f(u["uIdleMotion"], float(parameters.get("sphere_idle_motion", 0.12)))
+        gl.glUniform1f(u["uRotationSpeed"], float(parameters.get("sphere_rotation_speed", 0.35)))
+        gl.glUniform3f(
+            u["uBandResponse"],
+            *(float(parameters.get(key, 1.0)) for key in (
+                "sphere_bass_response", "sphere_mid_response", "sphere_high_response"
+            )),
+        )
+        gl.glUniform1f(u["uEnergyCurve"], float(parameters.get("sphere_energy_curve", 0.60)))
+        gl.glUniform1f(u["uVocalResponse"], float(parameters.get("sphere_vocal_response", 1.4)))
+        gl.glUniform1f(u["uSizePulse"], state.size_pulse)
+        gl.glUniform1f(u["uSurfaceDetail"], float(parameters.get("sphere_surface_detail", 1.15)))
+        gl.glUniform1i(u["uAntialiasing"], 1 if bool(parameters.get("sphere_antialiasing", True)) else 0)
         p = frame.snapshot.presentation
         gl.glUniform1f(u["uFade"], p.scene_fade * p.content_fade)
         old_src_rgb, old_dst_rgb = int(gl.glGetIntegerv(gl.GL_BLEND_SRC_RGB)), int(gl.glGetIntegerv(gl.GL_BLEND_DST_RGB))
@@ -815,8 +1168,8 @@ class QuickSphereRenderer:
                 gl.glUniform1i(fu["uEffectPass"], 2)
                 gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, 6, 10)
             else:
-                # Water lanes are deliberately separated; standard alpha plus
-                # no depth writes preserves their translucent front surfaces.
+                # Water shares the body's real surface/deformation during its
+                # attached phase; no depth writes preserve translucent overlap.
                 gl.glEnable(gl.GL_CULL_FACE)
                 gl.glCullFace(gl.GL_BACK)
                 gl.glEnable(gl.GL_BLEND)
@@ -840,6 +1193,9 @@ class QuickSphereRenderer:
         self._ready = False
         errors = []
         for attribute, deleter in (
+            ("_shadow_vbo", lambda resource: gl.glDeleteBuffers(1, [resource])),
+            ("_shadow_vao", lambda resource: gl.glDeleteVertexArrays(1, [resource])),
+            ("_shadow_program", gl.glDeleteProgram),
             ("_fire_vbo", lambda resource: gl.glDeleteBuffers(1, [resource])),
             ("_fire_vao", lambda resource: gl.glDeleteVertexArrays(1, [resource])),
             ("_fire_program", gl.glDeleteProgram),
@@ -862,6 +1218,7 @@ class QuickSphereRenderer:
             self._uniforms.clear()
             self._effect_uniforms.clear()
             self._fire_uniforms.clear()
+            self._shadow_uniforms.clear()
             self._vertex_count = 0
             self._effect_vertex_count = 0
         if errors:

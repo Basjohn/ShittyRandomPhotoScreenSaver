@@ -218,6 +218,7 @@ class RetainedOverlayWidget:
             item.setProperty("widgetGlowOnHover", input_state.widget_glow_on_hover)
             item.setProperty("widgetGlowOnClick", input_state.widget_glow_on_click)
             item.setProperty("widgetGlowIntensity", input_state.widget_glow_intensity)
+            item.setProperty("widgetGlowDistance", input_state.widget_glow_distance)
             item.setProperty("widgetGlowColor", QColor(*input_state.widget_glow_color))
             item.setProperty("widgetGlowAdmitted", admitted)
             if not admitted or not input_state.widget_glow_on_click:

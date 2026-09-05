@@ -56,11 +56,15 @@ def test_input_options_are_event_cached_idempotent_and_closed_at_retirement(qt_a
     controller = QuickInputController(screen_index=0, runtime_generation=0)
     changes = []
     controller.input_state_changed.connect(changes.append)
-    options = dict(on_hover=True, on_click=False, intensity=0.42, color=(7, 33, 98, 128))
+    options = dict(
+        on_hover=True, on_click=False, intensity=0.42, distance=31.0,
+        color=(7, 33, 98, 128),
+    )
     assert controller.configure_widget_glow(**options)
     assert not controller.configure_widget_glow(**options)
     assert len(changes) == 1
     assert controller.input_state.widget_glow_intensity == pytest.approx(0.42)
+    assert controller.input_state.widget_glow_distance == pytest.approx(31.0)
     assert controller.input_state.widget_glow_color == (7, 33, 98, 128)
     controller.close_input()
     assert not controller.configure_widget_glow(**options)
@@ -208,5 +212,10 @@ def test_glow_projects_visualizer_frame_and_shell_less_digital_clock_bounds():
     assert "interactionGlowWidth" in clock and "digitalFace.preferredContentWidth" in clock
     assert "property real interactionGlowWidth" in overlay
     assert "hovered ? 0.80 : 0.0" in glow
+    assert "property real distancePx: 14.0" in glow
+    assert "distancePx / 12.0" in glow
+    assert "width / glow.distanceScale" in glow
+    assert "widgetGlowDistance" in visualizer and "distancePx:" in visualizer
+    assert "widgetGlowDistance" in overlay and "distancePx:" in overlay
     # Stronger 100% uses the same baked shader twice; no extra clock or capture.
     assert glow.count('fragmentShader: "shaders/widget_glow.frag.qsb"') == 2

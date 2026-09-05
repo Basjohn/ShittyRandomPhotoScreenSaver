@@ -59,13 +59,14 @@ def test_sphere_curated_presets_load_and_custom_restore_owns_all_surface_fields(
 def test_sphere_config_round_trips_and_applies_at_logical_owner():
     settings = SpotifyVisualizerSettings.from_mapping({
         "mode": "sphere", "enabled_modes": ["sphere"], "preset_sphere": 5, "sphere_material": "Magma",
-        "sphere_deformation": 3.0, "sphere_rotation_speed": .5, "sphere_gloss": .2,
+        "sphere_deformation": 4.5, "sphere_rotation_speed": .5, "sphere_gloss": .2,
         "sphere_specular": 1.6, "sphere_light_direction": "se", "sphere_idle_motion": .3,
         "sphere_surface_detail": 0.0, "sphere_bump_reactivity": .9, "sphere_size_response": 1.7, "sphere_bass_response": 1.7,
         "sphere_mid_response": .8, "sphere_high_response": .4,
         "sphere_vocal_response": 1.75, "sphere_energy_curve": .55, "sphere_material_fx": 1.3,
+        "sphere_antialiasing": False, "sphere_shadow_enabled": True, "sphere_shadow_strength": .73,
     })
-    assert settings.sphere_deformation == 3.0
+    assert settings.sphere_deformation == 4.5
     serialized = settings.to_dict()
     assert serialized["widgets.spotify_visualizer.sphere_material"] == "Magma"
     assert serialized["widgets.spotify_visualizer.sphere_surface_detail"] == 0.0
@@ -73,17 +74,23 @@ def test_sphere_config_round_trips_and_applies_at_logical_owner():
     assert serialized["widgets.spotify_visualizer.sphere_size_response"] == 1.7
     assert serialized["widgets.spotify_visualizer.sphere_vocal_response"] == 1.75
     assert serialized["widgets.spotify_visualizer.sphere_energy_curve"] == .55
+    assert serialized["widgets.spotify_visualizer.sphere_antialiasing"] is False
+    assert serialized["widgets.spotify_visualizer.sphere_shadow_enabled"] is True
+    assert serialized["widgets.spotify_visualizer.sphere_shadow_strength"] == .73
 
     class Host: pass
     host = Host()
     apply_logical_vis_mode_kwargs(host, settings.__dict__)
-    assert (host._sphere_material, host._sphere_deformation, host._sphere_light_direction) == ("Magma", 3.0, "SE")
+    assert (host._sphere_material, host._sphere_deformation, host._sphere_light_direction) == ("Magma", 4.5, "SE")
     assert host._sphere_parameters["sphere_surface_detail"] == 0.0
     assert host._sphere_parameters["sphere_bump_reactivity"] == .9
     assert host._sphere_parameters["sphere_size_response"] == 1.7
     assert host._sphere_parameters["sphere_bass_response"] == 1.7
     assert host._sphere_parameters["sphere_vocal_response"] == 1.75
     assert host._sphere_parameters["sphere_material_fx"] == 1.3
+    assert host._sphere_parameters["sphere_antialiasing"] is False
+    assert host._sphere_parameters["sphere_shadow_enabled"] is True
+    assert host._sphere_parameters["sphere_shadow_strength"] == .73
 
 
 def test_sphere_response_controls_are_frozen_bounded_and_default_dormant():
@@ -94,25 +101,34 @@ def test_sphere_response_controls_are_frozen_bounded_and_default_dormant():
     assert SPHERE_DEFAULT_PARAMETERS["sphere_vocal_response"] == 1.4
     assert SPHERE_DEFAULT_PARAMETERS["sphere_bump_reactivity"] == .65
     assert SPHERE_DEFAULT_PARAMETERS["sphere_size_response"] == 1.5
+    assert SPHERE_DEFAULT_PARAMETERS["sphere_antialiasing"] is True
+    assert SPHERE_DEFAULT_PARAMETERS["sphere_shadow_enabled"] is True
+    assert SPHERE_DEFAULT_PARAMETERS["sphere_shadow_strength"] == .62
     host = SimpleNamespace()
     apply_logical_vis_mode_kwargs(host, {
-        "sphere_deformation": 0.0,
+        "sphere_deformation": 9.0,
         "sphere_bass_response": 3.0,
         "sphere_mid_response": -1.0,
         "sphere_high_response": .75,
         "sphere_vocal_response": 3.0,
         "sphere_bump_reactivity": 3.0,
-        "sphere_size_response": 3.0,
+        "sphere_size_response": 9.0,
+        "sphere_shadow_strength": 9.0,
+        "sphere_antialiasing": False,
+        "sphere_shadow_enabled": False,
         "sphere_energy_curve": .55,
         "sphere_material_fx": 0.0,
     })
-    assert host._sphere_deformation == 0.0
+    assert host._sphere_deformation == 4.5
     assert host._sphere_parameters["sphere_bass_response"] == 2.0
     assert host._sphere_parameters["sphere_mid_response"] == 0.0
     assert host._sphere_parameters["sphere_high_response"] == .75
     assert host._sphere_parameters["sphere_vocal_response"] == 3.0
     assert host._sphere_parameters["sphere_bump_reactivity"] == 2.0
-    assert host._sphere_parameters["sphere_size_response"] == 2.0
+    assert host._sphere_parameters["sphere_size_response"] == 3.0
+    assert host._sphere_parameters["sphere_shadow_strength"] == 1.0
+    assert host._sphere_parameters["sphere_antialiasing"] is False
+    assert host._sphere_parameters["sphere_shadow_enabled"] is False
     assert host._sphere_parameters["sphere_energy_curve"] == .55
     assert host._sphere_parameters["sphere_material_fx"] == 0.0
     apply_logical_vis_mode_kwargs(host, {"sphere_vocal_response": -1.0, "sphere_bump_reactivity": -1.0, "sphere_size_response": -1.0})
@@ -160,7 +176,7 @@ def test_sphere_size_response_is_smooth_elastic_and_materially_larger_at_high_se
     class Host: pass
     host = Host()
     apply_logical_vis_mode_kwargs(host, {
-        "sphere_size_response": 2.0,
+        "sphere_size_response": 3.0,
         "sphere_energy_curve": 0.60,
     })
     first = runtime.resolve(
@@ -179,11 +195,12 @@ def test_sphere_size_response_is_smooth_elastic_and_materially_larger_at_high_se
         assert frame is not None
         samples.append(frame.size_pulse)
     # The first logical step cannot snap anywhere near the final growth, while
-    # a sustained strong transient may breathe out to roughly +60% radius.
+    # a sustained strong transient may breathe out to roughly +90% radius at
+    # the new 3.0 maximum (50% more headroom than the former +60% ceiling).
     assert 0.0 < samples[0] < 0.05
     assert samples[20] < samples[60]
-    assert samples[-1] > 0.50
-    assert max(samples) <= 0.72
+    assert samples[-1] > 0.78
+    assert max(samples) <= 0.90
 
     quiet = VisualizerTransientState()
     release = []
@@ -279,11 +296,17 @@ def test_sphere_settings_body_is_lazy_and_persists_when_explicitly_enabled(qt_ap
         tab._select_mode_page("sphere")
         assert tab._vis_body_host.is_constructed("sphere")
         tab.sphere_material.setCurrentText("Water")
+        assert tab.sphere_deformation.maximum() == 450
+        assert tab.sphere_size_response.maximum() == 300
+        tab.sphere_deformation.setValue(425)
+        tab.sphere_size_response.setValue(285)
+        tab.sphere_antialiasing.setChecked(False)
+        tab.sphere_shadow_enabled.setChecked(True)
+        tab.sphere_shadow_strength.setValue(74)
         tab.sphere_gloss.setValue(40)
         tab.sphere_bass_response.setValue(165)
         tab.sphere_vocal_response.setValue(175)
         tab.sphere_bump_reactivity.setValue(85)
-        tab.sphere_size_response.setValue(170)
         tab.sphere_energy_curve.setValue(55)
         tab.sphere_material_fx.setValue(120)
         tab._save_settings_now()
@@ -293,7 +316,11 @@ def test_sphere_settings_body_is_lazy_and_persists_when_explicitly_enabled(qt_ap
         assert saved["sphere_bass_response"] == 1.65
         assert saved["sphere_vocal_response"] == 1.75
         assert saved["sphere_bump_reactivity"] == .85
-        assert saved["sphere_size_response"] == 1.7
+        assert saved["sphere_deformation"] == 4.25
+        assert saved["sphere_size_response"] == 2.85
+        assert saved["sphere_antialiasing"] is False
+        assert saved["sphere_shadow_enabled"] is True
+        assert saved["sphere_shadow_strength"] == .74
         assert saved["sphere_energy_curve"] == .55
         assert saved["sphere_material_fx"] == 1.2
         assert "sphere" in saved["enabled_modes"]
