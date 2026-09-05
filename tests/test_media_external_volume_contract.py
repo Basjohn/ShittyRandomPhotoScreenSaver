@@ -60,7 +60,7 @@ def test_visualizer_volume_wheel_is_event_only_and_custom_gated() -> None:
 
 def test_media_settings_expose_collapsed_header_seek_and_volume_buckets() -> None:
     source = _text("ui/tabs/widgets_tab_media.py")
-    for label in ("Header Appearance", "Seek Bar", "Volume Control"):
+    for label in ("Appearance", "Seek Bar", "Volume Control"):
         assert f'"{label}"' in source
     for attr in (
         "media_volume_track_color_btn",

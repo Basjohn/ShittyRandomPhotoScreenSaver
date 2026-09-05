@@ -213,8 +213,14 @@ class TestWidgetsTab:
             assert saved["playback_progress_glow_enabled"] is True
             assert saved["playback_progress_glow_color"] == [45, 180, 255, 160]
 
+            # Seek-bar styling is gated on the progress toggle ONLY; it is
+            # intentionally independent of "Show Transport Controls" (the Seek Bar
+            # bucket is a separate concern), so hiding controls must not disable
+            # the progress toggle.
             tab.media_show_controls.setChecked(False)
-            assert tab.media_playback_progress_enabled.isEnabled() is False
+            assert tab.media_playback_progress_enabled.isEnabled() is True
+            # Turning the progress bar itself off disables its styling container.
+            tab.media_playback_progress_enabled.setChecked(False)
             assert tab._media_progress_options_container.isEnabled() is False
         finally:
             tab.deleteLater()
@@ -1390,7 +1396,7 @@ def test_widget_bucket_state_roundtrip(qt_app, settings_manager):
     try:
         checks = (
             (tab._clock_controls_container, "Time Content", "clock", "time"),
-            (tab._media_controls_container, "Transport & Volume", "media", "controls"),
+            (tab._media_controls_container, "Transport Controls", "media", "controls"),
             (tab._reddit_controls_container, "Reddit 1", "reddit", "reddit1"),
             (tab._reddit_controls_container, "Reddit 2", "reddit", "secondary"),
         )
@@ -1407,7 +1413,7 @@ def test_widget_bucket_state_roundtrip(qt_app, settings_manager):
     try:
         checks = (
             (reloaded._clock_controls_container, "Time Content", "clock", "time"),
-            (reloaded._media_controls_container, "Transport & Volume", "media", "controls"),
+            (reloaded._media_controls_container, "Transport Controls", "media", "controls"),
             (reloaded._reddit_controls_container, "Reddit 1", "reddit", "reddit1"),
             (reloaded._reddit_controls_container, "Reddit 2", "reddit", "secondary"),
         )

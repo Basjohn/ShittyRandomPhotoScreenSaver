@@ -38,8 +38,8 @@ def test_reddit_age_column_aligns_first_value_digit_and_fixed_ago_suffix() -> No
     assert "anchors.left: parent.left" in reddit
     assert "anchors.right: parent.right" in reddit
     # Keep the AGO suffixes mutually aligned while nudging the whole suffix
-    # column three pixels left from the age-field edge.
-    assert "anchors.rightMargin: 3.0" in reddit
+    # column left from the age-field edge (17 px after the +14 px column shift).
+    assert "anchors.rightMargin: 17.0" in reddit
     assert "anchors.leftMargin: 4.0" in reddit
 
 

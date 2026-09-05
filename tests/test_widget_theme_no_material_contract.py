@@ -98,7 +98,9 @@ def test_style_overrides_keep_colours_and_border_width_but_no_surface_style() ->
 
 def test_widget_mirrors_are_strict_colour_only_v3_with_clean_names_and_filenames() -> None:
     paths = tuple((ROOT / "themes" / "widgets").glob("*.srwtheme"))
-    assert len(paths) == 58
+    # One colour-only widget mirror per Settings theme (curation-count agnostic).
+    settings_theme_count = len(tuple((ROOT / "themes").glob("*.srtheme")))
+    assert len(paths) == settings_theme_count
     for path in paths:
         payload = json.loads(path.read_text(encoding="utf-8"))
         assert payload["schema_version"] == 3, path.name
