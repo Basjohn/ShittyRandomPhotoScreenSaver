@@ -396,7 +396,10 @@ void main() {
         
         // Operator adjustment: one logical pixel less across the complete
         // outline (half on each side), retaining subpixel coverage at tiny sizes.
-        stroke = max(0.3 * px, stroke - 0.5 / inner_h);
+        // Extreme main heads receive one further pixel of reduction through the
+        // existing visible-area ramp; Ghost and canonical widths stay separate.
+        stroke = max(0.3 * px,
+            stroke - 0.5 * (1.0 + large_viewport_stroke_bonus_px) / inner_h);
 
         // --- Tiny bubble shortcut (< ~4px radius) ---
         float tiny_threshold = 4.0 * px;

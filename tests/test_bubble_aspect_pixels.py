@@ -22,6 +22,7 @@ from widgets.spotify_visualizer.render_state import (
 _WIDTHS = (140, 280, 420, 630, 1260)
 _HEIGHTS = (140, 280, 420, 630, 1260)
 _EQUAL_AREA_SHAPES = ((140, 840), (280, 420), (420, 280), (600, 196), (840, 140), (1200, 98))
+_LARGE_OUTLINE_SHAPES = ((2520, 420), (420, 2520))
 
 
 def _presentation(
@@ -182,8 +183,8 @@ def _real_gl(qt_app):
         surface.destroy()
         pytest.skip("offscreen OpenGL context unavailable")
 
-    max_width = max(_WIDTHS)
-    max_height = max(_HEIGHTS)
+    max_width = max(max(_WIDTHS), *(width for width, _ in _LARGE_OUTLINE_SHAPES))
+    max_height = max(max(_HEIGHTS), *(height for _, height in _LARGE_OUTLINE_SHAPES))
     fbo = color = depth = 0
     host = QuickVisualizerRenderHost()
     try:
@@ -226,6 +227,7 @@ def _real_gl(qt_app):
         assert gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) == gl.GL_FRAMEBUFFER_COMPLETE
 
         def render(snapshot, width: int, height: int):
+            assert width <= max_width and height <= max_height
             return _render(host, gl, snapshot, width, height, _matrix(width, height))
 
         yield gl, render
@@ -369,8 +371,16 @@ def test_real_gl_bubble_outline_tracks_visible_size_and_not_extent_encoding(_rea
     assert widths[0] < widths[1] < widths[2], widths
     assert 0.45 <= widths[0] <= 0.85, widths
     assert 0.8 <= widths[1] <= 1.15, widths
-    assert 9.0 <= widths[2] <= 10.5, widths
+    assert 8.8 <= widths[2] <= 9.3, widths
     assert widths[2] > widths[1] * 2.5, widths
+
+    # The extra one-pixel thinning follows visible area through wide and tall
+    # edits, rather than whichever edge happens to have grown the most.
+    for width, height in _LARGE_OUTLINE_SHAPES:
+        image = render(_snapshot(_presentation(width, height), radius=0.08, overrides=style), width, height)
+        row = height // 2
+        outline_width = sum(image[(row * width + x) * 4] / 255 for x in range(width // 2, width))
+        assert abs(outline_width - widths[2]) < 0.1
 
     ordinary = _presentation(420, 280)
     huge_extent = resolve_visualizer_presentation(
