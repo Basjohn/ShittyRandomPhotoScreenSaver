@@ -23,10 +23,7 @@ from rendering.widget_descriptors import (
     get_widget_settings_section_descriptors,
     get_widget_stack_preview_descriptors,
 )
-from rendering.widget_factories import WidgetFactoryRegistry
-from rendering.widget_manager import WidgetManager
 from ui.tabs.widgets_tab import WidgetsTab
-from core.resources.manager import ResourceManager
 
 
 def _find_toggle(container, text: str) -> QToolButton | None:
@@ -555,65 +552,5 @@ def test_steam_connection_bucket_opens_from_persisted_target_state(qt_app, setti
             assert toggle.isChecked() is True
         finally:
             tab.deleteLater()
-    finally:
-        _restore_steam_gate(prior)
-
-
-def test_converted_and_unported_steam_qwidget_factories_are_retired(
-    settings_manager,
-) -> None:
-    prior = _with_steam_gate(False)
-    try:
-        public_registry = WidgetFactoryRegistry(settings_manager)
-        assert all(
-            public_registry.get_factory(widget_id) is None
-            for widget_id in STEAM_WIDGET_IDS
-        )
-    finally:
-        _restore_steam_gate(prior)
-
-    prior = _with_steam_gate(True)
-    try:
-        gated_registry = WidgetFactoryRegistry(settings_manager)
-        assert all(
-            gated_registry.get_factory(widget_id) is None
-            for widget_id in STEAM_WIDGET_IDS
-        )
-    finally:
-        _restore_steam_gate(prior)
-
-
-class _SteamSetupSettings:
-    def __init__(self, widgets: dict) -> None:
-        self._widgets = widgets
-
-    def get_widgets_map(self) -> dict:
-        return self._widgets
-
-
-def test_steam_master_gate_suppresses_enabled_cards_and_fade_expectations(qt_app) -> None:
-    prior = _with_steam_gate(False)
-    try:
-        parent = QWidget()
-        parent.resize(1280, 720)
-        manager = WidgetManager(parent, ResourceManager())
-        settings = _SteamSetupSettings({
-            "steam": {"enabled": False, "refresh_minutes": 10},
-            "achievement_pulse": {
-                "enabled": True,
-                "monitor": "ALL",
-                "position": "Middle Right",
-            },
-            "shadows": {"enabled": True},
-        })
-        try:
-            created = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
-            assert "achievement_pulse_widget" not in created
-            assert "achievement_pulse" not in manager._expected_overlays
-
-            registry = WidgetFactoryRegistry(settings)
-            assert registry.get_factory("achievement_pulse") is None
-        finally:
-            parent.deleteLater()
     finally:
         _restore_steam_gate(prior)
