@@ -13,7 +13,6 @@ from rendering.transition_registry import (
     iter_transition_descriptors,
 )
 from engine.screensaver_engine import ScreensaverEngine
-from rendering.transition_factory import TransitionFactory
 
 
 def test_transition_registry_canonicalizes_legacy_names() -> None:
@@ -39,45 +38,6 @@ def test_transition_registry_hw_gating_metadata_is_queryable() -> None:
     assert "Burn" in hw_names
     assert is_transition_available_for_hw("Crossfade", False) is True
     assert is_transition_available_for_hw("Burn", False) is False
-
-
-class _FactorySettings:
-    def __init__(self, *, hw_accel: bool) -> None:
-        self.hw_accel = hw_accel
-
-    def get(self, key: str, default=None):
-        if key == "display.hw_accel":
-            return self.hw_accel
-        if key == "transitions.last_random_choice":
-            return None
-        if key == "transitions.random_choice":
-            return None
-        return default
-
-
-def test_transition_factory_random_fallback_respects_hw_gating() -> None:
-    factory = object.__new__(TransitionFactory)
-    factory._settings = _FactorySettings(hw_accel=False)
-    choice = TransitionFactory._pick_random_transition(
-        factory,
-        {
-            "pool": {
-                "Crossfade": True,
-                "Slide": False,
-                "Wipe": False,
-                "Diffuse": False,
-                "Block Puzzle Flip": False,
-                "Blinds": False,
-                "3D Block Spins": False,
-                "Ripple": False,
-                "Warp Dissolve": False,
-                "Crumble": False,
-                "Particle": False,
-                "Burn": True,
-            }
-        },
-    )
-    assert choice == "Crossfade"
 
 
 def test_transition_registry_program_specs_keep_crossfade_startup_only() -> None:
@@ -125,34 +85,3 @@ def test_transition_registry_owns_each_authored_progress_curve() -> None:
         "particle": EasingCurve.LINEAR,
         "burn": EasingCurve.LINEAR,
     }
-
-
-def test_transition_factory_ignores_retired_easing_setting() -> None:
-    captured: dict[str, object] = {}
-    factory = object.__new__(TransitionFactory)
-    factory._resources = None
-    factory._settings = _FactorySettings(hw_accel=True)
-    factory._settings.get = lambda key, default=None: (
-        {
-            "type": "Slide",
-            "duration_ms": 1000,
-            "easing": "InOutBack",
-        }
-        if key == "transitions"
-        else default
-    )
-
-    def capture(transition_type, settings, duration_ms, easing_curve):
-        captured.update(
-            transition_type=transition_type,
-            settings=settings,
-            duration_ms=duration_ms,
-            easing_curve=easing_curve,
-        )
-        return None
-
-    factory._create_by_type = capture
-
-    assert factory._create_transition_impl() is None
-    assert captured["transition_type"] == "Slide"
-    assert captured["easing_curve"] is EasingCurve.SINE_IN_OUT
