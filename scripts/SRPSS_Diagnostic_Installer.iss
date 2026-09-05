@@ -6,7 +6,7 @@
 [Setup]
 AppId={{9E730AA6-0FF0-4EF5-AE55-7D88956F32DE}
 AppName=SRPSS Diagnostic
-AppVersion=4.7.2
+AppVersion=5.0.0
 AppPublisher=Jayde Ver Elst
 DefaultDirName={localappdata}\SRPSS Diagnostic
 DefaultGroupName=SRPSS Diagnostic
@@ -21,12 +21,13 @@ ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS_Diagnostic.exe
 WizardSmallImageFile=..\images\LogoBMP.bmp
-VersionInfoVersion=4.7.2
+VersionInfoVersion=5.0.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
+Name: "resetsettings"; Description: "Revert Settings To Defaults"; GroupDescription: "Settings:"; Flags: unchecked
 Name: "desktop"; Description: "Create a Desktop shortcut"; GroupDescription: "Additional options:"; Flags: unchecked
 Name: "runafter"; Description: "Run the diagnostic runtime after install"; GroupDescription: "Post-install option:"; Flags: unchecked
 
@@ -42,6 +43,11 @@ Name: "{userdesktop}\SRPSS Diagnostic"; Filename: "{app}\SRPSS_Diagnostic.exe"; 
 
 [Run]
 Filename: "{app}\SRPSS_Diagnostic.exe"; Parameters: "/s"; Description: "Run SRPSS Diagnostic"; Flags: nowait postinstall skipifsilent; Tasks: runafter
+
+[InstallDelete]
+; Diagnostic deliberately consumes the ordinary SRPSS user settings profile so
+; a diagnostic build exercises the same configuration as the screensaver.
+Type: files; Name: "{userappdata}\SRPSS\settings_v2.json"; Tasks: resetsettings
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"

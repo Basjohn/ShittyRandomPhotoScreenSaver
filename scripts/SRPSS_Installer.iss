@@ -11,7 +11,7 @@
 [Setup]
 AppId={{D8A5B7C8-9F9B-4F0D-9C5A-0F2F6A1E7C11}
 AppName=ShittyRandomPhotoScreenSaver
-AppVersion=4.7.2
+AppVersion=5.0.0
 AppPublisher=Jayde Ver Elst
 DefaultDirName={commonpf}\SRPSS
 DefaultGroupName=ShittyRandomPhotoScreenSaver
@@ -26,10 +26,13 @@ ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
 WizardSmallImageFile=..\images\LogoBMP.bmp
-VersionInfoVersion=4.7.2
+VersionInfoVersion=5.0.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "resetsettings"; Description: "Revert Settings To Defaults"; GroupDescription: "Settings:"; Flags: unchecked
 
 [Files]
 ; Main screensaver from the canonical release payload.
@@ -52,6 +55,7 @@ Source: ".\..\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\prese
 ; Curated Settings + Widget themes share one ProgramData root.
 Source: ".\..\themes\*"; DestDir: "{commonappdata}\SRPSS\themes"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: ".\..\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
+Source: ".\..\resources\jedimodeyall.mp3"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 
 [Dirs]
 ; Keep normal inherited ProgramData ACLs. Add only the ordinary rights each
@@ -66,6 +70,10 @@ Name: "{commonappdata}\SRPSS\logs"; Permissions: users-modify
 Name: "{commonappdata}\SRPSS\helper_signals"; Permissions: users-modify
 
 [InstallDelete]
+; Optional clean-settings install. Delete only the canonical user settings snapshot;
+; caches, credentials, themes, presets, and other state remain untouched.
+Type: files; Name: "{userappdata}\SRPSS\settings_v2.json"; Tasks: resetsettings
+
 ; Remove legacy screen saver binaries.
 Type: files; Name: "{sys}\\Sprss.scr"
 Type: files; Name: "{sys}\\PSrpss.scr"
@@ -76,6 +84,7 @@ Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\themes"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\helper"
 Type: files; Name: "{commonappdata}\SRPSS\sounds\tutuogg.ogg"
+Type: files; Name: "{commonappdata}\SRPSS\sounds\jedimodeyall.mp3"
 
 [Registry]
 ; Set SRPSS.scr as the current user's active screensaver.

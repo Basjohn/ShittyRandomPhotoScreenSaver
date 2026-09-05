@@ -218,11 +218,34 @@ if (-not (Test-Path -LiteralPath $BuildLayoutScript -PathType Leaf)) {
 foreach ($RequiredBuildCommand in @(
     'Reset-SRPSSBuildDirectory',
     'Remove-SRPSSBuildDirectory',
-    'Publish-SRPSSDirectory'
+    'Publish-SRPSSDirectory',
+    'Assert-SRPSSSourceProductAssets',
+    'Assert-SRPSSPythonRuntimeDependencies',
+    'Assert-SRPSSOnedirQuickPayload',
+    'Assert-SRPSSOnedirVisualizerShaders'
 )) {
     if (-not (Get-Command $RequiredBuildCommand -CommandType Function -ErrorAction SilentlyContinue)) {
         throw "Shared build layout did not load required function: $RequiredBuildCommand"
     }
+}
+
+try {
+    $SourceAssetSummary = Assert-SRPSSSourceProductAssets -RepoRoot $Root
+    Write-Host (
+        "[BUILD] Source product assets: Settings themes={0}, Widget themes={1}, Visualizer presets={2}, Quick payload files={3}" -f `
+            $SourceAssetSummary.SettingsThemes, `
+            $SourceAssetSummary.WidgetThemes, `
+            $SourceAssetSummary.VisualizerPresets, `
+            $SourceAssetSummary.QuickPayloadFiles
+    )
+} catch {
+    throw "Product asset preflight failed: $($_.Exception.Message)"
+}
+
+try {
+    Assert-SRPSSPythonRuntimeDependencies -PythonExe $VenvPython
+} catch {
+    throw "Runtime dependency preflight failed: $($_.Exception.Message)"
 }
 
 Reset-SRPSSBuildDirectory -Path $BuildDir -BuildRoot $BuildRoot | Out-Null
@@ -293,6 +316,7 @@ $argsList = @(
     "--include-data-dir=themes=themes",
     "--include-data-dir=images=images",
     "--include-data-files=resources/tutuogg.ogg=resources/tutuogg.ogg",
+    "--include-data-files=resources/jedimodeyall.mp3=resources/jedimodeyall.mp3",
     "--include-data-dir=widgets/spotify_visualizer/shaders=widgets/spotify_visualizer/shaders",
     "--include-data-dir=rendering/quick/qml=rendering/quick/qml",
     "--include-package=rendering.quick",
@@ -301,6 +325,7 @@ $argsList = @(
     "--include-package=widgets.spotify_visualizer.renderers",
     "--include-package=rendering.gl_programs",
     "--include-package=rendering.gl_compositor_pkg",
+    "--include-package=OpenGL",
     "--include-package=pyaudiowpatch",
     "--include-package=sounddevice",
     "--include-qt-plugins=multimedia",
@@ -379,16 +404,22 @@ if (-not $Exe) {
     exit 1
 }
 
-# Validate the onedir payload against the current source shader set.
+# Validate the onedir payload against the current source Quick/QML and shader sets.
 try {
+    $PackagedQuickPayload = @(
+        Assert-SRPSSOnedirQuickPayload `
+            -RepoRoot $Root `
+            -DistributionRoot $Exe.DirectoryName
+    )
     $PackagedShaders = @(
         Assert-SRPSSOnedirVisualizerShaders `
             -RepoRoot $Root `
             -DistributionRoot $Exe.DirectoryName
     )
+    Write-Host "[BUILD-VENV] Qt Quick/QML payload present in onedir output: $($PackagedQuickPayload.Count) files"
     Write-Host "[BUILD-VENV] Visualizer shaders present in onedir payload: $($PackagedShaders -join ', ')"
 } catch {
-    Write-Host "[BUILD-VENV] Shader payload validation failed - $($_.Exception.Message)"
+    Write-Host "[BUILD-VENV] Quick/shader payload validation failed - $($_.Exception.Message)"
     exit 1
 }
 

@@ -25,6 +25,8 @@ Item {
     property real widgetGlowIntensity: 1.0
     property real widgetGlowDistance: 14.0
     property color widgetGlowColor: "transparent"
+    property bool widgetGlowJediMode: false
+    signal jediModeRequested(string trigger)
     opacity: fadeOpacity * startupRevealOpacity
     // Never clip the composed card/text shadows or their negative offsets.
     clip: false
@@ -215,8 +217,17 @@ Item {
         // input owner, so feedback never competes with family MouseAreas.
         HoverHandler {
             id: interactionHover
-            enabled: interactionGlowLoader.active && overlayWidget.widgetGlowOnHover
+            enabled: overlayWidget.widgetGlowOnHover
+                && (interactionGlowLoader.active
+                    || (overlayWidget.widgetGlowJediMode
+                        && overlayWidget.widgetGlowAdmitted
+                        && overlayWidget.visible))
             blocking: false
+            onHoveredChanged: {
+                if (hovered && overlayWidget.widgetGlowJediMode
+                        && overlayWidget.widgetGlowAdmitted)
+                    overlayWidget.jediModeRequested("hover")
+            }
         }
 
         OverlayCard {

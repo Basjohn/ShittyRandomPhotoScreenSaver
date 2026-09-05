@@ -60,6 +60,47 @@ def compute_quick_devcurve_layout(
     )
 
 
+
+
+def _smoothstep01(value: float) -> float:
+    x = max(0.0, min(1.0, float(value)))
+    return x * x * (3.0 - 2.0 * x)
+
+
+def devcurve_outline_extra_total_px(layout: QuickDevCurveLayout) -> float:
+    """Return the bounded viewport-derived *total* line-width addition.
+
+    DevCurve's persisted outline widths remain authored normalized values.  The
+    Quick migration had left them visually a little light, and pure CUSTOM
+    viewport expansion intentionally preserves authored pixel scale.  Add one
+    logical pixel at every size, then ease in at most two more pixels as either
+    viewport axis grows from canonical to 3x.  Uniform whole-card scaling is
+    already handled by the authored width and does not enter this viewport ramp.
+    """
+
+    x_extent = 1.0 / max(float(layout.normalized_x_scale), 1e-6)
+    y_extent = 1.0 / max(float(layout.normalized_y_scale), 1e-6)
+    viewport_extent = max(x_extent, y_extent)
+    ramp = _smoothstep01((viewport_extent - 1.0) / 2.0)
+    return 1.0 + 2.0 * ramp
+
+
+def devcurve_outline_half_width(
+    authored_width: float,
+    layout: QuickDevCurveLayout,
+) -> float:
+    """Resolve authored outline half-width plus the small Quick pixel boost."""
+
+    base = max(0.0004, min(0.015, float(authored_width))) * float(
+        layout.normalized_y_scale
+    )
+    content_height = max(1.0, float(layout.content_rect[3]))
+    extra_half_normalized = (devcurve_outline_extra_total_px(layout) * 0.5) / (
+        content_height
+    )
+    return base + extra_half_normalized
+
+
 def _curve_mapping(
     values: Sequence[tuple[str, Sequence[object]]],
 ) -> dict[str, tuple[float, ...]]:
@@ -220,20 +261,16 @@ class QuickDevCurveRenderer:
             )
             gl.glUniform1f(
                 uniforms[f"u_devcurve_layer_{name}_outline_width"],
-                max(
-                    0.0004,
-                    min(
-                        0.015,
-                        float(
-                            parameter(
-                                parameters,
-                                f"devcurve_layer_{name}_outline_width",
-                                0.006,
-                            )
-                        ),
+                devcurve_outline_half_width(
+                    float(
+                        parameter(
+                            parameters,
+                            f"devcurve_layer_{name}_outline_width",
+                            0.006,
+                        )
                     ),
-                )
-                * layout.normalized_y_scale,
+                    layout,
+                ),
             )
             gl.glUniform1i(
                 uniforms[f"u_devcurve_layer_{name}_enabled"],

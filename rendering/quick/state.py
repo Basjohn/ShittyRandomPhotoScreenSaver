@@ -47,6 +47,7 @@ class QuickInputState:
     widget_glow_intensity: float = 1.0
     widget_glow_distance: float = 14.0
     widget_glow_color: tuple[int, int, int, int] = (0, 0, 0, 0)
+    widget_glow_jedi_mode: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)

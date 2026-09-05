@@ -99,6 +99,7 @@ class DisplayManager(QObject):
     settings_requested = Signal()  # S key - open settings
     # The exact DisplayManager identity is a pointer-width Python integer.
     custom_layout_reload_requested = Signal(str, int, object)
+    jedi_mode_requested = Signal(str, str)
     
     def __init__(
         self,
@@ -603,6 +604,7 @@ class DisplayManager(QObject):
             intensity=input_options.widget_glow_intensity / 100.0,
             distance=float(input_options.widget_glow_distance),
             color=resolve_widget_glow_color(input_options.widget_glow_color),
+            jedi_mode=input_options.widget_glow_jedi_mode,
         )
 
         # The retained context menu is a runtime-scene overlay, so its shadow
@@ -1146,6 +1148,9 @@ class DisplayManager(QObject):
         )
         runtime.custom_layout_cancel_requested.connect(
             self.cancel_custom_layout_session
+        )
+        runtime.scene_controller.jedi_mode_requested.connect(
+            self.jedi_mode_requested.emit
         )
         runtime.transition_finalized.connect(
             lambda completion, display=unit: self._on_quick_transition_finalized(

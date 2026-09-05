@@ -10,8 +10,11 @@ from typing import Dict, List
 
 
 DEVCURVE_SAMPLE_COUNT = 96
-DEVCURVE_FOREGROUND_ACTIVE_TRAVEL_RATE = 0.23 / 1.35
-DEVCURVE_SPECULAR_ACTIVE_TRAVEL_RATE = DEVCURVE_FOREGROUND_ACTIVE_TRAVEL_RATE
+# Material/specular highlights should travel continuously.  Audio owns the
+# shape/amplitude reaction; it may only breathe this cruise rate gently.
+DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE = 0.23 / 1.35
+DEVCURVE_MATERIAL_TRAVEL_VARIATION = 0.10
+DEVCURVE_MATERIAL_TRAVEL_SMOOTH_TAU_S = 0.35
 _LAYER_ORDER = ("bass", "vocals", "mids", "transients")
 _LAYER_INDEX = {name: idx for idx, name in enumerate(_LAYER_ORDER)}
 
@@ -157,15 +160,35 @@ def _update_specular_streams(
     dt: float,
     curve: List[float],
     energy_drive: float,
-    idle_speed: float,
 ) -> List[List[float]]:
     _ensure_specular_streams(state)
     slots: List[List[float]] = []
-    idle_rate = _clamp(float(idle_speed), 0.0, 2.0) * 0.28 / 2.0
+
+    # Before the Quick migration closeout this path accidentally treated audio
+    # energy as a material-travel throttle: shipped presets could swing from
+    # about 0.014 to 0.170 units/s (~12x) and visibly lurch/stop.  Travel is a
+    # continuous authored motion; strong reaction belongs in curve shape, fill,
+    # transients and highlights.  Energy therefore nudges the cruise rate only
+    # +/-10%, and the rate itself is time-smoothed before integration.
     active_mix = _smoothstep(_clamp(energy_drive / 0.35, 0.0, 1.0))
-    material_rate = idle_rate + (DEVCURVE_SPECULAR_ACTIVE_TRAVEL_RATE - idle_rate) * active_mix
+    variation = DEVCURVE_MATERIAL_TRAVEL_VARIATION
+    target_rate = DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE * (
+        (1.0 - variation) + (2.0 * variation) * active_mix
+    )
+    previous_rate = float(state.specular_travel_rate)
+    if previous_rate <= 0.0:
+        material_rate = target_rate
+    else:
+        alpha = 1.0 - math.exp(
+            -dt / max(DEVCURVE_MATERIAL_TRAVEL_SMOOTH_TAU_S, 1e-6)
+        )
+        material_rate = previous_rate + (target_rate - previous_rate) * alpha
+
     state.foreground_travel_rate = material_rate
     state.specular_travel_rate = material_rate
+    state.foreground_travel_pos = (
+        float(state.foreground_travel_pos) + dt * material_rate
+    ) % 1.0
     for idx, stream in enumerate(state.specular_streams):
         x = float(stream.get("x", 1.0))
         strength = float(stream.get("strength", 0.75))
@@ -206,6 +229,7 @@ class DevCurveRuntimeState:
     active_amplitude: float = 0.0
     idle_amplitude: float = 0.0
     foreground_travel_rate: float = 0.0
+    foreground_travel_pos: float = 0.0
     specular_travel_rate: float = 0.0
     specular_streams: List[Dict[str, float]] = field(
         default_factory=lambda: [
@@ -386,7 +410,6 @@ def solve_devcurve_frame(
             dt=dt,
             curve=curve,
             energy_drive=energy_drive,
-            idle_speed=idle_speed,
         )
 
     return {
@@ -400,7 +423,7 @@ def solve_devcurve_frame(
         "active_amplitude": state.active_amplitude,
         "idle_amplitude": state.idle_amplitude,
         "foreground_travel_rate": state.foreground_travel_rate,
-        "foreground_travel_pos": math.fmod(max(0.0, float(now_ts)) * state.foreground_travel_rate, 1.0),
+        "foreground_travel_pos": state.foreground_travel_pos,
         "specular_travel_rate": state.specular_travel_rate,
         "energies": dict(state.smooth_energy),
     }

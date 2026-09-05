@@ -32,7 +32,8 @@
         "widget_glow_on_click": false,
         "widget_glow_on_hover": false,
         "widget_glow_intensity": 100,
-        "widget_glow_distance": 14
+        "widget_glow_distance": 14,
+        "widget_glow_jedi_mode": false
     },
     "mc": {},
     "queue": {

@@ -221,3 +221,214 @@ function Assert-SRPSSOnedirVisualizerShaders {
 
     return $shaderNames
 }
+
+function Get-SRPSSQuickPayloadRelativePaths {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot
+    )
+
+    $qmlSource = Join-Path $RepoRoot 'rendering\quick\qml'
+    if (-not (Test-Path -LiteralPath $qmlSource -PathType Container)) {
+        throw "Qt Quick QML source directory does not exist: $qmlSource"
+    }
+
+    $requiredRelativePaths = @(
+        'DisplayScene.qml',
+        'VisualizerPresentation.qml',
+        'WidgetInteractionGlow.qml',
+        'shaders\widget_glow.frag.qsb'
+    )
+    foreach ($relativePath in $requiredRelativePaths) {
+        if (-not (Test-Path -LiteralPath (Join-Path $qmlSource $relativePath) -PathType Leaf)) {
+            throw "Qt Quick QML payload is missing required file: $relativePath"
+        }
+    }
+
+    return @(
+        Get-ChildItem -LiteralPath $qmlSource -Recurse -File |
+            ForEach-Object {
+                $_.FullName.Substring($qmlSource.Length + 1)
+            } |
+            Sort-Object
+    )
+}
+
+function Assert-SRPSSSourceProductAssets {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot
+    )
+
+    $requiredFiles = @(
+        'SRPSS.ico',
+        'images\LogoBMP.bmp',
+        'resources\tutuogg.ogg',
+        'resources\jedimodeyall.mp3',
+        'rendering\quick\qml\DisplayScene.qml',
+        'rendering\quick\qml\VisualizerPresentation.qml',
+        'rendering\quick\qml\WidgetInteractionGlow.qml',
+        'rendering\quick\qml\shaders\widget_glow.frag.qsb'
+    )
+    foreach ($relativePath in $requiredFiles) {
+        $candidate = Join-Path $RepoRoot $relativePath
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            throw "Required product asset is missing: $candidate"
+        }
+    }
+
+    $requiredDirectories = @(
+        'presets\visualizer_modes',
+        'themes',
+        'themes\widgets',
+        'widgets\spotify_visualizer\shaders'
+    )
+    foreach ($relativePath in $requiredDirectories) {
+        $candidate = Join-Path $RepoRoot $relativePath
+        if (-not (Test-Path -LiteralPath $candidate -PathType Container)) {
+            throw "Required product asset directory is missing: $candidate"
+        }
+    }
+
+    $settingsThemes = @(
+        Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'themes') -Filter '*.srtheme' -File -ErrorAction SilentlyContinue
+    )
+    $widgetThemes = @(
+        Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'themes\widgets') -Filter '*.srwtheme' -File -ErrorAction SilentlyContinue
+    )
+    $visualizerPresets = @(
+        Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'presets\visualizer_modes') -Filter '*.json' -File -Recurse -ErrorAction SilentlyContinue
+    )
+    if ($settingsThemes.Count -eq 0) {
+        throw 'No shipped Settings .srtheme files were found under themes.'
+    }
+    if ($widgetThemes.Count -eq 0) {
+        throw 'No shipped Widget .srwtheme files were found under themes\widgets.'
+    }
+    if ($visualizerPresets.Count -eq 0) {
+        throw 'No shipped visualizer preset JSON files were found.'
+    }
+
+    return [pscustomobject]@{
+        SettingsThemes = $settingsThemes.Count
+        WidgetThemes = $widgetThemes.Count
+        VisualizerPresets = $visualizerPresets.Count
+        QuickPayloadFiles = @(Get-SRPSSQuickPayloadRelativePaths -RepoRoot $RepoRoot).Count
+    }
+}
+
+function Assert-SRPSSOnefileQuickPayloadContract {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][object[]]$NuitkaArguments
+    )
+
+    $requiredArguments = @(
+        '--include-data-dir=rendering/quick/qml=rendering/quick/qml',
+        '--include-data-files=resources/tutuogg.ogg=resources/tutuogg.ogg',
+        '--include-data-files=resources/jedimodeyall.mp3=resources/jedimodeyall.mp3',
+        '--include-package=rendering.quick',
+        '--include-package=widgets.spotify_visualizer',
+        '--include-package=widgets.spotify_visualizer.renderers',
+        '--include-package=rendering.gl_programs',
+        '--include-package=rendering.gl_compositor_pkg',
+        '--include-package=OpenGL',
+        '--include-package=pyaudiowpatch',
+        '--include-package=sounddevice',
+        '--include-qt-plugins=qml',
+        '--include-qt-plugins=multimedia',
+        '--include-module=PySide6.QtQuick',
+        '--include-module=PySide6.QtQml',
+        '--include-module=PySide6.QtMultimedia'
+    )
+    foreach ($argument in $requiredArguments) {
+        if ($NuitkaArguments -notcontains $argument) {
+            throw "Onefile build is missing required Qt Quick/runtime declaration: $argument"
+        }
+    }
+
+    return @(Get-SRPSSQuickPayloadRelativePaths -RepoRoot $RepoRoot)
+}
+
+function Assert-SRPSSOnedirQuickPayload {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$DistributionRoot
+    )
+
+    $relativePaths = @(Get-SRPSSQuickPayloadRelativePaths -RepoRoot $RepoRoot)
+    $qmlDestination = Join-Path $DistributionRoot 'rendering\quick\qml'
+    $missing = @(
+        $relativePaths | Where-Object {
+            -not (Test-Path -LiteralPath (Join-Path $qmlDestination $_) -PathType Leaf)
+        }
+    )
+    if ($missing.Count -gt 0) {
+        throw "Onedir payload is missing Qt Quick/QML data: $($missing -join ', ')"
+    }
+
+    $requiredProductFiles = @(
+        'resources\tutuogg.ogg',
+        'resources\jedimodeyall.mp3'
+    )
+    foreach ($relativePath in $requiredProductFiles) {
+        if (-not (Test-Path -LiteralPath (Join-Path $DistributionRoot $relativePath) -PathType Leaf)) {
+            throw "Onedir payload is missing required product file: $relativePath"
+        }
+    }
+    $requiredProductDirectories = @(
+        'themes',
+        'themes\widgets',
+        'presets\visualizer_modes',
+        'widgets\spotify_visualizer\shaders'
+    )
+    foreach ($relativePath in $requiredProductDirectories) {
+        if (-not (Test-Path -LiteralPath (Join-Path $DistributionRoot $relativePath) -PathType Container)) {
+            throw "Onedir payload is missing required product directory: $relativePath"
+        }
+    }
+
+    return $relativePaths
+}
+
+function Assert-SRPSSPythonRuntimeDependencies {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonExe
+    )
+
+    # Keep this aligned with requirements.txt and the dynamic/lazy runtime
+    # surfaces that Nuitka cannot safely infer from one top-level import graph.
+    $probe = @'
+import importlib
+modules = (
+    "PySide6.QtCore",
+    "PySide6.QtGui",
+    "PySide6.QtWidgets",
+    "PySide6.QtQuick",
+    "PySide6.QtQml",
+    "PySide6.QtMultimedia",
+    "shiboken6",
+    "OpenGL",
+    "numpy",
+    "PIL",
+    "winrt.windows.media.control",
+    "winrt.windows.storage.streams",
+    "pyaudiowpatch",
+    "sounddevice",
+    "pycaw",
+    "comtypes",
+    "psutil",
+)
+for name in modules:
+    importlib.import_module(name)
+print("SRPSS_RUNTIME_DEPENDENCIES_OK")
+'@
+
+    & $PythonExe -c $probe 2>&1 | ForEach-Object { Write-Host $_ }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Python runtime dependency probe failed for: $PythonExe"
+    }
+}

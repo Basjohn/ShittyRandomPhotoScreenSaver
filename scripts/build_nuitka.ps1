@@ -65,11 +65,34 @@ if (-not (Test-Path -LiteralPath $BuildLayoutScript -PathType Leaf)) {
 foreach ($RequiredBuildCommand in @(
     'Reset-SRPSSBuildDirectory',
     'Remove-SRPSSBuildDirectory',
-    'Publish-SRPSSDirectory'
+    'Publish-SRPSSDirectory',
+    'Assert-SRPSSSourceProductAssets',
+    'Assert-SRPSSPythonRuntimeDependencies',
+    'Assert-SRPSSOnefileQuickPayloadContract',
+    'Assert-SRPSSOnefileVisualizerShaderContract'
 )) {
     if (-not (Get-Command $RequiredBuildCommand -CommandType Function -ErrorAction SilentlyContinue)) {
         throw "Shared build layout did not load required function: $RequiredBuildCommand"
     }
+}
+
+try {
+    $SourceAssetSummary = Assert-SRPSSSourceProductAssets -RepoRoot $Root
+    Write-Host (
+        "[BUILD] Source product assets: Settings themes={0}, Widget themes={1}, Visualizer presets={2}, Quick payload files={3}" -f `
+            $SourceAssetSummary.SettingsThemes, `
+            $SourceAssetSummary.WidgetThemes, `
+            $SourceAssetSummary.VisualizerPresets, `
+            $SourceAssetSummary.QuickPayloadFiles
+    )
+} catch {
+    throw "Product asset preflight failed: $($_.Exception.Message)"
+}
+
+try {
+    Assert-SRPSSPythonRuntimeDependencies -PythonExe 'python'
+} catch {
+    throw "Runtime dependency preflight failed: $($_.Exception.Message)"
 }
 
 Reset-SRPSSBuildDirectory -Path $BuildDir -BuildRoot $BuildRoot | Out-Null
@@ -157,10 +180,18 @@ $argsList = @(
     "--include-data-dir=themes=themes",
     "--include-data-dir=images=images",
     "--include-data-files=resources/tutuogg.ogg=resources/tutuogg.ogg",
+    "--include-data-files=resources/jedimodeyall.mp3=resources/jedimodeyall.mp3",
     "--include-data-dir=widgets/spotify_visualizer/shaders=widgets/spotify_visualizer/shaders",
     "--include-data-dir=rendering/quick/qml=rendering/quick/qml",
     "--include-package=rendering.quick",
     "--include-package=ui.tabs",
+    "--include-package=widgets.spotify_visualizer",
+    "--include-package=widgets.spotify_visualizer.renderers",
+    "--include-package=rendering.gl_programs",
+    "--include-package=rendering.gl_compositor_pkg",
+    "--include-package=OpenGL",
+    "--include-package=pyaudiowpatch",
+    "--include-package=sounddevice",
     "--include-qt-plugins=multimedia",
     "--include-qt-plugins=qml",
     "--include-module=PySide6.QtMultimedia",
@@ -236,6 +267,24 @@ if ($BuildExit -ne 0) {
 $Exe = Get-ChildItem -Path $BuildOutputDir -Recurse -Filter "$AppName.exe" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $Exe) {
     Write-Host "[BUILD-N] Build failed or no executable produced. See log: $LogFile"
+    exit 1
+}
+
+try {
+    $EmbeddedQuickPayload = @(
+        Assert-SRPSSOnefileQuickPayloadContract `
+            -RepoRoot $Root `
+            -NuitkaArguments $argsList
+    )
+    $EmbeddedShaders = @(
+        Assert-SRPSSOnefileVisualizerShaderContract `
+            -RepoRoot $Root `
+            -NuitkaArguments $argsList
+    )
+    Write-Host "[BUILD-N] Qt Quick/QML payload declared for onefile embedding: $($EmbeddedQuickPayload.Count) files"
+    Write-Host "[BUILD-N] Visualizer shaders declared for onefile embedding: $($EmbeddedShaders -join ', ')"
+} catch {
+    Write-Host "[BUILD-N] Quick/shader contract validation failed - $($_.Exception.Message)"
     exit 1
 }
 

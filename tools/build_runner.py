@@ -317,10 +317,66 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
         repo_root / "SRPSS.ico",
         repo_root / "images" / "LogoBMP.bmp",
         repo_root / "resources" / "tutuogg.ogg",
+        repo_root / "resources" / "jedimodeyall.mp3",
+        repo_root / "rendering" / "quick" / "qml" / "DisplayScene.qml",
+        repo_root / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml",
+        repo_root / "rendering" / "quick" / "qml" / "WidgetInteractionGlow.qml",
+        repo_root / "rendering" / "quick" / "qml" / "shaders" / "widget_glow.frag.qsb",
     )
     for asset in required_assets:
         if not asset.is_file():
             result.errors.append(f"Required build asset is missing: {asset}")
+
+    required_asset_dirs = (
+        repo_root / "themes",
+        repo_root / "themes" / "widgets",
+        repo_root / "presets" / "visualizer_modes",
+        repo_root / "widgets" / "spotify_visualizer" / "shaders",
+    )
+    for directory in required_asset_dirs:
+        if not directory.is_dir():
+            result.errors.append(f"Required product asset directory is missing: {directory}")
+
+    if (repo_root / "themes").is_dir() and not any((repo_root / "themes").glob("*.srtheme")):
+        result.errors.append("No shipped Settings .srtheme files were found under themes")
+    if (repo_root / "themes" / "widgets").is_dir() and not any(
+        (repo_root / "themes" / "widgets").glob("*.srwtheme")
+    ):
+        result.errors.append("No shipped Widget .srwtheme files were found under themes/widgets")
+    if (repo_root / "presets" / "visualizer_modes").is_dir() and not any(
+        (repo_root / "presets" / "visualizer_modes").rglob("*.json")
+    ):
+        result.errors.append("No shipped visualizer preset JSON files were found")
+
+    requirements_path = repo_root / "requirements.txt"
+    if not requirements_path.is_file():
+        result.errors.append(f"Pinned product requirements are missing: {requirements_path}")
+    else:
+        requirement_names: set[str] = set()
+        for raw_line in requirements_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            name = re.split(r"[<>=!~\[]", line, maxsplit=1)[0].strip().casefold()
+            if name:
+                requirement_names.add(name)
+        required_distributions = {
+            "pyside6",
+            "pyside6_addons",
+            "pyside6_essentials",
+            "shiboken6",
+            "pyopengl",
+            "pyaudiowpatch",
+            "sounddevice",
+            "winrt-windows-media-control",
+            "winrt-windows-storage-streams",
+        }
+        missing_distributions = sorted(required_distributions - requirement_names)
+        if missing_distributions:
+            result.errors.append(
+                "requirements.txt is missing frozen-runtime dependencies: "
+                + ", ".join(missing_distributions)
+            )
 
     for job in jobs:
         if job.default_selected and not job.expected_artifact.exists():

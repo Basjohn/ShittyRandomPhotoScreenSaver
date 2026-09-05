@@ -13,7 +13,7 @@
 [Setup]
 AppId={{31A3E38F-0A6C-46CF-8934-9EB8A42F0463}
 AppName=SRPSS - Media Center
-AppVersion=4.7.2
+AppVersion=5.0.0
 AppPublisher=Jayde Ver Elst
 AppPublisherURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 AppSupportURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
@@ -31,13 +31,14 @@ ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
 WizardSmallImageFile=..\images\LogoBMP.bmp
-VersionInfoVersion=4.7.2
+VersionInfoVersion=5.0.0
 AllowUNCPath=False
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
+Name: "resetsettings"; Description: "Revert Settings To Defaults"; GroupDescription: "Settings:"; Flags: unchecked
 Name: "startmenu"; Description: "Create Start Menu Shortcuts"; GroupDescription: "Additional options:"
 Name: "desktop"; Description: "Create Desktop Shortcuts"; GroupDescription: "Additional options:"
 Name: "runafter"; Description: "Run After Install"; GroupDescription: "Post-install option:"; Flags: unchecked
@@ -54,6 +55,7 @@ Source: "..\release\media_center\presets\visualizer_modes\*"; DestDir: "{commona
 ; Active curated Settings + Widget theme tree shared with SCR/NORMAL builds.
 Source: "..\release\media_center\themes\*"; DestDir: "{commonappdata}\SRPSS\themes"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "..\release\media_center\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
+Source: "..\release\media_center\resources\jedimodeyall.mp3"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 ; Include the EXE itself (for convenience when browsing install dir)
 Source: "..\release\media_center\SRPSS_Media_Center.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Installer icon for shortcuts / ARP entry
@@ -72,10 +74,14 @@ Filename: "{app}\SRPSS_Media_Center.exe"; Description: "Launch SRPSS - Media Cen
 Type: filesandordirs; Name: "{app}"
 
 [InstallDelete]
+; Optional clean-settings install for the Media Center profile only.
+Type: files; Name: "{userappdata}\SRPSS_MC\settings_v2.json"; Tasks: resetsettings
+
 ; Wipe both the packaged backup copy and the shared active curated tree so
 ; stale/renamed files never linger across upgrades.
 Type: filesandordirs; Name: "{app}\presets\visualizer_modes"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\themes"
 Type: files; Name: "{commonappdata}\SRPSS\sounds\tutuogg.ogg"
+Type: files; Name: "{commonappdata}\SRPSS\sounds\jedimodeyall.mp3"
 

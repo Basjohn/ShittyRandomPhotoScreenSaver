@@ -524,10 +524,29 @@ class DisplayTab(QWidget):
         widget_glow_color_row.addWidget(self.widget_glow_use_theme_btn)
         widget_glow_color_row.addStretch()
 
+        widget_glow_jedi_widget, widget_glow_jedi_row, _ = add_aligned_row_widget(
+            layout,
+            "",
+            label_width=self._LABEL_WIDTH,
+            wrap=False,
+        )
+        self.widget_glow_jedi_mode_check = QCheckBox(
+            "Jedi Mode - Please Don't Do This"
+        )
+        self.widget_glow_jedi_mode_check.setProperty("circleIndicator", True)
+        self.widget_glow_jedi_mode_check.setToolTip(
+            "Enable the deliberately obnoxious Jedi Mode easter egg. Hover Glow "
+            "plays it once on pointer entry; Click Glow plays it once per admitted click."
+        )
+        self.widget_glow_jedi_mode_check.stateChanged.connect(self._save_settings)
+        widget_glow_jedi_row.addWidget(self.widget_glow_jedi_mode_check)
+        widget_glow_jedi_row.addStretch()
+
         self._widget_glow_detail_rows = (
             widget_glow_intensity_widget,
             widget_glow_distance_widget,
             widget_glow_color_widget,
+            widget_glow_jedi_widget,
         )
         self._update_widget_glow_detail_visibility()
 
@@ -614,6 +633,7 @@ class DisplayTab(QWidget):
         self.widget_glow_on_click_check.blockSignals(True)
         self.widget_glow_intensity_slider.blockSignals(True)
         self.widget_glow_distance_slider.blockSignals(True)
+        self.widget_glow_jedi_mode_check.blockSignals(True)
         
         try:
             # Monitor selection (new canonical: display.show_on_monitors)
@@ -729,6 +749,9 @@ class DisplayTab(QWidget):
             self.widget_glow_distance_label.setText(
                 f"{input_options.widget_glow_distance} px"
             )
+            self.widget_glow_jedi_mode_check.setChecked(
+                input_options.widget_glow_jedi_mode
+            )
             self._widget_glow_color_override = (
                 None
                 if input_options.widget_glow_color is None
@@ -759,6 +782,7 @@ class DisplayTab(QWidget):
             self.widget_glow_on_click_check.blockSignals(False)
             self.widget_glow_intensity_slider.blockSignals(False)
             self.widget_glow_distance_slider.blockSignals(False)
+            self.widget_glow_jedi_mode_check.blockSignals(False)
             self._loading = False
     
     def _save_settings(self) -> None:
@@ -841,6 +865,10 @@ class DisplayTab(QWidget):
             None
             if self._widget_glow_color_override is None
             else list(self._widget_glow_color_override),
+        )
+        self._settings.set(
+            'input.widget_glow_jedi_mode',
+            self.widget_glow_jedi_mode_check.isChecked(),
         )
 
         # Renderer backend — always OpenGL
