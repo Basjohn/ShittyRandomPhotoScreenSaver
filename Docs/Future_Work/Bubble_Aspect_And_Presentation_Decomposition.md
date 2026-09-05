@@ -6,7 +6,16 @@ The operator activated this investigation after Sphere implementation/visual rev
 owns its sequence; `Current_Plan.md` retains broader J optimization and physical acceptance.
 Starting source: `66be7344`. BTF, R-69 and the Performance Optimization Contract remain binding.
 
-## Questions and exact owners
+## Superseding operator correction
+
+The operator rejected the height-only presentation analyzed below. The recovery now projects the full
+radius waveform through `sqrt(content_width * content_height / 1.5)`, preserving response across
+same-area shapes and growing with visible area. This deliberate product correction is not a performance
+cap or a DSP change. The older height-only evidence below is historical, not acceptance of that symptom.
+See `Visualizer_Visual_Regression_Recovery.md`; live preview/outline follow-up is in
+`Visualizer_Edit_Geometry_And_Sphere_Materials.md`.
+
+## Questions and exact owners (historical investigation)
 
 The reported symptom is progressively weaker response in wide rectangles and excessive size/response
 in narrow rectangles, including modest deviations from square/ordinary rectangles.

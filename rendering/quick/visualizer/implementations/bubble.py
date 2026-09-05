@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Sequence
 
 import numpy as np
@@ -70,6 +71,8 @@ class QuickBubbleLayout:
     trail_radial_scale: float
     large_viewport_stroke_bonus_px: float
     specular_reference_aspect: float
+    response_radius_scale: float
+    effect_scale: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,18 +117,21 @@ def compute_quick_bubble_layout(
     # intentionally independent and continues to scale the finished effect.
     trail_radial_scale = min(1.0, baseline[1] / extent[1])
 
-    # Bubble head radius remains the authored fraction of the current card
-    # height. Do not globally compress it by CUSTOM viewport extent: doing so
-    # suppresses the radius delta that carries Bubble reactivity. The separate
-    # extreme-size stroke treatment below is presentation-only.
-    vertical_scale = extent[1] / baseline[1]
+    # The operator rejected the height-only projection: reshaping the same
+    # area into a wide card weakened every visible reaction, and a tall card
+    # amplified it. Project the entire authored waveform through an equal-area
+    # canonical rectangle, independent of how extent/scale encode that area.
+    # This is not the retired baseline/current cap: large views still grow and
+    # temporal attack/overshoot/settling remain fully intact.
+    response_height = math.sqrt(content[2] * content[3] / (baseline[0] / baseline[1]))
+    effect_scale = response_height / baseline[1]
 
     # The same extreme-size presentation benefits from a slightly firmer edge.
     # Ramp to one authored pixel rather than branching the simulation or adding
     # geometry. At normal sizes this is exactly zero.
     large_viewport_stroke_bonus_px = max(
         0.0,
-        min(1.0, (vertical_scale - 1.75) / 0.75),
+        min(1.0, (effect_scale - 1.75) / 0.75),
     )
     # Specular mutation and ellipse orientation were authored at canonical
     # content aspect. Recover that content size at the current uniform scale
@@ -143,6 +149,8 @@ def compute_quick_bubble_layout(
         trail_radial_scale=trail_radial_scale,
         large_viewport_stroke_bonus_px=large_viewport_stroke_bonus_px,
         specular_reference_aspect=reference_width / reference_height,
+        response_radius_scale=response_height / content[3],
+        effect_scale=effect_scale,
     )
 
 
@@ -239,7 +247,8 @@ class QuickBubbleRenderer:
         gl.glUniform2f(uniforms["u_viewport_origin_px"], 0.0, 0.0)
         gl.glUniform1i(uniforms["u_quick_item_coords"], 1)
         gl.glUniform4f(uniforms["u_content_rect"], *layout.content_rect)
-        gl.glUniform1f(uniforms["u_visual_scale"], layout.visual_scale)
+        gl.glUniform1f(uniforms["u_visual_scale"], layout.effect_scale)
+        gl.glUniform1f(uniforms["u_response_radius_scale"], layout.response_radius_scale)
         gl.glUniform1f(
             uniforms["u_specular_reference_aspect"], layout.specular_reference_aspect,
         )
@@ -411,6 +420,7 @@ class QuickBubbleRenderer:
                 "u_quick_item_coords",
                 "u_content_rect",
                 "u_visual_scale",
+                "u_response_radius_scale",
                 "u_specular_reference_aspect",
                 "u_border_width",
                 "u_fade",

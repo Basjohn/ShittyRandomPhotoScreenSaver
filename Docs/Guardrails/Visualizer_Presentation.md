@@ -257,7 +257,8 @@ Where a logical mode needs spatial bounds, viewport metrics enter the logical ru
 extent is truth outside edit mode; an active CUSTOM working extent is a temporary higher-precedence override. Save commits
 the new extent, Cancel restores the old committed extent, and ending CUSTOM removes the override without assuming canonical
 `(420,280)`. Bubble is the strict case: positions/trails reflow through the expanded logical world, circles remain round,
-and authored render radius remains a fraction of actual card height rather than being divided by domain height. Velocity,
+and authored render radius uses the operator-authorized equal-area response height
+`sqrt(content_width * content_height / 1.5)` rather than actual-height coupling or a baseline/current cap. Velocity,
 collision and BTF semantics stay coherent: collision/spawn radii and collision-only gap/correction distances multiply by
 `domain_h` when mapped back into the expanded world, with an exact canonical 1x1 no-op. Geometry never becomes a clock.
 
@@ -392,11 +393,14 @@ into the expanded logical world and solve trail smear in content coordinates. Do
 gain, authored speed/control retuning, a new timer, or a second motion state.
 
 Bubble wake history and Bubble-head magnitude are separate contracts. Stored trail history remains content-space invariant and
-head radius/reactivity follows actual card height, but the Quick ripple wake is an authored presentation effect: each
+head radius/reactivity follows the equal-area canonical-height projection, but the Quick ripple wake is an authored presentation effect: each
 trail source's **complete** visible footprint (source separation, ripple radius/cap and ring spacing) remains baseline-pixel
 authoritative under edge-resized wide/tall viewports. Correcting only the three trail-source centres is insufficient.
 
-**R-69 is the golden viewport rule.** Bubble's renderer-facing head radius must not receive a global `baseline/current`, `1 / viewport_extent`, or equivalent large-viewport compressor. Ghost consumes already-normalized historical positions exactly once and must not inherit the ripple-wake axis/radial compression. The rejected global head compressor made extreme CUSTOM Bubble look nearly non-reactive while DSP/logical telemetry stayed healthy. If full expansion is aesthetically too large, target only a proven upper visual tail; do not flatten the full response curve. The same principle applies across Spectrum/Oscilloscope/Sine/DevCurve: geometry adaptation or smoothing may not silently weaken authored musical response or freshness.
+**R-69 remains the golden optimization rule.** The operator-authorized equal-area response correction
+(2026-09-05) deliberately supersedes the rejected height-only aspect coupling; it preserves the full
+waveform at a shape-independent size reference and does not cap large views.
+ Bubble's renderer-facing head radius must not receive a global `baseline/current`, `1 / viewport_extent`, or equivalent large-viewport compressor. Ghost consumes already-normalized historical positions exactly once and must not inherit the ripple-wake axis/radial compression. The rejected global head compressor made extreme CUSTOM Bubble look nearly non-reactive while DSP/logical telemetry stayed healthy. If full expansion is aesthetically too large, target only a proven upper visual tail; do not flatten the full response curve. The same principle applies across Spectrum/Oscilloscope/Sine/DevCurve: geometry adaptation or smoothing may not silently weaken authored musical response or freshness.
 
 **R-76 Spectrum temporal-axis rule.** Spectrum bar motion is vertical. Viewport-shape temporal compensation may depend on expanded vertical bar-field height, but viewport width alone must not slow authored response. The live Quick `SpectrumFrameRuntime` owns this treatment; do not restore a QWidget/painter/present-loop smoothing owner. Continuous solid-bar hysteresis is an authored temporal helper and keeps a canonical internal segment domain rather than changing rate zones when viewport height changes. Renderer segment geometry remains independent. Never use this rule to attenuate BeatEngine/source magnitude, the historical `0.55` upload transfer, or `compute_spectrum_height_scale()`.
 

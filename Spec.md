@@ -278,13 +278,15 @@ and nonbaseline trail length/strength are solved in content coordinates before w
 visible fraction-of-viewport motion at canonical, wide and tall extents rather than losing `1 / domain_axis`; canonical
 `1x1` takes the exact pre-projection path. Nonbaseline swirl tangent/radial geometry is likewise solved in content space and
 its birth offset projects once per axis, so viewport aspect does not distort the authored orbit. Authored render radius
-remains a fraction of actual card height as in the historical renderer. Directional entry depth, refill-cluster spread,
+is projected through the equal-area canonical response height `sqrt(content_width * content_height / 1.5)`.
+This operator-authorized mapping replaces the rejected actual-height coupling, preserves the complete radius
+waveform across same-area shapes and grows naturally with visible area. Directional entry depth, refill-cluster spread,
 surface exit/drain grace, contraction retirement margin, overlap-retry allowance/jitter and pre-entry prediction distance
 are also renderer-content distances projected once per nonbaseline axis; otherwise lifecycle shape changes with viewport
 size. None of these spatial projections changes random-draw order or adds a tick. Radius is not divided by viewport-domain
-height. Collision/spawn radius and collision-only gap/correction
-distances use the inverse domain-height mapping in simulation coordinates, preserving visible contact and exact canonical
-behavior.
+height. Collision/spawn policy remains in canonical normalized content coordinates and preserves exact canonical
+behavior; it is authored separation rather than literal pixel packing. Any contact change needs a dedicated
+rendered-overlap and event test under BTF.
 
 Bubble consume-once kick/snare/vocal events may accent stream and drift motion only through the existing decaying
 stream-burst state. They must not add a clock, mutate authored motion settings, replay an event, or leak into pulse/radius
@@ -294,7 +296,7 @@ still be changed by the existing impulse and collision stages.
 The all-five-mode viewport capability policy is part of the destination contract and the core Bubble reflow path has landed.
 Bubble's per-head specular mutation and light ellipse use the canonical content aspect at the current
 uniform scale/inset; edge resizing changes playroom without stretching or rotating the local highlight.
-Do not reintroduce a Bubble false capability gate to conceal a viewport ownership or spatial-domain defect. **R-69 is golden:** wide/tall geometry may not globally compress renderer-facing Bubble head radius, already-normalized Ghost/history displacement, or another mode's authored musical response/freshness. If an extreme Bubble full-expansion tail is too large, fix only that proven tail.
+Do not reintroduce a Bubble false capability gate to conceal a viewport ownership or spatial-domain defect. **R-69 is golden for optimization:** wide/tall geometry may not globally compress renderer-facing Bubble head radius, already-normalized Ghost/history displacement, or another mode's authored musical response/freshness. If an extreme Bubble full-expansion tail is too large, fix only that proven tail.
 
 Committed viewport extent is ordinary runtime truth. While CUSTOM is active, its working extent may temporarily override
 that committed value. Ending CUSTOM removes the temporary override: Save leaves the newly committed extent authoritative;

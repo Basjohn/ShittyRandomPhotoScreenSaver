@@ -936,3 +936,8 @@ The new permanent files are included in the canonical `destination` profile. Phy
 The Widget Theme catalogue/link checkpoint adds two permanent lifetime guards to the canonical `destination` profile. `tests/test_settings_theme_lifetime_contract.py` is Qt-free and verifies transaction semantics with a simulated wrapper lifetime. `tests/test_settings_theme_qobject_lifetime.py` runs only in the normal PySide6 environment and deletes a real QWidget before refreshing the root-QSS registry, proving the actual Shiboken edge that produced `Internal C++ object (SettingsDialog) already deleted`.
 
 `tests/test_widget_theme_no_material_contract.py` and the link/asset contract protect the linked-theme UX shape: the same compact themed lock control exists on both theme pages, Widget->Settings selection uses explicit reverse link metadata, and locked catalogue selection preserves `keep_synced=True` instead of silently converting to Independent. These source contracts do **not** replace the required user-environment test: physically recreate Settings, switch themes repeatedly, verify bidirectional list movement/persistence from both pages, and confirm no deleted-C++-object warning appears.
+
+The maintained destination profile includes `test_visualizer_line_coverage.py` for real-GL
+Sine/Osc/DevCurve device-pixel coverage at DPR 1.5 and extreme extent/small authored scale.
+`test_bubble_aspect_pixels.py` owns equal-area response/highlight and visible-size outline oracles;
+`test_qtquick_visualizer_spectrum.py` includes curated Organs black-fill/rainbow/glow pixels.

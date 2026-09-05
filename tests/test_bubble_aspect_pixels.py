@@ -21,6 +21,7 @@ from widgets.spotify_visualizer.render_state import (
 
 _WIDTHS = (140, 280, 420, 630, 1260)
 _HEIGHTS = (140, 280, 420, 630, 1260)
+_EQUAL_AREA_SHAPES = ((140, 840), (280, 420), (420, 280), (600, 196), (840, 140), (1200, 98))
 
 
 def _presentation(
@@ -241,73 +242,26 @@ def _real_gl(qt_app):
 
 
 @pytest.mark.qt
-def test_real_gl_bubble_radius_is_height_authored_and_aspect_correct(_real_gl):
-    """A width-only resize must change occupancy, not physical Bubble radius."""
+def test_real_gl_bubble_response_is_equal_area_and_aspect_correct(_real_gl):
+    """Reshaping one visible area must preserve the complete radius excursion."""
     _, render = _real_gl
-    width_results = {}
-    for width in _WIDTHS:
-        height = 280
-        baseline = render(
-            _snapshot(_presentation(width, height), radius=0.04, count=0),
-            width,
-            height,
-        )
-        width_results[width] = []
-        for radius in (0.04, 0.08):
-            image = render(
-                _snapshot(_presentation(width, height), radius=radius),
-                width,
-                height,
-            )
-            width_results[width].append(
-                _diameter(_bounds(image, baseline, width, height))
-            )
-
-    for width, diameters in width_results.items():
-        for diameter in diameters:
-            assert abs(diameter[0] - diameter[1]) <= 2
-    for radius_index in (0, 1):
-        values = [width_results[width][radius_index][0] for width in _WIDTHS]
-        assert max(values) - min(values) <= 3
-    deltas = [
-        width_results[width][1][0] - width_results[width][0][0]
-        for width in _WIDTHS
-    ]
-    assert max(deltas) - min(deltas) <= 3
-    occupancy = [
-        width_results[width][1][0] / width
-        for width in _WIDTHS
-    ]
-    assert all(left > right for left, right in zip(occupancy, occupancy[1:]))
-
-    height_results = {}
-    width = 420
-    for height in _HEIGHTS:
+    results = {}
+    for width, height in _EQUAL_AREA_SHAPES:
         presentation = _presentation(width, height)
-        baseline = render(
-            _snapshot(presentation, radius=0.04, count=0),
-            width,
-            height,
-        )
-        image = render(
-            _snapshot(presentation, radius=0.04),
-            width,
-            height,
-        )
-        height_results[height] = _diameter(
-            _bounds(image, baseline, width, height)
-        )
-    for height, diameter in height_results.items():
-        assert abs(diameter[0] - diameter[1]) <= 2
-    normalized = [height_results[height][0] / height for height in _HEIGHTS]
-    assert max(normalized) - min(normalized) <= 0.03
-    assert all(
-        left < right
-        for left, right in zip(
-            (height_results[height][0] for height in _HEIGHTS),
-            (height_results[height][0] for height in _HEIGHTS[1:]),
-        )
-    )
+        baseline = render(_snapshot(presentation, radius=0.04, count=0), width, height)
+        results[width, height] = [
+            _diameter(_bounds(render(_snapshot(presentation, radius=radius), width, height),
+                              baseline, width, height))
+            for radius in (0.04, 0.08)
+        ]
+    for diameters in results.values():
+        assert all(abs(d[0] - d[1]) <= 2 for d in diameters), results
+    for radius_index in (0, 1):
+        values = [diameters[radius_index][0] for diameters in results.values()]
+        assert max(values) - min(values) <= 2, results
+    deltas = [d[1][0] - d[0][0] for d in results.values()]
+    assert min(deltas) >= 20, results
+    assert max(deltas) - min(deltas) <= 2, results
 
     base_presentation = _presentation(420, 280)
     scaled_presentation = _presentation(420, 280, scale=0.65)
@@ -354,8 +308,8 @@ def test_real_gl_bubble_radius_is_height_authored_and_aspect_correct(_real_gl):
 
 
 @pytest.mark.qt
-def test_real_gl_bubble_specular_crop_is_constant_across_widths(_real_gl):
-    """The highlight's authored-pixel crop must survive a width-only resize."""
+def test_real_gl_bubble_specular_crop_is_constant_across_equal_area_shapes(_real_gl):
+    """The local highlight must survive reshaping the same visible area."""
     _, render = _real_gl
     crop_radius = 40
     style = {
@@ -367,8 +321,7 @@ def test_real_gl_bubble_specular_crop_is_constant_across_widths(_real_gl):
         "bubble_specular_direction": "top_left",
     }
     crops = {}
-    height = 280
-    for width in _WIDTHS:
+    for width, height in _EQUAL_AREA_SHAPES:
         image = render(
             _snapshot(
                 _presentation(width, height),
@@ -395,8 +348,37 @@ def test_real_gl_bubble_specular_crop_is_constant_across_widths(_real_gl):
         width: max(
             abs(left - right) for left, right in zip(crops[width], reference)
         )
-        for width in _WIDTHS
+        for width, _ in _EQUAL_AREA_SHAPES
     }
-    for width in _WIDTHS:
+    for width, _ in _EQUAL_AREA_SHAPES:
         assert len(crops[width]) == len(reference)
     assert max(differences.values()) <= 1, differences
+
+
+@pytest.mark.qt
+def test_real_gl_bubble_outline_tracks_visible_size_and_not_extent_encoding(_real_gl):
+    _, render = _real_gl
+    style = {"bubble_specular_color": (0, 0, 0, 255)}
+    widths = []
+    for width, height in ((210, 140), (420, 280), (1260, 840)):
+        image = render(_snapshot(_presentation(width, height), radius=0.08, overrides=style), width, height)
+        # Integrated luminance across one outline is its effective pixel width;
+        # this also catches bright single-pixel needles masquerading as coverage.
+        row = height // 2
+        widths.append(sum(image[(row * width + x) * 4] / 255 for x in range(width // 2, width)))
+    assert widths[0] < widths[1] < widths[2], widths
+    assert 0.45 <= widths[0] <= 0.85, widths
+    assert 0.8 <= widths[1] <= 1.15, widths
+    assert 9.0 <= widths[2] <= 10.5, widths
+    assert widths[2] > widths[1] * 2.5, widths
+
+    ordinary = _presentation(420, 280)
+    huge_extent = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("bubble"),
+        display_size=(420.0, 280.0), viewport_extent=(4200.0, 2800.0),
+        uniform_visual_scale=0.1, border_width=0.0, corner_radius=0.0,
+        content_inset=0.0, shadow_enabled=False,
+    )
+    assert huge_extent.content_rect == ordinary.content_rect
+    assert render(_snapshot(ordinary, radius=0.08, overrides=style), 420, 280) == render(
+        _snapshot(huge_extent, radius=0.08, overrides=style), 420, 280)

@@ -293,7 +293,10 @@ viewport_extent          # left/right width; top/bottom height
 All five current modes must support viewport extent and the core capability policy is now all-five-mode capable. Bubble is
 not a destination exception and must not be re-gated to hide a defect. Preserve focused BTF/reflow proof, including equal
 renderer-content stream/drift head/trail travel for the same consume-once transient at canonical, wide and tall extents.
-R-69 is binding: viewport adaptation must not add a second compressor to Bubble head radius, Ghost/history displacement, or another mode's authored musical response/freshness. Performance-motivated changes at this seam must pass `Docs/Guardrails/Performance_Optimization_Contract.md`; lower GC/FPS/CPU counters never override this contract.
+Bubble presentation now uses `sqrt(content_width * content_height / 1.5)` as its response-height reference,
+following the operator rejection of height-only aspect coupling. The full logical radius waveform remains
+unchanged; same-area reshaping preserves pixel response and large views continue to grow.
+R-69 remains binding for optimization: viewport adaptation must not add a second compressor to Bubble head radius, Ghost/history displacement, or another mode's authored musical response/freshness. Performance-motivated changes at this seam must pass `Docs/Guardrails/Performance_Optimization_Contract.md`; lower GC/FPS/CPU counters never override this contract.
 
 Viewport configuration has two precedence levels, not two persistence owners: ordinary committed extent is runtime truth;
 an active CUSTOM session may provide a temporary working override. Save promotes the new value into committed truth, Cancel
