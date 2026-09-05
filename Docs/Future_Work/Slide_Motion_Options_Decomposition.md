@@ -1,6 +1,6 @@
 # Slide motion options
 
-Status: Elastic, Wobble and Flex are implemented. Live sequence: `FWPlan.md`.
+Status: Elastic, Wobble and Flex timing correction validated automatically; physical acceptance open. Live sequence: `FWPlan.md`.
 Pre-implementation comparison/rollback HEAD: `a90c0f0d26cc80e7739cc39fbe81e1c1d4e943d7`.
 
 ## Foundation and ownership
@@ -24,8 +24,8 @@ Pre-implementation comparison/rollback HEAD: `a90c0f0d26cc80e7739cc39fbe81e1c1d4
 defaults to `Linear`, preserving present behavior. Elastic, Wobble and Flex are options of Slide, never new IDs.
 One choice avoids speculative cross-product settings. The renderer consumes frozen per-run parameters only.
 
-Elastic is a deterministic bounded late-arrival overshoot/rebound from the existing eased run progress, with exact
-zero modifier at completion. Both image ownership and sampling derive from the same displaced coordinate. Overshoot
+Elastic is deterministic bounded travel/overshoot/rebound from the existing eased run progress, with exact
+endpoints. Both image ownership and sampling derive from the same displaced coordinate. Overshoot
 past arrival retains full destination coverage and samples from the arrived destination coordinate, clamped only at
 the departing edge, rather than wrapping an opposite-image strip across the screen. No unowned/black background
 branch, CPU integration, second clock or resources.
@@ -50,6 +50,21 @@ Visualizer state/cadence changes.
 - [x] Expose proven options on lazy Slide detail, preserving choices through load/save/recreation and unbuilt saves.
 - [x] Run real GL oracle and inspect representative captures; update contracts and checkpoint.
 - [ ] **Remaining:** separately design true Perspective and any specifically justified combinations.
+
+## Timing correction
+
+The operator reports slow travel followed by a sudden elastic jump. Source proves a velocity discontinuity:
+the old arrival equation changes slope from 1 to 10 at progress 0.78, concentrating settlement in the last
+22% of eased progress. This is independent of rendering cadence and requires no new timer or frame filter.
+
+- [x] Attribute the discontinuity to the feature-local travel equation, not the shared transition clock.
+- [x] Replace the late branch with three joined quintic travel segments: source to 1.018 at progress 0.78,
+  rebound to 0.995 at 0.90, then destination at 1. Each joins with zero first/second derivative; full travel
+  and settlement share one continuous velocity/acceleration contract. Preserve the existing run easing.
+- [x] Make Wobble/Flex deformation envelopes have zero endpoint velocity, avoiding an abrupt warp stop.
+- [x] Numerically bound speed and compare one-sided velocity/acceleration at joins; preserve dense sealed
+  coverage, exact endpoints and real GL source/destination texel evidence across all four directions.
+- [x] Focused Slide/transition/GL/uniform gates pass (106 tests); physical settlement/refresh acceptance remains open.
 
 ## Acceptance bars
 

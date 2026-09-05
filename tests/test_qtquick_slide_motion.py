@@ -75,6 +75,40 @@ def test_elastic_overshoot_samples_the_departing_edge_without_wrapping():
     assert second_uv[0] != uv[0]
 
 
+def test_elastic_travel_has_no_late_velocity_jump_and_smooth_turnarounds():
+    # The rejected implementation has speed 1 immediately before .78 and 10
+    # immediately after it. Check the complete path as well as each turn.
+    step = 0.0001
+    values = [_slide_elastic_arrival(index * step) for index in range(10001)]
+    speeds = [(right - left) / step for left, right in zip(values, values[1:])]
+    assert max(abs(speed) for speed in speeds) < 2.5
+    for join in (0.78, 0.90):
+        before = (_slide_elastic_arrival(join) - _slide_elastic_arrival(join-step)) / step
+        after = (_slide_elastic_arrival(join+step) - _slide_elastic_arrival(join)) / step
+        assert abs(before - after) < 0.001
+        left_accel = (_slide_elastic_arrival(join) - 2*_slide_elastic_arrival(join-step)
+                      + _slide_elastic_arrival(join-2*step)) / step**2
+        right_accel = (_slide_elastic_arrival(join+2*step) - 2*_slide_elastic_arrival(join+step)
+                       + _slide_elastic_arrival(join)) / step**2
+        assert abs(left_accel - right_accel) < 0.1
+
+
+@pytest.mark.parametrize("style", ("Wobble", "Flex"))
+def test_slide_warp_settles_without_an_endpoint_velocity_step(style):
+    # Subtract the existing Linear travel to isolate the optional warp. Its
+    # residual at either endpoint must vanish quadratically, not linearly.
+    coordinate = (0.42, 0.31)
+    def residual(progress):
+        _, warped = _slide_partition_sample("left", progress, coordinate, style)
+        _, linear = _slide_partition_sample("left", progress, coordinate, "Linear")
+        return max(abs(a-b) for a, b in zip(warped, linear))
+    for start, sign in ((0.0, 1), (1.0, -1)):
+        near = residual(start + sign * .001)
+        farther = residual(start + sign * .002)
+        assert near > 0.0
+        assert farther == pytest.approx(4.0 * near, rel=.001)
+
+
 @pytest.mark.parametrize("style", ("Linear", "Elastic", "Wobble", "Flex"))
 def test_slide_resolution_freezes_the_single_style_choice(style):
     spec = resolve_quick_transition_spec(_Settings(style))

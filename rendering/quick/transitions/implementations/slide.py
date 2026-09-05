@@ -32,15 +32,15 @@ uniform float u_progress;
 uniform vec2 u_direction;
 uniform int u_motionStyle;
 
+float settledSegment(float q) {
+    return q*q*q*(q*(6.0*q - 15.0) + 10.0);
+}
 float elasticArrival(float t) {
-    // Preserve ordinary travel until the final arrival window, then settle
-    // with a <= 2.5% damped overshoot. This is analytical and uses the run's
-    // sole existing progress sample.
-    const float arrivalStart = 0.78;
-    if (t <= arrivalStart) return t;
-    float q = (t - arrivalStart) / (1.0 - arrivalStart);
-    return 1.0 - (1.0 - arrivalStart) * exp(-10.0 * q)
-        * cos(12.566370614359172 * q);
+    // Position, velocity and acceleration agree at every join. The old late
+    // spring branch jumped from speed 1 to 10 at .78, producing a sudden kick.
+    if (t < 0.78) return 1.018 * settledSegment(t / 0.78);
+    if (t < 0.90) return mix(1.018, 0.995, settledSegment((t - 0.78) / 0.12));
+    return mix(0.995, 1.0, settledSegment((t - 0.90) / 0.10));
 }
 
 void main() {
@@ -57,7 +57,8 @@ void main() {
     float travel = u_motionStyle == 1 ? elasticArrival(t) : t;
     float orthogonalAxis = abs(u_direction.x) > 0.5 ? uv.y : uv.x;
     if (u_motionStyle == 3) {
-        travel += 0.065 * sin(3.141592653589793 * t)
+        float envelope = sin(3.141592653589793 * t);
+        travel += 0.065 * envelope * envelope
             * sin(6.283185307179586 * orthogonalAxis);
     }
 
@@ -70,7 +71,7 @@ void main() {
         : fract(shiftedUv);
     if (u_motionStyle == 2) {
         float envelope = sin(3.141592653589793 * t);
-        float wobble = 0.012 * envelope * (
+        float wobble = 0.012 * envelope * envelope * (
             sin(12.566370614359172 * orthogonalAxis)
             + 0.5 * sin(25.132741228718345 * orthogonalAxis)
         );
@@ -101,16 +102,19 @@ def _slide_motion_style(style: object) -> str:
 
 
 def _slide_elastic_arrival(canonical_time: float) -> float:
-    """Closed-form arrival overshoot with exact authored endpoints."""
+    """Continuous travel and settlement with exact endpoints and C2 joins."""
 
     t = max(0.0, min(1.0, float(canonical_time)))
     if t == 0.0 or t == 1.0:
         return t
-    arrival_start = 0.78
-    if t <= arrival_start:
-        return t
-    q = (t - arrival_start) / (1.0 - arrival_start)
-    return 1.0 - (1.0 - arrival_start) * math.exp(-10.0 * q) * math.cos(4.0 * math.pi * q)
+    if t < 0.78:
+        start, end, q = 0.0, 1.018, t / 0.78
+    elif t < 0.90:
+        start, end, q = 1.018, 0.995, (t - 0.78) / 0.12
+    else:
+        start, end, q = 0.995, 1.0, (t - 0.90) / 0.10
+    blend = q*q*q*(q*(6.0*q - 15.0) + 10.0)
+    return start + (end - start) * blend
 
 
 def _slide_direction_vector(direction: object) -> tuple[float, float]:
@@ -145,7 +149,7 @@ def _slide_partition_sample(
         amount = _slide_elastic_arrival(t)
     elif style == "Flex":
         perpendicular = y if dx else x
-        amount = t + 0.065 * math.sin(math.pi * t) * math.sin(2.0 * math.pi * perpendicular)
+        amount = t + 0.065 * math.sin(math.pi * t)**2 * math.sin(2.0 * math.pi * perpendicular)
     else:
         amount = t
     axis = x if dx else y
@@ -164,7 +168,7 @@ def _slide_partition_sample(
         local_uv = tuple(value % 1.0 for value in shifted_uv)
     if style == "Wobble":
         perpendicular = y if dx else x
-        wobble = 0.012 * math.sin(math.pi * t) * (
+        wobble = 0.012 * math.sin(math.pi * t)**2 * (
             math.sin(4.0 * math.pi * perpendicular)
             + 0.5 * math.sin(8.0 * math.pi * perpendicular)
         )
