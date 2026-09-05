@@ -9,19 +9,17 @@ import weakref
 import warnings
 
 import pytest
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, QTimer
 from shiboken6 import isValid as is_valid_qobject
 
 from core.resources import ResourceManager, ResourceType
 from core.threading.manager import ThreadManager
 from engine.display_manager import DisplayManager
-from engine.engine_lifecycle import teardown_display_runtime
 from engine.runtime_destruction import (
     RuntimeDestructionBarrier,
     continue_after_runtime_destruction,
+    create_runtime_destruction_barrier,
 )
-from rendering.custom_layout_manager import CustomLayoutManager
-from rendering.widget_manager import WidgetManager
 from widgets.clock_ticker import GlobalClockTicker
 
 
@@ -116,13 +114,26 @@ def test_python_cycle_blocks_replacement_until_explicitly_released(qt_app, qtbot
 
 
 @pytest.mark.parametrize("display_count", [1, 2])
-def test_retained_display_wrappers_release_plain_python_owners_without_gc(
+def test_teardown_barrier_releases_display_roots_without_gc(
     qt_app,
     qtbot,
     display_count,
     monkeypatch,
     request,
 ):
+    """The replacement barrier observes the current per-display retirement roots
+    and drains them without gc.collect().
+
+    A retiring display publishes its roots through the current
+    ``runtime_retirement_roots()`` contract: the runtime/window QObjects plus the
+    plain-Python generation owners (the unit itself, its presenter and its
+    visualizer owner). ``create_runtime_destruction_barrier`` collects them from
+    ``DisplayManager.collect_runtime_retirement_roots()`` and holds only weakrefs.
+    The retiring owner graph must be acyclic enough to release by refcount alone,
+    and the QObject roots must invalidate on deleteLater even while their Python
+    wrappers are deliberately kept alive — no gc.collect() is permitted.
+    """
+
     gc_was_enabled = gc.isenabled()
     gc.disable()
     if gc_was_enabled:
@@ -133,127 +144,90 @@ def test_retained_display_wrappers_release_plain_python_owners_without_gc(
 
     monkeypatch.setattr(gc, "collect", _unexpected_collection)
 
-    class _Display(QObject):
-        image_displayed = Signal(str)
+    class _Runtime(QObject):
+        """Stand-in Quick runtime QObject root; its window is a QObject child."""
 
-        def __init__(self, parent, screen_index):
-            super().__init__(parent)
+        def __init__(self):
+            super().__init__()
+            self.window = QObject(self)
+
+    class _PlainOwner:
+        """A plain-Python per-generation owner (presenter / visualizer style)."""
+
+    class _DisplayUnit:
+        """Minimal current-contract display unit.
+
+        The real QuickDisplayUnit is itself a plain-Python generation owner whose
+        ``runtime_retirement_roots()`` publishes its runtime/window QObjects and
+        its plain-Python owners (self, presenter, visualizer owner).
+        """
+
+        def __init__(self, screen_index):
             self.screen_index = int(screen_index)
-            self._has_rendered_first_frame = False
-            self._runtime_cleanup_complete = False
-            self._widget_manager = WidgetManager(self, resource_manager=object())
-            self._custom_layout_manager = CustomLayoutManager(self)
-            # Match the normal z-order path: a display-parented Qt timer owns a
-            # bound WidgetManager slot until manager cleanup retires it.
-            raise_timer = QTimer(self)
-            raise_timer.setSingleShot(True)
-            raise_timer.timeout.connect(self._widget_manager._do_deferred_raise)
-            raise_timer.start(60_000)
-            self._widget_manager._raise_timer = raise_timer
-            self.settings_manager = None
-            self._settings_listener_connected = False
-            self._screen = None
-            self._coordinator = SimpleNamespace(
-                unregister_instance=lambda *_args: None,
-                release_focus=lambda *_args: None,
-                uninstall_event_filter=lambda *_args: None,
+            self._runtime = _Runtime()
+            self._presenter = _PlainOwner()
+            self._visualizer_owner = _PlainOwner()
+
+        def runtime_retirement_roots(self):
+            return (
+                (self._runtime, self._runtime.window),
+                (self, self._presenter, self._visualizer_owner),
             )
-            self._transition_controller = None
-            self._current_transition = None
-            self._input_handler = None
-            self._image_presenter = None
-            self._transition_factory = None
-            self._ctrl_cursor_hint = None
-            self._gl_compositor = None
-
-        def describe_runtime_state(self):
-            return {"screen": self.screen_index}
-
-        def quiesce_for_runtime_pause(self):
-            self._widget_manager.prepare_for_runtime_pause()
-
-        def clear(self):
-            return None
-
-        def cleanup_runtime(self, _reason):
-            from rendering.display_cleanup import cleanup_runtime
-
-            cleanup_runtime(self, reason=_reason)
-
-        def shutdown_render_pipeline(self, _reason):
-            return None
-
-        def _cleanup_widget(self, attr_name, *_args, **_kwargs):
-            setattr(self, attr_name, None)
-
-        def _cancel_transition_watchdog(self):
-            return None
-
-        def _destroy_render_surface(self):
-            return None
-
-        def close(self):
-            assert self._runtime_cleanup_complete
 
     manager = DisplayManager(
         resource_manager=object(),
         thread_manager=None,
         runtime_generation=301,
     )
-    # Deliberately keep every Python wrapper alive after its C++ QObject has
-    # been destroyed.  The barrier must not rely on wrapper/refcount timing to
-    # release the plain-Python managers.
-    retired_display_wrappers = [
-        _Display(manager, screen_index)
-        for screen_index in range(display_count)
-    ]
-    manager.displays = list(retired_display_wrappers)
-    widget_manager_refs = [
-        weakref.ref(display._widget_manager)
-        for display in retired_display_wrappers
-    ]
-    fade_coordinator_refs = [
-        weakref.ref(display._widget_manager._fade_coordinator)
-        for display in retired_display_wrappers
-    ]
-    custom_layout_manager_refs = [
-        weakref.ref(display._custom_layout_manager)
-        for display in retired_display_wrappers
-    ]
-    engine = SimpleNamespace(
-        display_manager=manager,
-        resource_manager=_EmptyResourceManager(),
-        thread_manager=_EmptyThreadManager(),
-        _pending_runtime_destruction_barrier=None,
-        _terminal_shutdown_requested=False,
-        _display_initialized=True,
-        _display_initializing=False,
-        _pending_displays_ready_generation=None,
-        _loading_in_progress=False,
-        _runtime_generation=302,
+    units = [_DisplayUnit(screen_index) for screen_index in range(display_count)]
+    manager.displays = list(units)
+
+    unit_refs = [weakref.ref(unit) for unit in units]
+    presenter_refs = [weakref.ref(unit._presenter) for unit in units]
+    visualizer_refs = [weakref.ref(unit._visualizer_owner) for unit in units]
+    # Keep the runtime Python wrappers alive after their C++ QObjects are
+    # destroyed: the barrier must observe C++ invalidation, not wrapper refcount.
+    runtime_wrappers = [unit._runtime for unit in units]
+
+    engine = _engine()
+
+    barrier = create_runtime_destruction_barrier(
+        engine,
+        manager,
+        reason="settings",
+        retiring_generation=301,
+        purpose="replacement",
     )
+    engine._pending_runtime_destruction_barrier = barrier
+    barrier.seal()
+
+    # The barrier watched the exact plain-Python owners each display published
+    # (unit + presenter + visualizer owner per display).
+    assert barrier.describe()["python_owners_pending"] >= 3 * display_count
+    assert barrier.is_complete is False
+
+    completed = []
+    continue_after_runtime_destruction(engine, lambda: completed.append(True))
+
+    # Drop every strong reference to the retiring generation's owners and queue
+    # the QObject roots for destruction. The manager QObject tree is also watched,
+    # so it is retired here too.
+    for runtime in runtime_wrappers:
+        runtime.deleteLater()
+    manager.displays = []
+    units.clear()
+    manager.deleteLater()
     del manager
 
-    barrier = teardown_display_runtime(engine, reason="settings")
-    completed = []
-    continue_after_runtime_destruction(
-        engine,
-        lambda: completed.append(
-            all(owner_ref() is None for owner_ref in custom_layout_manager_refs)
-        ),
-    )
-
-    assert barrier is not None
     qtbot.waitUntil(lambda: completed == [True], timeout=1000)
-    assert len(retired_display_wrappers) == display_count
-    assert all(
-        not is_valid_qobject(display)
-        for display in retired_display_wrappers
-    )
-    assert all(owner_ref() is None for owner_ref in widget_manager_refs)
-    assert all(owner_ref() is None for owner_ref in fade_coordinator_refs)
-    assert all(owner_ref() is None for owner_ref in custom_layout_manager_refs)
+
+    assert all(unit_ref() is None for unit_ref in unit_refs)
+    assert all(owner_ref() is None for owner_ref in presenter_refs)
+    assert all(owner_ref() is None for owner_ref in visualizer_refs)
+    # C++ roots invalidated even though the Python wrappers are still held.
+    assert all(not is_valid_qobject(runtime) for runtime in runtime_wrappers)
     assert barrier.describe()["python_owners_pending"] == 0
+    assert barrier.describe()["qobjects_pending"] == 0
 
 
 def test_display_manager_retires_only_owned_signal_connections_without_warnings(
@@ -438,9 +412,10 @@ def test_display_manager_publishes_generation_milestones_once(qt_app):
     manager._on_image_displayed(0, "first.jpg")
     manager._on_image_displayed(1, "second.jpg")
     manager._on_image_displayed(1, "later.jpg")
-    manager._on_startup_reveal_completed(1)
-    manager._on_startup_reveal_completed(0)
-    manager._on_startup_reveal_completed(0)
+    # Repeated reveal-finished callbacks for the live generation still publish
+    # the startup-reveal milestone exactly once (dedupe via _startup_reveal_emitted).
+    manager._on_quick_startup_reveal_finished(52)
+    manager._on_quick_startup_reveal_finished(52)
 
     assert first_frames == [52]
     assert reveals == [52]

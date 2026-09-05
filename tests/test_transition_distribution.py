@@ -224,7 +224,7 @@ def test_engine_random_fails_closed_when_pool_hw_unavailable() -> None:
 def test_rotation_timer_does_not_prepare_random_choice_twice() -> None:
     calls = {"show": 0, "prepare": 0}
 
-    def _show_next_image():
+    def _show_next_image(*, origin="unspecified"):
         calls["show"] += 1
         return True
 
@@ -258,7 +258,7 @@ def test_manual_next_rebases_only_after_request_is_accepted() -> None:
     calls = {"show": 0, "rebase": []}
     accepted = [False, True]
     engine = SimpleNamespace(
-        _show_next_image=lambda: (
+        _show_next_image=lambda *, origin="unspecified": (
             calls.__setitem__("show", calls["show"] + 1),
             accepted.pop(0),
         )[1],
@@ -430,7 +430,11 @@ def test_show_next_image_does_not_prepare_random_choice_without_runtime_targets(
     assert calls["prepare"] == 0
 
 
-def test_show_next_image_does_not_prepare_random_choice_for_empty_queue_result() -> None:
+def test_empty_queue_result_releases_opened_batch_and_shows_nothing() -> None:
+    # The image-change transaction is opened (pending True) and the batch
+    # transition is resolved *before* queue selection by design. When the queue
+    # then yields no image, the opened batch must be released (pending cleared to
+    # False) and no image may be loaded/displayed — the ownership must never leak.
     calls = {"prepare": 0, "load": 0, "pending": []}
     lock = threading.Lock()
 
@@ -440,6 +444,8 @@ def test_show_next_image_does_not_prepare_random_choice_for_empty_queue_result()
 
     display_manager = SimpleNamespace(
         set_transition_work_pending=lambda value: calls["pending"].append(value),
+        has_transition_work_pending=lambda: False,
+        has_admissible_transition_for_open_batch=lambda: True,
         show_error=lambda _message: None,
     )
     engine = SimpleNamespace(
@@ -448,21 +454,29 @@ def test_show_next_image_does_not_prepare_random_choice_for_empty_queue_result()
         _loading_lock=lock,
         _loading_in_progress=False,
         _prepare_random_transition_if_needed=lambda: calls.__setitem__("prepare", calls["prepare"] + 1),
-        _load_and_display_image=lambda _image_meta: calls.__setitem__("load", calls["load"] + 1) or True,
+        _load_and_display_image=lambda _image_meta, *, perf_trace=None: calls.__setitem__("load", calls["load"] + 1) or True,
         thread_manager=None,
         _current_image=None,
     )
+    # Exercise the real image-change admission gate (it marks the batch pending
+    # True through the current transition-work contract) rather than stubbing it.
+    engine._try_begin_image_change_work = (
+        lambda: ScreensaverEngine._try_begin_image_change_work(engine)
+    )
 
     assert ScreensaverEngine._show_next_image(engine) is False
-    assert calls["prepare"] == 0
+    # Transition is resolved batch-first (image-independent), then the empty queue
+    # releases the opened batch without loading/displaying anything.
+    assert calls["prepare"] == 1
     assert calls["load"] == 0
     assert calls["pending"] == [True, False]
+    assert engine._current_image is None
 
 
 def test_show_next_image_prepares_random_choice_once_for_accepted_image_batch() -> None:
     calls = {"prepare": 0, "load": 0, "pending": []}
     lock = threading.Lock()
-    image_meta = {"path": "accepted-image.jpg"}
+    image_meta = SimpleNamespace(local_path="accepted-image.jpg", url=None)
 
     class _Queue:
         def next(self):
@@ -470,6 +484,8 @@ def test_show_next_image_prepares_random_choice_once_for_accepted_image_batch() 
 
     display_manager = SimpleNamespace(
         set_transition_work_pending=lambda value: calls["pending"].append(value),
+        has_transition_work_pending=lambda: False,
+        has_admissible_transition_for_open_batch=lambda: True,
         show_error=lambda _message: None,
     )
     engine = SimpleNamespace(
@@ -478,9 +494,14 @@ def test_show_next_image_prepares_random_choice_once_for_accepted_image_batch() 
         _loading_lock=lock,
         _loading_in_progress=False,
         _prepare_random_transition_if_needed=lambda: calls.__setitem__("prepare", calls["prepare"] + 1),
-        _load_and_display_image=lambda _image_meta: calls.__setitem__("load", calls["load"] + 1) or True,
+        _load_and_display_image=lambda _image_meta, *, perf_trace=None: calls.__setitem__("load", calls["load"] + 1) or True,
         thread_manager=None,
         _current_image=None,
+    )
+    # Exercise the real image-change admission gate (it marks the batch pending
+    # True through the current transition-work contract) rather than stubbing it.
+    engine._try_begin_image_change_work = (
+        lambda: ScreensaverEngine._try_begin_image_change_work(engine)
     )
 
     assert ScreensaverEngine._show_next_image(engine) is True
