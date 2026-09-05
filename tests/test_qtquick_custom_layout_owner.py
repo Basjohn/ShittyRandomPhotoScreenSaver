@@ -802,6 +802,16 @@ def test_live_visualizer_session_save_preserves_visible_projection_and_identity(
         assert old_state is not None
         last_revision = 0
 
+        # Cancel restores the *pre-edit* running baseline, so capture it before
+        # Edit admission. Admission stores the session item as an integer QRect,
+        # so a sub-pixel (x.5) committed float rect round-trips through a <=0.5px
+        # envelope while Edit is active -- the same envelope the live-resize
+        # assertions below already tolerate. Cancel then returns to this true
+        # baseline exactly, which the post-start transient would not.
+        baseline_outer_rect = tuple(
+            unit.runtime.scene_controller.visualizer_item.presentation.outer_rect
+        )
+
         assert layout.start() is True
         session = layout.session
         assert session is not None
@@ -872,7 +882,7 @@ def test_live_visualizer_session_save_preserves_visible_projection_and_identity(
         restored = unit.runtime.scene_controller.visualizer_item.presentation
         assert restored is not None
         assert restored.viewport_extent == initial_extent
-        assert restored.outer_rect == pytest.approx(before.outer_rect)
+        assert restored.outer_rect == pytest.approx(baseline_outer_rect)
 
         assert layout.start() is True
         session = layout.session
@@ -1153,12 +1163,17 @@ def test_custom_layout_visualizer_display_transaction_moves_scene_and_manager_ed
             self.scene_controller = scene
 
     class _Unit:
-        def __init__(self, scene) -> None:
+        def __init__(self, scene, visualizer_owner=None) -> None:
             self.runtime = _Runtime(scene)
+            # Manager/unit lifecycle authority: the source unit must own the live
+            # Visualizer and the target must own none, or the one-owner transfer
+            # invariant refuses the move.
+            self.visualizer_owner = visualizer_owner
 
     source_scene, target_scene = _Scene(), _Scene()
-    source_unit, target_unit = _Unit(source_scene), _Unit(target_scene)
     visualizer = object()
+    source_unit = _Unit(source_scene, visualizer_owner=visualizer)
+    target_unit = _Unit(target_scene)
     current = {"unit": source_unit}
     transfers = []
 
@@ -1212,12 +1227,14 @@ def test_custom_layout_visualizer_display_transaction_rolls_scene_back_on_lifecy
             self.scene_controller = scene
 
     class _Unit:
-        def __init__(self, scene) -> None:
+        def __init__(self, scene, visualizer_owner=None) -> None:
             self.runtime = _Runtime(scene)
+            self.visualizer_owner = visualizer_owner
 
     source_scene, target_scene = _Scene(), _Scene()
-    source_unit, target_unit = _Unit(source_scene), _Unit(target_scene)
     visualizer = object()
+    source_unit = _Unit(source_scene, visualizer_owner=visualizer)
+    target_unit = _Unit(target_scene)
     layout = QuickCustomLayoutOwner(
         settings_manager=None,
         participants_provider=lambda: (),
