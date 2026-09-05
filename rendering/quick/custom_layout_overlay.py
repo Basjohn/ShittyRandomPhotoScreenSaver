@@ -17,6 +17,7 @@ from PySide6.QtCore import (
     Slot,
 )
 from PySide6.QtQuick import QQuickItem
+from shiboken6 import isValid as _is_valid_qobject
 
 from rendering.custom_layout_session import (
     CustomLayoutSession,
@@ -475,18 +476,31 @@ class RetainedCustomLayoutOverlay:
             ],
         )
 
-    def clear_session(self) -> None:
+    def clear_session(self) -> bool:
+        """Clear edit projection, returning False if the retained item was dead."""
+
         item = self._item
         model = self._model
         self._model = None
+        item_alive = False
         if item is not None:
+            try:
+                item_alive = bool(_is_valid_qobject(item))
+            except (RuntimeError, TypeError):
+                item_alive = False
+        if item_alive:
             item.setProperty("editActive", False)
             item.setProperty("sessionModel", None)
             item.setProperty("verticalGuides", [])
             item.setProperty("horizontalGuides", [])
         if model is not None:
             model.retire()
-            model.deleteLater()
+            try:
+                if _is_valid_qobject(model):
+                    model.deleteLater()
+            except (RuntimeError, TypeError):
+                pass
+        return item_alive or item is None
 
     def retire(self) -> None:
         self.clear_session()

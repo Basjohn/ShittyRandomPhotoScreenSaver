@@ -46,9 +46,26 @@ Operator-accepted hard contracts:
 - [x] The pre-existing discrete button-hop 1 px drift remains fixed by using a true floating geometric centre rather than integer `QRect.center()`.
 - [x] Media Volume visual polish folded in without lifecycle scope: internal and external volume borders are +1 authored px (1.5 -> 2.5); neighbouring control borders are unchanged.
 
+**2026-09-05 aggressive-edit terminalization regression (latest log):**
+
+A later torture run proved another M0 lifecycle hole after many successful resize/display operations. The first failure was not the final `s` hang: at ~18:27:44 the first Save persisted/promoted live geometry and then `_finish()` dereferenced an ordinary retained presentation whose C++ `QQuickItem` had already died. Cleanup threw halfway through the per-display loop, leaving one display out of Edit and the other still bound to the shared session. Later context-menu actions and Cancel hit the same poisoned retained graph, and terminal diagnostics finally dereferenced an already-deleted `DisplayScene` root and aborted teardown.
+
+Repair contract in this checkpoint:
+
+- [~] retained ordinary presentation wrappers subscribe to their own Qt `destroyed` edge; an unexpected C++ death removes the Python wrapper immediately and records its model identity for lifecycle repair. This is event-driven and adds no polling/render cadence;
+- [~] `_finish()` retires the shared coordinator and attempts cleanup on **every display** even if one scene is corrupt, then clears shared session/binding/resize ownership in `finally`. One dead display can no longer leave another half-stuck in Edit;
+- [~] Cancel catches baseline-projection failure, still terminalizes the whole shared session, then requests one reconstruction from committed truth;
+- [~] Save still performs **no reload at all when healthy**. Only proven live-promotion/retained-object corruption after persistence requests `save_corrupt_retained_runtime`; this is invariant repair, not a replacement for live Save;
+- [~] scene/overlay/Visualizer retirement paths guard already-deleted Shiboken wrappers. `describe_scene_state()` is observational only and must never prevent destruction;
+- [~] unexpected `DisplayScene` root destruction while admission remains open is now logged at the destruction edge with screen/generation and carried into CUSTOM cleanup as corruption, so a future recurrence exposes the upstream death timing instead of surfacing much later through a menu/widget dereference.
+
+The exact upstream reason the retained root died is **not yet proven** by the old log; do not speculate it into a transfer teardown. The new destruction-edge instrumentation is intended to identify that owner if it recurs while the recovery contract prevents a half-Edit/hung application.
+
 **Focused target-environment tests required before M0 closes:**
 
 - [ ] `tests/test_qtquick_visualizer_custom_geometry_regressions.py` — new focused regressions for two-axis corners, stable session scale, orphan-target reconciliation, and true target-owner refusal;
+- [ ] `tests/test_qtquick_custom_layout_terminalization.py` — all-display `_finish()` despite one failed scene cleanup, healthy live Save never requesting reload, corruption-only Save/Cancel reconstruction, and event-driven stale-wrapper ledger;
+- [ ] `tests/test_qtquick_retained_lifecycle_integrity.py` — detailed current-owner lifecycle matrix: coordinator + per-display cleanup failure terminalization, healthy geometry and coherent cross-display Save remaining live, slot-save deferral boundary, promotion/Cancel corruption ordering, unexpected-vs-intentional Qt-root death, admission-scoped `DisplayScene` loss, and diagnostic failure isolation;
 - [ ] `tests/test_qtquick_custom_layout_owner.py::test_visualizer_display_hop_uses_nearest_direction_and_preserves_shape` — deterministic 1 px hop regression;
 - [ ] current reconciled `tests/test_qtquick_custom_layout_owner.py` live Save / transfer / Cancel cells;
 - [ ] `tests/test_qtquick_custom_layout_overlay.py` — Visualizer corner semantics/styling and ordinary-widget negative controls;
@@ -64,7 +81,8 @@ This container has no `PySide6`/OpenGL, so Qt-bearing pytest collection remains 
 - [ ] drag across the native seam in both directions, then Save; releasing and starting a new drag permits a fresh transfer attempt;
 - [ ] Cancel after a cross-display hop restores source geometry/ownership cleanly;
 - [ ] after several successful live edits/transfers, load two numbered layout slots including a slot with a different Visualizer mode; rebuild completes and the selected mode becomes runtime truth;
-- [ ] no `Incoherent visualizer working geometry`, `target already has a retained scene admission`, closed-pacer retirement, duplicate admission or destruction-barrier residue.
+- [ ] after an intentionally aggressive resize/display torture pass, Save/Cancel leaves **both displays** out of Edit, context-menu actions remain clickable, Esc/Settings/exit remain admitted, and there is no deleted-`QQuickItem` warning;
+- [ ] no `Incoherent visualizer working geometry`, `target already has a retained scene admission`, half-CUSTOM state, unexpected `DisplayScene` destruction, closed-pacer retirement, duplicate admission or destruction-barrier residue.
 
 ### M1 — Bubble migration-reference visual parity
 

@@ -219,8 +219,27 @@ class QuickCustomLayoutOwner:
     def cancel(self) -> bool:
         if not self._active or self._session is None:
             return False
-        self._session.restore_baseline()
-        self._finish()
+        restore_error: Exception | None = None
+        try:
+            self._session.restore_baseline()
+        except Exception as exc:
+            # Baseline state lives in settings/session primitives; a dead retained
+            # Quick object must not strand one display in Edit. Close the shared
+            # session below and explicitly reconstruct from committed truth.
+            restore_error = exc
+            logger.exception(
+                "[CUSTOM_LAYOUT] Baseline projection failed during Cancel; "
+                "closing session and reconciling retained runtime"
+            )
+        cleanup_corruption = self._finish()
+        if restore_error is not None or cleanup_corruption:
+            logger.error(
+                "[CUSTOM_LAYOUT] Cancel requires retained-runtime reconciliation "
+                "restore_error=%s corruption=%s",
+                None if restore_error is None else type(restore_error).__name__,
+                cleanup_corruption,
+            )
+            self._reload_request("cancel_corrupt_retained_runtime")
         logger.info("[CUSTOM_LAYOUT] Cancelled Quick session")
         return True
 
@@ -301,19 +320,42 @@ class QuickCustomLayoutOwner:
                 "[CUSTOM_LAYOUT] Save live-committed cross-display Visualizer "
                 "transfer without generation reconciliation"
             )
+        promotion_error: Exception | None = None
         if live_committing:
-            self._promote_live_geometry_commit()
+            try:
+                self._promote_live_geometry_commit()
+            except Exception as exc:
+                # Persistence has already committed. Never leave the shared Edit
+                # session half-alive because retained promotion discovered a dead
+                # or incoherent presentation edge; finish atomically and rebuild
+                # from the newly persisted geometry instead. Healthy live commits
+                # still remain entirely in-generation.
+                promotion_error = exc
+                logger.exception(
+                    "[CUSTOM_LAYOUT] Live geometry promotion failed after persistence; "
+                    "closing session and reconciling retained runtime"
+                )
         else:
             logger.info(
                 "[CUSTOM_LAYOUT] Save retains generation reconciliation reason=%s",
                 topology_reason,
             )
-        self._finish()
+        cleanup_corruption = self._finish()
         # Geometry-only / coherent live commits remain in this retained
         # generation. A layout-slot transaction can explicitly defer topology
         # replacement until its slot attempt completes; no caller gets an ignored
-        # compatibility flag.
-        if not live_committing:
+        # compatibility flag. Proven retained-object corruption is different: the
+        # saved primitives are authoritative, so request one explicit reconstruction
+        # rather than continuing with dead wrappers.
+        if promotion_error is not None or cleanup_corruption:
+            logger.error(
+                "[CUSTOM_LAYOUT] Save requires retained-runtime reconciliation "
+                "promotion_error=%s corruption=%s",
+                None if promotion_error is None else type(promotion_error).__name__,
+                cleanup_corruption,
+            )
+            self._reload_request("save_corrupt_retained_runtime")
+        elif not live_committing:
             if defer_topology_reconciliation:
                 self._deferred_topology_reconciliation_reason = topology_reason
                 logger.info(
@@ -343,7 +385,12 @@ class QuickCustomLayoutOwner:
             return False
         self._settings_manager.set_widgets_map(widgets, emit_change=False)
         self._settings_manager.save()
-        self._finish()
+        cleanup_corruption = self._finish()
+        if cleanup_corruption:
+            logger.error(
+                "[CUSTOM_LAYOUT] Reset closed over corrupt retained objects: %s",
+                cleanup_corruption,
+            )
         self._reload_request("reset_authored")
         logger.info("[CUSTOM_LAYOUT] Restored authored Quick layout")
         return True
@@ -352,7 +399,14 @@ class QuickCustomLayoutOwner:
         if self._retired:
             return False
         if self._active:
-            self.cancel()
+            try:
+                if self._session is not None:
+                    self._session.restore_baseline()
+            except Exception:
+                logger.exception(
+                    "[CUSTOM_LAYOUT] Terminal retire could not project CUSTOM baseline"
+                )
+            self._finish()
         self._retired = True
         self._participants_provider = lambda: ()
         self._visualizer_provider = lambda: (None, None)
@@ -1423,7 +1477,9 @@ class QuickCustomLayoutOwner:
                 item.current_size_payload,
             )
 
-    def _finish(self) -> None:
+    def _finish(self) -> tuple[str, ...]:
+        """Close one shared CUSTOM session on every display, even if one is corrupt."""
+
         # Closing the retained edit overlay can leave the release/click that
         # activated Save/Cancel in the same native input burst as the underlying
         # screensaver. Arm the existing replacement guard *before* removing the
@@ -1435,19 +1491,44 @@ class QuickCustomLayoutOwner:
             700,
             reason="custom_layout_overlay_close",
         )
-        for binding in tuple(self._bindings.values()):
-            binding.unit.runtime.scene_controller.clear_custom_layout_session()
+        corruption: list[str] = []
+        bindings = tuple(self._bindings.values())
         coordinator = self._coordinator
+        # Retire the cross-display listener before clearing per-scene edit state.
+        # Cleanup must never generate another transfer while displays are closing.
         self._coordinator = None
         if coordinator is not None:
-            coordinator.retire()
-        self._session = None
-        self._bindings = {}
-        self._descriptors = {}
-        self._resize_origins = {}
-        self._visualizer_pixels_per_world.clear()
-        self._visualizer_move_transfer_latch.clear()
-        self._active = False
+            try:
+                coordinator.retire()
+            except Exception as exc:
+                corruption.append(f"coordinator:{type(exc).__name__}")
+                logger.exception("[CUSTOM_LAYOUT] Coordinator retirement failed")
+        try:
+            for binding in bindings:
+                try:
+                    damaged = binding.unit.runtime.scene_controller.clear_custom_layout_session()
+                    corruption.extend(
+                        f"{binding.identity}:{entry}" for entry in tuple(damaged or ())
+                    )
+                except Exception as exc:
+                    corruption.append(f"{binding.identity}:scene_cleanup:{type(exc).__name__}")
+                    logger.exception(
+                        "[CUSTOM_LAYOUT] Display cleanup failed identity=%s; "
+                        "continuing shared session retirement",
+                        binding.identity,
+                    )
+        finally:
+            # Shared Python ownership must close exactly once even when one display's
+            # retained C++ graph is already damaged. This prevents the half-Edit
+            # state observed when display 0 threw before display 1 was cleared.
+            self._session = None
+            self._bindings = {}
+            self._descriptors = {}
+            self._resize_origins = {}
+            self._visualizer_pixels_per_world.clear()
+            self._visualizer_move_transfer_latch.clear()
+            self._active = False
+        return tuple(dict.fromkeys(corruption))
 
     def _transfer_visualizer_display_transaction(
         self,

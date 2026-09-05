@@ -13,6 +13,7 @@ from PySide6.QtCore import QObject, QPoint, QUrl, Signal, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlComponent, QQmlContext, QQmlEngine
 from PySide6.QtQuick import QQuickItem
+from shiboken6 import isValid as _is_valid_qobject
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.visualizer_mode_registry import VisualizerShellPolicy
@@ -62,6 +63,16 @@ from .window import QuickDisplayWindow
 
 
 logger = get_logger(__name__)
+
+def _qobject_is_alive(value: object) -> bool:
+    if not isinstance(value, QObject):
+        return False
+    try:
+        return bool(_is_valid_qobject(value))
+    except (RuntimeError, TypeError):
+        return False
+
+
 
 
 def _render_snapshot_has_intentional_base_frame(snapshot: object) -> bool:
@@ -371,6 +382,9 @@ class QuickSceneController(QObject):
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
         self._custom_layout_visualizer_baseline: ResolvedVisualizerPresentation | None = None
+        # Set only when the C++ DisplayScene root dies while this generation is
+        # still admitting work. Normal terminal retirement closes admission first.
+        self._unexpected_scene_root_loss = False
         # Optional presentation-neutral sink for the retained CUSTOM viewport
         # extent. The destination orchestration binds the visualizer logical
         # runtime's viewport-config setter here so a live edge drag reaches the
@@ -430,6 +444,7 @@ class QuickSceneController(QObject):
         root.setParentItem(content)
         self._context = context
         self._scene_root = root
+        root.destroyed.connect(self._on_scene_root_destroyed)
         self._visualizer_loader = root.findChild(
             QQuickItem,
             "visualizerPresentationLoader",
@@ -508,6 +523,21 @@ class QuickSceneController(QObject):
         self._sync_root_height()
         root.setProperty("perfHudEnabled", self._perf_hud_enabled)
         self._publish_readiness(qml_root_created=True)
+
+    def _on_scene_root_destroyed(self, *_args: object) -> None:
+        """Record unexpected DisplayScene destruction without owning recovery cadence."""
+
+        if self._readiness.admission_open and not self._readiness.qml_objects_retired:
+            self._unexpected_scene_root_loss = True
+            logger.critical(
+                "[QUICK_LIFECYCLE] DisplayScene root died while admission remained open "
+                "screen=%s generation=%s",
+                self._window.screen_index,
+                self._readiness.runtime_generation,
+            )
+        # Never retain an invalid Shiboken wrapper merely for diagnostics. Child
+        # references are independently guarded/pruned by their lifecycle owners.
+        self._scene_root = None
 
     @property
     def scene_root(self) -> QQuickItem:
@@ -828,33 +858,83 @@ class QuickSceneController(QObject):
             target.ordinary_widget_host,
         )
 
-    def clear_custom_layout_session(self) -> None:
-        """Remove transient edit state without recreating family presentations."""
+    def clear_custom_layout_session(self) -> tuple[str, ...]:
+        """Remove transient edit state and report any already-dead Quick roots.
 
+        Normal CUSTOM closure is entirely retained and returns ``()``.  A dead QML
+        root is an invariant violation, but cleanup must still retire the shared
+        session on this display so one bad presentation cannot strand another
+        display in Edit.  The owner may then request one explicit reconstruction.
+        """
+
+        corrupt: list[str] = []
+        if self._unexpected_scene_root_loss:
+            corrupt.append("scene_root")
+            self._unexpected_scene_root_loss = False
         host = self.ordinary_widget_host
+        invalid = host.prune_invalid_presentations()
+        deaths = host.consume_unexpected_qt_deaths()
+        if invalid or deaths:
+            identities = tuple(dict.fromkeys((*invalid, *deaths)))
+            corrupt.extend(f"ordinary:{identity}" for identity in identities)
+            logger.error(
+                "[CUSTOM_LAYOUT] Retained ordinary Qt roots died unexpectedly "
+                "screen=%s identities=%s",
+                self._window.screen_index,
+                identities,
+            )
         for model_identity in host.model_identities():
             presentation = host.presentation_for_model_identity(model_identity)
-            if presentation is not None:
+            if presentation is None:
+                continue
+            try:
                 presentation.set_working_visible(True)
+            except (RuntimeError, TypeError):
+                corrupt.append(f"ordinary:{model_identity}")
+                host.retire_widget(presentation)
         media_overlay = host.presentation_for_model_identity("media")
         if media_overlay is not None:
-            media_overlay.item.setProperty("volumeWheelEnabled", True)
-        if self._visualizer_root is not None:
-            self._visualizer_root.setProperty("customLayoutWorkingVisible", True)
-            self._visualizer_root.setProperty("volumeWheelEnabled", True)
-        self.set_custom_layout_guides()
+            try:
+                media_overlay.item.setProperty("volumeWheelEnabled", True)
+            except (RuntimeError, TypeError):
+                corrupt.append("ordinary:media")
+                host.retire_widget(media_overlay)
+        root = self._visualizer_root
+        if root is not None:
+            if _qobject_is_alive(root):
+                root.setProperty("customLayoutWorkingVisible", True)
+                root.setProperty("volumeWheelEnabled", True)
+            else:
+                corrupt.append("visualizer_root")
+                self._visualizer_root = None
+                self._visualizer_content_host = None
         underlay = self._custom_layout_guide_underlay
-        if underlay is not None:
+        if underlay is not None and _qobject_is_alive(underlay):
+            underlay.setProperty("verticalCenterGuides", [])
+            underlay.setProperty("horizontalCenterGuides", [])
             underlay.setProperty("editActive", False)
-        self.custom_layout_overlay.clear_session()
-        if self._visualizer_item is not None:
-            self._visualizer_item.set_custom_layout_presentation_authority(False)
+        elif underlay is not None:
+            corrupt.append("custom_layout_guide_underlay")
+        overlay = self._custom_layout_overlay
+        if overlay is not None and not overlay.clear_session():
+            corrupt.append("custom_layout_overlay")
+        item = self._visualizer_item
+        if item is not None:
+            if _qobject_is_alive(item):
+                item.set_custom_layout_presentation_authority(False)
+            else:
+                corrupt.append("visualizer_item")
+                self._visualizer_item = None
         self._custom_layout_session = None
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
         self._custom_layout_visualizer_baseline = None
         # Ending CUSTOM restores the baseline logical world for the next step.
-        self._publish_visualizer_viewport_config()
+        try:
+            self._publish_visualizer_viewport_config()
+        except (RuntimeError, TypeError):
+            corrupt.append("visualizer_viewport_sink")
+        return tuple(dict.fromkeys(corrupt))
 
     def _apply_custom_layout_item(self, item: CustomLayoutSessionItem) -> None:
         if item.model_identity == "spotify_visualizer":
@@ -865,6 +945,15 @@ class QuickSceneController(QObject):
             return
         presentation = host.presentation_for_model_identity(item.model_identity)
         if presentation is None:
+            return
+        if not presentation.is_qt_alive:
+            host.prune_invalid_presentations()
+            logger.error(
+                "[CUSTOM_LAYOUT] Working projection found dead retained ordinary root "
+                "screen=%s identity=%s",
+                self._window.screen_index,
+                item.model_identity,
+            )
             return
         active_item = self._active_custom_layout_item(item.model_identity)
         presentation.set_working_visible(active_item is not None)
@@ -1443,11 +1532,30 @@ class QuickSceneController(QObject):
         self._visualizer_double_click_admission = None
         self._visualizer_middle_click_admission = None
         self._publish_readiness(admission_open=False)
-        if self._visualizer_item is not None:
-            self._visualizer_item.clear_render_source()
+        item = self._visualizer_item
+        if item is not None:
+            if _qobject_is_alive(item):
+                item.clear_render_source()
+            else:
+                logger.error(
+                    "[QUICK_LIFECYCLE] Visualizer item was already deleted "
+                    "before retirement screen=%s",
+                    self._window.screen_index,
+                )
+                self._visualizer_item = None
         self._visualizer_bridge = None
-        if self._visualizer_root is not None:
-            self._visualizer_root.setProperty("presentationActive", False)
+        root = self._visualizer_root
+        if root is not None:
+            if _qobject_is_alive(root):
+                root.setProperty("presentationActive", False)
+            else:
+                logger.error(
+                    "[QUICK_LIFECYCLE] Visualizer root was already deleted "
+                    "before retirement screen=%s",
+                    self._window.screen_index,
+                )
+                self._visualizer_root = None
+                self._visualizer_content_host = None
         if (
             not self._window.isVisible()
             and not self._window.isSceneGraphInitialized()
@@ -1469,22 +1577,27 @@ class QuickSceneController(QObject):
             "readiness": self._readiness.as_dict(),
             "qml_url": self._factory.qml_url.toLocalFile(),
             "qml_object_name": (
-                self._scene_root.objectName() if self._scene_root is not None else None
+                self._scene_root.objectName() if _qobject_is_alive(self._scene_root) else None
             ),
+            "qml_root_alive": _qobject_is_alive(self._scene_root),
+            "unexpected_qml_root_loss": bool(self._unexpected_scene_root_loss),
             "render_initialize_count": snapshot.initialize_count,
             "render_count": snapshot.render_count,
             "release_count": snapshot.release_count,
             "invalidation_count": snapshot.invalidation_count,
             "render_error": snapshot.error,
+            # Diagnostics are observational only. A poisoned retained Qt wrapper
+            # must never abort terminal teardown merely because a pre-destruction
+            # snapshot tried to inspect it.
             "presentation_image": (
                 None
-                if self._background_item is None
+                if not _qobject_is_alive(self._background_item)
                 or self._background_item.presentation_image is None
                 else self._background_item.presentation_image.describe()
             ),
             "transition_run": (
                 None
-                if self._background_item is None
+                if not _qobject_is_alive(self._background_item)
                 or self._background_item.transition_run is None
                 else {
                     "run_id": self._background_item.transition_run.run_id,
@@ -1498,10 +1611,10 @@ class QuickSceneController(QObject):
             ),
             "last_transition_run_id": self._last_transition_run_id,
             "visualizer": {
-                "instantiated": self._visualizer_item is not None,
+                "instantiated": _qobject_is_alive(self._visualizer_item),
                 "render_identity": (
                     None
-                    if self._visualizer_item is None
+                    if not _qobject_is_alive(self._visualizer_item)
                     or self._visualizer_item.render_identity is None
                     else {
                         "runtime_generation": (
@@ -1828,12 +1941,22 @@ class QuickSceneController(QObject):
         # Detach and queue the C++-owned root while every Python child wrapper
         # is still retained. Dropping a Python-created child first can trigger
         # a PySide ownership cascade before the outer QML wrapper is detached.
-        if root is not None:
+        if _qobject_is_alive(root):
             root.setParentItem(None)
             root.setParent(None)
             root.deleteLater()
-        if context is not None:
+        elif root is not None:
+            logger.error(
+                "[QUICK_LIFECYCLE] Scene root already deleted during QML retirement screen=%s",
+                self._window.screen_index,
+            )
+        if _qobject_is_alive(context):
             context.deleteLater()
+        elif context is not None:
+            logger.error(
+                "[QUICK_LIFECYCLE] QML context already deleted during retirement screen=%s",
+                self._window.screen_index,
+            )
         self._scene_root = None
         self._background_item = None
         self._ordinary_widget_host = None

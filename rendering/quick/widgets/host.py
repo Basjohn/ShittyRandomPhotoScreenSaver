@@ -22,6 +22,18 @@ from PySide6.QtCore import QObject, QPointF
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlContext
 from PySide6.QtQuick import QQuickItem
+from shiboken6 import isValid as _is_valid_qobject
+
+
+def _qobject_is_alive(value: object) -> bool:
+    """Return whether a Qt wrapper still owns a live C++ object."""
+
+    if not isinstance(value, QObject):
+        return False
+    try:
+        return bool(_is_valid_qobject(value))
+    except (RuntimeError, TypeError):
+        return False
 
 
 # Deliberate destination policy established by F1 Clock and reused by ordinary
@@ -111,6 +123,11 @@ class RetainedOverlayWidget:
             [Mapping[str, object]], None
         ] | None = None
         self._input_state_handler: Callable[[object], bool] | None = None
+        # A Python presentation wrapper must never outlive its QML-owned C++ root.
+        # This event-driven edge has no polling/render cost and follows the widget
+        # across display-host transfers because it consults ``self._host`` at the
+        # moment destruction occurs.
+        item.destroyed.connect(self._on_item_destroyed)
 
     @property
     def item(self) -> QQuickItem:
@@ -122,6 +139,12 @@ class RetainedOverlayWidget:
     @property
     def is_retired(self) -> bool:
         return self._item is None
+
+    @property
+    def is_qt_alive(self) -> bool:
+        """Return whether this retained presentation still owns a live item."""
+
+        return _qobject_is_alive(self._item)
 
     @property
     def shadow_item(self) -> QQuickItem | None:
@@ -232,6 +255,13 @@ class RetainedOverlayWidget:
         host = self._host
         return bool(host is not None and host.retire_widget(self))
 
+    def _on_item_destroyed(self, *_args: object) -> None:
+        """Drop this wrapper immediately when Qt destroys its retained root."""
+
+        host = self._host
+        if host is not None:
+            host._drop_unexpected_destroyed_widget(self)
+
     def _retire(self) -> None:
         item = self._item
         shadow_item = self._shadow_item
@@ -244,14 +274,14 @@ class RetainedOverlayWidget:
         self._input_state_handler = None
         for callback in callbacks:
             callback()
-        if shadow_item is not None:
+        if _qobject_is_alive(shadow_item):
             # The underlay references the widget for geometry/style bindings;
             # detach and retire it first so no binding can outlive its source.
             shadow_item.setProperty("sourceWidget", None)
             shadow_item.setParentItem(None)
             shadow_item.setParent(None)
             shadow_item.deleteLater()
-        if item is not None:
+        if _qobject_is_alive(item):
             item.setProperty("widgetGlowAdmitted", False)
             # Detach from the scene graph before queuing deletion so retiring one
             # widget never depends on the display generation still being live.
@@ -294,6 +324,10 @@ class OrdinaryWidgetPresentationHost:
         self._live: list[RetainedOverlayWidget] = []
         self._by_model_identity: dict[str, RetainedOverlayWidget] = {}
         self._input_state: object | None = None
+        # Event-bound corruption ledger. An unexpectedly destroyed C++ root is
+        # removed immediately from the live maps; CUSTOM close consumes this list
+        # and requests one reconstruction from committed truth.
+        self._unexpected_qt_deaths: list[str] = []
         # Generation-scoped presentation state.  Remembering this at the host
         # boundary guarantees a family root created after startup priming joins
         # the scene already closed/current, rather than flashing at QML's 1.0
@@ -518,6 +552,53 @@ class OrdinaryWidgetPresentationHost:
     ) -> RetainedOverlayWidget | None:
         return self._by_model_identity.get(str(model_identity or "").strip())
 
+    def _drop_unexpected_destroyed_widget(
+        self, widget: RetainedOverlayWidget
+    ) -> None:
+        """Remove one Qt-destroyed wrapper and remember the invariant break."""
+
+        if self._retired or widget not in self._live:
+            return
+        identity = widget.model_identity or "<anonymous>"
+        self._live.remove(widget)
+        if widget.model_identity and self._by_model_identity.get(widget.model_identity) is widget:
+            self._by_model_identity.pop(widget.model_identity, None)
+        self._unexpected_qt_deaths.append(identity)
+        widget._retire()
+
+    def prune_invalid_presentations(self) -> tuple[str, ...]:
+        """Drop wrappers whose QML-owned C++ roots have already died.
+
+        The ``destroyed`` signal normally performs this synchronously. This scan is
+        a lifecycle-bound backstop for wrappers that became invalid before signal
+        delivery/connection. It adds no render/input cadence.
+        """
+
+        if self._retired:
+            return ()
+        invalid: list[str] = []
+        for widget in tuple(self._live):
+            if widget.is_qt_alive:
+                continue
+            identity = widget.model_identity or "<anonymous>"
+            self._live.remove(widget)
+            if (
+                widget.model_identity
+                and self._by_model_identity.get(widget.model_identity) is widget
+            ):
+                self._by_model_identity.pop(widget.model_identity, None)
+            self._unexpected_qt_deaths.append(identity)
+            widget._retire()
+            invalid.append(identity)
+        return tuple(invalid)
+
+    def consume_unexpected_qt_deaths(self) -> tuple[str, ...]:
+        """Consume identities whose retained C++ roots died unexpectedly."""
+
+        deaths = tuple(dict.fromkeys(self._unexpected_qt_deaths))
+        self._unexpected_qt_deaths = []
+        return deaths
+
     def set_startup_reveal_opacity(self, opacity: float) -> tuple[str, ...]:
         """Store/project the generation startup gate for current and future roots."""
 
@@ -713,6 +794,7 @@ class OrdinaryWidgetPresentationHost:
         self._live = []
         self._by_model_identity = {}
         self._input_state = None
+        self._unexpected_qt_deaths = []
         self._retired = True
         for widget in live:
             widget._retire()
