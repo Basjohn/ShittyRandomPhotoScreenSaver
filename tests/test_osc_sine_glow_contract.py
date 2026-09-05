@@ -25,7 +25,7 @@ def test_glow_shaders_expose_reactivity_and_intensity_strength_contract() -> Non
 
 
 def test_build_gpu_extra_uses_mode_specific_glow_reactivity() -> None:
-    from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+    from widgets.spotify_visualizer.config_applier import _append_line_mode_visual_extras
 
     widget = SimpleNamespace(
         _sine_glow_enabled=True,
@@ -103,15 +103,18 @@ def test_build_gpu_extra_uses_mode_specific_glow_reactivity() -> None:
         _heartbeat_intensity=0.0,
     )
 
-    sine_extra = build_gpu_push_extra_kwargs(widget, "sine_wave", None)
-    osc_extra = build_gpu_push_extra_kwargs(widget, "oscilloscope", None)
+    widget.presentation_config_host = widget
+    sine_extra = {}
+    osc_extra = {}
+    _append_line_mode_visual_extras(sine_extra, widget, is_sine=True)
+    _append_line_mode_visual_extras(osc_extra, widget, is_sine=False)
 
     assert sine_extra["glow_reactivity"] == 1.6
     assert osc_extra["glow_reactivity"] == 0.4
 
 
 def test_line_mode_gpu_extra_uses_neutral_runtime_transport_keys() -> None:
-    from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+    from widgets.spotify_visualizer.config_applier import _append_line_mode_visual_extras
 
     widget = SimpleNamespace(
         _sine_glow_enabled=True,
@@ -189,8 +192,11 @@ def test_line_mode_gpu_extra_uses_neutral_runtime_transport_keys() -> None:
         _heartbeat_intensity=0.0,
     )
 
-    sine_extra = build_gpu_push_extra_kwargs(widget, "sine_wave", None)
-    osc_extra = build_gpu_push_extra_kwargs(widget, "oscilloscope", None)
+    widget.presentation_config_host = widget
+    sine_extra = {}
+    osc_extra = {}
+    _append_line_mode_visual_extras(sine_extra, widget, is_sine=True)
+    _append_line_mode_visual_extras(osc_extra, widget, is_sine=False)
 
     assert sine_extra["line_sensitivity"] == 1.25
     assert sine_extra["line_smoothing"] == 0.42
