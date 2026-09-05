@@ -224,6 +224,7 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
         tmp_path / "themes" / "widgets" / "Default.srwtheme",
         tmp_path / "presets" / "visualizer_modes" / "bubble" / "preset_1.json",
         tmp_path / "widgets" / "spotify_visualizer" / "shaders" / "bubble.frag",
+        tmp_path / "build_deps" / "requirements_helper.txt",
     ):
         asset.parent.mkdir(parents=True, exist_ok=True)
         asset.write_bytes(b"fixture")

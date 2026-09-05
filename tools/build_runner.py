@@ -322,6 +322,8 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
         repo_root / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml",
         repo_root / "rendering" / "quick" / "qml" / "WidgetInteractionGlow.qml",
         repo_root / "rendering" / "quick" / "qml" / "shaders" / "widget_glow.frag.qsb",
+        # PyInstaller toolchain pins for the (default-selected) Reddit Helper job.
+        repo_root / "build_deps" / "requirements_helper.txt",
     )
     for asset in required_assets:
         if not asset.is_file():

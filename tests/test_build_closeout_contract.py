@@ -14,16 +14,20 @@ def test_build_families_explicitly_carry_current_quick_runtime_dependencies() ->
         "--include-package=rendering.quick",
         "--include-package=widgets.spotify_visualizer",
         "--include-package=rendering.gl_programs",
-        "--include-package=rendering.gl_compositor_pkg",
         "--include-package=OpenGL",
         "--include-package=pyaudiowpatch",
         "--include-package=sounddevice",
+        "--include-data-files=SRPSS.ico=SRPSS.ico",
         "--include-qt-plugins=qml",
         "--include-qt-plugins=multimedia",
         "--include-module=PySide6.QtQuick",
         "--include-module=PySide6.QtQml",
         "--include-module=PySide6.QtMultimedia",
     )
+    # ``rendering.gl_compositor_pkg`` was removed in the Qt Quick cutover. Nuitka
+    # fatals on a non-existent --include-package, so the build families must never
+    # reference it again.
+    forbidden = ("rendering.gl_compositor_pkg",)
     for relative in (
         "scripts/build_nuitka.ps1",
         "scripts/build_nuitka_mc_onedir.ps1",
@@ -33,6 +37,8 @@ def test_build_families_explicitly_carry_current_quick_runtime_dependencies() ->
         source = _text(relative)
         for declaration in required:
             assert declaration in source, (relative, declaration)
+        for declaration in forbidden:
+            assert declaration not in source, (relative, declaration)
 
 
 def test_build_preflight_and_onedir_validation_cover_qml_shaders_themes_presets_and_sounds() -> None:
