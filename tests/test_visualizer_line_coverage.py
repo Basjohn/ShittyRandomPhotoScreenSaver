@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import math
+import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -55,13 +57,43 @@ def _logical(mode_id: str) -> VisualizerLogicalFrame:
         energy=VisualizerEnergyState(bass=0.8, mid=0.6, high=0.4, overall=0.8),
     )
     if mode_id == "sine_wave":
+        # Exercise the actual high-detail curated Sine shape rather than the
+        # former generic sinusoid. Wobble Groove has six travelling lines,
+        # 0.55 wave effect and 0.55 micro wobble, the combination reported to
+        # reopen tiny-scale gaps during strong music.
+        preset = json.loads((
+            Path(__file__).resolve().parents[1]
+            / "presets" / "visualizer_modes" / "sine_wave"
+            / "preset_1_Wobble_Groove.json"
+        ).read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"]
         state = SineFrame(
             animation_time=0.37,
             parameters=freeze_render_fields({
-                "sine_density": 3.0,
-                "sine_card_adaptation": 0.8,
-                "sine_line_color": (240, 250, 255, 255),
-                "sine_glow_enabled": False,
+                "sine_density": preset["sine_density"],
+                "sine_card_adaptation": preset["sine_card_adaptation"],
+                "line_speed": preset["sine_speed"],
+                "sine_wave_travel": preset["sine_wave_travel"],
+                "sine_wave_effect": preset["sine_wave_effect"],
+                "sine_micro_wobble": preset["sine_micro_wobble"],
+                "line_count": preset["sine_line_count"],
+                "line_color": preset["sine_line_color"],
+                "glow_enabled": preset["sine_glow_enabled"],
+                "glow_intensity": preset["sine_glow_intensity"],
+                "glow_reactivity": preset["sine_glow_reactivity"],
+                "glow_color": preset["sine_glow_color"],
+                "resolved_sensitivity": preset["sine_sensitivity"],
+                **{
+                    f"line{index}_color": preset[f"sine_line{index}_color"]
+                    for index in range(2, 7)
+                },
+                **{
+                    f"sine_travel_line{index}": preset[f"sine_travel_line{index}"]
+                    for index in range(2, 7)
+                },
+                **{
+                    f"sine_line{index}_shift": preset[f"sine_line{index}_shift"]
+                    for index in range(1, 7)
+                },
             }),
         )
     elif mode_id == "oscilloscope":
@@ -175,6 +207,18 @@ def test_real_gl_tiny_scale_steep_lines_keep_fractional_translation_coverage(qt_
         assert aligned_energy > 18_000
         assert translated_energy > 18_000
         assert translated_energy / aligned_energy == pytest.approx(1.0, rel=0.22)
+        # Wobble Groove's six travelling pulse lines must leave coverage in
+        # every x column at the rejected extreme/DPR geometry.  This catches
+        # a real raster gap, rather than accepting a healthy total alpha that
+        # happens to be concentrated in neighbouring columns.
+        translated_column_energy = [
+            sum(translated_alpha[row * width + column] for row in range(height))
+            for column in range(width)
+        ]
+        # Exclude the render-node/card clip's first and last four framebuffer
+        # columns. Those are outside the fractional content rect, not waveform
+        # gaps; the assertion covers every drawable Wobble Groove column.
+        assert min(translated_column_energy[4:-4]) > 0
         # A device-pixel coverage ramp must retain fractional alpha, rather
         # than collapsing the tiny authored stroke to binary sample hits.
         assert any(8 < alpha < 247 for alpha in translated_alpha)
@@ -195,7 +239,11 @@ def test_line_shaders_keep_style_scale_separate_from_derivative_coverage() -> No
     devcurve = (root / "widgets/spotify_visualizer/shaders/devcurve.frag").read_text(encoding="utf-8")
 
     for source in (sine, osc):
-        assert "float line_footprint_px = max(fwidth(dist_px), 1e-4);" in source
+        # Coverage differentiates signed distance. ``abs`` can cancel inside
+        # a quad straddling a steep pulse crest and reopen the old tiny-scale
+        # line gaps even though an fwidth call remains present.
+        assert "float signed_dist_px = (ny - wave_y) * inner_height;" in source
+        assert "float line_footprint_px = max(fwidth(signed_dist_px), 1e-4);" in source
         assert "line_width + line_footprint_px" in source
         assert "authored_visual_scale()" in source
     assert "float edgeAA = max(aa, fwidth(y - yCurve));" in devcurve

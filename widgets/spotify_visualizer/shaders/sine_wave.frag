@@ -233,8 +233,11 @@ vec4 eval_line(
     out float line_alpha_out, out float glow_alpha_out
 ) {
     float wave_y = clamp(0.5 + wave_val * amplitude + mw_displacement, 0.0, 1.0);
-    float dist = abs(ny - wave_y);
-    float dist_px = dist * inner_height;
+    // Preserve the signed distance for derivative coverage. Differentiating
+    // ``abs(ny - wave_y)`` can cancel across a 2x2 quad that straddles a
+    // steep pulse crest, reducing its footprint to zero and leaving a gap.
+    float signed_dist_px = (ny - wave_y) * inner_height;
+    float dist_px = abs(signed_dist_px);
 
     // Base width 2px, bass reaction can push it up to ~8px while still looking like a sine.
     // density_thickness_factor() tapers width at high density to prevent blobbing.
@@ -247,7 +250,7 @@ vec4 eval_line(
     // coverage ramp so the authored width above remains the style authority.
     // The derivative also widens the ramp on steep wave segments, where one
     // framebuffer pixel crosses more vertical distance than a horizontal one.
-    float line_footprint_px = max(fwidth(dist_px), 1e-4);
+    float line_footprint_px = max(fwidth(signed_dist_px), 1e-4);
     float line_alpha = 1.0 - smoothstep(
         0.0, line_width + line_footprint_px, dist_px
     );

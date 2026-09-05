@@ -51,9 +51,11 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
 
 ## Discovered follow-ups (after active geometry/material work)
 
-- [ ] Sine/Spline pulse coverage: operator sees improved AA but jagged edges during pulses in Wobble
+- [~] Sine/Spline pulse coverage: operator sees improved AA but jagged edges during pulses in Wobble
   Groove. Reproduce with the actual curated preset and strong pulse; inspect signed-distance footprint
-  before any amplitude or temporal filtering change.
+  before any amplitude or temporal filtering change. Signed-distance derivatives now avoid cusp
+  cancellation; curated Wobble Groove coverage and line gates pass (27 tests). Physical pulse acceptance
+  remains open; the current pixel gate does not independently prove the reported pulse shimmer gone.
 - [ ] Slide Elastic/Wobble/Flex timing: operator reports slow travel then a sudden elastic jump. Trace
   travel/effect progress and velocity continuity, then design smooth interpolation across the whole
   transition. Preserve exact endpoints and the sealed transition owner; no second timer.
