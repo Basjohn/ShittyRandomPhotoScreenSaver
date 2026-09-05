@@ -2,6 +2,8 @@
 
 Last updated: 2026-09-05
 
+- [x] **DevCurve travel smoothing / line firmness:** fixed outside migration gating in the M2 build slice. Travel phase is integrated and rate-smoothed with only ±10% audio breathing; strong reaction remains in curve shape/material. Outline gets +1 px total baseline and eases to +3 px total at the largest viewport.
+
 ## Scope rule — READ THIS FIRST
 
 `Current_Plan.md` M0-M3 is the **only migration-close authority**. This file must not silently add new migration blockers.
@@ -11,10 +13,10 @@ Current starting comparison remains the supplied current GODZIP/source tree. Ins
 
 ## Migration-close mirror — do not create a second plan
 
-- [~] **M0 mirror — Visualizer CUSTOM geometry/lifecycle:** finish target-environment validation of stable per-session pixels-per-world, side one-axis/corner two-axis viewport resize, wheel-only uniform scaling, manager-proven orphan target-admission cleanup, button/drag transfer, Cancel, and no-teardown Save. Latest stress regression also requires all-display atomic CUSTOM terminalization when a retained Qt root dies, corruption-only reconstruction after closure, and diagnostics that can never abort teardown. Numbered slot load remains the fenced rebuild boundary. Exact gates live in `Current_Plan.md`.
-- [~] **M1 mirror — Bubble reference mode:** cached profile is physically reported much more cohesive. Wide tail reaches +1 big only when authored big >0, +3 small and +20% baseline/cap; tall tail reaches -1 big/-1 small and **-30% cap** with baseline speed unchanged. Validate and then freeze absent new evidence.
-- [ ] **M2 mirror — performance/soak:** first `--perf --viz` without `--usage`, compare 60/165 Hz, then long normal-runtime soak after M0/M1 are stable.
-- [ ] **M3 mirror — suite/install:** maintained destination -> broad classification -> compiled/frozen/installed 1/2/N display, DPR/topology, Settings/Media Center/screensaver/shutdown acceptance.
+- [x] **M0 mirror — Visualizer CUSTOM geometry/lifecycle:** finish target-environment validation of stable per-session pixels-per-world, side one-axis/corner two-axis viewport resize, wheel-only uniform scaling, manager-proven orphan target-admission cleanup, button/drag transfer, Cancel, and no-teardown Save. Latest stress regression also requires all-display atomic CUSTOM terminalization when a retained Qt root dies, corruption-only reconstruction after closure, and diagnostics that can never abort teardown. Numbered slot load remains the fenced rebuild boundary. Exact gates live in `Current_Plan.md`.
+- [x] **M1 mirror — Bubble reference mode:** cached profile is physically reported much more cohesive. Wide tail reaches +1 big only when authored big >0, +3 small and +20% baseline/cap; tall tail reaches -1 big/-1 small and **-30% cap** with baseline speed unchanged. Validate and then freeze absent new evidence.
+- [~] **M2 mirror — suite/build/install:** destination/broad classification -> build-tool/package dependency audit -> Diagnostic/standard/MC build + installer/profile asset-path acceptance. Diagnostic owns bundled themes/presets; standard/MC keep shared ProgramData authority.
+- [ ] **M3 mirror — frozen-product performance/soak:** clean 60/165 Hz performance comparison, then the overnight soak on the actual frozen Diagnostic/SCR product after M2 is green.
 
 ## Post-migration / non-blocking work
 

@@ -132,6 +132,7 @@ class InputSettings:
     widget_glow_intensity: int = 100
     widget_glow_distance: int = 14
     widget_glow_color: Optional[List[int]] = None
+    widget_glow_jedi_mode: bool = False
 
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "InputSettings":
@@ -154,6 +155,9 @@ class InputSettings:
             widget_glow_color=_coerce_widget_glow_color(
                 settings.get("input.widget_glow_color", None)
             ),
+            widget_glow_jedi_mode=settings.to_bool(
+                settings.get("input.widget_glow_jedi_mode", False), False
+            ),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -170,6 +174,7 @@ class InputSettings:
                 if self.widget_glow_color is None
                 else list(self.widget_glow_color)
             ),
+            "input.widget_glow_jedi_mode": self.widget_glow_jedi_mode,
         }
 
 

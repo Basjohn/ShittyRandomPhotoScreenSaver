@@ -24,6 +24,8 @@ Item {
     property real widgetGlowIntensity: 1.0
     property real widgetGlowDistance: 14.0
     property color widgetGlowColor: "transparent"
+    property bool widgetGlowJediMode: false
+    signal jediModeRequested(string trigger)
     property color cardShadowColor: "#96000000"
     property real cardShadowBlur: 18.0
     property real cardShadowOffsetX: 0.0
@@ -68,9 +70,17 @@ Item {
 
     HoverHandler {
         id: visualizerInteractionHover
-        enabled: visualizerInteractionGlowLoader.active
-            && visualizerPresentationRoot.widgetGlowOnHover
+        enabled: visualizerPresentationRoot.widgetGlowOnHover
+            && (visualizerInteractionGlowLoader.active
+                || (visualizerPresentationRoot.widgetGlowJediMode
+                    && visualizerPresentationRoot.widgetGlowAdmitted
+                    && visualizerPresentationRoot.visible))
         blocking: false
+        onHoveredChanged: {
+            if (hovered && visualizerPresentationRoot.widgetGlowJediMode
+                    && visualizerPresentationRoot.widgetGlowAdmitted)
+                visualizerPresentationRoot.jediModeRequested("hover")
+        }
     }
 
     WheelHandler {

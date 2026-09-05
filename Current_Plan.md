@@ -18,7 +18,7 @@ Current supplied source authority for this work slice remains the user's current
 
 ## Migration-close sequence
 
-### M0 — ACTIVE: Visualizer CUSTOM geometry + cross-display lifecycle integrity
+### M0 — CLOSED: Visualizer CUSTOM geometry + cross-display lifecycle integrity
 
 **Goal:** every live Edit operation must leave one coherent geometry/lifecycle truth. **Do not undo live Edit Save.**
 
@@ -63,28 +63,28 @@ The exact upstream reason the retained root died is **not yet proven** by the ol
 
 **Focused target-environment tests required before M0 closes:**
 
-- [x] `tests/test_qtquick_visualizer_custom_geometry_regressions.py` — new focused regressions for two-axis corners, stable session scale, orphan-target reconciliation, and true target-owner refusal; (automated green, offscreen)
-- [x] `tests/test_qtquick_custom_layout_terminalization.py` — all-display `_finish()` despite one failed scene cleanup, healthy live Save never requesting reload, corruption-only Save/Cancel reconstruction, and event-driven stale-wrapper ledger; (automated green, offscreen)
-- [x] `tests/test_qtquick_retained_lifecycle_integrity.py` — detailed current-owner lifecycle matrix: coordinator + per-display cleanup failure terminalization, healthy geometry and coherent cross-display Save remaining live, slot-save deferral boundary, promotion/Cancel corruption ordering, unexpected-vs-intentional Qt-root death, admission-scoped `DisplayScene` loss, and diagnostic failure isolation; (automated green, offscreen)
-- [x] `tests/test_qtquick_custom_layout_owner.py::test_visualizer_display_hop_uses_nearest_direction_and_preserves_shape` — deterministic 1 px hop regression; (green: production uses true floating geometric centre)
-- [x] current reconciled `tests/test_qtquick_custom_layout_owner.py` live Save / transfer / Cancel cells; (automated green: reconciled to the visualizer_owner transaction invariant and the two-phase deferred retirement; fractional-world Cancel now compares against the pre-edit running baseline, not the integer-admission transient)
-- [x] `tests/test_qtquick_custom_layout_overlay.py` — Visualizer corner semantics/styling and ordinary-widget negative controls; (automated green: coordinator delegates the occupied-target decision to the injected handler and owns rollback; overlay presentation-only check accepts the injected `display_transfer_capability`)
-- [x] `tests/test_layout_slots.py` — slot load remains the fenced boundary and restores active Visualizer mode; (automated green)
-- [ ] `tests/test_qtquick_media_presentation.py` — Media Volume border presentation contract if current suite owns that pixel/style seam. (Volume-border/style pixel seam is green; 7 reds remain in this suite from the separate Media artwork/MultiEffect/scene-host workstream — e.g. `artworkBorderWidth` 6.0->2.0, `MultiEffect` masking — which is outside M0 CUSTOM-geometry/lifecycle and left for a dedicated media reconciliation.)
+- [x] `tests/test_qtquick_visualizer_custom_geometry_regressions.py` — new focused regressions for two-axis corners, stable session scale, orphan-target reconciliation, and true target-owner refusal;
+- [x] `tests/test_qtquick_custom_layout_terminalization.py` — all-display `_finish()` despite one failed scene cleanup, healthy live Save never requesting reload, corruption-only Save/Cancel reconstruction, and event-driven stale-wrapper ledger;
+- [x] `tests/test_qtquick_retained_lifecycle_integrity.py` — detailed current-owner lifecycle matrix: coordinator + per-display cleanup failure terminalization, healthy geometry and coherent cross-display Save remaining live, slot-save deferral boundary, promotion/Cancel corruption ordering, unexpected-vs-intentional Qt-root death, admission-scoped `DisplayScene` loss, and diagnostic failure isolation;
+- [x] `tests/test_qtquick_custom_layout_owner.py::test_visualizer_display_hop_uses_nearest_direction_and_preserves_shape` — deterministic 1 px hop regression;
+- [x] current reconciled `tests/test_qtquick_custom_layout_owner.py` live Save / transfer / Cancel cells;
+- [x] `tests/test_qtquick_custom_layout_overlay.py` — Visualizer corner semantics/styling and ordinary-widget negative controls;
+- [x] `tests/test_layout_slots.py` — slot load remains the fenced boundary and restores active Visualizer mode;
+- [ ] `tests/test_qtquick_media_presentation.py` — Media Volume border presentation contract if current suite owns that pixel/style seam.
 
 This container has no `PySide6`/OpenGL, so Qt-bearing pytest collection remains **AWAITING TARGET ENVIRONMENT**, not failed.
 
 **Physical M0 acceptance sequence:**
 
-- [ ] D1 -> D0 button hop -> continue reacting -> side resize -> corner X/Y resize -> wheel resize -> Save: no restart, no empty frame, no stale source Visualizer;
-- [ ] D0 -> D1 and back repeatedly, including a target-fit case: one retained Visualizer, one lifecycle owner, coherent outline/viewport geometry;
-- [ ] drag across the native seam in both directions, then Save; releasing and starting a new drag permits a fresh transfer attempt;
-- [ ] Cancel after a cross-display hop restores source geometry/ownership cleanly;
-- [ ] after several successful live edits/transfers, load two numbered layout slots including a slot with a different Visualizer mode; rebuild completes and the selected mode becomes runtime truth;
-- [ ] after an intentionally aggressive resize/display torture pass, Save/Cancel leaves **both displays** out of Edit, context-menu actions remain clickable, Esc/Settings/exit remain admitted, and there is no deleted-`QQuickItem` warning;
-- [ ] no `Incoherent visualizer working geometry`, `target already has a retained scene admission`, half-CUSTOM state, unexpected `DisplayScene` destruction, closed-pacer retirement, duplicate admission or destruction-barrier residue.
+- [x] D1 -> D0 button hop -> continue reacting -> side resize -> corner X/Y resize -> wheel resize -> Save: no restart, no empty frame, no stale source Visualizer;
+- [x] D0 -> D1 and back repeatedly, including a target-fit case: one retained Visualizer, one lifecycle owner, coherent outline/viewport geometry;
+- [x] drag across the native seam in both directions, then Save; releasing and starting a new drag permits a fresh transfer attempt;
+- [x] Cancel after a cross-display hop restores source geometry/ownership cleanly;
+- [x] after several successful live edits/transfers, load two numbered layout slots including a slot with a different Visualizer mode; rebuild completes and the selected mode becomes runtime truth;
+- [x] after an intentionally aggressive resize/display torture pass, Save/Cancel leaves **both displays** out of Edit, context-menu actions remain clickable, Esc/Settings/exit remain admitted, and there is no deleted-`QQuickItem` warning;
+- [x] no `Incoherent visualizer working geometry`, `target already has a retained scene admission`, half-CUSTOM state, unexpected `DisplayScene` destruction, closed-pacer retirement, duplicate admission or destruction-barrier residue.
 
-### M1 — Bubble migration-reference visual parity
+### M1 — CLOSED: Bubble migration-reference visual parity
 
 **Goal:** freeze one accepted visual/scaling contract before measuring the migration gain. No more broad visualizer tuning unless evidence reopens it.
 
@@ -101,45 +101,43 @@ Operator feedback on the current curve is **very good / much more cohesive**; th
 
 **M1 gates:**
 
-- [x] `tests/test_bubble_viewport_reflow.py` — full extreme tall cap now 0.70, wide zero-big safety, bounded population modifiers; (automated green; the reflow-normalization motion tests now isolate the separately-tested wide/tall speed gradient)
-- [x] `tests/test_qtquick_visualizer_bubble.py` and current Bubble pixel/reaction contracts; (automated green)
-- [ ] eyes-on canonical, moderate wide/tall, ~6:1 ultrawide and most-extreme vertical; outline may firm gradually but must not become thin because shape is extreme or balloon at the largest area;
-- [ ] preserve R-69: no global radius/reaction/Ghost/history/drift/cadence compression to make an extreme viewport fit.
+- [x] `tests/test_bubble_viewport_reflow.py` — full extreme tall cap now 0.70, wide zero-big safety, bounded population modifiers;
+- [x] `tests/test_qtquick_visualizer_bubble.py` and current Bubble pixel/reaction contracts;
+- [x] eyes-on canonical, moderate wide/tall, ~6:1 ultrawide and most-extreme vertical; outline may firm gradually but must not become thin because shape is extreme or balloon at the largest area;
+- [x] preserve R-69: no global radius/reaction/Ghost/history/drift/cadence compression to make an extreme viewport fit.
 
-### M2 — Delivery/performance + soak proof
 
-**Goal:** measure the migrated product after M0/M1 are stable; do not optimize around corrupted geometry or diagnostics overhead.
+**Closure evidence:** Claude's focused M0 + Bubble gate is green offscreen and on real monitors; the deterministic 1 px hop regression is green. The operator then completed an aggressive multi-display Edit/Save/Cancel/slot-load torture run without the prior split-CUSTOM or stale-root failure. Bubble is visually accepted and its logical/audio lane remained healthy. Reopen M0/M1 only on contradictory new evidence.
 
-- [ ] First representative run: `--perf --viz` **without `--usage`** on the 60 Hz display, then compare 165 Hz under the same Bubble preset/geometry.
-- [ ] Bubble logical cadence remains ~90 Hz with requested/integrated revisions tracking 1:1 apart from bounded shutdown/rebuild edges; no sustained integration failures, stale-age growth or cadence collapse.
+### M2 — ACTIVE: destination suite + build/install/product readiness
+
+**Goal:** make the actual frozen product authoritative before spending the final overnight soak on it. Build/tool/install defects are migration blockers; future visual polish is not.
+
+- [x] M0 focused gate is green on real hardware; M1 Bubble is operator-accepted.
+- [~] Reconcile the maintained destination profile. Current remaining reds are outside closed M0/M1 and must be classified against intentional current product changes rather than resurrecting retired owners.
+- [~] Audit both normal/global-Python and repo-venv Nuitka families so lazy Qt Quick/Visualizer/GL/audio imports are explicitly packaged rather than left to discovery.
+- [~] Build preflight/post-build validation must require QML, baked QSBs, Visualizer shaders, shipped themes, Widget Themes, visualizer presets, notification/Jedi sounds and pinned Qt Quick/QML/QtMultimedia dependencies.
+- [~] Diagnostic onefile must be self-contained: bundled themes/presets are its authority because its lowest-privilege installer intentionally does not seed ProgramData. Standard SCR and Media Center keep the shared ProgramData theme/preset authority.
+- [ ] Add the real `resources/jedimodeyall.mp3`; Jedi Mode build preflight intentionally fails until the authored asset exists.
+- [ ] Build Diagnostic EXE, standard SCR/onefile and MC onedir with current scripts; verify source preflight and post-build payload checks.
+- [ ] Validate installers/upgrades carry current presets/themes/sounds without stale renamed files, and that Settings/Widget Theme paths resolve correctly per product profile.
+- [ ] Run the destination profile from the resulting product tree where applicable, then broad-tree classification; no legacy architecture may be restored for museum tests.
+- [ ] Compiled/frozen acceptance: 1/2/N display, mixed DPR/topology, Settings recreation, Media Center/screensaver entry/exit, mode dormancy, and clean shutdown.
+
+**Small non-blocking polish folded into this build slice:** DevCurve travel now integrates a smoothed cruise phase with only ±10% audio speed breathing instead of a ~12x reactive throttle/re-phase; its lines gain +1 px total at canonical and ease to +3 px total at the largest viewport. Jedi Mode is a default-OFF easter egg using existing hover/click edges + EventSystem and a hard two-player QtMultimedia pool; no timer/poller/queue/frame owner.
+
+### M3 — frozen-product performance + overnight soak proof
+
+**Goal:** measure the actual end product after M2 proves the package is complete. Python/dev-run soak is supporting evidence only; the frozen diagnostic/SCR product is final authority.
+
+- [ ] Representative clean run: `--perf --viz` without `--usage` on 60 Hz, then 165 Hz under the same accepted Bubble preset/geometry.
+- [ ] Bubble logical cadence remains ~90 Hz with requested/integrated revisions tracking 1:1 apart from bounded shutdown/rebuild edges; no sustained stale-age growth, integration failures or cadence collapse.
 - [ ] Attribute any visible hitch from immutable logical revision/age -> Quick sync -> render-thread entry -> Bubble payload prep/transport -> uniforms/draw before changing rates or ownership.
-- [ ] Use `--usage` only as a separate diagnostic run; the known heavy enumeration sample must not be confused with product steady-state performance.
-- [ ] Confirm steady-state CPU/GPU/QML work, no hidden animation/polling owners, no repeated area/aspect classification, and no resource growth beyond existing bounded caches.
-- [ ] Run a long normal-runtime soak after M0 is clean. Record RSS/USS/private commit, VRAM/shared GPU memory, thread/work/subscription counts, handle trend, pacer/logical cadence and retirement/barrier outcomes.
+- [ ] Use `--usage` only as a separate diagnostic run; heavy process/resource enumeration must not be confused with product steady-state performance.
+- [ ] Run the valuable overnight soak on the frozen Diagnostic EXE renamed/used as the `.scr` product path, with ordinary runtime behavior rather than torture Edit. Record RSS/USS/private commit, VRAM/shared GPU memory, thread/work/subscription/handle trend, pacer/logical cadence, stale-frame tails and retirement/barrier outcomes.
+- [ ] Confirm process exits cleanly without log-autozip. If lingering reproduces only with autozip, classify/fix the logzip terminal owner separately; if it reproduces without autozip, reopen lifecycle closure immediately.
 
-Existing evidence remains useful: prior long resource soak proved owned-resource plateau and the failed-adjustment log showed healthy ~90 Hz Bubble delivery/zero integration failures **before** geometry ownership became incoherent. Do not reopen GC/freeze or media polling without contradictory evidence.
-
-### M3 — Destination suite + installed/product closure
-
-**Goal:** prove the destination architecture, not museum compatibility.
-
-- [ ] Run maintained destination profile:
-
-```powershell
-python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 900 --log
-```
-
-- [ ] Resolve every red against current Quick/event ownership. Stale QWidget/old GL overlay/native-event/polling tests are cleanup evidence, not permission to resurrect retired production seams.
-- [ ] Then run the broad tree:
-
-```powershell
-python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
-```
-
-- [ ] Reconcile remaining real current-owner reds; keep unrelated cleanup ledger in `Future_Cleanup.md`/`Docs/TestSuite.md`.
-- [ ] Compiled/frozen/installed acceptance: 1/2/N display, mixed DPR, topology changes, Settings recreation, Media Center/screensaver entry/exit and normal shutdown.
-- [ ] Complete the remaining V7 Visualizer Settings physical acceptance only where it exercises current product behavior: Media dependency disable/re-enable, Visualizers-family disable/re-enable, preserved settings, Rainbow/Custom, mode dormancy/retirement/re-enable, Settings recreation/theme inheritance.
-- [ ] Final source/docs/tests reconciliation and one superseding GODZIP/checkpoint.
+Existing evidence remains useful: the prior ~7h53m resource soak proved owned-resource plateau; subsequent torture runs show healthy ~90 Hz logical delivery and zero integration failures through aggressive geometry/display changes. M3 is confirmation on the actual frozen product, not a license to reopen already-closed architecture without contrary evidence.
 
 ## Definition of migration closed
 
@@ -149,9 +147,9 @@ All of the following must be true at once:
 - [ ] no split scene/runtime/pacer/unit ownership and no incoherent rect/viewport extent can be produced by side/corner/wheel/transfer gestures;
 - [ ] numbered slot load rebuilds cleanly and restores active Visualizer mode after arbitrary prior live edits;
 - [ ] Bubble canonical/extreme geometry is physically accepted and preserves authored freshness/reactivity/trails;
-- [ ] representative 60/165 Hz performance and long-run resource behavior show no new deterministic hitch/leak owner;
-- [ ] maintained destination suite is current-owner green/useful signal and broad reds are classified/reconciled;
-- [ ] compiled/frozen/installed multi-display/DPR/topology/shutdown validation is complete.
+- [ ] maintained destination/build/install path is current-owner complete, including Qt Quick/QML/Multimedia assets, themes/presets and installers;
+- [ ] compiled/frozen/installed multi-display/DPR/topology/shutdown validation is complete;
+- [ ] representative 60/165 Hz performance and frozen-product overnight resource behavior show no new deterministic hitch/leak/stale-frame owner.
 
 When these are green, **close the migration. Do not keep J open merely because unrelated future polish exists.**
 

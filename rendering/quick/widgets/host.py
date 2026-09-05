@@ -128,6 +128,9 @@ class RetainedOverlayWidget:
         # across display-host transfers because it consults ``self._host`` at the
         # moment destruction occurs.
         item.destroyed.connect(self._on_item_destroyed)
+        jedi_signal = getattr(item, "jediModeRequested", None)
+        if jedi_signal is not None and hasattr(jedi_signal, "connect"):
+            jedi_signal.connect(self._on_jedi_mode_requested)
 
     @property
     def item(self) -> QQuickItem:
@@ -243,6 +246,7 @@ class RetainedOverlayWidget:
             item.setProperty("widgetGlowIntensity", input_state.widget_glow_intensity)
             item.setProperty("widgetGlowDistance", input_state.widget_glow_distance)
             item.setProperty("widgetGlowColor", QColor(*input_state.widget_glow_color))
+            item.setProperty("widgetGlowJediMode", input_state.widget_glow_jedi_mode)
             item.setProperty("widgetGlowAdmitted", admitted)
             if not admitted or not input_state.widget_glow_on_click:
                 item.setProperty("widgetGlowClicked", False)
@@ -261,6 +265,13 @@ class RetainedOverlayWidget:
         host = self._host
         if host is not None:
             host._drop_unexpected_destroyed_widget(self)
+
+    def _on_jedi_mode_requested(self, trigger: object = "hover") -> None:
+        """Forward one QML interaction edge through the widget's current host."""
+
+        host = self._host
+        if host is not None:
+            host._emit_jedi_mode_event(str(trigger or "hover"), self._model_identity)
 
     def _retire(self) -> None:
         item = self._item
@@ -310,6 +321,7 @@ class OrdinaryWidgetPresentationHost:
             [str, Mapping[str, object], QQmlContext], QQuickItem
         ]
         | None = None,
+        jedi_event_handler: Callable[[str, str], None] | None = None,
     ) -> None:
         self._host_item: QQuickItem | None = host_item
         self._shadow_host_item: QQuickItem | None = shadow_host_item
@@ -317,6 +329,7 @@ class OrdinaryWidgetPresentationHost:
         self._create_overlay_item = create_overlay_item
         self._create_shadow_item = create_shadow_item
         self._create_family_item = create_family_item
+        self._jedi_event_handler = jedi_event_handler
         if (shadow_host_item is None) != (create_shadow_item is None):
             raise RuntimeError(
                 "ordinary-widget shadow underlay requires both host and factory"
@@ -648,6 +661,13 @@ class OrdinaryWidgetPresentationHost:
         if handler is not None and self._input_state is not None:
             handler(self._input_state)
 
+    def _emit_jedi_mode_event(self, trigger: str, model_identity: str) -> None:
+        """Forward one finite hover/click edge; no polling or queued repeat owner."""
+
+        handler = self._jedi_event_handler
+        if handler is not None:
+            handler(str(trigger), str(model_identity or "ordinary_widget"))
+
     def apply_input_state(self, input_state: object) -> bool:
         """Project one display-local input state onto all interactive families."""
 
@@ -671,6 +691,27 @@ class OrdinaryWidgetPresentationHost:
                 return True
         return False
 
+    def widget_glow_click_target_at(
+        self, input_state: object, scene_position: QPointF
+    ) -> RetainedOverlayWidget | None:
+        """Return the top admitted ordinary Click-Glow target for one press."""
+
+        if self._retired or input_state != self._input_state:
+            return None
+        # Match retained sibling stacking: higher z first, later child on ties.
+        for widget in sorted(
+            reversed(self._live), key=lambda w: w.item.z(), reverse=True
+        ):
+            item = widget.item
+            if not item.isVisible() or not item.isEnabled():
+                continue
+            if not item.contains(item.mapFromScene(scene_position)):
+                continue
+            if item.property("widgetGlowAdmitted") and item.property("widgetGlowOnClick"):
+                return widget
+            break
+        return None
+
     def set_widget_glow_click_target_at(
         self, input_state: object, scene_position: QPointF
     ) -> bool:
@@ -684,19 +725,7 @@ class OrdinaryWidgetPresentationHost:
 
         if self._retired or input_state != self._input_state:
             return False
-        target: RetainedOverlayWidget | None = None
-        # Match retained sibling stacking: higher z first, later child on ties.
-        for widget in sorted(
-            reversed(self._live), key=lambda w: w.item.z(), reverse=True
-        ):
-            item = widget.item
-            if not item.isVisible() or not item.isEnabled():
-                continue
-            if not item.contains(item.mapFromScene(scene_position)):
-                continue
-            if item.property("widgetGlowAdmitted") and item.property("widgetGlowOnClick"):
-                target = widget
-            break
+        target = self.widget_glow_click_target_at(input_state, scene_position)
 
         changed = False
         for widget in tuple(self._live):
@@ -804,3 +833,4 @@ class OrdinaryWidgetPresentationHost:
         self._create_overlay_item = None
         self._create_shadow_item = None
         self._create_family_item = None
+        self._jedi_event_handler = None

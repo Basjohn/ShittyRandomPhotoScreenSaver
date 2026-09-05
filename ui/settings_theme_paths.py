@@ -73,6 +73,13 @@ def resolve_settings_themes_directory(
             return Path(explicit)
 
     if _is_frozen_runtime():
+        try:
+            from core.build_profile import is_diagnostic_build
+
+            if is_diagnostic_build():
+                return _source_themes_directory()
+        except Exception:
+            pass
         return _installed_themes_directory()
     return _source_themes_directory()
 

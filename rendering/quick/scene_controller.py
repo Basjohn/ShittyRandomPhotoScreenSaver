@@ -360,6 +360,7 @@ class QuickSceneController(QObject):
     """The sole creator/retirement owner for one display's runtime Quick items."""
 
     readiness_changed = Signal(object)
+    jedi_mode_requested = Signal(str, str)
 
     def __init__(
         self,
@@ -470,6 +471,7 @@ class QuickSceneController(QObject):
             create_overlay_item=factory.create_overlay_widget,
             create_shadow_item=factory.create_overlay_card_shadow,
             create_family_item=factory.create_ordinary_widget_family,
+            jedi_event_handler=self._publish_jedi_mode_event,
         )
         window.bind_semantic_double_click_hit_test(
             self._semantic_double_click_hit_test
@@ -600,6 +602,7 @@ class QuickSceneController(QObject):
             "widgetGlowIntensity": float(input_state.widget_glow_intensity),
             "widgetGlowDistance": float(input_state.widget_glow_distance),
             "widgetGlowColor": QColor(*input_state.widget_glow_color),
+            "widgetGlowJediMode": bool(input_state.widget_glow_jedi_mode),
             "widgetGlowAdmitted": admitted,
         }
         changed = False
@@ -634,6 +637,28 @@ class QuickSceneController(QObject):
         root.setProperty("pixelShiftY", float(state.pixel_shift_y))
         return True
 
+    def _publish_jedi_mode_event(
+        self, trigger: str, model_identity: str = "ordinary_widget"
+    ) -> None:
+        """Emit one finite admitted interaction edge; never a recurring owner."""
+
+        state = self._input_state
+        normalized = str(trigger or "").strip().lower()
+        if (
+            state is None
+            or not state.admission_open
+            or state.exiting
+            or state.context_menu_active
+            or not state.widget_glow_jedi_mode
+            or normalized not in {"hover", "click"}
+        ):
+            return
+        if normalized == "hover" and not state.widget_glow_on_hover:
+            return
+        if normalized == "click" and not state.widget_glow_on_click:
+            return
+        self.jedi_mode_requested.emit(normalized, str(model_identity or "widget"))
+
     def apply_widget_glow_press(self, state: QuickInputState, scene_position: Any) -> bool:
         """Observe an admitted discrete press without participating in actions."""
 
@@ -651,9 +676,13 @@ class QuickSceneController(QObject):
             and bool(root.property("widgetGlowOnClick"))
             and self.visualizer_contains_scene_position(scene_position)
         )
+        ordinary_target = None
         if visualizer_target:
             changed = self.ordinary_widget_host.clear_widget_glow_click_target(state)
         else:
+            ordinary_target = self.ordinary_widget_host.widget_glow_click_target_at(
+                state, scene_position
+            )
             changed = self.ordinary_widget_host.set_widget_glow_click_target_at(
                 state, scene_position
             )
@@ -662,6 +691,13 @@ class QuickSceneController(QObject):
             if current != visualizer_target:
                 root.setProperty("widgetGlowClicked", visualizer_target)
                 changed = True
+        if state.widget_glow_jedi_mode:
+            if visualizer_target:
+                self._publish_jedi_mode_event("click", "visualizer")
+            elif ordinary_target is not None:
+                self._publish_jedi_mode_event(
+                    "click", ordinary_target.model_identity or "ordinary_widget"
+                )
         return changed
 
     def apply_context_menu_shadow_style(
@@ -1679,6 +1715,11 @@ class QuickSceneController(QObject):
         volume_step_signal = getattr(root, "appVolumeStepRequested", None)
         if volume_step_signal is not None and hasattr(volume_step_signal, "connect"):
             volume_step_signal.connect(self._handle_visualizer_app_volume_step)
+        jedi_signal = getattr(root, "jediModeRequested", None)
+        if jedi_signal is not None and hasattr(jedi_signal, "connect"):
+            jedi_signal.connect(
+                lambda trigger: self._publish_jedi_mode_event(trigger, "visualizer")
+            )
         self._visualizer_content_host = content_host
         self._visualizer_item = item
         root.setProperty("perfHudEnabled", self._perf_hud_enabled)

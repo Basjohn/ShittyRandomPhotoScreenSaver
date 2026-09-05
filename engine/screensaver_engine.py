@@ -66,6 +66,8 @@ from utils.image_prefetcher import ImagePrefetcher
 
 logger = get_logger(__name__)
 
+_JEDI_MODE_EVENT = "widget.jedi_mode_requested"
+
 
 class EngineState(Enum):
     """Engine lifecycle states.
@@ -816,6 +818,10 @@ class ScreensaverEngine(QObject):
                 "custom_layout_reload_requested",
                 self._on_custom_layout_reload_requested,
             )
+            _connect_runtime_signal(
+                "jedi_mode_requested",
+                self._on_jedi_mode_requested,
+            )
             _connect_runtime_signal("monitors_changed", self._on_monitors_changed)
             runtime_generation = int(getattr(self, "_runtime_generation", 0))
             _connect_runtime_signal(
@@ -1034,6 +1040,25 @@ class ScreensaverEngine(QObject):
             logger.exception("Failed to configure rotation timer: %s", e)
             self._rotation_timer = None
     
+    def _on_jedi_mode_requested(self, trigger: str, widget_id: str) -> None:
+        """Bridge one finite Quick interaction edge onto the process EventSystem."""
+
+        event_system = self.event_system
+        if event_system is None:
+            return
+        event_system.publish(
+            _JEDI_MODE_EVENT,
+            {"trigger": str(trigger), "widget_id": str(widget_id)},
+            source="qtquick_widget_interaction",
+        )
+
+    def _on_jedi_mode_event(self, _event) -> None:
+        """Lazily admit one Jedi sound event; no player exists while unused."""
+
+        from core.audio.jedi_mode_sound import JediModeSoundPlayer
+
+        JediModeSoundPlayer.instance().request_play()
+
     def _subscribe_to_events(self) -> None:
         """Subscribe to relevant events."""
         if not self.event_system:
@@ -1041,6 +1066,7 @@ class ScreensaverEngine(QObject):
         
         # Subscribe to settings changes
         self.event_system.subscribe('settings.changed', self._on_settings_changed)
+        self.event_system.subscribe(_JEDI_MODE_EVENT, self._on_jedi_mode_event)
         
         logger.debug("Event subscriptions configured")
     
