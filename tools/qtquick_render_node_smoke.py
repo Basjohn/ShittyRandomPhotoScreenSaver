@@ -1439,12 +1439,17 @@ class _SmokeRunner(QObject):
                     transition_id=self._args.transition_id,
                     requested_name=self._args.transition_id,
                     selected_from_random=False,
+                    # The fixture owns this timeline.  The transition must
+                    # remain open through a bounded per-display readback
+                    # opportunity even when the GUI event queue briefly stalls.
+                    # Three phase intervals leave the render thread a broad
+                    # interior window without changing production cadence.
                     duration_ms=max(
                         _TRANSITION_SMOKE_DURATIONS_MS.get(
                             self._args.transition_id,
                             80,
                         ),
-                        min(250, self._args.phase_delay_ms // 2),
+                        self._args.phase_delay_ms * 3,
                     ),
                     direction=self._args.transition_direction,
                     parameters={

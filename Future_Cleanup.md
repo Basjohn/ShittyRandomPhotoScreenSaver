@@ -38,10 +38,22 @@ stale tests that still import/assert against deleted presentation owners such as
 
 ## READY — Future Work destination gate reconciliation
 
+The later Sphere/geometry destination run completed all 117 targets (105 passed, 12 failed). The same nine
+unrelated targets below remain red. Its additional CUSTOM-owner failure occurred while that implementation was
+being edited and is covered by the live-commit slice's focused rerun; the input-exit smoke failure was an
+intermittent missing midpoint capture, with retirement complete. Its bounded fixture now allows three phase
+intervals for the existing render-node oracle; three input-exit reruns and one recreation rerun passed without
+new timers, polling or frame requests.
+
+- [ ] **Awaiting Logs — S-hotkey native fault:** the later destination run recorded one access violation
+  (`3221225477`) in `test_s_hotkey_workflow.py`; an isolated rerun passed all 12 tests. Preserve
+  `logs/evidence_chest/fw_missing_line_glow_2026_09_05/pytest_destination_group_1.log` and obtain a repeatable
+  stack/reproduction before changing lifecycle. Do not attribute it to Sphere or declare it fixed without evidence.
+
 The 2026-09-05 115-target destination run exposed these surviving unrelated reds after Glow/Slide/Sphere-related
 fixtures and the new retirement native fault were corrected. Evidence: `logs/pytest_destination_group_{1,2,3,4}.log`.
-The native runtime-reality and hotkey targets now pass after replacing Qt-owned runnable cleanup with render events;
-do not leave those as unresolved native failures. The missing legacy Spectrum smoothing target was already deleted
+The initial native runtime-reality and hotkey failures passed after replacing Qt-owned runnable cleanup with render
+events; the later non-reproduced hotkey fault is tracked separately above. The missing legacy Spectrum smoothing target was already deleted
 by `a3e4ec17`; its stale profile entry was removed rather than restoring retired plumbing.
 
 - [ ] Reconcile `test_qtquick_media_presentation.py` against current border/volume colour/artwork aspect/title/mask
