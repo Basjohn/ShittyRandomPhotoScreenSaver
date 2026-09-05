@@ -296,6 +296,10 @@ renderer-content stream/drift head/trail travel for the same consume-once transi
 Bubble presentation now uses `sqrt(content_width * content_height / 1.5)` as its response-height reference,
 following the operator rejection of height-only aspect coupling. The full logical radius waveform remains
 unchanged; same-area reshaping preserves pixel response and large views continue to grow.
+Sine/Oscilloscope Gaussian halo distance is measured normal to the curve in logical pixels; its width follows
+the visible content area's square-root scale against 420x280. DPR and whole-widget scaling remain physical
+projection concerns. Authored-world encoding must not compress the halo; line-core AA and musical amplitude
+remain separate contracts.
 R-69 remains binding for optimization: viewport adaptation must not add a second compressor to Bubble head radius, Ghost/history displacement, or another mode's authored musical response/freshness. Performance-motivated changes at this seam must pass `Docs/Guardrails/Performance_Optimization_Contract.md`; lower GC/FPS/CPU counters never override this contract.
 
 Viewport configuration has two precedence levels, not two persistence owners: ordinary committed extent is runtime truth;

@@ -133,6 +133,7 @@ DESTINATION_PROFILE = (
     "test_bubble_viewport_reflow.py",
     "test_bubble_aspect_pixels.py",
     "test_visualizer_line_coverage.py",
+    "test_visualizer_glow_footprint.py",
     "test_qtquick_phase_c_registry_parity.py",
     "test_qtquick_transition_controller.py",
     "test_qtquick_transition_implementations.py",

@@ -238,6 +238,18 @@ vec4 eval_line(
     // steep pulse crest, reducing its footprint to zero and leaving a gap.
     float signed_dist_px = (ny - wave_y) * inner_height;
     float dist_px = abs(signed_dist_px);
+    // Stroke coverage uses the authored vertical distance above. A halo is
+    // radial, however: normalize its distance by the local signed-distance
+    // gradient so steep wave sections retain the same screen-space spread.
+    vec2 glow_gradient = vec2(dFdx(signed_dist_px), dFdy(signed_dist_px));
+    vec2 logical_pixel_gradient = vec2(
+        dFdx(ny * inner_height), dFdy(ny * inner_height)
+    );
+    float logical_pixel_footprint = max(length(logical_pixel_gradient), 1e-4);
+    float curve_normal_scale = max(
+        length(glow_gradient) / logical_pixel_footprint, 1.0
+    );
+    float glow_dist_px = dist_px / curve_normal_scale;
 
     // Base width 2px, bass reaction can push it up to ~8px while still looking like a sine.
     // density_thickness_factor() tapers width at high density to prevent blobbing.
@@ -263,7 +275,7 @@ vec4 eval_line(
             sigma *= (0.50 + band_energy * (2.80 * react));
         }
         if (sigma > 0.0) {
-            glow_alpha = exp(-(dist_px * dist_px) / (2.0 * sigma * sigma));
+            glow_alpha = exp(-(glow_dist_px * glow_dist_px) / (2.0 * sigma * sigma));
             glow_alpha *= clamp(u_glow_intensity, 0.0, 2.0);
             if (u_reactive_glow == 1) {
                 float react = clamp(u_glow_reactivity, 0.0, 2.0);
@@ -369,7 +381,13 @@ void main() {
     float hb_mult = hb_params.x;
     float hb_cap = hb_params.y;
     // Size controls spread radius only; intensity controls visible strength.
-    float glow_sigma_base = 8.0 * px_scale * max(u_glow_size, 0.1);
+    // Style follows the visible content area, not the arbitrary authored
+    // viewport extent used by a custom layout. At the canonical 420x280 card
+    // this retains the historical 8 logical-pixel sigma.
+    float glow_style_scale = sqrt(max(
+        (inner_width * inner_height) / (420.0 * 280.0), 1e-4
+    ));
+    float glow_sigma_base = 8.0 * glow_style_scale * max(u_glow_size, 0.1);
 
     int lines = clamp(u_line_count, 1, 6);
 

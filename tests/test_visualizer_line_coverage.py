@@ -8,6 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from PySide6.QtGui import QColor
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
 from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
@@ -47,7 +48,7 @@ def _presentation(mode_id: str, *, fractional_x: float):
     )
 
 
-def _logical(mode_id: str) -> VisualizerLogicalFrame:
+def _logical(mode_id: str, *, with_glow: bool = False) -> VisualizerLogicalFrame:
     waveform = tuple(math.sin(index * math.tau * 3.0 / 64.0) for index in range(64))
     common = VisualizerCommonState(
         bars=(),
@@ -76,14 +77,17 @@ def _logical(mode_id: str) -> VisualizerLogicalFrame:
                 "sine_wave_effect": preset["sine_wave_effect"],
                 "sine_micro_wobble": preset["sine_micro_wobble"],
                 "line_count": preset["sine_line_count"],
-                "line_color": preset["sine_line_color"],
-                "glow_enabled": preset["sine_glow_enabled"],
+                # Production presentation state converts persisted color lists
+                # to QColor before frozen capture. Keep that exact boundary in
+                # this real-GL fixture so fallback defaults cannot mask it.
+                "line_color": QColor(*preset["sine_line_color"]),
+                "glow_enabled": with_glow and preset["sine_glow_enabled"],
                 "glow_intensity": preset["sine_glow_intensity"],
                 "glow_reactivity": preset["sine_glow_reactivity"],
-                "glow_color": preset["sine_glow_color"],
+                "glow_color": QColor(*preset["sine_glow_color"]),
                 "resolved_sensitivity": preset["sine_sensitivity"],
                 **{
-                    f"line{index}_color": preset[f"sine_line{index}_color"]
+                    f"line{index}_color": QColor(*preset[f"sine_line{index}_color"])
                     for index in range(2, 7)
                 },
                 **{
@@ -97,13 +101,33 @@ def _logical(mode_id: str) -> VisualizerLogicalFrame:
             }),
         )
     elif mode_id == "oscilloscope":
+        preset = json.loads((
+            Path(__file__).resolve().parents[1]
+            / "presets" / "visualizer_modes" / "oscilloscope"
+            / "preset_1_night_drive.json"
+        ).read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"]
         state = OscilloscopeFrame(
             animation_time=0.37,
             parameters=freeze_render_fields({
-                "osc_smoothing": 0.0,
-                "osc_line_amplitude": 3.0,
-                "osc_line_color": (240, 250, 255, 255),
-                "osc_glow_enabled": False,
+                "line_smoothing": preset["osc_smoothing"],
+                "resolved_sensitivity": preset["osc_line_amplitude"],
+                "line_color": QColor(*preset["osc_line_color"]),
+                "line_count": preset["osc_line_count"],
+                "glow_enabled": with_glow and preset["osc_glow_enabled"],
+                "glow_intensity": preset["osc_glow_intensity"],
+                "glow_reactivity": preset["osc_glow_reactivity"],
+                "glow_color": QColor(*preset["osc_glow_color"]),
+                "reactive_glow": preset["osc_reactive_glow"],
+                "osc_line_offset_bias": preset["osc_line_offset_bias"],
+                "osc_vertical_shift": preset["osc_vertical_shift"],
+                **{
+                    f"line{index}_color": QColor(*preset[f"osc_line{index}_color"])
+                    for index in range(2, 7)
+                },
+                **{
+                    f"line{index}_glow_color": QColor(*preset[f"osc_line{index}_glow_color"])
+                    for index in range(2, 7)
+                },
             }),
         )
     elif mode_id == "devcurve":
@@ -146,11 +170,10 @@ def _logical(mode_id: str) -> VisualizerLogicalFrame:
     )
 
 
-def _snapshot(mode_id: str, *, fractional_x: float):
+def _snapshot(mode_id: str, *, fractional_x: float, with_glow: bool = False):
     return compose_visualizer_render_snapshot(
-        _logical(mode_id), _presentation(mode_id, fractional_x=fractional_x), logical_revision=1
+        _logical(mode_id, with_glow=with_glow), _presentation(mode_id, fractional_x=fractional_x), logical_revision=1
     )
-
 
 @pytest.mark.qt
 @pytest.mark.parametrize("mode_id", ("sine_wave", "oscilloscope", "devcurve"))
@@ -177,6 +200,10 @@ def test_real_gl_tiny_scale_steep_lines_keep_fractional_translation_coverage(qt_
     fbo = color = 0
     host = QuickVisualizerRenderHost()
     try:
+        # The coverage oracle deliberately renders the line modes' core only:
+        # glow could populate a column whose stroke coverage has regressed.
+        if mode_id in ("sine_wave", "oscilloscope"):
+            assert _snapshot(mode_id, fractional_x=0.0).logical.mode_state.parameters["glow_enabled"] is False
         color = gl.glGenTextures(1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, color)
         gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
@@ -232,6 +259,90 @@ def test_real_gl_tiny_scale_steep_lines_keep_fractional_translation_coverage(qt_
         surface.destroy()
 
 
+@pytest.mark.qt
+@pytest.mark.parametrize(
+    ("mode_id", "expected_glow_color"),
+    (("sine_wave", (206, 92, 255, 255)), ("oscilloscope", (130, 160, 255, 255))),
+)
+def test_real_gl_curated_line_glow_changes_opaque_background(qt_app, mode_id: str, expected_glow_color: tuple[int, int, int, int]):
+    """Curated glow survives frozen capture and visibly reaches past the core."""
+    from OpenGL import GL as gl
+    from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
+
+    fmt = QSurfaceFormat()
+    fmt.setRenderableType(QSurfaceFormat.OpenGL)
+    fmt.setProfile(QSurfaceFormat.CoreProfile)
+    fmt.setVersion(4, 1)
+    context = QOpenGLContext()
+    context.setFormat(fmt)
+    if not context.create():
+        pytest.skip("OpenGL 4.1 context unavailable")
+    surface = QOffscreenSurface()
+    surface.setFormat(fmt)
+    surface.create()
+    if not surface.isValid() or not context.makeCurrent(surface):
+        pytest.skip("offscreen OpenGL context unavailable")
+
+    width, height = _PHYSICAL_SIZE
+    fbo = color = 0
+    host = QuickVisualizerRenderHost()
+    try:
+        frozen = _snapshot(mode_id, fractional_x=0.0, with_glow=True)
+        parameters = frozen.logical.mode_state.parameters
+        assert parameters["glow_enabled"] is True
+        assert parameters["glow_color"] == expected_glow_color
+        color = gl.glGenTextures(1)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, color)
+        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
+        fbo = gl.glGenFramebuffers(1)
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+        gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, color, 0)
+        assert gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) == gl.GL_FRAMEBUFFER_COMPLETE
+        matrix = (2 / _LOGICAL_SIZE[0], 0, 0, 0, 0, 2 / _LOGICAL_SIZE[1], 0, 0, 0, 0, 1, 0, -1, -1, 0, 1)
+
+        def render(*, with_glow: bool) -> bytes:
+            gl.glViewport(0, 0, width, height)
+            # Opaque blue-black background makes a real halo measurable as RGB
+            # change rather than transparent-frame alpha alone.
+            gl.glClearColor(0.025, 0.045, 0.075, 1.0)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+            assert host.render(
+                snapshot=_snapshot(mode_id, fractional_x=0.0, with_glow=with_glow),
+                viewport=(0, 0, width, height),
+                logical_size=_LOGICAL_SIZE,
+                matrix_values=matrix,
+            ) == mode_id
+            return bytes(gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE))
+
+        core = render(with_glow=False)
+        glow = render(with_glow=True)
+        rgb_delta = [
+            max(abs(glow[offset + channel] - core[offset + channel]) for channel in range(3))
+            for offset in range(0, len(core), 4)
+        ]
+        # The glow must alter pixels outside the rendered core, not merely tint
+        # the same antialiased samples. The glow-off RGB deviation identifies
+        # core samples on this opaque framebuffer.
+        background = (6, 11, 19)
+        core_rgb_delta = [
+            max(abs(core[offset + channel] - background[channel]) for channel in range(3))
+            for offset in range(0, len(core), 4)
+        ]
+        halo_pixels = sum(
+            delta >= 2 and core_delta < 4
+            for delta, core_delta in zip(rgb_delta, core_rgb_delta)
+        )
+        assert halo_pixels > 100_000
+        assert max(rgb_delta) >= 8
+    finally:
+        host.release_resources()
+        if fbo:
+            gl.glDeleteFramebuffers(1, [fbo])
+        if color:
+            gl.glDeleteTextures([color])
+        context.doneCurrent()
+        surface.destroy()
+
 def test_line_shaders_keep_style_scale_separate_from_derivative_coverage() -> None:
     root = __import__("pathlib").Path(__file__).resolve().parent.parent
     sine = (root / "widgets/spotify_visualizer/shaders/sine_wave.frag").read_text(encoding="utf-8")
@@ -246,5 +357,7 @@ def test_line_shaders_keep_style_scale_separate_from_derivative_coverage() -> No
         assert "float line_footprint_px = max(fwidth(signed_dist_px), 1e-4);" in source
         assert "line_width + line_footprint_px" in source
         assert "authored_visual_scale()" in source
+        assert "float glow_dist_px = dist_px / curve_normal_scale;" in source
+        assert "(inner_width * inner_height) / (420.0 * 280.0)" in source
     assert "float edgeAA = max(aa, fwidth(y - yCurve));" in devcurve
     assert "float fgAA = max(aa, fwidth(uv.y - yFg));" in devcurve

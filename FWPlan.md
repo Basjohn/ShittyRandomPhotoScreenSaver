@@ -23,11 +23,13 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
   below before queued Slide/widget-glow refinements. Live decomposition:
   `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md`.
 
-- [~] **Visualizer glow regression — Sine/Oscilloscope:** operator reports absent visualizer glows after
-  line improvements. Trace actual preset/configuration through the immutable draw state and shader at small,
-  normal and large scales; repair the owning seam with a real GL coverage test while preserving line AA/colour.
-  Confirmed in both playback and Edit Layout. Latest screenshot/short-run evidence is archived under
-  `logs/evidence_chest/fw_missing_line_glow_2026_09_05`; test-only glow alpha is not visual acceptance.
+- [x] **Visualizer glow regression — Sine/Oscilloscope:** repaired curve-normal halo distance and visible-area
+  width. The operator confirms restored glow; the final large-size correction preserves logical-pixel/DPR and
+  whole-widget scaling. Fourteen focused tests pass, including opaque-background halo, separate glow-off AA,
+  DPR 1.5, whole 2x scaling and huge-world encoding. Before/after captures inspected under
+  `logs/evidence_chest/fw_missing_line_glow_2026_09_05`.
+- [ ] **Awaiting physical validation — final large-scale glow:** confirm the content-sized halo feels balanced
+  during playback and Edit Layout at large/extreme sizes.
 - [~] **Edit exit without teardown — assessment:** live geometry is operator-described as almost perfect.
   Inventory the Save/Cancel exit teardown and its current responsibilities; measure/check stale frame, age,
   source fencing and geometry. If safe, preserve the existing visualizer state/resources across ordinary edit

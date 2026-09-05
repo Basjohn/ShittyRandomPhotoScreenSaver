@@ -141,5 +141,5 @@ admission or ownership and is not rewritten merely to sound current.
 - `Docs/Historical_Bugs/R-73_Quick_Card_Shadow_Extra_Offset_Translation_And_Visualizer_Omission.md` — frame Extra Offset is directional growth, and Visualizer joins global card-shadow ownership.
 - `Docs/Historical_Bugs/Runtime_Card_Backdrop_Materials_Rejected_2026-09-02.md` — runtime Glass/Acrylic card backdrops are explicitly rejected; Settings-window native materials remain separate.
 
-- `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md` — active all-mode Edit Layout geometry and Sphere material expansion.
+- `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md` — all-mode live geometry, line-glow scaling, Bubble freeze/outline follow-ups and Sphere material validation.
 - `Docs/Future_Work/Edit_Layout_Live_Commit.md` — promote retained geometry before ending CUSTOM and avoid geometry-only Save teardown.
