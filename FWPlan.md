@@ -66,10 +66,11 @@ effective extent = newly committed extent
 - [x] **FW1 — Widget interaction glow:** two Interaction switches, theme-inheriting shared swatch, one retained
   shader/quad and finite event-driven feedback. 64 focused tests passed; real Quick peak capture inspected.
   Detailed ownership and acceptance: `Docs/Future_Work/Widget_Interaction_Glow_Decomposition.md`.
-- [~] **FW2 — Slide motion options:** Elastic, Wobble and Flex are implemented in the sealed Slide owner with frozen
+- [x] **FW2 — Slide motion options and timing correction:** Elastic, Wobble and Flex are implemented in the sealed Slide owner with frozen
   per-run style resolution, exact endpoints and real-GL coverage. Perspective remains a separately designed feature;
   do not counterfeit it with a 2D effect.
-  Smooth the reported slow travel followed by sudden elastic settlement after Sphere checks.
+  Elastic's tenfold late velocity discontinuity is replaced by continuous quintic travel/rebound; Wobble/Flex
+  settle with zero warp velocity. 106 focused transition tests pass; physical timing acceptance remains open.
   Decomposition: `Docs/Future_Work/Slide_Motion_Options_Decomposition.md`.
 - [~] **FW3 — Deformable Sphere — motion restored; material expansion active:** dormant-by-default 3D mesh, five material presets including Water,
   bump/detail controls, source-fenced immutable capture, lazy Settings and event-only inactive GPU retirement.

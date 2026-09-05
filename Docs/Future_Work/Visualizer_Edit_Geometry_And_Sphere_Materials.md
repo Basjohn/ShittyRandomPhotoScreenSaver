@@ -64,9 +64,9 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
   before any amplitude or temporal filtering change. Signed-distance derivatives now avoid cusp
   cancellation; curated Wobble Groove coverage and line gates pass (27 tests). Physical pulse acceptance
   remains open; the current pixel gate does not independently prove the reported pulse shimmer gone.
-- [ ] Slide Elastic/Wobble/Flex timing: operator reports slow travel then a sudden elastic jump. Trace
-  travel/effect progress and velocity continuity, then design smooth interpolation across the whole
-  transition. Preserve exact endpoints and the sealed transition owner; no second timer.
+- [x] Slide timing correction: replaced the proven 1-to-10 velocity discontinuity at Elastic arrival with
+  quintic travel/rebound and zero endpoint-velocity Wobble/Flex envelopes. 106 focused tests pass.
+  Awaiting physical timing acceptance; exact endpoints, sealed coverage and the sole transition clock remain.
 
 The resize screenshot (`codex-clipboard-a5504cf1-1088-44ef-bbcc-ab5f0094f651.png`) shows a roughly
 1842x585 edit rectangle but only ~533x163 of rendered Spectrum at its top-left. Source tracing found
