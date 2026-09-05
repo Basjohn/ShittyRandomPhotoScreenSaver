@@ -54,8 +54,14 @@ def test_visualizer_volume_wheel_is_event_only_and_custom_gated() -> None:
     assert "visualizerPresentationRoot.volumeWheelEnabled" in qml
 
     controller = _text("rendering/quick/scene_controller.py")
+    # The visualizer volume wheel is disabled while a CUSTOM Edit session owns the
+    # scene and re-enabled when it clears. The enable path now assigns through a
+    # local ``root`` alias of ``self._visualizer_root`` and, at root creation,
+    # gates directly on the custom-layout session, which is the precise
+    # "custom_gated" contract this test guards.
     assert 'self._visualizer_root.setProperty("volumeWheelEnabled", False)' in controller
-    assert 'self._visualizer_root.setProperty("volumeWheelEnabled", True)' in controller
+    assert 'root.setProperty("volumeWheelEnabled", self._custom_layout_session is None)' in controller
+    assert 'root.setProperty("volumeWheelEnabled", True)' in controller
 
 
 def test_media_settings_expose_collapsed_header_seek_and_volume_buckets() -> None:

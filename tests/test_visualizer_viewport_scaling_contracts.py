@@ -372,9 +372,12 @@ class BubbleViewportScalingTests(unittest.TestCase):
         self.assertIn("ghost_decay_exponent", ghost)
 
         # Extreme-size correction may strengthen only the presentation edge; it
-        # must not change authored radius or motion amplitude.
-        self.assertIn("large_viewport_stroke_bonus_px", quick)
-        self.assertIn("large_viewport_stroke_bonus_px", shader)
+        # must not change authored radius or motion amplitude. The extreme-size
+        # stroke bonus is now resolved through the cached viewport profile as
+        # ``viewport_stroke_extra_half_px`` (formerly ``large_viewport_stroke_bonus_px``);
+        # it is still an edge-only half-pixel bonus, never a radius/motion compressor.
+        self.assertIn("viewport_stroke_extra_half_px", quick)
+        self.assertIn("viewport_stroke_extra_half_px", shader)
 
     def test_spawn_overlap_policy_is_content_space_invariant(self):
         bs = self.bubble
