@@ -75,3 +75,31 @@ Separately, the scene-level transfer gate treated **any** retained target render
 ### Added regression coverage
 
 `tests/test_qtquick_visualizer_custom_geometry_regressions.py` protects the two-axis Visualizer corner contract, stable per-session pixels-per-world authority, manager-proven orphan target cleanup, and refusal to overwrite a real target lifecycle owner. Existing reconciled CUSTOM-owner tests remain responsible for full button/drag/Save/Cancel integration in a PySide6-capable environment.
+
+## 2026-09-05 third failure mode — non-atomic CUSTOM closure over dead Quick roots
+
+A later aggressive resize/display torture run demonstrated a distinct lifecycle hole after the transfer/geometry repairs had otherwise behaved well.
+
+### Symptom chain
+
+- repeated Visualizer resize and display-transfer operations succeeded for several minutes;
+- the first visible failure occurred during Save around 18:27:44: persistence/live promotion reached the closure boundary, then one ordinary retained presentation dereferenced a C++ `QQuickItem` that had already been deleted;
+- `_finish()` stopped on that exception, so one display cleared some CUSTOM state while another retained the shared Edit session;
+- later Save attempts saw no active Visualizer override, the retained context menu could open but actions reached deleted Quick objects, and Cancel/Settings baseline projection hit the same poisoned graph;
+- terminal teardown then failed because `describe_scene_state()` itself dereferenced an already-deleted `DisplayScene` root. Diagnostics therefore amplified a recoverable retained-object failure into aborted destruction.
+
+### Permanent closure/recovery contract
+
+- A shared CUSTOM session closes on **all displays or none remain owned by it**. Per-display cleanup failures are accumulated; they do not abort the loop. Shared coordinator/session/binding/resize ownership clears unconditionally after every display has had its cleanup attempt.
+- Retained ordinary wrappers subscribe to their own Qt `destroyed` signal. Unexpected C++ destruction removes the wrapper from its current host immediately and records the model identity. Explicit normal retirement clears host ownership before `deleteLater()`, so it is not reported as corruption. This edge is event-driven and owns no cadence.
+- Cancel may fail to project a corrupt baseline, but it still terminalizes shared Edit ownership and then requests reconstruction from committed/pre-edit truth.
+- Healthy live Save remains **no-teardown/no-reinit**. Reconstruction is requested only after persistence when live promotion or retained cleanup proves the current Qt graph already corrupt. Do not turn this repair path into the ordinary Save mechanism.
+- Scene/overlay/Visualizer retirement and lifecycle snapshots must tolerate already-deleted Shiboken wrappers. Telemetry is never allowed to block destruction.
+- Unexpected `DisplayScene` destruction while admission is still open is recorded at the `destroyed` edge with screen/generation and marks the session corrupt. The original stress log proves that such a root was dead by shutdown, but does **not** prove which upstream owner destroyed it; preserve the new edge instrumentation rather than inventing a teardown theory.
+
+### Added regression owner
+
+`tests/test_qtquick_custom_layout_terminalization.py` protects all-display closure after one scene cleanup throws, healthy live Save remaining reload-free, corruption-only Save/Cancel reconstruction, and the event-driven stale-wrapper identity ledger. Physical M0 torture remains required because the original upstream Qt-root death was intermittent.
+
+`tests/test_qtquick_retained_lifecycle_integrity.py` is the broader current-owner lifecycle matrix. It additionally pins coordinator + display cleanup failure terminalization, coherent cross-display live Save, layout-slot deferred reconstruction, corruption-repair ordering, unexpected-versus-intentional retained-root death, admission-scoped `DisplayScene` loss, and the rule that display diagnostics are observational and cannot abort teardown. This complements the terminal runtime-destruction/barrier suite rather than restoring any retired lifecycle owner.
+

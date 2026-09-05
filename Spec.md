@@ -264,6 +264,16 @@ slot loads rebuild the runtime. While dormant, ordinary cards use base/committed
 uncommitted Visualizer uses Media's plain authored slot rather than the ordinary adjacent displacement. Cancel restores
 authored packing only when no effective route remains `Custom`. This boundary is event-driven and owns no cadence.
 
+CUSTOM terminalization is one **shared all-display transaction**. Save/Cancel may not clear one display and then throw before
+the others are released. Every display cleanup is attempted, shared coordinator/session/binding ownership is retired in a
+`finally`-equivalent boundary, and repeated cleanup is safe. A Python retained-presentation wrapper must not outlive its C++
+`QQuickItem`; unexpected Qt destruction is captured from the object's `destroyed` edge and pruned without polling. Healthy
+geometry-only Save—including a coherent cross-display Visualizer transfer—still performs no teardown/reinit. If persistence
+has committed but a dead retained Qt root or failed live promotion proves the current retained graph corrupt, finish the
+shared Edit session first and then queue exactly one generation reconstruction from committed truth. That reconstruction is
+an invariant-repair path, never the normal Save contract. Lifecycle/diagnostic snapshots are observational: encountering an
+already-deleted Shiboken wrapper must be reported/fail-closed and can never abort runtime destruction.
+
 ## Visualizer geometry
 
 `VisualizerLogicalRuntime` remains sole mode-general authored visualizer clock. Quick presentation does not own

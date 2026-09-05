@@ -3751,13 +3751,28 @@ class DisplayManager(QObject):
 
         states: list[dict[str, Any]] = []
         for display in self.displays:
-            describe = getattr(display, "describe_runtime_state", None)
-            if callable(describe):
-                state = describe()
-            else:
-                runtime = getattr(display, "runtime", None)
-                runtime_describe = getattr(runtime, "describe_runtime_state", None)
-                state = runtime_describe() if callable(runtime_describe) else None
+            try:
+                describe = getattr(display, "describe_runtime_state", None)
+                if callable(describe):
+                    state = describe()
+                else:
+                    runtime = getattr(display, "runtime", None)
+                    runtime_describe = getattr(runtime, "describe_runtime_state", None)
+                    state = runtime_describe() if callable(runtime_describe) else None
+            except Exception as exc:
+                # Lifecycle snapshots are telemetry, never teardown authority. A
+                # poisoned/deleted Qt wrapper must be visible in diagnostics but
+                # cannot prevent the actual generation destruction from running.
+                screen_index = getattr(display, "screen_index", "?")
+                logger.exception(
+                    "[LIFECYCLE] Display-state diagnostic failed screen=%s; "
+                    "continuing teardown",
+                    screen_index,
+                )
+                state = {
+                    "screen_index": screen_index,
+                    "diagnostic_error": f"{type(exc).__name__}: {exc}",
+                }
             if isinstance(state, dict):
                 states.append(state)
         return tuple(states)
