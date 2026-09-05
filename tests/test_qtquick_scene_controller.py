@@ -7,21 +7,306 @@ import json
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QPointF
+from PySide6.QtCore import QPoint, QPointF, QRect
 from PySide6.QtQml import QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
-from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
+from rendering.quick.scene_controller import (
+    QuickSceneController,
+    QuickSceneFactory,
+    _custom_visualizer_relative_scale,
+)
+from rendering.quick.custom_layout_owner import (
+    QuickCustomLayoutOwner,
+    _DisplayBinding,
+)
+from rendering.custom_layout_session import (
+    CustomLayoutKey,
+    CustomLayoutSession,
+    CustomLayoutSessionItem,
+)
+from rendering.widget_descriptors import get_widget_runtime_descriptor
 from rendering.quick.state import QuickSceneReadiness, QuickWindowPolicy
 from rendering.quick.window import QuickDisplayWindow
 from widgets.spotify_visualizer.presentation_geometry import (
     resolve_visualizer_presentation,
+    resize_visualizer_presentation,
 )
 from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
-from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+from core.settings.visualizer_mode_registry import (
+    VISUALIZER_MODE_IDS,
+    get_visualizer_presentation_policy,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("mode_id", VISUALIZER_MODE_IDS)
+def test_custom_visualizer_working_rect_survives_fresh_committed_snapshot(mode_id):
+    """All modes retain an active edge preview over a committed-size snapshot."""
+    policy = get_visualizer_presentation_policy(mode_id)
+    # This is the normal-snapshot state during an active right-edge edit: the
+    # owner has incorporated the new 840-wide logical extent but still resolves
+    # it through the committed 420px physical rectangle.
+    committed_snapshot = resolve_visualizer_presentation(
+        policy=policy,
+        display_size=(1920.0, 1080.0),
+        outer_origin=(130.0, 90.0),
+        viewport_extent=(840.0, 280.0),
+        uniform_visual_scale=0.5,
+    )
+    relative_scale = _custom_visualizer_relative_scale(
+        baseline=committed_snapshot,
+        viewport_extent=(840.0, 280.0),
+        working_width=840.0,
+        working_height=280.0,
+    )
+    assert relative_scale == pytest.approx(2.0)
+    working = resize_visualizer_presentation(
+        committed_snapshot,
+        display_size=(1920.0, 1080.0),
+        outer_origin=(130.0, 90.0),
+        viewport_extent=(840.0, 280.0),
+        relative_scale=relative_scale,
+    )
+    assert working.outer_rect == pytest.approx((130.0, 90.0, 840.0, 280.0))
+
+
+@pytest.mark.parametrize("mode_id", VISUALIZER_MODE_IDS)
+def test_custom_visualizer_huge_world_matches_same_visible_edit_footprint(mode_id):
+    """Saving/re-entering a huge world must retain the same visible rectangle."""
+    policy = get_visualizer_presentation_policy(mode_id)
+    visible = (1398.5560481317289, 268.0)
+    huge = resolve_visualizer_presentation(
+        policy=policy,
+        display_size=(1400.0, 268.0),
+        viewport_extent=(8240.0, 1579.0),
+        uniform_visual_scale=1.0,
+    )
+    direct = resolve_visualizer_presentation(
+        policy=policy,
+        display_size=visible,
+        viewport_extent=visible,
+        uniform_visual_scale=1.0,
+    )
+    huge_relative_scale = _custom_visualizer_relative_scale(
+        baseline=huge,
+        viewport_extent=(8240.0, 1579.0),
+        working_width=huge.outer_rect[2],
+        working_height=huge.outer_rect[3],
+    )
+    direct_relative_scale = _custom_visualizer_relative_scale(
+        baseline=direct,
+        viewport_extent=visible,
+        working_width=direct.outer_rect[2],
+        working_height=direct.outer_rect[3],
+    )
+    assert huge_relative_scale == pytest.approx(1.0)
+    assert direct_relative_scale == pytest.approx(1.0)
+    assert huge.outer_rect[2:] == pytest.approx(direct.outer_rect[2:])
+
+
+def test_custom_visualizer_rejects_incoherent_working_axes():
+    baseline = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("spectrum"),
+        display_size=(1920.0, 1080.0),
+        viewport_extent=(420.0, 280.0),
+    )
+    with pytest.raises(RuntimeError, match="not uniformly scaled"):
+        _custom_visualizer_relative_scale(
+            baseline=baseline,
+            viewport_extent=(840.0, 280.0),
+            working_width=840.0,
+            working_height=300.0,
+        )
+
+
+def test_custom_visualizer_relative_scale_accepts_independently_rounded_tall_rect():
+    """One axis cannot reject a valid integer-rounded CUSTOM session QRect."""
+    baseline = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("spectrum"),
+        display_size=(1920.0, 1080.0),
+        viewport_extent=(1.0, 10000.0),
+    )
+    # The height is an independently rounded projection of the same scale.
+    # A one-pixel comparison against the width-derived height is invalid here:
+    # its uncertainty expands with the 1:10000 aspect ratio.
+    relative_scale = _custom_visualizer_relative_scale(
+        baseline=baseline,
+        viewport_extent=(1.0, 10000.0),
+        working_width=1.0,
+        working_height=10001.0,
+    )
+    assert relative_scale * baseline.uniform_visual_scale == pytest.approx(
+        1.0001,
+        abs=0.0001,
+    )
+
+
+def _assert_custom_visualizer_rect(
+    controller: QuickSceneController,
+    item: CustomLayoutSessionItem,
+    display_origin: QPoint,
+) -> None:
+    """Assert the retained renderer follows the active session rectangle."""
+    presentation = controller.visualizer_item.presentation
+    expected = item.current_global_rect
+    assert presentation.outer_rect == pytest.approx(
+        (
+            float(expected.x() - display_origin.x()),
+            float(expected.y() - display_origin.y()),
+            float(expected.width()),
+            float(expected.height()),
+        )
+    )
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("mode_id", VISUALIZER_MODE_IDS)
+def test_scene_controller_keeps_all_custom_edge_wheel_cancel_and_save_geometry(
+    qt_app,
+    mode_id,
+) -> None:
+    """Exercise the real retained scene seam across every visualizer policy.
+
+    A normal renderer publication during an active edit resolves the freshly
+    changed world through its committed rectangle.  Before this regression the
+    controller reapplied that smaller rectangle at the active edit origin,
+    producing the top-left thumbnail seen in the operator capture.
+    """
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    screen_geometry = screen.geometry()
+    origin = screen_geometry.topLeft()
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=0,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    policy = get_visualizer_presentation_policy(mode_id)
+    committed = resolve_visualizer_presentation(
+        policy=policy,
+        display_size=(float(screen_geometry.width()), float(screen_geometry.height())),
+        outer_origin=(80.0, 90.0),
+        viewport_extent=(480.0, 160.0),
+        uniform_visual_scale=0.5,
+    )
+    controller.apply_visualizer_presentation(committed)
+    key = CustomLayoutKey("spotify_visualizer", "test-display")
+    baseline_rect = QRect(origin.x() + 80, origin.y() + 90, 480, 160)
+    payload = {"width": 480, "height": 160, "viewport_extent": [480.0, 160.0]}
+    item = CustomLayoutSessionItem(
+        source_key=key,
+        model_identity="spotify_visualizer",
+        baseline_global_rect=baseline_rect,
+        current_global_rect=baseline_rect,
+        baseline_size_payload=payload,
+        current_size_payload=payload,
+        baseline_enabled=True,
+        current_enabled=True,
+        resize_capable=True,
+        viewport_resize_capable=True,
+        baseline_viewport_extent=(480.0, 160.0),
+    )
+    session = CustomLayoutSession()
+    session.add_item(item)
+    controller.bind_custom_layout_session(
+        session,
+        display_identity="test-display",
+        display_origin=origin,
+    )
+    descriptor = get_widget_runtime_descriptor("spotify_visualizer")
+    assert descriptor is not None
+    owner = QuickCustomLayoutOwner(
+        settings_manager=None,
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _reason: None,
+    )
+    owner._bindings["test-display"] = _DisplayBinding(
+        identity="test-display",
+        monitor_route="1",
+        unit=None,
+        screen=screen,
+        geometry=QRect(screen_geometry),
+    )
+    owner._descriptors[key] = descriptor
+
+    def publish_and_interleave_normal_frame() -> None:
+        session.notify_item_changed(item)
+        # This is the production interleave: the live renderer publishes a
+        # fresh committed-size presentation while the edit session remains on.
+        controller.apply_visualizer_presentation(committed)
+        _assert_custom_visualizer_rect(controller, item, origin)
+
+    # Each semantic edge changes one logical world axis while the opposite
+    # physical edge remains fixed.  The session notification travels through
+    # the retained overlay model into _sync_custom_layout_visualizer.
+    edge_cases = (
+        ("left", QPoint(baseline_rect.x(), baseline_rect.center().y()), QPoint(baseline_rect.x() - 20, baseline_rect.center().y()), "right"),
+        ("right", QPoint(baseline_rect.right(), baseline_rect.center().y()), QPoint(baseline_rect.right() + 20, baseline_rect.center().y()), "left"),
+        ("top", QPoint(baseline_rect.center().x(), baseline_rect.y()), QPoint(baseline_rect.center().x(), baseline_rect.y() - 20), "bottom"),
+        ("bottom", QPoint(baseline_rect.center().x(), baseline_rect.bottom()), QPoint(baseline_rect.center().x(), baseline_rect.bottom() + 20), "top"),
+    )
+    for edge, start, end, fixed_side in edge_cases:
+        session.restore_baseline()
+        fixed = getattr(baseline_rect, fixed_side)()
+        assert owner.begin_resize(item, edge, start) is True
+        assert owner.update_resize(item, edge, end, finalize=True) is True
+        if fixed_side == "left":
+            assert item.current_global_rect.left() == fixed
+        elif fixed_side == "right":
+            assert item.current_global_rect.right() == fixed
+        elif fixed_side == "top":
+            assert item.current_global_rect.top() == fixed
+        else:
+            assert item.current_global_rect.bottom() == fixed
+        publish_and_interleave_normal_frame()
+
+    session.restore_baseline()
+    assert owner.resize_wheel(item, 120) is True
+    assert item.current_global_rect.width() > baseline_rect.width()
+    assert item.current_global_rect.height() > baseline_rect.height()
+    assert item.current_viewport_extent == (480.0, 160.0)
+    publish_and_interleave_normal_frame()
+
+    # Cancel restores the exact admission rectangle through the same active
+    # retained route.  Saving ends CUSTOM, so the committed publication itself
+    # must retain the final session rectangle once the session is cleared.
+    session.restore_baseline()
+    _assert_custom_visualizer_rect(controller, item, origin)
+    assert owner.resize_wheel(item, 120) is True
+    saved_rect = QRect(item.current_global_rect)
+    saved_extent = item.current_viewport_extent
+    assert saved_extent is not None
+    controller.clear_custom_layout_session()
+    saved = resolve_visualizer_presentation(
+        policy=policy,
+        display_size=(float(screen_geometry.width()), float(screen_geometry.height())),
+        outer_origin=(
+            float(saved_rect.x() - origin.x()),
+            float(saved_rect.y() - origin.y()),
+        ),
+        viewport_extent=saved_extent,
+        uniform_visual_scale=float(saved_rect.width()) / saved_extent[0],
+    )
+    controller.apply_visualizer_presentation(saved)
+    assert controller.visualizer_item.presentation.outer_rect == pytest.approx(
+        (
+            float(saved_rect.x() - origin.x()),
+            float(saved_rect.y() - origin.y()),
+            float(saved_rect.width()),
+            float(saved_rect.height()),
+        )
+    )
+    controller.quiesce_for_retirement()
+    window.deleteLater()
+    factory.deleteLater()
+    qt_app.processEvents()
 
 
 def test_scene_readiness_preserves_generation_zero_and_requires_intentional_frame():

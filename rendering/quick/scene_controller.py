@@ -72,6 +72,57 @@ def _render_snapshot_has_intentional_base_frame(snapshot: object) -> bool:
     )
 
 
+def _custom_visualizer_relative_scale(
+    *,
+    baseline: ResolvedVisualizerPresentation,
+    viewport_extent: tuple[float, float],
+    working_width: float,
+    working_height: float,
+) -> float:
+    """Resolve one CUSTOM working rectangle against its logical extent.
+
+    The edit-session rectangle is the temporary geometry authority.  A normal
+    visualizer publication may refresh ``baseline`` from committed geometry
+    during that session, so using its scale directly would restore the old
+    dimensions while retaining the newly dragged origin.  The two axes must
+    still encode one uniform scale: an inconsistency is a geometry-owner bug,
+    never a reason to silently choose one axis or distort the visualizer.
+    """
+
+    extent_width, extent_height = (float(value) for value in viewport_extent)
+    width, height = float(working_width), float(working_height)
+    if min(extent_width, extent_height, width, height) <= 0.0:
+        raise ValueError("CUSTOM visualizer geometry must be positive")
+    horizontal_interval = (
+        max(0.0, (width - 0.5) / extent_width),
+        (width + 0.5) / extent_width,
+    )
+    vertical_interval = (
+        max(0.0, (height - 0.5) / extent_height),
+        (height + 0.5) / extent_height,
+    )
+    lower = max(horizontal_interval[0], vertical_interval[0])
+    upper = min(horizontal_interval[1], vertical_interval[1])
+    # Width and height are independently rounded into the session QRect.  A
+    # tall/narrow extent can therefore legitimately differ by more than one
+    # physical pixel when projected from the other axis.  The two closed scale
+    # intervals encode the exact allowable rounding envelope; only disjoint
+    # intervals prove a second geometry authority or anisotropic distortion.
+    if lower > upper:
+        logger.error(
+            "[CUSTOM_LAYOUT] Incoherent visualizer working geometry "
+            "rect=%sx%s extent=%sx%s horizontal_interval=%s vertical_interval=%s",
+            width,
+            height,
+            extent_width,
+            extent_height,
+            horizontal_interval,
+            vertical_interval,
+        )
+        raise RuntimeError("CUSTOM visualizer working geometry is not uniformly scaled")
+    return ((lower + upper) * 0.5) / float(baseline.uniform_visual_scale)
+
+
 @dataclass(frozen=True, slots=True)
 class VisualizerSceneTransfer:
     """Detached logical/render admission used for one-window-at-a-time handoff."""
@@ -862,22 +913,19 @@ class QuickSceneController(QObject):
                 max(1.0, float(self._window.width())),
                 max(1.0, float(self._window.height())),
             )
-        # CUSTOM carries two independent working operations: resize_scale is the
-        # uniform (wheel/corner) whole-size factor; current_viewport_extent is
-        # the edge operation's committed logical world (None -> baseline aspect).
-        # Both resolve here through the one canonical geometry projection; the
-        # scene controller never infers extent from the QML frame.
+        # CUSTOM carries two independent operations: wheel/corner resize has
+        # already changed the working QRect, while an edge drag changes the
+        # logical extent.  The QRect is the retained edit authority, including
+        # after a normal publication refreshed baseline from committed state.
         effective_extent = active_item.current_viewport_extent or baseline.viewport_extent
-        target_width = (
-            effective_extent[0]
-            * baseline.uniform_visual_scale
-            * active_item.resize_scale
+        relative_scale = _custom_visualizer_relative_scale(
+            baseline=baseline,
+            viewport_extent=effective_extent,
+            working_width=float(rect.width()),
+            working_height=float(rect.height()),
         )
-        target_height = (
-            effective_extent[1]
-            * baseline.uniform_visual_scale
-            * active_item.resize_scale
-        )
+        target_width = effective_extent[0] * baseline.uniform_visual_scale * relative_scale
+        target_height = effective_extent[1] * baseline.uniform_visual_scale * relative_scale
         # The Python session owner has already bounded/clamped this rectangle.
         # Keep the pure presentation resolver from independently moving it.
         display_size = (
@@ -888,7 +936,7 @@ class QuickSceneController(QObject):
             baseline,
             display_size=display_size,
             outer_origin=local_origin,
-            relative_scale=active_item.resize_scale,
+            relative_scale=relative_scale,
             viewport_extent=effective_extent,
         )
         self._apply_visualizer_presentation_items(
