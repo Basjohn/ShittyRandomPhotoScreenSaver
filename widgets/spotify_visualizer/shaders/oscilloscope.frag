@@ -217,15 +217,18 @@ vec4 eval_line(
     out float line_alpha_out, out float glow_alpha_out
 ) {
     float wave_y = 0.5 + wave_val * amplitude;
-    float dist = abs(ny - wave_y);
-    float dist_px = dist * inner_height;
+    // Use the signed curve distance for the derivative. The absolute value
+    // has a cusp at the line centre; a steep waveform can straddle that cusp
+    // in one fragment quad and cancel fwidth, producing an intermittent gap.
+    float signed_dist_px = (ny - wave_y) * inner_height;
+    float dist_px = abs(signed_dist_px);
 
     float line_width = 2.0 * authored_visual_scale();
     // Coverage is a framebuffer concern.  Keep ``line_width`` as the authored
     // style value, then include the local device-pixel footprint so a tiny
     // uniform-scale line and a steep waveform segment cannot disappear between
     // samples.
-    float line_footprint_px = max(fwidth(dist_px), 1e-4);
+    float line_footprint_px = max(fwidth(signed_dist_px), 1e-4);
     float line_alpha = 1.0 - smoothstep(
         0.0, line_width + line_footprint_px, dist_px
     );
