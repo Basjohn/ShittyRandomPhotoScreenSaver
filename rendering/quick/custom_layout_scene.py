@@ -119,10 +119,12 @@ class QuickCustomLayoutSceneCoordinator:
                         _PresentationPlacement.from_item(item)
                     )
                     return
-                if target.visualizer_render_identity is not None:
-                    raise RuntimeError(
-                        "CUSTOM Visualizer target already has a retained scene admission"
-                    )
+                # Do not reject merely because the target still exposes a
+                # retained Visualizer item. The owner transaction has product-level
+                # DisplayManager/unit authority: it may clear a scene-local orphan
+                # only when the target unit owns no Visualizer lifecycle owner. Any
+                # real target lifecycle owner remains a hard conflict and rolls the
+                # source placement back.
                 transfer_visualizer = self._visualizer_transfer_handler
                 if transfer_visualizer is None:
                     raise RuntimeError(

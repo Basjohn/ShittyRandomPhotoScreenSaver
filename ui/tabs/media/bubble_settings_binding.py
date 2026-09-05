@@ -135,7 +135,7 @@ def load_bubble_mode_settings(
 
     if hasattr(tab, "bubble_big_count"):
         v = tab._config_int("spotify_visualizer", config, "bubble_big_count", 8)
-        tab.bubble_big_count.setValue(max(1, min(30, v)))
+        tab.bubble_big_count.setValue(max(0, min(30, v)))
         if hasattr(tab, "bubble_big_count_label"):
             tab.bubble_big_count_label.setText(str(v))
     if hasattr(tab, "bubble_small_count"):

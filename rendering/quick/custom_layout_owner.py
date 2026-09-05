@@ -112,6 +112,13 @@ class QuickCustomLayoutOwner:
         self._bindings: dict[str, _DisplayBinding] = {}
         self._descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
         self._resize_origins: dict[CustomLayoutKey, _ResizeOrigin] = {}
+        # One Edit session owns one stable pixels-per-world authority for the
+        # Visualizer viewport. Retained presentation publications may refresh
+        # style/content while editing, but may not silently replace this geometry
+        # scalar between side/corner gestures. Wheel scaling and a successful
+        # fit-to-target display transfer are the only operations allowed to move
+        # it, and both update it transactionally.
+        self._visualizer_pixels_per_world: dict[CustomLayoutKey, float] = {}
         # One visualizer may cross one display seam per pointer move gesture.
         # Without this latch a cursor hovering around the seam can ping-pong the
         # retained GL admission between scenes while QML is still processing the
@@ -153,6 +160,7 @@ class QuickCustomLayoutOwner:
             return False
         session = CustomLayoutSession()
         descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
+        self._visualizer_pixels_per_world.clear()
         for binding in bindings.values():
             self._admit_ordinary_items(
                 session,
@@ -577,23 +585,32 @@ class QuickCustomLayoutOwner:
         handle: str,
         cursor: QPoint,
     ) -> bool:
-        edge = str(handle or "")
-        if edge in {"left", "right", "top", "bottom"}:
+        handle_id = str(handle or "")
+        viewport_handles = {
+            "left", "right", "top", "bottom",
+            "top_left", "top_right", "bottom_left", "bottom_right",
+        }
+        is_viewport_handle = (
+            item.viewport_resize_capable and handle_id in viewport_handles
+        )
+        if handle_id in {"left", "right", "top", "bottom"}:
             if not item.viewport_resize_capable:
                 return False
         elif not item.resize_capable:
             return False
+
         uniform_scale = None
-        if item.viewport_resize_capable:
-            binding = self._bindings[item.current_display_identity]
-            render_item = binding.unit.runtime.scene_controller.visualizer_item
-            presentation = None if render_item is None else render_item.presentation
+        if is_viewport_handle:
+            uniform_scale = self._visualizer_pixels_per_world.get(item.source_key)
             if (
-                presentation is None
-                or presentation.viewport_extent != item.current_viewport_extent
+                uniform_scale is None
+                or not math.isfinite(float(uniform_scale))
+                or float(uniform_scale) <= 0.0
             ):
-                raise RuntimeError("CUSTOM visualizer resize has no current retained presentation")
-            uniform_scale = float(presentation.uniform_visual_scale)
+                raise RuntimeError(
+                    "CUSTOM visualizer resize has no stable pixels-per-world authority"
+                )
+            uniform_scale = float(uniform_scale)
         self._resize_origins[item.source_key] = _ResizeOrigin(
             rect=QRect(item.current_global_rect),
             cursor=QPoint(cursor),
@@ -613,11 +630,18 @@ class QuickCustomLayoutOwner:
         origin = self._resize_origins.get(item.source_key)
         if origin is None:
             return False
-        edge = str(handle or "")
-        if edge in {"left", "right", "top", "bottom"}:
-            changed = self._resize_viewport_edge(item, origin, edge, cursor)
+        handle_id = str(handle or "")
+        if handle_id in {"left", "right", "top", "bottom"}:
+            changed = self._resize_viewport_edge(item, origin, handle_id, cursor)
+        elif (
+            item.viewport_resize_capable
+            and handle_id in {
+                "top_left", "top_right", "bottom_left", "bottom_right"
+            }
+        ):
+            changed = self._resize_viewport_corner(item, origin, handle_id, cursor)
         else:
-            changed = self._resize_uniform_drag(item, origin, edge, cursor)
+            changed = self._resize_uniform_drag(item, origin, handle_id, cursor)
         if finalize:
             self._resize_origins.pop(item.source_key, None)
         return changed
@@ -864,6 +888,9 @@ class QuickCustomLayoutOwner:
         )
         session.add_item(item)
         descriptors[key] = descriptor
+        self._visualizer_pixels_per_world[key] = (
+            self._pixels_per_world_from_geometry(global_rect, extent)
+        )
 
     def _apply_uniform_scale(
         self,
@@ -899,13 +926,26 @@ class QuickCustomLayoutOwner:
         )
         viewport_extent = item.current_viewport_extent
         visualizer_world = item.viewport_resize_capable and viewport_extent is not None
+        visualizer_pixels_per_world = None
         if visualizer_world:
-            render_item = binding.unit.runtime.scene_controller.visualizer_item
-            presentation = None if render_item is None else render_item.presentation
-            if presentation is None or presentation.viewport_extent != viewport_extent:
-                raise RuntimeError("CUSTOM visualizer wheel has no current retained presentation")
-            current_width = max(1.0, float(viewport_extent[0]) * presentation.uniform_visual_scale)
-            current_height = max(1.0, float(viewport_extent[1]) * presentation.uniform_visual_scale)
+            visualizer_pixels_per_world = self._visualizer_pixels_per_world.get(
+                item.source_key
+            )
+            if (
+                visualizer_pixels_per_world is None
+                or not math.isfinite(float(visualizer_pixels_per_world))
+                or float(visualizer_pixels_per_world) <= 0.0
+            ):
+                raise RuntimeError(
+                    "CUSTOM visualizer wheel has no stable pixels-per-world authority"
+                )
+            visualizer_pixels_per_world = float(visualizer_pixels_per_world)
+            current_width = max(
+                1.0, float(viewport_extent[0]) * visualizer_pixels_per_world
+            )
+            current_height = max(
+                1.0, float(viewport_extent[1]) * visualizer_pixels_per_world
+            )
             current_resize_scale = max(1.0e-6, float(item.resize_scale))
             max_scale = current_resize_scale * min(
                 float(binding.geometry.width()) / current_width,
@@ -925,8 +965,14 @@ class QuickCustomLayoutOwner:
         relative_to_current = scale / max(1.0e-6, float(item.resize_scale))
         if visualizer_world:
             assert viewport_extent is not None
-            width = max(1, int(round(float(viewport_extent[0]) * presentation.uniform_visual_scale * relative_to_current)))
-            height = max(1, int(round(float(viewport_extent[1]) * presentation.uniform_visual_scale * relative_to_current)))
+            assert visualizer_pixels_per_world is not None
+            next_pixels_per_world = visualizer_pixels_per_world * relative_to_current
+            width = max(
+                1, int(round(float(viewport_extent[0]) * next_pixels_per_world))
+            )
+            height = max(
+                1, int(round(float(viewport_extent[1]) * next_pixels_per_world))
+            )
         else:
             width = max(1, int(round(reference_width * scale)))
             height = max(1, int(round(reference_height * scale)))
@@ -970,6 +1016,9 @@ class QuickCustomLayoutOwner:
                 resize_scale=scale,
                 viewport_extent=viewport_extent,
             )
+            self._visualizer_pixels_per_world[item.source_key] = (
+                self._pixels_per_world_from_geometry(geometry, viewport_extent)
+            )
         else:
             item.set_geometry(
                 geometry,
@@ -1000,63 +1049,123 @@ class QuickCustomLayoutOwner:
             origin.rect,
         )
 
-    def _resize_viewport_edge(
+    @staticmethod
+    def _pixels_per_world_from_geometry(
+        rect: QRect,
+        viewport_extent: tuple[float, float] | None,
+    ) -> float:
+        if viewport_extent is None:
+            raise RuntimeError("CUSTOM visualizer geometry has no viewport extent")
+        extent_width = float(viewport_extent[0])
+        extent_height = float(viewport_extent[1])
+        width = float(rect.width())
+        height = float(rect.height())
+        if min(extent_width, extent_height, width, height) <= 0.0:
+            raise RuntimeError("CUSTOM visualizer geometry must be positive")
+        horizontal = (
+            max(0.0, (width - 0.5) / extent_width),
+            (width + 0.5) / extent_width,
+        )
+        vertical = (
+            max(0.0, (height - 0.5) / extent_height),
+            (height + 0.5) / extent_height,
+        )
+        lower = max(horizontal[0], vertical[0])
+        upper = min(horizontal[1], vertical[1])
+        if lower > upper:
+            raise RuntimeError(
+                "CUSTOM visualizer geometry does not encode one pixels-per-world scale"
+            )
+        return max(1.0e-6, (lower + upper) * 0.5)
+
+    @staticmethod
+    def _viewport_resize_rect(
+        origin: _ResizeOrigin,
+        binding: _DisplayBinding,
+        minimum: Any,
+        cursor: QPoint,
+        *,
+        horizontal_edge: str | None = None,
+        vertical_edge: str | None = None,
+    ) -> QRect:
+        """Resize selected viewport edges while anchoring the opposite edges.
+
+        The cursor delta is measured from gesture start so grabbing anywhere in
+        the visible handle never produces a jump. Bounds are applied to the edge
+        being moved rather than by a later generic clamp, which preserves the
+        opposite-corner anchor for the new two-axis Visualizer corner gesture.
+        """
+
+        rect = QRect(origin.rect)
+        dx = int(cursor.x() - origin.cursor.x())
+        dy = int(cursor.y() - origin.cursor.y())
+        bounds = binding.geometry
+        min_width = max(1, int(minimum.width()))
+        min_height = max(1, int(minimum.height()))
+
+        if horizontal_edge == "left":
+            fixed_right = origin.rect.x() + origin.rect.width()
+            left = max(
+                bounds.x(),
+                min(origin.rect.x() + dx, fixed_right - min_width),
+            )
+            rect.setX(left)
+            rect.setWidth(fixed_right - left)
+        elif horizontal_edge == "right":
+            fixed_left = origin.rect.x()
+            right = min(
+                bounds.x() + bounds.width(),
+                max(fixed_left + min_width, fixed_left + origin.rect.width() + dx),
+            )
+            rect.setX(fixed_left)
+            rect.setWidth(right - fixed_left)
+
+        if vertical_edge == "top":
+            fixed_bottom = origin.rect.y() + origin.rect.height()
+            top = max(
+                bounds.y(),
+                min(origin.rect.y() + dy, fixed_bottom - min_height),
+            )
+            rect.setY(top)
+            rect.setHeight(fixed_bottom - top)
+        elif vertical_edge == "bottom":
+            fixed_top = origin.rect.y()
+            bottom = min(
+                bounds.y() + bounds.height(),
+                max(fixed_top + min_height, fixed_top + origin.rect.height() + dy),
+            )
+            rect.setY(fixed_top)
+            rect.setHeight(bottom - fixed_top)
+
+        return rect
+
+    def _commit_viewport_resize_geometry(
         self,
         item: CustomLayoutSessionItem,
         origin: _ResizeOrigin,
-        edge: str,
-        cursor: QPoint,
+        rect: QRect,
+        *,
+        change_width: bool,
+        change_height: bool,
     ) -> bool:
-        binding = self._bindings[item.current_display_identity]
-        extent = origin.viewport_extent
+        if origin.visualizer_uniform_scale is None:
+            raise RuntimeError("CUSTOM visualizer viewport resize has no retained scale")
+        pixels_per_world = max(1.0e-6, float(origin.visualizer_uniform_scale))
+        extent = item.current_viewport_extent
         if extent is None:
             extent = (
                 float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[0]),
                 float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1]),
             )
-        # The working QRect is independently rounded.  Its width is not a
-        # reliable world conversion after repeated edge edits; the retained
-        # presentation captured at gesture start carries the exact uniform
-        # projection for every update in this drag.
-        if origin.visualizer_uniform_scale is None:
-            raise RuntimeError("CUSTOM visualizer edge has no retained scale")
-        pixels_per_world = max(1e-6, float(origin.visualizer_uniform_scale))
-        rect = QRect(origin.rect)
-        dx = cursor.x() - origin.cursor.x()
-        dy = cursor.y() - origin.cursor.y()
-        minimum = quick_custom_minimum_size(item)
-        if edge == "left":
-            right = origin.rect.x() + origin.rect.width()
-            rect.setX(min(cursor.x(), right - minimum.width()))
-            rect.setWidth(right - rect.x())
-        elif edge == "right":
-            rect.setWidth(max(minimum.width(), origin.rect.width() + dx))
-        elif edge == "top":
-            bottom = origin.rect.y() + origin.rect.height()
-            rect.setY(min(cursor.y(), bottom - minimum.height()))
-            rect.setHeight(bottom - rect.y())
-        else:
-            rect.setHeight(max(minimum.height(), origin.rect.height() + dy))
-        local = clamp_local_rect_to_bounds(
-            QRect(
-                rect.x() - binding.geometry.x(),
-                rect.y() - binding.geometry.y(),
-                rect.width(),
-                rect.height(),
-            ),
-            binding.geometry.size(),
-            min_size=minimum,
+        # Side handles are semantically one-axis operations. Preserve the untouched
+        # logical extent exactly instead of letting integer QRect rounding nudge it
+        # by a fraction on every orthogonal gesture. Corners opt into both axes.
+        next_extent = (
+            float(rect.width()) / pixels_per_world
+            if change_width else float(extent[0]),
+            float(rect.height()) / pixels_per_world
+            if change_height else float(extent[1]),
         )
-        rect = QRect(
-            binding.geometry.x() + local.x(),
-            binding.geometry.y() + local.y(),
-            local.width(),
-            local.height(),
-        )
-        if edge in {"left", "right"}:
-            next_extent = (float(rect.width()) / pixels_per_world, float(extent[1]))
-        else:
-            next_extent = (float(extent[0]), float(rect.height()) / pixels_per_world)
         payload = dict(item.current_size_payload)
         payload.update(
             width=rect.width(),
@@ -1068,7 +1177,62 @@ class QuickCustomLayoutOwner:
             size_payload=payload,
             viewport_extent=next_extent,
         )
+        # The gesture consumed the cached scalar; keep it exact for the next
+        # side/corner gesture rather than reading a later presentation refresh.
+        self._visualizer_pixels_per_world[item.source_key] = pixels_per_world
         return True
+
+    def _resize_viewport_edge(
+        self,
+        item: CustomLayoutSessionItem,
+        origin: _ResizeOrigin,
+        edge: str,
+        cursor: QPoint,
+    ) -> bool:
+        binding = self._bindings[item.current_display_identity]
+        minimum = quick_custom_minimum_size(item)
+        rect = self._viewport_resize_rect(
+            origin,
+            binding,
+            minimum,
+            cursor,
+            horizontal_edge=edge if edge in {"left", "right"} else None,
+            vertical_edge=edge if edge in {"top", "bottom"} else None,
+        )
+        return self._commit_viewport_resize_geometry(
+            item,
+            origin,
+            rect,
+            change_width=edge in {"left", "right"},
+            change_height=edge in {"top", "bottom"},
+        )
+
+    def _resize_viewport_corner(
+        self,
+        item: CustomLayoutSessionItem,
+        origin: _ResizeOrigin,
+        corner: str,
+        cursor: QPoint,
+    ) -> bool:
+        binding = self._bindings[item.current_display_identity]
+        minimum = quick_custom_minimum_size(item)
+        horizontal_edge = "left" if str(corner).endswith("left") else "right"
+        vertical_edge = "top" if str(corner).startswith("top_") else "bottom"
+        rect = self._viewport_resize_rect(
+            origin,
+            binding,
+            minimum,
+            cursor,
+            horizontal_edge=horizontal_edge,
+            vertical_edge=vertical_edge,
+        )
+        return self._commit_viewport_resize_geometry(
+            item,
+            origin,
+            rect,
+            change_width=True,
+            change_height=True,
+        )
 
     def _peer_local_rects(
         self,
@@ -1281,6 +1445,7 @@ class QuickCustomLayoutOwner:
         self._bindings = {}
         self._descriptors = {}
         self._resize_origins = {}
+        self._visualizer_pixels_per_world.clear()
         self._visualizer_move_transfer_latch.clear()
         self._active = False
 
@@ -1327,10 +1492,52 @@ class QuickCustomLayoutOwner:
             raise RuntimeError(
                 "CUSTOM visualizer lifecycle owner disagrees with retained scene source"
             )
+        if getattr(source_binding.unit, "visualizer_owner", None) is not owner:
+            raise RuntimeError(
+                "CUSTOM visualizer source unit lost lifecycle retirement ownership"
+            )
         transfer_unit = self._visualizer_unit_transfer
         if transfer_unit is None:
             raise RuntimeError(
                 "CUSTOM visualizer display transfer has no manager ownership seam"
+            )
+
+        target_owner = getattr(target_binding.unit, "visualizer_owner", None)
+        if target_owner is not None:
+            if target_owner is owner:
+                raise RuntimeError(
+                    "CUSTOM visualizer target already owns lifecycle authority"
+                )
+            raise RuntimeError(
+                "CUSTOM visualizer target owns another visualizer lifecycle"
+            )
+
+        stale_target_identity = getattr(
+            target_scene, "visualizer_render_identity", None
+        )
+        if stale_target_identity is not None:
+            # Product-level manager authority proves this target unit owns no
+            # Visualizer. Its retained identity is therefore an orphaned shell,
+            # not a second legitimate runtime. Retire only the scene-local
+            # admission before moving the one live source; do not recreate or
+            # tear down the logical owner.
+            discard_stale = getattr(
+                target_scene, "discard_unowned_visualizer_admission", None
+            )
+            if not callable(discard_stale):
+                raise RuntimeError(
+                    "CUSTOM visualizer target cannot retire an orphaned admission"
+                )
+            discarded = discard_stale()
+            if discarded is None:
+                raise RuntimeError(
+                    "CUSTOM visualizer stale target admission could not be discarded"
+                )
+            logger.warning(
+                "[CUSTOM_LAYOUT] Discarded orphaned Visualizer target admission "
+                "target=%s identity=%s",
+                target_binding.identity,
+                discarded,
             )
 
         source_scene.transfer_visualizer_to(target_scene)
@@ -1338,6 +1545,32 @@ class QuickCustomLayoutOwner:
             if not transfer_unit(target_binding.unit):
                 raise RuntimeError(
                     "CUSTOM visualizer display ownership transfer rejected"
+                )
+            # In a real active Edit session the item geometry has already been
+            # projected onto the target before this synchronous notification.
+            # Refresh the one pixels-per-world authority from that final QRect so
+            # a target-fit hop is the only non-wheel operation allowed to change
+            # scale. Standalone unit tests may exercise this transaction without
+            # an active session; they intentionally skip this session-only cache.
+            if self._active:
+                session = self._session
+                if session is None:
+                    raise RuntimeError("CUSTOM visualizer transfer lost its edit session")
+                visualizer_item = next(
+                    (
+                        item
+                        for item in session.items()
+                        if item.model_identity == "spotify_visualizer"
+                    ),
+                    None,
+                )
+                if visualizer_item is None:
+                    raise RuntimeError("CUSTOM visualizer transfer lost its session item")
+                self._visualizer_pixels_per_world[visualizer_item.source_key] = (
+                    self._pixels_per_world_from_geometry(
+                        visualizer_item.current_global_rect,
+                        visualizer_item.current_viewport_extent,
+                    )
                 )
         except Exception as lifecycle_error:
             try:

@@ -41,7 +41,7 @@ uniform float u_trail_strength;     // 0.0 = off, 1.0 = full
 uniform float u_tail_opacity;       // max opacity ceiling for tail gradient (0.0-0.85)
 uniform vec2 u_trail_axis_scale;    // authored-pixel history-source footprint on CUSTOM axes
 uniform float u_trail_radial_scale;  // authored-pixel ripple radius/ring footprint on CUSTOM height
-uniform float u_large_viewport_stroke_bonus_px; // up to +1 authored px at extreme height (Quick only)
+uniform float u_viewport_stroke_extra_half_px; // cached physical half-stroke gradient (Quick only)
 
 // --- Styling ---
 uniform vec2 u_specular_dir;       // normalised direction to light source
@@ -200,8 +200,8 @@ void main() {
     pop_col.rgb = apply_rainbow(pop_col.rgb, u_rainbow_hue_offset);
     
     int count = min(u_bubble_count, 110);
-    float large_viewport_stroke_bonus_px = (u_quick_item_coords == 1)
-        ? clamp(u_large_viewport_stroke_bonus_px, 0.0, 1.0)
+    float viewport_stroke_extra_half_px = (u_quick_item_coords == 1)
+        ? clamp(u_viewport_stroke_extra_half_px, 0.0, 1.25)
         : 0.0;
     // --- Water ripple wake trail behind each moving bubble ---
     // Each bubble's 3 trail samples become ripple source points at
@@ -383,23 +383,16 @@ void main() {
         // Radius in aspect-corrected space
         float r = brad;
         
-        // Keep outline weight proportional to rendered bubble radius rather
-        // than pinning it to an authored-pixel width. Physical CUSTOM testing
-        // found the old 1.2px-at-r=.04 rule much too heavy at canonical/small
-        // viewports but appropriately weighted around the ~2.9x-tall viewport.
-        // A ~3.75% radius ratio preserves that large-card appearance while
-        // naturally thinning canonical bubbles; tiny/huge safety bounds remain
-        // authored pixels so AA never collapses or blooms without limit.
-        float stroke = max(0.55 * px, min(r * 0.0375, 1.8 * style_px));
-        stroke = max(0.55 * px, min(2.8 * style_px,
-            stroke + large_viewport_stroke_bonus_px * style_px));
-        
-        // Operator adjustment: one logical pixel less across the complete
-        // outline (half on each side), retaining subpixel coverage at tiny sizes.
-        // Viewport extremity must never make the outline thinner than canonical:
-        // the positive firmness ramp above may protect large heads, but the
-        // historical subtraction itself stays viewport-neutral.
-        stroke = max(0.3 * px, stroke - 0.5 / inner_h);
+        // Physical Bubble outline gradient.  Canonical heads now start at
+        // 0.80px per side (~1.6px total) instead of the historical ~0.6px
+        // complete outline.  Geometry/profile changes add a cached physical
+        // half-stroke amount; it is deliberately NOT multiplied by effect scale,
+        // avoiding the old late/accelerating ramp that approached ~6px total.
+        // Radius proportionality remains useful for genuinely larger heads, but
+        // the final physical ceiling is 2.35px per side (~4.7px total).
+        float stroke = max(0.80 * px, min(r * 0.0375, 1.8 * style_px));
+        stroke = min(2.35 * px,
+            stroke + viewport_stroke_extra_half_px * px);
 
         // --- Tiny bubble shortcut (< ~4px radius) ---
         float tiny_threshold = 4.0 * px;

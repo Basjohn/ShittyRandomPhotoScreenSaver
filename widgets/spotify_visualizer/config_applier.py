@@ -228,7 +228,7 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
             val = 'random'
         host._bubble_drift_direction = val
     if 'bubble_big_count' in kwargs:
-        host._bubble_big_count = max(1, min(30, int(kwargs['bubble_big_count'])))
+        host._bubble_big_count = max(0, min(30, int(kwargs['bubble_big_count'])))
     if 'bubble_small_count' in kwargs:
         host._bubble_small_count = max(5, min(80, int(kwargs['bubble_small_count'])))
     if 'bubble_surface_reach' in kwargs:

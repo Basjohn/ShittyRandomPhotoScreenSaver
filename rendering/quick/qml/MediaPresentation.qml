@@ -644,7 +644,7 @@ OverlayWidget {
                 anchors.horizontalCenter: parent.horizontalCenter
                 radius: width / 2.0
                 color: mediaRoot.mediaModel.appVolumeTrackColor
-                border.width: mediaRoot.scaleAwareStrokeWidth(1.5)
+                border.width: mediaRoot.scaleAwareStrokeWidth(2.5)
                 border.color: mediaRoot.mediaModel.appVolumeBorderColor
                 clip: false
     
@@ -678,7 +678,7 @@ OverlayWidget {
                     radius: width / 2.0
                     color: mediaRoot.mediaModel.appVolumeFillColor
                     border.width: height > 0.0
-                        ? mediaRoot.scaleAwareStrokeWidth(1.5) : 0.0
+                        ? mediaRoot.scaleAwareStrokeWidth(2.5) : 0.0
                     border.color: mediaRoot.mediaModel.appVolumeBorderColor
                 }
     

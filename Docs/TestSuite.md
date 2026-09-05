@@ -246,10 +246,10 @@ The E2.7 `test_widget_manager_refresh.py` stale-test incident is the model: six 
 The previous `79/85` H-profile result is historical only. Its six known stale assertion-bearing files were repaired against current authority rather than by restoring retired seams:
 
 - `test_qtquick_auxiliary.py` — R6 native `QCursor`, event-cached semantic Ctrl/interaction, no scene pointer-position ownership;
-- `test_qtquick_visualizer_bubble.py` — current viewport/layout signature and R-69 source guards;
+- `test_qtquick_visualizer_bubble.py` — cached viewport-gradient/stroke layout signature, zero-big-count config contract and R-69 source guards;
 - `test_qtquick_visualizer_devcurve.py` — current Quick normalization literal;
 - `test_qtquick_visualizer_item.py` — current fail-closed mismatch telemetry plus R-68 CUSTOM presentation-authority rebase;
-- `test_bubble_viewport_reflow.py` — current card-relative radius/collision-world contract instead of retired `_render_radius_in_world`;
+- `test_bubble_viewport_reflow.py` — current card-relative radius/collision-world contract plus cached wide/tall population/travel gradient and zero-big preservation;
 - `test_s_hotkey_workflow.py` — current `_show_next_image(origin=...)` instrumentation/admission signature.
 
 The full test pack exposed additional current-authority drift that is also repaired:
@@ -410,7 +410,7 @@ Changed/current permanent contracts in the closure patch:
 | `tests/test_visualizer_playback_gating.py` | Playback admission uses current lane; no generic per-frame Future path. |
 | `tests/test_qtquick_visualizer_item.py` | Current presentation mismatch fencing + R-68 active-CUSTOM presentation rebase. |
 | `tests/test_visualizer_viewport_scaling_contracts.py` | R4/R5 viewport projection plus R-69 golden Bubble head/Ghost no-second-compression guard. |
-| `tests/test_bubble_viewport_reflow.py` | Current card-relative radius / expanded collision-world invariant. |
+| `tests/test_bubble_viewport_reflow.py` | Current card-relative radius / expanded collision-world invariant plus cached wide/tall viewport-gradient bounds. |
 | `tests/test_spectrum_viewport_temporal_scaling.py` | Current Spectrum height-only temporal scaling (wide canonical-height unchanged) without an independent cadence. |
 | `tests/test_spectrum_viewport_temporal_scaling.py` | **R-76 live Quick contract:** canonical/wide exact temporal response, tall-only bar-field compensation, bounded physical jump growth, and viewport-invariant solid hysteresis domain. |
 | `tests/test_qtquick_h9_uniform_resize.py` | Reddit/Reddit2/Media/Gmail whole-card transform and Visualizer isolation. |
@@ -418,7 +418,7 @@ Changed/current permanent contracts in the closure patch:
 | `tests/test_runtime_perf_policy_contracts.py` | R6/R7/R-63 source bars; no hard-coded current monitor geometry. |
 | `tests/test_visualizer_doc_references.py` | Current live-doc owner/guardrail routing; historical negative-control wording is allowed where explicitly framed. |
 | `tests/test_media_runtime.py` | Removed one stale deleted-`WidgetManager` production-setup case; current Quick binder + generation suites own that integration. |
-| `tests/test_qtquick_visualizer_bubble.py` / `devcurve.py` | Current layout/shader source contracts. |
+| `tests/test_qtquick_visualizer_bubble.py` / `devcurve.py` | Current layout/shader source contracts; Bubble includes bounded physical stroke-gradient + zero-big authored-state coverage. |
 | `tests/test_s_hotkey_workflow.py` | Current image-change `origin=` signature. |
 
 No changed test was weakened merely to produce green output. The closure environment cannot execute PySide-dependent collection, so runtime GREEN remains the I0 gate.
@@ -1087,3 +1087,28 @@ shader literals/contracts are structurally checked. This environment has no `PyS
 Qt-bearing group stops at import and is **AWAITING PySide6/OpenGL VALIDATION**, not a test failure. In the target environment
 run the five files above (at minimum the named discrete-hop cell) and physically inspect attached Water/Magma liquid, Magma
 fissure depth, AA, lighting-derived shadow, extreme Sphere controls and layout-slot mode restoration.
+
+### 2026-09-05 migration-close CUSTOM geometry/lifecycle regressions
+
+The intermittent live Visualizer transfer failure is now treated as a current-owner regression, not legacy-layout corruption.
+The new focused file deliberately has a new name so this GODZIP does not replace Claude's separately reconciled historical
+CUSTOM suite:
+
+- `tests/test_qtquick_visualizer_custom_geometry_regressions.py` — Visualizer corners change viewport X/Y independently while
+  preserving uniform scale; successive side resizes share one Edit-session pixels-per-world authority; a manager-proven
+  orphan target scene admission is cleared before the one live scene/manager transfer; any target lifecycle owner remains a
+  hard conflict.
+- `tests/test_qtquick_custom_layout_owner.py` remains the broader integration owner. Re-run its discrete-hop geometric-centre
+  regression plus current live-transfer/Save/Cancel cells from the user's reconciled suite; do not replace that file from an
+  older ChatGPT package.
+- `tests/test_qtquick_custom_layout_overlay.py` remains the QML/interaction owner for side vs corner semantics and ordinary
+  widget negative controls. Visualizer corners are darker blue X/Y extent handles; wheel remains uniform scale.
+- `tests/test_layout_slots.py` remains the fenced numbered-load/mode-restore owner. Slot load may rebuild; live Edit Save may not.
+- `tests/test_bubble_viewport_reflow.py` now expects the accepted extreme-vertical tail to cap stream speed at **0.70x** while
+  leaving baseline speed unchanged.
+- `tests/test_qtquick_media_presentation.py` is the target-environment owner to re-run for the +1 authored-pixel inner/outer
+  Media Volume borders; no new Media ownership mechanism was introduced.
+
+This container has no `PySide6`, so Qt-bearing pytest collection is **AWAITING TARGET ENVIRONMENT**. Static compile/source
+checks here are not substitutes for the button-hop/native-drag/Save/Cancel/slot-load physical sequence listed in
+`Current_Plan.md` M0.

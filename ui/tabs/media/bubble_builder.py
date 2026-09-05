@@ -514,7 +514,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
 
     big_count_row = _aligned_row(population_bucket, "Big Bubbles:")
     tab.bubble_big_count = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.bubble_big_count.setMinimum(1)
+    tab.bubble_big_count.setMinimum(0)
     tab.bubble_big_count.setMaximum(30)
     val = int(tab._default_float('spotify_visualizer', 'bubble_big_count', 8))
     tab.bubble_big_count.setValue(val)

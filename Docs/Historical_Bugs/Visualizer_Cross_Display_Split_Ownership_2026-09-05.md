@@ -46,3 +46,32 @@ Geometry-only same-display Save remains a live working-state -> committed-state 
 - repeated source <-> target transfers never produce duplicate scene admission;
 - teardown never touches a closed pacer through a still-attached Visualizer owner;
 - mixed 60/165 Hz and mixed-DPR transfer preserves one logical Visualizer owner and one authored cadence.
+
+## 2026-09-05 second failure mode — scale drift + orphan target admission
+
+A later adjustment run exposed a rarer path that the first transaction repair did not fully describe.
+
+### Symptom chain
+
+- repeated live viewport resizes eventually logged an incoherent pair around `649x960` working pixels versus `649x1406` logical viewport extent;
+- both button hop and native drag then repeatedly failed with `CUSTOM Visualizer target already has a retained scene admission`;
+- the target display's retained scene carried an **older Visualizer activation identity**, while manager-level lifecycle authority and the currently reacting Visualizer remained on the source display;
+- Save could therefore persist a visually split result (empty target frame, live source Visualizer), and a subsequent numbered slot load inherited the already-invalid ownership graph.
+
+### Additional root cause
+
+Viewport-only gestures were each allowed to derive pixels-per-world from the latest retained presentation. A tall resize could therefore encode one axis using one scale and a later horizontal resize encode the other axis using another. Each gesture looked locally plausible, but the final rectangle and logical extent no longer represented one uniform visual scale.
+
+Separately, the scene-level transfer gate treated **any** retained target render identity as a legitimate owner conflict. That was too weak an authority check: a target `QuickDisplayUnit` can own no Visualizer lifecycle owner while its retained scene still contains an old activation shell. Once such a shell existed, every later transfer attempt could be rejected even though there was still only one real logical/runtime owner.
+
+### Extended permanent contract
+
+- One active Visualizer Edit session owns one stable pixels-per-world scalar for viewport-only resize. Side handles consume it on one axis and Visualizer corners consume it on both axes. Independent gestures must never relearn unrelated presentation scales.
+- Scroll wheel remains the explicit uniform whole-Visualizer scale operation. A cross-display target-fit projection is the only other allowed scale change, and it updates the scalar only after final target geometry and lifecycle ownership commit successfully.
+- Target render identity alone is **not** lifecycle authority. Before clearing a stale target admission, product-level `DisplayManager` / exact `QuickDisplayUnit.visualizer_owner` must prove that target unit owns no Visualizer lifecycle owner. Only then may scene-local render/input admission be discarded and the retained shell reused.
+- If the target unit owns any Visualizer lifecycle authority, transfer is a hard conflict. Do not overwrite it, do not create a fallback owner, and do not recreate the logical runtime to make the gesture succeed.
+- Button and drag transfer feed the same transaction and the same session geometry truth. Live Edit Save remains a promotion boundary, **never a recovery teardown boundary**.
+
+### Added regression coverage
+
+`tests/test_qtquick_visualizer_custom_geometry_regressions.py` protects the two-axis Visualizer corner contract, stable per-session pixels-per-world authority, manager-proven orphan target cleanup, and refusal to overwrite a real target lifecycle owner. Existing reconciled CUSTOM-owner tests remain responsible for full button/drag/Save/Cancel integration in a PySide6-capable environment.

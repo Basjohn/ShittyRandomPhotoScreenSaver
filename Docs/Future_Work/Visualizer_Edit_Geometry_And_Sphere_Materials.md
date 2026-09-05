@@ -16,8 +16,10 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
   content geometry or changes the viewport while pretending to perform uniform scaling.
 - [x] Correct the owning seam once for all six modes; no mode-specific hidden caps, extent compression,
   delayed preview, extra clock, polling or cosmetic gain fix for an ownership defect.
-- [x] Bubble: reduce nominal full outline width by one logical pixel; retain minimal pixel coverage for
-  tiny heads. Use the same visible-area size/stroke contract during live adjustment and after save.
+- [x] Bubble outline follow-up supersedes the old one-pixel-thinner experiment: canonical main-head stroke now floors at
+  ~1.6 physical px total and a cached area/shape gradient firms it gradually to a ~4.7px ceiling. The old -1px subtraction
+  and accelerating `bonus * effect_scale` paths are retired. Use the same cached geometry contract during live adjustment
+  and after save.
 - [x] Falsifying production-chain tests for left/right/top/bottom, whole-scale and move; opposite-edge
   anchoring, stable position, round geometry, extreme saved extents at small scale, and cancel/save.
 - [x] Compare renderer-specific geometry in Spectrum/Osc/Sine/Bubble/DevCurve/Sphere. Audit amplitude,
@@ -31,17 +33,30 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
 - [x] Cross-display Visualizer drag/Save is operator-accepted in the current authority: the retained scene plus runtime/frame
   pacer/lifecycle ownership transfers live and Save does not rebuild or tear down that successful transfer. Numbered layout-slot
   **load** remains the explicit fenced reconstruction/hot-swap boundary. Preserve this distinction as a hard UX contract.
-- [~] One extreme transfer gesture still produced an incoherent 439x960 rectangle against a 9520.87x25548.02 logical
-  extent. Keep the coherence rejection; do not hide it by relaxing uniform-scale math. Revisit viewport scaling/reactivity
-  in the next geometry session unless the transfer repair removes the reproduction.
-- [x] Historical extreme-outline thinning was corrected again in Checkpoint 1: the large/extreme viewport ramp may add
-  positive firmness protection but no longer participates in a subtractive main-head stroke term. Extreme wide/tall shape
-  alone therefore cannot make Bubble thinner than its canonical contract.
-- [~] Extreme-wide Bubble presentation compensation is source-landed: only a wide-tail ramp beyond ordinary card shapes
-  reaches +1 big / +3 small bubbles and +20% stream baseline/cap (full at the observed 1174x187 / 6.28:1 viewport). No
-  radius, Ghost/history, reaction amplitude, drift or logical cadence compression is used. Await physical validation.
+- [x] Historical incoherent-transfer symptom retained as evidence: extreme gestures produced impossible working QRect/extent
+  pairs (including the earlier 439x960 / 9520.87x25548.02 case and the later 649x960 / 649x1406 case). The coherence rejection
+  remains binding; the current source fix addresses the scale-authority cause rather than relaxing uniform-scale math.
+- [~] Visualizer CUSTOM resize/transfer lifecycle follow-up: one Edit session now owns one stable pixels-per-world scalar.
+  Side handles consume it for one-axis viewport extent, Visualizer corner handles consume it for independent X/Y extent,
+  and wheel remains the sole ordinary uniform-scale gesture. Cross-display target-fit projection may update the scalar only
+  after the final target geometry and manager ownership transfer commit. A stale retained target admission may be cleared
+  only when `DisplayManager` proves the target display unit owns no Visualizer lifecycle owner; otherwise transfer fails and
+  rolls back. This repairs the 2026-09-05 intermittent `649x960` rectangle / `649x1406` extent split and stale-old-activation
+  target admission without reintroducing Edit-Save teardown. Await target-environment regression + physical transfer loop.
+- [x] Bubble viewport modifiers now resolve through one cached geometry gradient. The logical simulation recomputes its
+  profile only when committed extent changes and Quick caches the whole Bubble layout until presentation geometry changes;
+  steady saved geometry does not keep running aspect/area classification.
+- [~] Wide compensation now eases earlier from 2.5:1 to 5.0:1 physical aspect, reaching +1 big / +3 small bubbles and +20%
+  stream baseline/cap. Authored zero big bubbles remain zero. Extreme vertical geometry uses the opposite bounded tail from
+  1.5:1 to 3.0:1 height:width, reaching -1 big / -1 small and -30% stream cap only. No radius, Ghost/history, reaction
+  amplitude, drift or logical cadence compression is used. Await physical validation of the new gradient curve.
 
 ## E2 — richer customizable Sphere
+
+> **Migration status:** closed/deferred. The operator considers the current visual fidelity insufficient despite the landed
+> 3D architecture/material work. Sphere is dormant-by-default and does not block migration closure. Future work is owned by
+> `FWPlan.md`: preserve reusable 3D architecture unless completely superseded and consider a higher-fidelity redesign,
+> including voxel/volumetric approaches. The checklist below remains historical implementation evidence, not an active gate.
 
 - [x] Inventory five material presets, current energy transfer/defaults/maxima and existing mesh/shader
   constraints. Identify why current live bands produce barely visible displacement.

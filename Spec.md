@@ -273,11 +273,12 @@ All six current modes share a default/baseline 1.5 aspect and support two distin
 
 ```text
 uniform_visual_scale
-    wheel/corner -> whole visualizer scales uniformly; viewport extent unchanged
+    wheel -> whole visualizer scales uniformly; viewport extent unchanged
 
 viewport_extent
     left/right edge -> width only
     top/bottom edge -> height only
+    corner -> width + height independently, opposite corner anchored
 ```
 
 Viewport extent is world/layout playroom, not final-pixel X/Y stretch. All six current modes—Spectrum,
@@ -297,11 +298,17 @@ are also renderer-content distances projected once per nonbaseline axis; otherwi
 size. None of these spatial projections changes random-draw order or adds a tick. Radius is not divided by viewport-domain
 height. Collision/spawn policy remains in canonical normalized content coordinates and preserves exact canonical
 behavior; it is authored separation rather than literal pixel packing. Any contact change needs a dedicated
-rendered-overlap and event test under BTF. Ordinary wide/tall cards keep authored population and stream speed. A narrowly
-bounded **extreme-wide presentation tail** may ease from no-op above roughly 3.4:1 physical aspect to at most +1 authored
-big bubble, +3 authored small bubbles and +20% stream baseline/cap by roughly 5.25:1; it may not alter drift, radius,
-Ghost/history displacement, reaction amplitude or cadence. Main-head outline subtraction is viewport-neutral: extreme
-wide/tall geometry must never make the outline thinner merely because the viewport-shape ramp is high.
+rendered-overlap and event test under BTF. Bubble viewport presentation uses one **geometry-only cached gradient profile**:
+resolve it when committed viewport geometry changes, cache it in the logical simulation and retained Quick layout, and do
+not reclassify area/aspect every audio/render tick after Edit settles. The main-head outline uses a bounded physical-pixel
+curve (about **1.6 px total canonical floor**, earlier gentle area/shape firmness, about **4.7 px total ceiling**) rather than
+the retired late `bonus * effect_scale` acceleration or the retired -1px complete-outline subtraction. Extreme width eases
+from no-op at roughly **2.5:1** physical aspect to at most +1 authored big bubble, +3 authored small bubbles and +20% stream
+baseline/cap by roughly **5.0:1**; the +1 big modifier applies only when authored `bubble_big_count > 0`, and zero is a valid
+authored count. Extreme vertical geometry eases from roughly **1.5:1 to 3.0:1 height:width** to at most -1 big bubble,
+-1 small bubble and -30% stream **cap** while leaving baseline stream speed unchanged. Integer population deltas are necessarily
+discrete; stroke and speed/cap factors are continuous. These profile adjustments may not alter drift, radius, Ghost/history
+displacement, reaction amplitude or cadence.
 
 Bubble consume-once kick/snare/vocal events may accent stream and drift motion only through the existing decaying
 stream-burst state. They must not add a clock, mutate authored motion settings, replay an event, or leak into pulse/radius
@@ -316,6 +323,14 @@ Do not reintroduce a Bubble false capability gate to conceal a viewport ownershi
 Committed viewport extent is ordinary runtime truth. While CUSTOM is active, its working extent may temporarily override
 that committed value. Ending CUSTOM removes the temporary override: Save leaves the newly committed extent authoritative;
 Cancel restores the pre-edit committed extent. "No active CUSTOM session" is not synonymous with canonical `(420,280)`.
+During one live Edit session, viewport-only resizing has exactly one cached pixels-per-world authority. Side and corner
+handles consume that scalar; they must not relearn scale independently from later retained presentation publications. Only
+explicit wheel uniform scaling or an unavoidable cross-display target-fit projection may update the scalar, and the new
+rectangle + viewport extent + scalar must remain one coherent transaction. Cross-display transfer may clear a retained
+target Visualizer admission only when `DisplayManager` proves that target display unit owns **no** Visualizer lifecycle owner;
+any target lifecycle owner is a hard conflict. A manager-proven orphan is scene-local residue, not permission to recreate or
+move the logical runtime.
+
 During a live edit, the working rectangle also owns its preview scale. Normal logical-frame publications cannot
 restore the saved size at the new dragged origin; independently rounded axes must admit the same uniform scale.
 
