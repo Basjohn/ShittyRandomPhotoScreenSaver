@@ -1,0 +1,14 @@
+# SRPSS Reddit Helper build dependencies
+# The Reddit helper is frozen with PyInstaller (not Nuitka) into an isolated
+# on-disk bundle via scripts/venv/build_reddit_helper.ps1. It is effectively
+# pure-stdlib at runtime -- the PyInstaller build explicitly excludes PySide6,
+# winrt, numpy, PIL, sounddevice, pycaw and pytest, and the worker's only PySide6
+# use is a lazy URL-open fallback (webbrowser is primary). These pins therefore
+# cover only the PyInstaller build toolchain, installed into the shared repo-root
+# .venv. Captured from the working Python 3.11.9 build environment.
+
+pyinstaller==6.22.2
+pyinstaller-hooks-contrib==2026.7
+altgraph==0.17.5
+pefile==2023.2.7
+pywin32-ctypes==0.2.3
