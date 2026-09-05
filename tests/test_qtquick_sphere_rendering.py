@@ -26,10 +26,10 @@ from widgets.spotify_visualizer.render_state import (
 )
 
 
-def _presentation(*, extent=(256.0, 256.0), scale=1.0, inset=0.0):
+def _presentation(*, extent=(256.0, 256.0), display_size=None, scale=1.0, inset=0.0):
     presentation = resolve_visualizer_presentation(
         policy=get_visualizer_presentation_policy("sphere"),
-        display_size=extent,
+        display_size=extent if display_size is None else display_size,
         viewport_extent=extent,
         uniform_visual_scale=scale,
         content_inset=inset,
@@ -45,7 +45,7 @@ def _presentation(*, extent=(256.0, 256.0), scale=1.0, inset=0.0):
 
 
 def _snapshot(*, energy=(0.0, 0.0, 0.0), material="Chrome", authored_time=1.3,
-              extent=(256.0, 256.0), scale=1.0, inset=0.0, overrides=None):
+              extent=(256.0, 256.0), display_size=None, scale=1.0, inset=0.0, overrides=None):
     parameters = freeze_render_fields({
         "sphere_material": material,
         "sphere_deformation": 1.0,
@@ -69,7 +69,7 @@ def _snapshot(*, energy=(0.0, 0.0, 0.0), material="Chrome", authored_time=1.3,
         ),
         mode_state=SphereFrame(authored_time=authored_time, parameters=parameters),
     )
-    return compose_visualizer_render_snapshot(logical, _presentation(extent=extent, scale=scale, inset=inset), logical_revision=1)
+    return compose_visualizer_render_snapshot(logical, _presentation(extent=extent, display_size=display_size, scale=scale, inset=inset), logical_revision=1)
 
 
 def test_sphere_mesh_is_bounded_finite_unit_outward_and_has_real_z():
@@ -91,7 +91,7 @@ def test_sphere_mesh_is_bounded_finite_unit_outward_and_has_real_z():
         assert sum(normal[index] * centroid[index] for index in range(3)) > 0.0
 
 
-def test_sphere_pixel_geometry_uses_one_metric_across_aspects_and_scale():
+def test_sphere_pixel_geometry_uses_resolved_content_metric_across_aspects_and_scale():
     wide = _presentation(extent=(560.0, 280.0))
     tall = _presentation(extent=(280.0, 560.0))
     scaled = _presentation(extent=(420.0, 300.0), scale=0.65)
@@ -100,9 +100,31 @@ def test_sphere_pixel_geometry_uses_one_metric_across_aspects_and_scale():
         assert center_x == pytest.approx(presentation.content_rect[0] - presentation.outer_rect[0] + presentation.content_rect[2] * 0.5)
         assert center_y == pytest.approx(presentation.content_rect[1] - presentation.outer_rect[1] + presentation.content_rect[3] * 0.5)
         fraction = sphere_module.SPHERE_RADIUS_FRACTION
-        assert radius == pytest.approx(presentation.baseline_viewport_size[1] * presentation.uniform_visual_scale * fraction)
+        assert radius == pytest.approx(min(presentation.content_rect[2:]) * fraction)
     assert sphere_pixel_geometry(wide)[2] == pytest.approx(sphere_pixel_geometry(tall)[2])
-    assert sphere_pixel_geometry(scaled)[2] == pytest.approx(sphere_pixel_geometry(_presentation(extent=(420.0, 300.0)))[2] * 0.65)
+    doubled = _presentation(extent=(420.0, 300.0), display_size=(840.0, 600.0), scale=2.0)
+    baseline = _presentation(extent=(420.0, 300.0), display_size=(840.0, 600.0))
+    assert sphere_pixel_geometry(doubled)[2] == pytest.approx(sphere_pixel_geometry(baseline)[2] * 2.0)
+
+
+def test_sphere_pixel_geometry_ignores_authored_extent_when_visible_footprint_matches():
+    """The persisted huge CUSTOM world must not shrink the displayed Sphere."""
+    # The rejected profile authored this very wide world, which resolves to a
+    # roughly 1400x268 on-screen footprint.  Compare it with the identical
+    # footprint authored directly: presentation-local Sphere pixels must agree.
+    visible_size = (1398.5560481317289, 268.0)
+    huge_world = _presentation(
+        extent=(8240.0, 1579.0), display_size=(1400.0, 268.0), scale=1.0,
+    )
+    direct_world = _presentation(
+        extent=visible_size, display_size=visible_size, scale=1.0,
+    )
+    assert huge_world.content_rect[2:] == pytest.approx(direct_world.content_rect[2:])
+    huge_radius = sphere_pixel_geometry(huge_world)[2]
+    assert huge_radius == pytest.approx(sphere_pixel_geometry(direct_world)[2])
+    assert huge_radius == pytest.approx(268.0 * sphere_module.SPHERE_RADIUS_FRACTION)
+    # The old baseline-height-times-uniform-scale formula produced ~13px here.
+    assert huge_radius > 70.0
 
 
 def test_canonical_viewport_reserves_full_bounded_deformation_envelope():
@@ -126,7 +148,10 @@ def test_real_gl_sphere_host_is_deterministic_reactive_material_distinct_and_dep
     if not context.create(): pytest.skip("OpenGL 4.1 context unavailable")
     surface = QOffscreenSurface(); surface.setFormat(fmt); surface.create()
     if not surface.isValid() or not context.makeCurrent(surface): pytest.skip("offscreen OpenGL context unavailable")
-    width = height = 256
+    # This FBO includes the actual rejected visible footprint.  Smaller
+    # snapshots below remain valid sub-rects; the logged custom extent must be
+    # projected through its real 1400x268 pixel coordinate space.
+    width, height = 1400, 268
     fbo = color = depth = 0
     host = QuickVisualizerRenderHost()
     uploads = 0
@@ -190,15 +215,50 @@ def test_real_gl_sphere_host_is_deterministic_reactive_material_distinct_and_dep
 
         wide_bounds = alpha_bounds(render(_snapshot(extent=(320.0, 180.0))))
         tall_bounds = alpha_bounds(render(_snapshot(extent=(180.0, 320.0))))
-        scaled_bounds = alpha_bounds(render(_snapshot(scale=0.65)))
+        base_scale_bounds = alpha_bounds(render(_snapshot(display_size=(512.0, 512.0))))
+        scaled_bounds = alpha_bounds(render(_snapshot(display_size=(512.0, 512.0), scale=0.65)))
         for bounds in (wide_bounds, tall_bounds):
             rendered_width = bounds[2] - bounds[0] + 1
             rendered_height = bounds[3] - bounds[1] + 1
             assert abs(rendered_width - rendered_height) <= 12
-        base_bounds = alpha_bounds(idle)
-        base_diameter = (base_bounds[2] - base_bounds[0] + base_bounds[3] - base_bounds[1] + 2) / 2
+        base_diameter = (base_scale_bounds[2] - base_scale_bounds[0] + base_scale_bounds[3] - base_scale_bounds[1] + 2) / 2
         scaled_diameter = (scaled_bounds[2] - scaled_bounds[0] + scaled_bounds[3] - scaled_bounds[1] + 2) / 2
         assert scaled_diameter == pytest.approx(base_diameter * 0.65, abs=8.0)
+
+        # This is a real production-host draw: a 2x resolved Edit scale must
+        # enlarge the mesh pixels, not merely alter snapshot metadata.
+        small_scale_bounds = alpha_bounds(render(_snapshot(
+            extent=(128.0, 128.0), display_size=(256.0, 256.0), scale=1.0,
+        )))
+        double_scale_bounds = alpha_bounds(render(_snapshot(
+            extent=(128.0, 128.0), display_size=(256.0, 256.0), scale=2.0,
+        )))
+        small_scale_diameter = (
+            small_scale_bounds[2] - small_scale_bounds[0] + small_scale_bounds[3] - small_scale_bounds[1] + 2
+        ) / 2
+        double_scale_diameter = (
+            double_scale_bounds[2] - double_scale_bounds[0] + double_scale_bounds[3] - double_scale_bounds[1] + 2
+        ) / 2
+        assert double_scale_diameter == pytest.approx(small_scale_diameter * 2.0, abs=10.0)
+
+        # Exact rejected persisted geometry: 8240x1579 authored units are
+        # uniformly reduced to about 1400x268 visible pixels.  It must render
+        # as a sizeable body and retain visible authored-time and band response.
+        logged_geometry = {
+            "extent": (8240.0, 1579.0),
+            "display_size": (1400.0, 268.0),
+            "scale": 1.0,
+        }
+        logged_idle = render(_snapshot(**logged_geometry, authored_time=1.0))
+        logged_later = render(_snapshot(**logged_geometry, authored_time=2.0))
+        logged_bass = render(_snapshot(**logged_geometry, authored_time=1.0, energy=(1.0, 0.0, 0.0)))
+        logged_bounds = alpha_bounds(logged_idle)
+        logged_diameter = (
+            logged_bounds[2] - logged_bounds[0] + logged_bounds[3] - logged_bounds[1] + 2
+        ) / 2
+        assert logged_diameter > 110.0
+        assert logged_idle != logged_later
+        assert logged_idle != logged_bass
 
         detail_off = render(_snapshot(inset=32.0, overrides={"sphere_surface_detail": 0.0}))
         detail_on = render(_snapshot(inset=32.0, overrides={"sphere_surface_detail": 1.0}))

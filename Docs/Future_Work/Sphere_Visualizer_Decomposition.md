@@ -60,7 +60,8 @@ restrained high ripples remain independent and do not form an audio hedgehog. Ar
 from authored time. Bounded specular/Fresnel/material treatment makes surface deformation readable.
 
 Perspective uses a fixed camera distance in sphere-local units and scales into current content pixel geometry with
-one common X/Y pixel scale. Uniform resize changes object size; viewport-edge resize changes framing/playroom,
+one common X/Y pixel scale based on the shorter current content axis. Uniform resize changes object size;
+viewport-edge resize changes object size when it changes that shorter axis, otherwise framing/playroom,
 without ellipse distortion or viewport-dependent audio damping. Clip to the existing assigned viewport.
 
 Depth/cull/function/clear state is restored through the existing fence plus narrowly scoped Sphere-local state where
@@ -103,10 +104,12 @@ projection when Windows clamps an oversized native window; the report records ac
 The corrected 4K Water capture is `logs/evidence_chest/fw_sphere/water_4k_final.png`.
 The only probe timer is a failure deadline; production adds no timer, poller, source lane or per-frame mesh upload.
 
-The nominal pixel radius is 0.28 of the canonical 280px height. The summed maximum radial displacement is 1.64
-sphere units; fixed-camera perspective projects its full envelope below 138px at baseline scale. Thus canonical
-framing reserves room for all supported deformation/idle settings. Deliberately smaller CUSTOM viewports retain
-normal clipping; edge resize changes framing and whole-scale resize changes one common X/Y pixel metric.
+The nominal pixel radius is now 0.28 of the shorter actual content axis. The old canonical-height *
+uniform-scale mapping produced ~13px radius inside the operator's ~1400x268 viewport; the corrected
+radius is ~75px. Uniform resize now enlarges the object, independent of large saved extent encoding.
+Real GL at that exact geometry proves substantial occupied pixels plus time/bass changes; the operator
+confirms it animates and reacts. Stronger reaction/material detail and live edit geometry are active in
+`Visualizer_Edit_Geometry_And_Sphere_Materials.md`. Do not treat prototype acceptance as final quality.
 
 Chrome/Silver have restrained metal microdetail, Obsidian has fractured stone relief, Magma has recessed emissive
 fissures with authored-time flow, and Water has animated ripple bump, caustic accents and Fresnel transparency.

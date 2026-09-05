@@ -22,8 +22,11 @@ def capture_sphere(widget: Any, engine: Any, context: Any):
         raise TypeError("Sphere logical mode state has the wrong type")
     source_is_current = (
         context.playing
-        and context.source_generation > 0
-        and context.source_activation_id > 0
+        # Identity 0 is the first valid engine activation, not an unassigned
+        # sentinel.  Keep this aligned with the generic render admission fence
+        # so Sphere does not silently erase its first live generation's energy.
+        and context.source_generation >= 0
+        and context.source_activation_id >= 0
         and context.source_generation == context.engine_generation
         and context.source_activation_id == context.activation_id
     )
