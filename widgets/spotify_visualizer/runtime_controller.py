@@ -505,7 +505,12 @@ class VisualizerRuntimeController:
             != policy.viewport_resize_capable
         ):
             return False
-        self.commit_presentation_metrics(presentation)
+        # A CUSTOM snapshot carries the temporary working world for the
+        # retained scene only. Its ordinary baseline is promoted explicitly at
+        # Save; committing every live edit frame here makes Cancel restore the
+        # last drag instead of the pre-edit presentation.
+        if not self.has_custom_viewport_override:
+            self.commit_presentation_metrics(presentation)
         snapshot = compose_visualizer_render_snapshot(
             logical,
             presentation,

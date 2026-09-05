@@ -10,6 +10,7 @@ configuration and render-bridge publication.
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import replace
 from typing import Any, Callable, Mapping
@@ -462,6 +463,51 @@ class QuickDisplayVisualizerOwner:
         # viewport-sensitive Bubble presentation scaling wrong until a cold
         # restart.  This is state-only and adds no cadence/polling owner.
 
+    def commit_live_custom_layout(
+        self,
+        *,
+        local_rect: tuple[float, float, float, float],
+        viewport_extent: tuple[float, float],
+    ) -> None:
+        """Promote active CUSTOM geometry without recreating its generation."""
+
+        if self._retired or not self._started or not self._bound:
+            raise RuntimeError("live CUSTOM layout requires a bound running visualizer")
+        x, y, width, height = (float(value) for value in local_rect)
+        extent_width, extent_height = (float(value) for value in viewport_extent)
+        if not all(
+            math.isfinite(value)
+            for value in (x, y, width, height, extent_width, extent_height)
+        ) or width <= 0.0 or height <= 0.0 or extent_width <= 0.0 or extent_height <= 0.0:
+            raise ValueError("live CUSTOM visualizer geometry must be finite and positive")
+        if not self._controller.has_custom_viewport_override:
+            raise RuntimeError("live CUSTOM visualizer commit requires an active override")
+        presentation = self._presentation_runtime.scene_controller.visualizer_item.presentation
+        if presentation is None:
+            raise RuntimeError("live CUSTOM visualizer has no retained presentation")
+        if presentation.viewport_extent != (extent_width, extent_height):
+            raise RuntimeError("live CUSTOM visualizer extent differs from retained presentation")
+        expected = (x, y, width, height)
+        # CUSTOM owns an integer QRect while the retained visualizer owns a
+        # uniform floating projection.  Each edge of that QRect is rounded
+        # independently, so require the exact half-pixel envelope rather than
+        # falsely rejecting valid tall/narrow worlds.  The presentation is the
+        # authoritative visible value promoted below.
+        if any(
+            abs(value - target) > 0.500001
+            for value, target in zip(presentation.outer_rect, expected, strict=True)
+        ):
+            raise RuntimeError("live CUSTOM visualizer rectangle differs from retained presentation")
+        # The retained scene already displays this exact projection. Promote
+        # it before CUSTOM removes its temporary extent override, so the next
+        # ordinary publication resolves the same rect/world pair.
+        # Validate the controller policy before changing either owner field.
+        # This preserves the prior committed pair if a malformed presentation
+        # is ever routed here.
+        self._controller.commit_presentation_metrics(presentation)
+        self._committed_layout_rect = tuple(float(value) for value in presentation.outer_rect)
+        self._committed_layout_extent = (extent_width, extent_height)
+
     def _activation_scene_fade(self) -> float:
         """Return the authored 0 -> 1 first-appearance scene fade progress.
 
@@ -548,7 +594,12 @@ class QuickDisplayVisualizerOwner:
             presentation,
             active=True,
         )
-        self._controller.commit_presentation_metrics(presentation)
+        # CUSTOM's live projection is temporary working truth. Committing it
+        # here would overwrite the normal baseline on every logical frame, so
+        # Cancel could only restore the last edit rectangle. Save promotes it
+        # explicitly through commit_live_custom_layout instead.
+        if not self._controller.has_custom_viewport_override:
+            self._controller.commit_presentation_metrics(presentation)
         # The retained scene has now consumed one coherent presentation.  Drop
         # the one-shot persisted-layout hydration fence so later live CUSTOM
         # edits / transfers continue to follow the controller normally.
