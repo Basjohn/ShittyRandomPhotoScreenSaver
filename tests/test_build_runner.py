@@ -215,9 +215,37 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
         tmp_path / "SRPSS.ico",
         tmp_path / "images" / "LogoBMP.bmp",
         tmp_path / "resources" / "tutuogg.ogg",
+        tmp_path / "resources" / "jedimodeyall.mp3",
+        tmp_path / "rendering" / "quick" / "qml" / "DisplayScene.qml",
+        tmp_path / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml",
+        tmp_path / "rendering" / "quick" / "qml" / "WidgetInteractionGlow.qml",
+        tmp_path / "rendering" / "quick" / "qml" / "shaders" / "widget_glow.frag.qsb",
+        tmp_path / "themes" / "Default.srtheme",
+        tmp_path / "themes" / "widgets" / "Default.srwtheme",
+        tmp_path / "presets" / "visualizer_modes" / "bubble" / "preset_1.json",
+        tmp_path / "widgets" / "spotify_visualizer" / "shaders" / "bubble.frag",
     ):
         asset.parent.mkdir(parents=True, exist_ok=True)
         asset.write_bytes(b"fixture")
+    # Pinned frozen-runtime requirements are a preflight gate. Use the verbatim
+    # ``pip freeze`` spellings (dotted/underscored) to prove the check normalizes
+    # names per PEP 503 rather than demanding a canonical hyphenated form.
+    (tmp_path / "requirements.txt").write_text(
+        "\n".join(
+            (
+                "PySide6==6.9.1",
+                "PySide6_Addons==6.9.1",
+                "PySide6_Essentials==6.9.1",
+                "shiboken6==6.9.1",
+                "PyOpenGL==3.1.10",
+                "PyAudioWPatch==0.2.12.7",
+                "sounddevice==0.5.3",
+                "winrt-Windows.Media.Control==3.2.1",
+                "winrt-Windows.Storage.Streams==3.2.1",
+            )
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setattr(build_runner, "_find_pwsh", lambda: Path("pwsh.exe"))
     monkeypatch.setattr(build_runner, "_find_iscc", lambda: Path("ISCC.exe"))
 
