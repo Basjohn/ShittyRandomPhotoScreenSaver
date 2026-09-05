@@ -8,11 +8,12 @@ ROOT = Path(__file__).resolve().parents[1]
 THEMES = ROOT / "themes"
 WIDGETS = THEMES / "widgets"
 
+# The curated light batch was simplified (Porcelain Sky / Alabaster Citrus were
+# retired in the swatch simplification); these two remain the only themes whose
+# panel.group.surface actually inverts to a light value (luminance >= 0.75).
 LIGHT = (
-    "Porcelain Sky [Two-Tone] [Acrylic]",
     "Linen Sage [Two-Tone] [Acrylic]",
     "Pearl Blush [Three-Tone] [Glass]",
-    "Alabaster Citrus [Three-Tone] [Acrylic]",
 )
 METAL = (
     "Polished Chrome [Single] [Glass]",
@@ -21,7 +22,7 @@ METAL = (
     "Tungsten Brass [Three-Tone] [Acrylic]",
 )
 
-# These six use dark typography over intentionally light/translucent Settings
+# These use dark typography over intentionally light/translucent Settings
 # surfaces. They need a backdrop-aware contrast gate rather than the old
 # opaque-RGB-only check.
 LIGHT_SURFACE = LIGHT + (
@@ -86,7 +87,7 @@ def _widget_runtime_card_floor(widget: dict) -> list[int]:
 def _composite_text_on_surface(text: list[int], surface: list[int]) -> list[int]:
     return _composite(text, surface)
 
-def test_eight_curated_themes_and_widget_mirrors_exist() -> None:
+def test_curated_light_metal_themes_and_widget_mirrors_exist() -> None:
     for name in LIGHT + METAL:
         assert (THEMES / f"{name}.srtheme").is_file(), name
         assert (WIDGETS / f"{_widget_name(name)}.srwtheme").is_file(), name
@@ -185,7 +186,7 @@ def test_generated_widget_counterparts_keep_stable_pair_identity_without_materia
         assert not widget["name"].endswith(" [Acrylic]"), name
 
 
-def test_eight_widget_mirrors_include_mature_media_and_backlog_semantics() -> None:
+def test_curated_widget_mirrors_include_mature_media_and_backlog_semantics() -> None:
     required = {
         "abandonment_issues.accent",
         "media.transport.surface",

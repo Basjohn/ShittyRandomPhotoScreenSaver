@@ -28,7 +28,10 @@ def _imports_tools_or_scripts(path: Path) -> list[str]:
 
 def test_production_python_never_imports_operator_analysis_tools():
     violations: list[str] = []
-    excluded_roots = {"tests", "tools"}
+    # Only production source is in scope: skip the test/tool trees plus
+    # non-production output/scratch/vendor roots (diagnostic captures under logs/,
+    # the deleteme debris graveyard, scratch dirs, and the third-party venv).
+    excluded_roots = {"tests", "tools", "deleteme", "logs", "temp", "tmp", "cache", ".venv"}
     for path in ROOT.rglob("*.py"):
         rel = path.relative_to(ROOT)
         if rel.parts and rel.parts[0] in excluded_roots:

@@ -140,13 +140,21 @@ def test_missing_persisted_file_falls_back_without_destroying_user_selection(tmp
 
 def test_theme_directory_resolution_precedence(monkeypatch, tmp_path):
     explicit = tmp_path / "explicit"
-    build = tmp_path / "build"
 
-    monkeypatch.setattr(theme_paths, "THEMES_DIRECTORY_BUILD_REPLACE_BLANK", str(build))
+    # Explicit injection always wins, independent of frozen/installed state.
+    monkeypatch.setattr(theme_paths, "_is_frozen_runtime", lambda: True)
     assert theme_paths.resolve_settings_themes_directory(explicit) == explicit
-    assert theme_paths.resolve_settings_themes_directory() == build
 
-    monkeypatch.setattr(theme_paths, "THEMES_DIRECTORY_BUILD_REPLACE_BLANK", "")
+    # A frozen/installed runtime resolves the curated machine-wide ProgramData
+    # tree that the installer owns.
+    monkeypatch.setenv("PROGRAMDATA", str(tmp_path / "pd"))
+    assert (
+        theme_paths.resolve_settings_themes_directory()
+        == tmp_path / "pd" / "SRPSS" / "themes"
+    )
+
+    # Script/dev (non-frozen) falls back to the bundled source ``themes`` root.
+    monkeypatch.setattr(theme_paths, "_is_frozen_runtime", lambda: False)
     fallback = theme_paths.resolve_settings_themes_directory()
     assert fallback.name == "themes"
     assert fallback.parent == Path(theme_paths.__file__).resolve().parent.parent

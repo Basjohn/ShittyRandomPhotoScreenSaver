@@ -33,7 +33,7 @@ def test_spec_describes_the_current_visualizer_presentation_contract():
     assert "`VisualizerLogicalRuntime` remains sole mode-general authored visualizer clock" in spec_text
     assert "uniform_visual_scale" in spec_text
     assert "viewport_extent" in spec_text
-    assert "all-five-mode viewport capability policy" in spec_text
+    assert "all-six-mode viewport capability policy" in spec_text
     assert "R-69 is golden" in spec_text
     assert "may not globally compress renderer-facing Bubble head radius" in spec_text
     assert "Docs/Visualizer_Reset_Matrix.md" not in spec_text
@@ -62,7 +62,7 @@ def test_contracts_route_visualizer_shell_clip_and_geometry_owners():
     assert "viewport_extent" in contracts_text
     assert "shared 40% floor" in contracts_text
     assert "Gmail model width is already outer width" in contracts_text
-    assert "R-69 is binding" in contracts_text
+    assert "R-69 remains binding" in contracts_text
 
 
 def test_compositor_architecture_does_not_make_visualizer_card_universal():
@@ -78,7 +78,7 @@ def test_project_overview_keeps_visualizer_scope_current():
     overview_text = (ROOT / "Docs" / "00_PROJECT_OVERVIEW.md").read_text(encoding="utf-8")
     assert "high-fidelity multi-mode visualizer" in overview_text
     assert "H is closed" in overview_text
-    assert "I is active caller-proven residue" in overview_text
+    assert "caller-proven Phase-I cleanup are closed" in overview_text
     assert "wheel/corners -> uniform scale" in overview_text
     assert "R-69 is golden" in overview_text
     assert "persistent newest-source serial lane" in overview_text
