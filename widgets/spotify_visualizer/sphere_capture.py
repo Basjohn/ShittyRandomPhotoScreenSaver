@@ -35,6 +35,8 @@ def capture_sphere(widget: Any, engine: Any, context: Any):
         if source_is_current
         else _energy_state(None)
     )
+    if not source_is_current:
+        extra["transient_energy"] = None
     parameters = getattr(widget, "_sphere_parameters", SPHERE_DEFAULT_PARAMETERS)
     if not isinstance(parameters, FrozenFields):
         raise TypeError("Sphere capture requires configure-owned FrozenFields")

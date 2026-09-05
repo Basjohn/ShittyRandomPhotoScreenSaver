@@ -8,14 +8,54 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
 
 ## Active sequence
 
-- [~] **Priority — Edit Layout geometry and Sphere materials:** operator confirms restored visualizer
-  appearance and active Sphere motion. Apply Bubble's one-pixel outline reduction, fix preview/edge
-  geometry across all six modes and extremes, then expand customizable Sphere deformation, fiery
-  dripping Magma and translucent Water with falling blobs. Later Future Work waits. Live decomposition:
+- [~] **Priority — Visualizer geometry/glow and Sphere validation:** live edit geometry is nearly correct
+  by operator report. Sphere now has vocal deformation, independent size pulse, adjustable base/reactive bump,
+  diffuse fire/smoke/ash/lava and translucent Water with rounded blobs. Focused GL/settings checks and actual
+  preset captures pass; physical music/appearance acceptance remains open. Close the glow and edit-exit rows
+  below before queued Slide/widget-glow refinements. Live decomposition:
   `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md`.
 
+- [~] **Visualizer glow regression — Sine/Oscilloscope:** operator reports absent visualizer glows after
+  line improvements. Trace actual preset/configuration through the immutable draw state and shader at small,
+  normal and large scales; repair the owning seam with a real GL coverage test while preserving line AA/colour.
+- [~] **Edit exit without teardown — assessment:** live geometry is operator-described as almost perfect.
+  Inventory the Save/Cancel exit teardown and its current responsibilities; measure/check stale frame, age,
+  source fencing and geometry. If safe, preserve the existing visualizer state/resources across ordinary edit
+  exit, with tests for Save/Cancel, source freshness and unchanged activation. Real retirement boundaries remain.
+  Document the decision and decomposition before implementation; do not remove teardown by assumption.
+  Decomposition: `Docs/Future_Work/Edit_Layout_Live_Commit.md`.
+
+  For implementation:
+  Give QuickDisplayVisualizerOwner an explicit running-safe operation along the lines of:
+
+commit_live_custom_layout(local_rect, viewport_extent)
+
+It should atomically promote the current working state into:
+
+_committed_layout_rect
+_committed_layout_extent
+controller.commit_presentation_metrics(current_presentation)
+
+Then Save becomes conceptually:
+
+persist → promote working state to committed → end CUSTOM → continue running.
+
+And that ordering is especially beautiful for viewport-sensitive modes.
+
+Immediately before Save:
+
+effective extent = CUSTOM override
+
+Immediately after promotion but before clearing:
+
+CUSTOM override == newly committed extent
+
+Immediately after clearing:
+
+effective extent = newly committed extent
+
 - [ ] **Early follow-up — Widget interaction glow hold/fade controls:** only after the active Visualizer
-  geometry and Sphere-quality slice is implemented and visually accepted, create a technical decomposition
+  geometry and Sphere-quality slice is implemented and visually checked, create a technical decomposition
   before implementation. Add a settings-owned intensity control and make hover/click fade-in and fade-out
   three times slower. Retain hover glow while the Cursor Halo is over the widget and click glow while that
   widget remains the last clicked target until a click elsewhere; end each prerequisite through existing
@@ -26,19 +66,20 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
 - [x] **FW1 — Widget interaction glow:** two Interaction switches, theme-inheriting shared swatch, one retained
   shader/quad and finite event-driven feedback. 64 focused tests passed; real Quick peak capture inspected.
   Detailed ownership and acceptance: `Docs/Future_Work/Widget_Interaction_Glow_Decomposition.md`.
-- [x] **FW2 — Slide motion options:** Elastic, Wobble and Flex are implemented in the sealed Slide owner with frozen
+- [~] **FW2 — Slide motion options:** Elastic, Wobble and Flex are implemented in the sealed Slide owner with frozen
   per-run style resolution, exact endpoints and real-GL coverage. Perspective remains a separately designed feature;
   do not counterfeit it with a 2D effect.
+  Smooth the reported slow travel followed by sudden elastic settlement after Sphere checks.
   Decomposition: `Docs/Future_Work/Slide_Motion_Options_Decomposition.md`.
 - [~] **FW3 — Deformable Sphere — motion restored; material expansion active:** dormant-by-default 3D mesh, five material presets including Water,
   bump/detail controls, source-fenced immutable capture, lazy Settings and event-only inactive GPU retirement.
   Real Quick captures inspected and relevant automatic gates passed; physical acceptance remains separate.
   Detailed evidence: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
-- [~] **Bubble aspect/response — operator reports unresolved; optimization remains landed:** after Sphere checkpoint `66be7344`,
-  traced/documented height-based radius versus field occupancy, fixed the proven local-highlight aspect defect,
-  and removed measured immutable-tuple reconstruction (`139aed21`). Preserved canonical pixels, authored
-  response, consume-once events and cadence. Evidence and remaining physical/log checks:
-  `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md`.
+- [~] **Bubble aspect/response — awaiting physical validation:** equal-area response replaces the rejected
+  height-only coupling; outlines are one pixel thinner with derivative coverage. Live edit preview uses the
+  same working geometry as the edit frame. Immutable-tuple reuse remains landed without cadence changes.
+  Confirm same-area wide/tall response and rendered contacts. Evidence:
+  `Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md`.
 - [ ] **Awaiting Validation / Logs — Bubble:** match the operator's resize operation and same-preset
   canonical/wide/narrow feel; obtain a 60 Hz `--perf --viz` baseline without `--usage` before further
   presentation-tail tuning. Per-head GL response is preserved; the original live complaint is not declared closed.

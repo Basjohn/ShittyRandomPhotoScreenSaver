@@ -20,6 +20,7 @@ from widgets.spotify_visualizer.render_state import (
     SphereFrame,
     VisualizerCommonState,
     VisualizerEnergyState,
+    VisualizerTransientState,
     VisualizerLogicalFrame,
     compose_visualizer_render_snapshot,
     freeze_render_fields,
@@ -44,7 +45,7 @@ def _presentation(*, extent=(256.0, 256.0), display_size=None, scale=1.0, inset=
     return presentation
 
 
-def _snapshot(*, energy=(0.0, 0.0, 0.0), material="Chrome", authored_time=1.3,
+def _snapshot(*, energy=(0.0, 0.0, 0.0), transient=0.0, material="Chrome", authored_time=1.3,
               extent=(256.0, 256.0), display_size=None, scale=1.0, inset=0.0, overrides=None):
     parameters = freeze_render_fields({
         "sphere_material": material,
@@ -66,6 +67,7 @@ def _snapshot(*, energy=(0.0, 0.0, 0.0), material="Chrome", authored_time=1.3,
         common=VisualizerCommonState(
             bars=(), bar_count=0,
             energy=VisualizerEnergyState(bass=bass, mid=mid, high=high, overall=max(energy)),
+            transient=VisualizerTransientState(mid=transient),
         ),
         mode_state=SphereFrame(authored_time=authored_time, parameters=parameters),
     )
@@ -124,17 +126,57 @@ def test_sphere_pixel_geometry_ignores_authored_extent_when_visible_footprint_ma
     assert huge_radius == pytest.approx(sphere_pixel_geometry(direct_world)[2])
     assert huge_radius == pytest.approx(268.0 * sphere_module.SPHERE_RADIUS_FRACTION)
     # The old baseline-height-times-uniform-scale formula produced ~13px here.
-    assert huge_radius > 70.0
+    assert huge_radius > 60.0
 
 
 def test_canonical_viewport_reserves_full_bounded_deformation_envelope():
     # Sum absolute maxima of the independent shader fields, including maximum
     # idle detail and all three bands at their maximum supported strength.
-    maximum_radius = 1.0 + 0.14 + 2.0 * (0.09 + 0.035 + 0.10 + 0.025)
+    maximum_radius = 1.0 + 0.20 + 0.10 + 2.0 * 0.27
     camera_distance = 4.6
     perspective_radius = maximum_radius * camera_distance / math.sqrt(camera_distance**2 - maximum_radius**2)
     pixels = 280.0 * sphere_module.SPHERE_RADIUS_FRACTION * perspective_radius
     assert pixels < 138.0  # 140px half-height, with a visible safety margin.
+
+
+def test_sphere_shader_has_bounded_independent_band_transfer_and_optional_effects():
+    source = sphere_module._VERTEX_SOURCE
+    assert "uniform vec3 uBandResponse;" in source
+    assert "uniform float uEnergyCurve;" in source
+    assert "pow(clamp(uEnergy, 0.0, 1.0)" in source
+    assert "exp(-2.8 * drive)" in source
+    assert "_EFFECT_VERTEX_SOURCE" in sphere_module.__dict__
+    assert "_FIRE_FRAGMENT_SOURCE" in sphere_module.__dict__
+    assert "uEffectPass == 0" in sphere_module._FIRE_FRAGMENT_SOURCE
+    assert "fwidth(noise)" in sphere_module._FIRE_FRAGMENT_SOURCE
+    assert "waterBlobShape" in sphere_module._EFFECT_VERTEX_SOURCE
+    assert "magma ? teardropShape(n) : waterBlobShape(n, id)" in sphere_module._EFFECT_VERTEX_SOURCE
+    assert "vec3(radius * 1.02, radius * 0.98, radius * 1.02)" in sphere_module._EFFECT_VERTEX_SOURCE
+
+
+def test_partial_effect_allocation_is_discarded_before_the_next_lazy_retry(monkeypatch):
+    renderer = QuickSphereRenderer()
+    renderer._effect_program = 11
+    renderer._effect_vao = 12
+    renderer._effect_vbo = 13
+    renderer._effect_vertex_count = 960
+    renderer._fire_program = 14
+    renderer._fire_vao = 15
+    renderer._fire_vbo = 16
+    renderer._effect_uniforms = {"uMatrix": 1}
+    renderer._fire_uniforms = {"uTime": 2}
+    deleted = []
+    monkeypatch.setattr(sphere_module.gl, "glDeleteProgram", lambda resource: deleted.append(resource))
+    monkeypatch.setattr(sphere_module.gl, "glDeleteVertexArrays", lambda _count, resources: deleted.extend(resources))
+    monkeypatch.setattr(sphere_module.gl, "glDeleteBuffers", lambda _count, resources: deleted.extend(resources))
+
+    renderer._discard_effect_resources()
+
+    assert set(deleted) == {11, 12, 13, 14, 15, 16}
+    assert not renderer._effect_program and not renderer._effect_vao and not renderer._effect_vbo
+    assert not renderer._fire_program and not renderer._fire_vao and not renderer._fire_vbo
+    assert renderer._effect_vertex_count == 0
+    assert not renderer._effect_uniforms and not renderer._fire_uniforms
 
 
 @pytest.mark.qt
@@ -172,8 +214,8 @@ def test_real_gl_sphere_host_is_deterministic_reactive_material_distinct_and_dep
         assert gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) == gl.GL_FRAMEBUFFER_COMPLETE
         matrix = (2/width, 0, 0, 0, 0, 2/height, 0, 0, 0, 0, 1, 0, -1, -1, 0, 1)
 
-        def render(snapshot, *, verify_sentinel=False):
-            gl.glViewport(0, 0, width, height); gl.glClearColor(0, 0, 0, 0); gl.glClearDepth(0.37); gl.glDisable(gl.GL_SCISSOR_TEST); gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+        def render(snapshot, *, verify_sentinel=False, clear_color=(0, 0, 0, 0), read_depth=False):
+            gl.glViewport(0, 0, width, height); gl.glClearColor(*clear_color); gl.glClearDepth(0.37); gl.glDisable(gl.GL_SCISSOR_TEST); gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
             gl.glEnable(gl.GL_SCISSOR_TEST); gl.glScissor(0, 0, width, height)
             gl.glDepthFunc(gl.GL_GREATER); gl.glClearDepth(0.37); gl.glDisable(gl.GL_DEPTH_TEST); gl.glDepthMask(gl.GL_FALSE)
             assert host.render(snapshot=snapshot, viewport=(0, 0, width, height), logical_size=(float(width), float(height)), matrix_values=matrix) == "sphere"
@@ -188,7 +230,11 @@ def test_real_gl_sphere_host_is_deterministic_reactive_material_distinct_and_dep
             if verify_sentinel:
                 sentinel = float(gl.glReadPixels(8, 8, 1, 1, gl.GL_DEPTH_COMPONENT, gl.GL_FLOAT)[0][0])
                 assert sentinel == pytest.approx(0.37)
-            return bytes(gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE))
+            image = bytes(gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE))
+            if read_depth:
+                depth_pixels = gl.glReadPixels(0, 0, width, height, gl.GL_DEPTH_COMPONENT, gl.GL_FLOAT)
+                return image, depth_pixels.tobytes()
+            return image
 
         idle = render(_snapshot(inset=32.0), verify_sentinel=True)
         repeated = render(_snapshot(inset=32.0))
@@ -199,9 +245,128 @@ def test_real_gl_sphere_host_is_deterministic_reactive_material_distinct_and_dep
         assert idle == repeated
         assert idle != bass and idle != mid and idle != high
         assert len(set(materials)) == 5
-        assert uploads == 1
+        # One body and one 320-triangle effect mesh are uploaded once. The
+        # fire quad is intentionally below this size threshold; no later frame
+        # is allowed to upload geometry again.
+        assert uploads == 2
         alpha = idle[3::4]
         assert alpha[0] == 0 and alpha[-1] == 0 and max(alpha) > 0
+
+        # Magma/Water detached effects are analytically moved by the authored
+        # frame time, but their shared mesh remains static and FX=0 is a real
+        # hard off switch rather than a dim colour branch.
+        magma_off = render(_snapshot(material="Magma", inset=32.0, overrides={"sphere_material_fx": 0.0}))
+        magma_fx = render(_snapshot(material="Magma", inset=32.0, overrides={"sphere_material_fx": 1.35}))
+        water_off = render(_snapshot(material="Water", inset=32.0, overrides={"sphere_material_fx": 0.0}))
+        water_fx = render(_snapshot(material="Water", inset=32.0, overrides={"sphere_material_fx": 1.20}))
+        assert magma_off != magma_fx
+        assert water_off != water_fx
+        assert uploads == 2
+
+        # An opaque destination makes the alpha contract observable. With a
+        # zero global content fade, newborn lava/smoke/fire cannot alter color
+        # or depth; at a half fade their standard-alpha composition remains
+        # visible over the real destination rather than transparent black.
+        opaque = (.13, .19, .27, 1.0)
+        def content_fade(snapshot, value):
+            return replace(snapshot, presentation=replace(snapshot.presentation, content_fade=value))
+        magma_zero_base = render(content_fade(_snapshot(
+            material="Magma", authored_time=1.3, inset=32.0, energy=(.8, .65, .5),
+            overrides={"sphere_material_fx": 0.0},
+        ), 0.0), clear_color=opaque, read_depth=True)
+        magma_zero_fx = render(content_fade(_snapshot(
+            material="Magma", authored_time=1.3, inset=32.0, energy=(.8, .65, .5),
+            overrides={"sphere_material_fx": 2.0},
+        ), 0.0), clear_color=opaque, read_depth=True)
+        assert magma_zero_fx == magma_zero_base
+        magma_half_base = render(content_fade(_snapshot(
+            material="Magma", authored_time=1.3, inset=32.0, energy=(.8, .65, .5),
+            overrides={"sphere_material_fx": 0.0},
+        ), .5), clear_color=opaque)
+        magma_half_fx = render(content_fade(_snapshot(
+            material="Magma", authored_time=1.3, inset=32.0, energy=(.8, .65, .5),
+            overrides={"sphere_material_fx": 2.0},
+        ), .5), clear_color=opaque)
+        assert magma_half_fx != magma_half_base
+        assert all(alpha == 255 for alpha in magma_half_fx[3::4])
+
+        # FX=2 has a finite, visible life rather than clipped full-frame
+        # decoration. Compare against the exact same body at FX=0 so the color
+        # oracle sees only detached lava/fire and water pixels.
+        magma_fx2 = render(_snapshot(
+            material="Magma", authored_time=2.1, inset=32.0,
+            energy=(.8, .65, .5), overrides={"sphere_material_fx": 2.0},
+        ))
+        magma_base = render(_snapshot(
+            material="Magma", authored_time=2.1, inset=32.0,
+            energy=(.8, .65, .5), overrides={"sphere_material_fx": 0.0},
+        ))
+        water_fx2 = render(_snapshot(
+            material="Water", authored_time=2.1, inset=32.0,
+            energy=(.8, .65, .5), overrides={"sphere_material_fx": 2.0},
+        ))
+        water_base = render(_snapshot(
+            material="Water", authored_time=2.1, inset=32.0,
+            energy=(.8, .65, .5), overrides={"sphere_material_fx": 0.0},
+        ))
+
+        def detached_pixels(base, effect):
+            return [
+                (index // 4, effect[index], effect[index + 1], effect[index + 2])
+                for index in range(0, len(effect), 4)
+                if effect[index:index + 3] != base[index:index + 3]
+            ]
+
+        magma_pixels = detached_pixels(magma_base, magma_fx2)
+        water_pixels = detached_pixels(water_base, water_fx2)
+        assert len(magma_pixels) > 90
+        assert len(water_pixels) > 50
+        # Fire/lava retains a hot red-orange core; liquid is blue/cyan after
+        # its Fresnel/specular/transmission fragment pass.
+        assert sum(red > 130 and green > 20 and red > blue * 1.35
+                   for _, red, green, blue in magma_pixels) > 30
+        # Grey translucent smoke is a normal-alpha pass, deliberately unlike
+        # the additive flame; ash retains a few dark/orange flakes.
+        assert sum(12 < red < 130 and max(red, green, blue) - min(red, green, blue) < 36
+                   for _, red, green, blue in magma_pixels) > 8
+        assert sum(blue > 110 and blue > red * 1.25
+                   for _, red, green, blue in water_pixels) > 8
+        for pixels in (magma_pixels, water_pixels):
+            xs = [pixel % width for pixel, *_ in pixels]
+            ys = [pixel // width for pixel, *_ in pixels]
+            assert min(xs) > 1 and max(xs) < width - 2
+            assert min(ys) > 1 and max(ys) < height - 2
+        assert magma_fx2 != render(_snapshot(
+            material="Magma", authored_time=2.7, inset=32.0,
+            energy=(.8, .65, .5), overrides={"sphere_material_fx": 2.0},
+        ))
+        assert water_fx2 != render(_snapshot(
+            material="Water", authored_time=2.7, inset=32.0,
+            energy=(.8, .65, .5), overrides={"sphere_material_fx": 2.0},
+        ))
+
+        # Sample the whole analytic life at maximum FX. Raised clouds/smoke
+        # deliberately clear the enlarged body silhouette, yet their finite
+        # camera-projected envelope remains within the 1.9-radius reserve.
+        center_x, center_y, radius = sphere_pixel_geometry(_snapshot(inset=32.0).presentation)
+        for material in ("Magma", "Water"):
+            for authored_time in (0.0, .25, .5, .75, 1.0, 1.25, 1.5, 1.75):
+                base = render(_snapshot(
+                    material=material, authored_time=authored_time, inset=32.0,
+                    energy=(1.0, 1.0, 1.0), overrides={"sphere_material_fx": 0.0},
+                ))
+                effect = render(_snapshot(
+                    material=material, authored_time=authored_time, inset=32.0,
+                    energy=(1.0, 1.0, 1.0), overrides={"sphere_material_fx": 2.0},
+                ))
+                pixels = detached_pixels(base, effect)
+                assert pixels
+                xs = [pixel % width for pixel, *_ in pixels]
+                ys = [pixel // width for pixel, *_ in pixels]
+                assert min(xs) >= center_x - 1.90 * radius
+                assert max(xs) <= center_x + 1.90 * radius
+                assert min(ys) >= center_y - 1.90 * radius
+                assert max(ys) <= center_y + 1.90 * radius
 
         def alpha_bounds(image):
             points = [
@@ -260,9 +425,63 @@ def test_real_gl_sphere_host_is_deterministic_reactive_material_distinct_and_dep
         assert logged_idle != logged_later
         assert logged_idle != logged_bass
 
+        # Measure silhouette coverage, not just lighting/color inequality. Quiet
+        # real band levels must deform the body, and a strong bass passage must
+        # not flatten the independent mid lobes against a combined radius cap.
+        response_controls = {
+            "sphere_idle_motion": 0.0, "sphere_rotation_speed": 0.0,
+            "sphere_material_fx": 0.0, "sphere_deformation": 2.0,
+            "sphere_bump_reactivity": 0.0,
+            "sphere_size_response": 0.0,
+            "sphere_bass_response": 2.0, "sphere_mid_response": 2.0,
+        }
+        quiet = render(_snapshot(**logged_geometry, energy=(0.0, 0.0, 0.0), overrides=response_controls))
+        low_bass = render(_snapshot(**logged_geometry, energy=(0.04, 0.0, 0.0), overrides=response_controls))
+        full_bass = render(_snapshot(**logged_geometry, energy=(1.0, 0.0, 0.0), overrides=response_controls))
+        added_mid = render(_snapshot(**logged_geometry, energy=(1.0, 0.7, 0.0), overrides=response_controls))
+        def silhouette_delta(left, right):
+            return sum(abs(a-b) for a, b in zip(left[3::4], right[3::4])) / 255.0
+        assert silhouette_delta(quiet, low_bass) > 200.0
+        assert silhouette_delta(full_bass, added_mid) > 100.0
+        no_response = {**response_controls, "sphere_deformation": 0.0}
+        assert render(_snapshot(**logged_geometry, energy=(1.0, 0.7, 0.0), overrides=no_response)) == quiet
+        vocal_only = {**response_controls, "sphere_bass_response": 0.0,
+                      "sphere_mid_response": 0.0, "sphere_high_response": 0.0,
+                      "sphere_vocal_response": 2.0}
+        vocal_shape = render(_snapshot(**logged_geometry, energy=(0.0, 0.4, 0.1), overrides=vocal_only))
+        assert silhouette_delta(quiet, vocal_shape) > 200.0
+        assert render(_snapshot(**logged_geometry, energy=(1.0, 0.0, 0.0), overrides=vocal_only)) == quiet
+        assert render(_snapshot(**logged_geometry, energy=(0.0, 0.4, 0.1),
+                                overrides={**vocal_only, "sphere_vocal_response": 0.0})) == quiet
+
+        # Whole-body breathing is independent of local deformation. A pure
+        # vocal-band transient grows the actual diameter; decay returns exactly
+        # to rest and Size Response=0 removes the entire effect.
+        size_only = {**response_controls, "sphere_deformation": 0.0, "sphere_size_response": 2.0}
+        resting = render(_snapshot(**logged_geometry, overrides=size_only))
+        pulse = render(_snapshot(**logged_geometry, transient=1.0, overrides=size_only))
+        decaying = render(_snapshot(**logged_geometry, transient=0.2, overrides=size_only))
+        def diameter(pixels):
+            left, top, right, bottom = alpha_bounds(pixels)
+            return (right - left + bottom - top + 2) / 2.0
+        assert diameter(pulse) > diameter(resting) * 1.17
+        assert diameter(resting) < diameter(decaying) < diameter(pulse)
+        assert render(_snapshot(**logged_geometry, transient=0.0, overrides=size_only)) == resting
+        assert render(_snapshot(**logged_geometry, transient=1.0,
+                                overrides={**size_only, "sphere_size_response": 0.0})) == resting
+
         detail_off = render(_snapshot(inset=32.0, overrides={"sphere_surface_detail": 0.0}))
         detail_on = render(_snapshot(inset=32.0, overrides={"sphere_surface_detail": 1.0}))
         assert detail_off != detail_on
+        static_surface = {"sphere_deformation": 0.0, "sphere_idle_motion": 0.0,
+                          "sphere_rotation_speed": 0.0, "sphere_material_fx": 0.0,
+                          "sphere_surface_detail": 1.15}
+        bump_static = render(_snapshot(energy=(0.2, 0.6, 0.2),
+                                      overrides={**static_surface, "sphere_bump_reactivity": 0.0}))
+        bump_reactive = render(_snapshot(energy=(0.2, 0.6, 0.2),
+                                        overrides={**static_surface, "sphere_bump_reactivity": 1.5}))
+        assert bump_static[3::4] == bump_reactive[3::4]  # relief changes normals, not size
+        assert bump_static != bump_reactive
         water_still = {
             "sphere_rotation_speed": 0.0,
             "sphere_deformation": 0.0,

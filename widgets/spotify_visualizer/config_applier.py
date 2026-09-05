@@ -39,7 +39,13 @@ SPHERE_DEFAULT_PARAMETERS = freeze_render_fields({
     "sphere_material": "Chrome", "sphere_deformation": 1.0,
     "sphere_rotation_speed": 0.35, "sphere_gloss": 0.65,
     "sphere_specular": 0.8, "sphere_light_direction": "NW",
-    "sphere_idle_motion": 0.12, "sphere_surface_detail": 1.0,
+    "sphere_idle_motion": 0.12, "sphere_surface_detail": 1.15,
+    "sphere_bass_response": 1.0, "sphere_mid_response": 1.0,
+    "sphere_high_response": 1.0, "sphere_vocal_response": 1.4,
+    "sphere_bump_reactivity": 0.65,
+    "sphere_size_response": 1.5,
+    "sphere_energy_curve": 0.60,
+    "sphere_material_fx": 1.0,
 })
 _SPHERE_PARAMETER_KEYS = tuple(SPHERE_DEFAULT_PARAMETERS)
 
@@ -142,6 +148,16 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._sphere_idle_motion = _sphere_bounded(kwargs['sphere_idle_motion'], 0.0, 1.0, 'sphere_idle_motion')
     if 'sphere_surface_detail' in kwargs:
         host._sphere_surface_detail = _sphere_bounded(kwargs['sphere_surface_detail'], 0.0, 2.0, 'sphere_surface_detail')
+    for key, maximum in (
+        ('sphere_bass_response', 2.0), ('sphere_mid_response', 2.0),
+        ('sphere_high_response', 2.0), ('sphere_vocal_response', 2.0),
+        ('sphere_bump_reactivity', 2.0),
+        ('sphere_size_response', 2.0),
+        ('sphere_energy_curve', 2.0),
+        ('sphere_material_fx', 2.0),
+    ):
+        if key in kwargs:
+            setattr(host, f"_{key}", _sphere_bounded(kwargs[key], 0.2 if key == "sphere_energy_curve" else 0.0, maximum, key))
     if any(key in kwargs for key in _SPHERE_PARAMETER_KEYS):
         host._sphere_parameters = freeze_render_fields({
             key: getattr(host, f"_{key}", SPHERE_DEFAULT_PARAMETERS[key])

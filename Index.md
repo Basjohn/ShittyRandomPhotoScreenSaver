@@ -43,7 +43,7 @@ Live migration phase/checkpoint status is intentionally owned only by `Current_P
 | deferred features | `Future_Work.md` |
 | operator-activated Future Work implementation / live checklists | `FWPlan.md` |
 | active Bubble aspect response / bounded presentation-cost diagnosis | `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md` |
-| active operator-rejected visualizer appearance / Bubble / Sphere repair | `Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md` |
+| recovered visualizer appearance and remaining Bubble validation | `Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md` |
 | experimental Sphere ownership, materials and validation | `Docs/Future_Work/Sphere_Visualizer_Decomposition.md` |
 | G4 durable scale/extent contract | `Docs/QtQuick_Migration/Remaining_G4_Visualizer_Viewport_Resize_Decomposition.md` |
 | G4 post-checkpoint correction playbook | `Docs/QtQuick_Migration/G4_Post_Checkpoint_Audit_Corrections_Decomposition.md` |
@@ -128,7 +128,7 @@ admission. `Remaining_H_Production_Cutover_Decomposition.md` is the durable clos
 The all-five-mode capability policy is landed. Do not reintroduce a Bubble false gate to avoid correcting viewport
 ownership or spatial-domain defects.
 
-Bubble's durable reflow contract is routed through `Spec.md`, `Docs/Visualizer_Reference.md`, `Docs/Guardrails/Bubble_Temporal_Fidelity.md` and R-69: expanded-world positions/trails remain distinct from the historical card-height-normalized render radius, whose collision/spawn mapping is explicitly converted back into world units. Never restore a viewport-dependent global head/Ghost compressor to make extreme geometry look smaller.
+Bubble's durable reflow contract is routed through `Spec.md`, `Docs/Visualizer_Reference.md`, `Docs/Guardrails/Bubble_Temporal_Fidelity.md` and R-69: expanded-world positions/trails remain distinct from the equal-area pixel radius response. Collision/spawn admission retains canonical normalized-content policy, with a separate rendered-contact validation gate. Never restore a viewport-dependent global head/Ghost compressor to make extreme geometry look smaller.
 
 ## Historical evidence
 
@@ -142,3 +142,4 @@ admission or ownership and is not rewritten merely to sound current.
 - `Docs/Historical_Bugs/Runtime_Card_Backdrop_Materials_Rejected_2026-09-02.md` — runtime Glass/Acrylic card backdrops are explicitly rejected; Settings-window native materials remain separate.
 
 - `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md` — active all-mode Edit Layout geometry and Sphere material expansion.
+- `Docs/Future_Work/Edit_Layout_Live_Commit.md` — promote retained geometry before ending CUSTOM and avoid geometry-only Save teardown.

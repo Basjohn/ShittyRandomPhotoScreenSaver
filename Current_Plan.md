@@ -39,10 +39,11 @@ Durable references when mechanism detail is needed:
 Operator-activated `Future_Work.md` implementation is sequenced separately in `FWPlan.md`; preserve the unrelated
 work and physical/log validation below.
 
-- [~] **Priority — Visualizer live edit geometry and Sphere materials:** restored appearance and active
-  Sphere motion are operator-confirmed. Fix edge/preview geometry across all six modes and extreme
-  extents, reduce Bubble outline width by one pixel, then strengthen customizable Sphere response and
-  materials. Live checks: `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md`.
+- [~] **Priority — Visualizer polish and continuous edit Save:** live edge geometry is operator-described
+  as nearly correct. Restore missing Sine/Oscilloscope glow and implement geometry-only Save without
+  teardown after explicit live-state promotion (`Docs/Future_Work/Edit_Layout_Live_Commit.md`). Richer Sphere
+  materials, vocal deformation, size pulse and bump controls have focused GL/settings proof; physical
+  music/appearance acceptance remains open. Live checks: `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md`.
 - [ ] **Awaiting Validation / Logs — Bubble:** confirm equal-area response/outline during edit and after
   save, then match the 60 Hz steady-run tail evidence before further optimization. Detailed evidence:
   `Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md`. Preserve BTF and cadence.
