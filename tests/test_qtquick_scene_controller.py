@@ -239,6 +239,14 @@ def test_scene_controller_keeps_all_custom_edge_wheel_cancel_and_save_geometry(
         geometry=QRect(screen_geometry),
     )
     owner._descriptors[key] = descriptor
+    # Production seeds the one stable pixels-per-world authority when the visualizer
+    # item is admitted (QuickCustomLayoutOwner._admit_visualizer_item). This test
+    # constructs the owner state directly, so seed the same authority the current
+    # begin_resize/wheel gestures require; otherwise resize raises "no stable
+    # pixels-per-world authority".
+    owner._visualizer_pixels_per_world[key] = owner._pixels_per_world_from_geometry(
+        baseline_rect, (480.0, 160.0)
+    )
 
     def publish_and_interleave_normal_frame() -> None:
         session.notify_item_changed(item)
@@ -301,13 +309,19 @@ def test_scene_controller_keeps_all_custom_edge_wheel_cancel_and_save_geometry(
         uniform_visual_scale=float(saved_rect.width()) / saved_extent[0],
     )
     controller.apply_visualizer_presentation(saved)
+    # The session item carries an integer QRect, so a uniform wheel scale rounds
+    # width and height independently; the presentation re-derived from the width
+    # scale can therefore differ from the rounded rect by up to half a pixel on
+    # one axis. Accept that integer-rounding envelope (the same tolerance the live
+    # edge-drag assertions above already use) rather than exact float equality.
     assert controller.visualizer_item.presentation.outer_rect == pytest.approx(
         (
             float(saved_rect.x() - origin.x()),
             float(saved_rect.y() - origin.y()),
             float(saved_rect.width()),
             float(saved_rect.height()),
-        )
+        ),
+        abs=0.500001,
     )
     controller.quiesce_for_retirement()
     window.deleteLater()
