@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import QMetaObject, QObject, QPointF, Qt
+from PySide6.QtCore import QObject, QPointF
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlContext
 from PySide6.QtQuick import QQuickItem
@@ -217,8 +217,11 @@ class RetainedOverlayWidget:
             item = self._item
             item.setProperty("widgetGlowOnHover", input_state.widget_glow_on_hover)
             item.setProperty("widgetGlowOnClick", input_state.widget_glow_on_click)
+            item.setProperty("widgetGlowIntensity", input_state.widget_glow_intensity)
             item.setProperty("widgetGlowColor", QColor(*input_state.widget_glow_color))
             item.setProperty("widgetGlowAdmitted", admitted)
+            if not admitted or not input_state.widget_glow_on_click:
+                item.setProperty("widgetGlowClicked", False)
         handler = self._input_state_handler
         return bool(handler is not None and handler(input_state))
 
@@ -586,22 +589,56 @@ class OrdinaryWidgetPresentationHost:
                 return True
         return False
 
-    def pulse_widget_glow_at(self, input_state: object, scene_position: QPointF) -> bool:
-        """Pulse the top visible hit card on a discrete, current input event."""
+    def set_widget_glow_click_target_at(
+        self, input_state: object, scene_position: QPointF
+    ) -> bool:
+        """Select the last-clicked ordinary card from one discrete input edge.
+
+        Click glow is state, not a self-decaying pulse. The top visible hit card
+        becomes the sole selected target until another admitted press selects a
+        different card or empty space clears the target. No timer/poller is
+        introduced; QML only animates when this boolean state changes.
+        """
 
         if self._retired or input_state != self._input_state:
             return False
+        target: RetainedOverlayWidget | None = None
         # Match retained sibling stacking: higher z first, later child on ties.
-        for widget in sorted(reversed(self._live), key=lambda w: w.item.z(), reverse=True):
+        for widget in sorted(
+            reversed(self._live), key=lambda w: w.item.z(), reverse=True
+        ):
             item = widget.item
             if not item.isVisible() or not item.isEnabled():
                 continue
             if not item.contains(item.mapFromScene(scene_position)):
                 continue
-            if not item.property("widgetGlowAdmitted") or not item.property("widgetGlowOnClick"):
-                return False
-            return QMetaObject.invokeMethod(item, "pulseWidgetGlow", Qt.DirectConnection)
-        return False
+            if item.property("widgetGlowAdmitted") and item.property("widgetGlowOnClick"):
+                target = widget
+            break
+
+        changed = False
+        for widget in tuple(self._live):
+            item = widget.item
+            selected = widget is target
+            if bool(item.property("widgetGlowClicked")) == selected:
+                continue
+            item.setProperty("widgetGlowClicked", selected)
+            changed = True
+        return changed
+
+    def clear_widget_glow_click_target(self, input_state: object) -> bool:
+        """Clear ordinary click selection from the same admitted press state."""
+
+        if self._retired or input_state != self._input_state:
+            return False
+        changed = False
+        for widget in tuple(self._live):
+            item = widget.item
+            if not bool(item.property("widgetGlowClicked")):
+                continue
+            item.setProperty("widgetGlowClicked", False)
+            changed = True
+        return changed
 
     def transfer_widget_to(
         self,

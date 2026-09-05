@@ -185,6 +185,7 @@ class DisplayManager(QObject):
                 self._quick_visualizer_unit,
             ),
             reload_request=self._request_custom_layout_runtime_reload,
+            visualizer_unit_transfer=self._transfer_quick_visualizer_unit,
         )
         self._retiring_quick_units: dict[int, QuickDisplayUnit] = {}
         self._retire_manager_when_quick_complete = False
@@ -599,6 +600,7 @@ class DisplayManager(QObject):
         unit.runtime.input_controller.configure_widget_glow(
             on_hover=input_options.widget_glow_on_hover,
             on_click=input_options.widget_glow_on_click,
+            intensity=input_options.widget_glow_intensity / 100.0,
             color=resolve_widget_glow_color(input_options.widget_glow_color),
         )
 
@@ -2486,6 +2488,87 @@ class DisplayManager(QObject):
                         "[SPOTIFY_VIS] Media route already detached during retirement"
                     )
         self._quick_visualizer_media_model = None
+
+    def _transfer_quick_visualizer_unit(self, target: QuickDisplayUnit) -> bool:
+        """Move the single visualizer's display-retirement authority transactionally.
+
+        The enclosing CUSTOM transaction moves the retained scene item first and
+        calls this manager seam before it can commit the session placement.
+        DisplayManager owns the matching Python
+        lifecycle edge: owner runtime/pacer routes, ``_quick_visualizer_unit`` and
+        the unit that will eventually retire the owner must all move together.
+        No controller, BeatEngine, logical runtime, activation, or cadence is
+        recreated.
+        """
+
+        if self._retired:
+            raise RuntimeError("cannot transfer visualizer on a retired display manager")
+        owner = self._quick_visualizer_owner
+        source = self._quick_visualizer_unit
+        if owner is None or source is None:
+            raise RuntimeError("visualizer display transfer has no admitted owner")
+        if target is source:
+            return False
+        if target not in self.displays or target.is_retired:
+            raise RuntimeError("visualizer display transfer target is not live")
+        if bool(getattr(owner, "is_retired", False)):
+            raise RuntimeError("visualizer display transfer owner is retired")
+        if owner.presentation_runtime is not source.runtime:
+            raise RuntimeError(
+                "visualizer presentation runtime disagrees with manager source unit"
+            )
+        if source.visualizer_owner is not owner:
+            raise RuntimeError("visualizer source unit lost retirement ownership")
+        target_owner = target.visualizer_owner
+        if target_owner is not None and target_owner is not owner:
+            raise RuntimeError("visualizer target unit owns another visualizer")
+        if target_owner is owner:
+            raise RuntimeError("visualizer target already owns retirement authority")
+
+        owner.set_presentation_runtime(target.runtime)
+        source_detached = False
+        target_attached = False
+        try:
+            source_detached = source.detach_visualizer_owner(owner)
+            if not source_detached:
+                raise RuntimeError("visualizer source unit could not detach owner")
+            target.attach_visualizer_owner(owner)
+            target_attached = True
+            self._quick_visualizer_unit = target
+        except Exception:
+            # The scene transfer has already happened, but the manager-side
+            # lifecycle move is still one bounded transaction.  Restore the old
+            # retirement/pacer edge rather than leave teardown split between two
+            # display units.
+            if target_attached and target.visualizer_owner is owner:
+                try:
+                    target.detach_visualizer_owner(owner)
+                except Exception:
+                    logger.exception(
+                        "[SPOTIFY_VIS] Failed rolling back target retirement owner"
+                    )
+            if source_detached and source.visualizer_owner is None:
+                try:
+                    source.attach_visualizer_owner(owner)
+                except Exception:
+                    logger.exception(
+                        "[SPOTIFY_VIS] Failed restoring source retirement owner"
+                    )
+            self._quick_visualizer_unit = source
+            try:
+                owner.set_presentation_runtime(source.runtime)
+            except Exception:
+                logger.exception(
+                    "[SPOTIFY_VIS] Failed restoring source display edge after transfer"
+                )
+            raise
+
+        logger.info(
+            "[SPOTIFY_VIS] Moved visualizer display ownership screen=%s -> %s",
+            source.screen_index,
+            target.screen_index,
+        )
+        return True
 
     def _release_quick_visualizer_routes(
         self,

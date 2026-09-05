@@ -181,3 +181,91 @@ def test_generation_replacement_builds_fresh_owner_no_duplicate(qt_app, monkeypa
         second_runtime.close_runtime()
         second_factory.deleteLater()
         qt_app.processEvents()
+
+
+def test_display_transfer_moves_pacer_and_retirement_edge_without_recreating_controller() -> None:
+    class _Pacer:
+        def __init__(self) -> None:
+            self.active_calls = []
+            self.sync_calls = []
+
+        def set_visualizer_active(self, value):
+            self.active_calls.append(bool(value))
+
+        def set_visualizer_sync(self, callback):
+            self.sync_calls.append(callback)
+
+    class _Scene:
+        def __init__(self) -> None:
+            self.sinks = []
+            self.double = []
+            self.middle = []
+
+        def set_visualizer_viewport_config_sink(self, sink):
+            self.sinks.append(sink)
+
+        def set_visualizer_double_click_admission(self, value):
+            self.double.append(value)
+
+        def set_visualizer_middle_click_admission(self, value):
+            self.middle.append(value)
+
+    def _runtime():
+        scene = _Scene()
+        runtime = SimpleNamespace(
+            runtime_generation=17,
+            frame_pacer=_Pacer(),
+            scene_controller=scene,
+        )
+        runtime.bind_visualizer_viewport_config = scene.set_visualizer_viewport_config_sink
+        return runtime
+
+    source, target = _runtime(), _runtime()
+    owner = QuickDisplayVisualizerOwner(source, bar_count=8, initial_mode="bubble")
+    controller = owner.controller
+    owner._bound = True
+    owner._started = True
+
+    assert owner.set_presentation_runtime(target) is True
+    assert owner.controller is controller
+    assert owner.presentation_runtime is target
+    assert owner._runtime is target
+    assert source.frame_pacer.active_calls[-1] is False
+    assert source.frame_pacer.sync_calls[-1] is None
+    assert target.frame_pacer.sync_calls[-1] == owner.sync_present
+    assert target.frame_pacer.active_calls[-1] is True
+    assert source.scene_controller.sinks[-1] is None
+    assert target.scene_controller.sinks[-1] == controller.set_custom_viewport_override
+
+    assert owner.retire() is True
+    assert target.frame_pacer.active_calls[-1] is False
+    assert target.frame_pacer.sync_calls[-1] is None
+    assert target.scene_controller.sinks[-1] is None
+
+
+def test_fresh_visualizer_sync_requires_a_retained_item_update_request() -> None:
+    class _Scene:
+        @staticmethod
+        def request_visualizer_present() -> bool:
+            return False
+
+    owner = object.__new__(QuickDisplayVisualizerOwner)
+    owner._retired = False
+    owner._presentation_runtime = SimpleNamespace(scene_controller=_Scene())
+
+    with pytest.raises(
+        RuntimeError,
+        match="fresh visualizer publication has no retained presentation item",
+    ):
+        owner._request_retained_present()
+
+
+def test_frame_pacer_coalesces_visualizer_item_update_with_window_request() -> None:
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "rendering" / "quick" / "frame_pacer.py").read_text(
+        encoding="utf-8"
+    )
+    assert "visualizer_requested_present = bool(synchronize())" in source
+    assert "if not visualizer_requested_present:" in source
+    assert "self._window.update()" in source

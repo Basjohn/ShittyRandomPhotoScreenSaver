@@ -8,7 +8,12 @@ from widgets.spotify_visualizer.render_state import FrozenFields, SphereFrame
 
 
 def capture_sphere(widget: Any, engine: Any, context: Any):
-    from widgets.spotify_visualizer.logical_frame_capture import _base_extras, _energy_state, _resolve_current_mode_runtime
+    from widgets.spotify_visualizer.logical_frame_capture import (
+        _base_extras,
+        _energy_state,
+        _resolve_current_mode_runtime,
+        _transient_state,
+    )
     from widgets.spotify_visualizer.sphere_frame_runtime import SphereFrameRuntime
 
     extra = _base_extras(widget, "sphere", engine)
@@ -37,12 +42,13 @@ def capture_sphere(widget: Any, engine: Any, context: Any):
     )
     if not source_is_current:
         extra["transient_energy"] = None
+    transient = _transient_state(extra.get("transient_energy"))
     parameters = getattr(widget, "_sphere_parameters", SPHERE_DEFAULT_PARAMETERS)
     if not isinstance(parameters, FrozenFields):
         raise TypeError("Sphere capture requires configure-owned FrozenFields")
     resolved = runtime.resolve(now_ts=context.now_ts, runtime_generation=context.runtime_generation,
         engine_generation=context.engine_generation, activation_id=context.activation_id,
-        energy=energy, parameters=parameters)
+        energy=energy, parameters=parameters, transient=transient)
     if resolved is None:
         if controller.peek_logical_mode_state("sphere") is not runtime:
             return None
@@ -51,7 +57,11 @@ def capture_sphere(widget: Any, engine: Any, context: Any):
         return None
     extra["_quick_mode_changed"] = resolved.changed
     extra["_quick_resolved_energy"] = resolved.energy
-    return SphereFrame(authored_time=resolved.authored_time, parameters=resolved.parameters), extra
+    return SphereFrame(
+        authored_time=resolved.authored_time,
+        size_pulse=resolved.size_pulse,
+        parameters=resolved.parameters,
+    ), extra
 
 
 __all__ = ["capture_sphere"]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 from PySide6.QtCore import QRect
 
@@ -13,6 +14,9 @@ from rendering.custom_layout_session import (
 )
 
 from .scene_controller import QuickSceneController
+
+
+VisualizerTransferHandler = Callable[[QuickSceneController, QuickSceneController], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,8 +37,18 @@ class _PresentationPlacement:
 class QuickCustomLayoutSceneCoordinator:
     """Keep each retained presentation on its shared session item's display."""
 
-    def __init__(self, session: CustomLayoutSession) -> None:
+    def __init__(
+        self,
+        session: CustomLayoutSession,
+        *,
+        visualizer_transfer_handler: VisualizerTransferHandler,
+    ) -> None:
+        if not callable(visualizer_transfer_handler):
+            raise TypeError("visualizer_transfer_handler must be callable")
         self._session: CustomLayoutSession | None = session
+        self._visualizer_transfer_handler: VisualizerTransferHandler | None = (
+            visualizer_transfer_handler
+        )
         self._scenes: dict[str, QuickSceneController] = {}
         self._placement_by_key: dict[
             CustomLayoutKey,
@@ -74,6 +88,7 @@ class QuickCustomLayoutSceneCoordinator:
             session.unsubscribe_changes(self._on_session_item_changed)
         self._scenes.clear()
         self._placement_by_key.clear()
+        self._visualizer_transfer_handler = None
 
     def _on_session_item_changed(self, item: CustomLayoutSessionItem) -> None:
         prior = self._placement_by_key.get(
@@ -108,7 +123,12 @@ class QuickCustomLayoutSceneCoordinator:
                     raise RuntimeError(
                         "CUSTOM Visualizer target already has a retained scene admission"
                     )
-                source.transfer_visualizer_to(target)
+                transfer_visualizer = self._visualizer_transfer_handler
+                if transfer_visualizer is None:
+                    raise RuntimeError(
+                        "CUSTOM Visualizer transfer coordinator is retired"
+                    )
+                transfer_visualizer(source, target)
             else:
                 source.transfer_ordinary_widget_to(
                     target,

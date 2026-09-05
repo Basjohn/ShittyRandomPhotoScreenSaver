@@ -184,9 +184,16 @@ content width.
 
 Ordinary widgets support optional **Widget Glow on Hover** and **Widget Glow on Click** under Display -> Interaction.
 One shared swatch inherits the active Widget Theme's `card.border` semantic by default (`input.widget_glow_color=null`);
-an explicit RGBA choice persists until **Use Theme** clears it. Existing interaction/Ctrl/context-menu admission gates
-the shared retained glow. Hover edges and admitted discrete presses trigger finite Quick animations; there is no new
-poller, timer, worker or visualizer clock. Runtime theme colours resolve with the existing generation configuration.
+an explicit RGBA choice persists until **Use Theme** clears it. `input.widget_glow_intensity` is the canonical 0-100%
+strength scalar (default 100) and projects once with the other immutable input options. Existing
+interaction/Ctrl/context-menu admission gates the shared retained glow. Hover uses the existing passive hover edge: it
+fades in, settles with no running animation while hovered, and only begins a gentle fade when hover ends. Admitted
+discrete presses select the last-clicked ordinary card or retained Visualizer without consuming its semantic action;
+that click glow remains settled until a later admitted press selects another target or empty space, then fades out.
+The retained Visualizer uses the same primitive around its presentation bounds. A shell-less Digital Clock projects the
+halo around its intrinsic visible text stack rather than an invisible card allocation. Only state edges trigger finite
+Quick animations; there is no new poller, timer, worker, independent frame loop or visualizer clock. Runtime theme
+colours resolve with the existing generation configuration.
 
 Producers integrate work then publish coherent accepted current state. Presentation consumes bounded latest state with
 generation/request fencing. No producer wait for paint, paint acknowledgement, FIFO render backlog, catch-up replay or
@@ -312,7 +319,8 @@ Sphere is an experimental, independently enabled sixth mode; existing profiles r
 modes. Its frameless transparent viewport contains a static 3D mesh with authored-time deformation, reconstructed
 normals and material-specific bump/roughness. Chrome, Obsidian, Magma, Silver and Water have curated presets plus
 Custom. Independent controls shape band/vocal-range deformation, whole-body transient size response, base bump and
-reactive bump. Magma adds diffuse fire, smoke, ash and lava drips; Water transmits the existing background and sheds
+reactive bump. Deformation and Vocal Response intentionally allow a 0.0-3.0 expressive range while their curated/default
+values remain unchanged; other response controls retain their existing bounds. Magma adds diffuse fire, smoke, ash and lava drips; Water transmits the existing background and sheds
 rounded 3D blobs. Static effect geometry is allocated only for an admitted material that uses it. Settings normalize
 parameters once; current playing source identity gates both musical and transient energy, while idle motion
 continues on the existing logical clock. A fixed camera/common pixel scale preserves aspect and reserves the full

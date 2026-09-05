@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-09-03
+Last updated: 2026-09-05
 
 ## Current authority
 
@@ -22,6 +22,127 @@ Permanent destination guardrails include:
 This document is now a **testing guide plus preserved migration reconciliation ledger**, not a second hand-maintained inventory authority. The large section-10 tables are a dated 2026-09-01 migration-audit snapshot explaining why old tests were kept/re-homed/deleted. They may mention files that have since been removed or renamed. Do not restore an old owner or stale test merely because a historical row names it.
 
 Current membership is determined from the exact tree and `tests/run_chunked.py` profile definitions. Whenever a current checkpoint adds/removes/re-homes a maintained test, update the current additions/contract notes in this document; do not try to keep the old migration snapshot pretending to be a live filesystem listing.
+
+## 0. 2026-09-05 test-truth audit reconciliation
+
+A whole-tree test-truth audit ran the collection preflight and re-collected every
+error file **in isolation** to separate genuine per-file breakage from full-tree
+import artifacts. Result: full-tree collection went from **3684 collected / 67
+collection errors** to **3817 collected / 7 collection errors**. No production code
+was changed; changes were test-only. The dated section-10 rows below were **not**
+individually rewritten (they remain a historical snapshot per the caveat above);
+this section is the authoritative current delta.
+
+### Deleted — whole-file pre-cutover fossils (67)
+
+Each imported an entirely-deleted pre-Quick subsystem and could never collect; the
+surviving contracts are owned by the Quick/neutral successors in the `destination`
+profile. Deleted via plain removal (reviewable in `git`).
+
+- **GL compositor / RHI / GL infrastructure (26):** `test_adaptive_timer`,
+  `test_compositor_metrics`, `test_compositor_presentation_liveness`,
+  `test_compositor_gpu_queries`, `test_gl_compositor_cleanup`,
+  `test_gl_compositor_overlays`, `test_gl_compositor_transition_lifecycle`,
+  `test_gl_compositor_transitions`, `test_gl_fallback_policy`,
+  `test_gl_shader_fallback_diagnostics`, `test_gl_stage_timestamps`,
+  `test_gl_state_and_error_handling`, `test_gl_state_manager`,
+  `test_gl_state_manager_overlay`, `test_gl_timer_queries`,
+  `test_gpu_delivery_association`, `test_p4_rhi_compositor_surface`,
+  `test_p4_rhi_fallback_visibility`, `test_p4_stage_integration`,
+  `test_p4_stage_marker_order`, `test_phase4_resource_containment`,
+  `test_rendering_backends`, `test_retained_base_texture`, `test_slide_jitter`,
+  `test_frame_timing_workload`, `test_startup_shader_warmup`.
+- **Legacy `transitions.*` GL transition implementations (7):**
+  `test_block_puzzle_flip`, `test_diffuse_transition`, `test_slide_transition`,
+  `test_transitions`, `test_transition_endframe`, `test_transition_state_manager`,
+  `test_runtime_callback_ownership`.
+- **Legacy QWidget display / input / widget hosts (26):** `test_display_setup`,
+  `test_display_widget_target_size`, `test_double_click_navigation`,
+  `test_fade_coordinator`, `test_multi_monitor_focus`, `test_startup_black_flash`,
+  `test_widget_factories`, `test_widget_lifecycle`, `test_widget_positioner`,
+  `test_widget_positioning_comprehensive`, `test_widget_runtime_owner_hoist`,
+  `test_widget_visual_padding`, `test_pixel_shift`, `test_shadow_utils`,
+  `test_overlay_startup_policy`, `test_mc_context_menu`, `test_mc_keyboard_input`,
+  `test_media_provider_runtime`, `test_widget_setup`, `test_widget_manager_refresh`,
+  `test_widget_manager`, `test_display_context_menu`, `test_display_image_ops`,
+  `test_display_integration`, `test_custom_layout_manager`, `test_ghost_isolation`.
+- **Spotify GL-overlay / old line pipeline (8):** `test_overlay_diagnostics`,
+  `test_overlay_frame_shell`, `test_overlay_render_dispatch`, `test_overlay_uniforms`,
+  `test_stencil_mask_alignment`, `test_p3_set_state_attribution`,
+  `test_oscilloscope_display_contract`, `test_line4_6_pipeline_trace`.
+
+Several deleted rows were still labelled `KEEP` / `KEEP — MIGRATION PERMANENT` in the
+section-10 snapshot (e.g. `test_transition_registry` note aside, `test_layout_slots`,
+`test_media_command_ingress`, `test_adaptive_timer`, `test_gpu_delivery_association`,
+`test_frame_timing_workload`). Those `KEEP` labels were stale (pre-cutover) — the
+files could no longer import. Do not restore them.
+
+### Repaired — genuine value preserved (6)
+
+- `test_widget_theme.py` — rewritten **colour-only** for the current schema-v3
+  `WidgetThemeSpec`/`WidgetThemeState` API. The abandoned Glass/Acrylic
+  `card_material` dimension (`CARD_MATERIAL_MODES`,
+  `resolve_effective_card_material_mode`, `card_material_override`) is removed; the
+  behavioural contracts (whole-or-reject `.srwtheme` I/O, catalogue discovery,
+  Keep-Synced identity, Custom snapshot fallback, theme-owned-edit) are preserved.
+  The source-grep no-material guard stays in `test_widget_theme_no_material_contract.py`.
+- `test_steam_achievement_pulse.py` — dropped the deleted `rendering.input_handler`
+  import and its two settings-section-priming tests; the neutral Steam achievement
+  selection/cache/model coverage is preserved.
+- `test_layout_slots.py` — dropped the deleted `rendering.display_widget` import and
+  its three slot save/load tests; the `core.settings.layout_slots` snapshot contract
+  is preserved. (The edit-session commit-once slot-reload semantics now live only in
+  the Quick owner — see `test_quick_authored_layout_mode_contract.py`.)
+- `test_widget_import_dormancy.py` — dropped the two probes importing the deleted
+  legacy hosts (`rendering.widget_manager`, `rendering.display_widget`, and
+  `WidgetManager.setup_all_widgets`); the live Quick-scene/Gmail dormancy oracles are
+  retained. Deactivated-family dormancy is covered by `test_capability_activation` +
+  `test_qtquick_family_binder`.
+- `test_logging_routing.py` — dropped the one test importing the deleted
+  `rendering.gl_programs.program_cache`.
+- `test_f0_5_shadow_controls.py` — the retired-sidecar / retired-behaviour
+  negative-control guards now skip source files the cutover deleted (a deleted file
+  trivially cannot read the sidecar); full assertion strength is retained for every
+  file that still exists.
+
+### Test-infrastructure fixes
+
+- `test_spectrum_viewport_temporal_scaling.py` — the module-level inert `core.settings`
+  / `widgets.spotify_visualizer` stubs are now **saved and restored** around this
+  module's own imports. Previously the fileless inert `core.settings` leaked into the
+  shared `sys.modules` for the rest of the run, so every later
+  `from core.settings import SettingsManager` failed with
+  `cannot import name 'SettingsManager' from 'core.settings' (unknown location)`.
+  This was the sole cause of the whole-tree collection breaking
+  `test_widget_glow_settings`, `test_widgets_tab`, and
+  `test_widget_capability_persist_repair` (all healthy in isolation and in the
+  per-file-isolated `destination` profile).
+- `tests/conftest.py` — `collect_ignore` emptied. Of the 16 previously-ignored
+  modules, 13 were deleted above and 3 (`test_widget_import_dormancy`,
+  `test_logging_routing`, `test_f0_5_shadow_controls`) were repaired and restored to
+  normal collection.
+
+### Remaining collection errors — 7 mixed files left for decision
+
+These interleave live neutral logic with a deleted import and need per-file
+rehome-or-delete judgement (not blind deletion):
+
+- `test_context_menu_activation` — imports deleted `rendering.display_context_menu` /
+  `widgets.context_menu`; the capability/Random-parity intent is covered by
+  `test_capability_activation` + `test_transition_activation_admission`.
+- `test_media_keys`, `test_media_command_ingress` — deleted QWidget media-key /
+  native-event ingress path; current media is event-driven (`test_media_runtime`,
+  `test_media_event_observation`).
+- `test_media_widget_runtime_methods` — deleted `widgets.media_widget` anchor.
+- `test_runtime_destruction` — high-value destruction-barrier coverage; imports
+  deleted `rendering.custom_layout_manager` / `widget_manager` / `display_cleanup`
+  alongside live `engine.runtime_destruction`. Recommend rehome to the current owner
+  (compare `test_terminal_runtime_destruction`).
+- `test_steam_phase3_settings_descriptors` — live `rendering.widget_descriptors` +
+  deleted `rendering.widget_factories` / `widget_manager`.
+- `test_transition_registry` — live `rendering.transition_registry` + deleted
+  `rendering.transition_factory`; verify redundancy vs `test_transition_catalog_imports`
+  + `test_transition_distribution`.
 
 ## 1. Evidence and status vocabulary
 
@@ -371,7 +492,7 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_qtquick_clock_presentation.py` | **KEEP — MIGRATION PERMANENT** | F1 retained Clock model/family/ticker/style/geometry/analogue-shadow destination contract, including shared 80%-alpha separator and cheap retained separator shadow; retain as permanent current coverage. |
 | `tests/test_qtquick_weather_presentation.py` | **KEEP — MIGRATION PERMANENT** | F2 retained Weather runtime-consumer/model/state/icon/style/action/host contract; retain as permanent current coverage. |
 | `tests/test_qtquick_ordinary_widget_host.py` | **KEEP — MIGRATION PERMANENT** | E3/E4 retained ordinary-widget host + shared shell primitives; root fade, cached directional card shadow, production display-level shadow underlay (all ordinary shadows below all ordinary cards), signed offsets and offset-only text shadow are destination architecture. |
-| `tests/test_qtquick_widget_glow.py` / `tests/test_widget_glow_settings.py` | **KEEP — DESTINATION** | Theme inheritance/explicit override, event-only input feedback, real child-action passthrough, settled animation dormancy, generation/transfer/retirement and Settings listener lifetime. |
+| `tests/test_qtquick_widget_glow.py` / `tests/test_widget_glow_settings.py` | **KEEP — DESTINATION** | Theme inheritance/explicit override, 0-100% intensity roundtrip/projection, event-only held hover/last-click-target feedback, real child-action passthrough, settled animation dormancy, generation/transfer/retirement and Settings listener lifetime. |
 | `tests/test_shadow_direction.py` | **KEEP — MIGRATION PERMANENT** | E4 canonical direction/settings/resolver/QML-boundary contract; retain as permanent current coverage. |
 | `tests/test_qtquick_p0_presentation_benchmark.py` | **DELETE — I TOOLING AUDIT** | Coupled to deleted replay/P0 benchmark ownership; current Quick runtime/presentation tests own destination behavior. |
 | `tests/test_qtquick_particle_transition.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |

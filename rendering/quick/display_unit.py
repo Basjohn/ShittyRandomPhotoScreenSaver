@@ -88,6 +88,12 @@ class QuickDisplayUnit:
 
         return not self._retired and self._runtime.binding_loss is None
 
+    @property
+    def visualizer_owner(self) -> Any | None:
+        """Return the manager-attached visualizer retirement owner, if any."""
+
+        return self._visualizer_owner
+
     def attach_visualizer_owner(self, owner: Any) -> None:
         """Attach the single manager-admitted visualizer owner to this unit.
 
@@ -102,6 +108,24 @@ class QuickDisplayUnit:
         if self._visualizer_owner is not None:
             raise RuntimeError("Quick display unit already owns a visualizer")
         self._visualizer_owner = owner
+
+    def detach_visualizer_owner(self, owner: Any) -> bool:
+        """Detach exactly ``owner`` when manager authority moves display host.
+
+        A CUSTOM cross-display transfer does not retire the visualizer; it moves
+        which display unit owns eventual retirement ordering.  Refuse a mismatched
+        owner rather than silently detaching another generation's authority.
+        """
+
+        if owner is None:
+            raise ValueError("visualizer owner must not be None")
+        current = self._visualizer_owner
+        if current is None:
+            return False
+        if current is not owner:
+            raise RuntimeError("Quick display unit owns a different visualizer")
+        self._visualizer_owner = None
+        return True
 
     def display_bounds(self) -> OverlayWidgetGeometry:
         """Return this display's logical host rectangle (origin-relative)."""

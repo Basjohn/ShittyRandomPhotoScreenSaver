@@ -38,6 +38,8 @@ from .context_menu import (
 )
 from .custom_layout_overlay import (
     CustomLayoutOverlayModel,
+    DisplayTransferCapability,
+    DisplayTransferHandler,
     GeometryResolver,
     MoveFinishedHandler,
     ResizeBeginHandler,
@@ -387,6 +389,10 @@ class QuickSceneController(QObject):
         self._visualizer_middle_click_admission: Any | None = None
         self._visualizer_volume_wheel_handler: Any | None = None
         self._visualizer_telemetry = VisualizerRenderNodeTelemetry()
+        # Last admitted immutable input snapshot. Ordinary families cache the same
+        # value in their host; retaining it here lets a lazily created/transferred
+        # Visualizer inherit current event-driven glow policy without polling.
+        self._input_state: QuickInputState | None = None
         self._last_transition_run_id = 0
         # --perf HUD is deliberately passive: frameSwapped is already emitted
         # by Qt and the display pacer already owns cadence.  We only aggregate
@@ -542,7 +548,41 @@ class QuickSceneController(QObject):
             or input_state.screen_index != self._window.screen_index
         ):
             return False
-        return self.ordinary_widget_host.apply_input_state(input_state)
+        self._input_state = input_state
+        ordinary_changed = self.ordinary_widget_host.apply_input_state(input_state)
+        return self._apply_visualizer_input_state(input_state) or ordinary_changed
+
+    def _apply_visualizer_input_state(self, input_state: QuickInputState) -> bool:
+        """Project one cached input snapshot onto the optional retained Visualizer."""
+
+        root = self._visualizer_root
+        if root is None:
+            return False
+        admitted = bool(
+            input_state.admission_open
+            and not input_state.exiting
+            and not input_state.context_menu_active
+            and (input_state.interaction_mode_enabled or input_state.ctrl_held)
+        )
+        values = {
+            "widgetGlowOnHover": bool(input_state.widget_glow_on_hover),
+            "widgetGlowOnClick": bool(input_state.widget_glow_on_click),
+            "widgetGlowIntensity": float(input_state.widget_glow_intensity),
+            "widgetGlowColor": QColor(*input_state.widget_glow_color),
+            "widgetGlowAdmitted": admitted,
+        }
+        changed = False
+        for name, value in values.items():
+            if root.property(name) == value:
+                continue
+            root.setProperty(name, value)
+            changed = True
+        if (not admitted or not input_state.widget_glow_on_click) and bool(
+            root.property("widgetGlowClicked")
+        ):
+            root.setProperty("widgetGlowClicked", False)
+            changed = True
+        return changed
 
     def apply_auxiliary_state(self, state: QuickAuxiliaryState) -> bool:
         """Project matching display-local auxiliary facts into the scene root."""
@@ -573,7 +613,25 @@ class QuickSceneController(QObject):
             or state.screen_index != self._window.screen_index
         ):
             return False
-        return self.ordinary_widget_host.pulse_widget_glow_at(state, scene_position)
+        root = self._visualizer_root
+        visualizer_target = bool(
+            root is not None
+            and bool(root.property("widgetGlowAdmitted"))
+            and bool(root.property("widgetGlowOnClick"))
+            and self.visualizer_contains_scene_position(scene_position)
+        )
+        if visualizer_target:
+            changed = self.ordinary_widget_host.clear_widget_glow_click_target(state)
+        else:
+            changed = self.ordinary_widget_host.set_widget_glow_click_target_at(
+                state, scene_position
+            )
+        if root is not None:
+            current = bool(root.property("widgetGlowClicked"))
+            if current != visualizer_target:
+                root.setProperty("widgetGlowClicked", visualizer_target)
+                changed = True
+        return changed
 
     def apply_context_menu_shadow_style(
         self, style: QuickContextMenuShadowStyle
@@ -666,6 +724,8 @@ class QuickSceneController(QObject):
         resize_update_handler: ResizeUpdateHandler | None = None,
         resize_wheel_handler: ResizeWheelHandler | None = None,
         move_finished_handler: MoveFinishedHandler | None = None,
+        display_transfer_capability: DisplayTransferCapability | None = None,
+        display_transfer_handler: DisplayTransferHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         """Bind this display's retained pixels to shared CUSTOM working state."""
 
@@ -696,6 +756,8 @@ class QuickSceneController(QObject):
             resize_update_handler=resize_update_handler,
             resize_wheel_handler=resize_wheel_handler,
             move_finished_handler=move_finished_handler,
+            display_transfer_capability=display_transfer_capability,
+            display_transfer_handler=display_transfer_handler,
         )
         underlay = self._custom_layout_guide_underlay
         if underlay is not None:
@@ -1468,6 +1530,8 @@ class QuickSceneController(QObject):
             self._visualizer_startup_reveal_opacity,
         )
         root.setProperty("volumeWheelEnabled", self._custom_layout_session is None)
+        if self._input_state is not None:
+            self._apply_visualizer_input_state(self._input_state)
         volume_step_signal = getattr(root, "appVolumeStepRequested", None)
         if volume_step_signal is not None and hasattr(volume_step_signal, "connect"):
             volume_step_signal.connect(self._handle_visualizer_app_volume_step)

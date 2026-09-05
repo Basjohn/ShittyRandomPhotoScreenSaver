@@ -21,11 +21,9 @@ Item {
     property bool widgetGlowAdmitted: false
     property bool widgetGlowOnHover: false
     property bool widgetGlowOnClick: false
+    property bool widgetGlowClicked: false
+    property real widgetGlowIntensity: 1.0
     property color widgetGlowColor: "transparent"
-    function pulseWidgetGlow() {
-        if (interactionGlowLoader.item)
-            interactionGlowLoader.item.pulseClick()
-    }
     opacity: fadeOpacity * startupRevealOpacity
     // Never clip the composed card/text shadows or their negative offsets.
     clip: false
@@ -157,6 +155,18 @@ Item {
             + authoredCardX * presentationScale
     readonly property real cardShadowVisualY: (height - cardShadowVisualHeight) / 2.0
 
+    // Interaction feedback usually follows the card shell, but shell-less
+    // presentations (digital Clock) can project their actual visible content
+    // bounds without creating another geometry owner. Values are in authoredRoot
+    // coordinates and therefore inherit the same whole-card CUSTOM transform.
+    readonly property real authoredLayoutWidth: authoredRoot.width
+    readonly property real authoredLayoutHeight: authoredRoot.height
+    property real interactionGlowX: authoredCardX
+    property real interactionGlowY: 0.0
+    property real interactionGlowWidth: authoredCardWidth
+    property real interactionGlowHeight: authoredRoot.height
+    property real interactionGlowCornerRadius: cardCornerRadius
+
     Item {
         id: authoredRoot
         objectName: "overlayAuthoredRoot"
@@ -180,16 +190,22 @@ Item {
         Loader {
             id: interactionGlowLoader
             objectName: "widgetInteractionGlowLoader"
-            anchors.fill: card
+            x: overlayWidget.interactionGlowX
+            y: overlayWidget.interactionGlowY
+            width: Math.max(0.0, overlayWidget.interactionGlowWidth)
+            height: Math.max(0.0, overlayWidget.interactionGlowHeight)
             z: 3
             active: overlayWidget.widgetGlowAdmitted && overlayWidget.visible
+                && overlayWidget.widgetGlowIntensity > 0.0
                 && (overlayWidget.widgetGlowOnHover || overlayWidget.widgetGlowOnClick)
             sourceComponent: WidgetInteractionGlow {
                 hoverEnabled: overlayWidget.widgetGlowOnHover
                 clickEnabled: overlayWidget.widgetGlowOnClick
                 hovered: interactionHover.hovered
+                clicked: overlayWidget.widgetGlowClicked
+                intensityScale: overlayWidget.widgetGlowIntensity
                 glowColor: overlayWidget.widgetGlowColor
-                cornerRadius: overlayWidget.cardCornerRadius
+                cornerRadius: overlayWidget.interactionGlowCornerRadius
             }
         }
 

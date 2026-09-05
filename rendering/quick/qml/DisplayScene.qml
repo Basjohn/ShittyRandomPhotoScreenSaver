@@ -101,6 +101,10 @@ Item {
     CustomLayoutOverlay {
         id: customLayoutOverlay
         anchors.fill: parent
+        transferButtonColor: displayScene.contextMenuSurfaceColor
+        transferButtonHoverColor: displayScene.contextMenuSelectedSurfaceColor
+        transferButtonBorderColor: displayScene.contextMenuBorderColor
+        transferButtonGlyphColor: displayScene.contextMenuArrowColor
         z: 100
     }
 

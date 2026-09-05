@@ -311,6 +311,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 4
  'input': {'halo_shape': 'cursor_light',
            'interaction_mode': False,
            'widget_glow_color': None,
+           'widget_glow_intensity': 100,
            'widget_glow_on_click': False,
            'widget_glow_on_hover': False},
  'mc': {},

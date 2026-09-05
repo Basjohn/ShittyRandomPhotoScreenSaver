@@ -30,6 +30,8 @@ ResizeBeginHandler = Callable[[CustomLayoutSessionItem, str, QPoint], bool]
 ResizeUpdateHandler = Callable[[CustomLayoutSessionItem, str, QPoint, bool], bool]
 ResizeWheelHandler = Callable[[CustomLayoutSessionItem, int], bool]
 MoveFinishedHandler = Callable[[], None]
+DisplayTransferCapability = Callable[[CustomLayoutSessionItem, str], bool]
+DisplayTransferHandler = Callable[[CustomLayoutSessionItem, str], bool]
 
 # Semantic edge-handle ids for the viewport-extent (aspect/world) operation.
 # Corner ids (``top_left`` .. ``bottom_right``) drive the uniform whole-size
@@ -56,6 +58,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     _RESIZABLE_ROLE = _WIDGET_ID_ROLE + 6
     _VIEWPORT_RESIZE_ROLE = _WIDGET_ID_ROLE + 7
     _RESIZE_SCALE_ROLE = _WIDGET_ID_ROLE + 8
+    _CAN_TRANSFER_LEFT_ROLE = _WIDGET_ID_ROLE + 9
+    _CAN_TRANSFER_RIGHT_ROLE = _WIDGET_ID_ROLE + 10
 
     def __init__(
         self,
@@ -69,6 +73,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         resize_update_handler: ResizeUpdateHandler | None = None,
         resize_wheel_handler: ResizeWheelHandler | None = None,
         move_finished_handler: MoveFinishedHandler | None = None,
+        display_transfer_capability: DisplayTransferCapability | None = None,
+        display_transfer_handler: DisplayTransferHandler | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -83,6 +89,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._resize_update_handler = resize_update_handler
         self._resize_wheel_handler = resize_wheel_handler
         self._move_finished_handler = move_finished_handler
+        self._display_transfer_capability = display_transfer_capability
+        self._display_transfer_handler = display_transfer_handler
         self._items: list[CustomLayoutSessionItem] = []
         session.subscribe_changes(self._on_session_item_changed)
         self.refresh()
@@ -98,6 +106,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             self._RESIZABLE_ROLE: QByteArray(b"resizable"),
             self._VIEWPORT_RESIZE_ROLE: QByteArray(b"viewportResizeCapable"),
             self._RESIZE_SCALE_ROLE: QByteArray(b"resizeScale"),
+            self._CAN_TRANSFER_LEFT_ROLE: QByteArray(b"canTransferLeft"),
+            self._CAN_TRANSFER_RIGHT_ROLE: QByteArray(b"canTransferRight"),
         }
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # type: ignore[override]
@@ -126,6 +136,10 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return item.viewport_resize_capable
         if role == self._RESIZE_SCALE_ROLE:
             return float(item.resize_scale)
+        if role == self._CAN_TRANSFER_LEFT_ROLE:
+            return self._can_transfer(item, "left")
+        if role == self._CAN_TRANSFER_RIGHT_ROLE:
+            return self._can_transfer(item, "right")
         return None
 
     @Slot()
@@ -189,6 +203,30 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         handler = self._move_finished_handler
         if handler is not None:
             handler()
+
+    @Slot(int, str, result=bool)
+    def transferItem(self, row: int, direction: str) -> bool:
+        """Move the Visualizer to the adjacent display through the owner seam.
+
+        This is a discrete alternative to dragging across native QQuickWindow
+        boundaries. QML supplies only ``left``/``right`` intent; Python owns
+        target selection, geometry projection and the retained-scene transfer.
+        """
+
+        if not 0 <= int(row) < len(self._items):
+            return False
+        item = self._items[int(row)]
+        direction = str(direction or "").strip().lower()
+        if direction not in {"left", "right"} or not self._can_transfer(item, direction):
+            return False
+        handler = self._display_transfer_handler
+        if handler is None or not handler(item, direction):
+            return False
+        session = self._session
+        if session is None:
+            return False
+        session.notify_item_changed(item)
+        return True
 
     @Slot(int)
     def closeItem(self, row: int) -> None:
@@ -273,6 +311,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._resize_update_handler = None
         self._resize_wheel_handler = None
         self._move_finished_handler = None
+        self._display_transfer_capability = None
+        self._display_transfer_handler = None
         self.endResetModel()
 
     def _resizable_item(self, row: int) -> CustomLayoutSessionItem | None:
@@ -300,6 +340,12 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         if _is_viewport_edge_handle(handle):
             return item if item.viewport_resize_capable else None
         return item if item.resize_capable else None
+
+    def _can_transfer(self, item: CustomLayoutSessionItem, direction: str) -> bool:
+        if item.model_identity != "spotify_visualizer":
+            return False
+        capability = self._display_transfer_capability
+        return bool(capability is not None and capability(item, str(direction)))
 
     def _global_point(self, local_x: float, local_y: float) -> QPoint:
         return QPoint(
@@ -341,6 +387,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
                 self._RESIZABLE_ROLE,
                 self._VIEWPORT_RESIZE_ROLE,
                 self._RESIZE_SCALE_ROLE,
+                self._CAN_TRANSFER_LEFT_ROLE,
+                self._CAN_TRANSFER_RIGHT_ROLE,
             ],
         )
 
@@ -383,6 +431,8 @@ class RetainedCustomLayoutOverlay:
         resize_update_handler: ResizeUpdateHandler | None = None,
         resize_wheel_handler: ResizeWheelHandler | None = None,
         move_finished_handler: MoveFinishedHandler | None = None,
+        display_transfer_capability: DisplayTransferCapability | None = None,
+        display_transfer_handler: DisplayTransferHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         self.clear_session()
         model = CustomLayoutOverlayModel(
@@ -395,6 +445,8 @@ class RetainedCustomLayoutOverlay:
             resize_update_handler=resize_update_handler,
             resize_wheel_handler=resize_wheel_handler,
             move_finished_handler=move_finished_handler,
+            display_transfer_capability=display_transfer_capability,
+            display_transfer_handler=display_transfer_handler,
             parent=self.item,
         )
         self._model = model

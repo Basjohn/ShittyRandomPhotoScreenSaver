@@ -1,0 +1,51 @@
+# SRPSS repository text-normalization policy.
+# Keep authored text stable as LF so cross-platform/editor writes do not create
+# whole-file fake diffs. Git may still check out Windows shell/installer scripts
+# as CRLF where the surrounding Windows tooling convention benefits from it.
+
+* text=auto
+
+# Authored source, configuration, documentation and shader source.
+*.py       text eol=lf
+*.qml      text eol=lf
+*.frag     text eol=lf
+*.json     text eol=lf
+*.sst      text eol=lf
+*.md       text eol=lf
+*.txt      text eol=lf
+*.xml      text eol=lf
+*.qrc      text eol=lf
+*.svg      text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.toml     text eol=lf
+*.ini      text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+# Windows-native script/installer entry points.
+*.ps1      text eol=crlf
+*.bat      text eol=crlf
+*.cmd      text eol=crlf
+*.iss      text eol=crlf
+
+# Binary/runtime assets: never newline-normalize these payloads.
+*.qsb      -text
+*.ico      -text
+*.png      -text
+*.jpg      -text
+*.jpeg     -text
+*.webp     -text
+*.gif      -text
+*.ogg      -text
+*.wav      -text
+*.mp3      -text
+*.ttf      -text
+*.otf      -text
+*.woff     -text
+*.woff2    -text
+*.zip      -text
+*.7z       -text
+*.db       -text
+*.sqlite   -text
+*.sqlite3  -text

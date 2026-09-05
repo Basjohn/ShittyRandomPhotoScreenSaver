@@ -26,6 +26,7 @@ from rendering.quick.visualizer.item import VisualizerRenderItem
 from rendering.quick.visualizer.node import VisualizerRenderNode
 from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
 from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
+from widgets.spotify_visualizer.sphere_frame_runtime import sphere_size_pulse_target
 from widgets.spotify_visualizer.render_state import (
     SphereFrame, VisualizerCommonState, VisualizerEnergyState, VisualizerTransientState, VisualizerLogicalFrame,
     compose_visualizer_render_snapshot, freeze_render_fields,
@@ -163,17 +164,28 @@ class _Runner(QObject):
     def publish(self):
         args = self.args
         for material, item, bridge, p, _parent in self.entries:
+            energy = VisualizerEnergyState(
+                bass=args.bass, mid=args.mid, high=args.high,
+                overall=max(args.bass, args.mid, args.high),
+            )
+            transient = VisualizerTransientState(mid=args.transient)
+            parameters = self.material_parameters[material]
             logical = VisualizerLogicalFrame(
                 runtime_generation=1, engine_generation=2, activation_id=3,
                 source_generation=2, source_activation_id=3, mode_id="sphere", playing=True,
                 logical_timestamp=10.0 + self.frame_number / 60.0, source_timestamp=10.0,
                 changed=True, present_frame=True, mode_reveal_ready=True,
-                common=VisualizerCommonState(bars=(), bar_count=0,
-                    energy=VisualizerEnergyState(bass=args.bass, mid=args.mid, high=args.high,
-                                                 overall=max(args.bass, args.mid, args.high)),
-                    transient=VisualizerTransientState(mid=args.transient)),
-                mode_state=SphereFrame(authored_time=3.4 + self.frame_number / 60.0,
-                    parameters=self.material_parameters[material]),
+                common=VisualizerCommonState(
+                    bars=(), bar_count=0, energy=energy, transient=transient,
+                ),
+                # This render smoke has no logical runtime; feed its requested
+                # transient at the authored target so --transient still probes
+                # whole-body scale after product smoothing moved out of render.
+                mode_state=SphereFrame(
+                    authored_time=3.4 + self.frame_number / 60.0,
+                    size_pulse=sphere_size_pulse_target(energy, transient, parameters),
+                    parameters=parameters,
+                ),
             )
             snapshot = compose_visualizer_render_snapshot(logical, p, logical_revision=self.frame_number + 1)
             if not bridge.publish(snapshot):

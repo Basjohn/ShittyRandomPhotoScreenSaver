@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMenu, QScrollArea, QStyle, QStyleOptionButton,
     QStylePainter,
 )
-from PySide6.QtCore import Qt, QPoint, QRect, QRectF, Signal, QUrl, QTimer
+from PySide6.QtCore import Qt, QPoint, QRect, QRectF, Signal, QUrl, QTimer, QEvent
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication, QPainterPath, QDesktopServices
 
 from core.logging.logger import get_log_dir, get_logger, is_perf_metrics_enabled
@@ -325,7 +325,10 @@ class TabButton(QPushButton):
         self._sync_content_style()
 
     def _sync_content_style(self, *_args) -> None:
-        if self.isChecked():
+        if not self.isEnabled():
+            token = "text.disabled"
+            weight = QFont.Weight.DemiBold
+        elif self.isChecked():
             token = "navigation.tab.selected_text"
             weight = QFont.Weight.Bold
         elif self.underMouse():
@@ -343,6 +346,12 @@ class TabButton(QPushButton):
         font = self._tab_text_label.font()
         font.setWeight(weight)
         self._tab_text_label.setFont(font)
+
+
+    def changeEvent(self, event) -> None:  # type: ignore[override]
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.EnabledChange:
+            self._sync_content_style()
 
     def enterEvent(self, event) -> None:  # type: ignore[override]
         super().enterEvent(event)

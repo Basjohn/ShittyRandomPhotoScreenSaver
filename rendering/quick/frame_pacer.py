@@ -271,6 +271,7 @@ class QuickFramePacer(QObject):
             return
         decision = self._state.consume(self._clock_ns())
         if decision.due_opportunities:
+            visualizer_requested_present = False
             if self._demands & QuickFrameDemand.VISUALIZER:
                 synchronize = self._visualizer_sync
                 if synchronize is None:
@@ -278,7 +279,15 @@ class QuickFramePacer(QObject):
                         "visualizer frame demand has no presentation synchronization owner"
                     )
                 try:
-                    synchronize()
+                    # A successful visualizer sync is contractually complete only
+                    # after VisualizerRenderItem.update() accepted the retained
+                    # presentation request. That is already a scene
+                    # presentation request. Issuing QQuickWindow.update() as well
+                    # produced two swaps from the same pacer opportunity (observed
+                    # ~120 fps on a 60 Hz display and ~250 on 165 Hz) without a
+                    # second authored revision. Preserve the item update and only
+                    # request the window when no fresh visualizer publication did.
+                    visualizer_requested_present = bool(synchronize())
                 except Exception:
                     logger.error(
                         "[QUICK_PACER] Visualizer presentation synchronization failed",
@@ -286,7 +295,10 @@ class QuickFramePacer(QObject):
                     )
                     raise
             # Qt may coalesce update requests. One service callback issues at
-            # most the freshest request for all deadlines already missed.
-            self._window.update()
+            # most one presentation request for all deadlines already missed. A
+            # visualizer item update also services transition/widget animation
+            # state because the complete Quick window renders that opportunity.
+            if not visualizer_requested_present:
+                self._window.update()
         if self.is_active():
             self._timer.start(decision.next_delay_ms)

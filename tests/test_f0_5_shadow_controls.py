@@ -43,6 +43,10 @@ def test_no_current_source_reads_the_retired_sidecar() -> None:
         "widgets/spotify_visualizer/renderers/spectrum.py",
         "core/settings/storage_paths.py",
     ):
+        if not (root / rel).exists():
+            # Retired QWidget-era files were deleted by the Quick cutover; a file
+            # that no longer exists trivially cannot read the retired sidecar.
+            continue
         source = (root / rel).read_text(encoding="utf-8")
         # No import of the retired sidecar and no exported-dict/alias dependency.
         assert "import" not in source or "core.settings.shadow_tuning" not in source, rel
@@ -94,6 +98,10 @@ def test_no_production_copy_of_retired_profile_behavior_remains() -> None:
     }
 
     for rel, markers in retired_markers.items():
+        if not (root / rel).exists():
+            # Retired QWidget-era files were deleted by the Quick cutover; a file
+            # that no longer exists cannot carry a copy of the retired behaviour.
+            continue
         source = (root / rel).read_text(encoding="utf-8")
         for marker in markers:
             assert marker not in source, f"{rel}: {marker}"

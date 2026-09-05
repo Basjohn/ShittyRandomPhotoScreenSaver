@@ -142,9 +142,10 @@ vec3 surface(vec3 n) {
     float vocal = 1.0 - exp(-2.8 * pow(vocalRange, max(uEnergyCurve, 0.05)) * uVocalResponse);
     float vocalShape = sin(2.6*n.y + 1.4*sin(2.2*n.x - 0.9*t))
                      * cos(2.0*n.z + 0.6*t);
-    // Each field and each band is independently bounded by one. Their absolute
-    // coefficients sum to .27, so max idle/audio/pulse radius is 1.84 while
-    // every lobe remains free to evolve at maximum gain.
+    // Each field and each band is independently bounded by one. Deformation is
+    // configuration-bounded to 3.0; even the strongest negative combined lobe
+    // keeps radius positive, while the enlarged upper range remains free to
+    // produce deliberately dramatic positive crests without renderer clipping.
     float driven = e.x * 0.100 * bassShape + e.y * 0.035 * lobes
                  + e.z * 0.025 * ripples + vocal * 0.110 * vocalShape;
     float radius = 1.0 + uSizePulse + uIdleMotion * 0.10 * broad
@@ -448,6 +449,9 @@ void main() {
                      + sin(8.0*p.y - 1.8*sin(6.0*p.x)));
     float crackAA = max(fwidth(cracks), 0.012);
     float crust = smoothstep(0.06-crackAA, 0.28+crackAA, cracks);
+    // Magma fissures are actual inward relief: the glowing crack field is
+    // negative height while the surrounding crust remains modestly raised.
+    float fissure = 1.0 - smoothstep(0.035-crackAA, 0.16+crackAA, cracks);
     float height, roughness;
     if (uMaterial == 0) {
         float brush = sin(410.0*p.y + 4.0*grain(p*14.0))
@@ -459,7 +463,8 @@ void main() {
         height = 0.009*mediumGrain + 0.002*fineGrain + 0.013*crust;
         roughness = mix(0.12, 0.48, crust) + 0.08*mediumGrain;
     } else if (uMaterial == 2) {
-        height = 0.043*crust + crust*(0.010*mediumGrain + 0.003*fineGrain);
+        height = 0.024*crust + crust*(0.008*mediumGrain + 0.0025*fineGrain)
+               - 0.040*fissure;
         roughness = mix(0.12,0.85,crust);
     } else if (uMaterial == 4) {
         float wave = sin(14.0*p.x + 9.0*p.y - uTime*0.85 + 0.7*sin(11.0*p.z+uTime))
@@ -588,16 +593,10 @@ class QuickSphereRenderer:
         )
         gl.glUniform1f(u["uEnergyCurve"], float(parameters.get("sphere_energy_curve", 0.60)))
         gl.glUniform1f(u["uVocalResponse"], float(parameters.get("sphere_vocal_response", 1.4)))
-        # The shared transient bus already owns attack/decay. Read its immutable
-        # envelope directly; the render callback adds no clock or mutable filter.
-        transient = frame.snapshot.logical.common.transient
-        pulse_drive = max(0.0, min(1.0, max(
-            energy.overall * 0.25, energy.bass * 0.35,
-            transient.bass, transient.mid, transient.high,
-        )))
-        size_pulse = (0.10 * float(parameters.get("sphere_size_response", 1.5))
-                      * pulse_drive ** float(parameters.get("sphere_energy_curve", 0.60)))
-        gl.glUniform1f(u["uSizePulse"], size_pulse)
+        # Whole-body breathing/elasticity is authored at the sole logical
+        # cadence. The render thread consumes one immutable value and owns no
+        # second filter, timer, or transient history.
+        gl.glUniform1f(u["uSizePulse"], state.size_pulse)
         for uniform, key, default in (
             ("uDeformation", "sphere_deformation", 1.0),
             ("uSurfaceDetail", "sphere_surface_detail", 1.15),

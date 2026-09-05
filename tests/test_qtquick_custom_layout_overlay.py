@@ -112,6 +112,55 @@ def test_overlay_model_mutates_shared_session_items_without_copying_authority() 
     assert foreign.removed is False
 
 
+def test_visualizer_overlay_exposes_discrete_display_hop_without_copying_state() -> None:
+    session = CustomLayoutSession()
+    visualizer = _item(
+        "spotify_visualizer",
+        "display:a",
+        QRect(120, 80, 420, 280),
+        resizable=True,
+        viewport_capable=True,
+        baseline_viewport_extent=(420.0, 280.0),
+    )
+    session.add_item(visualizer)
+    transfers: list[tuple[int, str]] = []
+
+    def _can_transfer(item, direction):
+        return item is visualizer and direction == "right"
+
+    def _transfer(item, direction):
+        transfers.append((id(item), direction))
+        item.set_current_display("display:b", monitor_route="2")
+        item.set_geometry(QRect(920, 80, 420, 280))
+        return True
+
+    source = CustomLayoutOverlayModel(
+        session=session,
+        display_identity="display:a",
+        display_transfer_capability=_can_transfer,
+        display_transfer_handler=_transfer,
+    )
+    target = CustomLayoutOverlayModel(
+        session=session,
+        display_identity="display:b",
+        display_transfer_capability=lambda item, direction: direction == "left",
+        display_transfer_handler=lambda _item, _direction: False,
+    )
+
+    roles = source.roleNames()
+    role_by_name = {bytes(name).decode(): role for role, name in roles.items()}
+    index = source.index(0, 0)
+    assert source.data(index, role_by_name["canTransferLeft"]) is False
+    assert source.data(index, role_by_name["canTransferRight"]) is True
+    original_identity = id(visualizer)
+    assert source.transferItem(0, "right") is True
+    assert transfers == [(original_identity, "right")]
+    assert source.rowCount() == 0
+    assert target.rowCount() == 1
+    assert id(session.item(visualizer.source_key)) == original_identity
+    assert visualizer.current_global_rect == QRect(920, 80, 420, 280)
+
+
 def test_overlay_resize_requests_route_through_python_and_keep_item_identity() -> None:
     session = CustomLayoutSession()
     clock = _item(
@@ -308,7 +357,10 @@ def test_visualizer_scene_coordinator_rejects_occupied_target_and_rolls_back() -
     )
     visualizer.current_monitor_route = "1"
     session.add_item(visualizer)
-    coordinator = QuickCustomLayoutSceneCoordinator(session)
+    coordinator = QuickCustomLayoutSceneCoordinator(
+        session,
+        visualizer_transfer_handler=lambda source, target: source.transfer_visualizer_to(target),
+    )
     source = _SceneStub(object())
     target = _SceneStub(object())
     coordinator.register_scene("display:a", source)
@@ -756,7 +808,10 @@ def test_visualizer_cross_display_transfer_rehomes_one_render_admission(
         resizable=True,
     )
     session.add_item(visualizer)
-    coordinator = QuickCustomLayoutSceneCoordinator(session)
+    coordinator = QuickCustomLayoutSceneCoordinator(
+        session,
+        visualizer_transfer_handler=lambda source, target: source.transfer_visualizer_to(target),
+    )
     coordinator.register_scene("display:a", source_controller)
     coordinator.register_scene("display:b", target_controller)
 
@@ -1012,3 +1067,7 @@ def test_quick_custom_layout_overlay_is_presentation_only() -> None:
     assert "drag.target" not in qml
     assert "sessionModel.moveItem(" in qml
     assert "sessionModel.closeItem(" in qml
+    assert "sessionModel.transferItem(editFrame.index, \"left\")" in qml
+    assert "sessionModel.transferItem(editFrame.index, \"right\")" in qml
+    assert "canTransferLeft" in qml
+    assert "canTransferRight" in qml

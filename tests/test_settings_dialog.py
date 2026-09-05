@@ -11,6 +11,7 @@ from shiboken6 import Shiboken
 import ui.settings_dialog as settings_dialog_module
 from ui.settings_dialog import SettingsDialog, CustomTitleBar, TabButton, ResetDefaultsDialog
 from core.settings.settings_manager import SettingsManager
+from core.settings.capability_activation import set_widget_family_activated
 from core.animation import AnimationManager
 from engine.runtime_destruction import RuntimeDestructionBarrier
 
@@ -177,6 +178,43 @@ def test_settings_dialog_has_tabs(qapp, settings_manager, animation_manager):
     assert dialog.tab_buttons == [
         dialog._tab_button_by_key[key] for key in dialog._tab_keys
     ]
+
+
+
+
+def test_visualizers_navigation_mirrors_media_and_family_capabilities(
+    qapp, settings_manager, animation_manager
+):
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    button = dialog.visualizers_tab_btn
+
+    assert button.isEnabled()
+    enabled_text_style = button._tab_text_label.styleSheet()
+
+    widgets = settings_manager.get("widgets", {})
+    set_widget_family_activated(widgets, "media", True)
+    set_widget_family_activated(widgets, "visualizers", False)
+    settings_manager.set("widgets", widgets)
+    dialog._refresh_visualizers_tab_eligibility()
+    assert not button.isEnabled()
+    assert button.toolTip() == "Enable Visualizers In Widgets"
+    assert button._tab_text_label.styleSheet() != enabled_text_style
+
+    widgets = settings_manager.get("widgets", {})
+    set_widget_family_activated(widgets, "visualizers", True)
+    set_widget_family_activated(widgets, "media", False)
+    settings_manager.set("widgets", widgets)
+    dialog._refresh_visualizers_tab_eligibility()
+    assert not button.isEnabled()
+    assert button.toolTip() == "Enable Media In Widgets"
+
+    widgets = settings_manager.get("widgets", {})
+    set_widget_family_activated(widgets, "media", True)
+    set_widget_family_activated(widgets, "visualizers", True)
+    settings_manager.set("widgets", widgets)
+    dialog._refresh_visualizers_tab_eligibility()
+    assert button.isEnabled()
+    assert button.toolTip() == ""
 
 
 def test_settings_dialog_has_content_stack(qapp, settings_manager, animation_manager):

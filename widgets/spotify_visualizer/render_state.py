@@ -278,6 +278,7 @@ class SphereFrame:
     """Small immutable Sphere payload; reactive energy stays in ``common``."""
 
     authored_time: float = 0.0
+    size_pulse: float = 0.0
     parameters: FrozenFields = FrozenFields()
 
     def __post_init__(self) -> None:
@@ -285,6 +286,10 @@ class SphereFrame:
         if authored_time < 0.0:
             raise ValueError("sphere authored time must be non-negative")
         object.__setattr__(self, "authored_time", authored_time)
+        size_pulse = _finite(self.size_pulse, name="sphere size pulse")
+        if size_pulse < 0.0:
+            raise ValueError("sphere size pulse must be non-negative")
+        object.__setattr__(self, "size_pulse", size_pulse)
         object.__setattr__(
             self, "parameters", _coerce_frozen_fields(self.parameters, name="sphere parameters")
         )

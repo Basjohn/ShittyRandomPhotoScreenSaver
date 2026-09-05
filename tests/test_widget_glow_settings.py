@@ -33,21 +33,42 @@ def test_widget_glow_defaults_inherit_theme_and_model_roundtrip(tmp_path):
 
     assert settings.get("input.widget_glow_on_hover") is False
     assert settings.get("input.widget_glow_on_click") is False
+    assert settings.get("input.widget_glow_intensity") == 100
     assert settings.get("input.widget_glow_color") is None
 
     model = InputSettings.from_settings(settings)
+    assert model.widget_glow_intensity == 100
     assert model.widget_glow_color is None
+    assert model.to_dict()["input.widget_glow_intensity"] == 100
     assert model.to_dict()["input.widget_glow_color"] is None
 
     settings.set("input.widget_glow_on_hover", True)
     settings.set("input.widget_glow_on_click", True)
+    settings.set("input.widget_glow_intensity", 37)
     settings.set("input.widget_glow_color", [12, 34, 56, 200])
     model = InputSettings.from_settings(settings)
     assert model.widget_glow_on_hover is True
     assert model.widget_glow_on_click is True
+    assert model.widget_glow_intensity == 37
     assert model.widget_glow_color == [12, 34, 56, 200]
+    assert model.to_dict()["input.widget_glow_intensity"] == 37
     assert model.to_dict()["input.widget_glow_color"] == [12, 34, 56, 200]
 
+
+
+def test_display_tab_intensity_loads_and_saves(qt_app, tmp_path):
+    settings = _settings(tmp_path, "WidgetGlowIntensity")
+    settings.set("input.widget_glow_intensity", 41)
+    tab = DisplayTab(settings)
+    try:
+        assert tab.widget_glow_intensity_slider.value() == 41
+        assert tab.widget_glow_intensity_label.text() == "41%"
+        tab.widget_glow_intensity_slider.setValue(73)
+        assert settings.get("input.widget_glow_intensity") == 73
+        assert tab.widget_glow_intensity_label.text() == "73%"
+    finally:
+        tab.deleteLater()
+        qt_app.processEvents()
 
 def test_display_tab_inherited_swatch_and_unrelated_save_keep_none(qt_app, tmp_path):
     theme = _theme_with_border(Rgba(22, 77, 155, 211))
