@@ -1,6 +1,6 @@
 # Keep retained presentation alive after geometry-only Edit Save
 
-Status: **geometry-only live commit landed and physically accepted; topology-changing Save still reconciles**. Live sequencing: `FWPlan.md`.
+Status: **geometry-only live commit accepted; interactive cross-display Visualizer transfer Save now also live-commits when the transfer graph is coherent (awaiting physical validation); family-presence/monitor-route changes and layout-slot save/load still reconcile**. Live sequencing: `FWPlan.md`.
 
 The retained path now keeps ordinary same-display geometry Save in the current runtime generation. The operator reports
 that live visualizer adjustment and Save are flowing extremely well: no visible teardown/rebuild is required to commit the
@@ -30,8 +30,8 @@ presentation and latches one visualizer display crossing per pointer gesture to 
 Visualizer frame also exposes theme-palette left/right display-hop buttons. Those buttons carry only semantic direction into
 Python; `QuickCustomLayoutOwner` selects the nearest horizontal retained display, projects the current shape/relative position,
 and the existing scene coordinator performs the same single retained admission transfer. There is no second transfer owner and
-no fade/timer. Physical validation is still required; display-transfer Save intentionally remains a topology reconciliation
-after the move completes.
+no fade/timer. Physical validation is still required; interactive display-transfer Save now live-commits when the transfer
+graph is coherent (fail-safe to reconciliation otherwise), while layout-slot save/load remain generation reconciliations.
 
 ## Live implementation checklist
 
@@ -43,9 +43,13 @@ after the move completes.
   identity, runtime generation and logical-state identity in focused production-chain coverage.
 - [x] Prove Cancel retains baseline committed state and failed persistence does not promote or end editing.
 - [x] Prove ordinary preferred-size events retain saved geometry and geometry-only Save requests no replacement.
-- [~] Display transfer remains topology-changing: active retained runtime/pacer ownership now moves with the scene; both
-  drag and discrete theme-palette left/right hop controls use that same transaction. Retain one explicit generation
-  reconciliation on Save until a later design proves cross-display live commit safe.
+- [~] Interactive cross-display Save now live-commits: active retained runtime/pacer/manager-unit/retirement ownership
+  moves with the scene during the drag (both pointer drag and discrete theme-palette left/right hop), and
+  `QuickCustomLayoutOwner.save` promotes the retained geometry in place when `_cross_display_transfer_is_coherent()`
+  confirms a fully target-owned graph, logging `Save live-committed cross-display Visualizer transfer`. Any partial/
+  incoherent transfer, a non-Visualizer cross-display move, family presence/monitor-route change, or a layout-slot save
+  (`defer_topology_reconciliation`) still falls back to one explicit generation reconciliation. Layout-slot load stays a
+  fenced generation replacement. Awaiting the physical validation run below.
 - [ ] Awaiting physical validation: cross-display drag **and arrow hop** each move exactly one live visualizer, preserve the
   intended shape/placement, leave no dead duplicate, produce no QML warning storm/destruction-barrier owner, and same-display
   Save remains hitch-free at 60/165 Hz. Decide on any fade-out/fade-in only from this run.

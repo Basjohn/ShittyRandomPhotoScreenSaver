@@ -271,7 +271,29 @@ class QuickCustomLayoutOwner:
         self._settings_manager.set_widgets_map(widgets, emit_change=False)
         self._settings_manager.save()
         topology_reason = self._live_commit_topology_reason()
-        if topology_reason is None:
+        # Interactive Edit Save may now live-commit a cross-display Visualizer
+        # move. The drag already transferred the retained scene AND the
+        # runtime/pacer/manager-unit/retirement to the target as one atomic
+        # transaction (`_transfer_visualizer_display_transaction`), so a coherent
+        # transfer leaves the generation already reconciled and needs no rebuild.
+        # This is deliberately limited: only the interactive path (never a
+        # layout-slot save, which defers), only when the sole topology change is a
+        # `display_transfer`, and only when the transfer graph is fully
+        # target-owned. Any other change (family presence, monitor route,
+        # incoherent transfer) or a layout-slot save still reconciles.
+        live_committing = topology_reason is None
+        if (
+            not live_committing
+            and topology_reason == "display_transfer"
+            and not defer_topology_reconciliation
+            and self._cross_display_transfer_is_coherent()
+        ):
+            live_committing = True
+            logger.info(
+                "[CUSTOM_LAYOUT] Save live-committed cross-display Visualizer "
+                "transfer without generation reconciliation"
+            )
+        if live_committing:
             self._promote_live_geometry_commit()
         else:
             logger.info(
@@ -279,10 +301,11 @@ class QuickCustomLayoutOwner:
                 topology_reason,
             )
         self._finish()
-        # Geometry-only Save remains in this retained generation. A layout-slot
-        # transaction can explicitly defer topology replacement until its slot
-        # attempt completes; no caller gets an ignored compatibility flag.
-        if topology_reason is not None:
+        # Geometry-only / coherent live commits remain in this retained
+        # generation. A layout-slot transaction can explicitly defer topology
+        # replacement until its slot attempt completes; no caller gets an ignored
+        # compatibility flag.
+        if not live_committing:
             if defer_topology_reconciliation:
                 self._deferred_topology_reconciliation_reason = topology_reason
                 logger.info(
@@ -1161,6 +1184,34 @@ class QuickCustomLayoutOwner:
             if item.current_monitor_route != item.source_monitor_route:
                 return "monitor_route_changed"
         return None
+
+    def _cross_display_transfer_is_coherent(self) -> bool:
+        """Return whether an already-live cross-display Visualizer transfer left a
+        fully target-owned graph, so an interactive Save can promote in place
+        instead of reinitialising the generation.
+
+        Fail-safe: any cross-display item that is not the Visualizer, or a
+        Visualizer whose current owner/unit is not the transfer target, forces the
+        normal generation reconciliation. This never promotes a partially moved
+        graph (the exact split that produced the historic retained-scene-admission
+        warning storm and shutdown barrier timeout).
+        """
+
+        session = self._session
+        if session is None:
+            return False
+        owner, unit = self._visualizer_provider()
+        for item in session.items():
+            if item.current_display_identity == item.source_key.display_identity:
+                continue
+            if item.model_identity != "spotify_visualizer":
+                return False
+            if owner is None or unit is None:
+                return False
+            target_binding = self._bindings.get(item.current_display_identity)
+            if target_binding is None or target_binding.unit is not unit:
+                return False
+        return True
 
     def _promote_live_geometry_commit(self) -> None:
         """Promote all already-retained geometry before CUSTOM clears it."""
