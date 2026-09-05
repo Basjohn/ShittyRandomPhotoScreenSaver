@@ -18,22 +18,39 @@ def _install_inert_package(name: str, path: pathlib.Path) -> None:
 
 # Keep this source-only contract runnable in audit containers without PySide6.
 # The real runtime imports the same modules through the normal package graph.
+#
+# The inert-package stubs MUST be installed only for the duration of this
+# module's own imports and then removed: a leaked inert ``core.settings`` (a
+# fileless module object) stays in the shared ``sys.modules`` for the rest of the
+# collection and breaks every later ``from core.settings import SettingsManager``
+# with "cannot import name 'SettingsManager' from 'core.settings' (unknown
+# location)". The already-bound symbols below keep working after restoration.
+_STUBBED_PACKAGES = ("core.settings", "widgets.spotify_visualizer")
+_saved_modules = {name: sys.modules.get(name) for name in _STUBBED_PACKAGES}
+
 _install_inert_package("core.settings", ROOT / "core" / "settings")
 _install_inert_package(
     "widgets.spotify_visualizer",
     ROOT / "widgets" / "spotify_visualizer",
 )
 
-from widgets.spotify_visualizer.spectrum_frame_runtime import SpectrumFrameRuntime
-from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
-    canonical_spectrum_solid_hysteresis_segments,
-    compute_spectrum_height_scale,
-    spectrum_bar_to_boosted,
-)
-from widgets.spotify_visualizer.spectrum_temporal_contract import (
-    spectrum_vertical_temporal_ratio,
-    spectrum_visual_alpha,
-)
+try:
+    from widgets.spotify_visualizer.spectrum_frame_runtime import SpectrumFrameRuntime
+    from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
+        canonical_spectrum_solid_hysteresis_segments,
+        compute_spectrum_height_scale,
+        spectrum_bar_to_boosted,
+    )
+    from widgets.spotify_visualizer.spectrum_temporal_contract import (
+        spectrum_vertical_temporal_ratio,
+        spectrum_visual_alpha,
+    )
+finally:
+    for _name, _original in _saved_modules.items():
+        if _original is None:
+            sys.modules.pop(_name, None)
+        else:
+            sys.modules[_name] = _original
 
 
 def _resolve(

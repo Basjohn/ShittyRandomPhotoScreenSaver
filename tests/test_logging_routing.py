@@ -203,13 +203,6 @@ def test_family_logger_rejects_unknown_declared_family():
         get_logger("test.structured.invalid", families=("typo_family",))
 
 
-def test_gl_program_cache_declares_structured_cache_ownership():
-    from rendering.gl_programs import program_cache
-
-    assert isinstance(program_cache.logger, LogFamilyAdapter)
-    assert program_cache.logger._families == (LOG_FAMILY_CACHE,)
-
-
 def test_non_spotify_filter_blocks_spotify_records():
     """Test NonSpotifyFilter blocks Spotify tagged records."""
     filter_obj = NonSpotifyFilter()

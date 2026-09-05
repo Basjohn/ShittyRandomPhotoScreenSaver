@@ -45,7 +45,7 @@ def _presentation(*, extent=(256.0, 256.0), display_size=None, scale=1.0, inset=
     return presentation
 
 
-def _snapshot(*, energy=(0.0, 0.0, 0.0), transient=0.0, material="Chrome", authored_time=1.3,
+def _snapshot(*, energy=(0.0, 0.0, 0.0), transient=0.0, size_pulse=0.0, material="Chrome", authored_time=1.3,
               extent=(256.0, 256.0), display_size=None, scale=1.0, inset=0.0, overrides=None):
     parameters = freeze_render_fields({
         "sphere_material": material,
@@ -69,7 +69,11 @@ def _snapshot(*, energy=(0.0, 0.0, 0.0), transient=0.0, material="Chrome", autho
             energy=VisualizerEnergyState(bass=bass, mid=mid, high=high, overall=max(energy)),
             transient=VisualizerTransientState(mid=transient),
         ),
-        mode_state=SphereFrame(authored_time=authored_time, parameters=parameters),
+        mode_state=SphereFrame(
+            authored_time=authored_time,
+            size_pulse=size_pulse,
+            parameters=parameters,
+        ),
     )
     return compose_visualizer_render_snapshot(logical, _presentation(extent=extent, display_size=display_size, scale=scale, inset=inset), logical_revision=1)
 
@@ -91,6 +95,13 @@ def test_sphere_mesh_is_bounded_finite_unit_outward_and_has_real_z():
         assert sum(component * component for component in normal) > 1e-12
         centroid = tuple((a[index] + b[index] + c[index]) / 3.0 for index in range(3))
         assert sum(normal[index] * centroid[index] for index in range(3)) > 0.0
+
+
+def test_magma_shader_models_fissures_as_negative_relief():
+    source = sphere_module._FRAGMENT_SOURCE
+    assert "float fissure = 1.0 - smoothstep" in source
+    assert "- 0.040*fissure" in source
+    assert "0.024*crust" in source
 
 
 def test_sphere_pixel_geometry_uses_resolved_content_metric_across_aspects_and_scale():
@@ -454,21 +465,19 @@ def test_real_gl_sphere_host_is_deterministic_reactive_material_distinct_and_dep
         assert render(_snapshot(**logged_geometry, energy=(0.0, 0.4, 0.1),
                                 overrides={**vocal_only, "sphere_vocal_response": 0.0})) == quiet
 
-        # Whole-body breathing is independent of local deformation. A pure
-        # vocal-band transient grows the actual diameter; decay returns exactly
-        # to rest and Size Response=0 removes the entire effect.
-        size_only = {**response_controls, "sphere_deformation": 0.0, "sphere_size_response": 2.0}
-        resting = render(_snapshot(**logged_geometry, overrides=size_only))
-        pulse = render(_snapshot(**logged_geometry, transient=1.0, overrides=size_only))
-        decaying = render(_snapshot(**logged_geometry, transient=0.2, overrides=size_only))
+        # Whole-body breathing is an immutable authored SphereFrame value now;
+        # the renderer owns no transient filter/history. Verify that larger
+        # authored pulse values change only the body scale monotonically.
+        size_only = {**response_controls, "sphere_deformation": 0.0}
+        resting = render(_snapshot(**logged_geometry, size_pulse=0.0, overrides=size_only))
+        pulse = render(_snapshot(**logged_geometry, size_pulse=0.55, overrides=size_only))
+        decaying = render(_snapshot(**logged_geometry, size_pulse=0.18, overrides=size_only))
         def diameter(pixels):
             left, top, right, bottom = alpha_bounds(pixels)
             return (right - left + bottom - top + 2) / 2.0
-        assert diameter(pulse) > diameter(resting) * 1.17
+        assert diameter(pulse) > diameter(resting) * 1.35
         assert diameter(resting) < diameter(decaying) < diameter(pulse)
-        assert render(_snapshot(**logged_geometry, transient=0.0, overrides=size_only)) == resting
-        assert render(_snapshot(**logged_geometry, transient=1.0,
-                                overrides={**size_only, "sphere_size_response": 0.0})) == resting
+        assert render(_snapshot(**logged_geometry, size_pulse=0.0, overrides=size_only)) == resting
 
         detail_off = render(_snapshot(inset=32.0, overrides={"sphere_surface_detail": 0.0}))
         detail_on = render(_snapshot(inset=32.0, overrides={"sphere_surface_detail": 1.0}))

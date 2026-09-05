@@ -30,6 +30,14 @@ def _coerce_widget_glow_color(value: Any) -> Optional[List[int]]:
         raise ValueError("widget glow colour channels must be in [0, 255]")
     return channels
 
+def _coerce_widget_glow_intensity(value: Any) -> int:
+    """Clamp the persisted percentage without turning corrupt state into a crash."""
+
+    try:
+        return max(0, min(100, int(value)))
+    except (TypeError, ValueError, OverflowError):
+        return 100
+
 
 @dataclass
 class DisplaySettings:
@@ -112,6 +120,7 @@ class InputSettings:
     halo_shape: str = "circle"
     widget_glow_on_hover: bool = False
     widget_glow_on_click: bool = False
+    widget_glow_intensity: int = 100
     widget_glow_color: Optional[List[int]] = None
 
     @classmethod
@@ -126,6 +135,9 @@ class InputSettings:
             widget_glow_on_click=settings.to_bool(
                 settings.get("input.widget_glow_on_click", False), False
             ),
+            widget_glow_intensity=_coerce_widget_glow_intensity(
+                settings.get("input.widget_glow_intensity", 100)
+            ),
             widget_glow_color=_coerce_widget_glow_color(
                 settings.get("input.widget_glow_color", None)
             ),
@@ -138,6 +150,7 @@ class InputSettings:
             "input.halo_shape": self.halo_shape,
             "input.widget_glow_on_hover": self.widget_glow_on_hover,
             "input.widget_glow_on_click": self.widget_glow_on_click,
+            "input.widget_glow_intensity": self.widget_glow_intensity,
             "input.widget_glow_color": (
                 None
                 if self.widget_glow_color is None

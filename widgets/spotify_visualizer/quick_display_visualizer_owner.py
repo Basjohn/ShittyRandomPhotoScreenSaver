@@ -301,7 +301,11 @@ class QuickDisplayVisualizerOwner:
 
         if self._retired:
             return
-        self._presentation_runtime.scene_controller.request_visualizer_present()
+        requested = self._presentation_runtime.scene_controller.request_visualizer_present()
+        if not requested:
+            raise RuntimeError(
+                "fresh visualizer publication has no retained presentation item"
+            )
 
     def set_playing(
         self,
@@ -378,18 +382,67 @@ class QuickDisplayVisualizerOwner:
             )
 
     def set_presentation_runtime(self, runtime: Any) -> bool:
-        """Move retained presentation/config publication, not logical ownership."""
+        """Move the retained display edge while preserving one logical owner.
+
+        CUSTOM cross-display transfer moves the actual VisualizerRenderItem. The
+        frame-pacer/bind/retirement edge must move with it; leaving ``_runtime``
+        on the source display lets a later preset/mode activation create a second
+        dead admission there and lets retirement clean the wrong scene. No audio,
+        logical runtime, controller, activation identity, or authored cadence is
+        recreated here.
+        """
 
         if self._retired:
             return False
-        if runtime is self._presentation_runtime:
+        if runtime is self._presentation_runtime and runtime is self._runtime:
             return False
-        old_runtime = self._presentation_runtime
-        old_runtime.scene_controller.set_visualizer_viewport_config_sink(None)
-        self._presentation_runtime = runtime
-        runtime.bind_visualizer_viewport_config(
-            self._controller.set_custom_viewport_override
-        )
+
+        old_presentation_runtime = self._presentation_runtime
+        old_runtime = self._runtime
+        old_pacer = getattr(old_runtime, "frame_pacer", None)
+        new_pacer = getattr(runtime, "frame_pacer", None)
+        if self._started and (old_pacer is None or new_pacer is None):
+            raise RuntimeError("visualizer display transfer requires both frame pacers")
+
+        if self._started:
+            old_pacer.set_visualizer_active(False)
+            old_pacer.set_visualizer_sync(None)
+        old_presentation_runtime.scene_controller.set_visualizer_viewport_config_sink(None)
+        try:
+            self._presentation_runtime = runtime
+            self._runtime = runtime
+            runtime.bind_visualizer_viewport_config(
+                self._controller.set_custom_viewport_override
+            )
+            if self._started:
+                new_pacer.set_visualizer_sync(self.sync_present)
+                new_pacer.set_visualizer_active(True)
+        except Exception:
+            # Transfer is one event-bound transaction. Restore the old display
+            # edge rather than leave the logical owner attached to half a scene.
+            try:
+                runtime.scene_controller.set_visualizer_viewport_config_sink(None)
+            except Exception:
+                logger.exception(
+                    "[SPOTIFY_VIS] Failed clearing partial target viewport route"
+                )
+            if self._started and new_pacer is not None:
+                try:
+                    new_pacer.set_visualizer_active(False)
+                    new_pacer.set_visualizer_sync(None)
+                except Exception:
+                    logger.exception(
+                        "[SPOTIFY_VIS] Failed clearing partial target pacer route"
+                    )
+            self._presentation_runtime = old_presentation_runtime
+            self._runtime = old_runtime
+            old_presentation_runtime.bind_visualizer_viewport_config(
+                self._controller.set_custom_viewport_override
+            )
+            if self._started:
+                old_pacer.set_visualizer_sync(self.sync_present)
+                old_pacer.set_visualizer_active(True)
+            raise
         return True
 
     def set_authored_outer_origin(self, x: float, y: float) -> bool:
@@ -918,6 +971,11 @@ class QuickDisplayVisualizerOwner:
             pacer.set_visualizer_sync(None)
             self._runtime.scene_controller.set_visualizer_double_click_admission(None)
             self._runtime.scene_controller.set_visualizer_middle_click_admission(None)
+        if self._bound:
+            # Especially after a CUSTOM display transfer, the active scene must
+            # not retain controller.set_custom_viewport_override and thereby keep
+            # this generation-scoped owner alive past the destruction barrier.
+            self._presentation_runtime.scene_controller.set_visualizer_viewport_config_sink(None)
         joined = bool(self._controller.stop_logical_runtime())
         if not joined:
             return False

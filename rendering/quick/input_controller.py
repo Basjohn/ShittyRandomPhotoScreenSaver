@@ -86,17 +86,26 @@ class QuickInputController(RuntimeInputOwner):
         return bool(self._state.interaction_mode_enabled)
 
     def configure_widget_glow(
-        self, *, on_hover: bool, on_click: bool, color: tuple[int, int, int, int]
+        self,
+        *,
+        on_hover: bool,
+        on_click: bool,
+        intensity: float,
+        color: tuple[int, int, int, int],
     ) -> bool:
         """Cache resolved presentation options at the Settings event boundary."""
 
         if not self._state.admission_open:
             return False
+        level = float(intensity)
+        if not 0.0 <= level <= 1.0:
+            raise ValueError("widget glow intensity must be in [0, 1]")
         if len(color) != 4 or any(not 0 <= channel <= 255 for channel in color):
             raise ValueError("widget glow requires four RGBA channels in [0, 255]")
         return self._publish_state(
             widget_glow_on_hover=bool(on_hover),
             widget_glow_on_click=bool(on_click),
+            widget_glow_intensity=level,
             widget_glow_color=tuple(int(channel) for channel in color),
         )
 

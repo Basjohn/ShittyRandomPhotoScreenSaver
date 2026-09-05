@@ -425,6 +425,32 @@ class DisplayTab(QWidget):
         widget_glow_click_row.addWidget(self.widget_glow_on_click_check)
         widget_glow_click_row.addStretch()
 
+        widget_glow_intensity_row, _ = add_aligned_row(
+            layout,
+            "Glow Intensity:",
+            label_width=self._LABEL_WIDTH,
+            wrap=False,
+        )
+        self.widget_glow_intensity_slider = shared_styles.NoWheelSlider(
+            Qt.Orientation.Horizontal
+        )
+        self.widget_glow_intensity_slider.setRange(0, 100)
+        self.widget_glow_intensity_slider.setValue(100)
+        self.widget_glow_intensity_slider.setMinimumWidth(220)
+        self.widget_glow_intensity_slider.setToolTip(
+            "Scale the shared hover/click glow strength. 0% keeps the feature "
+            "configured but visually transparent; 100% preserves full authored strength."
+        )
+        self.widget_glow_intensity_label = create_inline_label("100%")
+        self.widget_glow_intensity_label.setMinimumWidth(48)
+        self.widget_glow_intensity_slider.valueChanged.connect(
+            lambda value: self.widget_glow_intensity_label.setText(f"{value}%")
+        )
+        self.widget_glow_intensity_slider.valueChanged.connect(self._save_settings)
+        widget_glow_intensity_row.addWidget(self.widget_glow_intensity_slider, 1)
+        widget_glow_intensity_row.addWidget(self.widget_glow_intensity_label)
+        widget_glow_intensity_row.addStretch()
+
         widget_glow_color_row, _ = add_aligned_row(
             layout,
             "Widget Glow Color:",
@@ -530,6 +556,7 @@ class DisplayTab(QWidget):
         self.interaction_mode_check.blockSignals(True)
         self.widget_glow_on_hover_check.blockSignals(True)
         self.widget_glow_on_click_check.blockSignals(True)
+        self.widget_glow_intensity_slider.blockSignals(True)
         
         try:
             # Monitor selection (new canonical: display.show_on_monitors)
@@ -633,6 +660,12 @@ class DisplayTab(QWidget):
             self.widget_glow_on_click_check.setChecked(
                 input_options.widget_glow_on_click
             )
+            self.widget_glow_intensity_slider.setValue(
+                input_options.widget_glow_intensity
+            )
+            self.widget_glow_intensity_label.setText(
+                f"{input_options.widget_glow_intensity}%"
+            )
             self._widget_glow_color_override = (
                 None
                 if input_options.widget_glow_color is None
@@ -660,6 +693,7 @@ class DisplayTab(QWidget):
             self.interaction_mode_check.blockSignals(False)
             self.widget_glow_on_hover_check.blockSignals(False)
             self.widget_glow_on_click_check.blockSignals(False)
+            self.widget_glow_intensity_slider.blockSignals(False)
             self._loading = False
     
     def _save_settings(self) -> None:
@@ -728,6 +762,10 @@ class DisplayTab(QWidget):
         self._settings.set(
             'input.widget_glow_on_click',
             self.widget_glow_on_click_check.isChecked(),
+        )
+        self._settings.set(
+            'input.widget_glow_intensity',
+            self.widget_glow_intensity_slider.value(),
         )
         self._settings.set(
             'input.widget_glow_color',

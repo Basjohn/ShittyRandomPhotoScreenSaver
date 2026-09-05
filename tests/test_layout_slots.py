@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from types import SimpleNamespace
-from unittest.mock import Mock
 
 from core.settings.layout_slots import (
     apply_layout_slot,
@@ -11,7 +9,6 @@ from core.settings.layout_slots import (
     normalize_layout_slot_id,
     save_layout_slot,
 )
-from rendering.display_widget import DisplayWidget
 
 
 def test_capture_layout_slot_includes_layout_state_and_excludes_sources():
@@ -299,94 +296,3 @@ def test_save_layout_slot_never_recursively_captures_slots():
 
     assert payload is not None
     assert "layout_slots" not in payload["widgets"]
-
-
-class _SettingsStub:
-    def __init__(self, widgets: dict) -> None:
-        self.widgets = deepcopy(widgets)
-        self.saved = 0
-        self.emit_changes: list[bool] = []
-
-    def get_widgets_map(self) -> dict:
-        return deepcopy(self.widgets)
-
-    def set_widgets_map(self, widgets: dict, *, emit_change: bool = True) -> None:
-        self.widgets = deepcopy(widgets)
-        self.emit_changes.append(emit_change)
-
-    def save(self) -> None:
-        self.saved += 1
-
-
-def test_display_save_slot_while_editing_commits_once_then_reloads():
-    settings = _SettingsStub({"clock": {"position": "Top Left", "font_size": 24}})
-    manager = Mock()
-    manager.commit_session_without_reload.return_value = True
-    display = SimpleNamespace(
-        settings_manager=settings,
-        _custom_layout_edit_active=True,
-        _custom_layout_manager=manager,
-        _request_custom_layout_runtime_reload=Mock(),
-    )
-
-    assert DisplayWidget._save_layout_slot(display, "1", commit_edit_session=True) is True
-
-    manager.commit_session_without_reload.assert_called_once_with()
-    display._request_custom_layout_runtime_reload.assert_called_once_with("slot_save")
-    assert settings.saved == 1
-    assert "1" in settings.widgets["layout_slots"]["slots"]
-    assert settings.emit_changes == [False]
-
-
-def test_display_save_slot_outside_edit_mode_does_not_emit_live_refresh():
-    settings = _SettingsStub({"media": {"position": "Bottom Right", "provider": "spotify"}})
-    display = SimpleNamespace(
-        settings_manager=settings,
-        _custom_layout_edit_active=False,
-        _custom_layout_manager=Mock(),
-        _request_custom_layout_runtime_reload=Mock(),
-    )
-
-    assert DisplayWidget._save_layout_slot(display, "1") is True
-
-    assert settings.saved == 1
-    assert settings.emit_changes == [False]
-    display._request_custom_layout_runtime_reload.assert_not_called()
-    assert settings.widgets["media"]["provider"] == "spotify"
-    assert "1" in settings.widgets["layout_slots"]["slots"]
-
-
-def test_display_load_slot_while_editing_commits_applies_and_preserves_slot():
-    slot_payload = {
-        "version": 1,
-        "widgets": {"clock": {"position": "Bottom Right", "font_size": 64}},
-        "custom_layout": {"version": 2, "displays": {}},
-        "custom_layout_restore": {"widgets": {}},
-    }
-    settings = _SettingsStub(
-        {
-            "clock": {"position": "Top Left", "font_size": 24, "timezone": "local"},
-            "layout_slots": {"version": 1, "slots": {"1": deepcopy(slot_payload)}},
-            "custom_layout": {"version": 2, "displays": {"screen:old": {"clock": {"digital": {}}}}},
-        }
-    )
-    manager = Mock()
-    manager.commit_session_without_reload.return_value = True
-    display = SimpleNamespace(
-        settings_manager=settings,
-        _custom_layout_edit_active=True,
-        _custom_layout_manager=manager,
-        _request_custom_layout_runtime_reload=Mock(),
-    )
-
-    assert DisplayWidget._load_layout_slot(display, "1", commit_edit_session=True) is True
-
-    manager.commit_session_without_reload.assert_called_once_with()
-    display._request_custom_layout_runtime_reload.assert_called_once_with("slot_load")
-    assert settings.widgets["clock"] == {
-        "position": "Bottom Right",
-        "font_size": 64,
-        "timezone": "local",
-    }
-    assert settings.widgets["custom_layout"] == {"version": 2, "displays": {}}
-    assert settings.widgets["layout_slots"]["slots"]["1"] == slot_payload

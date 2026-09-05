@@ -17,6 +17,12 @@ Item {
     property real cardBorderWidth: 4.0
     property real cardCornerRadius: 8.0
     property bool cardShadowEnabled: true
+    property bool widgetGlowAdmitted: false
+    property bool widgetGlowOnHover: false
+    property bool widgetGlowOnClick: false
+    property bool widgetGlowClicked: false
+    property real widgetGlowIntensity: 1.0
+    property color widgetGlowColor: "transparent"
     property color cardShadowColor: "#96000000"
     property real cardShadowBlur: 18.0
     property real cardShadowOffsetX: 0.0
@@ -35,6 +41,35 @@ Item {
 
     opacity: authoredSceneOpacity * startupRevealOpacity
     visible: presentationActive && customLayoutWorkingVisible && opacity > 0.0
+
+    Loader {
+        id: visualizerInteractionGlowLoader
+        objectName: "visualizerInteractionGlowLoader"
+        anchors.fill: parent
+        z: 2.8
+        active: visualizerPresentationRoot.widgetGlowAdmitted
+            && visualizerPresentationRoot.visible
+            && visualizerPresentationRoot.widgetGlowIntensity > 0.0
+            && (visualizerPresentationRoot.widgetGlowOnHover
+                || visualizerPresentationRoot.widgetGlowOnClick)
+        sourceComponent: WidgetInteractionGlow {
+            hoverEnabled: visualizerPresentationRoot.widgetGlowOnHover
+            clickEnabled: visualizerPresentationRoot.widgetGlowOnClick
+            hovered: visualizerInteractionHover.hovered
+            clicked: visualizerPresentationRoot.widgetGlowClicked
+            intensityScale: visualizerPresentationRoot.widgetGlowIntensity
+            glowColor: visualizerPresentationRoot.widgetGlowColor
+            cornerRadius: visualizerPresentationRoot.cardShellEnabled
+                ? visualizerPresentationRoot.cardCornerRadius : 4.0
+        }
+    }
+
+    HoverHandler {
+        id: visualizerInteractionHover
+        enabled: visualizerInteractionGlowLoader.active
+            && visualizerPresentationRoot.widgetGlowOnHover
+        blocking: false
+    }
 
     WheelHandler {
         target: null

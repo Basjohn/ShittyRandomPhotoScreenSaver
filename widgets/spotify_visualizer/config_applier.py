@@ -132,7 +132,7 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
             raise ValueError(f"invalid sphere material {material!r}")
         host._sphere_material = material
     if 'sphere_deformation' in kwargs:
-        host._sphere_deformation = _sphere_bounded(kwargs['sphere_deformation'], 0.0, 2.0, 'sphere_deformation')
+        host._sphere_deformation = _sphere_bounded(kwargs['sphere_deformation'], 0.0, 3.0, 'sphere_deformation')
     if 'sphere_rotation_speed' in kwargs:
         host._sphere_rotation_speed = _sphere_bounded(kwargs['sphere_rotation_speed'], 0.0, 2.0, 'sphere_rotation_speed')
     if 'sphere_gloss' in kwargs:
@@ -150,7 +150,7 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._sphere_surface_detail = _sphere_bounded(kwargs['sphere_surface_detail'], 0.0, 2.0, 'sphere_surface_detail')
     for key, maximum in (
         ('sphere_bass_response', 2.0), ('sphere_mid_response', 2.0),
-        ('sphere_high_response', 2.0), ('sphere_vocal_response', 2.0),
+        ('sphere_high_response', 2.0), ('sphere_vocal_response', 3.0),
         ('sphere_bump_reactivity', 2.0),
         ('sphere_size_response', 2.0),
         ('sphere_energy_curve', 2.0),

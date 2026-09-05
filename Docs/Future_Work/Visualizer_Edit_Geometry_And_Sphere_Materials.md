@@ -26,12 +26,15 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
 
 ### Reopened live-edit failure and extreme main outlines
 
-- [~] Fix the operator's Bubble freeze during Edit and after Save. The archived 03:24–03:26 run in
-  `logs/evidence_chest/fw_bubble_edit_freeze_2026_09_05_new` keeps advancing fresh logical Bubble states
-  through 03:26:59, but rejects incoherent working rectangle/extent pairs during resizing. Trace repeated
-  moves within one gesture, integer rounding and interleaved publication; preserve independent extent/scale.
-- [ ] Prove visible snapshot revisions continue through repeated drag updates and Save, with unchanged
-  generation/source ownership. Do not hide projection rejection by relaxing coherence or restarting Bubble.
+- [x] Geometry-only Save now promotes the live retained rectangle/extent and keeps the visualizer running in the same
+  generation; the operator reports this UX path is working extremely well. No teardown is used as a geometry crutch.
+- [~] Cross-display drag is the remaining edit-lifecycle defect. The 03:40-03:45 run emitted 432 occupied-target QML
+  warnings and retained one `QuickDisplayVisualizerOwner` through the application-exit destruction barrier. Source repair
+  retargets the owner's active runtime/frame pacer with the transferred presentation and latches one display crossing per
+  move gesture. Await physical proof that no dead duplicate or seam-thrash remains.
+- [~] One extreme transfer gesture still produced an incoherent 439x960 rectangle against a 9520.87x25548.02 logical
+  extent. Keep the coherence rejection; do not hide it by relaxing uniform-scale math. Revisit viewport scaling/reactivity
+  in the next geometry session unless the transfer repair removes the reproduction.
 - [x] Reduce full main-outline width by one additional logical pixel at extreme visible sizes. Reuse the
   existing area-based large-stroke ramp (zero through 1.75x canonical linear scale, full at 2.5x) for a
   continuous reduction. Keep Ghost and small/canonical widths; retain derivative coverage and radius response.
@@ -44,7 +47,16 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
 - [x] Define stronger independent bass/mid/high and vocal-range deformation, preserving a quiet/idle state and controls
   that can return to restraint. Derive a finite maximum envelope and fit/framing contract explicitly.
 - [x] Add independently adjustable whole-body transient growth/contraction, base bump and bump reactivity.
-- [x] Magma: flowing detailed emissive fissures, diffuse smoke-like fire, smoke/ash and downward lava drips.
+- [~] Whole-body size response follow-up: move the transient growth envelope out of the render callback into
+  `SphereFrameRuntime`, using one bounded near-critical spring on the sole authored logical cadence. High Size Response
+  may now reach materially larger (~60% radius target at the maximum setting) breathing/elastic expansion instead of the
+  old ~20% ceiling; render consumes only immutable `SphereFrame.size_pulse`. Await eyes-on timing/amplitude acceptance.
+- [~] Magma fissure relief follow-up: make the glowing fissure field negative bump height while retaining modest raised
+  crust, so cracks read as cut inward rather than embossed. Colour/fire semantics stay local and unchanged. Await eyes-on.
+- [~] Magma secondary-effects visual acceptance: architecture already provides flowing emissive fissures plus bounded
+  fire/smoke/ash/drop passes, but the operator reports the current drops read as uniform fire-coloured teardrops. Future visual
+  refinement should make the ensemble clearly read as **ash + smoke + viscous leaking lava**, with lava drops/blobs carrying
+  molten-body variation rather than merely recoloured tear silhouettes. This is visual polish, not a core-transfer blocker.
 - [x] Water: translucent depth/edge treatment, rolling detail and rounded irregular falling 3D blobs (no drip neck).
 - [x] Chrome/Silver/Obsidian: detailed material-specific relief with readable light on stronger deformation.
 - [x] Keep topology static and GPU-owned. Reuse authored time/energy for bounded analytical motion and
@@ -60,18 +72,16 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
 - [x] Update Spec/Index and focused contracts alongside landed geometry/material changes.
 - [ ] Focused tests and relevant shared destination gates; classify unrelated debris in Future_Cleanup.
 - [ ] Commit/push each validated slice. Keep physical 60/165Hz, mixed-DPR and installed tests explicit.
-- [ ] Awaiting operator validation: live adjustment stability, Bubble outline/response, stronger Sphere
-  reactivity and the requested material appearance. Automatic tests cannot close this perception gate.
+- [ ] Awaiting operator validation: cross-display transfer stability, Bubble extreme viewport response, the new elastic
+  Sphere size envelope and inward Magma fissure relief. Automatic tests cannot close these perception gates.
 
 ## Discovered follow-ups (after active geometry/material work)
 
 - [~] Sine/Oscilloscope missing visualizer glow: trace actual frozen parameters and shader coverage at
   different scales. Restore glow independently of the current AA line core; add falsifying GL evidence.
-- [~] Edit exit teardown assessment: inventory its current owners/resets, source freshness and stale-frame
-  evidence. Decompose and implement ordinary Save/Cancel without teardown if those contracts can be retained.
-  Preserve activation/disable/transfer retirement where identities or actual render ownership change.
-  Source audit confirms stale committed rectangles are currently concealed by replacement. Implementation:
-  `Docs/Future_Work/Edit_Layout_Live_Commit.md`.
+- [x] Geometry-only Edit Save no longer tears down the runtime: retained state is promoted before CUSTOM clears.
+  Display transfer/family topology changes remain explicit reconciliation boundaries. Implementation and remaining
+  cross-display acceptance: `Docs/Future_Work/Edit_Layout_Live_Commit.md`.
 - [~] Sine/Spline pulse coverage: operator sees improved AA but jagged edges during pulses in Wobble
   Groove. Reproduce with the actual curated preset and strong pulse; inspect signed-distance footprint
   before any amplitude or temporal filtering change. Signed-distance derivatives now avoid cusp
@@ -119,3 +129,12 @@ huge saved world fills a large visible viewport (the inspected profile resolves 
   the actual primary profile geometry are inspected; 14 focused GL/glow/coverage tests pass.
 - [x] Focused checks and durable contract update. The operator confirms visible glows; final large-scale
   balance remains Awaiting Physical Validation.
+
+## 2026-09-05 operator follow-up
+
+- Cross-display Save/slot-load failures were lifecycle ownership, not legacy geometry-slot format. Manager/unit retirement
+  authority now follows the retained Visualizer scene to the target display.
+- The extreme incoherent rect/extent rejection remains deliberately fail-loud and is deferred to the next geometry pass; do
+  not widen tolerance to hide a genuine anisotropic owner split.
+- Sphere's elastic whole-body size response is physically reported as substantially better. Deformation and Vocal Response
+  upper bounds are raised 2.0 -> 3.0 with unchanged defaults; shader deformation remains finite/positive at the new bound.

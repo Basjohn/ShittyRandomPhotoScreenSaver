@@ -1,46 +1,67 @@
 # Keep retained presentation alive after geometry-only Edit Save
 
-Status: source audit complete; implementation active. Live sequencing: `FWPlan.md`.
+Status: **geometry-only live commit landed and physically accepted; topology-changing Save still reconciles**. Live sequencing: `FWPlan.md`.
 
-The operator reports nearly correct live visualizer adjustment and asks whether ordinary edit exit can avoid
-teardown. Archived `fw_geo_material_2026_09_05` logs show Save triggers full `custom_edit` replacement and input
-suppression. They do not establish stale-frame behaviour for a path that currently never runs without replacement.
-Validate continuity directly rather than infer it from the absence of logs.
+The retained path now keeps ordinary same-display geometry Save in the current runtime generation. The operator reports
+that live visualizer adjustment and Save are flowing extremely well: no visible teardown/rebuild is required to commit the
+already-rendered rectangle/extent. Display ownership transfer remains a topology boundary and is separately under repair.
 
 ## Owning seams and decision
 
-`QuickCustomLayoutOwner.save` persists before promotion and ending the session. Its visualizer promotion currently
-commits controller metrics alone; the live visualizer owner's committed rectangle stays old. The next ordinary frame
-therefore resolves an old rectangle against a new extent. Generation replacement currently conceals this fault.
-Ordinary presentations also need their existing `OverlayGeometryBinding.policy.committed_rect` promoted, otherwise
-a subsequent preferred-size event can restore saved-before-edit geometry.
+`QuickCustomLayoutOwner.save` now persists first, classifies whether topology changed, promotes the already-retained
+working geometry when it did not, then ends CUSTOM. `QuickDisplayVisualizerOwner.commit_live_custom_layout` atomically
+promotes the current retained rectangle, viewport extent and controller committed metrics while the temporary CUSTOM
+override is still active. Clearing CUSTOM therefore changes **authority**, not the value consumed by the next logical step.
+Ordinary retained families promote through their existing presentation/binding owner as part of the same transaction.
 
-Implement an explicit running-safe `QuickDisplayVisualizerOwner.commit_live_custom_layout(local_rect, viewport_extent)`.
-While the CUSTOM override is still active, validate and capture its current presentation, then promote owner rectangle,
-owner extent and controller committed metrics together on the existing GUI owner. Do not call the configure-only
-operation or recreate/retire the runtime. The effective extent must remain identical across clearing CUSTOM.
+Save order is now: persist successfully -> classify topology -> promote retained geometry -> end CUSTOM -> continue
+running. Cancel restores the baseline and ends CUSTOM without promotion. Invalid live promotion still fails loudly.
 
-Save order: persist successfully -> promote working geometry -> end CUSTOM -> continue running. Cancel restores the
-baseline and ends CUSTOM without promotion. Persistence failure must leave the editable session and live baseline intact.
+The no-teardown admission remains explicit: same-display, enabled, non-removed items with geometry/scale/payload changes
+only. Family presence/removal, display transfer and monitor-route changes retain generation reconciliation. Reset and
+layout-slot topology semantics remain explicit. This is not a hidden fallback.
 
-The initial no-teardown admission is explicit: same-display, enabled, non-removed items with geometry/scale/payload
-changes only. Changes to family presence, removal or display routing retain the existing generation reconciliation,
-with a reason logged. Reset and layout-slot loading retain their explicit reload semantics. This is a topology boundary,
-not a silent fallback for malformed data or failed live promotion. Invalid promotion must fail loudly.
+The 03:40-03:45 operator run exposed the remaining cross-display edge clearly: 432 QML warnings reported
+`CUSTOM Visualizer target already has a retained scene admission`, followed at shutdown by a destruction-barrier timeout
+retaining one `QuickDisplayVisualizerOwner`. Source tracing found that scene transfer moved `_presentation_runtime` but
+left the owner's active `_runtime`/frame-pacer/bind/retirement edge on the old display. A later mode/preset or retirement
+could therefore act on the wrong scene. The current source repair moves that runtime edge transactionally with the retained
+presentation and latches one visualizer display crossing per pointer gesture to prevent seam ping-pong. The CUSTOM
+Visualizer frame also exposes theme-palette left/right display-hop buttons. Those buttons carry only semantic direction into
+Python; `QuickCustomLayoutOwner` selects the nearest horizontal retained display, projects the current shape/relative position,
+and the existing scene coordinator performs the same single retained admission transfer. There is no second transfer owner and
+no fade/timer. Physical validation is still required; display-transfer Save intentionally remains a topology reconciliation
+after the move completes.
 
 ## Live implementation checklist
 
 - [x] Trace Save/Cancel, controller metrics, committed layout owners and normal-frame publications.
-- [ ] Implement and validate the running-safe visualizer commit operation; stage values before mutation.
-- [ ] Promote ordinary retained geometry through its existing binding, including applied size payload semantics.
-- [ ] Route geometry-only Save through promotion before session removal; retain explicit topology reconciliation.
-- [ ] Prove all six modes retain rectangle/extent across the next normal publication, along with owner, source
-  identity, runtime generation and logical-state identity. Include extreme saved extents and wheel/edge adjustment.
-- [ ] Prove Cancel retains baseline committed state and failed persistence does not promote or end editing.
-- [ ] Prove ordinary preferred-size events retain saved geometry and geometry-only Save requests no replacement.
-- [ ] Prove removal, display transfer and explicit reset/slot-load semantics still reconcile as required.
-- [ ] Review focused results, update durable contracts and checkpoint commit/push.
-- [ ] Awaiting physical validation: real music continues without a Save hitch, wrong geometry or stale-frame interval
-  at 60/165 Hz; verify mixed-DPR and repeated Save/Cancel after the source-to-visible gates pass.
+- [x] Implement the running-safe visualizer commit operation; stage/validate values before mutation.
+- [x] Promote ordinary retained geometry through its existing binding, including applied size payload semantics.
+- [x] Route geometry-only Save through promotion before session removal; retain explicit topology reconciliation.
+- [x] Prove all six modes retain rectangle/extent across the next normal publication, along with owner, source
+  identity, runtime generation and logical-state identity in focused production-chain coverage.
+- [x] Prove Cancel retains baseline committed state and failed persistence does not promote or end editing.
+- [x] Prove ordinary preferred-size events retain saved geometry and geometry-only Save requests no replacement.
+- [~] Display transfer remains topology-changing: active retained runtime/pacer ownership now moves with the scene; both
+  drag and discrete theme-palette left/right hop controls use that same transaction. Retain one explicit generation
+  reconciliation on Save until a later design proves cross-display live commit safe.
+- [ ] Awaiting physical validation: cross-display drag **and arrow hop** each move exactly one live visualizer, preserve the
+  intended shape/placement, leave no dead duplicate, produce no QML warning storm/destruction-barrier owner, and same-display
+  Save remains hitch-free at 60/165 Hz. Decide on any fade-out/fade-in only from this run.
 
 No timer, polling, render loop, source subscription, alternate persistence authority or new generation fence is added.
+
+## 2026-09-05 cross-display lifecycle follow-up
+
+The first no-teardown geometry work exposed a separate display-transfer owner split. The retained scene and
+`QuickDisplayVisualizerOwner._runtime` moved, but `DisplayManager._quick_visualizer_unit` and the source
+`QuickDisplayUnit._visualizer_owner` retirement attachment did not. A later slot-load destruction barrier therefore
+retained only `QuickDisplayVisualizerOwner`, while Save after transfer could retire the target pacer through the owner and
+then make the target unit touch that already-closed pacer. The repair moves manager unit + exact unit retirement attachment
+in the same event transaction as the owner runtime/pacer edge. Geometry-only same-display Save remains no-teardown;
+layout-slot load and topology-changing Save remain fenced generation replacements pending further physical proof.
+
+### Transaction hardening after WIP review
+
+The lifecycle repair is now intentionally **one Visualizer session callback**, not two ordered subscribers. The coordinator delegates the scene move to `QuickCustomLayoutOwner._transfer_visualizer_display_transaction()`, which performs retained-scene transfer and the manager/unit/pacer move before the session placement can commit. If manager-side transfer fails, the retained scene is transferred back first; only then may the coordinator restore the working item geometry. This closes the partial-commit hole identified in the interrupted WIP. See `Docs/Historical_Bugs/Visualizer_Cross_Display_Split_Ownership_2026-09-05.md`.

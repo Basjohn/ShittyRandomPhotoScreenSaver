@@ -198,9 +198,12 @@ The desktop snapshot is never queue/history/current-image semantic truth and is 
 ## Actions / images
 
 Widget interaction glow: `InputSettings` -> `DisplayManager._configure_quick_auxiliary` resolves the shared optional
-colour through `ui.widget_glow_style` (`card.border` inheritance) -> existing Quick input snapshot/scene-generation
-gate -> ordinary host -> `OverlayWidget`/`WidgetInteractionGlow`. The input owner observes discrete presses without
-intercepting family actions; the shell observes hover edges. One lazy shader and finite animations own pixels only.
+colour through `ui.widget_glow_style` (`card.border` inheritance) plus the canonical 0-100% intensity scalar -> existing
+Quick input snapshot/scene-generation gate -> ordinary host -> `OverlayWidget`/`WidgetInteractionGlow`. The input owner
+observes discrete presses without intercepting family actions; the host turns each admitted press into one last-clicked
+ordinary-card boolean target (or clears it on empty space), while the shell observes hover edges. Hover/click fade toward
+their state on entry/selection and remain settled until that state changes, at which point they fade gently out. One lazy
+shader and finite edge-triggered animations own pixels only; no recurring cadence exists.
 
 ```text
 QML semantic action -> Python admission/action owner -> business side effect -> accepted state -> presentation

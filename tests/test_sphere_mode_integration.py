@@ -9,7 +9,11 @@ from core.settings.visualizer_mode_registry import (
     resolve_effective_enabled_modes,
 )
 from widgets.spotify_visualizer.config_applier import apply_logical_vis_mode_kwargs
-from widgets.spotify_visualizer.render_state import SphereFrame, VisualizerEnergyState
+from widgets.spotify_visualizer.render_state import (
+    SphereFrame,
+    VisualizerEnergyState,
+    VisualizerTransientState,
+)
 from widgets.spotify_visualizer.sphere_frame_runtime import SphereFrameRuntime
 
 
@@ -61,7 +65,7 @@ def test_sphere_config_round_trips_and_applies_at_logical_owner():
         "sphere_mid_response": .8, "sphere_high_response": .4,
         "sphere_vocal_response": 1.75, "sphere_energy_curve": .55, "sphere_material_fx": 1.3,
     })
-    assert settings.sphere_deformation == 2.0
+    assert settings.sphere_deformation == 3.0
     serialized = settings.to_dict()
     assert serialized["widgets.spotify_visualizer.sphere_material"] == "Magma"
     assert serialized["widgets.spotify_visualizer.sphere_surface_detail"] == 0.0
@@ -73,7 +77,7 @@ def test_sphere_config_round_trips_and_applies_at_logical_owner():
     class Host: pass
     host = Host()
     apply_logical_vis_mode_kwargs(host, settings.__dict__)
-    assert (host._sphere_material, host._sphere_deformation, host._sphere_light_direction) == ("Magma", 2.0, "SE")
+    assert (host._sphere_material, host._sphere_deformation, host._sphere_light_direction) == ("Magma", 3.0, "SE")
     assert host._sphere_parameters["sphere_surface_detail"] == 0.0
     assert host._sphere_parameters["sphere_bump_reactivity"] == .9
     assert host._sphere_parameters["sphere_size_response"] == 1.7
@@ -106,7 +110,7 @@ def test_sphere_response_controls_are_frozen_bounded_and_default_dormant():
     assert host._sphere_parameters["sphere_bass_response"] == 2.0
     assert host._sphere_parameters["sphere_mid_response"] == 0.0
     assert host._sphere_parameters["sphere_high_response"] == .75
-    assert host._sphere_parameters["sphere_vocal_response"] == 2.0
+    assert host._sphere_parameters["sphere_vocal_response"] == 3.0
     assert host._sphere_parameters["sphere_bump_reactivity"] == 2.0
     assert host._sphere_parameters["sphere_size_response"] == 2.0
     assert host._sphere_parameters["sphere_energy_curve"] == .55
@@ -131,7 +135,11 @@ def test_sphere_runtime_fences_activation_and_carries_only_frozen_parameters():
         activation_id=4, energy=energy, parameters=host._sphere_parameters)
     assert first is not None and later is not None and reset is not None
     assert first.authored_time == 0.0 and later.authored_time == 1.0 and reset.authored_time == 0.0
-    frame = SphereFrame(authored_time=later.authored_time, parameters=later.parameters)
+    frame = SphereFrame(
+        authored_time=later.authored_time,
+        size_pulse=later.size_pulse,
+        parameters=later.parameters,
+    )
     assert frame.parameters["sphere_material"] == "Silver"
     prior_parameters = host._sphere_parameters
     apply_logical_vis_mode_kwargs(host, {"sphere_material": "Magma", "sphere_gloss": .2})
@@ -142,6 +150,66 @@ def test_sphere_runtime_fences_activation_and_carries_only_frozen_parameters():
     runtime.retire()
     assert runtime.resolve(now_ts=13.0, runtime_generation=1, engine_generation=2,
         activation_id=5, energy=energy, parameters=host._sphere_parameters) is None
+
+
+def test_sphere_size_response_is_smooth_elastic_and_materially_larger_at_high_setting():
+    runtime = SphereFrameRuntime()
+    energy = VisualizerEnergyState()
+    transient = VisualizerTransientState(mid=1.0, onset_detected=True, onset_strength=1.0)
+
+    class Host: pass
+    host = Host()
+    apply_logical_vis_mode_kwargs(host, {
+        "sphere_size_response": 2.0,
+        "sphere_energy_curve": 0.60,
+    })
+    first = runtime.resolve(
+        now_ts=20.0, runtime_generation=1, engine_generation=2, activation_id=3,
+        energy=energy, parameters=host._sphere_parameters, transient=transient,
+    )
+    assert first is not None and first.size_pulse == 0.0
+
+    samples = []
+    for index in range(1, 181):
+        frame = runtime.resolve(
+            now_ts=20.0 + index / 90.0,
+            runtime_generation=1, engine_generation=2, activation_id=3,
+            energy=energy, parameters=host._sphere_parameters, transient=transient,
+        )
+        assert frame is not None
+        samples.append(frame.size_pulse)
+    # The first logical step cannot snap anywhere near the final growth, while
+    # a sustained strong transient may breathe out to roughly +60% radius.
+    assert 0.0 < samples[0] < 0.05
+    assert samples[20] < samples[60]
+    assert samples[-1] > 0.50
+    assert max(samples) <= 0.72
+
+    quiet = VisualizerTransientState()
+    release = []
+    for index in range(181, 226):
+        frame = runtime.resolve(
+            now_ts=20.0 + index / 90.0,
+            runtime_generation=1, engine_generation=2, activation_id=3,
+            energy=energy, parameters=host._sphere_parameters, transient=quiet,
+        )
+        assert frame is not None
+        release.append(frame.size_pulse)
+    assert 0.0 < release[0] < samples[-1]
+    assert release[-1] < release[0] * 0.5
+
+    apply_logical_vis_mode_kwargs(host, {"sphere_size_response": 0.0})
+    reset = runtime.resolve(
+        now_ts=30.0, runtime_generation=1, engine_generation=2, activation_id=4,
+        energy=energy, parameters=host._sphere_parameters, transient=transient,
+    )
+    next_frame = runtime.resolve(
+        now_ts=30.1, runtime_generation=1, engine_generation=2, activation_id=4,
+        energy=energy, parameters=host._sphere_parameters, transient=transient,
+    )
+    assert reset is not None and next_frame is not None
+    assert reset.size_pulse == 0.0
+    assert next_frame.size_pulse == 0.0
 
 
 def test_capture_publishes_sphere_payload_and_common_energy_at_snapshot_seam():

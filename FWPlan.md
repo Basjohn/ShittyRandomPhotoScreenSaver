@@ -8,10 +8,15 @@ current source before each slice. Starting comparison HEAD: `0fd64b3d00283461413
 
 ## Active sequence
 
-- [~] **Priority — Bubble freezes during Edit and after Save:** archived the new 03:24–03:26 run in
-  `logs/evidence_chest/fw_bubble_edit_freeze_2026_09_05_new`. Fresh audio and simulation continue after Save,
-  while live rectangle/extent pairs repeatedly fail projection coherence. Fix the gesture owner and prove
-  repeated drag updates plus normal-frame publication through Save before admitting no-teardown completion.
+- [x] **Geometry-only Edit Save continuity:** retained geometry/extent is promoted in place and the operator reports
+  Save is flowing extremely well without teardown, stale re-entry, or a visible restart. Keep this as the normal
+  same-display path; topology-changing operations remain explicit reconciliation.
+- [~] **Priority — Visualizer cross-display ownership transfer:** the 03:40-03:45 run produced 432 occupied-target QML
+  warnings plus one surviving `QuickDisplayVisualizerOwner` at the destruction barrier. Source repair moves the active
+  runtime/frame-pacer/bind/retirement edge with the retained scene and permits one crossing per pointer gesture. A small
+  theme-palette left/right arrow control is now also present on the Visualizer CUSTOM frame; it routes through the same Python
+  owner seam and preserves shape/relative placement without inventing another transfer authority. Await physical proof of both
+  drag and button transfer. Do **not** add source/target fades until the operator run shows they improve the experience.
 - [x] **Bubble main outlines at extremes:** reduced full main-outline width by another logical pixel at
   large sizes through the existing visible-area transition. Small/canonical and Ghost styling remain intact.
   Three real-GL tests pass, including same-area wide/tall outlines; physical weight acceptance remains open.
@@ -66,13 +71,17 @@ Immediately after clearing:
 
 effective extent = newly committed extent
 
-- [ ] **Early follow-up — Widget interaction glow hold/fade controls:** only after the active Visualizer
-  geometry and Sphere-quality slice is implemented and visually checked, create a technical decomposition
-  before implementation. Add a settings-owned intensity control and make hover/click fade-in and fade-out
-  three times slower. Retain hover glow while the Cursor Halo is over the widget and click glow while that
-  widget remains the last clicked target until a click elsewhere; end each prerequisite through existing
-  events, then fade gently. Do not add a timer, poller or new persistence owner: if sustained glow cannot
-  remain event-owned, omit that sustained behavior while retaining intensity and slower finite fades.
+- [~] **Widget interaction glow hold/fade controls — SOURCE IMPLEMENTED / PHYSICAL ACCEPTANCE OPEN:**
+  `input.widget_glow_intensity` is now a settings-owned 0-100% slider projected once into the immutable Quick
+  input snapshot. Hover fades in on the existing `HoverHandler` edge, remains settled while hovered, and fades
+  gently only when hover state ends. Click is no longer a self-decaying one-shot pulse: one admitted window
+  press selects the top retained ordinary card as `widgetGlowClicked`; it remains settled as the last-clicked
+  target until another admitted press selects another card or empty space, then fades out. Child semantic actions
+  still own their click; the observer adds no foreground MouseArea. Physical follow-up found 100% too weak and missing
+  on the Visualizer plus incorrectly framed on shell-less Digital Clock. The follow-up therefore strengthens the same
+  event-held primitive, projects it around the retained Visualizer viewport/frame, and lets Digital Clock use intrinsic
+  content bounds when its card shell is absent. No Timer, poller, worker, frame loop or new persistence/cadence owner.
+  Real Quick strength/geometry still needs operator eyes.
 
 - [x] Read backlog, current navigation/contracts and repository guardrails; preserve the clean starting tree.
 - [x] **FW1 — Widget interaction glow:** two Interaction switches, theme-inheriting shared swatch, one retained
@@ -84,10 +93,14 @@ effective extent = newly committed extent
   Elastic's tenfold late velocity discontinuity is replaced by continuous quintic travel/rebound; Wobble/Flex
   settle with zero warp velocity. 106 focused transition tests pass; physical timing acceptance remains open.
   Decomposition: `Docs/Future_Work/Slide_Motion_Options_Decomposition.md`.
-- [~] **FW3 — Deformable Sphere — motion restored; material expansion active:** dormant-by-default 3D mesh, five material presets including Water,
+- [~] **FW3 — Deformable Sphere — motion/material follow-up active:** dormant-by-default 3D mesh, five material presets including Water,
   bump/detail controls, source-fenced immutable capture, lazy Settings and event-only inactive GPU retirement.
   Real Quick captures inspected and relevant automatic gates passed; physical acceptance remains separate.
-  Detailed evidence: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
+  Detailed evidence: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`. Current follow-up moves whole-body growth into
+  a logical-cadence elastic/breathing spring with a much larger high-setting ceiling and makes Magma fissure bump relief
+  explicitly inward. Operator acceptance says the new size motion feels substantially better; Deformation and Vocal
+  Response now expose a 3.0 upper range (50% above the prior 2.0 cap) while defaults remain unchanged. `Future_Work.md` now records Block Spins + Sphere as the two-consumer proof for a small dormant 3D
+  renderer substrate; transition/Visualizer lifecycle owners remain separate.
 - [~] **Bubble aspect/response — awaiting physical validation:** equal-area response replaces the rejected
   height-only coupling; outlines are one pixel thinner with derivative coverage. Live edit preview uses the
   same working geometry as the edit frame. Immutable-tuple reuse remains landed without cadence changes.

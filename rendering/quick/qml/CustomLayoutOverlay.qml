@@ -18,6 +18,13 @@ Item {
     property color closeButtonColor: "#000000"
     property color closeButtonBorderColor: "#ffffff"
     property color closeButtonGlyphColor: "#ffffff"
+    // Discrete Visualizer display-hop controls reuse the resolved menu/theme
+    // palette. They are intentionally separate from drag transfer so native
+    // QQuickWindow pointer grabs are not the only way to change ownership.
+    property color transferButtonColor: "#f21b1d24"
+    property color transferButtonHoverColor: "#4f77b9e8"
+    property color transferButtonBorderColor: "#d8f3ff"
+    property color transferButtonGlyphColor: "#d8f3ff"
 
     visible: editActive
     enabled: editActive
@@ -63,6 +70,8 @@ Item {
             required property bool resizable
             required property bool viewportResizeCapable
             required property real resizeScale
+            required property bool canTransferLeft
+            required property bool canTransferRight
 
             // Gmail/Reddit establish the shared branded-header row at an authored
             // 32 px centreline (14 px card inset + 18 px half-height).  The edit
@@ -177,6 +186,110 @@ Item {
                         editFrame.index,
                         wheel.angleDelta.y
                     )
+                }
+            }
+
+            Rectangle {
+                id: transferLeftControl
+                objectName: "customLayoutTransferLeft-" + editFrame.widgetId
+                visible: editFrame.widgetId === "spotify_visualizer" && editFrame.canTransferLeft
+                width: 28
+                height: 28
+                radius: width / 2
+                x: 8
+                y: Math.max(8, (editFrame.height - height) / 2)
+                z: 30
+                antialiasing: true
+                color: transferLeftMouse.containsMouse
+                    ? customLayoutOverlay.transferButtonHoverColor
+                    : customLayoutOverlay.transferButtonColor
+                border.width: 1
+                border.color: customLayoutOverlay.transferButtonBorderColor
+
+                Item {
+                    anchors.centerIn: parent
+                    width: 10
+                    height: 14
+                    Rectangle {
+                        width: 9
+                        height: 2
+                        radius: 1
+                        color: customLayoutOverlay.transferButtonGlyphColor
+                        antialiasing: true
+                        rotation: -45
+                        x: -1
+                        y: 3
+                    }
+                    Rectangle {
+                        width: 9
+                        height: 2
+                        radius: 1
+                        color: customLayoutOverlay.transferButtonGlyphColor
+                        antialiasing: true
+                        rotation: 45
+                        x: -1
+                        y: 9
+                    }
+                }
+
+                MouseArea {
+                    id: transferLeftMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: customLayoutOverlay.sessionModel.transferItem(editFrame.index, "left")
+                }
+            }
+
+            Rectangle {
+                id: transferRightControl
+                objectName: "customLayoutTransferRight-" + editFrame.widgetId
+                visible: editFrame.widgetId === "spotify_visualizer" && editFrame.canTransferRight
+                width: 28
+                height: 28
+                radius: width / 2
+                x: Math.max(8, editFrame.width - width - 8)
+                y: Math.max(8, (editFrame.height - height) / 2)
+                z: 30
+                antialiasing: true
+                color: transferRightMouse.containsMouse
+                    ? customLayoutOverlay.transferButtonHoverColor
+                    : customLayoutOverlay.transferButtonColor
+                border.width: 1
+                border.color: customLayoutOverlay.transferButtonBorderColor
+
+                Item {
+                    anchors.centerIn: parent
+                    width: 10
+                    height: 14
+                    Rectangle {
+                        width: 9
+                        height: 2
+                        radius: 1
+                        color: customLayoutOverlay.transferButtonGlyphColor
+                        antialiasing: true
+                        rotation: 45
+                        x: 2
+                        y: 3
+                    }
+                    Rectangle {
+                        width: 9
+                        height: 2
+                        radius: 1
+                        color: customLayoutOverlay.transferButtonGlyphColor
+                        antialiasing: true
+                        rotation: -45
+                        x: 2
+                        y: 9
+                    }
+                }
+
+                MouseArea {
+                    id: transferRightMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: customLayoutOverlay.sessionModel.transferItem(editFrame.index, "right")
                 }
             }
 

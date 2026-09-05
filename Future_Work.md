@@ -137,6 +137,30 @@ Shared 3D infrastructure should therefore be dependency-light at import, while c
 costly assets belong to the admitted renderer and are released on retirement/context loss. There must never be a hidden
 "3D subsystem" ticking or holding heavy resources in the background when all of its real consumers are disabled/dormant.
 
+### Two-consumer 3D substrate — Block Spins + Sphere
+
+This is no longer a one-off hypothesis. **Quick Block Spins** and the now-landed deformable **Sphere** are two independent
+3D consumers with different product owners: a finite transition run versus a persistent Visualizer logical/runtime path.
+They both require context-local programs/buffers, real Z/depth, projection, GL-state hygiene and explicit retirement. That
+is enough evidence to extract a **small low-level renderer substrate when the next relevant slice touches these seams**.
+It is not permission to merge transition and Visualizer lifecycle/state owners.
+
+Prefer shared, dependency-light primitives for the parts the two consumers have actually proven common:
+
+- context-local program / VAO / VBO / static-mesh allocation and release helpers;
+- bounded depth clear/scissor ownership inside the consuming Quick surface;
+- small aspect-correct perspective / projection helpers where equations truly match;
+- GL-state restoration helpers that compose with the existing Quick render fence;
+- tiny presentation-neutral normal/lighting math only after identical semantics are demonstrated.
+
+Keep the transition run, source/destination texture ownership, fracture/tile per-run state, Visualizer audio/logical state,
+Sphere deformation/materials and every feature's authored shader semantics local. Do **not** grow a generic camera tree,
+material hierarchy, physics engine or always-resident "SRPSS 3D engine". Heavy shared resources remain lazy and dormant.
+
+Future **Glass Shatter**, **Exploding Tiles**, Slide **Perspective Push**, the optional tiny-Z pile in **Directional Pixel
+Accretion**, and later page-curl/fold/cloth-like ideas should inspect this substrate first instead of inventing another 3D
+resource/depth foundation. Extract only what their concrete implementation proves reusable.
+
 For a **deactivated** transition: keep cheap metadata available, exclude it from Random/Cycle, do not
 import heavy implementation solely for catalog construction, do not compile effect shaders, do not
 create effect-specific GL resources, and do not run effect-specific timers/workers.
@@ -452,12 +476,13 @@ or distort an existing helper merely to claim reuse.
     the isolated mode-owned logical/frame runtime as the clock/state authority. The Sphere renderer consumes authored
     state/time; render refresh never advances simulation.
 
-### 7.1B First-consumer reusable-infrastructure policy
+### 7.1B Second-consumer reusable-infrastructure policy
 
-Treat the Sphere as the first **demanding consumer** of reusable SRPSS 3D rendering primitives, not as permission to build
-an SRPSS general-purpose 3D engine before the object exists.
+Sphere is the first **demanding Visualizer** consumer and the second independent Quick 3D consumer after Block Spins. Its
+landed implementation confirms the small shared-substrate candidates listed above, while also proving that transition and
+Visualizer ownership must remain separate. Do not turn that proof into a general-purpose 3D engine.
 
-Likely reusable candidates, **if the Sphere implementation actually justifies them**, include:
+Reusable candidates justified by the two current consumers include:
 
 - static mesh/buffer ownership and context-local release helpers;
 - aspect-correct perspective and small model/view/projection math helpers;
@@ -467,8 +492,8 @@ Likely reusable candidates, **if the Sphere implementation actually justifies th
 - tiny lit-mesh shader/math utilities only where they do not encode Sphere semantics.
 
 Keep Sphere-specific deformation fields, spherical-harmonic/lobe/noise choices, audio-to-deformation mapping,
-deformed-sphere normal strategy, material identities (**Chrome / Obsidian / Magma / Silver**) and authored behavior local to
-the mode unless a later second concrete consumer proves an abstraction worthwhile.
+deformed-sphere normal strategy, material identities (**Chrome / Obsidian / Magma / Silver / Water**) and authored behavior local to
+the mode unless another concrete consumer proves that exact semantic primitive is genuinely shared.
 
 Do **not** pre-build a general scene graph, camera framework, material-class hierarchy, 3D object system or generic physics
 engine. When reuse looks plausible but is not yet justified, record the candidate in the Sphere decomposition rather than
@@ -629,12 +654,15 @@ experiment record rather than reviving 2026-09-02 debris.
 
 # 10. Operator-requested UI polish contracts
 
-## 10.1 Widget glow on hover / click
+## 10.1 Widget glow on hover / click — landed, physical tuning open
 
-Add two Interaction controls: **Widget Glow on Hover** and **Widget Glow on Click**, with one shared glow
-colour swatch. The visual should pulse in relation to cursor interaction and decay when hover/click state
-ends. Implementation must be event/state driven: no recurring timer, poller, worker, or thread-contention
-owner. Prefer one shared retained visual primitive rather than per-widget implementations.
+Display -> Interaction now owns **Widget Glow on Hover**, **Widget Glow on Click**, the shared theme-inheriting
+colour swatch, and a 0-100% **Glow Intensity** slider. The retained primitive is state-edge driven rather than a
+self-decaying pulse: hover fades in and stays settled until the existing hover edge ends; click selects the last
+clicked ordinary card and stays settled until a later admitted press selects another card or empty space. State
+changes alone trigger finite fade-in/fade-out animations. No recurring timer, poller, worker, independent frame
+loop or per-widget controller exists. Future work here is eyes-on timing/subtlety only unless a concrete defect is
+found; do not reopen ownership or invent sustained animation cadence.
 
 ## 10.2 Settings FlowContainer polish [LOW]
 

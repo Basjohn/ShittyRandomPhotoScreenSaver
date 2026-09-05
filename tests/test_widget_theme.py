@@ -1,9 +1,14 @@
-"""Widget Theme Phase 1 — semantic/serialization/resolver contract.
+"""Widget Theme — semantic/serialization/resolver contract (colour-only v3).
 
 Covers the guaranteed Default Dark fallback, whole-or-reject `.srwtheme` I/O, the
-catalogue, the effective-material resolution table, the Keep Synced identity rule,
-Custom snapshot resolution, and the theme-owned-edit ownership transition. No Qt
-runtime, no render cost — this is the Phase 1 data/state-machine layer.
+catalogue, the Keep Synced identity rule, Custom snapshot resolution, and the
+theme-owned-edit ownership transition. No Qt runtime, no render cost — this is the
+data/state-machine layer.
+
+The abandoned Glass/Acrylic card-material dimension was removed with the runtime
+rollback; the schema is colour-only schema-v3. The source-level guard that material
+does not creep back lives in ``test_widget_theme_no_material_contract.py``; this
+module owns the surviving behavioural contracts.
 """
 
 from __future__ import annotations
@@ -14,10 +19,9 @@ import pytest
 
 from ui.settings_theme_spec import Rgba
 from ui.widget_theme_spec import (
-    CARD_MATERIAL_MODES,
     DEFAULT_DARK_WIDGET_THEME,
+    WIDGET_THEME_SCHEMA_VERSION,
     WidgetThemeSpec,
-    resolve_effective_card_material_mode,
 )
 from ui.widget_theme_io import (
     WIDGET_THEME_FILE_EXTENSION,
@@ -40,32 +44,15 @@ from ui.widget_theme_runtime import (
 )
 
 
-# -- effective material resolver ------------------------------------------- #
+# -- default validity ------------------------------------------------------- #
 
 
-@pytest.mark.parametrize(
-    "default_mode,override,expected",
-    [
-        ("normal", "theme", "normal"),
-        ("glass", "theme", "glass"),
-        ("acrylic", "theme", "acrylic"),
-        ("normal", "glass", "glass"),
-        ("glass", "normal", "normal"),
-        ("normal", "acrylic", "acrylic"),
-        # Fail-safe clamps so a card always has a coherent surface.
-        ("junk", "theme", "normal"),
-        ("normal", "junk", "normal"),
-        ("", "", "normal"),
-    ],
-)
-def test_effective_card_material_mode_table(default_mode, override, expected):
-    assert resolve_effective_card_material_mode(default_mode, override) == expected
-
-
-def test_default_dark_recommends_normal_and_is_valid():
-    assert DEFAULT_DARK_WIDGET_THEME.default_card_material_mode == "normal"
-    assert DEFAULT_DARK_WIDGET_THEME.default_card_material_mode in CARD_MATERIAL_MODES
+def test_default_dark_is_colour_only_v3_and_valid():
     assert DEFAULT_DARK_WIDGET_THEME.theme_id == "default_dark"
+    assert DEFAULT_DARK_WIDGET_THEME.schema_version == WIDGET_THEME_SCHEMA_VERSION
+    # Core card roles are complete on the compiled default.
+    assert "card.background" in DEFAULT_DARK_WIDGET_THEME.colors
+    assert "card.border" in DEFAULT_DARK_WIDGET_THEME.colors
 
 
 # -- whole-or-reject I/O ---------------------------------------------------- #
@@ -88,13 +75,6 @@ def test_missing_semantic_role_rejects_whole_theme():
 def test_unknown_semantic_role_rejects_whole_theme():
     payload = widget_theme_to_payload(DEFAULT_DARK_WIDGET_THEME)
     payload["colors"]["card.made_up"] = [1, 2, 3, 4]
-    with pytest.raises(WidgetThemeFileError):
-        widget_theme_from_json(json.dumps(payload))
-
-
-def test_bad_material_mode_rejects_whole_theme():
-    payload = widget_theme_to_payload(DEFAULT_DARK_WIDGET_THEME)
-    payload["default_card_material_mode"] = "hologram"
     with pytest.raises(WidgetThemeFileError):
         widget_theme_from_json(json.dumps(payload))
 
@@ -123,7 +103,6 @@ def test_save_round_trips_a_real_file(tmp_path):
     edited = WidgetThemeSpec(
         theme_id="ocean",
         name="Ocean",
-        default_card_material_mode="normal",
         linked_settings_theme_id="ocean_settings",
         colors=dict(DEFAULT_DARK_WIDGET_THEME.colors),
     )
@@ -165,34 +144,26 @@ def test_selection_resolution_falls_back_for_unknown_id(tmp_path):
 # -- resolver + Keep Synced + Custom --------------------------------------- #
 
 
-def test_resolve_defaults_to_dark_with_normal_material(tmp_path):
+def test_resolve_defaults_to_dark(tmp_path):
     catalog = build_widget_theme_catalog(tmp_path)
     resolved = resolve_widget_theme(WidgetThemeState(), catalog)
     assert resolved.theme == DEFAULT_DARK_WIDGET_THEME
-    assert resolved.effective_card_material_mode == "normal"
     assert resolved.is_custom is False
 
 
-def test_keep_synced_uses_linked_id_but_override_survives(tmp_path):
+def test_keep_synced_uses_linked_id_when_on_and_stored_selection_when_off(tmp_path):
     ocean = WidgetThemeSpec(
         theme_id="ocean",
         name="Ocean",
-        default_card_material_mode="normal",
         colors=dict(DEFAULT_DARK_WIDGET_THEME.colors),
     )
     save_widget_theme_file(ocean, tmp_path / "Ocean.srwtheme")
     catalog = build_widget_theme_catalog(tmp_path)
 
     # Sync ON: the linked (mirrored) widget theme id wins over the stored selection.
-    state = WidgetThemeState(
-        selected_id="default_dark",
-        keep_synced=True,
-        card_material_override="glass",  # explicit surface override
-    )
+    state = WidgetThemeState(selected_id="default_dark", keep_synced=True)
     resolved = resolve_widget_theme(state, catalog, synced_widget_theme_id="ocean")
     assert resolved.theme.theme_id == "ocean"
-    # Surface Style override survives theme identity changes (material only).
-    assert resolved.effective_card_material_mode == "glass"
 
     # Sync OFF: the explicit selection wins, sync id ignored.
     state_off = WidgetThemeState(selected_id="default_dark", keep_synced=False)
@@ -220,7 +191,7 @@ def test_theme_owned_edit_snapshots_to_custom_and_unsyncs(tmp_path):
     new_border = Rgba(10, 120, 200, 255)
 
     snapshot, state = begin_theme_owned_edit(
-        WidgetThemeState(keep_synced=True, card_material_override="glass"),
+        WidgetThemeState(keep_synced=True),
         active,
         "card.border",
         new_border,
@@ -231,8 +202,6 @@ def test_theme_owned_edit_snapshots_to_custom_and_unsyncs(tmp_path):
     assert snapshot.color("card.border") == new_border
     assert state.selected_id == CUSTOM_WIDGET_THEME_ID
     assert state.keep_synced is False
-    # Surface Style override is preserved (a theme edit never alters material).
-    assert state.card_material_override == "glass"
     # The shipped theme is never mutated; unedited roles survive exactly.
     assert active.color("card.border") == DEFAULT_DARK_WIDGET_THEME.color("card.border")
     assert snapshot.color("card.background") == active.color("card.background")
@@ -241,4 +210,3 @@ def test_theme_owned_edit_snapshots_to_custom_and_unsyncs(tmp_path):
     resolved = resolve_widget_theme(state, catalog)
     assert resolved.is_custom is True
     assert resolved.theme.color("card.border") == new_border
-    assert resolved.effective_card_material_mode == "glass"

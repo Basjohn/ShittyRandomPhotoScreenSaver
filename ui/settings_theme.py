@@ -40,6 +40,14 @@ def _theme_qss_color(theme: SettingsThemeSpec, token: str) -> str:
     return render_qss_color(theme.color(token))
 
 
+def _theme_scaled_alpha(theme: SettingsThemeSpec, token: str, scale: float) -> str:
+    """Render a semantic colour with bounded derived alpha for disabled chrome."""
+
+    color = theme.color(token)
+    alpha = max(0, min(255, int(round(color.a * float(scale)))))
+    return f"rgba({color.r}, {color.g}, {color.b}, {alpha})"
+
+
 def _load_base_stylesheet() -> str | None:
     """Read the existing base QSS without owning semantic theme values."""
 
@@ -152,6 +160,12 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                     color: %(tab_selected_text)s;
                     font-weight: 700;
                     border: 1.5px solid %(panel_border)s;
+                }
+
+                #tabButton:disabled {
+                    background-color: %(tab_disabled_surface)s;
+                    color: %(tab_disabled_text)s;
+                    border: 1.5px solid %(tab_disabled_border)s;
                 }
 
                 #contentArea {
@@ -326,6 +340,11 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
             theme,
             "navigation.tab.selected_text",
         ),
+        "tab_disabled_surface": _theme_scaled_alpha(
+            theme, "navigation.tab.surface", 0.45
+        ),
+        "tab_disabled_text": _theme_rgba(theme, "text.disabled"),
+        "tab_disabled_border": _theme_scaled_alpha(theme, "panel.border", 0.55),
         "content_surface": _theme_rgba(theme, "content.surface"),
         "group_surface": _theme_rgba(theme, "panel.group.surface"),
         "panel_border": _theme_rgba(theme, "panel.border"),

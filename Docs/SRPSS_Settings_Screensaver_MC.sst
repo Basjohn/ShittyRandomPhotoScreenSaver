@@ -33,7 +33,8 @@
       "interaction_mode": true,
       "widget_glow_color": null,
       "widget_glow_on_click": false,
-      "widget_glow_on_hover": false
+      "widget_glow_on_hover": false,
+      "widget_glow_intensity": 100
     },
     "queue": {
       "shuffle": true

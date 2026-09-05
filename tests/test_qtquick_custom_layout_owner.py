@@ -17,12 +17,17 @@ from rendering.custom_layout_contract import (
     get_widget_layout_variant_payload,
     load_custom_layout_map,
 )
-from rendering.custom_layout_session import CustomLayoutSession
+from rendering.custom_layout_session import (
+    CustomLayoutKey,
+    CustomLayoutSession,
+    CustomLayoutSessionItem,
+)
 from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.custom_layout_hydration import (
     apply_quick_committed_payloads,
     resolve_quick_committed_geometry,
 )
+from rendering.quick import custom_layout_owner as custom_owner_module
 from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner, _DisplayBinding
 from rendering.quick.display_unit import create_quick_display_unit
 from rendering.quick.input_controller import QuickInputController
@@ -274,6 +279,125 @@ def test_custom_owner_publishes_peer_and_center_guides_from_snap_resolution() ->
     owner.clear_move_guides()
     assert active.calls[-1] == {"vertical": (), "horizontal": ()}
     assert other.calls[-1] == {"vertical": (), "horizontal": ()}
+
+
+def test_visualizer_move_latches_one_cross_display_transfer_until_release(monkeypatch) -> None:
+    class _Scene:
+        def set_custom_layout_guides(self, *, vertical=(), horizontal=()):
+            return None
+
+    screen_a, screen_b = object(), object()
+    scene_a, scene_b = _Scene(), _Scene()
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    owner._bindings = {
+        "display:a": _DisplayBinding(
+            "display:a", "1", SimpleNamespace(runtime=SimpleNamespace(scene_controller=scene_a)),
+            screen_a, QRect(0, 0, 800, 600),
+        ),
+        "display:b": _DisplayBinding(
+            "display:b", "2", SimpleNamespace(runtime=SimpleNamespace(scene_controller=scene_b)),
+            screen_b, QRect(800, 0, 800, 600),
+        ),
+    }
+    item = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("spotify_visualizer", "display:a"),
+        model_identity="spotify_visualizer",
+        baseline_global_rect=QRect(100, 100, 420, 280),
+        current_global_rect=QRect(100, 100, 420, 280),
+        baseline_size_payload={}, current_size_payload={},
+        baseline_enabled=True, current_enabled=True,
+        resize_capable=True, viewport_resize_capable=True,
+        baseline_viewport_extent=(420.0, 280.0),
+        source_monitor_route="1",
+    )
+    candidates = [screen_b, screen_a]
+    calls = []
+
+    def choose(*_args, **_kwargs):
+        calls.append(True)
+        return candidates[min(len(calls) - 1, len(candidates) - 1)]
+
+    monkeypatch.setattr(custom_owner_module, "choose_best_screen_for_global_rect", choose)
+    monkeypatch.setattr(custom_owner_module, "should_transfer_rect_to_screen", lambda *_a, **_k: True)
+    monkeypatch.setattr(
+        custom_owner_module,
+        "resolve_snap_local_rect_for_edit",
+        lambda rect, *_a, **_k: SimpleNamespace(
+            rect=QRect(rect), vertical_guides=(), horizontal_guides=(),
+            vertical_assists=(), horizontal_assists=(),
+        ),
+    )
+
+    owner.resolve_move(item, QRect(900, 100, 420, 280), QPoint(1000, 200))
+    assert item.current_display_identity == "display:b"
+    assert item.source_key in owner._visualizer_move_transfer_latch
+
+    # Hovering around the seam during the same native drag cannot immediately
+    # ping-pong the retained GL admission back to the first display.
+    owner.resolve_move(item, QRect(760, 100, 420, 280), QPoint(780, 200))
+    assert item.current_display_identity == "display:b"
+    assert len(calls) == 1
+
+    owner.clear_move_guides()
+    owner.resolve_move(item, QRect(760, 100, 420, 280), QPoint(780, 200))
+    assert item.current_display_identity == "display:a"
+    assert len(calls) == 2
+
+
+def test_visualizer_display_hop_uses_nearest_direction_and_preserves_shape() -> None:
+    class _Scene:
+        def set_custom_layout_guides(self, *, vertical=(), horizontal=()):
+            return None
+
+    def binding(identity: str, route: str, x: int) -> _DisplayBinding:
+        return _DisplayBinding(
+            identity, route,
+            SimpleNamespace(runtime=SimpleNamespace(scene_controller=_Scene())),
+            object(), QRect(x, 0, 800, 600),
+        )
+
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    owner._bindings = {
+        "display:left": binding("display:left", "1", 0),
+        "display:middle": binding("display:middle", "2", 800),
+        "display:right": binding("display:right", "3", 1600),
+    }
+    item = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("spotify_visualizer", "display:middle"),
+        model_identity="spotify_visualizer",
+        baseline_global_rect=QRect(900, 100, 420, 280),
+        current_global_rect=QRect(900, 100, 420, 280),
+        baseline_size_payload={}, current_size_payload={},
+        baseline_enabled=True, current_enabled=True,
+        resize_capable=True, viewport_resize_capable=True,
+        baseline_viewport_extent=(420.0, 280.0),
+        source_monitor_route="2",
+    )
+
+    assert owner._adjacent_display_binding(item, "left").identity == "display:left"
+    assert owner._adjacent_display_binding(item, "right").identity == "display:right"
+    assert owner.transfer_display(item, "left") is True
+    assert item.current_display_identity == "display:left"
+    assert item.current_monitor_route == "1"
+    assert item.current_global_rect == QRect(100, 100, 420, 280)
+    assert item.current_viewport_extent == (420.0, 280.0)
+
+    # From the left display the nearest rightward neighbour is the middle one,
+    # not a leap over it to the far-right display.
+    assert owner._adjacent_display_binding(item, "right").identity == "display:middle"
+    assert owner.transfer_display(item, "right") is True
+    assert item.current_display_identity == "display:middle"
+    assert item.current_global_rect == QRect(900, 100, 420, 280)
 
 
 def test_single_quick_custom_owner_cancel_restores_same_retained_item(qt_app) -> None:
@@ -781,6 +905,8 @@ def test_visualizer_custom_transfer_retargets_same_owner_publication(qt_app) -> 
 
         source.scene_controller.transfer_visualizer_to(target.scene_controller)
         assert owner.set_presentation_runtime(target) is True
+        assert owner.presentation_runtime is target
+        assert owner._runtime is target
         second = resolve_visualizer_presentation(
             policy=owner.controller.presentation_policy,
             display_size=(1920.0, 1080.0),
@@ -899,3 +1025,167 @@ def test_routed_ordinary_custom_transfer_moves_same_item_cancel_and_save(qt_app)
         units[1].retire()
         factory.deleteLater()
         qt_app.processEvents()
+
+
+def test_display_manager_visualizer_transfer_moves_unit_retirement_authority() -> None:
+    """Manager/unit ownership follows the retained scene to the target display."""
+
+    class _Owner:
+        def __init__(self, runtime) -> None:
+            self.runtime = runtime
+            self.moves = []
+
+        @property
+        def presentation_runtime(self):
+            return self.runtime
+
+        @property
+        def is_retired(self) -> bool:
+            return False
+
+        def set_presentation_runtime(self, runtime) -> bool:
+            self.moves.append(runtime)
+            self.runtime = runtime
+            return True
+
+    class _Unit:
+        def __init__(self, screen_index: int) -> None:
+            self.screen_index = screen_index
+            self.runtime = object()
+            self.is_retired = False
+            self.visualizer_owner = None
+
+        def attach_visualizer_owner(self, owner) -> None:
+            if self.visualizer_owner is not None:
+                raise RuntimeError("already owned")
+            self.visualizer_owner = owner
+
+        def detach_visualizer_owner(self, owner) -> bool:
+            if self.visualizer_owner is None:
+                return False
+            if self.visualizer_owner is not owner:
+                raise RuntimeError("wrong owner")
+            self.visualizer_owner = None
+            return True
+
+    source, target = _Unit(0), _Unit(1)
+    visualizer = _Owner(source.runtime)
+    source.visualizer_owner = visualizer
+    manager = SimpleNamespace(
+        _retired=False,
+        _quick_visualizer_owner=visualizer,
+        _quick_visualizer_unit=source,
+        displays=[source, target],
+    )
+
+    assert DisplayManager._transfer_quick_visualizer_unit(manager, target) is True
+    assert manager._quick_visualizer_unit is target
+    assert source.visualizer_owner is None
+    assert target.visualizer_owner is visualizer
+    assert visualizer.runtime is target.runtime
+    assert visualizer.moves == [target.runtime]
+
+
+def test_custom_layout_visualizer_display_transaction_moves_scene_and_manager_edge() -> None:
+    class _Scene:
+        def __init__(self) -> None:
+            self.transfers = []
+
+        def transfer_visualizer_to(self, target) -> None:
+            self.transfers.append(target)
+
+    class _Runtime:
+        def __init__(self, scene) -> None:
+            self.scene_controller = scene
+
+    class _Unit:
+        def __init__(self, scene) -> None:
+            self.runtime = _Runtime(scene)
+
+    source_scene, target_scene = _Scene(), _Scene()
+    source_unit, target_unit = _Unit(source_scene), _Unit(target_scene)
+    visualizer = object()
+    current = {"unit": source_unit}
+    transfers = []
+
+    def _transfer(unit) -> bool:
+        transfers.append(unit)
+        current["unit"] = unit
+        return True
+
+    layout = QuickCustomLayoutOwner(
+        settings_manager=None,
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (visualizer, current["unit"]),
+        reload_request=lambda _kind: None,
+        visualizer_unit_transfer=_transfer,
+    )
+    layout._bindings = {
+        "source": _DisplayBinding(
+            identity="source",
+            monitor_route="1",
+            unit=source_unit,
+            screen=object(),
+            geometry=QRect(0, 0, 800, 600),
+        ),
+        "target": _DisplayBinding(
+            identity="target",
+            monitor_route="2",
+            unit=target_unit,
+            screen=object(),
+            geometry=QRect(800, 0, 800, 600),
+        ),
+    }
+
+    layout._transfer_visualizer_display_transaction(source_scene, target_scene)
+
+    assert source_scene.transfers == [target_scene]
+    assert target_scene.transfers == []
+    assert transfers == [target_unit]
+    assert current["unit"] is target_unit
+
+
+def test_custom_layout_visualizer_display_transaction_rolls_scene_back_on_lifecycle_failure() -> None:
+    class _Scene:
+        def __init__(self) -> None:
+            self.transfers = []
+
+        def transfer_visualizer_to(self, target) -> None:
+            self.transfers.append(target)
+
+    class _Runtime:
+        def __init__(self, scene) -> None:
+            self.scene_controller = scene
+
+    class _Unit:
+        def __init__(self, scene) -> None:
+            self.runtime = _Runtime(scene)
+
+    source_scene, target_scene = _Scene(), _Scene()
+    source_unit, target_unit = _Unit(source_scene), _Unit(target_scene)
+    visualizer = object()
+    layout = QuickCustomLayoutOwner(
+        settings_manager=None,
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (visualizer, source_unit),
+        reload_request=lambda _kind: None,
+        visualizer_unit_transfer=lambda _unit: (_ for _ in ()).throw(
+            RuntimeError("manager transfer failed")
+        ),
+    )
+    layout._bindings = {
+        "source": _DisplayBinding(
+            identity="source", monitor_route="1", unit=source_unit,
+            screen=object(), geometry=QRect(0, 0, 800, 600),
+        ),
+        "target": _DisplayBinding(
+            identity="target", monitor_route="2", unit=target_unit,
+            screen=object(), geometry=QRect(800, 0, 800, 600),
+        ),
+    }
+
+    with pytest.raises(RuntimeError, match="manager transfer failed"):
+        layout._transfer_visualizer_display_transaction(source_scene, target_scene)
+
+    assert source_scene.transfers == [target_scene]
+    assert target_scene.transfers == [source_scene]

@@ -100,16 +100,23 @@ class QuickCustomLayoutOwner:
         participants_provider: Callable[[], Sequence[Any]],
         visualizer_provider: Callable[[], tuple[Any | None, Any | None]],
         reload_request: Callable[[str], None],
+        visualizer_unit_transfer: Callable[[Any], bool] | None = None,
     ) -> None:
         self._settings_manager = settings_manager
         self._participants_provider = participants_provider
         self._visualizer_provider = visualizer_provider
         self._reload_request = reload_request
+        self._visualizer_unit_transfer = visualizer_unit_transfer
         self._session: CustomLayoutSession | None = None
         self._coordinator: QuickCustomLayoutSceneCoordinator | None = None
         self._bindings: dict[str, _DisplayBinding] = {}
         self._descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
         self._resize_origins: dict[CustomLayoutKey, _ResizeOrigin] = {}
+        # One visualizer may cross one display seam per pointer move gesture.
+        # Without this latch a cursor hovering around the seam can ping-pong the
+        # retained GL admission between scenes while QML is still processing the
+        # same drag, producing duplicate/dead target admissions. Release clears it.
+        self._visualizer_move_transfer_latch: set[CustomLayoutKey] = set()
         self._deferred_topology_reconciliation_reason: str | None = None
         self._active = False
         self._retired = False
@@ -157,8 +164,10 @@ class QuickCustomLayoutOwner:
         if not session.items():
             return False
 
-        coordinator = QuickCustomLayoutSceneCoordinator(session)
-        session.subscribe_changes(self._sync_visualizer_presentation_runtime)
+        coordinator = QuickCustomLayoutSceneCoordinator(
+            session,
+            visualizer_transfer_handler=self._transfer_visualizer_display_transaction,
+        )
         try:
             for binding in bindings.values():
                 scene = binding.unit.runtime.scene_controller
@@ -172,6 +181,11 @@ class QuickCustomLayoutOwner:
                     resize_update_handler=self.update_resize,
                     resize_wheel_handler=self.resize_wheel,
                     move_finished_handler=self.clear_move_guides,
+                    display_transfer_capability=(
+                        lambda item, direction, available=bindings:
+                        self._adjacent_display_binding(item, direction, available) is not None
+                    ),
+                    display_transfer_handler=self.transfer_display,
                 )
         except Exception:
             for binding in bindings.values():
@@ -180,7 +194,6 @@ class QuickCustomLayoutOwner:
                 except Exception:
                     logger.debug("[CUSTOM_LAYOUT] Partial Quick bind cleanup failed", exc_info=True)
             coordinator.retire()
-            session.unsubscribe_changes(self._sync_visualizer_presentation_runtime)
             raise
 
         self._bindings = bindings
@@ -321,24 +334,29 @@ class QuickCustomLayoutOwner:
         cursor: QPoint,
     ) -> QRect:
         binding = self._bindings[item.current_display_identity]
-        candidate = choose_best_screen_for_global_rect(
-            proposed,
-            cursor_global=cursor,
-            screens=[entry.screen for entry in self._bindings.values()],
-        )
         target = binding
-        if candidate is not None and candidate is not binding.screen:
-            if should_transfer_rect_to_screen(
+        transfer_latched = (
+            item.model_identity == "spotify_visualizer"
+            and item.source_key in self._visualizer_move_transfer_latch
+        )
+        if not transfer_latched:
+            candidate = choose_best_screen_for_global_rect(
                 proposed,
-                current_screen=binding.screen,
-                candidate_screen=candidate,
                 cursor_global=cursor,
-            ):
-                target = next(
-                    entry
-                    for entry in self._bindings.values()
-                    if entry.screen is candidate
-                )
+                screens=[entry.screen for entry in self._bindings.values()],
+            )
+            if candidate is not None and candidate is not binding.screen:
+                if should_transfer_rect_to_screen(
+                    proposed,
+                    current_screen=binding.screen,
+                    candidate_screen=candidate,
+                    cursor_global=cursor,
+                ):
+                    target = next(
+                        entry
+                        for entry in self._bindings.values()
+                        if entry.screen is candidate
+                    )
         local = QRect(
             proposed.x() - target.geometry.x(),
             proposed.y() - target.geometry.y(),
@@ -355,6 +373,11 @@ class QuickCustomLayoutOwner:
         self._publish_move_guides(target.identity, resolution)
         resolved = resolution.rect
         if target.identity != item.current_display_identity:
+            if item.model_identity == "spotify_visualizer":
+                # Latch before the session notification can transfer the retained
+                # scene. A failed transfer is likewise not hammered hundreds of
+                # times in the same native drag; releasing starts a clean attempt.
+                self._visualizer_move_transfer_latch.add(item.source_key)
             item.set_current_display(
                 target.identity,
                 monitor_route=target.monitor_route,
@@ -367,8 +390,9 @@ class QuickCustomLayoutOwner:
         )
 
     def clear_move_guides(self) -> None:
-        """Clear transient alignment guides on every retained display."""
+        """Clear transient alignment guides and end the current move gesture."""
 
+        self._visualizer_move_transfer_latch.clear()
         for binding in tuple(self._bindings.values()):
             try:
                 binding.unit.runtime.scene_controller.set_custom_layout_guides()
@@ -378,6 +402,104 @@ class QuickCustomLayoutOwner:
                     binding.identity,
                     exc_info=True,
                 )
+
+    def _adjacent_display_binding(
+        self,
+        item: CustomLayoutSessionItem,
+        direction: str,
+        bindings: Mapping[str, _DisplayBinding] | None = None,
+    ) -> _DisplayBinding | None:
+        """Return the nearest horizontal display for a discrete Visualizer hop."""
+
+        if item.model_identity != "spotify_visualizer":
+            return None
+        direction = str(direction or "").strip().lower()
+        if direction not in {"left", "right"}:
+            return None
+        available = self._bindings if bindings is None else bindings
+        source = available.get(item.current_display_identity)
+        if source is None:
+            return None
+        source_center_x = source.geometry.x() + source.geometry.width() / 2.0
+        source_center_y = source.geometry.y() + source.geometry.height() / 2.0
+        candidates: list[tuple[float, float, _DisplayBinding]] = []
+        for candidate in available.values():
+            if candidate.identity == source.identity:
+                continue
+            center_x = candidate.geometry.x() + candidate.geometry.width() / 2.0
+            delta_x = center_x - source_center_x
+            if direction == "left" and delta_x >= 0.0:
+                continue
+            if direction == "right" and delta_x <= 0.0:
+                continue
+            center_y = candidate.geometry.y() + candidate.geometry.height() / 2.0
+            candidates.append((abs(delta_x), abs(center_y - source_center_y), candidate))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda entry: (entry[0], entry[1], entry[2].identity))
+        return candidates[0][2]
+
+    def transfer_display(
+        self,
+        item: CustomLayoutSessionItem,
+        direction: str,
+    ) -> bool:
+        """Project one Visualizer working rect onto an adjacent retained display.
+
+        This is the button-driven companion to pointer transfer. It preserves
+        shape/size when the target can contain them, keeps approximately the same
+        relative screen position, and lets the existing session notification own
+        the actual retained-scene/GL admission transfer. No fade or new cadence is
+        introduced here.
+        """
+
+        target = self._adjacent_display_binding(item, direction)
+        source = self._bindings.get(item.current_display_identity)
+        if target is None or source is None:
+            return False
+        rect = QRect(item.current_global_rect)
+        source_width = max(1.0, float(source.geometry.width()))
+        source_height = max(1.0, float(source.geometry.height()))
+        rel_center_x = (float(rect.center().x()) - float(source.geometry.x())) / source_width
+        rel_center_y = (float(rect.center().y()) - float(source.geometry.y())) / source_height
+
+        scale = min(
+            1.0,
+            float(target.geometry.width()) / max(1.0, float(rect.width())),
+            float(target.geometry.height()) / max(1.0, float(rect.height())),
+        )
+        width = max(1, int(round(float(rect.width()) * scale)))
+        height = max(1, int(round(float(rect.height()) * scale)))
+        target_center_x = float(target.geometry.x()) + rel_center_x * float(target.geometry.width())
+        target_center_y = float(target.geometry.y()) + rel_center_y * float(target.geometry.height())
+        local = QRect(
+            int(round(target_center_x - width / 2.0)) - target.geometry.x(),
+            int(round(target_center_y - height / 2.0)) - target.geometry.y(),
+            width,
+            height,
+        )
+        local = clamp_local_rect_to_bounds(
+            local,
+            target.geometry.size(),
+            min_size=quick_custom_minimum_size(item),
+        )
+        projected = QRect(
+            target.geometry.x() + local.x(),
+            target.geometry.y() + local.y(),
+            local.width(),
+            local.height(),
+        )
+        self._visualizer_move_transfer_latch.clear()
+        item.set_current_display(target.identity, monitor_route=target.monitor_route)
+        item.set_geometry(projected)
+        logger.info(
+            "[CUSTOM_LAYOUT] Visualizer display hop direction=%s source=%s target=%s rect=%s",
+            direction,
+            source.identity,
+            target.identity,
+            projected.getRect(),
+        )
+        return True
 
     def _publish_move_guides(self, display_identity: str, resolution: Any) -> None:
         """Publish only peer-edge/centering assists for the active move sample."""
@@ -1089,9 +1211,6 @@ class QuickCustomLayoutOwner:
             700,
             reason="custom_layout_overlay_close",
         )
-        session = self._session
-        if session is not None:
-            session.unsubscribe_changes(self._sync_visualizer_presentation_runtime)
         for binding in tuple(self._bindings.values()):
             binding.unit.runtime.scene_controller.clear_custom_layout_session()
         coordinator = self._coordinator
@@ -1102,20 +1221,72 @@ class QuickCustomLayoutOwner:
         self._bindings = {}
         self._descriptors = {}
         self._resize_origins = {}
+        self._visualizer_move_transfer_latch.clear()
         self._active = False
 
-    def _sync_visualizer_presentation_runtime(
+    def _transfer_visualizer_display_transaction(
         self,
-        item: CustomLayoutSessionItem,
+        source_scene: Any,
+        target_scene: Any,
     ) -> None:
-        if item.model_identity != "spotify_visualizer":
-            return
-        binding = self._bindings.get(item.current_display_identity)
-        if binding is None:
-            return
-        owner, _unit = self._visualizer_provider()
-        if owner is not None:
-            owner.set_presentation_runtime(binding.unit.runtime)
+        """Move retained pixels and display-retirement authority as one transaction.
+
+        ``CustomLayoutSession`` has synchronous listeners.  Splitting the retained
+        scene move and the manager/unit lifecycle move across two listeners allowed
+        the first listener to succeed and the second to fail, leaving pixels on one
+        display while the old unit still owned teardown.  Keep both sides inside one
+        coordinator callback so a lifecycle failure moves the retained scene back
+        before the session item itself is restored.
+        """
+
+        source_binding = next(
+            (
+                binding
+                for binding in self._bindings.values()
+                if binding.unit.runtime.scene_controller is source_scene
+            ),
+            None,
+        )
+        target_binding = next(
+            (
+                binding
+                for binding in self._bindings.values()
+                if binding.unit.runtime.scene_controller is target_scene
+            ),
+            None,
+        )
+        if source_binding is None or target_binding is None:
+            raise RuntimeError(
+                "CUSTOM visualizer transfer has no exact display binding"
+            )
+
+        owner, current_unit = self._visualizer_provider()
+        if owner is None or current_unit is None:
+            raise RuntimeError("CUSTOM visualizer transfer has no admitted owner")
+        if current_unit is not source_binding.unit:
+            raise RuntimeError(
+                "CUSTOM visualizer lifecycle owner disagrees with retained scene source"
+            )
+        transfer_unit = self._visualizer_unit_transfer
+        if transfer_unit is None:
+            raise RuntimeError(
+                "CUSTOM visualizer display transfer has no manager ownership seam"
+            )
+
+        source_scene.transfer_visualizer_to(target_scene)
+        try:
+            if not transfer_unit(target_binding.unit):
+                raise RuntimeError(
+                    "CUSTOM visualizer display ownership transfer rejected"
+                )
+        except Exception as lifecycle_error:
+            try:
+                target_scene.transfer_visualizer_to(source_scene)
+            except Exception as rollback_error:
+                raise RuntimeError(
+                    "CUSTOM visualizer transfer failed and retained-scene rollback failed"
+                ) from rollback_error
+            raise lifecycle_error
 
     @staticmethod
     def _is_all(value: object) -> bool:

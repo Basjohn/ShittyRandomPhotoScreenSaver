@@ -21,6 +21,23 @@ OverlayWidget {
         ? digitalFace.preferredContentHeight + clockRoot.shellInset
         : analogueFace.preferredContentHeight
 
+    // With the digital card shell disabled there is no visible card perimeter to
+    // glow. Follow the intrinsic text stack (+ a small breathing margin) instead
+    // of outlining the invisible outer allocation. Analogue keeps its authored
+    // presentation bounds.
+    readonly property real _digitalGlowMargin: 4.0
+    interactionGlowWidth: (_isDigital && !cardShellEnabled)
+        ? Math.min(authoredCardWidth, digitalFace.preferredContentWidth + 2.0 * _digitalGlowMargin)
+        : authoredCardWidth
+    interactionGlowHeight: (_isDigital && !cardShellEnabled)
+        ? Math.min(authoredLayoutHeight, digitalFace.preferredContentHeight + 2.0 * _digitalGlowMargin)
+        : authoredLayoutHeight
+    interactionGlowX: authoredCardX + (authoredCardWidth - interactionGlowWidth) * 0.5
+    interactionGlowY: (authoredLayoutHeight - interactionGlowHeight) * 0.5
+    interactionGlowCornerRadius: (_isDigital && !cardShellEnabled)
+        ? Math.min(8.0, interactionGlowHeight * 0.18)
+        : cardCornerRadius
+
     ClockDigitalFace {
         id: digitalFace
         objectName: "clockDigitalFace"

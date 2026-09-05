@@ -23,10 +23,13 @@ Its policy is FRAMELESS + VIEWPORT_RECT and supports the existing viewport resiz
 `SphereFrameRuntime` owns activation-relative authored time and latest frozen Sphere state, driven only by the
 existing logical clock/capture callback. Common analysis supplies bass/mid/high/overall plus transient energy;
 stale generation/activation data cannot become fresh response. No FFT, source subscription, worker or timer is added.
-The renderer consumes immutable time/energy/configuration and never advances simulation or reads the engine.
+The renderer consumes immutable time/energy/configuration and never advances simulation or reads the engine. Whole-body
+transient growth is a bounded near-critical spring inside `SphereFrameRuntime`: one authored state owner, no render clock.
 
-Payload interface: `SphereFrame(authored_time: float, parameters: FrozenFields)` under `logical.mode_state`;
-reactive inputs are `logical.common.energy` and `logical.common.transient`. Generation/source/fades stay on the enclosing established snapshot.
+Payload interface: `SphereFrame(authored_time: float, size_pulse: float, parameters: FrozenFields)` under
+`logical.mode_state`; reactive inputs originate from `logical.common.energy` / `logical.common.transient`, while the mode
+runtime now resolves whole-body size into the immutable `size_pulse` so render owns no transient filter/history.
+Generation/source/fades stay on the enclosing established snapshot.
 Sphere parameters are bounded `sphere_*` values: material (Chrome/Obsidian/Magma/Silver/Water), deformation strength,
 rotation speed, gloss/specular and key-light direction. Initial defaults are feature-local and do not alter existing
 mode defaults, presets, shared colour controls or logical parameters.
@@ -172,6 +175,9 @@ unrelated existing targets remain red (see cleanup ledger); do not report the en
 - **Performance:** one body upload plus lazily bounded effect-mesh/fire-quad uploads per renderer/context lifetime,
   constant bounded uniform transport and no per-frame topology/upload/source jobs. Measure 1080p/4K/extents separately;
   callbacks are not physical cadence proof.
+- **Magma secondary-effects acceptance:** smoke/ash/leaking-lava must read as materially distinct phenomena. The current
+  implementation may not be accepted merely because droplets are fire-coloured; viscous lava body/shape variation and clear
+  smoke/ash separation remain a later visual-polish bar.
 - **Eyes-on/operator:** it reads as a deforming 3D body with normals/specular following dents/bulges; materials differ
   meaningfully, no clipping surprises, responsive real music/idle, 60/165 Hz and mixed-DPR/recreation acceptance.
   Retain this checklist as Awaiting Validation when automation cannot honestly close it.
@@ -180,3 +186,10 @@ unrelated existing targets remain red (see cleanup ledger); do not report the en
 
 - [ ] Inspect real music response and the five material presets at representative display sizes.
 - [ ] Verify physical 60/165 Hz, mixed-DPR transfer and installed/frozen context recreation.
+
+## 2026-09-05 response-range follow-up
+
+Physical feedback accepts the new elastic/breathing whole-body size response as a major improvement. Preserve that logical
+clock-owned spring. Deformation and Vocal Response upper bounds are expanded from 2.0 to 3.0 (50%) while defaults and every
+other response bound remain unchanged. Vocal weighting remains the same bounded mid/high emphasis and shader output stays
+finite; this is expressive headroom, not a second analysis lane or cadence change.
