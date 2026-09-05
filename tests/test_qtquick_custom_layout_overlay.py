@@ -357,9 +357,23 @@ def test_visualizer_scene_coordinator_rejects_occupied_target_and_rolls_back() -
     )
     visualizer.current_monitor_route = "1"
     session.add_item(visualizer)
+
+    # The occupied-target *decision* now belongs to the injected transfer handler
+    # (the real one is QuickCustomLayoutOwner._transfer_visualizer_display_transaction,
+    # which has DisplayManager/unit authority to discard a scene-local orphan but
+    # treats a real target lifecycle owner as a hard conflict -- covered by
+    # test_qtquick_visualizer_custom_geometry_regressions). This test pins the
+    # *coordinator's* remaining contract: when the handler rejects, the coordinator
+    # rolls the source placement back and re-raises, and never touches the source
+    # scene. Simulate a live-owned target that the handler refuses.
+    def _reject_occupied_target(source, target):
+        if getattr(target, "visualizer_render_identity", None) is not None:
+            raise RuntimeError("target already has a retained scene admission")
+        source.transfer_visualizer_to(target)
+
     coordinator = QuickCustomLayoutSceneCoordinator(
         session,
-        visualizer_transfer_handler=lambda source, target: source.transfer_visualizer_to(target),
+        visualizer_transfer_handler=_reject_occupied_target,
     )
     source = _SceneStub(object())
     target = _SceneStub(object())
@@ -505,12 +519,23 @@ def test_scene_controller_owns_overlay_for_exact_display_generation(qt_app) -> N
     assert item.objectName() == "customLayoutOverlay"
     assert item.parentItem() is controller.scene_root
 
+    # Two-phase retirement (2026-09-05 cross-display lifecycle work): quiesce
+    # closes state admission but must NOT delete QML objects while the render
+    # scene graph is still live -- "item deletion waits for legal invalidation".
+    # Actual QML deletion (qml_objects_retired -> True) only happens once the
+    # window's scene graph is invalidated under a real render loop; that terminal
+    # path is owned by the threaded runtime teardown tests. Offscreen keeps the
+    # scene graph initialized, so here we pin the render-safe *deferral*: admission
+    # is closed, QML retirement is still pending, finalize refuses until scene
+    # invalidation, and the controller still owns its exact overlay generation.
     controller.quiesce_for_retirement()
-    assert controller.readiness.qml_objects_retired is True
-    with pytest.raises(RuntimeError):
-        _ = overlay.item
-    with pytest.raises(RuntimeError):
-        _ = controller.custom_layout_overlay
+    assert controller.readiness.admission_open is False
+    assert controller.readiness.qml_objects_retired is False
+    assert window.isSceneGraphInitialized() is True
+    with pytest.raises(RuntimeError, match="before scene invalidation"):
+        controller.finalize_retirement()
+    assert overlay.item is item
+    assert controller.custom_layout_overlay is overlay
 
     window.deleteLater()
     factory.deleteLater()
@@ -1057,11 +1082,15 @@ def test_quick_custom_layout_overlay_is_presentation_only() -> None:
         "QQuickWidget",
         "SettingsManager",
         "provider",
-        "capability",
         "QQmlEngine(",
         "QQuickWindow(",
     ):
         assert forbidden not in source
+    # The overlay may *receive* an injected display-transfer capability predicate
+    # (it renders canTransferLeft/Right button state from it) but must never own
+    # the decision -- that stays with QuickCustomLayoutOwner. Prove it is only the
+    # injected callback form, never a self-derived capability computation.
+    assert "display_transfer_capability" in source
     assert "CustomLayoutSessionItem" in source
     assert "item.apply_remove_action()" in source
     assert "drag.target" not in qml

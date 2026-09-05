@@ -63,14 +63,14 @@ The exact upstream reason the retained root died is **not yet proven** by the ol
 
 **Focused target-environment tests required before M0 closes:**
 
-- [ ] `tests/test_qtquick_visualizer_custom_geometry_regressions.py` — new focused regressions for two-axis corners, stable session scale, orphan-target reconciliation, and true target-owner refusal;
-- [ ] `tests/test_qtquick_custom_layout_terminalization.py` — all-display `_finish()` despite one failed scene cleanup, healthy live Save never requesting reload, corruption-only Save/Cancel reconstruction, and event-driven stale-wrapper ledger;
-- [ ] `tests/test_qtquick_retained_lifecycle_integrity.py` — detailed current-owner lifecycle matrix: coordinator + per-display cleanup failure terminalization, healthy geometry and coherent cross-display Save remaining live, slot-save deferral boundary, promotion/Cancel corruption ordering, unexpected-vs-intentional Qt-root death, admission-scoped `DisplayScene` loss, and diagnostic failure isolation;
-- [ ] `tests/test_qtquick_custom_layout_owner.py::test_visualizer_display_hop_uses_nearest_direction_and_preserves_shape` — deterministic 1 px hop regression;
-- [ ] current reconciled `tests/test_qtquick_custom_layout_owner.py` live Save / transfer / Cancel cells;
-- [ ] `tests/test_qtquick_custom_layout_overlay.py` — Visualizer corner semantics/styling and ordinary-widget negative controls;
-- [ ] `tests/test_layout_slots.py` — slot load remains the fenced boundary and restores active Visualizer mode;
-- [ ] `tests/test_qtquick_media_presentation.py` — Media Volume border presentation contract if current suite owns that pixel/style seam.
+- [x] `tests/test_qtquick_visualizer_custom_geometry_regressions.py` — new focused regressions for two-axis corners, stable session scale, orphan-target reconciliation, and true target-owner refusal; (automated green, offscreen)
+- [x] `tests/test_qtquick_custom_layout_terminalization.py` — all-display `_finish()` despite one failed scene cleanup, healthy live Save never requesting reload, corruption-only Save/Cancel reconstruction, and event-driven stale-wrapper ledger; (automated green, offscreen)
+- [x] `tests/test_qtquick_retained_lifecycle_integrity.py` — detailed current-owner lifecycle matrix: coordinator + per-display cleanup failure terminalization, healthy geometry and coherent cross-display Save remaining live, slot-save deferral boundary, promotion/Cancel corruption ordering, unexpected-vs-intentional Qt-root death, admission-scoped `DisplayScene` loss, and diagnostic failure isolation; (automated green, offscreen)
+- [x] `tests/test_qtquick_custom_layout_owner.py::test_visualizer_display_hop_uses_nearest_direction_and_preserves_shape` — deterministic 1 px hop regression; (green: production uses true floating geometric centre)
+- [x] current reconciled `tests/test_qtquick_custom_layout_owner.py` live Save / transfer / Cancel cells; (automated green: reconciled to the visualizer_owner transaction invariant and the two-phase deferred retirement; fractional-world Cancel now compares against the pre-edit running baseline, not the integer-admission transient)
+- [x] `tests/test_qtquick_custom_layout_overlay.py` — Visualizer corner semantics/styling and ordinary-widget negative controls; (automated green: coordinator delegates the occupied-target decision to the injected handler and owns rollback; overlay presentation-only check accepts the injected `display_transfer_capability`)
+- [x] `tests/test_layout_slots.py` — slot load remains the fenced boundary and restores active Visualizer mode; (automated green)
+- [ ] `tests/test_qtquick_media_presentation.py` — Media Volume border presentation contract if current suite owns that pixel/style seam. (Volume-border/style pixel seam is green; 7 reds remain in this suite from the separate Media artwork/MultiEffect/scene-host workstream — e.g. `artworkBorderWidth` 6.0->2.0, `MultiEffect` masking — which is outside M0 CUSTOM-geometry/lifecycle and left for a dedicated media reconciliation.)
 
 This container has no `PySide6`/OpenGL, so Qt-bearing pytest collection remains **AWAITING TARGET ENVIRONMENT**, not failed.
 
@@ -101,8 +101,8 @@ Operator feedback on the current curve is **very good / much more cohesive**; th
 
 **M1 gates:**
 
-- [ ] `tests/test_bubble_viewport_reflow.py` — full extreme tall cap now 0.70, wide zero-big safety, bounded population modifiers;
-- [ ] `tests/test_qtquick_visualizer_bubble.py` and current Bubble pixel/reaction contracts;
+- [x] `tests/test_bubble_viewport_reflow.py` — full extreme tall cap now 0.70, wide zero-big safety, bounded population modifiers; (automated green; the reflow-normalization motion tests now isolate the separately-tested wide/tall speed gradient)
+- [x] `tests/test_qtquick_visualizer_bubble.py` and current Bubble pixel/reaction contracts; (automated green)
 - [ ] eyes-on canonical, moderate wide/tall, ~6:1 ultrawide and most-extreme vertical; outline may firm gradually but must not become thin because shape is extreme or balloon at the largest area;
 - [ ] preserve R-69: no global radius/reaction/Ghost/history/drift/cadence compression to make an extreme viewport fit.
 

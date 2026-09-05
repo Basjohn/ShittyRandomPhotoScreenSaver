@@ -25,6 +25,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import widgets.spotify_visualizer.bubble_simulation as _bubble_sim_module
 from widgets.spotify_visualizer.bubble_simulation import (
     BubbleSimulation,
     BubbleState,
@@ -180,6 +181,40 @@ class _OneShotSnareScheduler:
 
 
 def _run_viewport_transient_motion(
+    extent,
+    *,
+    stream_direction,
+    drift_direction,
+    diag_key,
+    start=(0.5, 0.5),
+    group_drift=False,
+):
+    # These tests pin the reflow *normalization* contract: the logical world
+    # expands with the committed extent while motion still covers the same visible
+    # fraction per authored step. That is a distinct layer from the wide/tall
+    # speed/count *gradient* (resolve_bubble_viewport_profile), which deliberately
+    # scales the shared stream baseline/cap -- and therefore base_vel-driven swirl
+    # travel -- at extreme aspects (covered by the gradient/count tests above).
+    # Hold the gradient at canonical here so the normalization layer is measured in
+    # isolation; otherwise the intended wide travel-assist would mask it.
+    _orig_profile = _bubble_sim_module.resolve_bubble_viewport_profile
+    _bubble_sim_module.resolve_bubble_viewport_profile = (
+        lambda *_a, **_k: _orig_profile((420.0, 280.0))
+    )
+    try:
+        return _run_viewport_transient_motion_impl(
+            extent,
+            stream_direction=stream_direction,
+            drift_direction=drift_direction,
+            diag_key=diag_key,
+            start=start,
+            group_drift=group_drift,
+        )
+    finally:
+        _bubble_sim_module.resolve_bubble_viewport_profile = _orig_profile
+
+
+def _run_viewport_transient_motion_impl(
     extent,
     *,
     stream_direction,
