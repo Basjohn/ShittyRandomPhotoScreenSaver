@@ -17,6 +17,7 @@ uniform vec2 u_viewport_origin_px;
 uniform int u_quick_item_coords;
 uniform vec4 u_content_rect;  // item-local x, y, width, height
 uniform float u_visual_scale;
+uniform float u_response_radius_scale; // equal-area canonical response / content height
 uniform float u_border_width;
 uniform float u_fade;
 uniform float u_time;
@@ -146,8 +147,14 @@ void main() {
     float specular_aspect = (u_quick_item_coords == 1)
         ? u_specular_reference_aspect : aspect;
     
-    // Pixel size in normalised coords (for anti-aliasing)
-    float px = authored_scale / max(inner_h, 1.0);
+    // A real framebuffer pixel is independent of the persisted world scale.
+    // The latter may be 0.17 on a large visible card. Using it for AA created
+    // subpixel coverage and jagged/disappearing outlines at that geometry.
+    float px = (u_quick_item_coords == 1)
+        ? max(length(vec2(dFdx(uv.y), dFdy(uv.y))), 0.000001)
+        : 1.0 / (max(inner_h, 1.0) * max(u_dpr, 1.0));
+    float style_px = authored_scale / max(inner_h, 1.0);
+    float response_scale = (u_quick_item_coords == 1) ? u_response_radius_scale : 1.0;
     
     // --- Background gradient ---
     // Gradient direction now follows "brightest point location" semantics.
@@ -226,7 +233,7 @@ void main() {
 
         for (int i = 0; i < count; i++) {
             vec4 bpos = u_bubbles_pos[i];
-            float brad = bpos.z;
+            float brad = bpos.z * response_scale;
             float balpha = bpos.w;
             if (balpha < 0.01 || brad < 2.0 * px) continue;
 
@@ -314,7 +321,7 @@ void main() {
         for (int i = 0; i < count; i++) {
             vec4 bpos = u_bubbles_pos[i];
             vec2 bxy = bpos.xy;
-            float brad = bpos.z;
+            float brad = bpos.z * response_scale;
             float balpha = bpos.w;
             if (balpha < 0.01 || brad < 2.0 * px) continue;
 
@@ -334,7 +341,7 @@ void main() {
             float ghost_r = brad * 1.18;
             vec2 gdelta = uv - ghost_xy;
             gdelta.x *= aspect;
-            float ghost_stroke = clamp(1.0 * (ghost_r / 0.04), 0.4, 1.5) * px;
+            float ghost_stroke = max(0.3 * px, clamp(1.0 * (bpos.z * 1.18 / 0.04), 0.4, 1.5) * style_px - 0.5 / inner_h);
             float ghost_bound = ghost_r + ghost_stroke + 2.0 * px;
             if (abs(gdelta.x) > ghost_bound || abs(gdelta.y) > ghost_bound) continue;
 
@@ -345,7 +352,7 @@ void main() {
             if (ghost_fade <= 0.001) continue;
             float gdist = length(gdelta);
 
-            float ghost_ring = smoothstep(ghost_stroke + px, ghost_stroke - px * 0.5, abs(gdist - ghost_r));
+            float ghost_ring = 1.0 - smoothstep(max(0.0, ghost_stroke - px * 0.5), ghost_stroke + px * 0.5, abs(gdist - ghost_r));
             ghost_ring *= balpha * ga * ghost_fade * 0.45;
 
             if (ghost_ring > 0.001) {
@@ -359,7 +366,7 @@ void main() {
     for (int i = 0; i < count; i++) {
         vec4 bpos = u_bubbles_pos[i];
         vec2 bxy = bpos.xy;       // bubble center (normalised 0..1)
-        float brad = bpos.z;      // bubble radius (normalised to card height)
+        float brad = bpos.z * response_scale; // authored response projected once
         float balpha = bpos.w;    // bubble alpha (1.0 normal, <1.0 fading/popping)
         
         if (balpha < 0.01) continue;
@@ -383,14 +390,19 @@ void main() {
         // A ~3.75% radius ratio preserves that large-card appearance while
         // naturally thinning canonical bubbles; tiny/huge safety bounds remain
         // authored pixels so AA never collapses or blooms without limit.
-        float stroke = clamp(r * 0.0375, 0.35 * px, 1.8 * px);
-        stroke = min(2.8 * px, stroke + large_viewport_stroke_bonus_px * px);
+        float stroke = max(0.55 * px, min(r * 0.0375, 1.8 * style_px));
+        stroke = max(0.55 * px, min(2.8 * style_px,
+            stroke + large_viewport_stroke_bonus_px * style_px));
         
+        // Operator adjustment: one logical pixel less across the complete
+        // outline (half on each side), retaining subpixel coverage at tiny sizes.
+        stroke = max(0.3 * px, stroke - 0.5 / inner_h);
+
         // --- Tiny bubble shortcut (< ~4px radius) ---
         float tiny_threshold = 4.0 * px;
         if (r < tiny_threshold) {
             // Simple filled dot
-            float dot_alpha = smoothstep(r + px, r - px, dist) * balpha;
+            float dot_alpha = (1.0 - smoothstep(max(0.0, r - px * 0.5), r + px * 0.5, dist)) * balpha;
             // Pop flash: tint with pop colour when fading
             vec4 dot_col = (balpha < 0.9) ? pop_col : outline_col;
             result = mix(result, dot_col, dot_alpha * u_fade);
@@ -399,7 +411,7 @@ void main() {
         
         // --- Outline ring (SDF) ---
         float ring_dist = abs(dist - r);
-        float ring_alpha = smoothstep(stroke + px, stroke - px * 0.5, ring_dist);
+        float ring_alpha = 1.0 - smoothstep(max(0.0, stroke - px * 0.5), stroke + px * 0.5, ring_dist);
         ring_alpha *= balpha;
         
         // Pop flash: when alpha < 0.9, bubble is popping — tint outline
@@ -433,12 +445,12 @@ void main() {
         float d_perp = dot(spec_delta, spec_perp);
         
         // Elliptical distance (stretched along perpendicular for crescent look)
-        float crescent_stretch = mix(1.0, 1.6, smoothstep(0.02, 0.06, r));
+        float crescent_stretch = mix(1.0, 1.6, smoothstep(0.02, 0.06, bpos.z));
         float spec_ell_dist = sqrt(d_along * d_along + (d_perp * d_perp) / (crescent_stretch * crescent_stretch));
         
-        float spec_alpha = smoothstep(spec_r + px, spec_r - px * 0.5, spec_ell_dist);
+        float spec_alpha = 1.0 - smoothstep(max(0.0, spec_r - px * 0.5), spec_r + px * 0.5, spec_ell_dist);
         // Only draw specular inside the bubble
-        spec_alpha *= smoothstep(r + px, r - px, dist);
+        spec_alpha *= 1.0 - smoothstep(max(0.0, r - px * 0.5), r + px * 0.5, dist);
         spec_alpha *= balpha;
         
         result = mix(result, spec_col, spec_alpha * u_fade);

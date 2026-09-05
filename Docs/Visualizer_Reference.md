@@ -295,7 +295,7 @@ top/bottom edge -> viewport height only
 Expected adaptation at constant scale:
 
 - Spectrum reflows/redistributes bars across available width/height;
-- Bubble expands/reflows its position, trail and motion world without stretching circles; stream/drift deltas project once per expanded axis, nonbaseline trail smear is solved in renderer-content coordinates, and swirl orbit/birth geometry removes the independent domain axes so visible travel does not fall by `1 / domain_axis` or distort with aspect; its authored render radius remains the historical fraction of actual card height and is not divided by viewport-domain height, while collision/spawn radius and correction distances multiply by domain height when mapped into that expanded world;
+- Bubble expands/reflows its position, trail and motion world without stretching circles; stream/drift deltas project once per expanded axis, nonbaseline trail smear is solved in renderer-content coordinates, and swirl orbit/birth geometry removes the independent domain axes so visible travel does not fall by `1 / domain_axis` or distort with aspect; its authored radius projects through the equal-area canonical height described below; collision/spawn policy remains canonical normalized content-space separation, with unchanged BTF event behavior;
 - Bubble lifecycle distances (entry depth/margin, cluster spread, exit/drain and contraction grace, overlap retry and pre-entry prediction) are likewise renderer-content values projected once per expanded axis; canonical literals and random draw order remain exact;
 - Oscilloscope/Sine/DevCurve adapt domain while keeping stroke scale;
 - a future 3D sphere uses aspect-correct projection and stays round.
@@ -313,8 +313,10 @@ Bubble is a canary for shared timing and must not receive mode-specific cadence 
 presentation defects.
 
 Viewport geometry changes are spatial configuration, not logical cadence authority.
-Bubble radius and response remain authored fractions of content height. At unchanged height, width
-changes fractional occupancy rather than per-head pixel amplitude. Bubble-local specular offsets and
+Bubble radius and response project through `sqrt(content_width * content_height / 1.5)`. This explicit
+operator correction preserves complete radius excursions across equal-area shapes rather than making wide
+views weak and tall views oversized. The same actual-area metric sizes outlines, with a framebuffer-pixel
+coverage footprint independent of saved logical extent/uniform-scale encoding. Bubble-local specular offsets and
 ellipse orientation retain the canonical content aspect at the same scale/inset. The Quick payload
 retains the already validated immutable BubbleFrame tuples; native uploads still use persistent
 render-thread float32 buffers.

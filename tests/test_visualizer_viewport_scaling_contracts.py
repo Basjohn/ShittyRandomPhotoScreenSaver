@@ -280,27 +280,6 @@ class BubbleViewportScalingTests(unittest.TestCase):
             for lhs, rhs in zip(actual, expected):
                 self.assertAlmostEqual(lhs, rhs, places=12)
 
-    def test_bubble_outline_preserves_large_viewport_weight_without_heavy_baseline(self):
-        # The operator judged the old ~1.2 authored-pixel stroke appropriate at
-        # the ~2.9x-tall CUSTOM viewport but much too thick at canonical/small
-        # sizes. Radius-proportional stroke preserves that large-card ratio.
-        radius = 0.04
-        canonical_inner_h = 272.0
-        observed_tall_inner_h = 808.0
-
-        def stroke_px(inner_h: float) -> float:
-            px = 1.0 / inner_h
-            stroke_norm = max(0.35 * px, min(1.8 * px, radius * 0.0375))
-            return stroke_norm * inner_h
-
-        canonical = stroke_px(canonical_inner_h)
-        tall = stroke_px(observed_tall_inner_h)
-        self.assertLess(canonical, 0.5)
-        self.assertAlmostEqual(tall, 1.2, delta=0.03)
-
-        shader = (ROOT / "widgets/spotify_visualizer/shaders/bubble.frag").read_text()
-        self.assertIn("float stroke = clamp(r * 0.0375, 0.35 * px, 1.8 * px);", shader)
-        self.assertNotIn("float base_stroke_px = 1.2;", shader)
 
     def test_motion_tail_complete_presentation_footprint_stays_authored_pixel_scaled(self):
         # Stored trail history remains normalized/content-space invariant. R4

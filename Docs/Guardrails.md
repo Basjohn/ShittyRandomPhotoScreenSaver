@@ -96,3 +96,8 @@ A deactivated family remains deactivated even if a saved layout contained it.
 
 Close admission before retirement. Fence stale generation/request state. Destroy custom GL on the legal render/context
 owner. Do not repair cadence with `glFinish()`, `DwmFlush()`, GUI sleeps or nested event loops.
+
+The operator-authorized 2026-09-05 Bubble equal-area response correction is documented in
+`Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md` and `Docs/Visualizer_Reference.md`.
+It supersedes height-only product mapping; it does not authorize viewport-dependent performance caps,
+DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.
