@@ -10,19 +10,19 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
 ## E1 — all six modes, source-to-visible geometry
 
 - [x] Archive the latest `--geo` run before tests rotate logs.
-- [ ] Trace pointer edge -> working CUSTOM rect/extent/scale -> scene controller -> retained presenter
+- [x] Trace pointer edge -> working CUSTOM rect/extent/scale -> scene controller -> retained presenter
   -> actual renderer content, comparing drag preview, release, save, cancel and recreation.
-- [ ] Find the first seam that moves the opposite edge, double-applies a scale/screen-fit, reuses stale
+- [x] Find the first seam that moves the opposite edge, double-applies a scale/screen-fit, reuses stale
   content geometry or changes the viewport while pretending to perform uniform scaling.
-- [ ] Correct the owning seam once for all six modes; no mode-specific hidden caps, extent compression,
+- [x] Correct the owning seam once for all six modes; no mode-specific hidden caps, extent compression,
   delayed preview, extra clock, polling or cosmetic gain fix for an ownership defect.
-- [ ] Bubble: reduce nominal full outline width by one logical pixel; retain minimal pixel coverage for
+- [x] Bubble: reduce nominal full outline width by one logical pixel; retain minimal pixel coverage for
   tiny heads. Use the same visible-area size/stroke contract during live adjustment and after save.
-- [ ] Falsifying production-chain tests for left/right/top/bottom, whole-scale and move; opposite-edge
+- [x] Falsifying production-chain tests for left/right/top/bottom, whole-scale and move; opposite-edge
   anchoring, stable position, round geometry, extreme saved extents at small scale, and cancel/save.
-- [ ] Compare renderer-specific geometry in Spectrum/Osc/Sine/Bubble/DevCurve/Sphere. Audit amplitude,
+- [x] Compare renderer-specific geometry in Spectrum/Osc/Sine/Bubble/DevCurve/Sphere. Audit amplitude,
   stroke/glow and screen-fit independently; do not hide large/extreme errors with arbitrary damping.
-- [ ] Inspect actual Quick preview captures and document remaining physical validation.
+- [ ] Awaiting physical validation — inspect actual Quick preview captures and document remaining physical validation.
 
 ## E2 — richer customizable Sphere
 
@@ -64,3 +64,13 @@ The resize screenshot (`codex-clipboard-a5504cf1-1088-44ef-bbcc-ab5f0094f651.png
 1842x585 edit rectangle but only ~533x163 of rendered Spectrum at its top-left. Source tracing found
 normal snapshots refresh committed dimensions while drag position remains live; the shared temporary
 projection must derive scale from the active session rectangle instead.
+
+## E1 implementation evidence
+
+The actual Quick scene/session/owner test now exercises all six modes through each edge operation,
+normal presentation interleaving, wheel scaling, Cancel, and saved geometry. 55 focused geometry tests
+pass. The temporary size comes from the active session rectangle; incoming committed geometry cannot
+replace it at the dragged origin. Independently rounded X/Y dimensions are validated by intersecting
+possible uniform-scale intervals, so narrow/tall integer rounding does not spuriously reject a valid edit.
+The per-mode geometry audit (87 focused checks) found no additional duplicate scale or hidden extent cap.
+Physical live-preview acceptance remains open against the supplied Spectrum screenshot.
