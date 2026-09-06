@@ -14,16 +14,20 @@ def test_build_families_explicitly_carry_current_quick_runtime_dependencies() ->
         "--include-package=rendering.quick",
         "--include-package=widgets.spotify_visualizer",
         "--include-package=rendering.gl_programs",
-        "--include-package=rendering.gl_compositor_pkg",
         "--include-package=OpenGL",
         "--include-package=pyaudiowpatch",
         "--include-package=sounddevice",
+        "--include-data-files=SRPSS.ico=SRPSS.ico",
         "--include-qt-plugins=qml",
         "--include-qt-plugins=multimedia",
         "--include-module=PySide6.QtQuick",
         "--include-module=PySide6.QtQml",
         "--include-module=PySide6.QtMultimedia",
     )
+    # ``rendering.gl_compositor_pkg`` was removed in the Qt Quick cutover. Nuitka
+    # fatals on a non-existent --include-package, so the build families must never
+    # reference it again.
+    forbidden = ("rendering.gl_compositor_pkg",)
     for relative in (
         "scripts/build_nuitka.ps1",
         "scripts/build_nuitka_mc_onedir.ps1",
@@ -33,6 +37,8 @@ def test_build_families_explicitly_carry_current_quick_runtime_dependencies() ->
         source = _text(relative)
         for declaration in required:
             assert declaration in source, (relative, declaration)
+        for declaration in forbidden:
+            assert declaration not in source, (relative, declaration)
 
 
 def test_build_preflight_and_onedir_validation_cover_qml_shaders_themes_presets_and_sounds() -> None:
@@ -64,7 +70,7 @@ def test_diagnostic_frozen_profile_uses_bundled_theme_and_preset_payloads() -> N
     assert "return bundled_overrides_root" in presets
 
 
-def test_installers_offer_opt_in_profile_scoped_settings_reset() -> None:
+def test_installers_offer_profile_scoped_settings_reset() -> None:
     standard = _text("scripts/SRPSS_Installer.iss")
     diagnostic = _text("scripts/SRPSS_Diagnostic_Installer.iss")
     media_center = _text("scripts/SRPSS_MediaCenter_Installer.iss")
@@ -72,15 +78,41 @@ def test_installers_offer_opt_in_profile_scoped_settings_reset() -> None:
     for source in (standard, diagnostic, media_center):
         assert 'Name: "resetsettings"' in source
         assert 'Description: "Revert Settings To Defaults"' in source
-        assert 'Flags: unchecked' in source
+
+    # Post-schema-migration reset checkbox default: the diagnostic runtime keeps
+    # reset opt-in (unchecked), while the standard and Media Center installers
+    # default it to checked so a legacy profile cannot silently re-import stale
+    # values on first launch after the settings-v2 migration.
+    diagnostic_task = next(
+        line.strip()
+        for line in diagnostic.splitlines()
+        if line.strip().startswith('Name: "resetsettings"')
+    )
+    assert "Flags: unchecked" in diagnostic_task
+    for source in (standard, media_center):
+        reset_task = next(
+            line.strip()
+            for line in source.splitlines()
+            if line.strip().startswith('Name: "resetsettings"')
+        )
+        assert "Flags: unchecked" not in reset_task
 
     assert '{userappdata}\\SRPSS\\settings_v2.json"; Tasks: resetsettings' in standard
     assert '{userappdata}\\SRPSS\\settings_v2.json"; Tasks: resetsettings' in diagnostic
     assert '{userappdata}\\SRPSS_MC\\settings_v2.json"; Tasks: resetsettings' in media_center
 
-    # Reset is intentionally surgical: no broad APPDATA/cache/credential deletion.
+    # Reset stays surgical even after the migration hardened it: exactly one file
+    # deletion (settings_v2.json) plus exactly one legacy QSettings registry key
+    # clear (so pre-JSON values cannot be re-imported) -- never a broad
+    # APPDATA/cache/credential wipe.
     for source in (standard, diagnostic, media_center):
-        reset_lines = [line for line in source.splitlines() if "Tasks: resetsettings" in line]
-        assert len(reset_lines) == 1
-        assert reset_lines[0].strip().startswith("Type: files;")
-        assert reset_lines[0].strip().endswith('settings_v2.json"; Tasks: resetsettings')
+        reset_lines = [
+            line.strip() for line in source.splitlines() if "Tasks: resetsettings" in line
+        ]
+        file_lines = [line for line in reset_lines if line.startswith("Type: files;")]
+        registry_lines = [line for line in reset_lines if line.startswith("Root: HKCU;")]
+        assert len(file_lines) == 1, reset_lines
+        assert file_lines[0].endswith('settings_v2.json"; Tasks: resetsettings')
+        assert len(registry_lines) == 1, reset_lines
+        assert "Flags: deletekey" in registry_lines[0]
+        assert len(reset_lines) == 2, reset_lines
