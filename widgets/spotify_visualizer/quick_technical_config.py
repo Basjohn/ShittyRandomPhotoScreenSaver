@@ -1,17 +1,9 @@
 """Presentation-neutral technical configuration for the Quick visualizer owner.
 
-This is the retained Quick counterpart of the retired QWidget technical apply. It
-accepts an already-resolved per-mode technical mapping and applies each value to
-its actual owner:
-
-- BeatEngine / audio worker: capture + DSP technical configuration.
-- VisualizerRuntimeController: bar-count authority.
-- VisualizerLogicalTickState: values consumed by authored logical evolution.
-
-It does not resolve SettingsManager/presets, touch presentation geometry/GPU
-caches, or mirror state into any retired compositor/presenter.
+The mapping accepted here is already resolved by the canonical settings/preset
+layer.  This consumer therefore validates/coerces constraints but never chooses
+product defaults of its own.
 """
-
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -21,18 +13,55 @@ from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 
 logger = get_logger(__name__)
 
-def _clamp(value: object, minimum: float, maximum: float, default: float) -> float:
-    try:
-        resolved = float(value)
-    except (TypeError, ValueError):
-        resolved = float(default)
+_REQUIRED_SHARED_KEYS = frozenset(
+    {
+        "bar_count",
+        "dynamic_floor",
+        "manual_floor",
+        "adaptive_sensitivity",
+        "sensitivity",
+        "audio_block_size",
+        "dynamic_range_enabled",
+        "agc_strength",
+        "input_gain",
+        "kick_lane_gain",
+        "transient_pulse_gain",
+        "transient_clamp",
+        "spectrum_lane_transient_mix",
+    }
+)
+_MODE_REQUIRED_KEYS = {
+    "bubble": frozenset({"bubble_transient_mix_bass", "bubble_transient_mix_vocal"}),
+    "sine_wave": frozenset({"sine_wave_transient_width_mix"}),
+    "oscilloscope": frozenset({"oscilloscope_transient_width_mix"}),
+}
+
+
+def _clamp(value: object, minimum: float, maximum: float) -> float:
+    resolved = float(value)
     return max(float(minimum), min(float(maximum), resolved))
 
 
 def _energy_boost(enabled: bool) -> float:
-    """Resolve the canonical worker energy multiplier for the Quick owner."""
+    """Resolve the worker multiplier for the configured dynamic-range mode.
+
+    These are algorithm semantics, not missing-setting fallbacks.
+    """
 
     return 1.18 if enabled else 0.85
+
+
+def _require_complete_config(controller: Any, config: Mapping[str, Any]) -> str:
+    mode_id = str(getattr(controller, "mode_id", "")).strip().lower()
+    missing = set(_REQUIRED_SHARED_KEYS)
+    missing.update(_MODE_REQUIRED_KEYS.get(mode_id, ()))
+    missing.difference_update(config.keys())
+    if missing:
+        raise KeyError(
+            f"incomplete resolved visualizer technical config for {mode_id or 'unknown'}: "
+            + ", ".join(sorted(missing))
+        )
+    return mode_id
 
 
 def _apply_worker_only_technical(
@@ -41,9 +70,8 @@ def _apply_worker_only_technical(
     audio_block_size: int,
     kick_lane_gain: float,
     spectrum_lane_transient_mix: float,
+    transient_clamp: float,
 ) -> None:
-    """Apply capture sizing plus transient controls through their real owners."""
-
     worker = getattr(engine, "_audio_worker", None)
     if worker is None:
         raise RuntimeError("visualizer BeatEngine has no audio worker")
@@ -56,12 +84,10 @@ def _apply_worker_only_technical(
     set_transient_lane = getattr(engine, "set_transient_lane_config", None)
     if not callable(set_transient_lane):
         raise RuntimeError("visualizer BeatEngine has no transient-lane config authority")
-    set_transient_lane(kick_lane_gain, spectrum_lane_transient_mix)
+    set_transient_lane(kick_lane_gain, spectrum_lane_transient_mix, transient_clamp)
 
 
 def _resize_controller_logical_bar_state(controller: Any, target_bars: int) -> None:
-    """Keep controller + authored logical mirror coherent after engine resize."""
-
     target = max(1, int(target_bars))
     if target == int(controller.bar_count):
         return
@@ -73,8 +99,6 @@ def _resize_controller_logical_bar_state(controller: Any, target_bars: int) -> N
             "visualizer BeatEngine does not support presentation-neutral bar-count reconfiguration"
         )
 
-    # Engine reconfiguration owns its generation/activation invalidation.  Only
-    # after that succeeds do we commit the controller/logical mirror.
     reconfigure(target)
     controller.bar_count = target
 
@@ -92,32 +116,30 @@ def apply_controller_technical_config(
     *,
     reason: str = "quick_owner_configure",
 ) -> None:
-    """Apply one already-resolved mode technical mapping without a QWidget."""
+    """Apply one complete, already-resolved mode technical mapping."""
 
     if not isinstance(config, Mapping):
         raise TypeError("visualizer technical config must be a mapping")
+    mode_id = _require_complete_config(controller, config)
 
     engine = controller.ensure_engine()
     state = controller.logical_tick_state
 
-    target_bars = max(1, int(config.get("bar_count", controller.bar_count)))
-    _resize_controller_logical_bar_state(controller, target_bars)
+    target_bars = max(1, int(config["bar_count"]))
 
-    dynamic_floor = bool(config.get("dynamic_floor", True))
-    manual_floor = _clamp(config.get("manual_floor", 0.12), 0.0, 1.0, 0.12)
-    adaptive = bool(config.get("adaptive_sensitivity", True))
-    sensitivity = _clamp(config.get("sensitivity", 1.0), 0.25, 2.5, 1.0)
-    audio_block_size = max(0, int(config.get("audio_block_size", 0) or 0))
-    dynamic_range_enabled = bool(config.get("dynamic_range_enabled", False))
-    agc_strength = _clamp(config.get("agc_strength", 0.5), 0.0, 1.0, 0.5)
-    input_gain = _clamp(config.get("input_gain", 1.0), 0.05, 2.0, 1.0)
-    kick_lane_gain = _clamp(config.get("kick_lane_gain", 1.0), 0.0, 2.0, 1.0)
-    transient_pulse_gain = _clamp(
-        config.get("transient_pulse_gain", 1.0), 0.0, 3.0, 1.0
-    )
-    transient_clamp = _clamp(config.get("transient_clamp", 1.5), 0.0, 3.0, 1.5)
+    dynamic_floor = bool(config["dynamic_floor"])
+    manual_floor = _clamp(config["manual_floor"], 0.0, 1.0)
+    adaptive = bool(config["adaptive_sensitivity"])
+    sensitivity = _clamp(config["sensitivity"], 0.25, 2.5)
+    audio_block_size = max(0, int(config["audio_block_size"]))
+    dynamic_range_enabled = bool(config["dynamic_range_enabled"])
+    agc_strength = _clamp(config["agc_strength"], 0.0, 1.0)
+    input_gain = _clamp(config["input_gain"], 0.05, 2.0)
+    kick_lane_gain = _clamp(config["kick_lane_gain"], 0.0, 2.0)
+    transient_pulse_gain = _clamp(config["transient_pulse_gain"], 0.0, 3.0)
+    transient_clamp = _clamp(config["transient_clamp"], 0.0, 3.0)
     spectrum_lane_transient_mix = _clamp(
-        config.get("spectrum_lane_transient_mix", 0.65), 0.0, 1.0, 0.65
+        config["spectrum_lane_transient_mix"], 0.0, 1.0
     )
 
     set_floor = getattr(engine, "set_floor_config", None)
@@ -129,6 +151,8 @@ def apply_controller_technical_config(
     if not callable(set_sensitivity):
         raise RuntimeError("visualizer BeatEngine has no sensitivity-config authority")
     set_sensitivity(adaptive, sensitivity)
+
+    _resize_controller_logical_bar_state(controller, target_bars)
 
     set_energy = getattr(engine, "set_energy_boost", None)
     if not callable(set_energy):
@@ -150,6 +174,7 @@ def apply_controller_technical_config(
         audio_block_size=audio_block_size,
         kick_lane_gain=kick_lane_gain,
         spectrum_lane_transient_mix=spectrum_lane_transient_mix,
+        transient_clamp=transient_clamp,
     )
 
     if is_viz_diagnostics_enabled():
@@ -157,7 +182,7 @@ def apply_controller_technical_config(
             "[VIS_TECH_CONFIG] mode=%s reason=%s bars=%d dynamic_floor=%s "
             "manual_floor=%.3f adaptive=%s sensitivity=%.3f block=%d "
             "dynamic_range=%s energy_boost=%.3f agc=%.3f input_gain=%.3f",
-            str(getattr(controller, "mode_id", "unknown")),
+            mode_id or "unknown",
             str(reason),
             target_bars,
             dynamic_floor,
@@ -171,22 +196,23 @@ def apply_controller_technical_config(
             input_gain,
         )
 
-    # These originated in the "technical" settings section, but authored logical
-    # evolution consumes them.  Consumer ownership therefore wins over UI naming.
     state._transient_pulse_gain = transient_pulse_gain
     state._transient_clamp = transient_clamp
-    state._bubble_transient_mix_bass = _clamp(
-        config.get("bubble_transient_mix_bass", 0.75), 0.0, 1.0, 0.75
-    )
-    state._bubble_transient_mix_vocal = _clamp(
-        config.get("bubble_transient_mix_vocal", 0.25), 0.0, 1.0, 0.25
-    )
-    state._sine_wave_transient_width_mix = _clamp(
-        config.get("sine_wave_transient_width_mix", 0.4), 0.0, 1.0, 0.4
-    )
-    state._osc_transient_width_mix = _clamp(
-        config.get("oscilloscope_transient_width_mix", 0.35), 0.0, 1.0, 0.35
-    )
+    if mode_id == "bubble":
+        state._bubble_transient_mix_bass = _clamp(
+            config["bubble_transient_mix_bass"], 0.0, 1.0
+        )
+        state._bubble_transient_mix_vocal = _clamp(
+            config["bubble_transient_mix_vocal"], 0.0, 1.0
+        )
+    elif mode_id == "sine_wave":
+        state._sine_wave_transient_width_mix = _clamp(
+            config["sine_wave_transient_width_mix"], 0.0, 1.0
+        )
+    elif mode_id == "oscilloscope":
+        state._osc_transient_width_mix = _clamp(
+            config["oscilloscope_transient_width_mix"], 0.0, 1.0
+        )
 
 
 __all__ = ["apply_controller_technical_config"]

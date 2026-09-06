@@ -15,6 +15,7 @@ from core.settings.shadow_direction import (
     resolve_directional_extensions,
     resolve_signed_offset,
 )
+from rendering.quick.shadow_snapshot import QuickShadowSnapshot
 from .theme_projection import resolve_rgba_role
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
@@ -182,21 +183,17 @@ def project_steam_card_style(
     shadow_values: Mapping[str, object],
     border_width: float,
 ) -> SteamCardStyleProjection:
-    direction = shadow_values.get("direction", "SE")
-    frame_extra = bounded_float(
-        shadow_values.get("frame_extra_offset"), 0.0, 0.0, 40.0
+    shadow = QuickShadowSnapshot.from_mapping(shadow_values)
+    card_offset = resolve_signed_offset(shadow.direction, *ORDINARY_CARD_SHADOW_BASE)
+    card_extensions = resolve_directional_extensions(
+        shadow.direction, shadow.frame_extra_offset
     )
-    text_extra = bounded_float(
-        shadow_values.get("text_extra_offset"), 0.0, 0.0, 40.0
-    )
-    card_offset = resolve_signed_offset(direction, *ORDINARY_CARD_SHADOW_BASE)
-    card_extensions = resolve_directional_extensions(direction, frame_extra)
     text_offset = resolve_signed_offset(
-        direction,
-        ORDINARY_TEXT_SHADOW_BASE[0] + text_extra,
-        ORDINARY_TEXT_SHADOW_BASE[1] + text_extra,
+        shadow.direction,
+        ORDINARY_TEXT_SHADOW_BASE[0] + shadow.text_extra_offset,
+        ORDINARY_TEXT_SHADOW_BASE[1] + shadow.text_extra_offset,
     )
-    shadow_rgba = rgba(shadow_values.get("color"), (0, 0, 0, 255))
+    shadow_rgba = shadow.color
     return SteamCardStyleProjection(
         card_style=OverlayCardStyle(
             shell_enabled=show_background,
@@ -206,17 +203,13 @@ def project_steam_card_style(
             corner_radius=10.0,
             padding=0.0,
             shadow_enabled=(
-                show_background and as_bool(shadow_values.get("enabled"), True)
+                show_background and shadow.enabled
             ),
             shadow_color=with_alpha(
                 shadow_rgba,
-                bounded_float(
-                    shadow_values.get("frame_opacity"), 0.77, 0.0, 1.0
-                ),
+                shadow.frame_opacity,
             ),
-            shadow_blur=bounded_float(
-                shadow_values.get("blur_radius"), 18.0, 0.0, 80.0
-            ),
+            shadow_blur=min(80.0, shadow.blur_radius),
             shadow_offset_x=card_offset[0],
             shadow_offset_y=card_offset[1],
             shadow_extend_left=card_extensions[0],
@@ -224,14 +217,10 @@ def project_steam_card_style(
             shadow_extend_right=card_extensions[2],
             shadow_extend_bottom=card_extensions[3],
         ),
-        text_shadow_enabled=as_bool(
-            shadow_values.get("text_enabled"), True
-        ),
+        text_shadow_enabled=shadow.text_enabled,
         text_shadow_color=with_alpha(
             shadow_rgba,
-            bounded_float(
-                shadow_values.get("text_opacity"), 0.33, 0.0, 1.0
-            ),
+            shadow.text_opacity,
         ),
         text_shadow_offset_x=text_offset[0],
         text_shadow_offset_y=text_offset[1],

@@ -30,6 +30,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from core.logging.logger import get_logger
+from core.settings.default_contract import require_canonical_default
 from rendering.widget_descriptors import is_global_custom_layout_mode_selected
 from rendering.widget_stacking import (
     DisplayStackObstacle,
@@ -175,7 +176,12 @@ class QuickDisplayPresenter:
         global_config = config.get("global", {})
         if not isinstance(global_config, Mapping):
             global_config = {}
-        self._stacking_enabled = bool(global_config.get("stacking_enabled", False))
+        stacking_default = bool(
+            require_canonical_default("widgets.global.stacking_enabled")
+        )
+        self._stacking_enabled = bool(
+            global_config.get("stacking_enabled", stacking_default)
+        )
         self._authored_layout_enabled = not is_global_custom_layout_mode_selected(
             config
         )
@@ -478,25 +484,19 @@ class QuickDisplayPresenter:
             geometry = self._base_geometries.get(widget_id)
             if geometry is None:
                 continue
-            values = self._widgets_config.get(widget_id, {})
-            if not isinstance(values, Mapping):
-                values = {}
             binding = next(
                 (bound for bound_id, bound in self._geometry_bindings if bound_id == widget_id),
                 None,
             )
-            margin = 30
-            if binding is not None:
-                margin = int(round(float(binding.policy.margin)))
+            if binding is None:
+                raise RuntimeError(
+                    f"stack participant lacks resolved geometry policy: {widget_id}"
+                )
+            margin = int(round(float(binding.policy.margin)))
             participants.append(
                 DisplayStackParticipant(
                     key=widget_id,
-                    position_key=str(
-                        values.get(
-                            "position",
-                            binding.policy.anchor.value if binding is not None else "top_right",
-                        )
-                    ),
+                    position_key=binding.policy.anchor.value,
                     base_x=int(round(geometry.x - self._display_bounds.x)),
                     base_y=int(round(geometry.y - self._display_bounds.y)),
                     width=max(1, int(round(geometry.width))),

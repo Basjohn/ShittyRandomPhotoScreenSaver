@@ -41,6 +41,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from versioning import APP_VERSION  # noqa: E402
+from core.settings.defaults_authority_audit import audit_defaults_authority  # noqa: E402
 from core.visualizer_preset_manifest import (  # noqa: E402
     write_curated_visualizer_preset_manifest,
 )
@@ -288,6 +289,9 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
     result = PreflightResult(pwsh=_find_pwsh(), iscc=_find_iscc())
     jobs = jobs_for_mode(mode, repo_root)
 
+    for issue in audit_defaults_authority(repo_root):
+        result.errors.append(f"Defaults authority: {issue.render()}")
+
     for job in jobs:
         if not job.script.is_file():
             result.unavailable_jobs.add(job.key)
@@ -322,8 +326,6 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
         repo_root / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml",
         repo_root / "rendering" / "quick" / "qml" / "WidgetInteractionGlow.qml",
         repo_root / "rendering" / "quick" / "qml" / "shaders" / "widget_glow.frag.qsb",
-        # PyInstaller toolchain pins for the (default-selected) Reddit Helper job.
-        repo_root / "build_deps" / "requirements_helper.txt",
     )
     for asset in required_assets:
         if not asset.is_file():
@@ -354,34 +356,24 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
     if not requirements_path.is_file():
         result.errors.append(f"Pinned product requirements are missing: {requirements_path}")
     else:
-        def _canonical_distribution(name: str) -> str:
-            # PEP 503 name normalization so dotted/underscored frozen names
-            # (e.g. ``winrt-Windows.Media.Control``, ``PySide6_Addons`` as emitted
-            # verbatim by ``pip freeze``) compare equal to their canonical
-            # distribution names.
-            return re.sub(r"[-_.]+", "-", name).casefold()
-
         requirement_names: set[str] = set()
         for raw_line in requirements_path.read_text(encoding="utf-8").splitlines():
             line = raw_line.split("#", 1)[0].strip()
             if not line:
                 continue
-            name = re.split(r"[<>=!~\[]", line, maxsplit=1)[0].strip()
+            name = re.split(r"[<>=!~\[]", line, maxsplit=1)[0].strip().casefold()
             if name:
-                requirement_names.add(_canonical_distribution(name))
+                requirement_names.add(name)
         required_distributions = {
-            _canonical_distribution(dist)
-            for dist in (
-                "pyside6",
-                "pyside6_addons",
-                "pyside6_essentials",
-                "shiboken6",
-                "pyopengl",
-                "pyaudiowpatch",
-                "sounddevice",
-                "winrt-windows-media-control",
-                "winrt-windows-storage-streams",
-            )
+            "pyside6",
+            "pyside6_addons",
+            "pyside6_essentials",
+            "shiboken6",
+            "pyopengl",
+            "pyaudiowpatch",
+            "sounddevice",
+            "winrt-windows-media-control",
+            "winrt-windows-storage-streams",
         }
         missing_distributions = sorted(required_distributions - requirement_names)
         if missing_distributions:

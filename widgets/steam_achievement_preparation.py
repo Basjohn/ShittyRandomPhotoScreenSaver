@@ -12,11 +12,18 @@ from typing import Any, Mapping
 
 from PySide6.QtGui import QImage
 
+from core.settings.default_contract import require_canonical_default
 from core.steam.achievement_pulse import AchievementPulseSelection
 from widgets.steam_card_models import (
     SteamCardViewModel,
     build_achievement_pulse_view_model,
 )
+
+
+_ACHIEVEMENT_DEFAULTS = require_canonical_default("widgets.achievement_pulse")
+_STEAM_DEFAULTS = require_canonical_default("widgets.steam")
+if not isinstance(_ACHIEVEMENT_DEFAULTS, Mapping) or not isinstance(_STEAM_DEFAULTS, Mapping):
+    raise TypeError("Canonical Steam/Achievement Pulse defaults must be mappings")
 
 
 @dataclass(frozen=True)
@@ -25,12 +32,12 @@ class AchievementPulseRuntimeConfig:
 
     selection: AchievementPulseSelection = field(default_factory=AchievementPulseSelection)
     field_visibility: Mapping[str, bool] = field(default_factory=dict)
-    latest_unlock_count: int = 1
-    show_latest_artwork: bool = True
-    show_artwork: bool = True
-    artwork_shape: str = "portrait"
-    refresh_minutes: int = 10
-    show_connection_info_icon: bool = True
+    latest_unlock_count: int = int(_ACHIEVEMENT_DEFAULTS["latest_unlock_count"])
+    show_latest_artwork: bool = bool(_ACHIEVEMENT_DEFAULTS["show_latest_achievement_artwork"])
+    show_artwork: bool = bool(_ACHIEVEMENT_DEFAULTS["show_artwork"])
+    artwork_shape: str = str(_ACHIEVEMENT_DEFAULTS["artwork_shape"])
+    refresh_minutes: int = int(_STEAM_DEFAULTS["refresh_minutes"])
+    show_connection_info_icon: bool = bool(_STEAM_DEFAULTS["show_connection_info_icon"])
 
 
 @dataclass(frozen=True)

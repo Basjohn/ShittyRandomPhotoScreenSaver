@@ -89,6 +89,7 @@ _COMPUTE_SNAPSHOT_ATTRS = (
     "_transient_bus",
     "_kick_lane_gain",
     "_spectrum_lane_transient_mix",
+    "_transient_clamp",
     "_transient_bass",
     "_transient_mid",
     "_transient_high",
@@ -207,11 +208,11 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._last_fft_ts: float = 0.0
         # Output scaling to keep FFT peaks controlled while allowing safe boosts
         self._base_output_scale: float = 0.5
-        self._energy_boost: float = 0.85
-        self._input_gain: float = 1.0
+        self._energy_boost: Optional[float] = None
+        self._input_gain: Optional[float] = None
         # Floor control configuration (dynamic/manual)
-        self._use_dynamic_floor: bool = True
-        self._manual_floor: float = 0.12
+        self._use_dynamic_floor: Optional[bool] = None
+        self._manual_floor: Optional[float] = None
         self._min_floor: float = 0.0
         self._max_floor: float = 1.0
         self._raw_bass_avg: float = 0.12
@@ -238,16 +239,17 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._drop_threshold: float = 0.16
         self._drop_decay_fast: float = 0.72
         self._drop_snap_fraction: float = 0.58
-        self._drop_speed: float = 1.0
-        self._agc_strength: float = 0.5
+        self._drop_speed: Optional[float] = None
+        self._agc_strength: Optional[float] = None
         self._spectrum_notch_positions: Optional[list] = None
-        self._preferred_block_size: int = 0
+        self._preferred_block_size: Optional[int] = None
 
         # Transient bus (dual-path Approach A)
         from widgets.spotify_visualizer.transient_bus import TransientBus
         self._transient_bus: TransientBus = TransientBus()
-        self._kick_lane_gain: float = 1.0  # Spectrum kick express lane gain (0-2)
-        self._spectrum_lane_transient_mix: float = 0.65
+        self._kick_lane_gain: Optional[float] = None
+        self._spectrum_lane_transient_mix: Optional[float] = None
+        self._transient_clamp: Optional[float] = None
         # Latest transient snapshot fields (written by bar_computation, read by beat_engine)
         self._transient_bass: float = 0.0
         self._transient_mid: float = 0.0
@@ -269,8 +271,8 @@ class SpotifyVisualizerAudioWorker(QObject):
 
         # Sensitivity configuration (driven from Settings UI).
         self._cfg_lock = threading.Lock()
-        self._use_recommended: bool = True
-        self._user_sensitivity: float = 1.0
+        self._use_recommended: Optional[bool] = None
+        self._user_sensitivity: Optional[float] = None
         self._frame_debug_counter: int = 0
         self._bars_log_last_ts: float = 0.0
         self._bars_log_interval: float = 5.0
@@ -284,52 +286,27 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._recommended_sensitivity_multiplier: float = 0.285
         
         # Last config for replay
-        self._last_sensitivity_config = (True, 1.0)
-        self._last_floor_config = (True, 2.1)
+        self._last_sensitivity_config = None
+        self._last_floor_config = None
         
         # Spectrum shape config (pushed from UI/presets, consumed by fft_to_bars)
-        self._spectrum_shape_config = None  # SpectrumShapeConfig or None → uses defaults
-        self._spectrum_mirrored: bool = True  # center-out mirrored layout
-        self._spectrum_shape_nodes: list = [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]]
+        self._spectrum_shape_config = None
+        self._spectrum_mirrored: Optional[bool] = None
+        self._spectrum_shape_nodes: Optional[list] = None
         self._effective_block_size: int = 0
         self._capture_callback_failures: int = 0
 
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
-        try:
-            rec = bool(recommended)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            rec = True
-
-        try:
-            sens = float(sensitivity)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            sens = 1.0
-        if sens < 0.25:
-            sens = 0.25
-        if sens > 2.5:
-            sens = 2.5
-
+        rec = bool(recommended)
+        sens = max(0.25, min(2.5, float(sensitivity)))
         with self._cfg_lock:
             self._use_recommended = rec
             self._user_sensitivity = sens
         self._last_sensitivity_config = (rec, sens)
 
     def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
-        try:
-            dyn = bool(dynamic_enabled)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            dyn = True
-
-        try:
-            floor = float(manual_floor)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            floor = self._manual_floor
-
-        floor = max(self._min_floor, min(self._max_floor, floor))
+        dyn = bool(dynamic_enabled)
+        floor = max(self._min_floor, min(self._max_floor, float(manual_floor)))
 
         with self._cfg_lock:
             self._use_dynamic_floor = dyn
@@ -344,13 +321,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._last_floor_config = (dyn, floor)
 
     def set_audio_block_size(self, block_size: int) -> None:
-        try:
-            value = int(block_size)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            value = 0
-        if value < 0:
-            value = 0
+        value = max(0, int(block_size))
         previous = self._preferred_block_size
         if value == previous:
             return
@@ -360,16 +331,10 @@ class SpotifyVisualizerAudioWorker(QObject):
 
         backend_cfg = getattr(self._backend, "_config", None)
         if backend_cfg is not None:
-            try:
-                backend_cfg.block_size = value
-            except Exception:
-                logger.debug(
-                    "[SPOTIFY_VIS] Failed to update backend block-size config before restart",
-                    exc_info=True,
-                )
+            backend_cfg.block_size = value
 
         logger.info(
-            "[SPOTIFY_VIS] Audio block size changed while running (%d -> %d); restarting capture",
+            "[SPOTIFY_VIS] Audio block size changed while running (%s -> %d); restarting capture",
             previous,
             value,
         )
@@ -386,99 +351,60 @@ class SpotifyVisualizerAudioWorker(QObject):
                 value,
             )
 
-    def set_curved_profile(self, enabled: bool) -> None:
-        """Deprecated — curved profile is now always active. Kept as no-op for compat."""
-        pass
-
     def set_drop_speed(self, speed: float) -> None:
-        """Set the spectrum drop speed multiplier (0.5–3.0).
-
-        Thread-safe: single float assignment is atomic on CPython.
-        Read by _apply_reactive_smoothing in bar_computation.py.
-        """
+        """Set the spectrum drop speed multiplier (0.5–3.0)."""
         self._drop_speed = max(0.5, min(3.0, float(speed)))
 
     def set_notch_positions(self, positions: list) -> None:
-        """Set frequency-zone notch positions for dynamic band boundaries.
-
-        Thread-safe: list reference assignment is atomic on CPython.
-        Read by fft_to_bars in bar_computation.py.
-        """
-        if isinstance(positions, list) and len(positions) >= 2:
-            self._spectrum_notch_positions = positions
+        """Set resolved frequency-zone notch positions for band boundaries."""
+        if not isinstance(positions, list) or len(positions) < 2:
+            raise ValueError("Spectrum notch positions must contain at least two entries")
+        self._spectrum_notch_positions = positions
 
     def set_spectrum_shape_config(self, config) -> None:
-        """Push a SpectrumShapeConfig to the DSP pipeline.
+        """Push one fully-resolved SpectrumShapeConfig to the DSP pipeline."""
+        from widgets.spotify_visualizer.bar_computation import SpectrumShapeConfig
 
-        Thread-safe: the config dataclass is immutable once created and is
-        read atomically by fft_to_bars on the audio thread.
-        """
+        if not isinstance(config, SpectrumShapeConfig):
+            raise TypeError("Spectrum shape config must be SpectrumShapeConfig")
         self._spectrum_shape_config = config
 
     def set_spectrum_mirrored(self, mirrored: bool) -> None:
-        """Toggle center-out mirrored layout vs left-to-right linear."""
         self._spectrum_mirrored = bool(mirrored)
 
     def set_spectrum_shape_nodes(self, nodes: list) -> None:
-        """Push shape editor nodes to the DSP pipeline (read by fft_to_bars)."""
-        if isinstance(nodes, list) and len(nodes) >= 1:
-            self._spectrum_shape_nodes = nodes
+        if not isinstance(nodes, list) or not nodes:
+            raise ValueError("Spectrum shape nodes must be a non-empty list")
+        self._spectrum_shape_nodes = nodes
 
     def set_agc_strength(self, strength: float) -> None:
-        """Set AGC normalization strength (0.0=off, 0.5=default, 1.0=aggressive)."""
-        try:
-            val = float(strength)
-        except Exception:
-            val = 0.5
-        if val < 0.0:
-            val = 0.0
-        if val > 1.0:
-            val = 1.0
-        self._agc_strength = val
+        self._agc_strength = max(0.0, min(1.0, float(strength)))
 
     def set_input_gain(self, gain: float) -> None:
-        """Adjust pre-FFT input gain (virtual volume). Scales PCM before FFT."""
-        try:
-            val = float(gain)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            val = 1.0
-        if val < 0.05:
-            val = 0.05
-        if val > 2.0:
-            val = 2.0
-        self._input_gain = val
+        self._input_gain = max(0.05, min(2.0, float(gain)))
 
     def set_transient_lane_config(
-        self, kick_lane_gain: float, spectrum_lane_transient_mix: float
+        self,
+        kick_lane_gain: float,
+        spectrum_lane_transient_mix: float,
+        transient_clamp: float,
     ) -> None:
-        """Set transient express-lane controls consumed by FFT bar computation."""
-
+        """Set resolved transient express-lane controls consumed by FFT."""
         self._kick_lane_gain = max(0.0, min(2.0, float(kick_lane_gain)))
         self._spectrum_lane_transient_mix = max(
             0.0, min(1.0, float(spectrum_lane_transient_mix))
         )
+        self._transient_clamp = max(0.0, min(3.0, float(transient_clamp)))
 
     def set_energy_boost(self, boost: float) -> None:
-        """Adjust post-FFT energy boost factor."""
-        try:
-            val = float(boost)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            val = 1.0
-        if val < 0.5:
-            val = 0.5
-        if val > 1.8:
-            val = 1.8
-        self._energy_boost = val
+        self._energy_boost = max(0.5, min(1.8, float(boost)))
 
     def reset_reactivity_state(self) -> None:
         """Clear adaptive DSP state that must not bleed across modes."""
 
-        try:
-            floor = float(self._manual_floor)
-        except Exception:
-            floor = 0.12
+        if self._manual_floor is None:
+            raise RuntimeError("visualizer floor configuration is unresolved")
+        floor = float(self._manual_floor)
         with self._cfg_lock:
             self._raw_bass_avg = floor
             self._applied_noise_floor = floor
@@ -611,6 +537,8 @@ class SpotifyVisualizerAudioWorker(QObject):
             return
         self._np = np
 
+        if self._preferred_block_size is None:
+            raise RuntimeError("visualizer audio block-size configuration is unresolved")
         block_size = self._preferred_block_size if self._preferred_block_size > 0 else 0
         config = AudioCaptureConfig(sample_rate=48000, channels=2, block_size=block_size)
         self._backend = create_audio_capture(config)
@@ -773,8 +701,6 @@ class SpotifyVisualizerAudioWorker(QObject):
 
         state = SimpleNamespace()
         for name in _COMPUTE_SNAPSHOT_ATTRS:
-            if not hasattr(self, name):
-                continue
             value = getattr(self, name)
             if name == "_np":
                 setattr(state, name, value)

@@ -89,12 +89,9 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self,
         settings: SettingsManager,
         parent: Optional[QWidget] = None,
-        *,
-        widget_defaults: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(parent)
         self._settings = settings
-        self._provided_widget_defaults = widget_defaults
         self._widget_defaults = self._load_widget_defaults()
 
         visualizers_descriptor = get_widget_settings_section_descriptor("visualizers")
@@ -128,21 +125,12 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
     # ------------------------------------------------------------------
 
     def _load_widget_defaults(self) -> Dict[str, Dict[str, Any]]:
-        """Resolve canonical widget defaults; construction failures stay fail-loud."""
-        defaults = get_default_settings()
-        widgets_defaults = defaults.get("widgets", {})
-        loaded = widgets_defaults if isinstance(widgets_defaults, dict) else {}
-        if not isinstance(self._provided_widget_defaults, dict):
-            return loaded
-        merged = dict(loaded)
-        for section, section_defaults in self._provided_widget_defaults.items():
-            if isinstance(section_defaults, dict) and isinstance(merged.get(section), dict):
-                current = dict(merged[section])
-                current.update(section_defaults)
-                merged[section] = current
-            else:
-                merged[section] = section_defaults
-        return merged
+        """Load canonical Widget defaults for the active application profile."""
+        defaults = get_default_settings(self._settings.get_application_name())
+        widgets_defaults = defaults["widgets"]
+        if not isinstance(widgets_defaults, dict):
+            raise TypeError("Canonical defaults are missing the widgets mapping")
+        return widgets_defaults
 
     def _setup_ui(self) -> None:
         scroll = QScrollArea(self)
@@ -173,7 +161,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self.visualizers_enabled = QCheckBox("Enable Visualizers")
         self.visualizers_enabled.setProperty("circleIndicator", True)
         self.visualizers_enabled.setChecked(
-            self._default_bool("spotify_visualizer", "visualizers_enabled", True)
+            self._default_bool("spotify_visualizer", "visualizers_enabled")
         )
         self.visualizers_enabled.setToolTip("Master switch for all visualizer controls.")
         self.visualizers_enabled.stateChanged.connect(self._save_settings)
@@ -260,7 +248,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self.vis_enabled_checkbox = QCheckBox("Enable Beat Visualizer")
         self.vis_enabled_checkbox.setProperty("circleIndicator", True)
         self.vis_enabled_checkbox.setChecked(
-            self._default_bool("spotify_visualizer", "enabled", True)
+            self._default_bool("spotify_visualizer", "enabled")
         )
         self.vis_enabled_checkbox.setToolTip(
             "Enable the Media-linked visualizer presentation while preserving its settings."
@@ -362,7 +350,9 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             "Slowly shift the hue of visualiser colours through the spectrum. "
             "Saved independently per visualizer mode."
         )
-        self.rainbow_enabled.setChecked(False)
+        self.rainbow_enabled.setChecked(
+            self._default_bool('spotify_visualizer', 'rainbow_enabled')
+        )
         self.rainbow_enabled.setCursor(Qt.CursorShape.PointingHandCursor)
         # This is a discrete Custom toggle, not slider chatter. Persist it
         # immediately so closing Settings straight after clicking cannot lose the
@@ -401,7 +391,9 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         add_section_label(speed_row, "Speed:", 150)
         self.rainbow_speed_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.rainbow_speed_slider.setRange(1, 100)
-        self.rainbow_speed_slider.setValue(50)
+        self.rainbow_speed_slider.setValue(
+            int(round(self._default_float('spotify_visualizer', 'rainbow_speed') * 100.0))
+        )
         self.rainbow_speed_slider.setTickPosition(NoWheelSlider.TickPosition.TicksBelow)
         self.rainbow_speed_slider.setTickInterval(10)
         self.rainbow_speed_slider.setToolTip("How fast the hue cycles through the spectrum.")
@@ -531,7 +523,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self._save_settings_now()
 
     def _prepare_mode_hydration_config(self, mode_id: str) -> dict[str, Any]:
-        widgets = self._settings.get("widgets", {})
+        widgets = self._settings.get("widgets")
         if not isinstance(widgets, dict):
             widgets = {}
         stored = widgets.get("spotify_visualizer", {})
@@ -700,7 +692,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
 
         self._writing_settings = True
         try:
-            widgets = self._settings.get("widgets", {})
+            widgets = self._settings.get("widgets")
             if not isinstance(widgets, dict):
                 widgets = {}
             else:
@@ -728,7 +720,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self._flush_pending_visualizer_save()
 
     def _load_settings(self, *, construct_active_body: bool = False) -> None:
-        widgets = self._settings.get("widgets", {})
+        widgets = self._settings.get("widgets")
         if not isinstance(widgets, dict):
             widgets = {}
         section = widgets.get("spotify_visualizer", {})

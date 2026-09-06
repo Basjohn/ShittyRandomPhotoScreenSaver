@@ -260,8 +260,11 @@ def load_custom_layout_restore_map(widgets_config: Mapping[str, Any] | None) -> 
         if not isinstance(payload, Mapping):
             continue
         position = str(payload.get("position", "") or "").strip()
-        monitor = str(payload.get("monitor", "ALL") or "ALL").strip() or "ALL"
-        if not position:
+        monitor = str(payload.get("monitor", "") or "").strip()
+        # Restore metadata is captured from already-resolved live routing. A
+        # partial entry is invalid metadata, not permission to synthesize a
+        # product monitor default here.
+        if not position or not monitor:
             continue
         normalized_widgets[str(widget_id)] = {
             "position": position,
@@ -305,8 +308,8 @@ def get_custom_layout_restore_entry(
     if not isinstance(payload, Mapping):
         return None
     position = str(payload.get("position", "") or "").strip()
-    monitor = str(payload.get("monitor", "ALL") or "ALL").strip() or "ALL"
-    if not position:
+    monitor = str(payload.get("monitor", "") or "").strip()
+    if not position or not monitor:
         return None
     return {
         "position": position,
@@ -325,9 +328,13 @@ def set_custom_layout_restore_entry(
     if not isinstance(widgets, dict):
         widgets = {}
         restore_map["widgets"] = widgets
+    resolved_position = str(position or "").strip()
+    resolved_monitor = str(monitor or "").strip()
+    if not resolved_position or not resolved_monitor:
+        raise ValueError("CUSTOM restore entries require complete position and monitor routes")
     widgets[str(widget_id)] = {
-        "position": str(position),
-        "monitor": str(monitor or "ALL"),
+        "position": resolved_position,
+        "monitor": resolved_monitor,
     }
     return restore_map
 

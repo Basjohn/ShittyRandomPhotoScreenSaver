@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol
 
 from ui.settings_theme_io import (
     SETTINGS_THEME_FILE_EXTENSION,
@@ -40,6 +40,24 @@ from ui.settings_theme_spec import (
 BUILTIN_DEFAULT_THEME_ID = "builtin:default-dark"
 CANONICAL_DEFAULT_THEME_FILENAME = "Default Dark.srtheme"
 SETTINGS_THEME_SELECTION_KEY = "ui.settings_theme_selection"
+
+
+def _canonical_default_theme_id() -> str:
+    """Return the Settings-theme default owned by canonical SRPSS defaults.
+
+    Missing persisted selection is a defaults concern, not a catalogue fallback
+    concern.  Keep the compiled Default Dark fallback for unavailable/invalid
+    themes, but never let it become a second fresh-install defaults authority.
+    """
+
+    from core.settings.default_contract import require_canonical_default
+
+    raw = require_canonical_default("ui.settings_theme_selection")
+    if not isinstance(raw, str) or not raw.strip():
+        raise RuntimeError(
+            "Canonical defaults require non-empty ui.settings_theme_selection"
+        )
+    return raw.strip()
 
 
 class SettingsThemeSelectionStore(Protocol):
@@ -245,7 +263,7 @@ def read_persisted_theme_id(
 
     raw = settings.get(
         SETTINGS_THEME_SELECTION_KEY,
-        BUILTIN_DEFAULT_THEME_ID,
+        _canonical_default_theme_id(),
     )
     if not isinstance(raw, str):
         return BUILTIN_DEFAULT_THEME_ID

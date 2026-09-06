@@ -6,21 +6,30 @@ from collections.abc import Mapping
 
 from PySide6.QtCore import QSizeF
 
+from core.settings.default_contract import require_canonical_default
+
+
+_ABANDONMENT_DEFAULTS = require_canonical_default("widgets.abandonment_issues")
+if not isinstance(_ABANDONMENT_DEFAULTS, dict):
+    raise TypeError("Canonical Abandonment defaults must be a mapping")
 
 ABANDONMENT_AUTHORED_SIZE = QSizeF(600.0, 300.0)
 ABANDONMENT_ARTWORK_SIZE_MIN = 110
-ABANDONMENT_ARTWORK_SIZE_DEFAULT = 140
+ABANDONMENT_ARTWORK_SIZE_DEFAULT = int(_ABANDONMENT_DEFAULTS["artwork_size"])
 ABANDONMENT_ARTWORK_SIZE_MAX = 180
-ABANDONMENT_ACCENT_RGBA = (222, 157, 88, 225)
+ABANDONMENT_ACCENT_RGBA = tuple(_ABANDONMENT_DEFAULTS["accent_color"])
 ABANDONMENT_FIELD_DEFAULTS: dict[str, bool] = {
-    "playtime": True,
-    "achievements": True,
-    "last_unlock": True,
-    "last_played": True,
-    "archive_class": False,
-    "queue": False,
-    "source": False,
-    "pinned": False,
+    field_id: bool(_ABANDONMENT_DEFAULTS[f"show_{field_id}"])
+    for field_id in (
+        "playtime",
+        "achievements",
+        "last_unlock",
+        "last_played",
+        "archive_class",
+        "queue",
+        "source",
+        "pinned",
+    )
 }
 ABANDONMENT_LEDGER_ROW_HEIGHT = 31.0
 

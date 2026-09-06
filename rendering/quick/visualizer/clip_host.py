@@ -106,7 +106,7 @@ class VisualizerClipFrame:
                 content_height,
             ),
             inner_corner_radius=float(
-                presentation.shell_style.get("inner_corner_radius", 0.0)
+                presentation.shell_style["inner_corner_radius"]
             ),
             matrix_values=tuple(float(value) for value in matrix_values),
             viewport=tuple(int(value) for value in viewport),

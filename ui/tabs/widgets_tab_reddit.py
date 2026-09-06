@@ -102,7 +102,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_enabled.setToolTip(
         "Shows a small list of posts from a subreddit using the selected Reddit provider."
     )
-    tab.reddit_enabled.setChecked(tab._default_bool('reddit', 'enabled', True))
+    tab.reddit_enabled.setChecked(tab._default_bool('reddit', 'enabled'))
     tab.reddit_enabled.stateChanged.connect(tab._save_settings)
     tab.reddit_enabled.stateChanged.connect(tab._update_stack_status)
     reddit_layout.addWidget(tab.reddit_enabled)
@@ -113,10 +113,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _rc_layout.setContentsMargins(0, 0, 0, 12)
     _rc_layout.setSpacing(12)
 
-    reddit1_default_expanded = (
-        tab.get_widget_bucket_state("reddit", "reddit1", default=False)
-        or tab.get_widget_bucket_state("reddit", "primary", default=False)
-    )
+    reddit1_default_expanded = tab.get_widget_bucket_state("reddit", "reddit1")
     reddit1_toggle, reddit1_body, reddit1_layout = build_bucket_toggle(
         _rc_layout,
         "Reddit 1",
@@ -127,37 +124,28 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit2_toggle, reddit2_body, reddit2_layout = build_bucket_toggle(
         _rc_layout,
         "Reddit 2",
-        expanded=tab.get_widget_bucket_state("reddit", "secondary", default=False),
+        expanded=tab.get_widget_bucket_state("reddit", "secondary"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("reddit", "secondary", checked),
         defer_initial_visibility=True,
     )
     interaction_toggle, interaction_body, interaction_layout = build_bucket_toggle(
         _rc_layout,
         "Link Behavior",
-        expanded=(
-            tab.get_widget_bucket_state("reddit", "interaction", default=False)
-            or tab.get_widget_bucket_state("reddit", "feed", default=False)
-        ),
+        expanded=tab.get_widget_bucket_state("reddit", "interaction"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("reddit", "interaction", checked),
         defer_initial_visibility=True,
     )
     shared_layout_toggle, shared_layout_body, shared_layout_layout = build_bucket_toggle(
         _rc_layout,
         "Shared Layout & Typography",
-        expanded=(
-            tab.get_widget_bucket_state("reddit", "shared_layout", default=False)
-            or tab.get_widget_bucket_state("reddit", "layout", default=False)
-        ),
+        expanded=tab.get_widget_bucket_state("reddit", "shared_layout"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("reddit", "shared_layout", checked),
         defer_initial_visibility=True,
     )
     appearance_toggle, appearance_body, appearance_layout = build_bucket_toggle(
         _rc_layout,
         "Shared Appearance",
-        expanded=(
-            tab.get_widget_bucket_state("reddit", "shared_appearance", default=False)
-            or tab.get_widget_bucket_state("reddit", "appearance", default=False)
-        ),
+        expanded=tab.get_widget_bucket_state("reddit", "shared_appearance"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("reddit", "shared_appearance", checked),
         defer_initial_visibility=True,
     )
@@ -175,7 +163,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_exit_on_click.setToolTip(
         "When enabled, clicking a Reddit link will exit the screensaver and open the link in your browser."
     )
-    tab.reddit_exit_on_click.setChecked(tab._default_bool('reddit', 'exit_on_click', True))
+    tab.reddit_exit_on_click.setChecked(tab._default_bool('reddit', 'exit_on_click'))
     tab.reddit_exit_on_click.stateChanged.connect(tab._save_settings)
     interaction_layout.addWidget(tab.reddit_exit_on_click)
 
@@ -189,7 +177,9 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_provider_combo.setToolTip(
         "Shared post source for Reddit 1 and Reddit 2. Reddit RSS is the default live provider; HTML is also used as the designed first fallback when the selected source fails."
     )
-    default_provider = tab._default_str('reddit', 'provider', 'rss').strip().lower() or 'rss'
+    default_provider = tab._default_str('reddit', 'provider').strip().lower()
+    if not default_provider:
+        raise ValueError('Canonical Reddit provider is empty')
     default_provider_idx = tab.reddit_provider_combo.findData(default_provider)
     if default_provider_idx >= 0:
         tab.reddit_provider_combo.setCurrentIndex(default_provider_idx)
@@ -203,7 +193,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Subreddit name
     reddit_sub_row = _aligned_row(reddit1_layout, "Subreddit:")
     tab.reddit_subreddit = QLineEdit()
-    default_subreddit = tab._default_str('reddit', 'subreddit', 'wallpapers')
+    default_subreddit = tab._default_str('reddit', 'subreddit')
     tab.reddit_subreddit.setText(default_subreddit)
     tab.reddit_subreddit.setPlaceholderText("e.g. wallpapers")
     tab.reddit_subreddit.setToolTip("Enter the subreddit name (without r/ prefix)")
@@ -221,7 +211,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_items.valueChanged.connect(tab._update_stack_status)
     tab.reddit_items.setMinimumWidth(80)
     reddit_items_row.addWidget(tab.reddit_items)
-    reddit_limit_default = clamp_list_capacity(tab._default_int('reddit', 'limit', 10), default=10)
+    reddit_limit_default = clamp_list_capacity(tab._default_int('reddit', 'limit'))
     tab.reddit_items.setValue(reddit_limit_default)
     reddit_items_row.addStretch()
 
@@ -234,7 +224,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_position.currentTextChanged.connect(tab._update_stack_status)
     tab.reddit_position.setMinimumWidth(150)
     reddit_pos_row.addWidget(tab.reddit_position)
-    tab._set_combo_text(tab.reddit_position, tab._default_str('reddit', 'position', 'Bottom Right'))
+    tab._set_combo_text(tab.reddit_position, tab._default_str('reddit', 'position'))
     tab.reddit_stack_status = QLabel("")
     tab.reddit_stack_status.setMinimumWidth(100)
     tab.reddit_stack_status.setStyleSheet(STATUS_LABEL_STYLE)
@@ -250,14 +240,14 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_monitor_combo.currentTextChanged.connect(tab._update_stack_status)
     tab.reddit_monitor_combo.setMinimumWidth(120)
     reddit_disp_row.addWidget(tab.reddit_monitor_combo)
-    reddit_monitor_default = tab._widget_default('reddit', 'monitor', 'ALL')
+    reddit_monitor_default = tab._widget_default('reddit', 'monitor')
     tab._set_combo_text(tab.reddit_monitor_combo, str(reddit_monitor_default))
     reddit_disp_row.addStretch()
 
     # Font family
     reddit_font_family_row = _aligned_row(shared_layout_layout, "Font:")
     tab.reddit_font_combo = StyledFontComboBox(size_variant="hero")
-    default_reddit_font = tab._default_str('reddit', 'font_family', 'Inter')
+    default_reddit_font = tab._default_str('reddit', 'font_family')
     tab.reddit_font_combo.setCurrentFont(QFont(default_reddit_font))
     tab.reddit_font_combo.setMinimumWidth(220)
     tab.reddit_font_combo.setToolTip("Font family for Reddit post titles")
@@ -269,7 +259,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_font_row = _aligned_row(shared_layout_layout, "Font Size:")
     tab.reddit_font_size = QSpinBox()
     tab.reddit_font_size.setRange(10, 72)
-    tab.reddit_font_size.setValue(tab._default_int('reddit', 'font_size', 18))
+    tab.reddit_font_size.setValue(tab._default_int('reddit', 'font_size'))
     tab.reddit_font_size.setAccelerated(True)
     tab.reddit_font_size.setToolTip("Font size for Reddit post titles (10-72px)")
     tab.reddit_font_size.valueChanged.connect(tab._save_settings)
@@ -284,7 +274,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_margin_row = _aligned_row(shared_layout_layout, "Margin:")
     tab.reddit_margin = QSpinBox()
     tab.reddit_margin.setRange(0, 100)
-    tab.reddit_margin.setValue(tab._default_int('reddit', 'margin', 30))
+    tab.reddit_margin.setValue(tab._default_int('reddit', 'margin'))
     tab.reddit_margin.setAccelerated(True)
     tab.reddit_margin.valueChanged.connect(tab._save_settings)
     reddit_margin_row.addWidget(tab.reddit_margin)
@@ -310,19 +300,19 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     tab.reddit_show_background = QCheckBox("Show Background Frame")
     tab.reddit_show_background.setProperty("circleIndicator", True)
-    tab.reddit_show_background.setChecked(tab._default_bool('reddit', 'show_background', True))
+    tab.reddit_show_background.setChecked(tab._default_bool('reddit', 'show_background'))
     tab.reddit_show_background.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.reddit_show_background)
 
     tab.reddit_show_separators = QCheckBox("Show Separator Lines Between Posts")
     tab.reddit_show_separators.setProperty("circleIndicator", True)
-    tab.reddit_show_separators.setChecked(tab._default_bool('reddit', 'show_separators', True))
+    tab.reddit_show_separators.setChecked(tab._default_bool('reddit', 'show_separators'))
     tab.reddit_show_separators.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.reddit_show_separators)
 
     tab.reddit_show_refresh_spiral = QCheckBox("Show Refresh Spiral")
     tab.reddit_show_refresh_spiral.setProperty("circleIndicator", True)
-    tab.reddit_show_refresh_spiral.setChecked(tab._default_bool('reddit', 'show_refresh_spiral', True))
+    tab.reddit_show_refresh_spiral.setChecked(tab._default_bool('reddit', 'show_refresh_spiral'))
     tab.reddit_show_refresh_spiral.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.reddit_show_refresh_spiral)
 
@@ -331,7 +321,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.reddit_bg_opacity.setMinimum(0)
     tab.reddit_bg_opacity.setMaximum(100)
-    reddit_bg_opacity_pct = int(tab._default_float('reddit', 'bg_opacity', 0.6) * 100)
+    reddit_bg_opacity_pct = int(tab._default_float('reddit', 'bg_opacity') * 100)
     tab.reddit_bg_opacity.setValue(reddit_bg_opacity_pct)
     tab.reddit_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.reddit_bg_opacity.setTickInterval(10)
@@ -369,7 +359,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.reddit_border_opacity.setMinimum(0)
     tab.reddit_border_opacity.setMaximum(100)
-    reddit_border_opacity_pct = int(tab._default_float('reddit', 'border_opacity', 1.0) * 100)
+    reddit_border_opacity_pct = int(tab._default_float('reddit', 'border_opacity') * 100)
     tab.reddit_border_opacity.setValue(reddit_border_opacity_pct)
     tab.reddit_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.reddit_border_opacity.setTickInterval(10)
@@ -416,7 +406,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit2_items.valueChanged.connect(tab._save_settings)
     tab.reddit2_items.valueChanged.connect(tab._update_stack_status)
     reddit2_items_row.addWidget(tab.reddit2_items)
-    tab.reddit2_items.setValue(clamp_list_capacity(tab._default_int('reddit2', 'limit', 20), default=20))
+    tab.reddit2_items.setValue(clamp_list_capacity(tab._default_int('reddit2', 'limit')))
     reddit2_items_row.addStretch()
 
     reddit2_pos_row = _aligned_row(reddit2_layout, "Position:")
@@ -485,67 +475,71 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
         except Exception:
             reddit_config = {}
 
-    tab.reddit_enabled.setChecked(tab._config_bool('reddit', reddit_config, 'enabled', True))
-    tab.reddit_exit_on_click.setChecked(tab._config_bool('reddit', reddit_config, 'exit_on_click', True))
+    tab.reddit_enabled.setChecked(tab._config_bool('reddit', reddit_config, 'enabled'))
+    tab.reddit_exit_on_click.setChecked(tab._config_bool('reddit', reddit_config, 'exit_on_click'))
 
-    subreddit = tab._config_str('reddit', reddit_config, 'subreddit', 'All')
+    subreddit = tab._config_str('reddit', reddit_config, 'subreddit')
     tab.reddit_subreddit.setText(subreddit)
-    provider = tab._config_str('reddit', reddit_config, 'provider', 'rss').strip().lower() or 'rss'
+    provider = tab._config_str('reddit', reddit_config, 'provider').strip().lower()
+    if not provider:
+        provider = tab._default_str('reddit', 'provider').strip().lower()
     provider_idx = tab.reddit_provider_combo.findData(provider)
     if provider_idx >= 0:
         tab.reddit_provider_combo.setCurrentIndex(provider_idx)
 
-    limit_val = clamp_list_capacity(tab._config_int('reddit', reddit_config, 'limit', 10), default=10)
+    reddit_limit_default = tab._default_int('reddit', 'limit')
+    limit_val = clamp_list_capacity(tab._config_int('reddit', reddit_config, 'limit'), default=reddit_limit_default)
     tab.reddit_items.setValue(limit_val)
 
-    reddit_pos = tab._config_str('reddit', reddit_config, 'position', 'Bottom Right')
+    reddit_pos = tab._config_str('reddit', reddit_config, 'position')
     idx_pos = tab.reddit_position.findText(reddit_pos)
     if idx_pos >= 0:
         tab.reddit_position.setCurrentIndex(idx_pos)
 
-    r_monitor_sel = reddit_config.get('monitor', tab._widget_default('reddit', 'monitor', 'ALL'))
-    r_mon_text = str(r_monitor_sel) if isinstance(r_monitor_sel, (int, str)) else 'ALL'
+    r_monitor_sel = reddit_config.get('monitor', tab._widget_default('reddit', 'monitor'))
+    r_monitor_default = tab._widget_default('reddit', 'monitor')
+    r_mon_text = str(r_monitor_sel) if isinstance(r_monitor_sel, (int, str)) else str(r_monitor_default)
     r_idx = tab.reddit_monitor_combo.findText(r_mon_text)
     if r_idx >= 0:
         tab.reddit_monitor_combo.setCurrentIndex(r_idx)
 
-    tab.reddit_font_combo.setCurrentFont(QFont(tab._config_str('reddit', reddit_config, 'font_family', 'Inter')))
-    tab.reddit_font_size.setValue(tab._config_int('reddit', reddit_config, 'font_size', 18))
-    tab.reddit_margin.setValue(tab._config_int('reddit', reddit_config, 'margin', 30))
+    tab.reddit_font_combo.setCurrentFont(QFont(tab._config_str('reddit', reddit_config, 'font_family')))
+    tab.reddit_font_size.setValue(tab._config_int('reddit', reddit_config, 'font_size'))
+    tab.reddit_margin.setValue(tab._config_int('reddit', reddit_config, 'margin'))
 
-    tab.reddit_show_background.setChecked(tab._config_bool('reddit', reddit_config, 'show_background', True))
-    tab.reddit_show_separators.setChecked(tab._config_bool('reddit', reddit_config, 'show_separators', True))
-    tab.reddit_show_refresh_spiral.setChecked(tab._config_bool('reddit', reddit_config, 'show_refresh_spiral', True))
-    reddit_opacity_pct = int(tab._config_float('reddit', reddit_config, 'bg_opacity', 0.6) * 100)
+    tab.reddit_show_background.setChecked(tab._config_bool('reddit', reddit_config, 'show_background'))
+    tab.reddit_show_separators.setChecked(tab._config_bool('reddit', reddit_config, 'show_separators'))
+    tab.reddit_show_refresh_spiral.setChecked(tab._config_bool('reddit', reddit_config, 'show_refresh_spiral'))
+    reddit_opacity_pct = int(tab._config_float('reddit', reddit_config, 'bg_opacity') * 100)
     tab.reddit_bg_opacity.setValue(reddit_opacity_pct)
     tab.reddit_bg_opacity_label.setText(f"{reddit_opacity_pct}%")
 
-    reddit_border_opacity_pct = int(tab._config_float('reddit', reddit_config, 'border_opacity', 1.0) * 100)
+    reddit_border_opacity_pct = int(tab._config_float('reddit', reddit_config, 'border_opacity') * 100)
     tab.reddit_border_opacity.setValue(reddit_border_opacity_pct)
     tab.reddit_border_opacity_label.setText(f"{reddit_border_opacity_pct}%")
 
-    reddit_color_data = reddit_config.get('color', tab._widget_default('reddit', 'color', [255, 255, 255, 230]))
+    reddit_color_data = reddit_config.get('color', tab._widget_default('reddit', 'color'))
     tab._reddit_color = QColor(*reddit_color_data)
-    reddit_bg_color_data = reddit_config.get('bg_color', tab._widget_default('reddit', 'bg_color', [35, 35, 35, 255]))
+    reddit_bg_color_data = reddit_config.get('bg_color', tab._widget_default('reddit', 'bg_color'))
     try:
         tab._reddit_bg_color = QColor(*reddit_bg_color_data)
     except Exception:
-        tab._reddit_bg_color = QColor(35, 35, 35, 255)
-    reddit_border_color_data = reddit_config.get('border_color', tab._widget_default('reddit', 'border_color', [255, 255, 255, 255]))
+        tab._reddit_bg_color = tab._color_from_default('reddit', 'bg_color')
+    reddit_border_color_data = reddit_config.get('border_color', tab._widget_default('reddit', 'border_color'))
     try:
         tab._reddit_border_color = QColor(*reddit_border_color_data)
     except Exception:
-        tab._reddit_border_color = QColor(255, 255, 255, 255)
+        tab._reddit_border_color = tab._color_from_default('reddit', 'border_color')
     reddit_header_fill_data = reddit_config.get(
-        'header_fill_color', tab._widget_default('reddit', 'header_fill_color', [0, 0, 0, 0])
+        'header_fill_color', tab._widget_default('reddit', 'header_fill_color')
     )
     tab._reddit_header_fill_color = QColor(*reddit_header_fill_data)
     reddit_header_text_data = reddit_config.get(
-        'header_text_color', tab._widget_default('reddit', 'header_text_color', [255, 255, 255, 230])
+        'header_text_color', tab._widget_default('reddit', 'header_text_color')
     )
     tab._reddit_header_text_color = QColor(*reddit_header_text_data)
     reddit_header_border_data = reddit_config.get(
-        'header_border_color', tab._widget_default('reddit', 'header_border_color', [255, 255, 255, 255])
+        'header_border_color', tab._widget_default('reddit', 'header_border_color')
     )
     tab._reddit_header_border_color = QColor(*reddit_header_border_data)
     _apply_color_to_button('reddit_color_btn', '_reddit_color')
@@ -554,16 +548,18 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
 
     # Reddit 2
     reddit2_config = widgets.get('reddit2', {})
-    tab.reddit2_enabled.setChecked(tab._config_bool('reddit2', reddit2_config, 'enabled', False))
-    tab.reddit2_subreddit.setText(tab._config_str('reddit2', reddit2_config, 'subreddit', ''))
-    reddit2_limit = clamp_list_capacity(tab._config_int('reddit2', reddit2_config, 'limit', 20), default=20)
+    tab.reddit2_enabled.setChecked(tab._config_bool('reddit2', reddit2_config, 'enabled'))
+    tab.reddit2_subreddit.setText(tab._config_str('reddit2', reddit2_config, 'subreddit'))
+    reddit2_limit_default = tab._default_int('reddit2', 'limit')
+    reddit2_limit = clamp_list_capacity(tab._config_int('reddit2', reddit2_config, 'limit'), default=reddit2_limit_default)
     tab.reddit2_items.setValue(reddit2_limit)
-    reddit2_pos = tab._config_str('reddit2', reddit2_config, 'position', 'Top Left')
+    reddit2_pos = tab._config_str('reddit2', reddit2_config, 'position')
     reddit2_pos_idx = tab.reddit2_position.findText(reddit2_pos)
     if reddit2_pos_idx >= 0:
         tab.reddit2_position.setCurrentIndex(reddit2_pos_idx)
-    reddit2_monitor = reddit2_config.get('monitor', tab._widget_default('reddit2', 'monitor', 'ALL'))
-    reddit2_mon_text = str(reddit2_monitor) if isinstance(reddit2_monitor, (int, str)) else 'ALL'
+    reddit2_monitor = reddit2_config.get('monitor', tab._widget_default('reddit2', 'monitor'))
+    reddit2_monitor_default = tab._widget_default('reddit2', 'monitor')
+    reddit2_mon_text = str(reddit2_monitor) if isinstance(reddit2_monitor, (int, str)) else str(reddit2_monitor_default)
     reddit2_mon_idx = tab.reddit2_monitor_combo.findText(reddit2_mon_text)
     if reddit2_mon_idx >= 0:
         tab.reddit2_monitor_combo.setCurrentIndex(reddit2_mon_idx)
@@ -577,9 +573,9 @@ def save_reddit_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     reddit_config = {
         'enabled': family_enabled,
         'exit_on_click': tab.reddit_exit_on_click.isChecked(),
-        'provider': (tab.reddit_provider_combo.currentData() or 'rss'),
-        'subreddit': tab.reddit_subreddit.text().strip() or 'wallpapers',
-        'limit': clamp_list_capacity(tab.reddit_items.value(), default=10),
+        'provider': (tab.reddit_provider_combo.currentData() or tab._default_str('reddit', 'provider')),
+        'subreddit': tab.reddit_subreddit.text().strip() or tab._default_str('reddit', 'subreddit'),
+        'limit': clamp_list_capacity(tab.reddit_items.value(), default=tab._default_int('reddit', 'limit')),
         'position': tab.reddit_position.currentText(),
         'font_family': tab.reddit_font_combo.currentFont().family(),
         'font_size': tab.reddit_font_size.value(),
@@ -602,18 +598,16 @@ def save_reddit_settings(tab: WidgetsTab) -> tuple[dict, dict]:
                                 tab._reddit_header_border_color.blue(), tab._reddit_header_border_color.alpha()],
         'border_opacity': tab.reddit_border_opacity.value() / 100.0,
     }
-    rmon_text = tab.reddit_monitor_combo.currentText()
-    reddit_config['monitor'] = rmon_text if rmon_text == 'ALL' else int(rmon_text)
+    reddit_config['monitor'] = tab._monitor_value_from_combo('reddit', tab.reddit_monitor_combo)
 
     reddit2_config = {
         # The top-level Reddit toggle owns the whole family. Reddit 2 only
         # participates when the family is enabled and its own child toggle is on.
         'enabled': family_enabled and tab.reddit2_enabled.isChecked(),
-        'subreddit': tab.reddit2_subreddit.text().strip(),
-        'limit': clamp_list_capacity(tab.reddit2_items.value(), default=20),
+        'subreddit': tab.reddit2_subreddit.text().strip() or tab._default_str('reddit2', 'subreddit'),
+        'limit': clamp_list_capacity(tab.reddit2_items.value(), default=tab._default_int('reddit2', 'limit')),
         'position': tab.reddit2_position.currentText(),
     }
-    r2mon_text = tab.reddit2_monitor_combo.currentText()
-    reddit2_config['monitor'] = r2mon_text if r2mon_text == 'ALL' else int(r2mon_text)
+    reddit2_config['monitor'] = tab._monitor_value_from_combo('reddit2', tab.reddit2_monitor_combo)
 
     return reddit_config, reddit2_config

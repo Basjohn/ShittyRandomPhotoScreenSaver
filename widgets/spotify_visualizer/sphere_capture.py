@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from widgets.spotify_visualizer.config_applier import SPHERE_DEFAULT_PARAMETERS
 from widgets.spotify_visualizer.render_state import FrozenFields, SphereFrame
 
 
@@ -43,7 +42,7 @@ def capture_sphere(widget: Any, engine: Any, context: Any):
     if not source_is_current:
         extra["transient_energy"] = None
     transient = _transient_state(extra.get("transient_energy"))
-    parameters = getattr(widget, "_sphere_parameters", SPHERE_DEFAULT_PARAMETERS)
+    parameters = widget._sphere_parameters
     if not isinstance(parameters, FrozenFields):
         raise TypeError("Sphere capture requires configure-owned FrozenFields")
     resolved = runtime.resolve(now_ts=context.now_ts, runtime_generation=context.runtime_generation,

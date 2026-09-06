@@ -18,6 +18,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
+from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from core.settings.visualizer_mode_registry import (
     get_default_visualizer_mode_id,
@@ -74,80 +75,154 @@ class VisualizerSettingsContextMixin:
     ]
 
     def _initialize_visualizer_settings_context_state(self) -> None:
-        """Initialize only Visualizer Settings UI state from the shared authority."""
+        """Initialize Visualizer Settings UI state from canonical profile defaults."""
+        defaults = get_default_settings(self._settings.get_application_name())
+        ui_defaults = defaults["ui"]
+        if not isinstance(ui_defaults, Mapping):
+            raise TypeError("Canonical defaults are missing the ui mapping")
+        self._visualizer_ui_defaults = deepcopy(dict(ui_defaults))
         self._visualizer_adv_state = self._load_adv_states()
         self._visualizer_tech_state = self._load_tech_states()
         self._visualizer_tech_bucket_state = self._load_tech_bucket_states()
         self._visualizer_bucket_state = self._load_bucket_states()
 
-    def _widget_default(self, section: str, key: str, fallback: Any) -> Any:
-        """Fetch a default value for a widget section/key combo."""
+    def _load_canonical_ui_state_mapping(
+        self,
+        setting_key: str,
+        default_leaf: str,
+    ) -> Dict[str, bool]:
+        canonical = self._visualizer_ui_defaults.get(default_leaf)
+        if not isinstance(canonical, Mapping):
+            raise KeyError(f"Canonical UI defaults are missing ui.{default_leaf}")
+        merged = {str(key): bool(value) for key, value in canonical.items()}
+        raw = self._settings.get(setting_key)
+        if isinstance(raw, Mapping):
+            merged.update({str(key): bool(value) for key, value in raw.items()})
+        return merged
+
+    def _widget_default(self, section: str, key: str) -> Any:
+        """Return one canonical Widget default and fail loudly if schema is incomplete."""
         section_defaults = self._widget_defaults.get(section, {})
-        if isinstance(section_defaults, dict) and key in section_defaults:
-            return section_defaults[key]
-        return fallback
+        if isinstance(section_defaults, Mapping) and key in section_defaults:
+            return deepcopy(section_defaults[key])
+        raise KeyError(
+            f"Canonical widget defaults are missing persisted product key: "
+            f"widgets.{section}.{key}"
+        )
 
-    def _color_from_default(self, section: str, key: str, fallback: list[int]) -> QColor:
-        """Return a QColor built from canonical defaults with fallback."""
-        value = self._widget_default(section, key, fallback)
+    def _monitor_text_from_value(self, section: str, value: object) -> str:
+        """Normalize one widget monitor route for a Settings combo.
+
+        Persisted malformed values repair to the canonical widget monitor. The
+        helper deliberately owns no ``ALL``/monitor-number product default of
+        its own.
+        """
+
+        canonical = self._widget_default(section, "monitor")
+        candidate = value if isinstance(value, (int, str)) else canonical
+        text = str(candidate).strip()
+        if not text:
+            text = str(canonical).strip()
+        if not text:
+            raise ValueError(f"Canonical widget monitor is empty: widgets.{section}.monitor")
+        return text
+
+    def _monitor_value_from_combo(self, section: str, combo: object) -> int | str:
+        """Return a persisted monitor value without inventing a UI fallback."""
+
+        current_text = str(getattr(combo, "currentText")()).strip()
+        if not current_text:
+            current_text = self._monitor_text_from_value(
+                section, self._widget_default(section, "monitor")
+            )
+        if current_text.upper() == "ALL":
+            return "ALL"
         try:
-            if isinstance(value, (list, tuple)) and len(value) >= 3:
-                return QColor(*value)
-        except Exception:
-            logger.debug("[WIDGETS_TAB] Invalid color default for %s.%s", section, key, exc_info=True)
-        return QColor(*fallback)
+            return int(current_text)
+        except (TypeError, ValueError) as exc:
+            canonical_text = self._monitor_text_from_value(
+                section, self._widget_default(section, "monitor")
+            )
+            if canonical_text.upper() == "ALL":
+                return "ALL"
+            try:
+                return int(canonical_text)
+            except (TypeError, ValueError) as canonical_exc:
+                raise ValueError(
+                    f"Canonical widget monitor is invalid: widgets.{section}.monitor="
+                    f"{canonical_text!r}"
+                ) from canonical_exc
 
-    def _default_int(self, section: str, key: str, fallback: int) -> int:
-        """Return widget default coerced to int."""
-        value = self._widget_default(section, key, fallback)
+    def _combo_data_or_widget_default(self, section: str, key: str, combo: object) -> Any:
+        """Return combo data, repairing an impossible empty state canonically."""
+
+        data = getattr(combo, "currentData")()
+        if data is not None and (not isinstance(data, str) or data.strip()):
+            return data
+        return self._widget_default(section, key)
+
+    def _color_from_default(self, section: str, key: str) -> QColor:
+        """Return a QColor built strictly from the canonical Widget default."""
+        value = self._widget_default(section, key)
+        if not isinstance(value, (list, tuple)) or len(value) < 3:
+            raise TypeError(f"Canonical widget color default is invalid: widgets.{section}.{key}")
+        return QColor(*value)
+
+    def _default_int(self, section: str, key: str) -> int:
+        """Return one canonical Widget default coerced to int."""
         try:
-            return int(value)
-        except (TypeError, ValueError):
-            return int(fallback)
+            return int(self._widget_default(section, key))
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise TypeError(
+                f"Canonical widget int default is invalid: widgets.{section}.{key}"
+            ) from exc
 
-    def _default_float(self, section: str, key: str, fallback: float) -> float:
-        """Return widget default coerced to float."""
-        value = self._widget_default(section, key, fallback)
+    def _default_float(self, section: str, key: str) -> float:
+        """Return one canonical Widget default coerced to float."""
         try:
-            return float(value)
-        except (TypeError, ValueError):
-            return float(fallback)
+            return float(self._widget_default(section, key))
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise TypeError(
+                f"Canonical widget float default is invalid: widgets.{section}.{key}"
+            ) from exc
 
-    def _default_bool(self, section: str, key: str, fallback: bool) -> bool:
-        """Return widget default coerced to bool via SettingsManager helper."""
-        value = self._widget_default(section, key, fallback)
-        return SettingsManager.to_bool(value, fallback)
+    def _default_bool(self, section: str, key: str) -> bool:
+        """Return one canonical Widget bool default."""
+        value = self._widget_default(section, key)
+        if isinstance(value, bool):
+            return value
+        raise TypeError(f"Canonical widget bool default is invalid: widgets.{section}.{key}")
 
-    def _default_str(self, section: str, key: str, fallback: str) -> str:
-        """Return widget default coerced to string."""
-        value = self._widget_default(section, key, fallback)
-        if value is None:
-            return fallback
-        return str(value)
+    def _default_str(self, section: str, key: str) -> str:
+        """Return one canonical Widget string default."""
+        value = self._widget_default(section, key)
+        if isinstance(value, str):
+            return value
+        raise TypeError(f"Canonical widget string default is invalid: widgets.{section}.{key}")
 
-    def _config_bool(self, section: str, config: Mapping[str, Any], key: str, fallback: bool) -> bool:
-        default = self._default_bool(section, key, fallback)
+    def _config_bool(self, section: str, config: Mapping[str, Any], key: str) -> bool:
+        default = self._default_bool(section, key)
         raw = config.get(key, default) if isinstance(config, Mapping) else default
         return SettingsManager.to_bool(raw, default)
 
-    def _config_int(self, section: str, config: Mapping[str, Any], key: str, fallback: int) -> int:
-        default = self._default_int(section, key, fallback)
+    def _config_int(self, section: str, config: Mapping[str, Any], key: str) -> int:
+        default = self._default_int(section, key)
         raw = config.get(key, default) if isinstance(config, Mapping) else default
         try:
             return int(raw)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return default
 
-    def _config_float(self, section: str, config: Mapping[str, Any], key: str, fallback: float) -> float:
-        default = self._default_float(section, key, fallback)
+    def _config_float(self, section: str, config: Mapping[str, Any], key: str) -> float:
+        default = self._default_float(section, key)
         raw = config.get(key, default) if isinstance(config, Mapping) else default
         try:
             return float(raw)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return default
 
-    def _config_str(self, section: str, config: Mapping[str, Any], key: str, fallback: str) -> str:
-        default = self._default_str(section, key, fallback)
+    def _config_str(self, section: str, config: Mapping[str, Any], key: str) -> str:
+        default = self._default_str(section, key)
         raw = config.get(key, default) if isinstance(config, Mapping) else default
         if raw is None:
             return default
@@ -196,7 +271,7 @@ class VisualizerSettingsContextMixin:
             snapshot = self._extract_visualizer_snapshot(
                 current_vis_mode, spotify_vis_config
             )
-            cache = self._settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
+            cache = self._settings.get(VISUALIZER_CUSTOM_STORAGE_KEY)
             if not isinstance(cache, dict):
                 cache = {}
             cache[current_vis_mode] = snapshot
@@ -205,36 +280,32 @@ class VisualizerSettingsContextMixin:
         return spotify_vis_config, current_vis_mode, current_preset_index
 
     def _load_adv_states(self) -> Dict[str, bool]:
-        """Load persisted advanced toggle states from SettingsManager."""
-        raw = self._settings.get(self._ADV_STATE_KEY, {})
-        if isinstance(raw, dict):
-            return {k: bool(v) for k, v in raw.items()}
-        return {}
+        """Load persisted advanced states over the canonical UI baseline."""
+        return self._load_canonical_ui_state_mapping(
+            self._ADV_STATE_KEY, "visualizer_adv_states"
+        )
 
     def _load_tech_states(self) -> Dict[str, bool]:
-        """Load persisted Technical bucket toggle states from SettingsManager."""
-        raw = self._settings.get(self._TECH_STATE_KEY, {})
-        if isinstance(raw, dict):
-            return {k: bool(v) for k, v in raw.items()}
-        return {}
+        """Load persisted Technical states over the canonical UI baseline."""
+        return self._load_canonical_ui_state_mapping(
+            self._TECH_STATE_KEY, "visualizer_tech_states"
+        )
 
     def _load_tech_bucket_states(self) -> Dict[str, bool]:
-        """Load persisted per-mode Technical subsection visibility states."""
-        raw = self._settings.get(self._TECH_BUCKET_STATE_KEY, {})
-        if isinstance(raw, dict):
-            return {str(k): bool(v) for k, v in raw.items()}
-        return {}
+        """Load persisted Technical subsection states over canonical defaults."""
+        return self._load_canonical_ui_state_mapping(
+            self._TECH_BUCKET_STATE_KEY, "visualizer_tech_bucket_states"
+        )
 
     def _load_bucket_states(self) -> Dict[str, bool]:
-        """Load persisted per-mode visualizer bucket states."""
-        raw = self._settings.get(self._BUCKET_STATE_KEY, {})
-        if isinstance(raw, dict):
-            return {str(k): bool(v) for k, v in raw.items()}
-        return {}
+        """Load persisted Visualizer bucket states over canonical defaults."""
+        return self._load_canonical_ui_state_mapping(
+            self._BUCKET_STATE_KEY, "visualizer_bucket_states"
+        )
 
     def get_visualizer_adv_state(self, mode: str) -> bool:
-        """Return remembered expanded state for a visualizer mode."""
-        return bool(self._visualizer_adv_state.get(mode, False))
+        """Return remembered expanded state for a canonical visualizer mode."""
+        return bool(self._visualizer_adv_state[mode])
 
     def set_visualizer_adv_state(self, mode: str, expanded: bool) -> None:
         """Persist expanded/collapsed state for a visualizer mode."""
@@ -246,7 +317,7 @@ class VisualizerSettingsContextMixin:
 
     def get_visualizer_tech_state(self, mode: str) -> bool:
         """Return remembered Technical bucket state for a visualizer mode."""
-        return bool(self._visualizer_tech_state.get(mode, True))
+        return bool(self._visualizer_tech_state[mode])
 
     def set_visualizer_tech_state(self, mode: str, expanded: bool) -> None:
         """Persist Technical bucket expanded/collapsed state for a visualizer mode."""
@@ -256,11 +327,10 @@ class VisualizerSettingsContextMixin:
         except Exception:
             pass
 
-    def get_visualizer_tech_bucket_state(self, mode: str, bucket: str, default: bool = True) -> bool:
-        """Return remembered visibility state for a per-mode Technical subsection."""
-        states = getattr(self, "_visualizer_tech_bucket_state", {})
-        key = f"{mode}:{bucket}"
-        return bool(states.get(key, default))
+    def get_visualizer_tech_bucket_state(self, mode: str, bucket: str) -> bool:
+        """Return remembered visibility state for a canonical Technical subsection."""
+        states = self._visualizer_tech_bucket_state
+        return bool(states[f"{mode}:{bucket}"])
 
     def set_visualizer_tech_bucket_state(self, mode: str, bucket: str, visible: bool) -> None:
         """Persist visibility state for a per-mode Technical subsection."""
@@ -274,11 +344,9 @@ class VisualizerSettingsContextMixin:
         except Exception:
             pass
 
-    def get_visualizer_bucket_state(self, mode: str, bucket: str, default: bool = False) -> bool:
-        """Return remembered expanded state for a visualizer bucket."""
-        states = getattr(self, "_visualizer_bucket_state", {})
-        key = f"{mode}:{bucket}"
-        return bool(states.get(key, default))
+    def get_visualizer_bucket_state(self, mode: str, bucket: str) -> bool:
+        """Return remembered expanded state for a canonical visualizer bucket."""
+        return bool(self._visualizer_bucket_state[f"{mode}:{bucket}"])
 
     def set_visualizer_bucket_state(self, mode: str, bucket: str, expanded: bool) -> None:
         """Persist expanded/collapsed state for a visualizer bucket."""
@@ -332,14 +400,14 @@ class VisualizerSettingsContextMixin:
     def _snapshot_custom_visualizer_mode(self, mode_key: str, spotify_vis_config: dict) -> None:
         live_config = self._build_current_spotify_visualizer_config(spotify_vis_config)
         snapshot = build_normalized_custom_snapshot(mode_key, live_config)
-        cache = self._settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
+        cache = self._settings.get(VISUALIZER_CUSTOM_STORAGE_KEY)
         if not isinstance(cache, dict):
             cache = {}
         cache[mode_key] = snapshot
         self._settings.set(VISUALIZER_CUSTOM_STORAGE_KEY, cache)
 
     def _restore_custom_visualizer_mode(self, mode_key: str, spotify_vis_config: dict) -> bool:
-        cache = self._settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
+        cache = self._settings.get(VISUALIZER_CUSTOM_STORAGE_KEY)
         if not isinstance(cache, dict):
             return False
         payload = cache.get(mode_key)
@@ -352,7 +420,7 @@ class VisualizerSettingsContextMixin:
 
     def build_visualizer_preset_payload(self, mode_key: str) -> dict[str, Any]:
         """Construct a lean curated-preset payload from current settings."""
-        widgets_cfg = self._settings.get('widgets', {})
+        widgets_cfg = self._settings.get('widgets')
         if not isinstance(widgets_cfg, dict):
             return {}
         spotify_vis_config = widgets_cfg.get('spotify_visualizer', {})
@@ -585,7 +653,7 @@ class VisualizerSettingsContextMixin:
 
         custom_index = slider.custom_index() if hasattr(slider, 'custom_index') else get_custom_preset_index(mode_key)
 
-        widgets_cfg = self._settings.get('widgets', {}) or {}
+        widgets_cfg = self._settings.get('widgets') or {}
         spotify_vis_config = widgets_cfg.get('spotify_visualizer', {})
         if not isinstance(spotify_vis_config, dict):
             spotify_vis_config = {}

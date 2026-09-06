@@ -18,10 +18,12 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor
 
+from core.settings.default_contract import require_canonical_default
 from core.settings.shadow_direction import (
     resolve_directional_extensions,
     resolve_signed_offset,
 )
+from rendering.quick.shadow_snapshot import QuickShadowSnapshot
 from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
 from rendering.quick.widgets.theme_projection import (
     configured_rgba_override,
@@ -117,95 +119,109 @@ def _with_alpha(rgba: tuple[int, int, int, int], scale: float) -> QColor:
 
 @dataclass(frozen=True)
 class GmailPresentationConfig:
-    limit: int = 10
-    font_family: str = "Inter"
-    font_size: int = 12
-    text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    show_background: bool = True
-    background_color: tuple[int, int, int, int] = (35, 35, 35, 255)
-    background_opacity: float = 0.3
-    border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
-    border_opacity: float = 1.0
-    header_fill_color: tuple[int, int, int, int] = (0, 0, 0, 0)
-    header_border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
-    header_text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    group_threads: bool = True
-    show_sender: bool = True
-    show_subject: bool = True
-    show_envelope_icon: bool = False
-    show_three_dot_menu: bool = True
-    show_refresh_spiral: bool = True
-    show_timestamp: bool = True
-    show_unread_count_in_header: bool = True
-    show_separators: bool = True
-    show_header_border: bool = True
-    desaturate_when_no_unread: bool = False
-    separator_color: tuple[int, int, int, int] = (200, 200, 200, 40)
-    separator_thickness: int = 3
-    boundary_separator_color: tuple[int, int, int, int] = (180, 180, 180, 80)
-    boundary_separator_thickness: int = 3
-    action_popup_surface_color: tuple[int, int, int, int] = (43, 43, 43, 255)
-    action_popup_border_color: tuple[int, int, int, int] = (154, 154, 154, 200)
-    action_popup_hover_color: tuple[int, int, int, int] = (62, 62, 62, 220)
-    action_popup_text_color: tuple[int, int, int, int] = (255, 255, 255, 255)
-    auto_title_case: bool = True
-    clean_sender_names: bool = True
-    max_sender_words: int = 3
-    max_subject_words: int = 4
-    sender_subject_ratio: int = 35
-    date_display_mode: str = "numeric"
-    width: int = 600
+    limit: int
+    font_family: str
+    font_size: int
+    text_color: tuple[int, int, int, int]
+    show_background: bool
+    background_color: tuple[int, int, int, int]
+    background_opacity: float
+    border_color: tuple[int, int, int, int]
+    border_opacity: float
+    header_fill_color: tuple[int, int, int, int]
+    header_border_color: tuple[int, int, int, int]
+    header_text_color: tuple[int, int, int, int]
+    group_threads: bool
+    show_sender: bool
+    show_subject: bool
+    show_envelope_icon: bool
+    show_three_dot_menu: bool
+    show_refresh_spiral: bool
+    show_timestamp: bool
+    show_unread_count_in_header: bool
+    show_separators: bool
+    show_header_border: bool
+    desaturate_when_no_unread: bool
+    separator_color: tuple[int, int, int, int]
+    separator_thickness: int
+    boundary_separator_color: tuple[int, int, int, int]
+    boundary_separator_thickness: int
+    action_popup_surface_color: tuple[int, int, int, int]
+    action_popup_border_color: tuple[int, int, int, int]
+    action_popup_hover_color: tuple[int, int, int, int]
+    action_popup_text_color: tuple[int, int, int, int]
+    auto_title_case: bool
+    clean_sender_names: bool
+    max_sender_words: int
+    max_subject_words: int
+    sender_subject_ratio: int
+    date_display_mode: str
+    width: int
 
     @classmethod
     def from_mapping(cls, values: Mapping[str, object]) -> "GmailPresentationConfig":
+        """Normalize Gmail state with canonical defaults as the repair baseline."""
+
+        defaults = require_canonical_default("widgets.gmail")
+        if not isinstance(defaults, Mapping):
+            raise TypeError("Canonical widgets.gmail default must be a mapping")
+        merged = dict(defaults)
+        if isinstance(values, Mapping):
+            merged.update(values)
         return cls(
-            limit=_bounded_int(values.get("limit"), 10, 1, LIST_WIDGET_MAX_CAPACITY),
-            font_family=str(values.get("font_family", "Inter") or "Inter"),
-            font_size=_bounded_int(values.get("font_size"), 12, 8, 96),
-            text_color=_rgba(values.get("color"), (255, 255, 255, 230)),
-            show_background=_as_bool(values.get("show_background"), True),
-            background_color=_rgba(values.get("bg_color"), (35, 35, 35, 255)),
-            background_opacity=_bounded_float(values.get("bg_opacity"), 0.3, 0.0, 1.0),
-            border_color=_rgba(values.get("border_color"), (255, 255, 255, 255)),
-            border_opacity=_bounded_float(values.get("border_opacity"), 1.0, 0.0, 1.0),
-            header_fill_color=_rgba(values.get("header_fill_color"), (0, 0, 0, 0)),
-            header_border_color=_rgba(values.get("header_border_color"), (255, 255, 255, 255)),
-            header_text_color=_rgba(values.get("header_text_color"), (255, 255, 255, 230)),
-            group_threads=_as_bool(values.get("group_threads"), True),
-            show_sender=_as_bool(values.get("show_sender"), True),
-            show_subject=_as_bool(values.get("show_subject"), True),
-            show_envelope_icon=_as_bool(values.get("show_envelope_icon"), False),
-            show_three_dot_menu=_as_bool(values.get("show_three_dot_menu"), True),
-            show_refresh_spiral=_as_bool(values.get("show_refresh_spiral"), True),
-            show_timestamp=_as_bool(values.get("show_timestamp"), True),
-            show_unread_count_in_header=_as_bool(values.get("show_unread_count_in_header"), True),
-            show_separators=_as_bool(values.get("show_separators"), True),
-            show_header_border=_as_bool(values.get("show_header_border"), True),
-            desaturate_when_no_unread=_as_bool(values.get("desaturate_when_no_unread"), False),
-            separator_color=_rgba(values.get("separator_color"), (200, 200, 200, 40)),
-            separator_thickness=_bounded_int(values.get("separator_thickness"), 3, 0, 12),
+            limit=_bounded_int(merged["limit"], int(defaults["limit"]), 1, LIST_WIDGET_MAX_CAPACITY),
+            font_family=str(merged["font_family"] or defaults["font_family"]),
+            font_size=_bounded_int(merged["font_size"], int(defaults["font_size"]), 8, 96),
+            text_color=_rgba(merged["color"], tuple(defaults["color"])),
+            show_background=_as_bool(merged["show_background"], bool(defaults["show_background"])),
+            background_color=_rgba(merged["bg_color"], tuple(defaults["bg_color"])),
+            background_opacity=_bounded_float(merged["bg_opacity"], float(defaults["bg_opacity"]), 0.0, 1.0),
+            border_color=_rgba(merged["border_color"], tuple(defaults["border_color"])),
+            border_opacity=_bounded_float(merged["border_opacity"], float(defaults["border_opacity"]), 0.0, 1.0),
+            header_fill_color=_rgba(merged["header_fill_color"], tuple(defaults["header_fill_color"])),
+            header_border_color=_rgba(merged["header_border_color"], tuple(defaults["header_border_color"])),
+            header_text_color=_rgba(merged["header_text_color"], tuple(defaults["header_text_color"])),
+            group_threads=_as_bool(merged["group_threads"], bool(defaults["group_threads"])),
+            show_sender=_as_bool(merged["show_sender"], bool(defaults["show_sender"])),
+            show_subject=_as_bool(merged["show_subject"], bool(defaults["show_subject"])),
+            show_envelope_icon=_as_bool(merged["show_envelope_icon"], bool(defaults["show_envelope_icon"])),
+            show_three_dot_menu=_as_bool(merged["show_three_dot_menu"], bool(defaults["show_three_dot_menu"])),
+            show_refresh_spiral=_as_bool(merged["show_refresh_spiral"], bool(defaults["show_refresh_spiral"])),
+            show_timestamp=_as_bool(merged["show_timestamp"], bool(defaults["show_timestamp"])),
+            show_unread_count_in_header=_as_bool(merged["show_unread_count_in_header"], bool(defaults["show_unread_count_in_header"])),
+            show_separators=_as_bool(merged["show_separators"], bool(defaults["show_separators"])),
+            show_header_border=_as_bool(merged["show_header_border"], bool(defaults["show_header_border"])),
+            desaturate_when_no_unread=_as_bool(merged["desaturate_when_no_unread"], bool(defaults["desaturate_when_no_unread"])),
+            separator_color=_rgba(merged["separator_color"], tuple(defaults["separator_color"])),
+            separator_thickness=_bounded_int(merged["separator_thickness"], int(defaults["separator_thickness"]), 0, 12),
             boundary_separator_color=_rgba(
-                values.get("boundary_separator_color"), (180, 180, 180, 80)
+                merged["boundary_separator_color"], tuple(defaults["boundary_separator_color"])
             ),
             boundary_separator_thickness=_bounded_int(
-                values.get("boundary_separator_thickness"), 3, 0, 12
+                merged["boundary_separator_thickness"], int(defaults["boundary_separator_thickness"]), 0, 12
             ),
-            auto_title_case=_as_bool(values.get("auto_title_case"), True),
-            clean_sender_names=_as_bool(values.get("clean_sender_names"), True),
-            max_sender_words=_bounded_int(values.get("max_sender_words"), 3, 0, 20),
-            max_subject_words=_bounded_int(values.get("max_subject_words"), 4, 0, 30),
-            sender_subject_ratio=_bounded_int(values.get("sender_subject_ratio"), 35, 10, 90),
-            date_display_mode=str(values.get("date_display_mode", "numeric") or "numeric"),
-            width=_bounded_int(values.get("width"), 600, 200, 1200),
+            auto_title_case=_as_bool(merged["auto_title_case"], bool(defaults["auto_title_case"])),
+            clean_sender_names=_as_bool(merged["clean_sender_names"], bool(defaults["clean_sender_names"])),
+            max_sender_words=_bounded_int(merged["max_sender_words"], int(defaults["max_sender_words"]), 0, 20),
+            max_subject_words=_bounded_int(merged["max_subject_words"], int(defaults["max_subject_words"]), 0, 30),
+            sender_subject_ratio=_bounded_int(merged["sender_subject_ratio"], int(defaults["sender_subject_ratio"]), 10, 90),
+            date_display_mode=str(merged["date_display_mode"] or defaults["date_display_mode"]),
+            width=_bounded_int(merged["width"], int(defaults["width"]), 200, 1200),
+            # Semantic-only action palette seeds inherit widget-local roles.
+            # ``from_widgets_mapping`` resolves them through the active Widget Theme.
+            action_popup_surface_color=_rgba(merged["bg_color"], tuple(defaults["bg_color"])),
+            action_popup_border_color=_rgba(merged["border_color"], tuple(defaults["border_color"])),
+            action_popup_hover_color=_rgba(merged["bg_color"], tuple(defaults["bg_color"])),
+            action_popup_text_color=_rgba(merged["color"], tuple(defaults["color"])),
         )
 
     @classmethod
     def from_widgets_mapping(cls, widgets: Mapping[str, object]) -> "GmailPresentationConfig":
-        from core.settings.defaults import get_default_settings
-
-        defaults = get_default_settings().get("widgets", {}).get("gmail", {})
+        defaults = require_canonical_default("widgets.gmail")
+        if not isinstance(defaults, Mapping):
+            raise TypeError("Canonical widgets.gmail default must be a mapping")
         current = widgets.get("gmail", {}) if isinstance(widgets, Mapping) else {}
-        merged = dict(defaults) if isinstance(defaults, Mapping) else {}
+        merged = dict(defaults)
         if not isinstance(current, Mapping):
             current = {}
         else:
@@ -214,17 +230,17 @@ class GmailPresentationConfig:
         header_fill, header_border, header_text = resolve_header_colors(
             "gmail",
             values=current,
-            defaults=defaults if isinstance(defaults, Mapping) else {},
+            defaults=defaults,
             fill=config.header_fill_color,
             border=config.header_border_color,
             text=config.header_text_color,
         )
         separator_override = configured_rgba_override(
-            current, defaults if isinstance(defaults, Mapping) else {},
+            current, defaults,
             "separator_color", config.separator_color,
         )
         boundary_override = configured_rgba_override(
-            current, defaults if isinstance(defaults, Mapping) else {},
+            current, defaults,
             "boundary_separator_color", config.boundary_separator_color,
         )
         separator_local = {
@@ -234,7 +250,7 @@ class GmailPresentationConfig:
         }
         card_background, card_border = resolve_card_surface_colors(
             values=current,
-            defaults=defaults if isinstance(defaults, Mapping) else {},
+            defaults=defaults,
             background_color=config.background_color,
             background_opacity=config.background_opacity,
             border_color=config.border_color,
@@ -242,7 +258,7 @@ class GmailPresentationConfig:
         )
         text_color = resolve_primary_text_color(
             values=current,
-            defaults=defaults if isinstance(defaults, Mapping) else {},
+            defaults=defaults,
             text_color=config.text_color,
         )
         separator_local["local.text"] = text_color
@@ -304,17 +320,17 @@ class GmailPresentationStyle:
         *,
         border_width: float = 4.0,
     ) -> "GmailPresentationStyle":
-        frame_extra = _bounded_float(shadow_values.get("frame_extra_offset"), 0.0, 0.0, 40.0)
-        text_extra = _bounded_float(shadow_values.get("text_extra_offset"), 0.0, 0.0, 40.0)
-        direction = shadow_values.get("direction", "SE")
-        card_offset = resolve_signed_offset(direction, *ORDINARY_CARD_SHADOW_BASE)
-        card_extensions = resolve_directional_extensions(direction, frame_extra)
-        text_offset = resolve_signed_offset(
-            direction,
-            ORDINARY_TEXT_SHADOW_BASE[0] + text_extra,
-            ORDINARY_TEXT_SHADOW_BASE[1] + text_extra,
+        shadow = QuickShadowSnapshot.from_mapping(shadow_values)
+        card_offset = resolve_signed_offset(shadow.direction, *ORDINARY_CARD_SHADOW_BASE)
+        card_extensions = resolve_directional_extensions(
+            shadow.direction, shadow.frame_extra_offset
         )
-        shadow_rgba = _rgba(shadow_values.get("color"), (0, 0, 0, 255))
+        text_offset = resolve_signed_offset(
+            shadow.direction,
+            ORDINARY_TEXT_SHADOW_BASE[0] + shadow.text_extra_offset,
+            ORDINARY_TEXT_SHADOW_BASE[1] + shadow.text_extra_offset,
+        )
+        shadow_rgba = shadow.color
         return cls(
             card_style=OverlayCardStyle(
                 shell_enabled=config.show_background,
@@ -323,12 +339,12 @@ class GmailPresentationStyle:
                 border_width=max(0.0, float(border_width)),
                 corner_radius=8.0,
                 padding=14.0,
-                shadow_enabled=config.show_background and _as_bool(shadow_values.get("enabled"), True),
+                shadow_enabled=config.show_background and shadow.enabled,
                 shadow_color=_with_alpha(
                     shadow_rgba,
-                    _bounded_float(shadow_values.get("frame_opacity"), 0.77, 0.0, 1.0),
+                    shadow.frame_opacity,
                 ),
-                shadow_blur=_bounded_float(shadow_values.get("blur_radius"), 18.0, 0.0, 80.0),
+                shadow_blur=min(80.0, shadow.blur_radius),
                 shadow_offset_x=card_offset[0],
                 shadow_offset_y=card_offset[1],
                 shadow_extend_left=card_extensions[0],
@@ -336,10 +352,10 @@ class GmailPresentationStyle:
                 shadow_extend_right=card_extensions[2],
                 shadow_extend_bottom=card_extensions[3],
             ),
-            text_shadow_enabled=_as_bool(shadow_values.get("text_enabled"), True),
+            text_shadow_enabled=shadow.text_enabled,
             text_shadow_color=_with_alpha(
                 shadow_rgba,
-                _bounded_float(shadow_values.get("text_opacity"), 0.33, 0.0, 1.0),
+                shadow.text_opacity,
             ),
             text_shadow_offset_x=text_offset[0],
             text_shadow_offset_y=text_offset[1],

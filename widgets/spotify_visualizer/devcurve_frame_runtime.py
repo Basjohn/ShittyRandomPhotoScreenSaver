@@ -20,33 +20,23 @@ from widgets.spotify_visualizer.render_state import (
 
 
 _LAYER_NAMES = ("bass", "vocals", "mids", "transients")
-_DEFAULT_SHAPE = (
-    (0.0, 0.58),
-    (0.35, 0.64),
-    (0.70, 0.52),
-    (1.0, 0.60),
-)
 
 
-def _bounded(value: object, minimum: float, maximum: float) -> float:
+def _bounded(value: object, minimum: float, maximum: float, *, name: str) -> float:
     try:
         number = float(value)
-    except (TypeError, ValueError):
-        return minimum
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"resolved DevCurve parameter {name!r} must be numeric") from exc
     if not math.isfinite(number):
-        return minimum
+        raise ValueError(f"resolved DevCurve parameter {name!r} must be finite")
     return max(minimum, min(maximum, number))
 
 
-def _parameter(
-    parameters: Mapping[str, object],
-    name: str,
-    default: object,
-) -> object:
+def _parameter(parameters: Mapping[str, object], name: str) -> object:
     try:
         return parameters[name]
-    except KeyError:
-        return default
+    except KeyError as exc:
+        raise KeyError(f"resolved DevCurve parameter missing: {name}") from exc
 
 
 def _idle_energy(now_ts: float) -> VisualizerEnergyState:
@@ -64,7 +54,7 @@ def _curves(
     return tuple(
         (
             name,
-            tuple(float(value) for value in values.get(name, ())),
+            tuple(float(value) for value in values[name]),
         )
         for name in _LAYER_NAMES
     )
@@ -228,62 +218,56 @@ class DevCurveFrameRuntime:
             source_activation_id = -1
             source_timestamp = 0.0
 
-        parameter_values = {
-            str(name): value
-            for name, value in parameters.items()
-            if str(name) != "devcurve_growth"
-        }
+        parameter_values = {str(name): value for name, value in parameters.items()}
         layer_settings: dict[str, dict[str, float | bool | int]] = {}
         resolved_nodes: dict[str, list[list[float]]] = {}
-        for index, name in enumerate(_LAYER_NAMES):
+        for name in _LAYER_NAMES:
+            enabled_key = f"devcurve_layer_{name}_enabled"
+            power_key = f"devcurve_layer_{name}_power"
+            offset_key = f"devcurve_layer_{name}_offset"
+            order_key = f"devcurve_layer_{name}_order"
             layer_settings[name] = {
-                "enabled": bool(
-                    _parameter(
-                        parameter_values,
-                        f"devcurve_layer_{name}_enabled",
-                        True,
-                    )
-                ),
+                "enabled": bool(_parameter(parameter_values, enabled_key)),
                 "power": _bounded(
-                    _parameter(
-                        parameter_values,
-                        f"devcurve_layer_{name}_power",
-                        1.0,
-                    ),
+                    _parameter(parameter_values, power_key),
                     0.0,
                     3.0,
+                    name=power_key,
                 ),
                 "offset": _bounded(
-                    _parameter(
-                        parameter_values,
-                        f"devcurve_layer_{name}_offset",
-                        0.0,
-                    ),
+                    _parameter(parameter_values, offset_key),
                     -0.45,
                     0.45,
+                    name=offset_key,
                 ),
                 "order": max(
                     1,
-                    min(
-                        4,
-                        int(
-                            _parameter(
-                                parameter_values,
-                                f"devcurve_layer_{name}_order",
-                                index + 1,
-                            )
-                        ),
-                    ),
+                    min(4, int(_parameter(parameter_values, order_key))),
                 ),
             }
-            raw_nodes = layer_shape_nodes.get(name, _DEFAULT_SHAPE)
+            try:
+                raw_nodes = layer_shape_nodes[name]
+            except KeyError as exc:
+                raise KeyError(
+                    f"resolved DevCurve shape nodes missing for layer {name!r}"
+                ) from exc
             nodes = [
                 [float(node[0]), float(node[1])]
                 for node in raw_nodes
                 if len(node) >= 2
             ]
-            if not nodes:
-                nodes = [list(node) for node in _DEFAULT_SHAPE]
+            if len(nodes) < 2:
+                raise ValueError(
+                    f"resolved DevCurve layer {name!r} requires at least two shape nodes"
+                )
+            if any(
+                not math.isfinite(value)
+                for node in nodes
+                for value in node
+            ):
+                raise ValueError(
+                    f"resolved DevCurve layer {name!r} contains non-finite shape nodes"
+                )
             resolved_nodes[name] = nodes
             parameter_values[f"devcurve_layer_{name}_shape_nodes"] = nodes
 
@@ -296,35 +280,40 @@ class DevCurveFrameRuntime:
             transient_bus=resolved_transient,
             layer_shape_nodes=resolved_nodes,
             base_level=_bounded(
-                _parameter(parameter_values, "devcurve_base_level", 0.58),
+                _parameter(parameter_values, "devcurve_base_level"),
                 0.10,
                 0.90,
+                name="devcurve_base_level",
             ),
             motion_power=_bounded(
-                _parameter(parameter_values, "devcurve_motion_power", 1.0),
+                _parameter(parameter_values, "devcurve_motion_power"),
                 0.0,
                 3.0,
+                name="devcurve_motion_power",
             ),
             idle_motion=_bounded(
-                _parameter(parameter_values, "devcurve_idle_motion", 0.20),
+                _parameter(parameter_values, "devcurve_idle_motion"),
                 0.0,
                 1.5,
+                name="devcurve_idle_motion",
             ),
             idle_speed=_bounded(
-                _parameter(parameter_values, "devcurve_idle_speed", 0.60),
+                _parameter(parameter_values, "devcurve_idle_speed"),
                 0.05,
                 2.0,
+                name="devcurve_idle_speed",
             ),
             smoothness=_bounded(
-                _parameter(parameter_values, "devcurve_smoothness", 0.55),
+                _parameter(parameter_values, "devcurve_smoothness"),
                 0.0,
                 1.0,
+                name="devcurve_smoothness",
             ),
             layer_settings=layer_settings,
         )
-        layer_map = frame.get("layers", {})
+        layer_map = frame["layers"]
         if not isinstance(layer_map, Mapping):
-            layer_map = {}
+            raise TypeError("DevCurve solver returned invalid layer mapping")
         current_curves = _curves(layer_map)
 
         # Historical DevCurve accepted ghost settings but never rendered a
@@ -346,17 +335,17 @@ class DevCurveFrameRuntime:
 
         draw_order = tuple(
             str(name)
-            for name in frame.get("draw_order", _LAYER_NAMES)
+            for name in frame["draw_order"]
         )
-        foreground_layer = str(frame.get("foreground_layer", "") or "")
-        foreground_layer_id = int(frame.get("foreground_layer_id", -1))
-        raw_slots = frame.get("specular_slots", ())
+        foreground_layer = str(frame["foreground_layer"] or "")
+        foreground_layer_id = int(frame["foreground_layer_id"])
+        raw_slots = frame["specular_slots"]
         specular_slots = tuple(
             tuple(float(value) for value in slot)
             for slot in raw_slots
         )
         parameter_values["devcurve_sample_count"] = int(
-            frame.get("sample_count", 0)
+            frame["sample_count"]
         )
         parameter_values["devcurve_foreground_layer_id"] = (
             foreground_layer_id
@@ -369,22 +358,22 @@ class DevCurveFrameRuntime:
         frozen_diagnostics = freeze_render_fields(
             {
                 "smoothness_max_step": float(
-                    frame.get("smoothness_max_step", 0.0)
+                    frame["smoothness_max_step"]
                 ),
                 "active_amplitude": float(
-                    frame.get("active_amplitude", 0.0)
+                    frame["active_amplitude"]
                 ),
-                "idle_amplitude": float(frame.get("idle_amplitude", 0.0)),
+                "idle_amplitude": float(frame["idle_amplitude"]),
                 "foreground_travel_rate": float(
-                    frame.get("foreground_travel_rate", 0.0)
+                    frame["foreground_travel_rate"]
                 ),
                 "foreground_travel_pos": float(
-                    frame.get("foreground_travel_pos", 0.0)
+                    frame["foreground_travel_pos"]
                 ),
                 "specular_travel_rate": float(
-                    frame.get("specular_travel_rate", 0.0)
+                    frame["specular_travel_rate"]
                 ),
-                "energies": frame.get("energies", {}),
+                "energies": frame["energies"],
             }
         )
 

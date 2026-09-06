@@ -96,8 +96,20 @@ def _section(
     defaults: Mapping[str, Any],
     name: str,
 ) -> dict[str, Any]:
-    merged = dict(_mapping(defaults.get(name)))
-    merged.update(_mapping(transitions.get(name)))
+    """Overlay persisted section values on the required canonical section.
+
+    Explicit ``None`` is malformed for every persisted transition parameter
+    section currently in schema, so it repairs to the canonical leaf instead of
+    becoming a renderer-side fallback value.
+    """
+
+    canonical = defaults.get(name)
+    if not isinstance(canonical, Mapping):
+        raise KeyError(f"canonical transition defaults missing section {name!r}")
+    merged = dict(canonical)
+    persisted = transitions.get(name)
+    if isinstance(persisted, Mapping):
+        merged.update({key: value for key, value in persisted.items() if value is not None})
     return merged
 
 
@@ -130,31 +142,43 @@ def resolve_quick_transition_spec(
     """
 
     rng = random_source if random_source is not None else random
-    defaults = _mapping(get_default_settings().get("transitions", {}))
+    all_defaults = get_default_settings()
+    defaults = _mapping(all_defaults.get("transitions"))
+    display_defaults = _mapping(all_defaults.get("display"))
+    canonical_type = defaults.get("type")
+    canonical_random = defaults.get("random_always")
+    canonical_hw = display_defaults.get("hw_accel")
+    if not isinstance(canonical_type, str) or not canonical_type:
+        raise KeyError("canonical transition defaults missing type")
+    if not isinstance(canonical_random, bool):
+        raise KeyError("canonical transition defaults missing random_always")
+    if not isinstance(canonical_hw, bool):
+        raise KeyError("canonical display defaults missing hw_accel")
     raw = (
-        settings_manager.get("transitions", {})
+        settings_manager.get("transitions")
         if settings_manager is not None
         else {}
     )
     transitions = _mapping(raw)
     requested_name = canonicalize_transition_name(
-        transitions.get("type") or defaults.get("type") or "Crossfade",
-        fallback="Crossfade",
+        transitions.get("type", canonical_type),
+        fallback=canonicalize_transition_name(canonical_type, fallback=""),
     )
+    if not requested_name:
+        raise ValueError(f"canonical transition type is invalid: {canonical_type!r}")
     random_enabled = SettingsManager.to_bool(
-        transitions.get("random_always", defaults.get("random_always", False)),
-        False,
+        transitions.get("random_always", canonical_random),
+        canonical_random,
     )
     if random_enabled:
         choice = transitions.get("random_choice")
         selected_name = canonicalize_transition_name(choice, fallback="")
         if not selected_name:
             return None
-        hw_enabled = SettingsManager.to_bool(
-            settings_manager.get("display.hw_accel", False)
+        hw_enabled = (
+            settings_manager.get_bool("display.hw_accel")
             if settings_manager is not None
-            else False,
-            False,
+            else canonical_hw
         )
         if (
             selected_name not in get_effective_random_pool(transitions)
@@ -171,13 +195,20 @@ def resolve_quick_transition_spec(
     descriptor = get_transition_descriptor(selected_name)
     if descriptor is None:
         raise ValueError(f"unknown resolved transition: {selected_name!r}")
-    duration_raw = _mapping(transitions.get("durations")).get(
+    canonical_durations = defaults.get("durations")
+    if not isinstance(canonical_durations, Mapping):
+        raise KeyError("canonical transition defaults missing durations")
+    if descriptor.setting_name not in canonical_durations:
+        raise KeyError(
+            f"canonical transition defaults missing duration for {descriptor.setting_name!r}"
+        )
+    persisted_durations = _mapping(transitions.get("durations"))
+    duration_raw = persisted_durations.get(
         descriptor.setting_name,
-        _mapping(defaults.get("durations")).get(
-            descriptor.setting_name,
-            transitions.get("duration_ms", defaults.get("duration_ms", 1300)),
-        ),
+        canonical_durations[descriptor.setting_name],
     )
+    if duration_raw is None:
+        duration_raw = canonical_durations[descriptor.setting_name]
     duration_ms = int(duration_raw)
     if duration_ms <= 0:
         raise ValueError("resolved transition duration must be positive")
@@ -208,9 +239,12 @@ def resolve_quick_transition_spec(
             mapping=_DIRECTION_MAP,
             rng=rng,
         )
-        motion_style = cfg.get("motion_style", "Linear")
+        motion_style = cfg["motion_style"]
         if not isinstance(motion_style, str) or motion_style not in _SLIDE_MOTION_STYLES:
-            raise ValueError(f"unknown Slide motion style: {motion_style!r}")
+            canonical_slide = _section({}, defaults, "slide")
+            motion_style = canonical_slide["motion_style"]
+        if not isinstance(motion_style, str) or motion_style not in _SLIDE_MOTION_STYLES:
+            raise ValueError(f"invalid canonical Slide motion style: {motion_style!r}")
         parameters = {"motion_style": motion_style}
     elif transition_id == "wipe":
         cfg = _section(transitions, defaults, "wipe")
@@ -238,8 +272,8 @@ def resolve_quick_transition_spec(
         )
         if transition_id == "block_flip":
             parameters = {
-                "cols": int(cfg.get("cols", 24)),
-                "rows": int(cfg.get("rows", 24)),
+                "cols": int(cfg["cols"]),
+                "rows": int(cfg["rows"]),
             }
 
     return ResolvedQuickTransitionSpec(

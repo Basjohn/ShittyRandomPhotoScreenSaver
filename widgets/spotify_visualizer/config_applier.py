@@ -12,6 +12,7 @@ from typing import Any, Dict
 from PySide6.QtGui import QColor
 
 from core.logging.logger import get_logger
+from core.settings.default_contract import require_canonical_default
 from core.settings.bubble_gradient_semantics import (
     normalize_bubble_gradient_direction,
     normalize_bubble_specular_direction,
@@ -21,36 +22,31 @@ from widgets.spotify_visualizer.render_state import FrozenFields, freeze_render_
 
 logger = get_logger(__name__)
 
-_SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED = {
-    "Mid": 0.60,
-    "Vocal": 0.64,
-    "Low-Mid": 0.70,
-    "Bass": 0.80,
-}
-_SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR = {
-    "Bass": 0.80,
-    "Low-Mid": 0.70,
-    "Vocal": 0.64,
-    "Hi-Mid": 0.80,
-    "Treble": 1.00,
-}
+_SPHERE_PARAMETER_KEYS = (
+    "sphere_material",
+    "sphere_deformation",
+    "sphere_rotation_speed",
+    "sphere_gloss",
+    "sphere_specular",
+    "sphere_light_direction",
+    "sphere_idle_motion",
+    "sphere_surface_detail",
+    "sphere_bass_response",
+    "sphere_mid_response",
+    "sphere_high_response",
+    "sphere_vocal_response",
+    "sphere_bump_reactivity",
+    "sphere_size_response",
+    "sphere_energy_curve",
+    "sphere_material_fx",
+    "sphere_antialiasing",
+    "sphere_shadow_enabled",
+    "sphere_shadow_strength",
+)
 
-SPHERE_DEFAULT_PARAMETERS = freeze_render_fields({
-    "sphere_material": "Chrome", "sphere_deformation": 1.0,
-    "sphere_rotation_speed": 0.35, "sphere_gloss": 0.65,
-    "sphere_specular": 0.8, "sphere_light_direction": "NW",
-    "sphere_idle_motion": 0.12, "sphere_surface_detail": 1.15,
-    "sphere_bass_response": 1.0, "sphere_mid_response": 1.0,
-    "sphere_high_response": 1.0, "sphere_vocal_response": 1.4,
-    "sphere_bump_reactivity": 0.65,
-    "sphere_size_response": 1.5,
-    "sphere_energy_curve": 0.60,
-    "sphere_material_fx": 1.0,
-    "sphere_antialiasing": True,
-    "sphere_shadow_enabled": True,
-    "sphere_shadow_strength": 0.62,
-})
-_SPHERE_PARAMETER_KEYS = tuple(SPHERE_DEFAULT_PARAMETERS)
+
+def _visualizer_default(key: str) -> Any:
+    return require_canonical_default(f"widgets.spotify_visualizer.{key}")
 
 
 def _sphere_bounded(value: object, minimum: float, maximum: float, key: str) -> float:
@@ -87,29 +83,6 @@ def _presentation_source(host: Any) -> Any:
 
     pres = getattr(host, "presentation_config_host", None)
     return pres if isinstance(pres, VisualizerPresentationState) else host
-
-
-def _normalize_direction(value: Any, default: str = "top_left") -> str:
-    val = str(value).lower()
-    valid = {
-        "top", "bottom", "left", "right",
-        "top_left", "top_right", "bottom_left", "bottom_right",
-        "center_out", "center_out_reverse",
-    }
-    return val if val in valid else default
-
-
-def _normalize_lane_strengths(value: Any, defaults: Dict[str, float]) -> Dict[str, float] | None:
-    if not isinstance(value, dict):
-        return None
-    normalized: Dict[str, float] = {}
-    for label, default in defaults.items():
-        try:
-            lane_value = float(value.get(label, default))
-        except Exception:
-            lane_value = float(default)
-        normalized[label] = max(0.0, min(1.0, lane_value))
-    return normalized
 
 
 def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
@@ -168,11 +141,9 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._sphere_shadow_enabled = bool(kwargs['sphere_shadow_enabled'])
     if any(key in kwargs for key in _SPHERE_PARAMETER_KEYS):
         host._sphere_parameters = freeze_render_fields({
-            key: getattr(host, f"_{key}", SPHERE_DEFAULT_PARAMETERS[key])
+            key: getattr(host, f"_{key}")
             for key in _SPHERE_PARAMETER_KEYS
         })
-    elif not isinstance(getattr(host, "_sphere_parameters", None), FrozenFields):
-        host._sphere_parameters = SPHERE_DEFAULT_PARAMETERS
     if 'sine_heartbeat' in kwargs:
         host._sine_heartbeat = max(0.0, min(1.0, float(kwargs['sine_heartbeat'])))
     if 'bubble_big_bass_pulse' in kwargs:
@@ -195,7 +166,7 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
             'bottom_right',
             'random',
         ):
-            val = 'up'
+            val = str(_visualizer_default('bubble_stream_direction')).lower()
         host._bubble_stream_direction = val
     if 'bubble_stream_constant_speed' in kwargs:
         host._bubble_stream_constant_speed = max(
@@ -225,7 +196,7 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
             'swirl_cw', 'swirl_ccw', 'random'
         )
         if val not in valid_dirs:
-            val = 'random'
+            val = str(_visualizer_default('bubble_drift_direction')).lower()
         host._bubble_drift_direction = val
     if 'bubble_big_count' in kwargs:
         host._bubble_big_count = max(0, min(30, int(kwargs['bubble_big_count'])))
@@ -246,7 +217,7 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     if 'bubble_collision_pop_mode' in kwargs:
         mode = str(kwargs['bubble_collision_pop_mode']).strip().lower()
         if mode not in {"off", "one", "all"}:
-            mode = "off"
+            mode = str(_visualizer_default('bubble_collision_pop_mode')).strip().lower()
         host._bubble_collision_pop_mode = mode
     if 'bubble_big_size_max' in kwargs:
         host._bubble_big_size_max = max(0.010, min(0.060, float(kwargs['bubble_big_size_max'])))
@@ -264,6 +235,8 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._bubble_big_specular_max_size = max(0.5, min(5.0, float(kwargs['bubble_big_specular_max_size'])))
     if 'bubble_trail_strength' in kwargs:
         host._bubble_trail_strength = max(0.0, min(1.5, float(kwargs['bubble_trail_strength'])))
+    if 'bubble_ghosting_enabled' in kwargs:
+        host._bubble_ghosting_enabled = bool(kwargs['bubble_ghosting_enabled'])
 
     # --- Spectrum authored logical inputs (SpectrumFrameRuntime.resolve) ---
     # Canonical presets/settings store ``spectrum_render_mode``.  The historical
@@ -273,7 +246,10 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     # fallback for old focused callers.
     if 'spectrum_render_mode' in kwargs:
         host._spectrum_single_piece = (
-            normalize_spectrum_render_mode(kwargs['spectrum_render_mode'], 'bars')
+            normalize_spectrum_render_mode(
+                kwargs['spectrum_render_mode'],
+                str(_visualizer_default('spectrum_render_mode')),
+            )
             == 'bars'
         )
     elif 'spectrum_single_piece' in kwargs:
@@ -438,8 +414,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         host._osc_glow_enabled = bool(kwargs['osc_glow_enabled'])
     if 'osc_glow_intensity' in kwargs:
         host._osc_glow_intensity = max(0.0, float(kwargs['osc_glow_intensity']))
-    if 'osc_glow_size' in kwargs:
-        host._osc_glow_size = max(0.1, min(3.0, float(kwargs['osc_glow_size'])))
     if 'osc_glow_reactivity' in kwargs:
         host._osc_glow_reactivity = max(0.0, min(2.0, float(kwargs['osc_glow_reactivity'])))
     if 'osc_glow_color' in kwargs:
@@ -488,15 +462,10 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         if c is not None:
             host._bar_border_color = c
     if 'bar_border_opacity' in kwargs:
-        try:
-            opacity = max(0.0, min(1.0, float(kwargs['bar_border_opacity'])))
-        except Exception:
-            opacity = getattr(getattr(host, '_bar_border_color', None), 'alphaF', lambda: 1.0)()
-        base = getattr(host, '_bar_border_color', None)
-        if base is not None:
-            color = QColor(base)
-            color.setAlphaF(opacity)
-            host._bar_border_color = color
+        opacity = max(0.0, min(1.0, float(kwargs['bar_border_opacity'])))
+        color = QColor(host._bar_border_color)
+        color.setAlphaF(opacity)
+        host._bar_border_color = color
 
     # --- Spectrum styling (glow / border / rainbow border) -----------
     # ``spectrum_unique_colors`` is the canonical settings/preset key.  The old
@@ -542,8 +511,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         host._sine_glow_enabled = bool(kwargs['sine_glow_enabled'])
     if 'sine_glow_intensity' in kwargs:
         host._sine_glow_intensity = max(0.0, float(kwargs['sine_glow_intensity']))
-    if 'sine_glow_size' in kwargs:
-        host._sine_glow_size = max(0.1, min(3.0, float(kwargs['sine_glow_size'])))
     if 'sine_glow_reactivity' in kwargs:
         host._sine_glow_reactivity = max(0.0, min(2.0, float(kwargs['sine_glow_reactivity'])))
     if 'sine_glow_color' in kwargs:
@@ -634,44 +601,36 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
 
 
 def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> None:
-    """Update *extra* with the cross-mode visual fields every GPU path understands.
-
-    Authored-logical inputs (ghosting gates/decays, heartbeat) read from the
-    logical host; pure renderer styling (rainbow, glow, ghost-line toggles,
-    density/displacement) reads from the presentation-config owner.
-    """
+    """Copy the already-resolved cross-mode logical/presentation contract."""
     pres = _presentation_source(widget)
-    extra['rainbow_enabled'] = getattr(pres, '_rainbow_enabled', False)
-    extra['rainbow_speed'] = getattr(pres, '_rainbow_speed', 0.5)
-    extra['rainbow_per_bar'] = getattr(pres, '_rainbow_per_bar', False)
-    extra['spectrum_rainbow_fill'] = getattr(pres, '_spectrum_rainbow_fill', True)
-    extra['spectrum_rainbow_border'] = getattr(pres, '_spectrum_rainbow_border', False)
-    extra['spectrum_glow_enabled'] = getattr(pres, '_spectrum_glow_enabled', False)
-    extra['spectrum_glow_intensity'] = getattr(pres, '_spectrum_glow_intensity', 0.55)
-    extra['spectrum_glow_color'] = getattr(pres, '_spectrum_glow_color', None)
-    extra['spectrum_ghosting_enabled'] = getattr(widget, '_spectrum_ghosting_enabled', True)
-    extra['spectrum_ghost_alpha'] = getattr(pres, '_spectrum_ghost_alpha', 0.4)
-    extra['spectrum_ghost_decay'] = getattr(widget, '_spectrum_ghost_decay', 0.4)
-    extra['osc_ghosting_enabled'] = getattr(widget, '_osc_ghosting_enabled', False)
-    extra['osc_ghost_intensity'] = getattr(widget, '_osc_ghost_intensity', 0.4)
-    extra['osc_ghost_decay'] = getattr(widget, '_osc_ghost_decay', 0.4)
-    extra['osc_ghost_line2_enabled'] = getattr(pres, '_osc_ghost_line2_enabled', True)
-    extra['osc_ghost_line3_enabled'] = getattr(pres, '_osc_ghost_line3_enabled', True)
-    extra['sine_ghosting_enabled'] = getattr(widget, '_sine_ghosting_enabled', True)
-    extra['sine_ghost_alpha'] = getattr(widget, '_sine_ghost_alpha', 0.45)
-    extra['sine_ghost_decay'] = getattr(widget, '_sine_ghost_decay', 0.3)
-    extra['sine_ghost_line2_enabled'] = getattr(pres, '_sine_ghost_line2_enabled', True)
-    extra['sine_ghost_line3_enabled'] = getattr(pres, '_sine_ghost_line3_enabled', True)
-    extra['bubble_ghosting_enabled'] = getattr(pres, '_bubble_ghosting_enabled', False)
-    extra['bubble_ghost_alpha'] = getattr(pres, '_bubble_ghost_alpha', 0.0)
-    extra['bubble_ghost_decay'] = getattr(pres, '_bubble_ghost_decay', 0.4)
-    extra['sine_heartbeat'] = getattr(widget, '_sine_heartbeat', 0.0)
-    extra['heartbeat_intensity'] = getattr(widget, '_heartbeat_intensity', 0.0)
-    extra['sine_density'] = getattr(pres, '_sine_density', 1.0)
-    extra['sine_displacement'] = getattr(pres, '_sine_displacement', 0.0)
-
-
-
+    extra['rainbow_enabled'] = pres._rainbow_enabled
+    extra['rainbow_speed'] = pres._rainbow_speed
+    extra['rainbow_per_bar'] = pres._rainbow_per_bar
+    extra['spectrum_rainbow_fill'] = pres._spectrum_rainbow_fill
+    extra['spectrum_rainbow_border'] = pres._spectrum_rainbow_border
+    extra['spectrum_glow_enabled'] = pres._spectrum_glow_enabled
+    extra['spectrum_glow_intensity'] = pres._spectrum_glow_intensity
+    extra['spectrum_glow_color'] = pres._spectrum_glow_color
+    extra['spectrum_ghosting_enabled'] = widget._spectrum_ghosting_enabled
+    extra['spectrum_ghost_alpha'] = pres._spectrum_ghost_alpha
+    extra['spectrum_ghost_decay'] = widget._spectrum_ghost_decay
+    extra['osc_ghosting_enabled'] = widget._osc_ghosting_enabled
+    extra['osc_ghost_intensity'] = widget._osc_ghost_intensity
+    extra['osc_ghost_decay'] = widget._osc_ghost_decay
+    extra['osc_ghost_line2_enabled'] = pres._osc_ghost_line2_enabled
+    extra['osc_ghost_line3_enabled'] = pres._osc_ghost_line3_enabled
+    extra['sine_ghosting_enabled'] = widget._sine_ghosting_enabled
+    extra['sine_ghost_alpha'] = widget._sine_ghost_alpha
+    extra['sine_ghost_decay'] = widget._sine_ghost_decay
+    extra['sine_ghost_line2_enabled'] = pres._sine_ghost_line2_enabled
+    extra['sine_ghost_line3_enabled'] = pres._sine_ghost_line3_enabled
+    extra['bubble_ghosting_enabled'] = pres._bubble_ghosting_enabled
+    extra['bubble_ghost_alpha'] = pres._bubble_ghost_alpha
+    extra['bubble_ghost_decay'] = pres._bubble_ghost_decay
+    extra['sine_heartbeat'] = widget._sine_heartbeat
+    extra['heartbeat_intensity'] = widget._heartbeat_intensity
+    extra['sine_density'] = pres._sine_density
+    extra['sine_displacement'] = pres._sine_displacement
 
 
 
@@ -685,78 +644,78 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
     colours, per-line styling, ghost-line toggles) from the presentation owner.
     """
     pres = _presentation_source(widget)
-    extra['glow_enabled'] = getattr(pres, '_sine_glow_enabled' if is_sine else '_osc_glow_enabled', True if is_sine else False)
-    extra['glow_intensity'] = getattr(pres, '_sine_glow_intensity' if is_sine else '_osc_glow_intensity', 0.5 if is_sine else 0.4)
-    extra['glow_size'] = getattr(pres, '_sine_glow_size' if is_sine else '_osc_glow_size', 1.0)
+    extra['glow_enabled'] = getattr(pres, '_sine_glow_enabled' if is_sine else '_osc_glow_enabled')
+    extra['glow_intensity'] = getattr(pres, '_sine_glow_intensity' if is_sine else '_osc_glow_intensity')
+    extra['glow_size'] = 1.0  # fixed shader-space expansion; no longer a product setting
     extra['glow_reactivity'] = (
-        getattr(pres, '_sine_glow_reactivity', 1.0)
+        pres._sine_glow_reactivity
         if is_sine
-        else getattr(pres, '_osc_glow_reactivity', 1.0)
+        else pres._osc_glow_reactivity
     )
-    extra['glow_color'] = getattr(pres, '_sine_glow_color' if is_sine else '_osc_glow_color', None)
-    extra['reactive_glow'] = getattr(pres, '_sine_reactive_glow' if is_sine else '_osc_reactive_glow', True)
+    extra['glow_color'] = getattr(pres, '_sine_glow_color' if is_sine else '_osc_glow_color')
+    extra['reactive_glow'] = getattr(pres, '_sine_reactive_glow' if is_sine else '_osc_reactive_glow')
     # Authored-logical.
-    extra['line_sensitivity'] = getattr(widget, '_sine_sensitivity' if is_sine else '_osc_line_amplitude', 1.0 if is_sine else 3.0)
-    extra['line_speed'] = getattr(widget, '_sine_speed' if is_sine else '_osc_speed', 1.0)
+    extra['line_sensitivity'] = getattr(widget, '_sine_sensitivity' if is_sine else '_osc_line_amplitude')
+    extra['line_speed'] = getattr(widget, '_sine_speed' if is_sine else '_osc_speed')
     # Renderer styling.
-    extra['line_smoothing'] = getattr(pres, '_sine_smoothing' if is_sine else '_osc_smoothing', 0.7)
-    extra['line_dim'] = getattr(pres, '_sine_line_dim' if is_sine else '_osc_line_dim', False)
-    extra['line_offset_bias'] = getattr(pres, '_sine_line_offset_bias' if is_sine else '_osc_line_offset_bias', 0.0)
-    extra['osc_vertical_shift'] = getattr(pres, '_osc_vertical_shift', 0)
-    extra['sine_card_adaptation'] = getattr(pres, '_sine_card_adaptation', 0.3)
-    extra['sine_wave_effect'] = getattr(pres, '_sine_wave_effect', 0.0)
-    extra['sine_micro_wobble'] = getattr(pres, '_sine_micro_wobble', 0.0)
-    extra['sine_crawl_amount'] = getattr(pres, '_sine_crawl_amount', 0.0)
-    extra['sine_vertical_shift'] = getattr(pres, '_sine_vertical_shift', 0)
+    extra['line_smoothing'] = getattr(pres, '_sine_smoothing' if is_sine else '_osc_smoothing')
+    extra['line_dim'] = getattr(pres, '_sine_line_dim' if is_sine else '_osc_line_dim')
+    extra['line_offset_bias'] = getattr(pres, '_sine_line_offset_bias' if is_sine else '_osc_line_offset_bias')
+    extra['osc_vertical_shift'] = pres._osc_vertical_shift
+    extra['sine_card_adaptation'] = pres._sine_card_adaptation
+    extra['sine_wave_effect'] = pres._sine_wave_effect
+    extra['sine_micro_wobble'] = pres._sine_micro_wobble
+    extra['sine_crawl_amount'] = pres._sine_crawl_amount
+    extra['sine_vertical_shift'] = pres._sine_vertical_shift
     # Authored-logical (Sine travels / shifts / width reaction).
-    extra['sine_wave_travel'] = getattr(widget, '_sine_wave_travel', 0)
-    extra['sine_travel_line2'] = getattr(widget, '_sine_travel_line2', 0)
-    extra['sine_travel_line3'] = getattr(widget, '_sine_travel_line3', 0)
-    extra['sine_travel_line4'] = getattr(widget, '_sine_travel_line4', 0)
-    extra['sine_travel_line5'] = getattr(widget, '_sine_travel_line5', 0)
-    extra['sine_travel_line6'] = getattr(widget, '_sine_travel_line6', 0)
-    extra['sine_line1_shift'] = getattr(widget, '_sine_line1_shift', 0.0)
-    extra['sine_line2_shift'] = getattr(widget, '_sine_line2_shift', 0.0)
-    extra['sine_line3_shift'] = getattr(widget, '_sine_line3_shift', 0.0)
-    extra['sine_line4_shift'] = getattr(widget, '_sine_line4_shift', 0.0)
-    extra['sine_line5_shift'] = getattr(widget, '_sine_line5_shift', 0.0)
-    extra['sine_line6_shift'] = getattr(widget, '_sine_line6_shift', 0.0)
-    extra['sine_width_reaction'] = getattr(widget, '_sine_width_reaction', 0.0)
+    extra['sine_wave_travel'] = widget._sine_wave_travel
+    extra['sine_travel_line2'] = widget._sine_travel_line2
+    extra['sine_travel_line3'] = widget._sine_travel_line3
+    extra['sine_travel_line4'] = widget._sine_travel_line4
+    extra['sine_travel_line5'] = widget._sine_travel_line5
+    extra['sine_travel_line6'] = widget._sine_travel_line6
+    extra['sine_line1_shift'] = widget._sine_line1_shift
+    extra['sine_line2_shift'] = widget._sine_line2_shift
+    extra['sine_line3_shift'] = widget._sine_line3_shift
+    extra['sine_line4_shift'] = widget._sine_line4_shift
+    extra['sine_line5_shift'] = widget._sine_line5_shift
+    extra['sine_line6_shift'] = widget._sine_line6_shift
+    extra['sine_width_reaction'] = widget._sine_width_reaction
     # Line colours / count (sine line-count is authored-logical; osc is styling).
-    extra['line_color'] = getattr(pres, '_sine_line_color' if is_sine else '_osc_line_color', None)
+    extra['line_color'] = getattr(pres, '_sine_line_color' if is_sine else '_osc_line_color')
     extra['line_count'] = (
-        getattr(widget, '_sine_line_count', 1)
+        widget._sine_line_count
         if is_sine
-        else getattr(pres, '_osc_line_count', 1)
+        else pres._osc_line_count
     )
     _side = 'sine' if is_sine else 'osc'
     for _i in range(2, 7):
-        extra[f'line{_i}_color'] = getattr(pres, f'_{_side}_line{_i}_color', None)
-        extra[f'line{_i}_glow_color'] = getattr(pres, f'_{_side}_line{_i}_glow_color', None)
+        extra[f'line{_i}_color'] = getattr(pres, f'_{_side}_line{_i}_color')
+        extra[f'line{_i}_glow_color'] = getattr(pres, f'_{_side}_line{_i}_glow_color')
     for _i in range(2, 7):
         extra[f'ghost_line{_i}_enabled'] = bool(
-            getattr(pres, f'_{_side}_ghost_line{_i}_enabled', True)
+            getattr(pres, f'_{_side}_ghost_line{_i}_enabled')
         )
     # Legacy ghost enabled keys (for shader compatibility)
     for _i in range(2, 7):
-        extra[f'osc_ghost_line{_i}_enabled'] = bool(getattr(pres, f'_osc_ghost_line{_i}_enabled', True))
-        extra[f'sine_ghost_line{_i}_enabled'] = bool(getattr(pres, f'_sine_ghost_line{_i}_enabled', True))
+        extra[f'osc_ghost_line{_i}_enabled'] = bool(getattr(pres, f'_osc_ghost_line{_i}_enabled'))
+        extra[f'sine_ghost_line{_i}_enabled'] = bool(getattr(pres, f'_sine_ghost_line{_i}_enabled'))
 
     # Preset guardrail: when paused, ensure Sine has minimum travel so it
     # remains visibly alive even if a preset stores travel as NONE.
     if is_sine and not bool(getattr(widget, "_spotify_playing", False)):
-        t1 = int(extra.get('sine_wave_travel', 0) or 0)
-        t2 = int(extra.get('sine_travel_line2', 0) or 0)
-        t3 = int(extra.get('sine_travel_line3', 0) or 0)
-        t4 = int(extra.get('sine_travel_line4', 0) or 0)
-        t5 = int(extra.get('sine_travel_line5', 0) or 0)
-        t6 = int(extra.get('sine_travel_line6', 0) or 0)
+        t1 = int(extra['sine_wave_travel'])
+        t2 = int(extra['sine_travel_line2'])
+        t3 = int(extra['sine_travel_line3'])
+        t4 = int(extra['sine_travel_line4'])
+        t5 = int(extra['sine_travel_line5'])
+        t6 = int(extra['sine_travel_line6'])
         preferred = next((d for d in (t1, t2, t3, t4, t5, t6) if d in (1, 2)), 2)
         if t1 == 0:
             extra['sine_wave_travel'] = preferred
         # Ensure fallback travel is actually visible at idle without becoming
         # distractingly fast for quiet/paused scenes.
-        extra['line_speed'] = max(0.22, float(extra.get('line_speed', 0.0) or 0.0))
+        extra['line_speed'] = max(0.22, float(extra['line_speed']))
 
 
 
@@ -768,16 +727,16 @@ def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     simulation arrays/counts read from the authored logical host.
     """
     pres = _presentation_source(widget)
-    extra['bubble_outline_color'] = getattr(pres, '_bubble_outline_color', None)
-    extra['bubble_specular_color'] = getattr(pres, '_bubble_specular_color', None)
-    extra['bubble_gradient_light'] = getattr(pres, '_bubble_gradient_light', None)
-    extra['bubble_gradient_dark'] = getattr(pres, '_bubble_gradient_dark', None)
-    extra['bubble_pop_color'] = getattr(pres, '_bubble_pop_color', None)
-    extra['bubble_specular_direction'] = getattr(pres, '_bubble_specular_direction', 'top_left')
-    extra['bubble_gradient_direction'] = getattr(pres, '_bubble_gradient_direction', 'top')
+    extra['bubble_outline_color'] = pres._bubble_outline_color
+    extra['bubble_specular_color'] = pres._bubble_specular_color
+    extra['bubble_gradient_light'] = pres._bubble_gradient_light
+    extra['bubble_gradient_dark'] = pres._bubble_gradient_dark
+    extra['bubble_pop_color'] = pres._bubble_pop_color
+    extra['bubble_specular_direction'] = pres._bubble_specular_direction
+    extra['bubble_gradient_direction'] = pres._bubble_gradient_direction
     extra['bubble_pos_data'] = getattr(widget, '_bubble_pos_data', [])
     extra['bubble_extra_data'] = getattr(widget, '_bubble_extra_data', [])
     extra['bubble_trail_data'] = getattr(widget, '_bubble_trail_data', [])
-    extra['bubble_trail_strength'] = getattr(widget, '_bubble_trail_strength', 0.0)
-    extra['bubble_tail_opacity'] = getattr(pres, '_bubble_tail_opacity', 0.0)
-    extra['bubble_count'] = getattr(widget, '_bubble_count', 0)
+    extra['bubble_trail_strength'] = widget._bubble_trail_strength
+    extra['bubble_tail_opacity'] = pres._bubble_tail_opacity
+    extra['bubble_count'] = widget._bubble_count

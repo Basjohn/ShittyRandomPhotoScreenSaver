@@ -118,11 +118,10 @@ class QuickSineRenderer:
         def _set_color(
             name: str,
             value: object,
-            default: tuple[int, int, int, int],
         ) -> None:
             gl.glUniform4f(
                 uniforms[name],
-                *rgba(value, default=default),
+                *rgba(value),
             )
 
         gl.glUseProgram(self._program)
@@ -149,18 +148,18 @@ class QuickSineRenderer:
         _set1f("u_high_energy", energy.high)
 
         _set1i("u_playing", 1 if logical.playing else 0)
-        _set1f("u_sine_speed", parameter(parameters, "line_speed", 1.0))
+        _set1f("u_sine_speed", parameter(parameters, "line_speed"))
         _set1i(
             "u_sine_line_dim",
-            1 if bool(parameter(parameters, "line_dim", False)) else 0,
+            1 if bool(parameter(parameters, "line_dim")) else 0,
         )
         _set1f(
             "u_sine_line_offset_bias",
-            _bounded(parameter(parameters, "line_offset_bias", 0.0), 0.0, 1.0),
+            _bounded(parameter(parameters, "line_offset_bias"), 0.0, 1.0),
         )
         _set1f(
             "u_card_adaptation",
-            _bounded(parameter(parameters, "sine_card_adaptation", 0.3), 0.05, 1.0),
+            _bounded(parameter(parameters, "sine_card_adaptation"), 0.05, 1.0),
         )
         travel_names = (
             "sine_wave_travel",
@@ -184,45 +183,45 @@ class QuickSineRenderer:
         ):
             _set1i(
                 uniform_name,
-                max(0, min(2, int(parameter(parameters, setting_name, 0)))),
+                max(0, min(2, int(parameter(parameters, setting_name)))),
             )
         for index in range(1, 7):
             _set1f(
                 f"u_sine_line{index}_shift",
                 _bounded(
-                    parameter(parameters, f"sine_line{index}_shift", 0.0),
+                    parameter(parameters, f"sine_line{index}_shift"),
                     -2.0,
                     2.0,
                 ),
             )
-        _set1f("u_wave_effect", parameter(parameters, "sine_wave_effect", 0.0))
-        _set1f("u_micro_wobble", parameter(parameters, "sine_micro_wobble", 0.0))
-        _set1f("u_crawl_amount", parameter(parameters, "sine_crawl_amount", 0.0))
-        _set1f("u_wave_effect_gate", parameter(parameters, "wave_effect_gate", 0.06))
+        _set1f("u_wave_effect", parameter(parameters, "sine_wave_effect"))
+        _set1f("u_micro_wobble", parameter(parameters, "sine_micro_wobble"))
+        _set1f("u_crawl_amount", parameter(parameters, "sine_crawl_amount"))
+        _set1f("u_wave_effect_gate", parameter(parameters, "wave_effect_gate"))
         _set1i(
             "u_sine_vertical_shift",
             max(
                 -50,
-                min(200, int(parameter(parameters, "sine_vertical_shift", 0))),
+                min(200, int(parameter(parameters, "sine_vertical_shift"))),
             ),
         )
-        _set1f("u_heartbeat", parameter(parameters, "sine_heartbeat", 0.0))
+        _set1f("u_heartbeat", parameter(parameters, "sine_heartbeat"))
         _set1f("u_heartbeat_intensity", mode_state.heartbeat_intensity)
         _set1f(
             "u_width_reaction",
-            parameter(parameters, "resolved_width_reaction", 0.0),
+            parameter(parameters, "resolved_width_reaction"),
         )
-        _set1f("u_sine_density", parameter(parameters, "sine_density", 1.0))
+        _set1f("u_sine_density", parameter(parameters, "sine_density"))
         _set1f(
             "u_sine_displacement",
-            parameter(parameters, "sine_displacement", 0.0),
+            parameter(parameters, "sine_displacement"),
         )
 
         ghost_enabled = bool(
-            parameter(parameters, "sine_ghosting_enabled", True)
+            parameter(parameters, "sine_ghosting_enabled")
         )
         ghost_alpha = _bounded(
-            parameter(parameters, "sine_ghost_alpha", 0.45),
+            parameter(parameters, "sine_ghost_alpha"),
             0.0,
             1.0,
         )
@@ -238,7 +237,6 @@ class QuickSineRenderer:
                     parameter(
                         parameters,
                         f"ghost_line{index}_enabled",
-                        True,
                     )
                 )
                 else 0,
@@ -246,70 +244,59 @@ class QuickSineRenderer:
 
         _set1i(
             "u_glow_enabled",
-            1 if bool(parameter(parameters, "glow_enabled", True)) else 0,
+            1 if bool(parameter(parameters, "glow_enabled")) else 0,
         )
         _set1f(
             "u_glow_intensity",
-            max(0.0, float(parameter(parameters, "glow_intensity", 0.5))),
+            max(0.0, float(parameter(parameters, "glow_intensity"))),
         )
         _set1f(
             "u_glow_size",
-            _bounded(parameter(parameters, "glow_size", 1.0), 0.1, 3.0),
+            _bounded(parameter(parameters, "glow_size"), 0.1, 3.0),
         )
         _set1f(
             "u_glow_reactivity",
-            _bounded(parameter(parameters, "glow_reactivity", 1.0), 0.0, 2.0),
+            _bounded(parameter(parameters, "glow_reactivity"), 0.0, 2.0),
         )
         _set_color(
             "u_glow_color",
-            parameter(parameters, "glow_color", None),
-            (0, 200, 255, 230),
+            parameter(parameters, "glow_color"),
         )
         _set1i(
             "u_reactive_glow",
-            1 if bool(parameter(parameters, "reactive_glow", True)) else 0,
+            1 if bool(parameter(parameters, "reactive_glow")) else 0,
         )
         _set1f(
             "u_sensitivity",
             _bounded(
-                parameter(parameters, "resolved_sensitivity", 1.0),
+                parameter(parameters, "resolved_sensitivity"),
                 0.1,
                 5.0,
             ),
         )
         _set_color(
             "u_line_color",
-            parameter(parameters, "line_color", None),
-            (255, 255, 255, 255),
+            parameter(parameters, "line_color"),
         )
         _set1i(
             "u_line_count",
-            max(1, min(6, int(parameter(parameters, "line_count", 1)))),
+            max(1, min(6, int(parameter(parameters, "line_count")))),
         )
-        color_defaults = {
-            2: ((255, 120, 50, 230), (255, 120, 50, 180)),
-            3: ((50, 255, 120, 230), (50, 255, 120, 180)),
-            4: ((255, 0, 150, 230), (255, 0, 150, 180)),
-            5: ((0, 255, 200, 230), (0, 255, 200, 180)),
-            6: ((200, 100, 255, 230), (200, 100, 255, 180)),
-        }
-        for index, (line_default, glow_default) in color_defaults.items():
+        for index in range(2, 7):
             _set_color(
                 f"u_line{index}_color",
-                parameter(parameters, f"line{index}_color", None),
-                line_default,
+                parameter(parameters, f"line{index}_color"),
             )
             _set_color(
                 f"u_line{index}_glow_color",
-                parameter(parameters, f"line{index}_glow_color", None),
-                glow_default,
+                parameter(parameters, f"line{index}_glow_color"),
             )
 
         rainbow_enabled = bool(
-            parameter(parameters, "rainbow_enabled", False)
+            parameter(parameters, "rainbow_enabled")
         )
         rainbow_speed = _bounded(
-            parameter(parameters, "rainbow_speed", 0.5),
+            parameter(parameters, "rainbow_speed"),
             0.01,
             5.0,
         )

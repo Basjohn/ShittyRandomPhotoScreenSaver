@@ -25,10 +25,12 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor
 
 from core.reddit_preparation import RedditPost, candidate_identity
+from core.settings.default_contract import require_canonical_default
 from core.settings.shadow_direction import (
     resolve_directional_extensions,
     resolve_signed_offset,
 )
+from rendering.quick.shadow_snapshot import QuickShadowSnapshot
 
 from .theme_projection import (
     resolve_card_surface_colors,
@@ -174,22 +176,22 @@ def _age_label(created_utc: float, now_ts: float) -> str:
 
 @dataclass(frozen=True)
 class RedditPresentationConfig:
-    widget_id: str = "reddit"
-    subreddit: str = "technology"
-    limit: int = 10
-    font_family: str = "Inter"
-    font_size: int = 18
-    text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    show_background: bool = True
-    background_color: tuple[int, int, int, int] = (35, 35, 35, 255)
-    background_opacity: float = 0.6
-    border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
-    border_opacity: float = 1.0
-    header_fill_color: tuple[int, int, int, int] = (0, 0, 0, 0)
-    header_border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
-    header_text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    show_separators: bool = True
-    show_refresh_spiral: bool = True
+    widget_id: str
+    subreddit: str
+    limit: int
+    font_family: str
+    font_size: int
+    text_color: tuple[int, int, int, int]
+    show_background: bool
+    background_color: tuple[int, int, int, int]
+    background_opacity: float
+    border_color: tuple[int, int, int, int]
+    border_opacity: float
+    header_fill_color: tuple[int, int, int, int]
+    header_border_color: tuple[int, int, int, int]
+    header_text_color: tuple[int, int, int, int]
+    show_separators: bool
+    show_refresh_spiral: bool
 
     @classmethod
     def from_mapping(
@@ -198,43 +200,37 @@ class RedditPresentationConfig:
         *,
         widget_id: str = "reddit",
     ) -> "RedditPresentationConfig":
+        """Normalize Reddit-family state using canonical repair values only."""
+
+        normalized_id = str(widget_id or "reddit")
+        if normalized_id not in {"reddit", "reddit2"}:
+            raise ValueError(f"unsupported Reddit widget id: {normalized_id}")
+        canonical = require_canonical_default(f"widgets.{normalized_id}")
+        base = require_canonical_default("widgets.reddit")
+        if not isinstance(canonical, Mapping) or not isinstance(base, Mapping):
+            raise TypeError("Canonical Reddit defaults must be mappings")
+        merged = dict(base)
+        merged.update(canonical)
+        if isinstance(values, Mapping):
+            merged.update(values)
+
         return cls(
-            widget_id=str(widget_id or "reddit"),
-            subreddit=_subreddit_slug(values.get("subreddit", "technology")),
-            limit=_bounded_int(values.get("limit"), 10, 1, 25),
-            font_family=str(values.get("font_family", "Inter") or "Inter"),
-            font_size=_bounded_int(values.get("font_size"), 18, 8, 96),
-            text_color=_rgba(values.get("color"), (255, 255, 255, 230)),
-            show_background=_as_bool(values.get("show_background"), True),
-            background_color=_rgba(
-                values.get("bg_color", values.get("background_color")),
-                (35, 35, 35, 255),
-            ),
-            background_opacity=_bounded_float(
-                values.get("bg_opacity", values.get("background_opacity")),
-                0.6,
-                0.0,
-                1.0,
-            ),
-            border_color=_rgba(
-                values.get("border_color"), (255, 255, 255, 255)
-            ),
-            border_opacity=_bounded_float(
-                values.get("border_opacity"), 1.0, 0.0, 1.0
-            ),
-            header_fill_color=_rgba(
-                values.get("header_fill_color"), (0, 0, 0, 0)
-            ),
-            header_border_color=_rgba(
-                values.get("header_border_color"), (255, 255, 255, 255)
-            ),
-            header_text_color=_rgba(
-                values.get("header_text_color"), (255, 255, 255, 230)
-            ),
-            show_separators=_as_bool(values.get("show_separators"), True),
-            show_refresh_spiral=_as_bool(
-                values.get("show_refresh_spiral"), True
-            ),
+            widget_id=normalized_id,
+            subreddit=_subreddit_slug(merged["subreddit"] or canonical["subreddit"]),
+            limit=_bounded_int(merged["limit"], int(canonical["limit"]), 1, 25),
+            font_family=str(merged["font_family"] or base["font_family"]),
+            font_size=_bounded_int(merged["font_size"], int(base["font_size"]), 8, 96),
+            text_color=_rgba(merged["color"], tuple(base["color"])),
+            show_background=_as_bool(merged["show_background"], bool(base["show_background"])),
+            background_color=_rgba(merged["bg_color"], tuple(base["bg_color"])),
+            background_opacity=_bounded_float(merged["bg_opacity"], float(base["bg_opacity"]), 0.0, 1.0),
+            border_color=_rgba(merged["border_color"], tuple(base["border_color"])),
+            border_opacity=_bounded_float(merged["border_opacity"], float(base["border_opacity"]), 0.0, 1.0),
+            header_fill_color=_rgba(merged["header_fill_color"], tuple(base["header_fill_color"])),
+            header_border_color=_rgba(merged["header_border_color"], tuple(base["header_border_color"])),
+            header_text_color=_rgba(merged["header_text_color"], tuple(base["header_text_color"])),
+            show_separators=_as_bool(merged["show_separators"], bool(base["show_separators"])),
+            show_refresh_spiral=_as_bool(merged["show_refresh_spiral"], bool(base["show_refresh_spiral"])),
         )
 
     @classmethod
@@ -246,32 +242,32 @@ class RedditPresentationConfig:
     ) -> "RedditPresentationConfig":
         """Project canonical member settings with Reddit2 style inheritance."""
 
-        from core.settings.defaults import get_default_settings
-
-        defaults = get_default_settings().get("widgets", {})
-        default_member = defaults.get(widget_id, {}) if isinstance(defaults, Mapping) else {}
-        member = widgets.get(widget_id, {}) if isinstance(widgets, Mapping) else {}
-        if not isinstance(default_member, Mapping):
-            default_member = {}
+        normalized_id = str(widget_id or "reddit")
+        if normalized_id not in {"reddit", "reddit2"}:
+            raise ValueError(f"unsupported Reddit widget id: {normalized_id}")
+        default_member = require_canonical_default(f"widgets.{normalized_id}")
+        base_default = require_canonical_default("widgets.reddit")
+        if not isinstance(default_member, Mapping) or not isinstance(base_default, Mapping):
+            raise TypeError("Canonical Reddit defaults must be mappings")
+        member = widgets.get(normalized_id, {}) if isinstance(widgets, Mapping) else {}
         if not isinstance(member, Mapping):
             member = {}
         merged = dict(default_member)
         merged.update(member)
         effective_defaults = dict(default_member)
-        if widget_id == "reddit2":
-            base_default = defaults.get("reddit", {}) if isinstance(defaults, Mapping) else {}
+        if normalized_id == "reddit2":
             base_member = widgets.get("reddit", {}) if isinstance(widgets, Mapping) else {}
-            base = dict(base_default) if isinstance(base_default, Mapping) else {}
+            base = dict(base_default)
             if isinstance(base_member, Mapping):
                 base.update(base_member)
             for key in _STYLE_KEYS:
-                if key not in effective_defaults and isinstance(base_default, Mapping) and key in base_default:
+                if key not in effective_defaults and key in base_default:
                     effective_defaults[key] = base_default[key]
                 if key not in member and key in base:
                     merged[key] = base[key]
-        config = cls.from_mapping(merged, widget_id=widget_id)
+        config = cls.from_mapping(merged, widget_id=normalized_id)
         header_fill, header_border, header_text = resolve_header_colors(
-            widget_id,
+            normalized_id,
             values=merged,
             defaults=effective_defaults,
             fill=config.header_fill_color,
@@ -320,21 +316,19 @@ class RedditPresentationStyle:
         *,
         border_width: float = 4.0,
     ) -> "RedditPresentationStyle":
-        direction = shadow_values.get("direction", "SE")
-        frame_extra = _bounded_float(
-            shadow_values.get("frame_extra_offset"), 0.0, 0.0, 40.0
+        shadow = QuickShadowSnapshot.from_mapping(shadow_values)
+        card_offset = resolve_signed_offset(
+            shadow.direction, *ORDINARY_CARD_SHADOW_BASE
         )
-        text_extra = _bounded_float(
-            shadow_values.get("text_extra_offset"), 0.0, 0.0, 40.0
+        card_extensions = resolve_directional_extensions(
+            shadow.direction, shadow.frame_extra_offset
         )
-        card_offset = resolve_signed_offset(direction, *ORDINARY_CARD_SHADOW_BASE)
-        card_extensions = resolve_directional_extensions(direction, frame_extra)
         text_offset = resolve_signed_offset(
-            direction,
-            ORDINARY_TEXT_SHADOW_BASE[0] + text_extra,
-            ORDINARY_TEXT_SHADOW_BASE[1] + text_extra,
+            shadow.direction,
+            ORDINARY_TEXT_SHADOW_BASE[0] + shadow.text_extra_offset,
+            ORDINARY_TEXT_SHADOW_BASE[1] + shadow.text_extra_offset,
         )
-        shadow_rgba = _rgba(shadow_values.get("color"), (0, 0, 0, 255))
+        shadow_rgba = shadow.color
         return cls(
             card_style=OverlayCardStyle(
                 shell_enabled=config.show_background,
@@ -347,17 +341,13 @@ class RedditPresentationStyle:
                 padding=14.0,
                 shadow_enabled=(
                     config.show_background
-                    and _as_bool(shadow_values.get("enabled"), True)
+                    and shadow.enabled
                 ),
                 shadow_color=_with_alpha(
                     shadow_rgba,
-                    _bounded_float(
-                        shadow_values.get("frame_opacity"), 0.77, 0.0, 1.0
-                    ),
+                    shadow.frame_opacity,
                 ),
-                shadow_blur=_bounded_float(
-                    shadow_values.get("blur_radius"), 18.0, 0.0, 80.0
-                ),
+                shadow_blur=min(80.0, shadow.blur_radius),
                 shadow_offset_x=card_offset[0],
                 shadow_offset_y=card_offset[1],
                 shadow_extend_left=card_extensions[0],
@@ -365,14 +355,10 @@ class RedditPresentationStyle:
                 shadow_extend_right=card_extensions[2],
                 shadow_extend_bottom=card_extensions[3],
             ),
-            text_shadow_enabled=_as_bool(
-                shadow_values.get("text_enabled"), True
-            ),
+            text_shadow_enabled=shadow.text_enabled,
             text_shadow_color=_with_alpha(
                 shadow_rgba,
-                _bounded_float(
-                    shadow_values.get("text_opacity"), 0.33, 0.0, 1.0
-                ),
+                shadow.text_opacity,
             ),
             text_shadow_offset_x=text_offset[0],
             text_shadow_offset_y=text_offset[1],

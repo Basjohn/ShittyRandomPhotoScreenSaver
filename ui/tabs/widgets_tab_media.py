@@ -41,11 +41,6 @@ from ui.tabs.shared_styles import (
     build_bucket_toggle,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
-from ui.tabs.settings_binding import (
-    ColorBinding,
-    apply_bindings_load,
-    collect_bindings_save,
-)
 from ui.tabs.media.technical_controls import (
     collect_per_mode_technical_controls,
     load_per_mode_technical_controls,
@@ -109,28 +104,42 @@ def _finalize_bucket_body(toggle, body: QWidget) -> None:
         body.setVisible(expanded)
 
 
-_OSC_MULTI_LINE_COLOR_BINDINGS = [
-    ColorBinding('osc_line2_color', '_osc_line2_color', [255, 120, 50, 230]),
-    ColorBinding('osc_line2_glow_color', '_osc_line2_glow_color', [255, 120, 50, 180]),
-    ColorBinding('osc_line3_color', '_osc_line3_color', [50, 255, 120, 230]),
-    ColorBinding('osc_line3_glow_color', '_osc_line3_glow_color', [50, 255, 120, 180]),
-    ColorBinding('osc_line4_color', '_osc_line4_color', [255, 0, 150, 230]),
-    ColorBinding('osc_line4_glow_color', '_osc_line4_glow_color', [255, 0, 150, 180]),
-    ColorBinding('osc_line5_color', '_osc_line5_color', [0, 255, 200, 230]),
-    ColorBinding('osc_line5_glow_color', '_osc_line5_glow_color', [0, 255, 200, 180]),
-    ColorBinding('osc_line6_color', '_osc_line6_color', [200, 100, 255, 230]),
-    ColorBinding('osc_line6_glow_color', '_osc_line6_glow_color', [200, 100, 255, 180]),
-]
+_OSC_MULTI_LINE_COLOR_BINDINGS = (
+    ("osc_line2_color", "_osc_line2_color"),
+    ("osc_line2_glow_color", "_osc_line2_glow_color"),
+    ("osc_line3_color", "_osc_line3_color"),
+    ("osc_line3_glow_color", "_osc_line3_glow_color"),
+    ("osc_line4_color", "_osc_line4_color"),
+    ("osc_line4_glow_color", "_osc_line4_glow_color"),
+    ("osc_line5_color", "_osc_line5_color"),
+    ("osc_line5_glow_color", "_osc_line5_glow_color"),
+    ("osc_line6_color", "_osc_line6_color"),
+    ("osc_line6_glow_color", "_osc_line6_glow_color"),
+)
+
 
 
 def _load_osc_multi_line_color_bindings(tab, spotify_vis_config) -> None:
-    """Load oscilloscope secondary line colors through the shared binding helper."""
-    apply_bindings_load(tab, spotify_vis_config, _OSC_MULTI_LINE_COLOR_BINDINGS)
+    """Load secondary Oscilloscope colors from config with canonical repair defaults."""
+    config = spotify_vis_config if isinstance(spotify_vis_config, dict) else {}
+    for key, attr in _OSC_MULTI_LINE_COLOR_BINDINGS:
+        default = tab._widget_default("spotify_visualizer", key)
+        value = config.get(key, default)
+        try:
+            setattr(tab, attr, QColor(*value))
+        except Exception:
+            setattr(tab, attr, QColor(*default))
 
 
 def _collect_osc_multi_line_color_bindings(tab) -> dict:
-    """Collect oscilloscope secondary line colors through the shared binding helper."""
-    return collect_bindings_save(tab, _OSC_MULTI_LINE_COLOR_BINDINGS)
+    """Collect secondary Oscilloscope colors without save-side shadow defaults."""
+    return {
+        key: _qcolor_to_list(
+            getattr(tab, attr, None),
+            tab._widget_default("spotify_visualizer", key),
+        )
+        for key, attr in _OSC_MULTI_LINE_COLOR_BINDINGS
+    }
 
 
 def _update_media_enabled_visibility(tab) -> None:
@@ -349,42 +358,42 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     provider_toggle, provider_body, provider_layout = build_bucket_toggle(
         _media_ctrl_layout,
         "Provider & Layout",
-        expanded=tab.get_widget_bucket_state("media", "provider_layout", default=False),
+        expanded=tab.get_widget_bucket_state("media", "provider_layout"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("media", "provider_layout", checked),
         defer_initial_visibility=True,
     )
     appearance_toggle, appearance_body, appearance_layout = build_bucket_toggle(
         _media_ctrl_layout,
         "Appearance",
-        expanded=tab.get_widget_bucket_state("media", "appearance", default=False),
+        expanded=tab.get_widget_bucket_state("media", "appearance"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("media", "appearance", checked),
         defer_initial_visibility=True,
     )
     artwork_toggle, artwork_body, artwork_layout = build_bucket_toggle(
         _media_ctrl_layout,
         "Artwork",
-        expanded=tab.get_widget_bucket_state("media", "artwork_header", default=False),
+        expanded=tab.get_widget_bucket_state("media", "artwork_header"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("media", "artwork_header", checked),
         defer_initial_visibility=True,
     )
     controls_toggle, controls_body, controls_layout = build_bucket_toggle(
         _media_ctrl_layout,
         "Transport Controls",
-        expanded=tab.get_widget_bucket_state("media", "controls", default=False),
+        expanded=tab.get_widget_bucket_state("media", "controls"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("media", "controls", checked),
         defer_initial_visibility=True,
     )
     seek_toggle, seek_body, seek_layout = build_bucket_toggle(
         _media_ctrl_layout,
         "Seek Bar",
-        expanded=tab.get_widget_bucket_state("media", "seek_bar", default=False),
+        expanded=tab.get_widget_bucket_state("media", "seek_bar"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("media", "seek_bar", checked),
         defer_initial_visibility=True,
     )
     volume_toggle, volume_body, volume_layout = build_bucket_toggle(
         _media_ctrl_layout,
         "Volume Control",
-        expanded=tab.get_widget_bucket_state("media", "volume_control", default=False),
+        expanded=tab.get_widget_bucket_state("media", "volume_control"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("media", "volume_control", checked),
         defer_initial_visibility=True,
     )
@@ -448,7 +457,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_position.currentTextChanged.connect(tab._update_stack_status)
     tab.media_position.setMinimumWidth(150)
     media_pos_row.addWidget(tab.media_position)
-    tab._set_combo_text(tab.media_position, tab._default_str('media', 'position', 'Bottom Left'))
+    tab._set_combo_text(tab.media_position, tab._default_str('media', 'position'))
     tab.media_stack_status = QLabel("")
     tab.media_stack_status.setMinimumWidth(100)
     tab.media_stack_status.setStyleSheet(STATUS_LABEL_STYLE)
@@ -462,13 +471,13 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_monitor_combo.currentTextChanged.connect(tab._update_stack_status)
     tab.media_monitor_combo.setMinimumWidth(120)
     media_disp_row.addWidget(tab.media_monitor_combo)
-    media_monitor_default = tab._widget_default('media', 'monitor', 'ALL')
+    media_monitor_default = tab._widget_default('media', 'monitor')
     tab._set_combo_text(tab.media_monitor_combo, str(media_monitor_default))
     media_disp_row.addStretch()
 
     media_font_family_row = _aligned_row(provider_layout, "Font:")
     tab.media_font_combo = StyledFontComboBox(size_variant="hero")
-    default_media_font = tab._default_str('media', 'font_family', 'Inter')
+    default_media_font = tab._default_str('media', 'font_family')
     tab.media_font_combo.setCurrentFont(QFont(default_media_font))
     tab.media_font_combo.setMinimumWidth(220)
     tab.media_font_combo.currentFontChanged.connect(tab._save_settings)
@@ -478,7 +487,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_font_row = _aligned_row(provider_layout, "Font Size:")
     tab.media_font_size = QSpinBox()
     tab.media_font_size.setRange(10, 72)
-    tab.media_font_size.setValue(tab._default_int('media', 'font_size', 20))
+    tab.media_font_size.setValue(tab._default_int('media', 'font_size'))
     tab.media_font_size.setAccelerated(True)
     tab.media_font_size.valueChanged.connect(tab._save_settings)
     tab.media_font_size.valueChanged.connect(tab._update_stack_status)
@@ -491,7 +500,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_margin_row = _aligned_row(provider_layout, "Margin:")
     tab.media_margin = QSpinBox()
     tab.media_margin.setRange(0, 100)
-    tab.media_margin.setValue(tab._default_int('media', 'margin', 30))
+    tab.media_margin.setValue(tab._default_int('media', 'margin'))
     tab.media_margin.setAccelerated(True)
     tab.media_margin.valueChanged.connect(tab._save_settings)
     media_margin_row.addWidget(tab.media_margin)
@@ -515,7 +524,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     tab.media_show_album = QCheckBox("Show Album Line")
     tab.media_show_album.setProperty("circleIndicator", True)
-    tab.media_show_album.setChecked(tab._default_bool('media', 'show_album', True))
+    tab.media_show_album.setChecked(tab._default_bool('media', 'show_album'))
     tab.media_show_album.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.media_show_album)
 
@@ -525,14 +534,14 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "Shows the Playing/Paused state line beneath the track metadata."
     )
     tab.media_show_playback_state.setChecked(
-        tab._default_bool('media', 'show_playback_state', True)
+        tab._default_bool('media', 'show_playback_state')
     )
     tab.media_show_playback_state.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.media_show_playback_state)
 
     tab.media_show_background = QCheckBox("Show Background Frame")
     tab.media_show_background.setProperty("circleIndicator", True)
-    tab.media_show_background.setChecked(tab._default_bool('media', 'show_background', True))
+    tab.media_show_background.setChecked(tab._default_bool('media', 'show_background'))
     tab.media_show_background.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.media_show_background)
 
@@ -546,7 +555,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.media_bg_opacity.setMinimum(0)
     tab.media_bg_opacity.setMaximum(100)
-    media_bg_opacity_pct = int(tab._default_float('media', 'bg_opacity', 0.6) * 100)
+    media_bg_opacity_pct = int(tab._default_float('media', 'bg_opacity') * 100)
     tab.media_bg_opacity.setValue(media_bg_opacity_pct)
     tab.media_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.media_bg_opacity.setTickInterval(10)
@@ -581,7 +590,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.media_border_opacity.setMinimum(0)
     tab.media_border_opacity.setMaximum(100)
-    media_border_opacity_pct = int(tab._default_float('media', 'border_opacity', 1.0) * 100)
+    media_border_opacity_pct = int(tab._default_float('media', 'border_opacity') * 100)
     tab.media_border_opacity.setValue(media_border_opacity_pct)
     tab.media_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.media_border_opacity.setTickInterval(10)
@@ -603,7 +612,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         title="Choose App Volume Track Color", show_alpha=True
     )
     tab.media_volume_track_color_btn.set_color(
-        getattr(tab, '_media_volume_track_color', QColor(35, 35, 35, 255))
+        getattr(tab, '_media_volume_track_color', tab._color_from_default('media', 'spotify_volume_track_color'))
     )
     tab.media_volume_track_color_btn.color_changed.connect(
         lambda c: (setattr(tab, '_media_volume_track_color', c), tab._save_settings())
@@ -615,7 +624,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_volume_fill_color_btn = ColorSwatchButton(
         title="Choose Spotify Volume Fill Color", show_alpha=True
     )
-    tab.media_volume_fill_color_btn.set_color(getattr(tab, '_media_volume_fill_color', tab._media_color))
+    tab.media_volume_fill_color_btn.set_color(getattr(tab, '_media_volume_fill_color', tab._color_from_default('media', 'spotify_volume_fill_color')))
     tab.media_volume_fill_color_btn.color_changed.connect(
         lambda c: (setattr(tab, '_media_volume_fill_color', c), tab._save_settings())
     )
@@ -636,7 +645,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_artwork_row = _aligned_row(artwork_layout, "Artwork Size:")
     tab.media_artwork_size = QSpinBox()
     tab.media_artwork_size.setRange(100, 300)
-    tab.media_artwork_size.setValue(tab._default_int('media', 'artwork_size', 200))
+    tab.media_artwork_size.setValue(tab._default_int('media', 'artwork_size'))
     tab.media_artwork_size.setAccelerated(True)
     tab.media_artwork_size.valueChanged.connect(tab._save_settings)
     tab.media_artwork_size.valueChanged.connect(tab._update_stack_status)
@@ -649,7 +658,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_rounded_artwork = QCheckBox("Rounded Artwork Border")
     tab.media_rounded_artwork.setProperty("circleIndicator", True)
     tab.media_rounded_artwork.setChecked(
-        tab._default_bool('media', 'rounded_artwork_border', True)
+        tab._default_bool('media', 'rounded_artwork_border')
     )
     tab.media_rounded_artwork.stateChanged.connect(tab._save_settings)
     artwork_layout.addWidget(tab.media_rounded_artwork)
@@ -657,7 +666,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_show_header_frame = QCheckBox("Show Header Pill (Logo + Title)")
     tab.media_show_header_frame.setProperty("circleIndicator", True)
     tab.media_show_header_frame.setChecked(
-        tab._default_bool('media', 'show_header_frame', True)
+        tab._default_bool('media', 'show_header_frame')
     )
     tab.media_show_header_frame.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.media_show_header_frame)
@@ -665,7 +674,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_show_controls = QCheckBox("Show Transport Controls")
     tab.media_show_controls.setProperty("circleIndicator", True)
     tab.media_show_controls.setChecked(
-        tab._default_bool('media', 'show_controls', True)
+        tab._default_bool('media', 'show_controls')
     )
     tab.media_show_controls.stateChanged.connect(tab._save_settings)
     controls_layout.addWidget(tab.media_show_controls)
@@ -673,7 +682,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_playback_progress_enabled = QCheckBox("Show Playback Progress Bar")
     tab.media_playback_progress_enabled.setProperty("circleIndicator", True)
     tab.media_playback_progress_enabled.setChecked(
-        tab._default_bool('media', 'playback_progress_enabled', False)
+        tab._default_bool('media', 'playback_progress_enabled')
     )
     tab.media_playback_progress_enabled.setToolTip(
         "Draws the interactive playback/seek pill from the existing Media runtime snapshot. "
@@ -694,7 +703,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_playback_progress_height = QSpinBox()
     tab.media_playback_progress_height.setRange(3, 18)
     tab.media_playback_progress_height.setValue(
-        tab._default_int('media', 'playback_progress_height', 6)
+        tab._default_int('media', 'playback_progress_height')
     )
     tab.media_playback_progress_height.valueChanged.connect(tab._save_settings)
     progress_height_row.addWidget(tab.media_playback_progress_height)
@@ -706,7 +715,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         title="Choose Media Seek Track Color", show_alpha=True
     )
     tab.media_playback_progress_track_color_btn.set_color(
-        getattr(tab, '_media_progress_track_color', QColor(255, 255, 255, 74))
+        getattr(tab, '_media_progress_track_color', tab._color_from_default('media', 'playback_progress_track_color'))
     )
     tab.media_playback_progress_track_color_btn.color_changed.connect(
         lambda color: (
@@ -734,7 +743,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_playback_progress_shadow_enabled = QCheckBox("Progress Bar Shadow")
     tab.media_playback_progress_shadow_enabled.setProperty("circleIndicator", True)
     tab.media_playback_progress_shadow_enabled.setChecked(
-        tab._default_bool('media', 'playback_progress_shadow_enabled', False)
+        tab._default_bool('media', 'playback_progress_shadow_enabled')
     )
     tab.media_playback_progress_shadow_enabled.stateChanged.connect(tab._save_settings)
     tab.media_playback_progress_shadow_enabled.stateChanged.connect(
@@ -747,7 +756,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         title="Choose Media Seek Shadow Color", show_alpha=True
     )
     tab.media_playback_progress_shadow_color_btn.set_color(
-        getattr(tab, '_media_progress_shadow_color', QColor(0, 0, 0, 102))
+        getattr(tab, '_media_progress_shadow_color', tab._color_from_default('media', 'playback_progress_shadow_color'))
     )
     tab.media_playback_progress_shadow_color_btn.color_changed.connect(
         lambda color: (
@@ -761,7 +770,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_playback_progress_glow_enabled = QCheckBox("Progress Bar Glow")
     tab.media_playback_progress_glow_enabled.setProperty("circleIndicator", True)
     tab.media_playback_progress_glow_enabled.setChecked(
-        tab._default_bool('media', 'playback_progress_glow_enabled', False)
+        tab._default_bool('media', 'playback_progress_glow_enabled')
     )
     tab.media_playback_progress_glow_enabled.stateChanged.connect(tab._save_settings)
     tab.media_playback_progress_glow_enabled.stateChanged.connect(
@@ -792,7 +801,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "It affects only the selected desktop application's audio session and is gated by Interaction Mode / Ctrl-held interaction modes."
     )
     tab.media_spotify_volume_enabled.setChecked(
-        tab._default_bool('media', 'spotify_volume_enabled', True)
+        tab._default_bool('media', 'spotify_volume_enabled')
     )
     tab.media_spotify_volume_enabled.stateChanged.connect(tab._save_settings)
     volume_layout.addWidget(tab.media_spotify_volume_enabled)
@@ -804,7 +813,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "Single-click toggles system-wide mute on/off (requires pycaw/Core Audio)."
     )
     tab.media_mute_button_enabled.setChecked(
-        tab._default_bool('media', 'mute_button_enabled', False)
+        tab._default_bool('media', 'mute_button_enabled')
     )
     tab.media_mute_button_enabled.stateChanged.connect(tab._save_settings)
     controls_layout.addWidget(tab.media_mute_button_enabled)
@@ -958,7 +967,7 @@ def _install_visualizer_body_host(tab, controls_layout, *, retire_body=None) -> 
         )
         return container
 
-    widgets_value = tab._settings.get("widgets", {}) if hasattr(tab, "_settings") else {}
+    widgets_value = tab._settings.get("widgets") if hasattr(tab, "_settings") else {}
     section = widgets_value.get("spotify_visualizer", {}) if isinstance(widgets_value, dict) else {}
     enabled = resolve_effective_enabled_modes(
         section.get("enabled_modes") if isinstance(section, dict) else None
@@ -1007,11 +1016,11 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     widgets = widgets or {}
 
     media_config = widgets.get('media', {}) if isinstance(widgets, dict) else {}
-    tab.media_enabled.setChecked(tab._config_bool('media', media_config, 'enabled', True))
+    tab.media_enabled.setChecked(tab._config_bool('media', media_config, 'enabled'))
 
     # Registered GSMTC provider.
     provider = preserve_provider_setting(
-        tab._config_str('media', media_config, 'provider', 'spotify')
+        tab._config_str('media', media_config, 'provider')
     )
     combo = getattr(tab, 'media_provider_combo', None)
     if combo is not None:
@@ -1024,143 +1033,143 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
             idx = combo.findData(provider)
         combo.setCurrentIndex(idx)
 
-    media_pos = tab._config_str('media', media_config, 'position', 'Bottom Left')
+    media_pos = tab._config_str('media', media_config, 'position')
     index = tab.media_position.findText(media_pos)
     if index >= 0:
         tab.media_position.setCurrentIndex(index)
 
-    tab.media_font_combo.setCurrentFont(QFont(tab._config_str('media', media_config, 'font_family', 'Inter')))
-    tab.media_font_size.setValue(tab._config_int('media', media_config, 'font_size', 22))
-    tab.media_margin.setValue(tab._config_int('media', media_config, 'margin', 30))
-    tab.media_show_background.setChecked(tab._config_bool('media', media_config, 'show_background', True))
-    media_opacity_pct = int(tab._config_float('media', media_config, 'bg_opacity', 0.6) * 100)
+    tab.media_font_combo.setCurrentFont(QFont(tab._config_str('media', media_config, 'font_family')))
+    tab.media_font_size.setValue(tab._config_int('media', media_config, 'font_size'))
+    tab.media_margin.setValue(tab._config_int('media', media_config, 'margin'))
+    tab.media_show_background.setChecked(tab._config_bool('media', media_config, 'show_background'))
+    media_opacity_pct = int(tab._config_float('media', media_config, 'bg_opacity') * 100)
     tab.media_bg_opacity.setValue(media_opacity_pct)
     tab.media_bg_opacity_label.setText(f"{media_opacity_pct}%")
 
-    tab._media_artwork_size = tab._config_int('media', media_config, 'artwork_size', 250)
+    tab._media_artwork_size = tab._config_int('media', media_config, 'artwork_size')
     tab.media_artwork_size.setValue(tab._media_artwork_size)
-    tab.media_rounded_artwork.setChecked(tab._config_bool('media', media_config, 'rounded_artwork_border', True))
-    tab.media_show_header_frame.setChecked(tab._config_bool('media', media_config, 'show_header_frame', True))
-    tab.media_show_album.setChecked(tab._config_bool('media', media_config, 'show_album', True))
+    tab.media_rounded_artwork.setChecked(tab._config_bool('media', media_config, 'rounded_artwork_border'))
+    tab.media_show_header_frame.setChecked(tab._config_bool('media', media_config, 'show_header_frame'))
+    tab.media_show_album.setChecked(tab._config_bool('media', media_config, 'show_album'))
     tab.media_show_playback_state.setChecked(
-        tab._config_bool('media', media_config, 'show_playback_state', True)
+        tab._config_bool('media', media_config, 'show_playback_state')
     )
-    tab.media_show_controls.setChecked(tab._config_bool('media', media_config, 'show_controls', True))
+    tab.media_show_controls.setChecked(tab._config_bool('media', media_config, 'show_controls'))
     tab.media_playback_progress_enabled.setChecked(
-        tab._config_bool('media', media_config, 'playback_progress_enabled', False)
+        tab._config_bool('media', media_config, 'playback_progress_enabled')
     )
     tab.media_playback_progress_height.setValue(
-        tab._config_int('media', media_config, 'playback_progress_height', 6)
+        tab._config_int('media', media_config, 'playback_progress_height')
     )
     tab.media_playback_progress_shadow_enabled.setChecked(
-        tab._config_bool('media', media_config, 'playback_progress_shadow_enabled', False)
+        tab._config_bool('media', media_config, 'playback_progress_shadow_enabled')
     )
     tab.media_playback_progress_glow_enabled.setChecked(
-        tab._config_bool('media', media_config, 'playback_progress_glow_enabled', False)
+        tab._config_bool('media', media_config, 'playback_progress_glow_enabled')
     )
     tab.media_spotify_volume_enabled.setChecked(
-        tab._config_bool('media', media_config, 'spotify_volume_enabled', True)
+        tab._config_bool('media', media_config, 'spotify_volume_enabled')
     )
     _update_media_provider_controls(tab)
     tab.media_mute_button_enabled.setChecked(
-        tab._config_bool('media', media_config, 'mute_button_enabled', True)
+        tab._config_bool('media', media_config, 'mute_button_enabled')
     )
 
     # Colors
-    media_color_data = media_config.get('color', tab._widget_default('media', 'color', [255, 255, 255, 230]))
+    media_color_data = media_config.get('color', tab._widget_default('media', 'color'))
     tab._media_color = QColor(*media_color_data)
-    media_bg_color_data = media_config.get('bg_color', tab._widget_default('media', 'bg_color', [35, 35, 35, 255]))
+    media_bg_color_data = media_config.get('bg_color', tab._widget_default('media', 'bg_color'))
     try:
         tab._media_bg_color = QColor(*media_bg_color_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set media bg_color=%s", media_bg_color_data, exc_info=True)
-        tab._media_bg_color = QColor(35, 35, 35, 255)
-    media_border_color_data = media_config.get('border_color', tab._widget_default('media', 'border_color', [255, 255, 255, 255]))
+        tab._media_bg_color = tab._color_from_default('media', 'bg_color')
+    media_border_color_data = media_config.get('border_color', tab._widget_default('media', 'border_color'))
     try:
         tab._media_border_color = QColor(*media_border_color_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set media border_color=%s", media_border_color_data, exc_info=True)
-        tab._media_border_color = QColor(255, 255, 255, 255)
-    media_border_opacity_pct = int(tab._config_float('media', media_config, 'border_opacity', 1.0) * 100)
+        tab._media_border_color = tab._color_from_default('media', 'border_color')
+    media_border_opacity_pct = int(tab._config_float('media', media_config, 'border_opacity') * 100)
     tab.media_border_opacity.setValue(media_border_opacity_pct)
     tab.media_border_opacity_label.setText(f"{media_border_opacity_pct}%")
 
     header_fill_data = media_config.get(
-        'header_fill_color', tab._widget_default('media', 'header_fill_color', [0, 0, 0, 0])
+        'header_fill_color', tab._widget_default('media', 'header_fill_color')
     )
     tab._media_header_fill_color = QColor(*header_fill_data)
     header_text_data = media_config.get(
-        'header_text_color', tab._widget_default('media', 'header_text_color', [255, 255, 255, 230])
+        'header_text_color', tab._widget_default('media', 'header_text_color')
     )
     tab._media_header_text_color = QColor(*header_text_data)
     header_border_data = media_config.get(
-        'header_border_color', tab._widget_default('media', 'header_border_color', [255, 255, 255, 255])
+        'header_border_color', tab._widget_default('media', 'header_border_color')
     )
     tab._media_header_border_color = QColor(*header_border_data)
 
     volume_track_data = media_config.get(
         'spotify_volume_track_color',
-        tab._widget_default('media', 'spotify_volume_track_color', [35, 35, 35, 255]),
+        tab._widget_default('media', 'spotify_volume_track_color'),
     )
     try:
         tab._media_volume_track_color = QColor(*volume_track_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set volume_track_color=%s", volume_track_data, exc_info=True)
-        tab._media_volume_track_color = QColor(35, 35, 35, 255)
+        tab._media_volume_track_color = tab._color_from_default('media', 'spotify_volume_track_color')
     volume_fill_data = media_config.get(
         'spotify_volume_fill_color',
-        tab._widget_default('media', 'spotify_volume_fill_color', [79, 79, 79, 150]),
+        tab._widget_default('media', 'spotify_volume_fill_color'),
     )
     try:
         tab._media_volume_fill_color = QColor(*volume_fill_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set volume_fill_color=%s", volume_fill_data, exc_info=True)
-        tab._media_volume_fill_color = QColor(79, 79, 79, 150)
+        tab._media_volume_fill_color = tab._color_from_default('media', 'spotify_volume_fill_color')
     volume_border_data = media_config.get(
         'spotify_volume_border_color',
-        tab._widget_default('media', 'spotify_volume_border_color', [255, 255, 255, 255]),
+        tab._widget_default('media', 'spotify_volume_border_color'),
     )
     try:
         tab._media_volume_border_color = QColor(*volume_border_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set volume_border_color=%s", volume_border_data, exc_info=True)
-        tab._media_volume_border_color = QColor(255, 255, 255, 255)
+        tab._media_volume_border_color = tab._color_from_default('media', 'spotify_volume_border_color')
     progress_track_data = media_config.get(
         'playback_progress_track_color',
-        tab._widget_default('media', 'playback_progress_track_color', [255, 255, 255, 74]),
+        tab._widget_default('media', 'playback_progress_track_color'),
     )
     try:
         tab._media_progress_track_color = QColor(*progress_track_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set progress track color=%s", progress_track_data, exc_info=True)
-        tab._media_progress_track_color = QColor(255, 255, 255, 74)
+        tab._media_progress_track_color = tab._color_from_default('media', 'playback_progress_track_color')
     progress_fill_data = media_config.get(
         'playback_progress_fill_color',
-        tab._widget_default('media', 'playback_progress_fill_color', [255, 255, 255, 230]),
+        tab._widget_default('media', 'playback_progress_fill_color'),
     )
     try:
         tab._media_progress_fill_color = QColor(*progress_fill_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set progress fill color=%s", progress_fill_data, exc_info=True)
-        tab._media_progress_fill_color = QColor(255, 255, 255, 230)
+        tab._media_progress_fill_color = tab._color_from_default('media', 'playback_progress_fill_color')
     progress_shadow_data = media_config.get(
         'playback_progress_shadow_color',
-        tab._widget_default('media', 'playback_progress_shadow_color', [0, 0, 0, 102]),
+        tab._widget_default('media', 'playback_progress_shadow_color'),
     )
     try:
         tab._media_progress_shadow_color = QColor(*progress_shadow_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set progress shadow color=%s", progress_shadow_data, exc_info=True)
-        tab._media_progress_shadow_color = QColor(0, 0, 0, 102)
+        tab._media_progress_shadow_color = tab._color_from_default('media', 'playback_progress_shadow_color')
     progress_glow_data = media_config.get(
         'playback_progress_glow_color',
-        tab._widget_default('media', 'playback_progress_glow_color', [255, 255, 255, 180]),
+        tab._widget_default('media', 'playback_progress_glow_color'),
     )
     try:
         tab._media_progress_glow_color = QColor(*progress_glow_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set progress glow color=%s", progress_glow_data, exc_info=True)
-        tab._media_progress_glow_color = QColor(255, 255, 255, 180)
+        tab._media_progress_glow_color = tab._color_from_default('media', 'playback_progress_glow_color')
     _apply_color_to_button('media_color_btn', '_media_color')
     _apply_color_to_button('media_bg_color_btn', '_media_bg_color')
     _apply_color_to_button('media_border_color_btn', '_media_border_color')
@@ -1172,8 +1181,8 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     _apply_color_to_button('media_playback_progress_shadow_color_btn', '_media_progress_shadow_color')
     _apply_color_to_button('media_playback_progress_glow_color_btn', '_media_progress_glow_color')
 
-    m_monitor_sel = media_config.get('monitor', tab._widget_default('media', 'monitor', 'ALL'))
-    m_mon_text = str(m_monitor_sel) if isinstance(m_monitor_sel, (int, str)) else 'ALL'
+    m_monitor_sel = media_config.get('monitor', tab._widget_default('media', 'monitor'))
+    m_mon_text = tab._monitor_text_from_value('media', m_monitor_sel)
     midx = tab.media_monitor_combo.findText(m_mon_text)
     if midx >= 0:
         tab.media_monitor_combo.setCurrentIndex(midx)
@@ -1201,7 +1210,7 @@ def load_shared_visualizer_appearance_settings(
 
     fill_color_data = spotify_vis_config.get(
         fill_color_key,
-        tab._widget_default('spotify_visualizer', fill_color_key, [0, 255, 128, 230]),
+        tab._widget_default('spotify_visualizer', fill_color_key),
     )
     try:
         tab._spotify_vis_fill_color = QColor(*fill_color_data)
@@ -1211,11 +1220,11 @@ def load_shared_visualizer_appearance_settings(
             fill_color_data,
             exc_info=True,
         )
-        tab._spotify_vis_fill_color = QColor(0, 255, 128, 230)
+        tab._spotify_vis_fill_color = tab._color_from_default('spotify_visualizer', fill_color_key)
 
     border_color_data = spotify_vis_config.get(
         border_color_key,
-        tab._widget_default('spotify_visualizer', border_color_key, [255, 255, 255, 230]),
+        tab._widget_default('spotify_visualizer', border_color_key),
     )
     try:
         tab._spotify_vis_border_color = QColor(*border_color_data)
@@ -1225,15 +1234,14 @@ def load_shared_visualizer_appearance_settings(
             border_color_data,
             exc_info=True,
         )
-        tab._spotify_vis_border_color = QColor(255, 255, 255, 230)
+        tab._spotify_vis_border_color = tab._color_from_default('spotify_visualizer', border_color_key)
 
     _apply_vis_color_to_button(tab, 'vis_fill_color_btn', '_spotify_vis_fill_color')
     _apply_vis_color_to_button(tab, 'vis_border_color_btn', '_spotify_vis_border_color')
 
     border_opacity_pct = int(
         tab._config_float(
-            'spotify_visualizer', spotify_vis_config, border_opacity_key, 0.85
-        ) * 100
+            'spotify_visualizer', spotify_vis_config, border_opacity_key) * 100
     )
     tab.vis_border_opacity.setValue(border_opacity_pct)
     tab.vis_border_opacity_label.setText(f"{border_opacity_pct}%")
@@ -1267,10 +1275,9 @@ def load_visualizer_settings(
         _requested_mode,
         _effective_mode,
     ) = resolve_effective_visualizer_section(spotify_vis_config)
-    active_vis_mode = (
-        str(spotify_vis_config.get('mode', 'spectrum')).strip().lower()
-        or 'spectrum'
-    )
+    # The resolver already owns canonical default/substitution semantics; do not
+    # invent a second Settings-side mode fallback here.
+    active_vis_mode = str(_effective_mode).strip().lower()
     active_preset_index = resolve_preset_index_from_mapping(
         active_vis_mode,
         spotify_vis_config,
@@ -1299,11 +1306,10 @@ def load_visualizer_settings(
     if hasattr(tab, 'visualizers_enabled'):
         tab.visualizers_enabled.setChecked(
             tab._config_bool(
-                'spotify_visualizer', spotify_vis_config, 'visualizers_enabled', True
-            )
+                'spotify_visualizer', spotify_vis_config, 'visualizers_enabled')
         )
     tab.vis_enabled_checkbox.setChecked(
-        tab._config_bool('spotify_visualizer', spotify_vis_config, 'enabled', True)
+        tab._config_bool('spotify_visualizer', spotify_vis_config, 'enabled')
     )
     load_per_mode_technical_controls(tab, spotify_vis_config)
 
@@ -1345,10 +1351,11 @@ def load_visualizer_settings(
 def save_media_settings(tab: WidgetsTab) -> dict:
     """Return media_config from current UI state."""
     _provider_combo = getattr(tab, 'media_provider_combo', None)
-    _provider_val = _provider_combo.currentData() if _provider_combo is not None else "spotify"
+    _provider_default = tab._default_str('media', 'provider')
+    _provider_val = _provider_combo.currentData() if _provider_combo is not None else _provider_default
     media_config = {
         'enabled': tab.media_enabled.isChecked(),
-        'provider': _provider_val or "spotify",
+        'provider': _provider_val or _provider_default,
         'position': tab.media_position.currentText(),
         'font_family': tab.media_font_combo.currentFont().family(),
         'font_size': tab.media_font_size.value(),
@@ -1390,8 +1397,7 @@ def save_media_settings(tab: WidgetsTab) -> dict:
         'spotify_volume_enabled': tab.media_spotify_volume_enabled.isChecked(),
         'mute_button_enabled': tab.media_mute_button_enabled.isChecked(),
     }
-    mmon_text = tab.media_monitor_combo.currentText()
-    media_config['monitor'] = mmon_text if mmon_text == 'ALL' else int(mmon_text)
+    media_config['monitor'] = tab._monitor_value_from_combo('media', tab.media_monitor_combo)
 
     return media_config
 
@@ -1400,10 +1406,13 @@ def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
     """Return spotify_visualizer config from current UI state."""
     current_mode = collect_visualizer_mode_selection(tab)
     spotify_vis_config = {
-        'visualizers_enabled': tab.visualizers_enabled.isChecked() if hasattr(tab, 'visualizers_enabled') else True,
+        'visualizers_enabled': (
+            tab.visualizers_enabled.isChecked()
+            if hasattr(tab, 'visualizers_enabled')
+            else tab._default_bool('spotify_visualizer', 'visualizers_enabled')
+        ),
         'enabled': tab.vis_enabled_checkbox.isChecked(),
         'mode': current_mode,
-        'software_visualizer_enabled': False,
         f'{current_mode}_bar_fill_color': [
             tab._spotify_vis_fill_color.red(),
             tab._spotify_vis_fill_color.green(),
@@ -1417,8 +1426,16 @@ def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
             tab._spotify_vis_border_color.alpha(),
         ],
         f'{current_mode}_bar_border_opacity': tab.vis_border_opacity.value() / 100.0,
-        'rainbow_enabled': tab.rainbow_enabled.isChecked() if hasattr(tab, 'rainbow_enabled') else False,
-        'rainbow_speed': (tab.rainbow_speed_slider.value() if hasattr(tab, 'rainbow_speed_slider') else 50) / 100.0,
+        'rainbow_enabled': (
+            tab.rainbow_enabled.isChecked()
+            if hasattr(tab, 'rainbow_enabled')
+            else tab._default_bool('spotify_visualizer', 'rainbow_enabled')
+        ),
+        'rainbow_speed': (
+            tab.rainbow_speed_slider.value() / 100.0
+            if hasattr(tab, 'rainbow_speed_slider')
+            else tab._default_float('spotify_visualizer', 'rainbow_speed')
+        ),
     }
     _host = getattr(tab, '_vis_body_host', None)
     if _host is not None:

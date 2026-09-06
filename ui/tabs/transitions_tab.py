@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
 
-from core.settings.defaults import get_default_settings
+from core.settings.default_contract import require_canonical_default
 from core.settings.settings_manager import SettingsManager
 from core.settings.capability_activation import (
     is_transition_activated,
@@ -48,6 +48,21 @@ _TRANSITION_SETTING_NAMES = get_transition_setting_names()
 _SETUP_NAV_KEY = "__setup__"
 
 
+def _transition_default(path: str):
+    """Return one persisted Transition product default from canonical authority."""
+
+    return require_canonical_default(f"transitions.{path}")
+
+
+def _transition_defaults_root() -> dict:
+    """Return the complete canonical Transitions mapping or fail loudly."""
+
+    value = require_canonical_default("transitions")
+    if not isinstance(value, dict):
+        raise TypeError("Canonical transitions defaults must be a mapping")
+    return value
+
+
 class TransitionsTab(QWidget):
     """Transitions configuration tab."""
     
@@ -65,10 +80,11 @@ class TransitionsTab(QWidget):
         super().__init__(parent)
         
         self._settings = settings
-        # Maintain per-transition direction selections in-memory (default: Random)
-        self._dir_slide: str = "Random"
-        self._dir_wipe: str = "Random"
-        self._dir_blockspin: str = "Left to Right"
+        # Maintain per-transition direction selections in-memory from the one
+        # canonical defaults authority until persisted state is hydrated.
+        self._dir_slide: str = str(_transition_default("slide.direction"))
+        self._dir_wipe: str = str(_transition_default("wipe.direction"))
+        self._dir_blockspin: str = str(_transition_default("blockspin.direction"))
         # Per-transition pool membership for random/switch behaviour.
         self._pool_by_type = {}
         self._duration_by_type = {}
@@ -106,7 +122,7 @@ class TransitionsTab(QWidget):
             return
         if not (key == "transitions" or (isinstance(key, str) and key.startswith("transitions."))):
             return
-        cfg = self._settings.get("transitions", {})
+        cfg = self._settings.get("transitions")
         if not isinstance(cfg, dict):
             return
         self._loading = True
@@ -118,21 +134,35 @@ class TransitionsTab(QWidget):
                     cb.setChecked(desired)
                     cb.blockSignals(False)
                 self._activation_by_type[name] = desired
-            pool = cfg.get("pool", {}) if isinstance(cfg.get("pool", {}), dict) else {}
+            canonical_pool = _transition_default("pool")
+            if not isinstance(canonical_pool, dict):
+                raise TypeError("Canonical transitions.pool default must be a mapping")
+            pool = cfg.get("pool", canonical_pool)
+            if not isinstance(pool, dict):
+                pool = canonical_pool
             for name, cb in getattr(self, "_pool_checkboxes", {}).items():
-                desired = bool(SettingsManager.to_bool(pool.get(name, self._pool_by_type.get(name, True)), True))
+                default_enabled = bool(canonical_pool[name])
+                desired = bool(SettingsManager.to_bool(
+                    pool.get(name, default_enabled), default_enabled
+                ))
                 if cb.isChecked() != desired:
                     cb.blockSignals(True)
                     cb.setChecked(desired)
                     cb.blockSignals(False)
                 self._pool_by_type[name] = desired
-            use_random = SettingsManager.to_bool(cfg.get("random_always", False), False)
+            default_random = bool(_transition_default("random_always"))
+            use_random = SettingsManager.to_bool(
+                cfg.get("random_always", default_random), default_random
+            )
             cbr = getattr(self, "_use_random_checkbox", None)
             if cbr is not None and cbr.isChecked() != use_random:
                 cbr.blockSignals(True)
                 cbr.setChecked(use_random)
                 cbr.blockSignals(False)
-            new_type = canonicalize_transition_name(cfg.get("type", ""), fallback="")
+            default_type = str(_transition_default("type"))
+            new_type = canonicalize_transition_name(
+                cfg.get("type", default_type), fallback=default_type
+            )
             if new_type and new_type != "Random":
                 self._current_transition = new_type
                 self.transition_combo.blockSignals(True)
@@ -263,10 +293,13 @@ class TransitionsTab(QWidget):
         self.duration_slider.setRange(100, 15000)  # store milliseconds directly (15s max)
         self.duration_slider.setSingleStep(100)
         self.duration_slider.setPageStep(500)
-        self.duration_slider.setValue(1300)  # BUG FIX #5: Increased from 1000ms (30% slower)
+        initial_duration = int(_transition_default("duration_ms"))
+        self.duration_slider.setValue(initial_duration)
         self.duration_slider.valueChanged.connect(self._on_duration_changed)
         duration_row.addWidget(self.duration_slider, 1)
-        self.duration_value_label = _add_value_label(duration_row, "1300 ms", width=86)
+        self.duration_value_label = _add_value_label(
+            duration_row, f"{initial_duration} ms", width=86
+        )
         duration_row.addStretch()
         layout.addWidget(duration_group)
         
@@ -479,10 +512,10 @@ class TransitionsTab(QWidget):
 
     def _hydrate_transition_page(self, name: str) -> None:
         """Hydrate a just-built transition page from the current persisted settings."""
-        cfg = self._settings.get('transitions', {}) or {}
+        cfg = self._settings.get('transitions') or {}
         if not isinstance(cfg, dict):
             cfg = {}
-        canonical = get_default_settings().get('transitions', {}) or {}
+        canonical = _transition_defaults_root()
         previous_loading = getattr(self, "_loading", False)
         self._loading = True
         try:
@@ -499,18 +532,18 @@ class TransitionsTab(QWidget):
         ``self._loading`` so control signals do not trigger saves during hydration.
         """
         if hasattr(self, 'slide_group'):
-            canonical_slide = canonical_transitions.get('slide', {})
-            slide = transitions_config.get('slide', {})
-            style = slide.get('motion_style', canonical_slide.get('motion_style', 'Linear'))
+            canonical_slide = canonical_transitions['slide']
+            slide = transitions_config.get('slide', canonical_slide)
+            style = slide.get('motion_style', canonical_slide['motion_style'])
             index = self.slide_motion_style_combo.findText(str(style))
             self.slide_motion_style_combo.setCurrentIndex(max(0, index))
 
         if hasattr(self, 'flip_group'):
-            canonical_block_flip = canonical_transitions.get('block_flip', {})
-            block_flip = transitions_config.get('block_flip', {})
-            self.grid_rows_spin.setValue(block_flip.get('rows', canonical_block_flip.get('rows', 12)))
-            self.grid_cols_spin.setValue(block_flip.get('cols', canonical_block_flip.get('cols', 24)))
-            blockflip_dir = block_flip.get('direction', 'Random') or 'Random'
+            canonical_block_flip = canonical_transitions['block_flip']
+            block_flip = transitions_config.get('block_flip', canonical_block_flip)
+            self.grid_rows_spin.setValue(block_flip.get('rows', canonical_block_flip['rows']))
+            self.grid_cols_spin.setValue(block_flip.get('cols', canonical_block_flip['cols']))
+            blockflip_dir = block_flip.get('direction', canonical_block_flip['direction']) or str(canonical_block_flip['direction'])
             try:
                 idx = self.blockflip_direction_combo.findText(blockflip_dir)
                 if idx < 0:
@@ -529,22 +562,22 @@ class TransitionsTab(QWidget):
                 logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
         if hasattr(self, 'diffuse_group'):
-            canonical_diffuse = canonical_transitions.get('diffuse', {})
-            diffuse = transitions_config.get('diffuse', {})
-            self.block_size_spin.setValue(diffuse.get('block_size', canonical_diffuse.get('block_size', 18)))
-            shape = diffuse.get('shape', canonical_diffuse.get('shape', 'Rectangle'))
+            canonical_diffuse = canonical_transitions['diffuse']
+            diffuse = transitions_config.get('diffuse', canonical_diffuse)
+            self.block_size_spin.setValue(diffuse.get('block_size', canonical_diffuse['block_size']))
+            shape = diffuse.get('shape', canonical_diffuse['shape'])
             index = self.diffuse_shape_combo.findText(shape)
             if index >= 0:
                 self.diffuse_shape_combo.setCurrentIndex(index)
 
         if hasattr(self, 'blinds_group'):
-            canonical_blinds = canonical_transitions.get('blinds', {})
-            blinds = transitions_config.get('blinds', {})
+            canonical_blinds = canonical_transitions['blinds']
+            blinds = transitions_config.get('blinds', canonical_blinds)
             if not isinstance(blinds, dict):
                 blinds = {}
-            self.blinds_feather_slider.setValue(int(blinds.get('feather', canonical_blinds.get('feather', 2))))
+            self.blinds_feather_slider.setValue(int(blinds.get('feather', canonical_blinds['feather'])))
             self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
-            blinds_dir = blinds.get('direction', canonical_blinds.get('direction', 'Horizontal'))
+            blinds_dir = blinds.get('direction', canonical_blinds['direction'])
             try:
                 idx = self.blinds_direction_combo.findText(str(blinds_dir))
                 if idx < 0:
@@ -554,16 +587,16 @@ class TransitionsTab(QWidget):
                 logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
         if hasattr(self, 'ripple_group'):
-            canonical_ripple = canonical_transitions.get('ripple', {})
-            ripple = transitions_config.get('ripple', {})
-            self.ripple_count_spin.setValue(int(ripple.get('ripple_count', canonical_ripple.get('ripple_count', 3))))
+            canonical_ripple = canonical_transitions['ripple']
+            ripple = transitions_config.get('ripple', canonical_ripple)
+            self.ripple_count_spin.setValue(int(ripple.get('ripple_count', canonical_ripple['ripple_count'])))
 
         if hasattr(self, 'crumble_group'):
-            canonical_crumble = canonical_transitions.get('crumble', {})
-            crumble = transitions_config.get('crumble', {})
-            self.crumble_piece_count_spin.setValue(crumble.get('piece_count', canonical_crumble.get('piece_count', 14)))
-            self.crumble_complexity_spin.setValue(crumble.get('crack_complexity', canonical_crumble.get('crack_complexity', 1.0)))
-            weight = crumble.get('weighting', canonical_crumble.get('weighting', 'Random Choice'))
+            canonical_crumble = canonical_transitions['crumble']
+            crumble = transitions_config.get('crumble', canonical_crumble)
+            self.crumble_piece_count_spin.setValue(crumble.get('piece_count', canonical_crumble['piece_count']))
+            self.crumble_complexity_spin.setValue(crumble.get('crack_complexity', canonical_crumble['crack_complexity']))
+            weight = crumble.get('weighting', canonical_crumble['weighting'])
             try:
                 idx = self.crumble_weight_combo.findText(weight)
                 if idx < 0:
@@ -573,69 +606,73 @@ class TransitionsTab(QWidget):
                 logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
         if hasattr(self, 'particle_group'):
-            canonical_particle = canonical_transitions.get('particle', {})
-            particle = transitions_config.get('particle', {})
-            mode = particle.get('mode', canonical_particle.get('mode', 'Converge'))
+            canonical_particle = canonical_transitions['particle']
+            particle = transitions_config.get('particle', canonical_particle)
+            mode = particle.get('mode', canonical_particle['mode'])
             idx = self.particle_mode_combo.findText(mode)
             if idx >= 0:
                 self.particle_mode_combo.setCurrentIndex(idx)
-            direction = particle.get('direction', canonical_particle.get('direction', 'Left to Right'))
+            direction = particle.get('direction', canonical_particle['direction'])
             idx = self.particle_direction_combo.findText(direction)
             if idx >= 0:
                 self.particle_direction_combo.setCurrentIndex(idx)
-            self.particle_radius_spin.setValue(int(particle.get('particle_radius', canonical_particle.get('particle_radius', 10))))
-            self.particle_trail_check.setChecked(particle.get('trail_strength', canonical_particle.get('trail_strength', 0.6)) > 0.01)
-            self.particle_3d_check.setChecked(particle.get('use_3d_shading', canonical_particle.get('use_3d_shading', True)))
-            self.particle_texture_check.setChecked(particle.get('texture_mapping', canonical_particle.get('texture_mapping', True)))
-            self.particle_wobble_check.setChecked(particle.get('wobble', canonical_particle.get('wobble', True)))
-            self.particle_gloss_spin.setValue(int(particle.get('gloss_size', canonical_particle.get('gloss_size', 72))))
-            light_idx = particle.get('light_direction', canonical_particle.get('light_direction', 0))
+            self.particle_radius_spin.setValue(int(particle.get('particle_radius', canonical_particle['particle_radius'])))
+            self.particle_trail_check.setChecked(particle.get('trail_strength', canonical_particle['trail_strength']) > 0.01)
+            self.particle_3d_check.setChecked(particle.get('use_3d_shading', canonical_particle['use_3d_shading']))
+            self.particle_texture_check.setChecked(particle.get('texture_mapping', canonical_particle['texture_mapping']))
+            self.particle_wobble_check.setChecked(particle.get('wobble', canonical_particle['wobble']))
+            self.particle_gloss_spin.setValue(int(particle.get('gloss_size', canonical_particle['gloss_size'])))
+            light_idx = particle.get('light_direction', canonical_particle['light_direction'])
             if 0 <= light_idx < self.particle_light_combo.count():
                 self.particle_light_combo.setCurrentIndex(light_idx)
-            self.particle_swirl_turns_spin.setValue(particle.get('swirl_turns', canonical_particle.get('swirl_turns', 3.0)))
-            swirl_order_idx = particle.get('swirl_order', canonical_particle.get('swirl_order', 0))
+            self.particle_swirl_turns_spin.setValue(particle.get('swirl_turns', canonical_particle['swirl_turns']))
+            swirl_order_idx = particle.get('swirl_order', canonical_particle['swirl_order'])
             if 0 <= swirl_order_idx < self.particle_swirl_order_combo.count():
                 self.particle_swirl_order_combo.setCurrentIndex(swirl_order_idx)
             self._update_particle_mode_visibility()
 
         if hasattr(self, 'burn_group'):
-            canonical_burn = canonical_transitions.get('burn', {})
-            burn = transitions_config.get('burn', {})
+            canonical_burn = canonical_transitions['burn']
+            burn = transitions_config.get('burn', canonical_burn)
             if not isinstance(burn, dict):
                 burn = {}
-            burn_dir = burn.get('direction', canonical_burn.get('direction', 'Left to Right')) or 'Left to Right'
-            try:
-                idx = self.burn_direction_combo.findText(burn_dir)
-                if idx < 0:
-                    idx = 0
-                self.burn_direction_combo.setCurrentIndex(idx)
-            except Exception as e:
-                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-            jag = int(round(burn.get('jaggedness', canonical_burn.get('jaggedness', 0.5)) * 100))
+            canonical_burn_dir = str(canonical_burn['direction']).strip()
+            if not canonical_burn_dir:
+                raise ValueError("Canonical transitions.burn.direction is empty")
+            burn_dir = str(burn.get('direction', canonical_burn_dir) or '').strip()
+            idx = self.burn_direction_combo.findText(burn_dir)
+            if idx < 0:
+                idx = self.burn_direction_combo.findText(canonical_burn_dir)
+            if idx < 0:
+                raise ValueError(
+                    f"Canonical burn direction is not represented by the UI: {canonical_burn_dir!r}"
+                )
+            self.burn_direction_combo.setCurrentIndex(idx)
+            jag = int(round(burn.get('jaggedness', canonical_burn['jaggedness']) * 100))
             self.burn_jaggedness_slider.setValue(max(0, min(100, jag)))
             self.burn_jaggedness_label.setText(f"{self.burn_jaggedness_slider.value()}%")
-            glow_i = int(round(burn.get('glow_intensity', canonical_burn.get('glow_intensity', 0.7)) * 100))
+            glow_i = int(round(burn.get('glow_intensity', canonical_burn['glow_intensity']) * 100))
             self.burn_glow_intensity_slider.setValue(max(0, min(100, glow_i)))
             self.burn_glow_intensity_label.setText(f"{self.burn_glow_intensity_slider.value()}%")
-            char_w = int(round(burn.get('char_width', canonical_burn.get('char_width', 0.5)) * 100))
+            char_w = int(round(burn.get('char_width', canonical_burn['char_width']) * 100))
             self.burn_char_width_slider.setValue(max(10, min(100, char_w)))
             self.burn_char_width_label.setText(f"{self.burn_char_width_slider.value()}%")
-            glow_col = burn.get('glow_color', canonical_burn.get('glow_color', [255, 140, 30, 255]))
+            glow_col = burn.get('glow_color', canonical_burn['glow_color'])
             if isinstance(glow_col, (list, tuple)) and len(glow_col) >= 3:
                 self._burn_glow_color = QColor(int(glow_col[0]), int(glow_col[1]), int(glow_col[2]),
                                                int(glow_col[3]) if len(glow_col) > 3 else 255)
                 self._apply_burn_glow_color_btn()
-            ember_col = burn.get('ember_color', canonical_burn.get('ember_color', [230, 64, 13, 255]))
+            ember_col = burn.get('ember_color', canonical_burn['ember_color'])
             if isinstance(ember_col, (list, tuple)) and len(ember_col) >= 3:
                 self._burn_ember_color = QColor(int(ember_col[0]), int(ember_col[1]), int(ember_col[2]),
                                                 int(ember_col[3]) if len(ember_col) > 3 else 255)
                 self._apply_burn_ember_color_btn()
-            self.burn_smoke_check.setChecked(bool(burn.get('smoke_enabled', canonical_burn.get('smoke_enabled', True))))
-            smoke_d = int(round(burn.get('smoke_density', canonical_burn.get('smoke_density', 0.5)) * 100))
+            self.burn_smoke_check.setChecked(bool(burn.get('smoke_enabled', canonical_burn['smoke_enabled'])))
+            smoke_d = int(round(burn.get('smoke_density', canonical_burn['smoke_density']) * 100))
             self.burn_smoke_density_slider.setValue(max(0, min(100, smoke_d)))
             self.burn_smoke_density_label.setText(f"{self.burn_smoke_density_slider.value()}%")
-            self.burn_ash_check.setChecked(bool(burn.get('ash_enabled', canonical_burn.get('ash_enabled', True))))
-            ash_d = int(round(burn.get('ash_density', canonical_burn.get('ash_density', 0.5)) * 100))
+            self.burn_ash_check.setChecked(bool(burn.get('ash_enabled', canonical_burn['ash_enabled'])))
+            ash_d = int(round(burn.get('ash_density', canonical_burn['ash_density']) * 100))
             self.burn_ash_density_slider.setValue(max(0, min(100, ash_d)))
             self.burn_ash_density_label.setText(f"{self.burn_ash_density_slider.value()}%")
 
@@ -649,7 +686,7 @@ class TransitionsTab(QWidget):
         grid_rows_row = _aligned_row(flip_layout, "Grid Rows:")
         self.grid_rows_spin = QSpinBox()
         self.grid_rows_spin.setRange(2, 25)
-        self.grid_rows_spin.setValue(4)
+        self.grid_rows_spin.setValue(int(_transition_default("block_flip.rows")))
         self.grid_rows_spin.setAccelerated(True)
         self.grid_rows_spin.valueChanged.connect(self._save_settings)
         grid_rows_row.addWidget(self.grid_rows_spin)
@@ -658,7 +695,7 @@ class TransitionsTab(QWidget):
         grid_cols_row = _aligned_row(flip_layout, "Grid Columns:")
         self.grid_cols_spin = QSpinBox()
         self.grid_cols_spin.setRange(2, 25)
-        self.grid_cols_spin.setValue(6)
+        self.grid_cols_spin.setValue(int(_transition_default("block_flip.cols")))
         self.grid_cols_spin.setAccelerated(True)
         self.grid_cols_spin.valueChanged.connect(self._save_settings)
         grid_cols_row.addWidget(self.grid_cols_spin)
@@ -736,7 +773,7 @@ class TransitionsTab(QWidget):
         self.blinds_feather_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.blinds_feather_slider.setRange(0, 25)
         self.blinds_feather_slider.setSingleStep(1)
-        self.blinds_feather_slider.setValue(2)
+        self.blinds_feather_slider.setValue(int(_transition_default("blinds.feather")))
         self.blinds_feather_slider.valueChanged.connect(self._save_settings)
         blinds_feather_row.addWidget(self.blinds_feather_slider, 1)
         self.blinds_feather_label = self._add_value_label(blinds_feather_row, "2")
@@ -754,7 +791,7 @@ class TransitionsTab(QWidget):
         block_size_row = _aligned_row(diffuse_layout, "Block Size (px):")
         self.block_size_spin = QSpinBox()
         self.block_size_spin.setRange(4, 256)
-        self.block_size_spin.setValue(18)
+        self.block_size_spin.setValue(int(_transition_default("diffuse.block_size")))
         self.block_size_spin.valueChanged.connect(self._save_settings)
         block_size_row.addWidget(self.block_size_spin)
         block_size_row.addStretch()
@@ -784,7 +821,7 @@ class TransitionsTab(QWidget):
         ripple_count_row = _aligned_row(ripple_layout, "Ripple Count:")
         self.ripple_count_spin = QSpinBox()
         self.ripple_count_spin.setRange(1, 8)
-        self.ripple_count_spin.setValue(3)
+        self.ripple_count_spin.setValue(int(_transition_default("ripple.ripple_count")))
         self.ripple_count_spin.valueChanged.connect(self._save_settings)
         ripple_count_row.addWidget(self.ripple_count_spin)
         ripple_count_row.addStretch()
@@ -801,7 +838,7 @@ class TransitionsTab(QWidget):
         crumble_piece_row = _aligned_row(crumble_layout, "Piece Count:")
         self.crumble_piece_count_spin = QSpinBox()
         self.crumble_piece_count_spin.setRange(4, 128)
-        self.crumble_piece_count_spin.setValue(14)
+        self.crumble_piece_count_spin.setValue(int(_transition_default("crumble.piece_count")))
         self.crumble_piece_count_spin.valueChanged.connect(self._save_settings)
         crumble_piece_row.addWidget(self.crumble_piece_count_spin)
         crumble_piece_row.addStretch()
@@ -811,7 +848,7 @@ class TransitionsTab(QWidget):
         self.crumble_complexity_spin.setDecimals(2)
         self.crumble_complexity_spin.setRange(0.2, 5.0)
         self.crumble_complexity_spin.setSingleStep(0.1)
-        self.crumble_complexity_spin.setValue(1.0)
+        self.crumble_complexity_spin.setValue(float(_transition_default("crumble.crack_complexity")))
         self.crumble_complexity_spin.valueChanged.connect(self._save_settings)
         crumble_complexity_row.addWidget(self.crumble_complexity_spin)
         crumble_complexity_row.addStretch()
@@ -860,7 +897,7 @@ class TransitionsTab(QWidget):
         particle_radius_row = _aligned_row(particle_layout, "Particle Radius:")
         self.particle_radius_spin = QSpinBox()
         self.particle_radius_spin.setRange(4, 80)
-        self.particle_radius_spin.setValue(10)
+        self.particle_radius_spin.setValue(int(round(float(_transition_default("particle.particle_radius")))))
         self.particle_radius_spin.valueChanged.connect(self._save_settings)
         particle_radius_row.addWidget(self.particle_radius_spin)
         particle_radius_row.addStretch()
@@ -868,7 +905,7 @@ class TransitionsTab(QWidget):
         particle_trail_row = _aligned_row(particle_layout, "", wrap=False)
         self.particle_trail_check = QCheckBox("Motion Trail")
         self.particle_trail_check.setProperty("circleIndicator", True)
-        self.particle_trail_check.setChecked(True)
+        self.particle_trail_check.setChecked(float(_transition_default("particle.trail_strength")) > 0.01)
         self.particle_trail_check.stateChanged.connect(self._save_settings)
         particle_trail_row.addWidget(self.particle_trail_check)
         particle_trail_row.addStretch()
@@ -876,7 +913,7 @@ class TransitionsTab(QWidget):
         particle_3d_row = _aligned_row(particle_layout, "", wrap=False)
         self.particle_3d_check = QCheckBox("3D Ball Shading")
         self.particle_3d_check.setProperty("circleIndicator", True)
-        self.particle_3d_check.setChecked(True)
+        self.particle_3d_check.setChecked(bool(_transition_default("particle.use_3d_shading")))
         self.particle_3d_check.stateChanged.connect(self._save_settings)
         particle_3d_row.addWidget(self.particle_3d_check)
         particle_3d_row.addStretch()
@@ -884,7 +921,7 @@ class TransitionsTab(QWidget):
         particle_texture_row = _aligned_row(particle_layout, "", wrap=False)
         self.particle_texture_check = QCheckBox("Map Image to Particles")
         self.particle_texture_check.setProperty("circleIndicator", True)
-        self.particle_texture_check.setChecked(True)
+        self.particle_texture_check.setChecked(bool(_transition_default("particle.texture_mapping")))
         self.particle_texture_check.stateChanged.connect(self._save_settings)
         particle_texture_row.addWidget(self.particle_texture_check)
         particle_texture_row.addStretch()
@@ -892,7 +929,7 @@ class TransitionsTab(QWidget):
         particle_wobble_row = _aligned_row(particle_layout, "", wrap=False)
         self.particle_wobble_check = QCheckBox("Wobble on Arrival")
         self.particle_wobble_check.setProperty("circleIndicator", True)
-        self.particle_wobble_check.setChecked(False)
+        self.particle_wobble_check.setChecked(bool(_transition_default("particle.wobble")))
         self.particle_wobble_check.stateChanged.connect(self._save_settings)
         particle_wobble_row.addWidget(self.particle_wobble_check)
         particle_wobble_row.addStretch()
@@ -900,7 +937,7 @@ class TransitionsTab(QWidget):
         particle_gloss_row = _aligned_row(particle_layout, "Gloss Size:")
         self.particle_gloss_spin = QSpinBox()
         self.particle_gloss_spin.setRange(10, 200)
-        self.particle_gloss_spin.setValue(72)
+        self.particle_gloss_spin.setValue(int(round(float(_transition_default("particle.gloss_size")))))
         self.particle_gloss_spin.valueChanged.connect(self._save_settings)
         particle_gloss_row.addWidget(self.particle_gloss_spin)
         particle_gloss_row.addStretch()
@@ -923,7 +960,7 @@ class TransitionsTab(QWidget):
         self.particle_swirl_turns_spin.setDecimals(2)
         self.particle_swirl_turns_spin.setRange(0.5, 6.0)
         self.particle_swirl_turns_spin.setSingleStep(0.1)
-        self.particle_swirl_turns_spin.setValue(3.0)
+        self.particle_swirl_turns_spin.setValue(float(_transition_default("particle.swirl_turns")))
         self.particle_swirl_turns_spin.valueChanged.connect(self._save_settings)
         particle_swirl_turns_row.addWidget(self.particle_swirl_turns_spin)
         particle_swirl_turns_row.addStretch()
@@ -968,11 +1005,14 @@ class TransitionsTab(QWidget):
         burn_jag_row = _aligned_row(burn_layout, "Jaggedness:")
         self.burn_jaggedness_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.burn_jaggedness_slider.setRange(0, 100)
-        self.burn_jaggedness_slider.setValue(50)
+        burn_jaggedness_default = int(round(float(_transition_default("burn.jaggedness")) * 100.0))
+        self.burn_jaggedness_slider.setValue(burn_jaggedness_default)
         self.burn_jaggedness_slider.setToolTip("Edge noise amplitude (0 = smooth wipe, 100 = very jagged)")
         self.burn_jaggedness_slider.valueChanged.connect(self._save_settings)
         burn_jag_row.addWidget(self.burn_jaggedness_slider, 1)
-        self.burn_jaggedness_label = self._add_value_label(burn_jag_row, "50%")
+        self.burn_jaggedness_label = self._add_value_label(
+            burn_jag_row, f"{burn_jaggedness_default}%"
+        )
         self.burn_jaggedness_slider.valueChanged.connect(
             lambda v: self.burn_jaggedness_label.setText(f"{v}%")
         )
@@ -980,11 +1020,14 @@ class TransitionsTab(QWidget):
         burn_glow_row = _aligned_row(burn_layout, "Glow Intensity:")
         self.burn_glow_intensity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.burn_glow_intensity_slider.setRange(0, 100)
-        self.burn_glow_intensity_slider.setValue(70)
+        burn_glow_default = int(round(float(_transition_default("burn.glow_intensity")) * 100.0))
+        self.burn_glow_intensity_slider.setValue(burn_glow_default)
         self.burn_glow_intensity_slider.setToolTip("Warm glow brightness on the burning edge")
         self.burn_glow_intensity_slider.valueChanged.connect(self._save_settings)
         burn_glow_row.addWidget(self.burn_glow_intensity_slider, 1)
-        self.burn_glow_intensity_label = self._add_value_label(burn_glow_row, "70%")
+        self.burn_glow_intensity_label = self._add_value_label(
+            burn_glow_row, f"{burn_glow_default}%"
+        )
         self.burn_glow_intensity_slider.valueChanged.connect(
             lambda v: self.burn_glow_intensity_label.setText(f"{v}%")
         )
@@ -992,11 +1035,14 @@ class TransitionsTab(QWidget):
         burn_char_row = _aligned_row(burn_layout, "Char Width:")
         self.burn_char_width_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.burn_char_width_slider.setRange(10, 100)
-        self.burn_char_width_slider.setValue(50)
+        burn_char_default = int(round(float(_transition_default("burn.char_width")) * 100.0))
+        self.burn_char_width_slider.setValue(burn_char_default)
         self.burn_char_width_slider.setToolTip("Width of the charred/blackened zone behind the burn front")
         self.burn_char_width_slider.valueChanged.connect(self._save_settings)
         burn_char_row.addWidget(self.burn_char_width_slider, 1)
-        self.burn_char_width_label = self._add_value_label(burn_char_row, "50%")
+        self.burn_char_width_label = self._add_value_label(
+            burn_char_row, f"{burn_char_default}%"
+        )
         self.burn_char_width_slider.valueChanged.connect(
             lambda v: self.burn_char_width_label.setText(f"{v}%")
         )
@@ -1005,7 +1051,7 @@ class TransitionsTab(QWidget):
         self.burn_glow_color_btn = ColorSwatchButton(
             title="Choose Burn Glow Colour", show_alpha=True, auto_picker=False
         )
-        self._burn_glow_color = QColor(255, 140, 30, 255)
+        self._burn_glow_color = QColor(*_transition_default("burn.glow_color"))
         self._apply_burn_glow_color_btn()
         self.burn_glow_color_btn.setFixedSize(60, 24)
         self.burn_glow_color_btn.setToolTip("Primary glow colour on the burning edge")
@@ -1017,7 +1063,7 @@ class TransitionsTab(QWidget):
         self.burn_ember_color_btn = ColorSwatchButton(
             title="Choose Burn Ember Colour", show_alpha=True, auto_picker=False
         )
-        self._burn_ember_color = QColor(230, 64, 13, 255)
+        self._burn_ember_color = QColor(*_transition_default("burn.ember_color"))
         self._apply_burn_ember_color_btn()
         self.burn_ember_color_btn.setFixedSize(60, 24)
         self.burn_ember_color_btn.setToolTip(
@@ -1030,7 +1076,7 @@ class TransitionsTab(QWidget):
         burn_smoke_row = _aligned_row(burn_layout, "", wrap=False)
         self.burn_smoke_check = QCheckBox("Sparks")
         self.burn_smoke_check.setProperty("circleIndicator", True)
-        self.burn_smoke_check.setChecked(True)
+        self.burn_smoke_check.setChecked(bool(_transition_default("burn.smoke_enabled")))
         self.burn_smoke_check.setToolTip("Enable bright sparks flying off the burn front")
         self.burn_smoke_check.stateChanged.connect(self._save_settings)
         burn_smoke_row.addWidget(self.burn_smoke_check)
@@ -1039,10 +1085,13 @@ class TransitionsTab(QWidget):
         burn_smoke_density_row = _aligned_row(burn_layout, "Spark Intensity:")
         self.burn_smoke_density_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.burn_smoke_density_slider.setRange(0, 100)
-        self.burn_smoke_density_slider.setValue(50)
+        burn_smoke_density_default = int(round(float(_transition_default("burn.smoke_density")) * 100.0))
+        self.burn_smoke_density_slider.setValue(burn_smoke_density_default)
         self.burn_smoke_density_slider.valueChanged.connect(self._save_settings)
         burn_smoke_density_row.addWidget(self.burn_smoke_density_slider, 1)
-        self.burn_smoke_density_label = self._add_value_label(burn_smoke_density_row, "50%")
+        self.burn_smoke_density_label = self._add_value_label(
+            burn_smoke_density_row, f"{burn_smoke_density_default}%"
+        )
         self.burn_smoke_density_slider.valueChanged.connect(
             lambda v: self.burn_smoke_density_label.setText(f"{v}%")
         )
@@ -1050,7 +1099,7 @@ class TransitionsTab(QWidget):
         burn_ash_row = _aligned_row(burn_layout, "", wrap=False)
         self.burn_ash_check = QCheckBox("Ash Particles")
         self.burn_ash_check.setProperty("circleIndicator", True)
-        self.burn_ash_check.setChecked(True)
+        self.burn_ash_check.setChecked(bool(_transition_default("burn.ash_enabled")))
         self.burn_ash_check.setToolTip("Enable falling ash specks below the burn front")
         self.burn_ash_check.stateChanged.connect(self._save_settings)
         burn_ash_row.addWidget(self.burn_ash_check)
@@ -1059,10 +1108,13 @@ class TransitionsTab(QWidget):
         burn_ash_density_row = _aligned_row(burn_layout, "Ash Density:")
         self.burn_ash_density_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.burn_ash_density_slider.setRange(0, 100)
-        self.burn_ash_density_slider.setValue(50)
+        burn_ash_density_default = int(round(float(_transition_default("burn.ash_density")) * 100.0))
+        self.burn_ash_density_slider.setValue(burn_ash_density_default)
         self.burn_ash_density_slider.valueChanged.connect(self._save_settings)
         burn_ash_density_row.addWidget(self.burn_ash_density_slider, 1)
-        self.burn_ash_density_label = self._add_value_label(burn_ash_density_row, "50%")
+        self.burn_ash_density_label = self._add_value_label(
+            burn_ash_density_row, f"{burn_ash_density_default}%"
+        )
         self.burn_ash_density_slider.valueChanged.connect(
             lambda v: self.burn_ash_density_label.setText(f"{v}%")
         )
@@ -1147,7 +1199,11 @@ class TransitionsTab(QWidget):
         checkbox = getattr(self, "_activation_checkboxes", {}).get(name)
         if checkbox is not None:
             return bool(checkbox.isChecked())
-        return bool(self._activation_by_type.get(name, True))
+        return bool(
+            self._activation_by_type.get(
+                name, bool(_transition_default(f"activation.{name}"))
+            )
+        )
 
     def _on_transition_activation_toggled(self, name: str, checked: bool) -> None:
         self._activation_by_type[name] = bool(checked)
@@ -1201,7 +1257,7 @@ class TransitionsTab(QWidget):
         return _SETUP_NAV_KEY
 
     def _load_settings_impl(self) -> None:
-        transitions_config = self._settings.get('transitions', {}) or {}
+        transitions_config = self._settings.get('transitions') or {}
         if not isinstance(transitions_config, dict):
             transitions_config = {}
 
@@ -1213,24 +1269,22 @@ class TransitionsTab(QWidget):
             self._settings.set('transitions', transitions_config)
             self._settings.save()
 
-        canonical_transitions = get_default_settings().get('transitions', {})
-        if not isinstance(canonical_transitions, dict):
-            canonical_transitions = {}
+        canonical_transitions = _transition_defaults_root()
 
         # Canonical global default duration matches SettingsManager._set_defaults().
         default_duration_raw = transitions_config.get(
             'duration_ms',
-            canonical_transitions.get('duration_ms', 3000),
+            canonical_transitions['duration_ms'],
         )
         try:
             default_duration = int(default_duration_raw)
         except Exception as e:
             logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-            default_duration = 3000
+            default_duration = int(canonical_transitions['duration_ms'])
 
-        durations_cfg = transitions_config.get('durations', {})
+        durations_cfg = transitions_config.get('durations', canonical_transitions['durations'])
         if not isinstance(durations_cfg, dict):
-            durations_cfg = {}
+            durations_cfg = dict(canonical_transitions['durations'])
 
         type_keys = list(_TRANSITION_SETTING_NAMES)
         self._duration_by_type = {}
@@ -1248,20 +1302,25 @@ class TransitionsTab(QWidget):
                 value = default_duration
             self._duration_by_type[name] = value
 
-        pool_cfg = transitions_config.get('pool', {})
+        pool_cfg = transitions_config.get('pool', canonical_transitions['pool'])
         if not isinstance(pool_cfg, dict):
-            pool_cfg = {}
+            pool_cfg = dict(canonical_transitions['pool'])
         self._pool_by_type = {}
         for name in type_keys:
             if name == "Ripple":
-                raw_flag = pool_cfg.get("Ripple", pool_cfg.get("Rain Drops", True))
+                raw_flag = pool_cfg.get(
+                    "Ripple",
+                    pool_cfg.get("Rain Drops", canonical_transitions["pool"]["Ripple"]),
+                )
             else:
-                raw_flag = pool_cfg.get(name, True)
+                raw_flag = pool_cfg.get(name, canonical_transitions["pool"][name])
             try:
-                enabled = SettingsManager.to_bool(raw_flag, True)
+                enabled = SettingsManager.to_bool(
+                    raw_flag, bool(canonical_transitions["pool"][name])
+                )
             except Exception as e:
                 logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-                enabled = True
+                enabled = bool(canonical_transitions["pool"][name])
             self._pool_by_type[name] = bool(enabled)
 
         # Application-level activation (E2). Missing => activated (True).
@@ -1270,7 +1329,8 @@ class TransitionsTab(QWidget):
             for name in type_keys
         }
         use_random = SettingsManager.to_bool(
-            transitions_config.get('random_always', False), False
+            transitions_config.get('random_always', canonical_transitions['random_always']),
+            bool(canonical_transitions['random_always'])
         )
 
         # Block signals while we apply settings to avoid recursive saves with stale state
@@ -1334,8 +1394,8 @@ class TransitionsTab(QWidget):
         try:
             # Load transition type (default to Wipe to match SettingsManager defaults)
             transition_type = canonicalize_transition_name(
-                transitions_config.get('type', canonical_transitions.get('type', 'Ripple')),
-                fallback='Ripple',
+                transitions_config.get('type', canonical_transitions['type']),
+                fallback=str(canonical_transitions['type']),
             )
             index = self.transition_combo.findText(transition_type)
             if index >= 0:
@@ -1349,20 +1409,38 @@ class TransitionsTab(QWidget):
 
             # Apply SETUP page state: activation, Use Random, and pool membership.
             for name, checkbox in getattr(self, '_activation_checkboxes', {}).items():
-                checkbox.setChecked(bool(self._activation_by_type.get(name, True)))
+                checkbox.setChecked(
+                    bool(
+                        self._activation_by_type.get(
+                            name, bool(canonical_transitions['activation'][name])
+                        )
+                    )
+                )
             for name, checkbox in getattr(self, '_pool_checkboxes', {}).items():
-                checkbox.setChecked(bool(self._pool_by_type.get(name, True)))
+                checkbox.setChecked(
+                    bool(
+                        self._pool_by_type.get(
+                            name, bool(canonical_transitions['pool'][name])
+                        )
+                    )
+                )
             if getattr(self, '_use_random_checkbox', None) is not None:
                 self._use_random_checkbox.setChecked(bool(use_random))
 
             # Load per-transition directions (nested)
-            slide_cfg = transitions_config.get('slide', {}) if isinstance(transitions_config.get('slide', {}), dict) else {}
-            wipe_cfg = transitions_config.get('wipe', {}) if isinstance(transitions_config.get('wipe', {}), dict) else {}
-            blockspin_cfg = transitions_config.get('blockspin', {}) if isinstance(transitions_config.get('blockspin', {}), dict) else {}
+            slide_cfg = transitions_config.get('slide', canonical_transitions['slide'])
+            if not isinstance(slide_cfg, dict):
+                slide_cfg = dict(canonical_transitions['slide'])
+            wipe_cfg = transitions_config.get('wipe', canonical_transitions['wipe'])
+            if not isinstance(wipe_cfg, dict):
+                wipe_cfg = dict(canonical_transitions['wipe'])
+            blockspin_cfg = transitions_config.get('blockspin', canonical_transitions['blockspin'])
+            if not isinstance(blockspin_cfg, dict):
+                blockspin_cfg = dict(canonical_transitions['blockspin'])
 
-            slide_dir = slide_cfg.get('direction', 'Random') or 'Random'
-            wipe_dir = wipe_cfg.get('direction', 'Random') or 'Random'
-            blockspin_dir = blockspin_cfg.get('direction', 'Random') or 'Random'
+            slide_dir = slide_cfg.get('direction', canonical_transitions['slide']['direction']) or str(canonical_transitions['slide']['direction'])
+            wipe_dir = wipe_cfg.get('direction', canonical_transitions['wipe']['direction']) or str(canonical_transitions['wipe']['direction'])
+            blockspin_dir = blockspin_cfg.get('direction', canonical_transitions['blockspin']['direction']) or str(canonical_transitions['blockspin']['direction'])
 
             self._dir_slide = slide_dir
             self._dir_wipe = wipe_dir
@@ -1548,15 +1626,16 @@ class TransitionsTab(QWidget):
         if getattr(self, "_loading", False):
             return
 
-        existing = self._settings.get('transitions', {})
+        existing = self._settings.get('transitions')
         existing = existing if isinstance(existing, dict) else {}
 
         def _existing_subdict(key: str) -> dict:
             value = existing.get(key, {})
             return dict(value) if isinstance(value, dict) else {}
 
+        default_type = str(_transition_default("type"))
         cur_type = self._current_transition or canonicalize_transition_name(
-            existing.get('type', 'Ripple'), fallback='Ripple'
+            existing.get('type', default_type), fallback=default_type
         )
         cur_dir = self.direction_combo.currentText()
         if cur_type == "Slide":
@@ -1564,7 +1643,10 @@ class TransitionsTab(QWidget):
         elif cur_type == "Wipe":
             self._dir_wipe = cur_dir
         if hasattr(self, 'blockspin_direction_combo'):
-            self._dir_blockspin = self.blockspin_direction_combo.currentText() or "Left to Right"
+            self._dir_blockspin = (
+                self.blockspin_direction_combo.currentText()
+                or str(_transition_default("blockspin.direction"))
+            )
 
         cur_duration = self.duration_slider.value()
         self._duration_by_type[cur_type] = cur_duration
@@ -1575,7 +1657,7 @@ class TransitionsTab(QWidget):
             use_random = bool(self._use_random_checkbox.isChecked())
         except Exception as e:
             logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-            use_random = False
+            use_random = bool(_transition_default('random_always'))
 
         # Build the section fresh (dropping retired/stale keys), preserving only
         # the transient random-choice bookkeeping and any UNBUILT transition's
@@ -1711,16 +1793,19 @@ class TransitionsTab(QWidget):
 
     def _reflect_capability_state(self, config: dict) -> None:
         """Reflect a (possibly normalized) capability state back into the UI."""
-        activation = config.get('activation', {})
+        canonical_activation = _transition_default("activation")
+        if not isinstance(canonical_activation, dict):
+            raise TypeError("Canonical transitions.activation default must be a mapping")
+        activation = config.get('activation', canonical_activation)
         if isinstance(activation, dict):
             for name, checkbox in getattr(self, "_activation_checkboxes", {}).items():
-                desired = bool(activation.get(name, True))
+                desired = bool(activation.get(name, canonical_activation[name]))
                 if checkbox.isChecked() != desired:
                     checkbox.blockSignals(True)
                     checkbox.setChecked(desired)
                     checkbox.blockSignals(False)
                 self._activation_by_type[name] = desired
-        use_random = bool(config.get('random_always', False))
+        use_random = bool(config.get('random_always', _transition_default('random_always')))
         cb = getattr(self, "_use_random_checkbox", None)
         if cb is not None and cb.isChecked() != use_random:
             cb.blockSignals(True)
@@ -1728,7 +1813,10 @@ class TransitionsTab(QWidget):
             cb.blockSignals(False)
         # Keep the mirror + authoritative manual selection aligned with any
         # normalized concrete type.
-        new_type = canonicalize_transition_name(config.get('type', ''), fallback='')
+        default_type = str(_transition_default('type'))
+        new_type = canonicalize_transition_name(
+            config.get('type', default_type), fallback=default_type
+        )
         if new_type and new_type != "Random":
             self._current_transition = new_type
             if self.transition_combo.currentText() != new_type:

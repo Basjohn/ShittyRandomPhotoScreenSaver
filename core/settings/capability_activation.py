@@ -11,10 +11,9 @@ The canonical persisted schema lives in ``core/settings/default_settings.py``:
 
 This module is the presentation-neutral read/write authority over that schema.
 It imports no QWidget/Quick/provider/renderer code, so Settings and the runtime
-can consult activation cheaply. A missing key means *activated* (True): the
-schema opts capabilities out explicitly, never in, so a fresh install and any
-pre-Quick settings behave exactly as before this authority existed. H0 resets
-these keys to their final canonical Quick-era defaults.
+can consult activation cheaply. Missing persisted members resolve through the
+canonical defaults contract; call sites never invent an independent activation
+or pool default.
 
 See ``Docs/QtQuick_Migration/07_Settings_Capability_Activation.md``.
 """
@@ -22,6 +21,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping
 
+from core.settings.default_contract import require_canonical_default
 from rendering.transition_registry import (
     canonicalize_transition_name,
     get_transition_setting_names,
@@ -58,13 +58,19 @@ def is_widget_family_activated(
 ) -> bool:
     """Return whether a widget family capability is activated.
 
-    Unknown/absent state resolves to activated (True).
+    Unknown families remain admitted for compatibility; known absent state
+    resolves through canonical defaults.
     """
 
     if not isinstance(family_id, str) or not family_id:
         return True
+    if get_widget_family_descriptor(family_id) is None:
+        return True
     activation = _as_mapping(_as_mapping(widgets_config).get(WIDGET_FAMILY_ACTIVATION_KEY))
-    value = activation.get(family_id, True)
+    canonical_default = bool(
+        require_canonical_default(f"widgets.{WIDGET_FAMILY_ACTIVATION_KEY}.{family_id}")
+    )
+    value = activation.get(family_id, canonical_default)
     return bool(value)
 
 
@@ -165,15 +171,19 @@ def is_transition_activated(
 ) -> bool:
     """Return whether a transition capability is activated.
 
-    Accepts canonical setting names, stable ids, and legacy aliases. Unknown or
-    absent state resolves to activated (True).
+    Accepts canonical setting names, stable ids, and legacy aliases. Unknown
+    names remain admitted for compatibility; known absent state resolves through
+    canonical defaults.
     """
 
     canonical = canonicalize_transition_name(transition_name, fallback="")
     if not canonical or canonical == "Random":
         return True
     activation = _as_mapping(_as_mapping(transitions_config).get(TRANSITION_ACTIVATION_KEY))
-    return bool(activation.get(canonical, True))
+    canonical_default = bool(
+        require_canonical_default(f"transitions.{TRANSITION_ACTIVATION_KEY}.{canonical}")
+    )
+    return bool(activation.get(canonical, canonical_default))
 
 
 def set_transition_activated(
@@ -256,7 +266,12 @@ def get_effective_random_pool(
     return tuple(
         name
         for name in get_activated_transition_names(transitions_config)
-        if bool(pool.get(name, False))
+        if bool(
+            pool.get(
+                name,
+                bool(require_canonical_default(f"transitions.{TRANSITION_POOL_KEY}.{name}")),
+            )
+        )
     )
 
 
@@ -271,7 +286,10 @@ def is_random_mode_effective(
     """
 
     config = _as_mapping(transitions_config)
-    if not bool(config.get(TRANSITION_RANDOM_MODE_KEY, False)):
+    random_default = bool(
+        require_canonical_default(f"transitions.{TRANSITION_RANDOM_MODE_KEY}")
+    )
+    if not bool(config.get(TRANSITION_RANDOM_MODE_KEY, random_default)):
         return False
     return len(get_effective_random_pool(transitions_config)) > 0
 
@@ -358,7 +376,10 @@ def normalize_transition_capability_state(transitions_config: Dict[str, Any]) ->
         changed = True
 
     # Invariant 3: Random not effective with an empty effective pool.
-    if bool(transitions_config.get(TRANSITION_RANDOM_MODE_KEY, False)):
+    random_default = bool(
+        require_canonical_default(f"transitions.{TRANSITION_RANDOM_MODE_KEY}")
+    )
+    if bool(transitions_config.get(TRANSITION_RANDOM_MODE_KEY, random_default)):
         if not get_effective_random_pool(transitions_config):
             transitions_config[TRANSITION_RANDOM_MODE_KEY] = False
             transitions_config[TRANSITION_MANUAL_TYPE_KEY] = (

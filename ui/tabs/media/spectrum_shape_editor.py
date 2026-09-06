@@ -77,44 +77,7 @@ _PADDING_RIGHT = 12
 _PADDING_TOP = 44
 _PADDING_BOTTOM = 30  # extra room for notch labels
 
-# Default nodes — these directly define bar-height profile.
-# x = normalised bar position (0 .. 1), y = height multiplier (0 .. 1).
-# For mirrored mode x represents center-to-edge; 0 = center, 1 = edge.
-DEFAULT_NODES: List[List[float]] = [
-    [0.0, 0.40],
-    [0.35, 0.75],
-    [0.65, 0.55],
-    [1.0, 0.80],
-]
-
-# Bottom notch positions — fractional x values and labels.
-# These differ between mirrored and non-mirrored modes.
-_NOTCHES_MIRRORED = [
-    (0.0, "Mid"),
-    (0.30, "Vocal"),
-    (0.65, "Low-Mid"),
-    (1.0, "Bass"),
-]
-_NOTCHES_LINEAR = [
-    (0.0, "Bass"),
-    (0.24, "Low-Mid"),
-    (0.46, "Vocal"),
-    (0.72, "Hi-Mid"),
-    (1.0, "Treble"),
-]
-_LANE_STRENGTHS_MIRRORED = {
-    "Mid": 0.60,
-    "Vocal": 0.64,
-    "Low-Mid": 0.70,
-    "Bass": 0.80,
-}
-_LANE_STRENGTHS_LINEAR = {
-    "Bass": 0.80,
-    "Low-Mid": 0.70,
-    "Vocal": 0.64,
-    "Hi-Mid": 0.80,
-    "Treble": 1.00,
-}
+# Shape defaults are injected by the Settings builder from canonical defaults.
 
 
 def _normalize_lane_strengths(
@@ -221,19 +184,32 @@ class SpectrumShapeEditor(QWidget):
     notch_positions_changed = Signal(list)
     lane_strengths_changed = Signal(dict)
 
-    def __init__(self, parent: Optional[QWidget] = None, mirrored: bool = True) -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        mirrored: bool = True,
+        *,
+        default_nodes: List[List[float]],
+        default_notches_mirrored: List[List],
+        default_notches_linear: List[List],
+        default_lane_strengths_mirrored: Mapping[str, float],
+        default_lane_strengths_linear: Mapping[str, float],
+    ) -> None:
         super().__init__(parent)
-        self._nodes: List[List[float]] = [list(n) for n in DEFAULT_NODES]
+        self._default_nodes = [list(n) for n in default_nodes]
+        self._default_lane_strengths_mirrored = dict(default_lane_strengths_mirrored)
+        self._default_lane_strengths_linear = dict(default_lane_strengths_linear)
+        self._nodes: List[List[float]] = [list(n) for n in self._default_nodes]
         self._mirrored: bool = mirrored
         self._drag_index: int = -1
         self._hover_index: int = -1
         self._notch_drag_index: int = -1
         self._notch_drag_ref: Optional[List] = None
         self._notch_hover_index: int = -1
-        self._notches_mirrored: List[List] = [[x, lbl] for x, lbl in _NOTCHES_MIRRORED]
-        self._notches_linear: List[List] = [[x, lbl] for x, lbl in _NOTCHES_LINEAR]
-        self._lane_strengths_mirrored: Dict[str, float] = dict(_LANE_STRENGTHS_MIRRORED)
-        self._lane_strengths_linear: Dict[str, float] = dict(_LANE_STRENGTHS_LINEAR)
+        self._notches_mirrored: List[List] = [list(item) for item in default_notches_mirrored]
+        self._notches_linear: List[List] = [list(item) for item in default_notches_linear]
+        self._lane_strengths_mirrored: Dict[str, float] = dict(self._default_lane_strengths_mirrored)
+        self._lane_strengths_linear: Dict[str, float] = dict(self._default_lane_strengths_linear)
         self._lane_drag_index: int = -1
         self._lane_hover_index: int = -1
         self.setMinimumHeight(180)
@@ -255,7 +231,7 @@ class SpectrumShapeEditor(QWidget):
 
     def set_nodes(self, nodes: List[List[float]]) -> None:
         if not nodes:
-            nodes = [list(n) for n in DEFAULT_NODES]
+            nodes = [list(n) for n in self._default_nodes]
         self._nodes = sorted([list(n) for n in nodes], key=lambda n: n[0])
         self._clamp_all()
         self.update()
@@ -280,9 +256,9 @@ class SpectrumShapeEditor(QWidget):
         if mirrored is None:
             mirrored = self._mirrored
         if mirrored:
-            self._lane_strengths_mirrored = _normalize_lane_strengths(strengths, _LANE_STRENGTHS_MIRRORED)
+            self._lane_strengths_mirrored = _normalize_lane_strengths(strengths, self._default_lane_strengths_mirrored)
         else:
-            self._lane_strengths_linear = _normalize_lane_strengths(strengths, _LANE_STRENGTHS_LINEAR)
+            self._lane_strengths_linear = _normalize_lane_strengths(strengths, self._default_lane_strengths_linear)
         self.update()
 
     def get_notch_positions(self) -> List[List]:

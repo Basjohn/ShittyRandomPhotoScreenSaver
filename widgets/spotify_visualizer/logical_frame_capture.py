@@ -323,7 +323,7 @@ def _capture_spectrum(
     source_bars = tuple(getattr(widget, "_display_bars", ()) or ())
     resolved = runtime.resolve(
         source_bars,
-        bar_count=int(getattr(widget, "_bar_count", 0) or 0),
+        bar_count=int(widget._bar_count),
         now_ts=context.now_ts,
         runtime_generation=context.runtime_generation,
         engine_generation=context.engine_generation,
@@ -332,25 +332,19 @@ def _capture_spectrum(
         source_activation_id=context.source_activation_id,
         playing=context.playing,
         first_frame=context.first_frame,
-        smoothing_enabled=bool(
-            getattr(widget, "_spectrum_visual_smoothing_enabled", True)
-        ),
-        smoothing_strength=float(
-            getattr(widget, "_spectrum_visual_smoothing", 0.5)
-        ),
-        single_piece=bool(getattr(widget, "_spectrum_single_piece", False)),
+        smoothing_enabled=bool(widget._spectrum_visual_smoothing_enabled),
+        smoothing_strength=float(widget._spectrum_visual_smoothing),
+        single_piece=bool(widget._spectrum_single_piece),
         segments=_spectrum_segment_count(viewport_height),
         viewport_height=viewport_height,
-        ghosting_enabled=bool(
-            getattr(widget, "_spectrum_ghosting_enabled", True)
-        ),
-        ghost_decay=float(getattr(widget, "_spectrum_ghost_decay", 0.4)),
+        ghosting_enabled=bool(widget._spectrum_ghosting_enabled),
+        ghost_decay=float(widget._spectrum_ghost_decay),
         # Rainbow is presentation-owned.  The logical host intentionally does
         # not receive renderer styling, so drive Spectrum's existing animation
         # clock from the presentation snapshot already captured in ``extra``.
         animation_enabled=bool(
-            extra.get("rainbow_enabled", False)
-            or extra.get("rainbow_per_bar", False)
+            extra["rainbow_enabled"]
+            or extra["rainbow_per_bar"]
         ),
     )
     if resolved is None:
@@ -409,11 +403,7 @@ def _capture_oscilloscope(
 ) -> tuple[ModeFrame, dict[str, Any]] | None:
     extra = _base_extras(widget, "oscilloscope", engine)
     config_applier._append_line_mode_visual_extras(extra, widget, is_sine=False)
-    extra["osc_transient_width_mix"] = getattr(
-        widget,
-        "_osc_transient_width_mix",
-        0.35,
-    )
+    extra["osc_transient_width_mix"] = widget._osc_transient_width_mix
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
         raise RuntimeError(
@@ -442,20 +432,20 @@ def _capture_oscilloscope(
         source_generation=context.source_generation,
         source_activation_id=context.source_activation_id,
         playing=context.playing,
-        line_speed=float(extra.get("line_speed", 1.0) or 1.0),
+        line_speed=float(extra["line_speed"]),
         ghosting_enabled=bool(
-            extra.get("osc_ghosting_enabled", False)
-            and float(extra.get("osc_ghost_intensity", 0.0) or 0.0) > 0.001
+            extra["osc_ghosting_enabled"]
+            and float(extra["osc_ghost_intensity"]) > 0.001
         ),
-        ghost_decay=float(extra.get("osc_ghost_decay", 0.4) or 0.4),
+        ghost_decay=float(extra["osc_ghost_decay"]),
         energy=raw_energy,
         kick_event=raw_kick,
         snare_event=raw_snare,
         transient_width_mix=float(
-            extra.get("osc_transient_width_mix", 0.35)
+            extra["osc_transient_width_mix"]
         ),
-        base_sensitivity=float(extra.get("line_sensitivity", 3.0) or 3.0),
-        animation_enabled=bool(extra.get("rainbow_enabled", False)),
+        base_sensitivity=float(extra["line_sensitivity"]),
+        animation_enabled=bool(extra["rainbow_enabled"]),
     )
     if resolved is None:
         if controller.peek_logical_mode_state("oscilloscope") is not runtime:
@@ -513,11 +503,7 @@ def _capture_sine(
 ) -> tuple[ModeFrame, dict[str, Any]] | None:
     extra = _base_extras(widget, "sine_wave", engine)
     config_applier._append_line_mode_visual_extras(extra, widget, is_sine=True)
-    extra["sine_wave_transient_width_mix"] = getattr(
-        widget,
-        "_sine_wave_transient_width_mix",
-        0.4,
-    )
+    extra["sine_wave_transient_width_mix"] = widget._sine_wave_transient_width_mix
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
         raise RuntimeError("Sine logical capture requires its runtime controller owner")
@@ -546,14 +532,14 @@ def _capture_sine(
         kick_event=raw_kick,
         snare_event=raw_snare,
         ghosting_enabled=bool(
-            extra.get("sine_ghosting_enabled", False)
-            and float(extra.get("sine_ghost_alpha", 0.0) or 0.0) > 0.001
+            extra["sine_ghosting_enabled"]
+            and float(extra["sine_ghost_alpha"]) > 0.001
         ),
-        ghost_decay=float(extra.get("sine_ghost_decay", 0.3) or 0.3),
-        line_count=int(extra.get("line_count", 1) or 1),
-        line_speed=float(extra.get("line_speed", 0.5) or 0.5),
+        ghost_decay=float(extra["sine_ghost_decay"]),
+        line_count=int(extra["line_count"]),
+        line_speed=float(extra["line_speed"]),
         travels=tuple(
-            extra.get(name, 0)
+            extra[name]
             for name in (
                 "sine_wave_travel",
                 "sine_travel_line2",
@@ -564,16 +550,16 @@ def _capture_sine(
             )
         ),
         line_shifts=tuple(
-            extra.get(f"sine_line{index}_shift", 0.0)
+            extra[f"sine_line{index}_shift"]
             for index in range(1, 7)
         ),
         transient_width_mix=float(
-            extra.get("sine_wave_transient_width_mix", 0.4)
+            extra["sine_wave_transient_width_mix"]
         ),
-        base_width_reaction=float(extra.get("sine_width_reaction", 0.0)),
-        base_sensitivity=float(extra.get("line_sensitivity", 1.0) or 1.0),
-        base_heartbeat=float(extra.get("heartbeat_intensity", 0.0) or 0.0),
-        heartbeat_slider=float(extra.get("sine_heartbeat", 0.0) or 0.0),
+        base_width_reaction=float(extra["sine_width_reaction"]),
+        base_sensitivity=float(extra["line_sensitivity"]),
+        base_heartbeat=float(extra["heartbeat_intensity"]),
+        heartbeat_slider=float(extra["sine_heartbeat"]),
     )
     if resolved is None:
         if controller.peek_logical_mode_state("sine_wave") is not runtime:
@@ -745,10 +731,10 @@ def _capture_devcurve(
     # capture, matching the other Quick renderers' ownership boundary.
     renderer_parameters = dict(resolved.parameters)
     renderer_parameters["rainbow_enabled"] = bool(
-        extra.get("rainbow_enabled", False)
+        extra["rainbow_enabled"]
     )
     renderer_parameters["rainbow_speed"] = float(
-        extra.get("rainbow_speed", 0.5) or 0.5
+        extra["rainbow_speed"]
     )
     return (
         DevCurveFrame(
@@ -795,13 +781,13 @@ def _common_style(widget: Any) -> dict[str, object]:
     # Renderer styling from the presentation owner; single_piece is authored-logical.
     pres = config_applier._presentation_source(widget)
     return {
-        "fill_color": getattr(pres, "_bar_fill_color", None),
-        "border_color": getattr(pres, "_bar_border_color", None),
-        "ghosting_enabled": bool(getattr(pres, "_ghosting_enabled", True)),
-        "ghost_alpha": float(getattr(pres, "_ghost_alpha", 0.4)),
-        "ghost_decay": float(getattr(pres, "_ghost_decay_rate", -1.0)),
-        "single_piece": bool(getattr(widget, "_spectrum_single_piece", False)),
-        "border_radius": float(getattr(pres, "_spectrum_border_radius", 0.0)),
+        "fill_color": pres._bar_fill_color,
+        "border_color": pres._bar_border_color,
+        "ghosting_enabled": bool(widget._spectrum_ghosting_enabled),
+        "ghost_alpha": float(pres._spectrum_ghost_alpha),
+        "ghost_decay": float(widget._spectrum_ghost_decay),
+        "single_piece": bool(widget._spectrum_single_piece),
+        "border_radius": float(pres._spectrum_border_radius),
     }
 
 
@@ -907,7 +893,7 @@ def capture_visualizer_logical_frame(
                 getattr(widget, "_display_bars", ()) or (),
             )
         ),
-        bar_count=int(getattr(widget, "_bar_count", 0) or 0),
+        bar_count=int(widget._bar_count),
         waveform=waveform,
         waveform_count=waveform_count,
         energy=_energy_state(

@@ -79,7 +79,6 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
         bucket_key="appearance",
         title="Appearance",
         helper_text="Primary line color, glow color, and glow controls still apply when hidden.",
-        default_expanded=True,
     )
     _, behavior_bucket = build_collapsible_bucket(
         tab,
@@ -88,7 +87,6 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
         bucket_key="behavior",
         title="Behavior",
         helper_text="Wave amplitude, smoothing, speed, and ghosting still apply when hidden.",
-        default_expanded=True,
     )
     _, multi_line_bucket = build_collapsible_bucket(
         tab,
@@ -97,7 +95,6 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
         bucket_key="multi_line",
         title="Multi-Line",
         helper_text="Extra line colors, glow, and per-line ghost controls still apply when hidden.",
-        default_expanded=False,
     )
     _, layout_bucket = build_collapsible_bucket(
         tab,
@@ -106,7 +103,6 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
         bucket_key="layout",
         title="Layout",
         helper_text="Card height and multi-line spacing controls still apply when hidden.",
-        default_expanded=False,
     )
 
     LABEL_WIDTH = 150
@@ -154,7 +150,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     glow_toggle_row = _aligned_row(appearance_bucket, "")
     tab.osc_glow_enabled = QCheckBox("Enable Glow")
     tab.osc_glow_enabled.setProperty("circleIndicator", True)
-    tab.osc_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'osc_glow_enabled', True))
+    tab.osc_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'osc_glow_enabled'))
     tab.osc_glow_enabled.setToolTip("Draw a soft glow halo around the waveform line.")
     bind_setting_signal(tab, tab.osc_glow_enabled.stateChanged)
     glow_toggle_row.addWidget(tab.osc_glow_enabled)
@@ -167,7 +163,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_glow_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_glow_intensity.setMinimum(0)
     tab.osc_glow_intensity.setMaximum(100)
-    osc_glow_val = int(tab._default_float('spotify_visualizer', 'osc_glow_intensity', 0.5) * 100)
+    osc_glow_val = int(tab._default_float('spotify_visualizer', 'osc_glow_intensity') * 100)
     tab.osc_glow_intensity.setValue(osc_glow_val)
     tab.osc_glow_intensity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.osc_glow_intensity.setTickInterval(10)
@@ -188,9 +184,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     osc_glow_reactivity_val = int(
         tab._default_float(
             'spotify_visualizer',
-            'osc_glow_reactivity',
-            tab._default_float('spotify_visualizer', 'osc_glow_size', 1.0),
-        ) * 100
+            'osc_glow_reactivity') * 100
     )
     tab.osc_glow_reactivity.setValue(max(0, min(200, osc_glow_reactivity_val)))
     tab.osc_glow_reactivity.setTickPosition(QSlider.TickPosition.TicksBelow)
@@ -203,15 +197,12 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     osc_glow_reactivity_row.addWidget(tab.osc_glow_reactivity)
     tab.osc_glow_reactivity_label = QLabel(f"{osc_glow_reactivity_val}%")
     osc_glow_reactivity_row.addWidget(tab.osc_glow_reactivity_label)
-    # Backward-compat alias: legacy code paths may still reference osc_glow_size.
-    tab.osc_glow_size = tab.osc_glow_reactivity
-    tab.osc_glow_size_label = tab.osc_glow_reactivity_label
 
     glow_reactive_widget, glow_reactive_row = _aligned_row_widget(appearance_bucket, "")
     tab._osc_glow_widgets.append(glow_reactive_widget)
     tab.osc_reactive_glow = QCheckBox("Reactive Glow (Bass-Driven)")
     tab.osc_reactive_glow.setProperty("circleIndicator", True)
-    tab.osc_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'osc_reactive_glow', True))
+    tab.osc_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'osc_reactive_glow'))
     tab.osc_reactive_glow.setToolTip("Glow intensity pulses with bass energy.")
     bind_setting_signal(tab, tab.osc_reactive_glow.stateChanged)
     glow_reactive_row.addWidget(tab.osc_reactive_glow)
@@ -228,7 +219,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     ghost_toggle_row = _aligned_row(behavior_bucket, "")
     tab.osc_ghost_enabled = QCheckBox("Ghost Trail")
     tab.osc_ghost_enabled.setProperty("circleIndicator", True)
-    tab.osc_ghost_enabled.setChecked(tab._default_bool('spotify_visualizer', 'osc_ghosting_enabled', False))
+    tab.osc_ghost_enabled.setChecked(tab._default_bool('spotify_visualizer', 'osc_ghosting_enabled'))
     tab.osc_ghost_enabled.setToolTip("Show a faded trail of the previous waveform behind the current one.")
     bind_setting_signal(tab, tab.osc_ghost_enabled.stateChanged)
     ghost_toggle_row.addWidget(tab.osc_ghost_enabled)
@@ -241,7 +232,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_ghost_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_ghost_intensity.setMinimum(5)
     tab.osc_ghost_intensity.setMaximum(100)
-    osc_gi_val = int(tab._default_float('spotify_visualizer', 'osc_ghost_intensity', 0.4) * 100)
+    osc_gi_val = int(tab._default_float('spotify_visualizer', 'osc_ghost_intensity') * 100)
     tab.osc_ghost_intensity.setValue(max(5, min(100, osc_gi_val)))
     tab.osc_ghost_intensity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.osc_ghost_intensity.setTickInterval(10)
@@ -260,7 +251,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_ghost_decay = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_ghost_decay.setMinimum(10)
     tab.osc_ghost_decay.setMaximum(100)
-    osc_gd_val = int(tab._default_float('spotify_visualizer', 'osc_ghost_decay', 0.4) * 100)
+    osc_gd_val = int(tab._default_float('spotify_visualizer', 'osc_ghost_decay') * 100)
     tab.osc_ghost_decay.setValue(max(10, min(100, osc_gd_val)))
     tab.osc_ghost_decay.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.osc_ghost_decay.setTickInterval(10)
@@ -286,7 +277,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_line_amplitude = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_line_amplitude.setMinimum(5)
     tab.osc_line_amplitude.setMaximum(100)
-    osc_amp_default = tab._default_float('spotify_visualizer', 'osc_line_amplitude', 3.0)
+    osc_amp_default = tab._default_float('spotify_visualizer', 'osc_line_amplitude')
     osc_amp_val = int(osc_amp_default * 10)
     tab.osc_line_amplitude.setValue(max(5, min(100, osc_amp_val)))
     tab.osc_line_amplitude.setTickPosition(QSlider.TickPosition.TicksBelow)
@@ -309,7 +300,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_smoothing = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_smoothing.setMinimum(0)
     tab.osc_smoothing.setMaximum(100)
-    osc_smooth_val = int(tab._default_float('spotify_visualizer', 'osc_smoothing', 0.7) * 100)
+    osc_smooth_val = int(tab._default_float('spotify_visualizer', 'osc_smoothing') * 100)
     tab.osc_smoothing.setValue(max(0, min(100, osc_smooth_val)))
     tab.osc_smoothing.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.osc_smoothing.setTickInterval(10)
@@ -326,7 +317,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_speed.setMinimum(1)
     tab.osc_speed.setMaximum(100)
-    osc_speed_val = int(tab._default_float('spotify_visualizer', 'osc_speed', 1.0) * 100)
+    osc_speed_val = int(tab._default_float('spotify_visualizer', 'osc_speed') * 100)
     tab.osc_speed.setValue(max(1, min(100, osc_speed_val)))
     tab.osc_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.osc_speed.setTickInterval(10)
@@ -343,7 +334,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     osc_line_dim_row = _aligned_row(multi_line_bucket, "")
     tab.osc_line_dim = QCheckBox("Dim Lines 2/3 Glow")
     tab.osc_line_dim.setProperty("circleIndicator", True)
-    tab.osc_line_dim.setChecked(tab._default_bool('spotify_visualizer', 'osc_line_dim', False))
+    tab.osc_line_dim.setChecked(tab._default_bool('spotify_visualizer', 'osc_line_dim'))
     tab.osc_line_dim.setToolTip("When enabled, lines 2 and 3 have slightly reduced glow to let the primary line stand out.")
     bind_setting_signal(tab, tab.osc_line_dim.stateChanged)
     osc_line_dim_row.addWidget(tab.osc_line_dim)
@@ -353,7 +344,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_line_offset_bias = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_line_offset_bias.setMinimum(0)
     tab.osc_line_offset_bias.setMaximum(100)
-    osc_lob_val = int(tab._default_float('spotify_visualizer', 'osc_line_offset_bias', 0.0) * 100)
+    osc_lob_val = int(tab._default_float('spotify_visualizer', 'osc_line_offset_bias') * 100)
     tab.osc_line_offset_bias.setValue(osc_lob_val)
     tab.osc_line_offset_bias.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.osc_line_offset_bias.setTickInterval(10)
@@ -375,7 +366,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_vertical_shift = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_vertical_shift.setMinimum(-50)
     tab.osc_vertical_shift.setMaximum(200)
-    osc_vshift_val = int(tab._default_int('spotify_visualizer', 'osc_vertical_shift', 0))
+    osc_vshift_val = int(tab._default_int('spotify_visualizer', 'osc_vertical_shift'))
     tab.osc_vertical_shift.setValue(max(-50, min(200, osc_vshift_val)))
     tab.osc_vertical_shift.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.osc_vertical_shift.setTickInterval(25)
@@ -395,7 +386,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_multi_line_row = _aligned_row(multi_line_bucket, "")
     tab.osc_multi_line = QCheckBox("Multi-Line Mode (Up to 3 Lines)")
     tab.osc_multi_line.setProperty("circleIndicator", True)
-    tab.osc_multi_line.setChecked(tab._default_int('spotify_visualizer', 'osc_line_count', 1) > 1)
+    tab.osc_multi_line.setChecked(tab._default_int('spotify_visualizer', 'osc_line_count') > 1)
     tab.osc_multi_line.setToolTip("Enable additional waveform lines with different oscillation distributions.")
     bind_setting_signal(tab, tab.osc_multi_line.stateChanged)
     tab.osc_multi_line.stateChanged.connect(lambda: _update_osc_multi_line_visibility(tab))
@@ -411,7 +402,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_line_count = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_line_count.setMinimum(2)
     tab.osc_line_count.setMaximum(6)
-    tab.osc_line_count.setValue(max(2, tab._default_int('spotify_visualizer', 'osc_line_count', 1)))
+    tab.osc_line_count.setValue(max(2, tab._default_int('spotify_visualizer', 'osc_line_count')))
     tab.osc_line_count.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.osc_line_count.setTickInterval(1)
     bind_setting_signal(
@@ -421,7 +412,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     )
     tab.osc_line_count.valueChanged.connect(lambda: _update_osc_multi_line_visibility(tab))
     osc_line_count_row.addWidget(tab.osc_line_count)
-    tab.osc_line_count_label = QLabel(str(max(2, tab._default_int('spotify_visualizer', 'osc_line_count', 1))))
+    tab.osc_line_count_label = QLabel(str(max(2, tab._default_int('spotify_visualizer', 'osc_line_count'))))
     osc_line_count_row.addWidget(tab.osc_line_count_label)
 
     osc_l2_widget, osc_l2_row = _swatch_row_widget(ml_layout, "Line 2:")
@@ -450,7 +441,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_ghost_line2_enabled = QCheckBox("Draw Ghost")
     tab.osc_ghost_line2_enabled.setProperty("circleIndicator", True)
     tab.osc_ghost_line2_enabled.setChecked(
-        tab._default_bool('spotify_visualizer', 'osc_ghost_line2_enabled', True)
+        tab._default_bool('spotify_visualizer', 'osc_ghost_line2_enabled')
     )
     tab.osc_ghost_line2_enabled.setToolTip("Allow the ghost trail to render for oscilloscope line 2.")
     bind_setting_signal(tab, tab.osc_ghost_line2_enabled.stateChanged)
@@ -484,7 +475,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_ghost_line3_enabled = QCheckBox("Draw Ghost")
     tab.osc_ghost_line3_enabled.setProperty("circleIndicator", True)
     tab.osc_ghost_line3_enabled.setChecked(
-        tab._default_bool('spotify_visualizer', 'osc_ghost_line3_enabled', True)
+        tab._default_bool('spotify_visualizer', 'osc_ghost_line3_enabled')
     )
     tab.osc_ghost_line3_enabled.setToolTip("Allow the ghost trail to render for oscilloscope line 3.")
     bind_setting_signal(tab, tab.osc_ghost_line3_enabled.stateChanged)
@@ -518,7 +509,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_ghost_line4_enabled = QCheckBox("Draw Ghost")
     tab.osc_ghost_line4_enabled.setProperty("circleIndicator", True)
     tab.osc_ghost_line4_enabled.setChecked(
-        tab._default_bool('spotify_visualizer', 'osc_ghost_line4_enabled', True)
+        tab._default_bool('spotify_visualizer', 'osc_ghost_line4_enabled')
     )
     tab.osc_ghost_line4_enabled.setToolTip("Allow the ghost trail to render for oscilloscope line 4.")
     bind_setting_signal(tab, tab.osc_ghost_line4_enabled.stateChanged)
@@ -552,7 +543,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_ghost_line5_enabled = QCheckBox("Draw Ghost")
     tab.osc_ghost_line5_enabled.setProperty("circleIndicator", True)
     tab.osc_ghost_line5_enabled.setChecked(
-        tab._default_bool('spotify_visualizer', 'osc_ghost_line5_enabled', True)
+        tab._default_bool('spotify_visualizer', 'osc_ghost_line5_enabled')
     )
     tab.osc_ghost_line5_enabled.setToolTip("Allow the ghost trail to render for oscilloscope line 5.")
     bind_setting_signal(tab, tab.osc_ghost_line5_enabled.stateChanged)
@@ -586,7 +577,7 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
     tab.osc_ghost_line6_enabled = QCheckBox("Draw Ghost")
     tab.osc_ghost_line6_enabled.setProperty("circleIndicator", True)
     tab.osc_ghost_line6_enabled.setChecked(
-        tab._default_bool('spotify_visualizer', 'osc_ghost_line6_enabled', True)
+        tab._default_bool('spotify_visualizer', 'osc_ghost_line6_enabled')
     )
     tab.osc_ghost_line6_enabled.setToolTip("Allow the ghost trail to render for oscilloscope line 6.")
     bind_setting_signal(tab, tab.osc_ghost_line6_enabled.stateChanged)
@@ -595,21 +586,3 @@ def build_oscilloscope_ui(tab: "VisualizerSettingsContextMixin", parent_layout: 
 
     multi_line_bucket.addWidget(tab._osc_multi_container)
     _update_osc_multi_line_visibility(tab)
-
-    osc_growth_row = _aligned_row(layout_bucket, "Card Height:")
-    tab.osc_growth = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.osc_growth.setMinimum(100)
-    tab.osc_growth.setMaximum(500)
-    osc_growth_val = int(tab._default_float('spotify_visualizer', 'osc_growth', 1.0) * 100)
-    tab.osc_growth.setValue(max(100, min(500, osc_growth_val)))
-    tab.osc_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.osc_growth.setTickInterval(50)
-    tab.osc_growth.setToolTip("Height multiplier for the oscilloscope card.")
-    bind_setting_signal(
-        tab,
-        tab.osc_growth.valueChanged,
-        updater=lambda v: tab.osc_growth_label.setText(f"{v / 100.0:.1f}x"),
-    )
-    osc_growth_row.addWidget(tab.osc_growth)
-    tab.osc_growth_label = QLabel(f"{osc_growth_val / 100.0:.1f}x")
-    osc_growth_row.addWidget(tab.osc_growth_label)

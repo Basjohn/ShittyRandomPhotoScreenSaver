@@ -2,27 +2,35 @@
 from __future__ import annotations
 
 
-_DEFAULTS = {
-    "sphere_material": "Chrome", "sphere_deformation": 1.0,
-    "sphere_rotation_speed": .35, "sphere_gloss": .65, "sphere_specular": .8,
-    "sphere_light_direction": "NW", "sphere_idle_motion": .12, "sphere_surface_detail": 1.15,
-    "sphere_bass_response": 1.0, "sphere_mid_response": 1.0,
-    "sphere_high_response": 1.0, "sphere_vocal_response": 1.4,
-    "sphere_bump_reactivity": .65,
-    "sphere_size_response": 1.5,
-    "sphere_energy_curve": .60,
-    "sphere_material_fx": 1.0,
-    "sphere_antialiasing": True,
-    "sphere_shadow_enabled": True,
-    "sphere_shadow_strength": .62,
-}
+_SPHERE_SETTING_KEYS = (
+    "sphere_material",
+    "sphere_deformation",
+    "sphere_rotation_speed",
+    "sphere_gloss",
+    "sphere_specular",
+    "sphere_light_direction",
+    "sphere_idle_motion",
+    "sphere_surface_detail",
+    "sphere_bass_response",
+    "sphere_mid_response",
+    "sphere_high_response",
+    "sphere_vocal_response",
+    "sphere_bump_reactivity",
+    "sphere_size_response",
+    "sphere_energy_curve",
+    "sphere_material_fx",
+    "sphere_antialiasing",
+    "sphere_shadow_enabled",
+    "sphere_shadow_strength",
+)
 
 
 def load_sphere_mode_settings(tab, config) -> None:
-    for key, default in _DEFAULTS.items():
+    for key in _SPHERE_SETTING_KEYS:
         control = getattr(tab, key, None)
         if control is None:
             continue
+        default = tab._widget_default("spotify_visualizer", key)
         value = config.get(key, default)
         if hasattr(control, "setCurrentText"):
             control.setCurrentText(str(value))

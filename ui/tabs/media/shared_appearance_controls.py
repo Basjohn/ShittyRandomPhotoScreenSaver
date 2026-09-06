@@ -47,9 +47,13 @@ def build_shared_visualizer_appearance_controls(
     ``_spotify_vis_border_color`` (matching the load fallbacks; load overrides).
     """
     if not hasattr(tab, "_spotify_vis_fill_color"):
-        tab._spotify_vis_fill_color = QColor(0, 255, 128, 230)
+        tab._spotify_vis_fill_color = tab._color_from_default(
+            "spotify_visualizer", "spectrum_bar_fill_color"
+        )
     if not hasattr(tab, "_spotify_vis_border_color"):
-        tab._spotify_vis_border_color = QColor(255, 255, 255, 230)
+        tab._spotify_vis_border_color = tab._color_from_default(
+            "spotify_visualizer", "spectrum_bar_border_color"
+        )
 
     fill_row, fill_content, _ = add_builder_swatch_row(
         target_layout, "Bar Fill Color:", label_width=_LABEL_WIDTH
@@ -86,7 +90,7 @@ def build_shared_visualizer_appearance_controls(
     tab.vis_border_opacity.setMinimum(0)
     tab.vis_border_opacity.setMaximum(100)
     _pct = int(
-        tab._default_float("spotify_visualizer", "spectrum_bar_border_opacity", 0.85) * 100
+        tab._default_float("spotify_visualizer", "spectrum_bar_border_opacity") * 100
     )
     tab.vis_border_opacity.setValue(_pct)
     tab.vis_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)

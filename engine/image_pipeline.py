@@ -27,6 +27,7 @@ from core.constants.timing import TRANSITION_STAGGER_MS
 from core.threading.manager import ThreadManager
 from core.process.types import WorkerType, MessageType
 from core.settings import SettingsManager
+from core.settings.default_contract import require_canonical_default
 from rendering.display_modes import DisplayMode
 from rendering.quick.display_processing import DisplayProcessingDescriptor
 from rendering.image_processor_async import AsyncImageProcessor
@@ -362,18 +363,20 @@ def _probe_cache(
 
 
 def _get_display_quality_settings(engine: ScreensaverEngine) -> tuple[bool, bool]:
-    use_lanczos = True
-    sharpen = False
-    if engine.settings_manager:
-        use_lanczos = SettingsManager.to_bool(
-            engine.settings_manager.get("display.use_lanczos", True),
-            True,
-        )
-        sharpen = SettingsManager.to_bool(
-            engine.settings_manager.get("display.sharpen_downscale", False),
-            False,
-        )
-    return use_lanczos, sharpen
+    settings = getattr(engine, "settings_manager", None)
+    application = settings.get_application_name() if settings is not None else None
+    canonical_lanczos = bool(
+        require_canonical_default("display.use_lanczos", application)
+    )
+    canonical_sharpen = bool(
+        require_canonical_default("display.sharpen_downscale", application)
+    )
+    if settings is None:
+        return canonical_lanczos, canonical_sharpen
+    return (
+        settings.get_bool("display.use_lanczos"),
+        settings.get_bool("display.sharpen_downscale"),
+    )
 
 
 def _get_prefetch_target_specs(engine: ScreensaverEngine) -> List[Dict[str, Any]]:
@@ -449,11 +452,11 @@ def _get_prefetch_request_plan(engine: ScreensaverEngine, paths: List[str]) -> L
     if not ordered_specs:
         return []
 
-    raw_same_image = True
     settings_manager = getattr(engine, "settings_manager", None)
-    if settings_manager is not None:
-        raw_same_image = settings_manager.get("display.same_image_all_monitors", True)
-    same_image = SettingsManager.to_bool(raw_same_image, True)
+    if settings_manager is None:
+        same_image = bool(require_canonical_default("display.same_image_all_monitors"))
+    else:
+        same_image = settings_manager.get_bool("display.same_image_all_monitors")
 
     if not same_image:
         return [
@@ -545,12 +548,19 @@ def _build_immediate_prefetch_protected_keys(
 
     ordered_specs = _get_prefetch_target_specs_in_display_order(engine)
     settings_manager = getattr(engine, "settings_manager", None)
-    raw_same_image = (
-        settings_manager.get("display.same_image_all_monitors", True)
+    application = (
+        settings_manager.get_application_name()
         if settings_manager is not None
-        else True
+        else None
     )
-    same_image = SettingsManager.to_bool(raw_same_image, True)
+    canonical_same_image = bool(
+        require_canonical_default("display.same_image_all_monitors", application)
+    )
+    same_image = (
+        settings_manager.get_bool("display.same_image_all_monitors")
+        if settings_manager is not None
+        else canonical_same_image
+    )
     if same_image:
         first_path = paths[0]
         immediate_plan = []
@@ -735,8 +745,10 @@ def load_image_via_worker(
     image_path: str,
     target_width: int,
     target_height: int,
-    display_mode: str = "fill",
-    sharpen: bool = False,
+    *,
+    display_mode: str,
+    use_lanczos: bool,
+    sharpen: bool,
     timeout_ms: int = 500,
 ) -> Optional[QImage]:
     """
@@ -764,13 +776,6 @@ def load_image_via_worker(
     runtime_generation, runtime_display_manager = _capture_runtime_identity(engine)
     response = None
     try:
-        # Get quality settings from settings manager
-        use_lanczos = True
-        if engine.settings_manager:
-            use_lanczos = engine.settings_manager.get('display.use_lanczos', True)
-            if isinstance(use_lanczos, str):
-                use_lanczos = use_lanczos.lower() == 'true'
-
         response = supervisor.send_request_and_await_response(
             WorkerType.IMAGE,
             MessageType.IMAGE_PRESCALE,
@@ -951,7 +956,7 @@ def load_image_task(
                 size = preferred_size or engine._get_primary_display_size()
                 use_lanczos, sharpen = _get_display_quality_settings(engine)
                 display_mode = _normalize_display_mode(
-                    engine.settings_manager.get("display.mode", DisplayMode.FILL.value)
+                    engine.settings_manager.get("display.mode")
                     if engine.settings_manager
                     else DisplayMode.FILL
                 )
@@ -1164,6 +1169,7 @@ def _process_display_image_candidate(
                 width,
                 height,
                 display_mode=display_mode_str,
+                use_lanczos=use_lanczos,
                 sharpen=sharpen,
                 timeout_ms=3000,
             )
@@ -1460,8 +1466,7 @@ def load_and_display_image_async(
         )
 
     # Check same_image setting to determine how many images to load
-    raw_same_image = engine.settings_manager.get('display.same_image_all_monitors', True)
-    same_image = SettingsManager.to_bool(raw_same_image, True)
+    same_image = engine.settings_manager.get_bool('display.same_image_all_monitors')
 
     # Build list of images to load - one per display if different images mode
     image_metas = [image_meta]  # First display gets the provided image
@@ -1619,7 +1624,7 @@ def load_and_display_image_async(
                 return
 
             processed = data['processed']
-            is_same_image = data.get('same_image', True)
+            is_same_image = bool(data['same_image'])
             remaining_handoffs = [len(processed)]
 
             def _complete_handoff() -> None:
@@ -2005,13 +2010,8 @@ def load_and_display_image(
 
         image_path = str(image_meta.local_path) if image_meta.local_path else image_meta.url or "unknown"
 
-        raw_same_image = engine.settings_manager.get('display.same_image_all_monitors', True)
-        same_image = SettingsManager.to_bool(raw_same_image, True)
-        logger.debug(
-            "Same image on all monitors setting: %s (raw=%r)",
-            same_image,
-            raw_same_image,
-        )
+        same_image = engine.settings_manager.get_bool('display.same_image_all_monitors')
+        logger.debug("Same image on all monitors setting: %s", same_image)
 
         if same_image:
             engine.display_manager.show_image(pixmap, image_path)

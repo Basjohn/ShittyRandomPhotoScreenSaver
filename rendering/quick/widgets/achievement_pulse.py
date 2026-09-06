@@ -22,6 +22,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor
 
+from core.settings.default_contract import require_canonical_default
 from core.steam.achievement_pulse import AchievementPulseSelection
 from widgets.steam_achievement_preparation import (
     AchievementPulsePreparedPresentation,
@@ -32,8 +33,6 @@ from widgets.steam_card_models import (
     build_steam_connect_required_view_model,
 )
 from .achievement_pulse_layout import (
-    ACHIEVEMENT_CAPSULE_BORDER_RGBA,
-    ACHIEVEMENT_CAPSULE_FILL_RGBA,
     achievement_capsule_geometry,
     achievement_field_rail_count,
     achievement_pulse_authored_size,
@@ -70,13 +69,22 @@ from .steam_common import (
 
 
 _STEAM_LOGO = Path(__file__).resolve().parents[3] / "images" / "Steam_Logo_Cropped.png"
-_FIELD_DEFAULTS: tuple[tuple[str, bool], ...] = (
-    ("total", True),
-    ("latest", True),
-    ("playtime", True),
-    ("previous", True),
-    ("source", False),
-    ("selected", False),
+_STEAM_DEFAULTS = require_canonical_default("widgets.steam")
+_ACHIEVEMENT_DEFAULTS = require_canonical_default("widgets.achievement_pulse")
+if not isinstance(_STEAM_DEFAULTS, Mapping) or not isinstance(_ACHIEVEMENT_DEFAULTS, Mapping):
+    raise TypeError("Canonical Steam/Achievement Pulse defaults must be mappings")
+
+_FIELD_IDS: tuple[str, ...] = (
+    "total",
+    "latest",
+    "playtime",
+    "previous",
+    "source",
+    "selected",
+)
+_FIELD_DEFAULTS: tuple[tuple[str, bool], ...] = tuple(
+    (field_id, bool(_ACHIEVEMENT_DEFAULTS[f"show_{field_id}"]))
+    for field_id in _FIELD_IDS
 )
 
 # ``latest`` controls the unlock text/icon hierarchy, not a supporting bottom
@@ -87,32 +95,32 @@ _NON_CAPSULE_FIELD_IDS = frozenset({"latest"})
 
 @dataclass(frozen=True)
 class AchievementPulsePresentationConfig:
-    font_family: str = "Inter"
-    font_size: int = 14
-    text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    show_background: bool = True
-    background_color: tuple[int, int, int, int] = (35, 35, 35, 255)
-    background_opacity: float = 0.3
-    border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
-    border_opacity: float = 1.0
-    header_fill_color: tuple[int, int, int, int] = (11, 16, 22, 230)
-    header_border_color: tuple[int, int, int, int] = (229, 237, 244, 216)
-    header_text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    semantic_palette: SteamSemanticPalette = field(default_factory=SteamSemanticPalette)
-    selection_mode: str = "most_recent"
-    custom_appid: int | None = None
-    field_visibility: tuple[tuple[str, bool], ...] = _FIELD_DEFAULTS
-    latest_unlock_count: int = 1
-    show_latest_artwork: bool = True
-    show_artwork: bool = True
-    artwork_shape: str = "portrait"
-    square_artwork_size: int = 140
-    double_capsules: bool = True
-    capsule_font_size: int = 12
-    capsule_fill_color: tuple[int, int, int, int] = ACHIEVEMENT_CAPSULE_FILL_RGBA
-    capsule_border_color: tuple[int, int, int, int] = ACHIEVEMENT_CAPSULE_BORDER_RGBA
-    refresh_minutes: int = 10
-    show_connection_info_icon: bool = True
+    font_family: str
+    font_size: int
+    text_color: tuple[int, int, int, int]
+    show_background: bool
+    background_color: tuple[int, int, int, int]
+    background_opacity: float
+    border_color: tuple[int, int, int, int]
+    border_opacity: float
+    header_fill_color: tuple[int, int, int, int]
+    header_border_color: tuple[int, int, int, int]
+    header_text_color: tuple[int, int, int, int]
+    semantic_palette: SteamSemanticPalette
+    selection_mode: str
+    custom_appid: int | None
+    field_visibility: tuple[tuple[str, bool], ...]
+    latest_unlock_count: int
+    show_latest_artwork: bool
+    show_artwork: bool
+    artwork_shape: str
+    square_artwork_size: int
+    double_capsules: bool
+    capsule_font_size: int
+    capsule_fill_color: tuple[int, int, int, int]
+    capsule_border_color: tuple[int, int, int, int]
+    refresh_minutes: int
+    show_connection_info_icon: bool
 
     @classmethod
     def from_widgets_mapping(
@@ -121,23 +129,16 @@ class AchievementPulsePresentationConfig:
     ) -> "AchievementPulsePresentationConfig":
         """Project canonical shared-Steam and Achievement Pulse settings."""
 
-        from core.settings.defaults import get_default_settings
-
-        defaults = get_default_settings().get("widgets", {})
-        default_shared = defaults.get("steam", {}) if isinstance(defaults, Mapping) else {}
-        default_card = (
-            defaults.get("achievement_pulse", {})
-            if isinstance(defaults, Mapping)
-            else {}
-        )
+        default_shared = _STEAM_DEFAULTS
+        default_card = _ACHIEVEMENT_DEFAULTS
         shared = widgets.get("steam", {}) if isinstance(widgets, Mapping) else {}
         card = (
             widgets.get("achievement_pulse", {})
             if isinstance(widgets, Mapping)
             else {}
         )
-        merged_shared = dict(default_shared) if isinstance(default_shared, Mapping) else {}
-        merged_card = dict(default_card) if isinstance(default_card, Mapping) else {}
+        merged_shared = dict(default_shared)
+        merged_card = dict(default_card)
         if isinstance(shared, Mapping):
             merged_shared.update(shared)
         if isinstance(card, Mapping):
@@ -146,85 +147,119 @@ class AchievementPulsePresentationConfig:
         field_visibility = tuple(
             (
                 field_id,
-                _as_bool(merged_card.get(f"show_{field_id}"), default),
+                _as_bool(
+                    merged_card.get(f"show_{field_id}"),
+                    bool(default_card[f"show_{field_id}"]),
+                ),
             )
-            for field_id, default in _FIELD_DEFAULTS
+            for field_id in _FIELD_IDS
         )
         config = cls(
-            font_family=str(merged_card.get("font_family", "Inter") or "Inter"),
-            font_size=_bounded_int(merged_card.get("font_size"), 14, 8, 96),
+            font_family=str(
+                merged_card.get("font_family") or default_card["font_family"]
+            ),
+            font_size=_bounded_int(
+                merged_card.get("font_size"),
+                int(default_card["font_size"]),
+                8,
+                96,
+            ),
             text_color=_rgba(
                 merged_card.get("color"),
-                (255, 255, 255, 230),
+                tuple(default_card["color"]),
             ),
             show_background=_as_bool(
-                merged_card.get("show_background"), True
+                merged_card.get("show_background"),
+                bool(default_card["show_background"]),
             ),
             background_color=_rgba(
                 merged_card.get("bg_color"),
-                (35, 35, 35, 255),
+                tuple(default_card["bg_color"]),
             ),
             background_opacity=_bounded_float(
-                merged_card.get("bg_opacity"), 0.3, 0.0, 1.0
+                merged_card.get("bg_opacity"),
+                float(default_card["bg_opacity"]),
+                0.0,
+                1.0,
             ),
             border_color=_rgba(
                 merged_card.get("border_color"),
-                (255, 255, 255, 255),
+                tuple(default_card["border_color"]),
             ),
             border_opacity=_bounded_float(
-                merged_card.get("border_opacity"), 1.0, 0.0, 1.0
+                merged_card.get("border_opacity"),
+                float(default_card["border_opacity"]),
+                0.0,
+                1.0,
             ),
             header_fill_color=_rgba(
-                merged_card.get("header_fill_color"), (11, 16, 22, 230)
+                merged_card.get("header_fill_color"),
+                tuple(default_card["header_fill_color"]),
             ),
             header_border_color=_rgba(
-                merged_card.get("header_border_color"), (229, 237, 244, 216)
+                merged_card.get("header_border_color"),
+                tuple(default_card["header_border_color"]),
             ),
             header_text_color=_rgba(
-                merged_card.get("header_text_color"), (255, 255, 255, 230)
+                merged_card.get("header_text_color"),
+                tuple(default_card["header_text_color"]),
             ),
             selection_mode=str(
-                merged_card.get("selection_mode", "most_recent")
-                or "most_recent"
+                merged_card.get("selection_mode") or default_card["selection_mode"]
             ),
             custom_appid=_optional_appid(merged_card.get("custom_appid")),
             field_visibility=field_visibility,
             latest_unlock_count=_bounded_int(
-                merged_card.get("latest_unlock_count"), 1, 1, 5
+                merged_card.get("latest_unlock_count"),
+                int(default_card["latest_unlock_count"]),
+                1,
+                5,
             ),
             show_latest_artwork=_as_bool(
-                merged_card.get("show_latest_achievement_artwork"), True
+                merged_card.get("show_latest_achievement_artwork"),
+                bool(default_card["show_latest_achievement_artwork"]),
             ),
-            show_artwork=_as_bool(merged_card.get("show_artwork"), True),
+            show_artwork=_as_bool(
+                merged_card.get("show_artwork"),
+                bool(default_card["show_artwork"]),
+            ),
             artwork_shape=normalize_achievement_artwork_shape(
-                merged_card.get("artwork_shape", "portrait")
+                merged_card.get("artwork_shape", default_card["artwork_shape"])
             ),
             square_artwork_size=normalize_achievement_square_artwork_size(
-                merged_card.get("square_artwork_size", 140)
+                merged_card.get(
+                    "square_artwork_size",
+                    default_card["square_artwork_size"],
+                )
             ),
             double_capsules=_as_bool(
-                merged_card.get(
-                    "double_capsules",
-                    merged_card.get("double_capsule_long_data", True),
-                ),
-                True,
+                merged_card.get("double_capsules"),
+                bool(default_card["double_capsules"]),
             ),
             capsule_font_size=normalize_achievement_capsule_font_size(
-                merged_card.get("capsule_font_size", 12)
+                merged_card.get(
+                    "capsule_font_size",
+                    default_card["capsule_font_size"],
+                )
             ),
             capsule_fill_color=_rgba(
                 merged_card.get("capsule_fill_color"),
-                ACHIEVEMENT_CAPSULE_FILL_RGBA,
+                tuple(default_card["capsule_fill_color"]),
             ),
             capsule_border_color=_rgba(
                 merged_card.get("capsule_border_color"),
-                ACHIEVEMENT_CAPSULE_BORDER_RGBA,
+                tuple(default_card["capsule_border_color"]),
             ),
             refresh_minutes=_bounded_int(
-                merged_shared.get("refresh_minutes"), 10, 5, 1440
+                merged_shared.get("refresh_minutes"),
+                int(default_shared["refresh_minutes"]),
+                5,
+                1440,
             ),
+            semantic_palette=SteamSemanticPalette(),
             show_connection_info_icon=_as_bool(
-                merged_shared.get("show_connection_info_icon"), True
+                merged_shared.get("show_connection_info_icon"),
+                bool(default_shared["show_connection_info_icon"]),
             ),
         )
         header_fill, header_border, header_text = resolve_header_colors(

@@ -31,6 +31,7 @@ from core.visualizer_preset_manifest import (
     reconcile_curated_visualizer_preset_tree,
     sync_curated_preset_tree,
 )
+from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_preset_indices import (
     get_missing_preset_fallback_index,          # noqa: F401  intentional re-export
     resolve_all_preset_indices_from_getter,     # noqa: F401  intentional re-export
@@ -55,7 +56,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-DEFAULT_CURATED_SLOTS = 3
 VISUALIZER_CUSTOM_STORAGE_KEY = "visualizer_custom_presets"
 
 _PLACEHOLDER_NAME_RE = re.compile(
@@ -295,34 +295,20 @@ class VisualizerPreset:
     is_custom: bool = False
 
 
-def _default_presets(curated_slots: int = DEFAULT_CURATED_SLOTS) -> List[VisualizerPreset]:
-    """Return placeholder presets plus a trailing Custom slot."""
-    curated_slots = max(0, curated_slots)
-    presets: List[VisualizerPreset] = []
-    for idx in range(curated_slots):
-        presets.append(
-            VisualizerPreset(
-                name=f"Preset {idx + 1}",
-                description="Default settings",
-                settings={},
-            )
-        )
-
-    presets.append(
-        VisualizerPreset(
-            name="Custom",
-            description="Your own settings (Advanced)",
-            settings={},
-            is_custom=True,
-        )
+def _custom_preset() -> VisualizerPreset:
+    return VisualizerPreset(
+        name="Custom",
+        description="Your own settings (Advanced)",
+        settings={},
+        is_custom=True,
     )
-    return presets
 
 
-# Registry: mode -> list of curated presets plus trailing Custom.
-# Modes start with placeholder slots and then load the authored curated tree.
+# Registry: mode -> contiguous authored curated presets plus trailing Custom.
+# The temporary Custom-only seed avoids manufacturing fake curated slots while
+# module import builds the real registry below.
 _PRESETS: Dict[str, List[VisualizerPreset]] = {
-    mode: _default_presets() for mode in MODES
+    mode: [_custom_preset()] for mode in MODES
 }
 _CURATED_TREE_SYNCED = False
 
@@ -679,7 +665,7 @@ def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, A
     # If old presets have them but no card_adaptation, derive it.
     if mode == "sine_wave":
         if "sine_card_adaptation" not in settings and "sine_min_height" in settings:
-            minh = float(settings.get("sine_min_height", 0.10))
+            minh = float(settings["sine_min_height"])
             settings["sine_card_adaptation"] = round(min(1.0, max(0.05, minh / 0.24)), 2)
         settings.pop("sine_min_height", None)
         settings.pop("sine_max_height", None)
@@ -695,11 +681,15 @@ def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, A
                     "bars" if bool(settings.get("spectrum_single_piece")) else "segment"
                 )
             else:
-                settings["spectrum_render_mode"] = "bars"
+                settings["spectrum_render_mode"] = require_canonical_default(
+                    "widgets.spotify_visualizer.spectrum_render_mode"
+                )
         else:
             settings["spectrum_render_mode"] = normalize_spectrum_render_mode(
                 settings.get("spectrum_render_mode"),
-                "bars",
+                str(require_canonical_default(
+                    "widgets.spotify_visualizer.spectrum_render_mode"
+                )),
             )
 
         if "spectrum_unique_colors" not in settings:
@@ -708,56 +698,47 @@ def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, A
             elif "rainbow_per_bar" in settings:
                 settings["spectrum_unique_colors"] = bool(settings.get("rainbow_per_bar"))
             else:
-                settings["spectrum_unique_colors"] = True
+                settings["spectrum_unique_colors"] = require_canonical_default(
+                    "widgets.spotify_visualizer.spectrum_unique_colors"
+                )
 
         settings.pop("spectrum_single_piece", None)
         settings.pop("spectrum_rainbow_per_bar", None)
         settings.pop("rainbow_per_bar", None)
         settings.pop("spectrum_vocal_position", None)
-        _shape_defaults = {
-            "spectrum_lane_strengths_mirrored": {
-                "Mid": 0.60,
-                "Vocal": 0.64,
-                "Low-Mid": 0.70,
-                "Bass": 0.80,
-            },
-            "spectrum_lane_strengths_linear": {
-                "Bass": 0.80,
-                "Low-Mid": 0.70,
-                "Vocal": 0.64,
-                "Hi-Mid": 0.80,
-                "Treble": 1.0,
-            },
-            "spectrum_wave_amplitude": 0.5,
-            "spectrum_profile_floor": 0.12,
-            "spectrum_glow_enabled": False,
-            "spectrum_glow_intensity": 0.55,
-            "spectrum_glow_color": [110, 220, 255, 235],
-            "spectrum_mirrored": True,
-            "spectrum_shape_nodes": [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]],
-        }
-        for _sk, _sv in _shape_defaults.items():
+        _shape_default_keys = (
+            "spectrum_lane_strengths_mirrored",
+            "spectrum_lane_strengths_linear",
+            "spectrum_wave_amplitude",
+            "spectrum_profile_floor",
+            "spectrum_glow_enabled",
+            "spectrum_glow_intensity",
+            "spectrum_glow_color",
+            "spectrum_mirrored",
+            "spectrum_shape_nodes",
+        )
+        for _sk in _shape_default_keys:
             if _sk not in settings:
-                settings[_sk] = _sv
+                settings[_sk] = require_canonical_default(
+                    f"widgets.spotify_visualizer.{_sk}"
+                )
         settings.pop("spectrum_bass_emphasis", None)
         settings.pop("spectrum_mid_suppression", None)
     if mode == "oscilloscope":
         if "osc_line_amplitude" not in settings and "osc_sensitivity" in settings:
             settings["osc_line_amplitude"] = settings["osc_sensitivity"]
         settings.pop("osc_sensitivity", None)
-        for _key, _val in (
-            ("osc_ghost_line2_enabled", True),
-            ("osc_ghost_line3_enabled", True),
-        ):
+        for _key in ("osc_ghost_line2_enabled", "osc_ghost_line3_enabled"):
             if _key not in settings:
-                settings[_key] = _val
+                settings[_key] = require_canonical_default(
+                    f"widgets.spotify_visualizer.{_key}"
+                )
     if mode == "sine_wave":
-        for _key, _val in (
-            ("sine_ghost_line2_enabled", True),
-            ("sine_ghost_line3_enabled", True),
-        ):
+        for _key in ("sine_ghost_line2_enabled", "sine_ghost_line3_enabled"):
             if _key not in settings:
-                settings[_key] = _val
+                settings[_key] = require_canonical_default(
+                    f"widgets.spotify_visualizer.{_key}"
+                )
 
     # rainbow_enabled / rainbow_speed → per-mode keys
     # Old presets stored these as global keys; convert to {mode}_rainbow_enabled.
@@ -866,66 +847,45 @@ def _load_mode_presets_from_disk(mode: str) -> Dict[int, VisualizerPreset]:
 def _build_presets_for_mode(mode: str) -> List[VisualizerPreset]:
     global _CURATED_TREE_SYNCED
     if not _CURATED_TREE_SYNCED:
-        try:
-            reconcile_curated_visualizer_preset_tree(_presets_root(), allow_non_frozen=True)
-            sync_curated_preset_tree(_presets_root())
-        except Exception:
-            logger.debug("[VIS_PRESETS] Failed to sync curated preset tree", exc_info=True)
+        reconcile_curated_visualizer_preset_tree(_presets_root(), allow_non_frozen=True)
+        sync_curated_preset_tree(_presets_root())
         _CURATED_TREE_SYNCED = True
 
-    try:
-        curated = _load_mode_presets_from_disk(mode)
-        snapshot_overrides = _load_snapshot_presets(mode)
-        logger.info(
-            "[VIS_PRESETS] Build mode=%s curated_root=%s snapshot_root=%s curated_slots=%d snapshot_overrides=%d",
-            mode,
-            _presets_root(),
-            _snapshot_presets_root(),
-            len(curated),
-            len(snapshot_overrides),
+    curated = _load_mode_presets_from_disk(mode)
+    snapshot_overrides = _load_snapshot_presets(mode)
+    logger.info(
+        "[VIS_PRESETS] Build mode=%s curated_root=%s snapshot_root=%s curated_slots=%d snapshot_overrides=%d",
+        mode,
+        _presets_root(),
+        _snapshot_presets_root(),
+        len(curated),
+        len(snapshot_overrides),
+    )
+
+    if not curated:
+        raise RuntimeError(f"visualizer mode {mode!r} has no authored curated presets")
+    expected = list(range(max(curated) + 1))
+    actual = sorted(curated)
+    if actual != expected:
+        raise RuntimeError(
+            f"visualizer mode {mode!r} curated slots are not contiguous: {actual}"
         )
-    except Exception as exc:
-        logger.warning(
-            "[VIS_PRESETS] Failed to build presets for mode=%s; using safe defaults: %s",
-            mode,
-            exc,
-        )
-        logger.debug("[VIS_PRESETS] Preset build failure details", exc_info=True)
-        return _default_presets()
 
     combined: Dict[int, VisualizerPreset] = dict(curated)
     for index, override in snapshot_overrides.items():
         curated_base = combined.get(index)
         if curated_base is None:
-            combined[index] = override
-            continue
-        # Snapshot overrides should replace settings, not rename curated slots.
+            raise RuntimeError(
+                f"visualizer snapshot override for {mode!r} targets missing authored slot {index}"
+            )
         combined[index] = VisualizerPreset(
             name=curated_base.name,
             description=curated_base.description,
             settings=dict(override.settings),
         )
 
-    if combined:
-        max_index = max(combined.keys())
-        curated_slots = max(max_index + 1, 1)
-    else:
-        curated_slots = DEFAULT_CURATED_SLOTS
-
-    presets = _default_presets(curated_slots)
-    for index, preset in combined.items():
-        if index < 0:
-            continue
-        while index >= len(presets) - 1:
-            presets.insert(
-                len(presets) - 1,
-                VisualizerPreset(
-                    name=f"Preset {len(presets)}",
-                    description="Default settings",
-                    settings={},
-                ),
-            )
-        presets[index] = preset
+    presets = [combined[index] for index in expected]
+    presets.append(_custom_preset())
     return presets
 
 
@@ -934,8 +894,11 @@ for _mode in MODES:
 
 
 def get_presets(mode: str) -> List[VisualizerPreset]:
-    """Return the preset list for *mode* (curated slots plus trailing Custom)."""
-    return _PRESETS.get(mode, _default_presets())
+    """Return the authored preset list for *mode* plus trailing Custom."""
+    try:
+        return _PRESETS[mode]
+    except KeyError as exc:
+        raise KeyError(f"unknown visualizer preset mode: {mode!r}") from exc
 
 
 def get_preset_file_path(mode: str, preset_index: int) -> Path | None:
@@ -1039,9 +1002,9 @@ def get_preset_settings(mode: str, index: int) -> Dict[str, Any]:
     normal settings keys and are loaded by the existing 8-layer pipeline.
     """
     presets = get_presets(mode)
-    if 0 <= index < len(presets):
-        return dict(presets[index].settings)
-    return {}
+    if not 0 <= index < len(presets):
+        raise IndexError(f"visualizer preset index out of range for {mode}: {index}")
+    return dict(presets[index].settings)
 
 
 def apply_preset_to_config(mode: str, index: int, config: Dict[str, Any]) -> Dict[str, Any]:

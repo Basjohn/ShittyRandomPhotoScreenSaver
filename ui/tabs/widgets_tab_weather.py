@@ -123,7 +123,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Enable weather
     tab.weather_enabled = QCheckBox("Enable Weather Widget")
     tab.weather_enabled.setProperty("circleIndicator", True)
-    tab.weather_enabled.setChecked(tab._default_bool('weather', 'enabled', True))
+    tab.weather_enabled.setChecked(tab._default_bool('weather', 'enabled'))
     tab.weather_enabled.stateChanged.connect(tab._save_settings)
     tab.weather_enabled.stateChanged.connect(tab._update_stack_status)
     weather_layout.addWidget(tab.weather_enabled)
@@ -137,21 +137,21 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     source_toggle, source_body, source_layout = build_bucket_toggle(
         _weather_ctrl_layout,
         "Location & Layout",
-        expanded=tab.get_widget_bucket_state("weather", "source_layout", default=False),
+        expanded=tab.get_widget_bucket_state("weather", "source_layout"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("weather", "source_layout", checked),
         defer_initial_visibility=True,
     )
     content_toggle, content_body, content_layout = build_bucket_toggle(
         _weather_ctrl_layout,
         "Forecast Content",
-        expanded=tab.get_widget_bucket_state("weather", "content", default=False),
+        expanded=tab.get_widget_bucket_state("weather", "content"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("weather", "content", checked),
         defer_initial_visibility=True,
     )
     appearance_toggle, appearance_body, appearance_layout = build_bucket_toggle(
         _weather_ctrl_layout,
         "Appearance",
-        expanded=tab.get_widget_bucket_state("weather", "appearance", default=False),
+        expanded=tab.get_widget_bucket_state("weather", "appearance"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("weather", "appearance", checked),
         defer_initial_visibility=True,
     )
@@ -164,7 +164,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Location with live geocode autocomplete
     location_row = _aligned_row(source_layout, "Location:")
     tab.weather_location = QLineEdit()
-    default_city = tab._default_str('weather', 'location', '')
+    default_city = tab._default_str('weather', 'location')
     tab.weather_location.setText(default_city)
     tab.weather_location.setPlaceholderText("City name...")
     tab.weather_location.textChanged.connect(tab._save_settings)
@@ -185,7 +185,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.weather_position.currentTextChanged.connect(tab._update_stack_status)
     tab.weather_position.setMinimumWidth(150)
     weather_pos_row.addWidget(tab.weather_position)
-    tab._set_combo_text(tab.weather_position, tab._default_str('weather', 'position', 'Top Left'))
+    tab._set_combo_text(tab.weather_position, tab._default_str('weather', 'position'))
     tab.weather_stack_status = QLabel("")
     tab.weather_stack_status.setMinimumWidth(100)
     tab.weather_stack_status.setStyleSheet(STATUS_LABEL_STYLE)
@@ -200,14 +200,14 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.weather_monitor_combo.currentTextChanged.connect(tab._update_stack_status)
     tab.weather_monitor_combo.setMinimumWidth(120)
     weather_disp_row.addWidget(tab.weather_monitor_combo)
-    monitor_default = tab._widget_default('weather', 'monitor', 'ALL')
+    monitor_default = tab._widget_default('weather', 'monitor')
     tab._set_combo_text(tab.weather_monitor_combo, str(monitor_default))
     weather_disp_row.addStretch()
 
     # Font family
     weather_font_family_row = _aligned_row(source_layout, "Font:")
     tab.weather_font_combo = StyledFontComboBox(size_variant="hero")
-    default_weather_font = tab._default_str('weather', 'font_family', 'Inter')
+    default_weather_font = tab._default_str('weather', 'font_family')
     tab.weather_font_combo.setCurrentFont(QFont(default_weather_font))
     tab.weather_font_combo.setMinimumWidth(220)
     tab.weather_font_combo.currentFontChanged.connect(tab._save_settings)
@@ -218,7 +218,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     weather_font_row = _aligned_row(source_layout, "Font Size:")
     tab.weather_font_size = QSpinBox()
     tab.weather_font_size.setRange(12, 72)
-    tab.weather_font_size.setValue(tab._default_int('weather', 'font_size', 24))
+    tab.weather_font_size.setValue(tab._default_int('weather', 'font_size'))
     tab.weather_font_size.setAccelerated(True)
     tab.weather_font_size.valueChanged.connect(tab._save_settings)
     tab.weather_font_size.valueChanged.connect(tab._update_stack_status)
@@ -241,7 +241,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Show forecast line
     tab.weather_show_forecast = QCheckBox("Show Forecast Line")
     tab.weather_show_forecast.setProperty("circleIndicator", True)
-    tab.weather_show_forecast.setChecked(tab._default_bool('weather', 'show_forecast', True))
+    tab.weather_show_forecast.setChecked(tab._default_bool('weather', 'show_forecast'))
     tab.weather_show_forecast.setToolTip("Display tomorrow's forecast below current weather")
     tab.weather_show_forecast.stateChanged.connect(tab._save_settings)
     tab.weather_show_forecast.stateChanged.connect(tab._update_stack_status)
@@ -250,7 +250,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Show details row
     tab.weather_show_details = QCheckBox("Show Details (Rain/Humidity/Wind)")
     tab.weather_show_details.setProperty("circleIndicator", True)
-    tab.weather_show_details.setChecked(tab._default_bool('weather', 'show_details_row', True))
+    tab.weather_show_details.setChecked(tab._default_bool('weather', 'show_details_row'))
     tab.weather_show_details.setToolTip("Display weather detail metrics with icons")
     tab.weather_show_details.stateChanged.connect(tab._save_settings)
     content_layout.addWidget(tab.weather_show_details)
@@ -258,7 +258,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Show condition icon
     tab.weather_show_icon = QCheckBox("Show Weather Icon")
     tab.weather_show_icon.setProperty("circleIndicator", True)
-    tab.weather_show_icon.setChecked(tab._default_bool('weather', 'show_condition_icon', True))
+    tab.weather_show_icon.setChecked(tab._default_bool('weather', 'show_condition_icon'))
     tab.weather_show_icon.setToolTip("Display weather condition icon (clear, cloudy, rain, etc.)")
     tab.weather_show_icon.stateChanged.connect(tab._save_settings)
     content_layout.addWidget(tab.weather_show_icon)
@@ -272,7 +272,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     icon_align_row = _aligned_row(_icon_layout, "Icon Position:")
     tab.weather_icon_alignment = StyledComboBox(size_variant="compact")
     tab.weather_icon_alignment.addItems(["LEFT", "RIGHT"])
-    tab._set_combo_text(tab.weather_icon_alignment, tab._default_str('weather', 'icon_alignment', 'RIGHT'))
+    tab._set_combo_text(tab.weather_icon_alignment, tab._default_str('weather', 'icon_alignment'))
     tab.weather_icon_alignment.currentTextChanged.connect(tab._save_settings)
     tab.weather_icon_alignment.setMinimumWidth(120)
     icon_align_row.addWidget(tab.weather_icon_alignment)
@@ -281,7 +281,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     icon_size_row = _aligned_row(_icon_layout, "Icon Size:")
     tab.weather_icon_size = QSpinBox()
     tab.weather_icon_size.setRange(32, 192)
-    tab.weather_icon_size.setValue(tab._default_int('weather', 'icon_size', 96))
+    tab.weather_icon_size.setValue(tab._default_int('weather', 'icon_size'))
     tab.weather_icon_size.valueChanged.connect(tab._save_settings)
     icon_size_row.addWidget(tab.weather_icon_size)
     icon_size_row.addWidget(_inline_label("px"))
@@ -294,7 +294,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Background frame
     tab.weather_show_background = QCheckBox("Show Background Frame")
     tab.weather_show_background.setProperty("circleIndicator", True)
-    tab.weather_show_background.setChecked(tab._default_bool('weather', 'show_background', True))
+    tab.weather_show_background.setChecked(tab._default_bool('weather', 'show_background'))
     tab.weather_show_background.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.weather_show_background)
 
@@ -308,7 +308,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.weather_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.weather_bg_opacity.setMinimum(0)
     tab.weather_bg_opacity.setMaximum(100)
-    weather_bg_opacity_pct = int(tab._default_float('weather', 'bg_opacity', 0.6) * 100)
+    weather_bg_opacity_pct = int(tab._default_float('weather', 'bg_opacity') * 100)
     tab.weather_bg_opacity.setValue(weather_bg_opacity_pct)
     tab.weather_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.weather_bg_opacity.setTickInterval(10)
@@ -343,7 +343,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.weather_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.weather_border_opacity.setMinimum(0)
     tab.weather_border_opacity.setMaximum(100)
-    weather_border_opacity_pct = int(tab._default_float('weather', 'border_opacity', 1.0) * 100)
+    weather_border_opacity_pct = int(tab._default_float('weather', 'border_opacity') * 100)
     tab.weather_border_opacity.setValue(weather_border_opacity_pct)
     tab.weather_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.weather_border_opacity.setTickInterval(10)
@@ -364,7 +364,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     weather_margin_row = _aligned_row(source_layout, "Margin:")
     tab.weather_margin = QSpinBox()
     tab.weather_margin.setRange(0, 200)
-    tab.weather_margin.setValue(tab._default_int('weather', 'margin', 30))
+    tab.weather_margin.setValue(tab._default_int('weather', 'margin'))
     tab.weather_margin.setToolTip("Distance from screen edge in pixels")
     tab.weather_margin.valueChanged.connect(tab._save_settings)
     weather_margin_row.addWidget(tab.weather_margin)
@@ -393,47 +393,47 @@ def load_weather_settings(tab: WidgetsTab, widgets: dict) -> None:
     """Load weather settings from widgets config dict."""
     weather_config = widgets.get('weather', {})
 
-    tab.weather_enabled.setChecked(tab._config_bool('weather', weather_config, 'enabled', True))
-    tab.weather_location.setText(tab._config_str('weather', weather_config, 'location', ''))
+    tab.weather_enabled.setChecked(tab._config_bool('weather', weather_config, 'enabled'))
+    tab.weather_location.setText(tab._config_str('weather', weather_config, 'location'))
 
-    weather_pos = tab._config_str('weather', weather_config, 'position', 'Top Left')
+    weather_pos = tab._config_str('weather', weather_config, 'position')
     index = tab.weather_position.findText(weather_pos)
     if index >= 0:
         tab.weather_position.setCurrentIndex(index)
 
-    tab.weather_font_combo.setCurrentFont(QFont(tab._config_str('weather', weather_config, 'font_family', 'Inter')))
-    tab.weather_font_size.setValue(tab._config_int('weather', weather_config, 'font_size', 28))
-    tab.weather_show_forecast.setChecked(tab._config_bool('weather', weather_config, 'show_forecast', True))
-    tab.weather_show_details.setChecked(tab._config_bool('weather', weather_config, 'show_details_row', True))
-    tab.weather_show_icon.setChecked(tab._config_bool('weather', weather_config, 'show_condition_icon', True))
-    tab._set_combo_text(tab.weather_icon_alignment, tab._config_str('weather', weather_config, 'icon_alignment', 'RIGHT'))
-    tab.weather_icon_size.setValue(tab._config_int('weather', weather_config, 'icon_size', 96))
-    tab.weather_show_background.setChecked(tab._config_bool('weather', weather_config, 'show_background', True))
-    weather_opacity_pct = int(tab._config_float('weather', weather_config, 'bg_opacity', 0.6) * 100)
+    tab.weather_font_combo.setCurrentFont(QFont(tab._config_str('weather', weather_config, 'font_family')))
+    tab.weather_font_size.setValue(tab._config_int('weather', weather_config, 'font_size'))
+    tab.weather_show_forecast.setChecked(tab._config_bool('weather', weather_config, 'show_forecast'))
+    tab.weather_show_details.setChecked(tab._config_bool('weather', weather_config, 'show_details_row'))
+    tab.weather_show_icon.setChecked(tab._config_bool('weather', weather_config, 'show_condition_icon'))
+    tab._set_combo_text(tab.weather_icon_alignment, tab._config_str('weather', weather_config, 'icon_alignment'))
+    tab.weather_icon_size.setValue(tab._config_int('weather', weather_config, 'icon_size'))
+    tab.weather_show_background.setChecked(tab._config_bool('weather', weather_config, 'show_background'))
+    weather_opacity_pct = int(tab._config_float('weather', weather_config, 'bg_opacity') * 100)
     tab.weather_bg_opacity.setValue(weather_opacity_pct)
     tab.weather_opacity_label.setText(f"{weather_opacity_pct}%")
 
-    weather_color_data = weather_config.get('color', tab._widget_default('weather', 'color', [255, 255, 255, 230]))
+    weather_color_data = weather_config.get('color', tab._widget_default('weather', 'color'))
     tab._weather_color = QColor(*weather_color_data)
-    weather_bg_color_data = weather_config.get('bg_color', tab._widget_default('weather', 'bg_color', [35, 35, 35, 255]))
+    weather_bg_color_data = weather_config.get('bg_color', tab._widget_default('weather', 'bg_color'))
     try:
         tab._weather_bg_color = QColor(*weather_bg_color_data)
     except Exception:
-        tab._weather_bg_color = QColor(35, 35, 35, 255)
-    weather_border_color_data = weather_config.get('border_color', tab._widget_default('weather', 'border_color', [255, 255, 255, 255]))
+        tab._weather_bg_color = tab._color_from_default('weather', 'bg_color')
+    weather_border_color_data = weather_config.get('border_color', tab._widget_default('weather', 'border_color'))
     try:
         tab._weather_border_color = QColor(*weather_border_color_data)
     except Exception:
-        tab._weather_border_color = QColor(255, 255, 255, 255)
+        tab._weather_border_color = tab._color_from_default('weather', 'border_color')
     _sync_weather_swatch(tab, 'weather_color_btn', '_weather_color')
     _sync_weather_swatch(tab, 'weather_bg_color_btn', '_weather_bg_color')
     _sync_weather_swatch(tab, 'weather_border_color_btn', '_weather_border_color')
-    weather_border_opacity_pct = int(tab._config_float('weather', weather_config, 'border_opacity', 1.0) * 100)
+    weather_border_opacity_pct = int(tab._config_float('weather', weather_config, 'border_opacity') * 100)
     tab.weather_border_opacity.setValue(weather_border_opacity_pct)
     tab.weather_border_opacity_label.setText(f"{weather_border_opacity_pct}%")
 
-    wmon_sel = weather_config.get('monitor', tab._widget_default('weather', 'monitor', 'ALL'))
-    wmon_text = str(wmon_sel) if isinstance(wmon_sel, (int, str)) else 'ALL'
+    wmon_sel = weather_config.get('monitor', tab._widget_default('weather', 'monitor'))
+    wmon_text = tab._monitor_text_from_value('weather', wmon_sel)
     wmon_idx = tab.weather_monitor_combo.findText(wmon_text)
     if wmon_idx >= 0:
         tab.weather_monitor_combo.setCurrentIndex(wmon_idx)
@@ -467,6 +467,5 @@ def save_weather_settings(tab: WidgetsTab) -> dict:
                          tab._weather_border_color.blue(), tab._weather_border_color.alpha()],
         'border_opacity': tab.weather_border_opacity.value() / 100.0,
     }
-    wmon_text = tab.weather_monitor_combo.currentText()
-    weather_config['monitor'] = wmon_text if wmon_text == 'ALL' else int(wmon_text)
+    weather_config['monitor'] = tab._monitor_value_from_combo('weather', tab.weather_monitor_combo)
     return weather_config

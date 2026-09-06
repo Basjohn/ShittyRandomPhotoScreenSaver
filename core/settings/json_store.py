@@ -280,8 +280,10 @@ class JsonSettingsStore:
 
     def setValue(self, key: str, value: Any) -> None:
         with self._lock:
-            current = self._data.get(key)
-            if current == value:
+            # Missing and explicit JSON null are distinct persisted states.  Using
+            # ``dict.get`` here made a first write of ``None`` look unchanged, so
+            # canonical nullable defaults could never be seeded durably.
+            if key in self._data and self._data[key] == value:
                 return
             self._data[key] = deepcopy(value)
             self._mark_changed_locked()

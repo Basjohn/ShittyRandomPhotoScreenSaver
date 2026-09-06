@@ -14,48 +14,34 @@ if TYPE_CHECKING:
 
 
 
-def _normalize_visualizer_direction(value: Any, default: str = "top") -> str:
-    val = str(value).lower()
-    valid = {
-        "top", "bottom", "left", "right",
-        "top_left", "top_right", "bottom_left", "bottom_right",
-        "center_out", "center_out_reverse",
-    }
-    return val if val in valid else default
-
-
+# Retained only as a migration signature.  The current authored notch layout is
+# supplied explicitly by canonical defaults; this old layout must never become
+# a second current-default table.
 _SPECTRUM_LEGACY_NOTCHES_LINEAR = [[0.0, "Bass"], [0.25, "Low"], [0.50, "Mid"], [0.75, "Hi-Mid"], [1.0, "Treble"]]
-_SPECTRUM_DEFAULT_NOTCHES_LINEAR = [[0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"]]
-_SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED = {
-    "Mid": 0.60,
-    "Vocal": 0.64,
-    "Low-Mid": 0.70,
-    "Bass": 0.80,
-}
-_SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR = {
-    "Bass": 0.80,
-    "Low-Mid": 0.70,
-    "Vocal": 0.64,
-    "Hi-Mid": 0.80,
-    "Treble": 1.00,
-}
 
 
-def _normalize_spectrum_linear_notches(value: Any) -> list[list]:
-    """Promote old linear notch layouts into the explicit vocal-lane family."""
+def _normalize_spectrum_linear_notches(value: Any, canonical_default: Any) -> list[list]:
+    """Normalize/migrate linear notches, repairing only from canonical state."""
+    try:
+        canonical = [[float(x), str(label)] for x, label in canonical_default]
+    except Exception as exc:
+        raise ValueError("canonical spectrum linear notches are invalid") from exc
+    if len(canonical) < 2:
+        raise ValueError("canonical spectrum linear notches require at least two entries")
+
     if not isinstance(value, list) or len(value) < 2:
-        return [list(n) for n in _SPECTRUM_DEFAULT_NOTCHES_LINEAR]
+        return [list(n) for n in canonical]
 
     try:
         normalized = [[float(x), str(label)] for x, label in value]
     except Exception:
-        return [list(n) for n in _SPECTRUM_DEFAULT_NOTCHES_LINEAR]
+        return [list(n) for n in canonical]
 
     if len(normalized) == 5:
         labels = [str(label).strip().lower() for _, label in normalized]
         if labels == ["bass", "low", "mid", "hi-mid", "treble"]:
             if normalized == _SPECTRUM_LEGACY_NOTCHES_LINEAR:
-                return [list(n) for n in _SPECTRUM_DEFAULT_NOTCHES_LINEAR]
+                return [list(n) for n in canonical]
             return [
                 [float(normalized[0][0]), "Bass"],
                 [float(normalized[1][0]), "Low-Mid"],

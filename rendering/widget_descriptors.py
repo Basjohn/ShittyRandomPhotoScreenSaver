@@ -306,11 +306,14 @@ class WidgetCustomResizeLockDescriptor:
 
 @dataclass(frozen=True)
 class WidgetCustomPositionOptionDescriptor:
-    """Descriptor-owned WidgetsTab metadata for enabling the Custom position slot."""
+    """Descriptor-owned WidgetsTab metadata for enabling the Custom position slot.
+
+    Product position defaults are resolved from canonical widget settings at the
+    WidgetsTab boundary; descriptors carry no copied fallback positions.
+    """
 
     widget_id: str
     combo_attr: str
-    fallback_position: str
 
 
 WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...] = (
@@ -421,7 +424,6 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "devcurve_motion_power", "devcurve_idle_motion",
             "devcurve_idle_speed",
             "devcurve_smoothness",
-            "devcurve_growth",
             "devcurve_active_layer_order",
             "devcurve_active_layer_outline_width",
             "devcurve_ghost_enabled", "devcurve_ghost_opacity", "devcurve_ghost_decay",
@@ -680,14 +682,14 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
 
 
 WIDGET_CUSTOM_POSITION_OPTION_DESCRIPTORS: tuple[WidgetCustomPositionOptionDescriptor, ...] = (
-    WidgetCustomPositionOptionDescriptor("clock", "clock_position", "Top Right"),
-    WidgetCustomPositionOptionDescriptor("weather", "weather_position", "Top Left"),
-    WidgetCustomPositionOptionDescriptor("media", "media_position", "Bottom Left"),
-    WidgetCustomPositionOptionDescriptor("reddit", "reddit_position", "Bottom Right"),
-    WidgetCustomPositionOptionDescriptor("reddit2", "reddit2_position", "Top Left"),
-    WidgetCustomPositionOptionDescriptor("gmail", "gmail_position", "Top Left"),
-    WidgetCustomPositionOptionDescriptor("achievement_pulse", "achievement_pulse_position", "Middle Right"),
-    WidgetCustomPositionOptionDescriptor("abandonment_issues", "abandonment_issues_position", "Bottom Right"),
+    WidgetCustomPositionOptionDescriptor("clock", "clock_position"),
+    WidgetCustomPositionOptionDescriptor("weather", "weather_position"),
+    WidgetCustomPositionOptionDescriptor("media", "media_position"),
+    WidgetCustomPositionOptionDescriptor("reddit", "reddit_position"),
+    WidgetCustomPositionOptionDescriptor("reddit2", "reddit2_position"),
+    WidgetCustomPositionOptionDescriptor("gmail", "gmail_position"),
+    WidgetCustomPositionOptionDescriptor("achievement_pulse", "achievement_pulse_position"),
+    WidgetCustomPositionOptionDescriptor("abandonment_issues", "abandonment_issues_position"),
 )
 
 
@@ -1272,20 +1274,44 @@ def get_effective_monitor_settings_key_for_widget(
     return descriptor.get_effective_monitor_settings_key()
 
 
+def _canonical_monitor_value_for_widget(
+    widget_id: str,
+    widgets_config: Mapping[str, Any] | None,
+) -> str:
+    defaults = get_default_settings()["widgets"]
+    if not isinstance(defaults, Mapping):
+        raise KeyError("canonical widget defaults mapping is unavailable")
+    settings_key = get_effective_monitor_settings_key_for_widget(
+        widget_id, widgets_config
+    )
+    section = defaults.get(settings_key)
+    if not isinstance(section, Mapping) or "monitor" not in section:
+        raise KeyError(
+            f"canonical widget monitor route is missing for {widget_id!r} via {settings_key!r}"
+        )
+    value = str(section["monitor"] or "").strip()
+    if not value:
+        raise ValueError(
+            f"canonical widget monitor route is empty for {widget_id!r} via {settings_key!r}"
+        )
+    return value
+
+
 def get_effective_monitor_value_for_widget(
     widget_id: str,
     widgets_config: Mapping[str, Any] | None,
-    *,
-    default: str = "ALL",
 ) -> str:
+    """Resolve persisted routing with canonical widget routing as repair authority."""
+
+    canonical = _canonical_monitor_value_for_widget(widget_id, widgets_config)
     if not isinstance(widgets_config, Mapping):
-        return default
+        return canonical
     settings_key = get_effective_monitor_settings_key_for_widget(widget_id, widgets_config)
     section = widgets_config.get(settings_key, {})
     if not isinstance(section, Mapping):
-        return default
-    value = str(section.get("monitor", default) or default).strip()
-    return value or default
+        return canonical
+    value = str(section.get("monitor", canonical) or canonical).strip()
+    return value or canonical
 
 
 def monitor_route_admits_screen(monitor_value: object, screen_index: int) -> bool:
@@ -1309,17 +1335,11 @@ def widget_route_admits_screen(
     widget_id: str,
     widgets_config: Mapping[str, Any] | None,
     screen_index: int,
-    *,
-    default: str = "ALL",
 ) -> bool:
     """Resolve one widget's effective monitor route and admit its destination."""
 
     return monitor_route_admits_screen(
-        get_effective_monitor_value_for_widget(
-            widget_id,
-            widgets_config,
-            default=default,
-        ),
+        get_effective_monitor_value_for_widget(widget_id, widgets_config),
         screen_index,
     )
 
@@ -1769,7 +1789,9 @@ def sync_custom_layout_restore_routes(
         )
         if not isinstance(monitor_section, Mapping):
             monitor_section = {}
-        current_monitor = str(monitor_section.get("monitor", "ALL") or "ALL").strip() or "ALL"
+        current_monitor = get_effective_monitor_value_for_widget(
+            descriptor.widget_id, widgets_config
+        )
 
         set_custom_layout_restore_entry(
             restore_map,
@@ -1899,7 +1921,7 @@ def restore_widget_family_to_application_default_layout(
 
     defaults_candidate = default_widgets_config
     if not isinstance(defaults_candidate, Mapping):
-        defaults_candidate = get_default_settings().get("widgets", {})
+        defaults_candidate = get_default_settings()["widgets"]
     if not isinstance(defaults_candidate, Mapping):
         defaults_candidate = {}
 
@@ -1938,7 +1960,15 @@ def restore_widget_family_to_application_default_layout(
             if not isinstance(monitor_section, dict) or monitor_settings_key not in widgets_config:
                 monitor_section = {}
                 widgets_config[monitor_settings_key] = monitor_section
-            default_monitor = str(monitor_defaults.get("monitor", "ALL") or "ALL").strip() or "ALL"
+            if "monitor" not in monitor_defaults:
+                raise KeyError(
+                    f"canonical monitor route missing for {family_widget_id!r}"
+                )
+            default_monitor = str(monitor_defaults["monitor"] or "").strip()
+            if not default_monitor:
+                raise ValueError(
+                    f"canonical monitor route empty for {family_widget_id!r}"
+                )
             if monitor_section.get("monitor") != default_monitor:
                 restored_any = True
                 monitor_section["monitor"] = default_monitor
@@ -1963,7 +1993,7 @@ def restore_all_widget_positions_to_application_defaults(
 
     defaults_candidate = default_widgets_config
     if not isinstance(defaults_candidate, Mapping):
-        defaults_candidate = get_default_settings().get("widgets", {})
+        defaults_candidate = get_default_settings()["widgets"]
     if not isinstance(defaults_candidate, Mapping):
         defaults_candidate = {}
 
@@ -2018,18 +2048,33 @@ def _get_widget_runtime_descriptor_attr_map(
 
 @dataclass(frozen=True)
 class WidgetPreviewFieldDescriptor:
-    """Descriptor for one settings-preview field read from WidgetsTab controls."""
+    """Descriptor for one settings-preview field read from WidgetsTab controls.
+
+    The descriptor describes projection only. Missing/unreadable controls repair
+    through the canonical widget section instead of a copied field literal.
+    """
 
     key: str
     attr_name: str
     reader: str = "raw"
-    fallback: Any = None
+    canonical_key: str | None = None
 
 
-def _read_preview_attr(owner: Any, field: WidgetPreviewFieldDescriptor) -> Any:
+def _canonical_preview_value(owner: Any, widget_id: str, field: WidgetPreviewFieldDescriptor) -> Any:
+    resolver = getattr(owner, "_widget_default", None)
+    if not callable(resolver):
+        raise RuntimeError("WidgetsTab preview owner has no canonical-default resolver")
+    return resolver(widget_id, field.canonical_key or field.key)
+
+
+def _read_preview_attr(
+    owner: Any,
+    widget_id: str,
+    field: WidgetPreviewFieldDescriptor,
+) -> Any:
     widget = getattr(owner, field.attr_name, None)
     if widget is None:
-        return field.fallback
+        return _canonical_preview_value(owner, widget_id, field)
     try:
         if field.reader == "checked":
             return bool(widget.isChecked())
@@ -2038,14 +2083,19 @@ def _read_preview_attr(owner: Any, field: WidgetPreviewFieldDescriptor) -> Any:
         if field.reader == "current_text":
             return widget.currentText()
         if field.reader == "current_data":
-            return widget.currentData()
+            value = widget.currentData()
+            return (
+                _canonical_preview_value(owner, widget_id, field)
+                if value in (None, "")
+                else value
+            )
         if field.reader == "current_text_int":
             return int(widget.currentText())
         if field.reader == "clock_display_mode":
             return "analog" if bool(widget.isChecked()) else "digital"
         return widget
     except Exception:
-        return field.fallback
+        return _canonical_preview_value(owner, widget_id, field)
 
 
 @dataclass(frozen=True)
@@ -2071,7 +2121,7 @@ class WidgetStackPreviewDescriptor:
 
     def build_preview_section(self, owner: Any) -> Dict[str, Any]:
         section = {
-            field.key: _read_preview_attr(owner, field)
+            field.key: _read_preview_attr(owner, self.widget_id, field)
             for field in self.fields
         }
         if self.family_enabled_attr_name:
@@ -2102,44 +2152,43 @@ class WidgetDefaultInitDescriptor:
     section: str
     key: str
     value_kind: str
-    fallback: Any
 
 
 WIDGET_DEFAULT_INIT_DESCRIPTORS: tuple[WidgetDefaultInitDescriptor, ...] = (
-    WidgetDefaultInitDescriptor("_global_card_border_width", "global", "card_border_width_px", "int", 3),
-    WidgetDefaultInitDescriptor("_clock_color", "clock", "color", "color", [255, 255, 255, 230]),
-    WidgetDefaultInitDescriptor("_weather_color", "weather", "color", "color", [255, 255, 255, 230]),
-    WidgetDefaultInitDescriptor("_clock_border_color", "clock", "border_color", "color", [128, 128, 128, 255]),
-    WidgetDefaultInitDescriptor("_clock_bg_color", "clock", "bg_color", "color", [64, 64, 64, 255]),
-    WidgetDefaultInitDescriptor("_weather_bg_color", "weather", "bg_color", "color", [64, 64, 64, 255]),
-    WidgetDefaultInitDescriptor("_weather_border_color", "weather", "border_color", "color", [128, 128, 128, 255]),
-    WidgetDefaultInitDescriptor("_media_color", "media", "color", "color", [255, 255, 255, 230]),
-    WidgetDefaultInitDescriptor("_media_bg_color", "media", "bg_color", "color", [64, 64, 64, 255]),
-    WidgetDefaultInitDescriptor("_media_border_color", "media", "border_color", "color", [128, 128, 128, 255]),
-    WidgetDefaultInitDescriptor("_media_header_fill_color", "media", "header_fill_color", "color", [0, 0, 0, 0]),
-    WidgetDefaultInitDescriptor("_media_header_border_color", "media", "header_border_color", "color", [255, 255, 255, 255]),
-    WidgetDefaultInitDescriptor("_media_volume_track_color", "media", "spotify_volume_track_color", "color", [35, 35, 35, 255]),
-    WidgetDefaultInitDescriptor("_media_volume_fill_color", "media", "spotify_volume_fill_color", "color", [79, 79, 79, 150]),
-    WidgetDefaultInitDescriptor("_media_volume_border_color", "media", "spotify_volume_border_color", "color", [255, 255, 255, 255]),
-    WidgetDefaultInitDescriptor("_media_progress_track_color", "media", "playback_progress_track_color", "color", [255, 255, 255, 74]),
-    WidgetDefaultInitDescriptor("_media_progress_fill_color", "media", "playback_progress_fill_color", "color", [255, 255, 255, 230]),
-    WidgetDefaultInitDescriptor("_media_progress_shadow_color", "media", "playback_progress_shadow_color", "color", [0, 0, 0, 102]),
-    WidgetDefaultInitDescriptor("_media_progress_glow_color", "media", "playback_progress_glow_color", "color", [255, 255, 255, 180]),
-    WidgetDefaultInitDescriptor("_spotify_vis_fill_color", "spotify_visualizer", "bar_fill_color", "color", [255, 255, 255, 230]),
-    WidgetDefaultInitDescriptor("_spotify_vis_border_color", "spotify_visualizer", "bar_border_color", "color", [255, 255, 255, 230]),
-    WidgetDefaultInitDescriptor("_reddit_color", "reddit", "color", "color", [255, 255, 255, 230]),
-    WidgetDefaultInitDescriptor("_reddit_bg_color", "reddit", "bg_color", "color", [64, 64, 64, 255]),
-    WidgetDefaultInitDescriptor("_reddit_border_color", "reddit", "border_color", "color", [128, 128, 128, 255]),
-    WidgetDefaultInitDescriptor("_reddit_header_fill_color", "reddit", "header_fill_color", "color", [0, 0, 0, 0]),
-    WidgetDefaultInitDescriptor("_reddit_header_border_color", "reddit", "header_border_color", "color", [255, 255, 255, 255]),
-    WidgetDefaultInitDescriptor("_gmail_color", "gmail", "color", "color", [255, 255, 255, 230]),
-    WidgetDefaultInitDescriptor("_gmail_bg_color", "gmail", "bg_color", "color", [35, 35, 35, 255]),
-    WidgetDefaultInitDescriptor("_gmail_border_color", "gmail", "border_color", "color", [255, 255, 255, 255]),
-    WidgetDefaultInitDescriptor("_gmail_header_fill_color", "gmail", "header_fill_color", "color", [0, 0, 0, 0]),
-    WidgetDefaultInitDescriptor("_gmail_header_border_color", "gmail", "header_border_color", "color", [255, 255, 255, 255]),
-    WidgetDefaultInitDescriptor("_gmail_separator_color", "gmail", "separator_color", "color", [200, 200, 200, 40]),
-    WidgetDefaultInitDescriptor("_gmail_boundary_separator_color", "gmail", "boundary_separator_color", "color", [180, 180, 180, 80]),
-    WidgetDefaultInitDescriptor("_media_artwork_size", "media", "artwork_size", "int", 200),
+    WidgetDefaultInitDescriptor("_global_card_border_width", "global", "card_border_width_px", "int"),
+    WidgetDefaultInitDescriptor("_clock_color", "clock", "color", "color"),
+    WidgetDefaultInitDescriptor("_weather_color", "weather", "color", "color"),
+    WidgetDefaultInitDescriptor("_clock_border_color", "clock", "border_color", "color"),
+    WidgetDefaultInitDescriptor("_clock_bg_color", "clock", "bg_color", "color"),
+    WidgetDefaultInitDescriptor("_weather_bg_color", "weather", "bg_color", "color"),
+    WidgetDefaultInitDescriptor("_weather_border_color", "weather", "border_color", "color"),
+    WidgetDefaultInitDescriptor("_media_color", "media", "color", "color"),
+    WidgetDefaultInitDescriptor("_media_bg_color", "media", "bg_color", "color"),
+    WidgetDefaultInitDescriptor("_media_border_color", "media", "border_color", "color"),
+    WidgetDefaultInitDescriptor("_media_header_fill_color", "media", "header_fill_color", "color"),
+    WidgetDefaultInitDescriptor("_media_header_border_color", "media", "header_border_color", "color"),
+    WidgetDefaultInitDescriptor("_media_volume_track_color", "media", "spotify_volume_track_color", "color"),
+    WidgetDefaultInitDescriptor("_media_volume_fill_color", "media", "spotify_volume_fill_color", "color"),
+    WidgetDefaultInitDescriptor("_media_volume_border_color", "media", "spotify_volume_border_color", "color"),
+    WidgetDefaultInitDescriptor("_media_progress_track_color", "media", "playback_progress_track_color", "color"),
+    WidgetDefaultInitDescriptor("_media_progress_fill_color", "media", "playback_progress_fill_color", "color"),
+    WidgetDefaultInitDescriptor("_media_progress_shadow_color", "media", "playback_progress_shadow_color", "color"),
+    WidgetDefaultInitDescriptor("_media_progress_glow_color", "media", "playback_progress_glow_color", "color"),
+    WidgetDefaultInitDescriptor("_spotify_vis_fill_color", "spotify_visualizer", "bar_fill_color", "color"),
+    WidgetDefaultInitDescriptor("_spotify_vis_border_color", "spotify_visualizer", "bar_border_color", "color"),
+    WidgetDefaultInitDescriptor("_reddit_color", "reddit", "color", "color"),
+    WidgetDefaultInitDescriptor("_reddit_bg_color", "reddit", "bg_color", "color"),
+    WidgetDefaultInitDescriptor("_reddit_border_color", "reddit", "border_color", "color"),
+    WidgetDefaultInitDescriptor("_reddit_header_fill_color", "reddit", "header_fill_color", "color"),
+    WidgetDefaultInitDescriptor("_reddit_header_border_color", "reddit", "header_border_color", "color"),
+    WidgetDefaultInitDescriptor("_gmail_color", "gmail", "color", "color"),
+    WidgetDefaultInitDescriptor("_gmail_bg_color", "gmail", "bg_color", "color"),
+    WidgetDefaultInitDescriptor("_gmail_border_color", "gmail", "border_color", "color"),
+    WidgetDefaultInitDescriptor("_gmail_header_fill_color", "gmail", "header_fill_color", "color"),
+    WidgetDefaultInitDescriptor("_gmail_header_border_color", "gmail", "header_border_color", "color"),
+    WidgetDefaultInitDescriptor("_gmail_separator_color", "gmail", "separator_color", "color"),
+    WidgetDefaultInitDescriptor("_gmail_boundary_separator_color", "gmail", "boundary_separator_color", "color"),
+    WidgetDefaultInitDescriptor("_media_artwork_size", "media", "artwork_size", "int"),
 )
 
 
@@ -2151,19 +2200,24 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
         position_attr_name="clock_position",
         monitor_attr_name="clock_monitor_combo",
         fields=(
-            WidgetPreviewFieldDescriptor("enabled", "clock_enabled", "checked", False),
-            WidgetPreviewFieldDescriptor("display_mode", "clock_analog_mode", "clock_display_mode", "digital"),
-            WidgetPreviewFieldDescriptor("position", "clock_position", "current_text", "Top Right"),
-            WidgetPreviewFieldDescriptor("monitor", "clock_monitor_combo", "current_text", "ALL"),
-            WidgetPreviewFieldDescriptor("font_size", "clock_font_size", "value", 48),
-            WidgetPreviewFieldDescriptor("show_seconds", "clock_seconds", "checked", False),
-            WidgetPreviewFieldDescriptor("show_timezone_label", "clock_show_tz", "checked", False),
-            WidgetPreviewFieldDescriptor("show_day_of_week", "clock_show_day_of_week", "checked", False),
-            WidgetPreviewFieldDescriptor("show_date", "clock_show_date", "checked", False),
-            WidgetPreviewFieldDescriptor("show_separator", "clock_show_separator", "checked", False),
-            WidgetPreviewFieldDescriptor("separator_thickness", "clock_separator_thickness", "value", 2),
-            WidgetPreviewFieldDescriptor("calendar_layout", "clock_calendar_layout", "current_data", "shared_line"),
-            WidgetPreviewFieldDescriptor("calendar_font_size", "clock_calendar_font_size", "value", 20),
+            WidgetPreviewFieldDescriptor("enabled", "clock_enabled", "checked"),
+            WidgetPreviewFieldDescriptor("display_mode", "clock_analog_mode", "clock_display_mode"),
+            WidgetPreviewFieldDescriptor("position", "clock_position", "current_text"),
+            WidgetPreviewFieldDescriptor("monitor", "clock_monitor_combo", "current_text"),
+            WidgetPreviewFieldDescriptor("font_size", "clock_font_size", "value"),
+            WidgetPreviewFieldDescriptor("show_seconds", "clock_seconds", "checked"),
+            WidgetPreviewFieldDescriptor(
+                "show_timezone_label",
+                "clock_show_tz",
+                "checked",
+                canonical_key="show_timezone",
+            ),
+            WidgetPreviewFieldDescriptor("show_day_of_week", "clock_show_day_of_week", "checked"),
+            WidgetPreviewFieldDescriptor("show_date", "clock_show_date", "checked"),
+            WidgetPreviewFieldDescriptor("show_separator", "clock_show_separator", "checked"),
+            WidgetPreviewFieldDescriptor("separator_thickness", "clock_separator_thickness", "value"),
+            WidgetPreviewFieldDescriptor("calendar_layout", "clock_calendar_layout", "current_data"),
+            WidgetPreviewFieldDescriptor("calendar_font_size", "clock_calendar_font_size", "value"),
         ),
     ),
     WidgetStackPreviewDescriptor(
@@ -2173,9 +2227,9 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
         position_attr_name="clock_position",
         monitor_attr_name="clock2_monitor_combo",
         fields=(
-            WidgetPreviewFieldDescriptor("enabled", "clock2_enabled", "checked", False),
-            WidgetPreviewFieldDescriptor("position", "clock_position", "current_text", "Top Right"),
-            WidgetPreviewFieldDescriptor("monitor", "clock2_monitor_combo", "current_text", "ALL"),
+            WidgetPreviewFieldDescriptor("enabled", "clock2_enabled", "checked"),
+            WidgetPreviewFieldDescriptor("position", "clock_position", "current_text"),
+            WidgetPreviewFieldDescriptor("monitor", "clock2_monitor_combo", "current_text"),
         ),
     ),
     WidgetStackPreviewDescriptor(
@@ -2185,9 +2239,9 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
         position_attr_name="clock_position",
         monitor_attr_name="clock3_monitor_combo",
         fields=(
-            WidgetPreviewFieldDescriptor("enabled", "clock3_enabled", "checked", False),
-            WidgetPreviewFieldDescriptor("position", "clock_position", "current_text", "Top Right"),
-            WidgetPreviewFieldDescriptor("monitor", "clock3_monitor_combo", "current_text", "ALL"),
+            WidgetPreviewFieldDescriptor("enabled", "clock3_enabled", "checked"),
+            WidgetPreviewFieldDescriptor("position", "clock_position", "current_text"),
+            WidgetPreviewFieldDescriptor("monitor", "clock3_monitor_combo", "current_text"),
         ),
     ),
     WidgetStackPreviewDescriptor(
@@ -2197,11 +2251,11 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
         position_attr_name="weather_position",
         monitor_attr_name="weather_monitor_combo",
         fields=(
-            WidgetPreviewFieldDescriptor("enabled", "weather_enabled", "checked", False),
-            WidgetPreviewFieldDescriptor("position", "weather_position", "current_text", "Top Left"),
-            WidgetPreviewFieldDescriptor("monitor", "weather_monitor_combo", "current_text", "ALL"),
-            WidgetPreviewFieldDescriptor("font_size", "weather_font_size", "value", 18),
-            WidgetPreviewFieldDescriptor("show_forecast", "weather_show_forecast", "checked", False),
+            WidgetPreviewFieldDescriptor("enabled", "weather_enabled", "checked"),
+            WidgetPreviewFieldDescriptor("position", "weather_position", "current_text"),
+            WidgetPreviewFieldDescriptor("monitor", "weather_monitor_combo", "current_text"),
+            WidgetPreviewFieldDescriptor("font_size", "weather_font_size", "value"),
+            WidgetPreviewFieldDescriptor("show_forecast", "weather_show_forecast", "checked"),
         ),
     ),
     WidgetStackPreviewDescriptor(
@@ -2211,11 +2265,11 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
         position_attr_name="media_position",
         monitor_attr_name="media_monitor_combo",
         fields=(
-            WidgetPreviewFieldDescriptor("enabled", "media_enabled", "checked", False),
-            WidgetPreviewFieldDescriptor("position", "media_position", "current_text", "Bottom Right"),
-            WidgetPreviewFieldDescriptor("monitor", "media_monitor_combo", "current_text", "ALL"),
-            WidgetPreviewFieldDescriptor("font_size", "media_font_size", "value", 14),
-            WidgetPreviewFieldDescriptor("artwork_size", "media_artwork_size", "value", 80),
+            WidgetPreviewFieldDescriptor("enabled", "media_enabled", "checked"),
+            WidgetPreviewFieldDescriptor("position", "media_position", "current_text"),
+            WidgetPreviewFieldDescriptor("monitor", "media_monitor_combo", "current_text"),
+            WidgetPreviewFieldDescriptor("font_size", "media_font_size", "value"),
+            WidgetPreviewFieldDescriptor("artwork_size", "media_artwork_size", "value"),
         ),
     ),
     WidgetStackPreviewDescriptor(
@@ -2225,11 +2279,11 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
         position_attr_name="reddit_position",
         monitor_attr_name="reddit_monitor_combo",
         fields=(
-            WidgetPreviewFieldDescriptor("enabled", "reddit_enabled", "checked", False),
-            WidgetPreviewFieldDescriptor("position", "reddit_position", "current_text", "Bottom Right"),
-            WidgetPreviewFieldDescriptor("monitor", "reddit_monitor_combo", "current_text", "ALL"),
-            WidgetPreviewFieldDescriptor("font_size", "reddit_font_size", "value", 18),
-            WidgetPreviewFieldDescriptor("limit", "reddit_items", "value", 10),
+            WidgetPreviewFieldDescriptor("enabled", "reddit_enabled", "checked"),
+            WidgetPreviewFieldDescriptor("position", "reddit_position", "current_text"),
+            WidgetPreviewFieldDescriptor("monitor", "reddit_monitor_combo", "current_text"),
+            WidgetPreviewFieldDescriptor("font_size", "reddit_font_size", "value"),
+            WidgetPreviewFieldDescriptor("limit", "reddit_items", "value"),
         ),
     ),
     WidgetStackPreviewDescriptor(
@@ -2239,10 +2293,10 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
         position_attr_name="reddit2_position",
         monitor_attr_name="reddit2_monitor_combo",
         fields=(
-            WidgetPreviewFieldDescriptor("enabled", "reddit2_enabled", "checked", False),
-            WidgetPreviewFieldDescriptor("position", "reddit2_position", "current_text", "Top Left"),
-            WidgetPreviewFieldDescriptor("monitor", "reddit2_monitor_combo", "current_text", "ALL"),
-            WidgetPreviewFieldDescriptor("limit", "reddit2_items", "value", 20),
+            WidgetPreviewFieldDescriptor("enabled", "reddit2_enabled", "checked"),
+            WidgetPreviewFieldDescriptor("position", "reddit2_position", "current_text"),
+            WidgetPreviewFieldDescriptor("monitor", "reddit2_monitor_combo", "current_text"),
+            WidgetPreviewFieldDescriptor("limit", "reddit2_items", "value"),
         ),
     ),
     WidgetStackPreviewDescriptor(
@@ -2252,10 +2306,10 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
         position_attr_name="gmail_position",
         monitor_attr_name="gmail_monitor_combo",
         fields=(
-            WidgetPreviewFieldDescriptor("enabled", "gmail_enabled", "checked", False),
-            WidgetPreviewFieldDescriptor("position", "gmail_position", "current_text", "Top Left"),
-            WidgetPreviewFieldDescriptor("monitor", "gmail_monitor_combo", "current_text", "ALL"),
-            WidgetPreviewFieldDescriptor("limit", "gmail_limit", "value", 5),
+            WidgetPreviewFieldDescriptor("enabled", "gmail_enabled", "checked"),
+            WidgetPreviewFieldDescriptor("position", "gmail_position", "current_text"),
+            WidgetPreviewFieldDescriptor("monitor", "gmail_monitor_combo", "current_text"),
+            WidgetPreviewFieldDescriptor("limit", "gmail_limit", "value"),
         ),
     ),
     WidgetStackPreviewDescriptor(
@@ -2265,10 +2319,10 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
         position_attr_name="steam_progress_position",
         monitor_attr_name="steam_progress_monitor_combo",
         fields=(
-            WidgetPreviewFieldDescriptor("enabled", "steam_progress_enabled", "checked", False),
-            WidgetPreviewFieldDescriptor("position", "steam_progress_position", "current_text", "Top Right"),
-            WidgetPreviewFieldDescriptor("monitor", "steam_progress_monitor_combo", "current_text", "ALL"),
-            WidgetPreviewFieldDescriptor("font_size", "steam_progress_font_size", "value", 14),
+            WidgetPreviewFieldDescriptor("enabled", "steam_progress_enabled", "checked"),
+            WidgetPreviewFieldDescriptor("position", "steam_progress_position", "current_text"),
+            WidgetPreviewFieldDescriptor("monitor", "steam_progress_monitor_combo", "current_text"),
+            WidgetPreviewFieldDescriptor("font_size", "steam_progress_font_size", "value"),
         ),
         family_enabled_attr_name="steam_enabled",
         dev_feature_gate="steam",
@@ -2280,10 +2334,10 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
         position_attr_name="achievement_pulse_position",
         monitor_attr_name="achievement_pulse_monitor_combo",
         fields=(
-            WidgetPreviewFieldDescriptor("enabled", "achievement_pulse_enabled", "checked", False),
-            WidgetPreviewFieldDescriptor("position", "achievement_pulse_position", "current_text", "Middle Right"),
-            WidgetPreviewFieldDescriptor("monitor", "achievement_pulse_monitor_combo", "current_text", "ALL"),
-            WidgetPreviewFieldDescriptor("font_size", "achievement_pulse_font_size", "value", 14),
+            WidgetPreviewFieldDescriptor("enabled", "achievement_pulse_enabled", "checked"),
+            WidgetPreviewFieldDescriptor("position", "achievement_pulse_position", "current_text"),
+            WidgetPreviewFieldDescriptor("monitor", "achievement_pulse_monitor_combo", "current_text"),
+            WidgetPreviewFieldDescriptor("font_size", "achievement_pulse_font_size", "value"),
         ),
         family_enabled_attr_name="steam_enabled",
     ),
@@ -2294,10 +2348,10 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
         position_attr_name="abandonment_issues_position",
         monitor_attr_name="abandonment_issues_monitor_combo",
         fields=(
-            WidgetPreviewFieldDescriptor("enabled", "abandonment_issues_enabled", "checked", False),
-            WidgetPreviewFieldDescriptor("position", "abandonment_issues_position", "current_text", "Bottom Right"),
-            WidgetPreviewFieldDescriptor("monitor", "abandonment_issues_monitor_combo", "current_text", "ALL"),
-            WidgetPreviewFieldDescriptor("font_size", "abandonment_issues_font_size", "value", 14),
+            WidgetPreviewFieldDescriptor("enabled", "abandonment_issues_enabled", "checked"),
+            WidgetPreviewFieldDescriptor("position", "abandonment_issues_position", "current_text"),
+            WidgetPreviewFieldDescriptor("monitor", "abandonment_issues_monitor_combo", "current_text"),
+            WidgetPreviewFieldDescriptor("font_size", "abandonment_issues_font_size", "value"),
         ),
         family_enabled_attr_name="steam_enabled",
     ),
@@ -2308,10 +2362,10 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
         position_attr_name="friend_pulse_position",
         monitor_attr_name="friend_pulse_monitor_combo",
         fields=(
-            WidgetPreviewFieldDescriptor("enabled", "friend_pulse_enabled", "checked", False),
-            WidgetPreviewFieldDescriptor("position", "friend_pulse_position", "current_text", "Top Left"),
-            WidgetPreviewFieldDescriptor("monitor", "friend_pulse_monitor_combo", "current_text", "ALL"),
-            WidgetPreviewFieldDescriptor("font_size", "friend_pulse_font_size", "value", 14),
+            WidgetPreviewFieldDescriptor("enabled", "friend_pulse_enabled", "checked"),
+            WidgetPreviewFieldDescriptor("position", "friend_pulse_position", "current_text"),
+            WidgetPreviewFieldDescriptor("monitor", "friend_pulse_monitor_combo", "current_text"),
+            WidgetPreviewFieldDescriptor("font_size", "friend_pulse_font_size", "value"),
         ),
         family_enabled_attr_name="steam_enabled",
         dev_feature_gate="steam",

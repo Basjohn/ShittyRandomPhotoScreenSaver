@@ -296,14 +296,14 @@ class QuickBubbleRenderer:
             0.0,
             min(
                 1.5,
-                float(parameter(parameters, "bubble_trail_strength", 0.0)),
+                float(parameter(parameters, "bubble_trail_strength")),
             ),
         )
         tail_opacity = max(
             0.0,
             min(
                 0.85,
-                float(parameter(parameters, "bubble_tail_opacity", 0.0)),
+                float(parameter(parameters, "bubble_tail_opacity")),
             ),
         )
         if payload.trails and payload.bubble_count:
@@ -330,10 +330,10 @@ class QuickBubbleRenderer:
         )
 
         specular_direction = get_bubble_specular_shader_vector(
-            str(parameter(parameters, "bubble_specular_direction", "top_left"))
+            str(parameter(parameters, "bubble_specular_direction"))
         )
         gradient_name = str(
-            parameter(parameters, "bubble_gradient_direction", "top")
+            parameter(parameters, "bubble_gradient_direction")
         )
         gradient_direction = get_bubble_gradient_shader_vector(gradient_name)
         gl.glUniform2f(uniforms["u_specular_dir"], *specular_direction)
@@ -343,46 +343,26 @@ class QuickBubbleRenderer:
             get_bubble_gradient_shader_mode(gradient_name),
         )
 
-        color_values = (
-            (
-                "u_outline_color",
-                "bubble_outline_color",
-                (255, 255, 255, 230),
-            ),
-            (
-                "u_specular_color",
-                "bubble_specular_color",
-                (255, 255, 255, 255),
-            ),
-            (
-                "u_gradient_light",
-                "bubble_gradient_light",
-                (210, 170, 120, 255),
-            ),
-            (
-                "u_gradient_dark",
-                "bubble_gradient_dark",
-                (80, 60, 50, 255),
-            ),
-            (
-                "u_pop_color",
-                "bubble_pop_color",
-                (255, 255, 255, 180),
-            ),
+        color_parameters = (
+            ("u_outline_color", "bubble_outline_color"),
+            ("u_specular_color", "bubble_specular_color"),
+            ("u_gradient_light", "bubble_gradient_light"),
+            ("u_gradient_dark", "bubble_gradient_dark"),
+            ("u_pop_color", "bubble_pop_color"),
         )
-        for uniform_name, parameter_name, default in color_values:
+        for uniform_name, parameter_name in color_parameters:
             gl.glUniform4f(
                 uniforms[uniform_name],
-                *rgba(parameter(parameters, parameter_name, None), default=default),
+                *rgba(parameter(parameters, parameter_name)),
             )
 
         ghost_alpha = 0.0
-        if bool(parameter(parameters, "bubble_ghosting_enabled", False)):
+        if bool(parameter(parameters, "bubble_ghosting_enabled")):
             ghost_alpha = max(
                 0.0,
                 min(
                     1.0,
-                    float(parameter(parameters, "bubble_ghost_alpha", 0.0)),
+                    float(parameter(parameters, "bubble_ghost_alpha")),
                 ),
             )
         gl.glUniform1f(uniforms["u_ghost_alpha"], ghost_alpha)
@@ -390,17 +370,17 @@ class QuickBubbleRenderer:
             0.1,
             min(
                 1.0,
-                float(parameter(parameters, "bubble_ghost_decay", 0.4)),
+                float(parameter(parameters, "bubble_ghost_decay")),
             ),
         )
         gl.glUniform1f(uniforms["u_ghost_decay"], ghost_decay)
         hue = 0.0
-        if bool(parameter(parameters, "rainbow_enabled", False)):
+        if bool(parameter(parameters, "rainbow_enabled")):
             speed = max(
                 0.01,
                 min(
                     5.0,
-                    float(parameter(parameters, "rainbow_speed", 0.5)),
+                    float(parameter(parameters, "rainbow_speed")),
                 ),
             )
             hue = safe_hue(mode_state.simulation_timestamp * speed * 0.1)

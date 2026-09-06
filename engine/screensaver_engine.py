@@ -34,13 +34,13 @@ from core.resources import ResourceManager
 from core.threading import ThreadManager
 from core.animation import AnimationManager
 from core.settings import SettingsManager
+from core.settings.default_contract import require_canonical_default
 from core.logging.logger import get_logger
 from core.process.types import WorkerType
 from core.process.supervisor import ProcessSupervisor
 from core.process.workers import (
     image_worker_main,
     rss_worker_main,
-    transition_worker_main,
 )
 
 from engine.display_manager import DisplayManager
@@ -58,6 +58,7 @@ from rendering.transition_registry import (
     is_transition_available_for_hw,
 )
 from core.settings.capability_activation import (
+    get_effective_random_pool,
     is_transition_activated,
     normalize_transition_capability_state,
 )
@@ -482,7 +483,13 @@ class ScreensaverEngine(QObject):
             logger.debug("SettingsManager signal bridged to EventSystem")
             
             # Sync transition cycle index with current settings
-            current_transition = self.settings_manager.get('transitions', {}).get('type', 'Crossfade')
+            transitions_state = self.settings_manager.get('transitions')
+            default_transition = str(require_canonical_default('transitions.type'))
+            current_transition = (
+                transitions_state.get('type', default_transition)
+                if isinstance(transitions_state, dict)
+                else default_transition
+            )
             try:
                 self._current_transition_index = self._transition_types.index(current_transition)
                 logger.debug(f"Transition cycle index synced to {self._current_transition_index} ({current_transition})")
@@ -500,8 +507,7 @@ class ScreensaverEngine(QObject):
             # Register worker factories
             self._process_supervisor.register_worker_factory(WorkerType.IMAGE, image_worker_main)
             self._process_supervisor.register_worker_factory(WorkerType.RSS, rss_worker_main)
-            self._process_supervisor.register_worker_factory(WorkerType.TRANSITION, transition_worker_main)
-            logger.info("ProcessSupervisor initialized with 3 worker factories")
+            logger.info("ProcessSupervisor initialized with 2 worker factories")
             
             logger.info("Core systems initialized successfully")
             return True
@@ -518,16 +524,16 @@ class ScreensaverEngine(QObject):
             # Settings already loaded by SettingsManager on init
             # Just verify key settings exist
             
-            interval = self.settings_manager.get('timing.interval', 10)
+            interval = self.settings_manager.get('timing.interval')
             logger.info(f"Image rotation interval: {interval}s")
             
-            display_mode = self.settings_manager.get('display.mode', 'fill')
+            display_mode = self.settings_manager.get('display.mode')
             logger.info(f"Display mode: {display_mode}")
             
-            shuffle = self.settings_manager.get('queue.shuffle', True)
+            shuffle = self.settings_manager.get('queue.shuffle')
             logger.info(f"Shuffle enabled: {shuffle}")
             # Cache-related settings
-            self._prefetch_ahead = int(self.settings_manager.get('cache.prefetch_ahead', 5))
+            self._prefetch_ahead = int(self.settings_manager.get('cache.prefetch_ahead'))
             logger.info(f"Prefetch ahead: {self._prefetch_ahead}")
             
             return True
@@ -544,7 +550,7 @@ class ScreensaverEngine(QObject):
             sources_initialized = 0
             
             # Get folder sources from settings (using dot notation)
-            folder_paths = self.settings_manager.get('sources.folders', [])
+            folder_paths = self.settings_manager.get('sources.folders')
             for folder_path in folder_paths:
                 try:
                     folder_source = FolderSource(Path(folder_path))
@@ -555,9 +561,9 @@ class ScreensaverEngine(QObject):
                     logger.warning(f"[FALLBACK] Failed to add folder source {folder_path}: {e}")
             
             # Get RSS sources from settings
-            rss_feeds = self.settings_manager.get('sources.rss_feeds', [])
-            rss_save_to_disk = self.settings_manager.get('sources.rss_save_to_disk', False)
-            rss_save_directory = self.settings_manager.get('sources.rss_save_directory', '')
+            rss_feeds = self.settings_manager.get('sources.rss_feeds')
+            rss_save_to_disk = self.settings_manager.get('sources.rss_save_to_disk')
+            rss_save_directory = self.settings_manager.get('sources.rss_save_directory')
 
             # Create single RSSCoordinator with all feed URLs
             if rss_feeds:
@@ -598,9 +604,9 @@ class ScreensaverEngine(QObject):
             logger.info("Building image queue...")
             
             # Get queue settings
-            shuffle = self.settings_manager.get('queue.shuffle', True)
-            history_size = self.settings_manager.get('queue.history_size', 50)
-            local_ratio = self.settings_manager.get('sources.local_ratio', 60)
+            shuffle = self.settings_manager.get('queue.shuffle')
+            history_size = self.settings_manager.get('queue.history_size')
+            local_ratio = self.settings_manager.get('sources.local_ratio')
             
             # Create queue with ratio-based source selection
             self.image_queue = ImageQueue(
@@ -718,11 +724,11 @@ class ScreensaverEngine(QObject):
 
     def _initialize_cache_prefetcher(self) -> None:
         try:
-            configured_items = int(self.settings_manager.get('cache.max_items', 16))
-            configured_mem_mb = int(self.settings_manager.get('cache.max_memory_mb', 256))
+            configured_items = int(self.settings_manager.get('cache.max_items'))
+            configured_mem_mb = int(self.settings_manager.get('cache.max_memory_mb'))
             max_items = max(2, min(32, configured_items))
             max_mem_mb = max(64, min(256, configured_mem_mb))
-            configured_conc = int(self.settings_manager.get('cache.max_concurrent', 2))
+            configured_conc = int(self.settings_manager.get('cache.max_concurrent'))
             max_conc = max(1, min(4, configured_conc))
             if (
                 max_items != configured_items
@@ -773,10 +779,10 @@ class ScreensaverEngine(QObject):
             self._pending_displays_ready_generation = None
             
             # Get display settings
-            display_mode_str = self.settings_manager.get('display.mode', 'fill')
+            display_mode_str = self.settings_manager.get('display.mode')
             display_mode = DisplayMode.from_string(display_mode_str)
             
-            same_image = self.settings_manager.get('display.same_image_all_monitors', True)
+            same_image = self.settings_manager.get('display.same_image_all_monitors')
             
             # Create display manager (inject core managers)
             self.display_manager = DisplayManager(
@@ -1019,7 +1025,7 @@ class ScreensaverEngine(QObject):
 
     def _setup_rotation_timer(self) -> None:
         """Setup timer for image rotation."""
-        interval_seconds = self.settings_manager.get('timing.interval', 10)
+        interval_seconds = self.settings_manager.get('timing.interval')
         interval_ms = interval_seconds * 1000
 
         if self._rotation_timer:
@@ -1085,7 +1091,7 @@ class ScreensaverEngine(QObject):
         # Determine max workers based on settings and CPU cores
         import os
         cpu_count = os.cpu_count() or 4
-        max_workers_setting = self.settings_manager.get('workers.max_workers', 'auto')
+        max_workers_setting = self.settings_manager.get('workers.max_workers')
         
         if max_workers_setting == 'auto':
             # Half CPU cores for background app, minimum 2, maximum 4
@@ -1095,7 +1101,9 @@ class ScreensaverEngine(QObject):
                 max_workers = int(max_workers_setting)
                 max_workers = max(1, min(8, max_workers))
             except (ValueError, TypeError):
-                max_workers = 4
+                # Malformed persisted state repairs to the canonical ``auto``
+                # policy rather than inventing a local worker-count default.
+                max_workers = max(2, min(4, cpu_count // 2))
         
         logger.info(f"Worker pool: max_workers={max_workers} (CPU cores={cpu_count})")
         
@@ -1114,7 +1122,7 @@ class ScreensaverEngine(QObject):
                 logger.debug(f"{name} skipped - max_workers limit reached ({max_workers})")
                 continue
                 
-            if self.settings_manager.get(setting_key, True):
+            if bool(self.settings_manager.get(setting_key)):
                 if self._process_supervisor.start(worker_type):
                     logger.info(f"{name} started successfully")
                     workers_started += 1
@@ -1367,22 +1375,6 @@ class ScreensaverEngine(QObject):
 
         _retry._srpss_runtime_generation = runtime_generation
         ThreadManager.single_shot(delay_ms, _retry)
-    def _load_image_via_worker(
-        self,
-        image_path: str,
-        target_width: int,
-        target_height: int,
-        display_mode: str = "fill",
-        sharpen: bool = False,
-        timeout_ms: int = 500,
-    ) -> Optional[QImage]:
-        """Delegates to engine.image_pipeline."""
-        from engine.image_pipeline import load_image_via_worker
-        return load_image_via_worker(
-            self, image_path, target_width, target_height,
-            display_mode=display_mode, sharpen=sharpen, timeout_ms=timeout_ms,
-        )
-
     def _load_image_task(self, image_meta: ImageMetadata, preferred_size: Optional[tuple] = None) -> Optional[QPixmap]:
         """Delegates to engine.image_pipeline."""
         from engine.image_pipeline import load_image_task
@@ -1548,9 +1540,12 @@ class ScreensaverEngine(QObject):
 
     def _prepare_random_transition_if_needed(self) -> str | None:
         try:
-            transitions = self.settings_manager.get('transitions', {})
+            canonical_transitions = require_canonical_default("transitions")
+            if not isinstance(canonical_transitions, dict):
+                raise TypeError("canonical transitions default must be a mapping")
+            transitions = self.settings_manager.get('transitions')
             if not isinstance(transitions, dict):
-                transitions = {}
+                transitions = dict(canonical_transitions)
             # Canonical activation normalization (the one authority): ensure >=1
             # activated transition and reconcile Random with an empty effective
             # pool before selecting. Persist only on an actual repair (rare).
@@ -1560,45 +1555,30 @@ class ScreensaverEngine(QObject):
             # random_always is the single live random-mode authority (E2.6). A
             # legacy type="Random" is migrated once by the normalization above,
             # never treated as a second live random trigger here.
-            raw_rnd = transitions.get('random_always', self.settings_manager.get('transitions.random_always', False))
-            rnd = SettingsManager.to_bool(raw_rnd, False)
+            canonical_random = bool(canonical_transitions["random_always"])
+            raw_rnd = transitions.get('random_always', canonical_random)
+            rnd = SettingsManager.to_bool(raw_rnd, canonical_random)
             if not rnd:
+                canonical_type = str(canonical_transitions["type"])
                 return canonicalize_transition_name(
-                    transitions.get("type", "Crossfade"),
-                    fallback="Crossfade",
+                    transitions.get("type", canonical_type),
+                    fallback=canonicalize_transition_name(canonical_type, fallback=""),
                 )
-            # Available transition types; include GL-only when HW is enabled and
-            # restrict to those enabled in the per-transition pool map.
-            cycle_types = get_transition_setting_names()
+            # Effective Random membership is centralized in capability_activation:
+            # activated ∩ saved pool, with missing members repaired from canonical
+            # defaults.  This engine seam adds only hardware availability.
+            canonical_hw = bool(require_canonical_default("display.hw_accel"))
             try:
-                raw_hw = self.settings_manager.get('display.hw_accel', False)
-                hw = SettingsManager.to_bool(raw_hw, False)
+                hw = self.settings_manager.get_bool('display.hw_accel')
             except Exception as e:
                 logger.debug("[ENGINE] Exception suppressed: %s", e)
-                hw = False
+                hw = canonical_hw
 
-            pool_cfg = transitions.get('pool', {}) if isinstance(transitions.get('pool', {}), dict) else {}
-
-            def _in_pool(name: str) -> bool:
-                try:
-                    if name == "Ripple":
-                        raw_flag = pool_cfg.get("Ripple", pool_cfg.get("Rain Drops", True))
-                    else:
-                        raw_flag = pool_cfg.get(name, True)
-                    return bool(SettingsManager.to_bool(raw_flag, True))
-                except Exception as _e:
-                    logger.debug("[ENGINE] Exception suppressed: %s", _e)
-                    return True
-
-            # Effective random pool = activated ∩ pool-member ∩ hw-available.
-            # A deactivated transition is excluded from runtime selection.
-            available: List[str] = []
-            for name in cycle_types:
-                if not is_transition_available_for_hw(name, hw) or not _in_pool(name):
-                    continue
-                if not is_transition_activated(transitions, name):
-                    continue
-                available.append(name)
+            available = [
+                name
+                for name in get_effective_random_pool(transitions)
+                if is_transition_available_for_hw(name, hw)
+            ]
 
             if not available:
                 # Effective pool (activated ∩ saved pool ∩ hardware) is empty.
@@ -1612,12 +1592,12 @@ class ScreensaverEngine(QObject):
                     "pool (activated ∩ saved pool ∩ hardware)."
                 )
                 return None
-            # Avoid immediate repeats of transition type. Legacy "Shuffle"
-            # selections are treated as "Crossfade" so the engine no longer
-            # reintroduces Shuffle into the pool.
+            # Avoid immediate repeats when runtime history contains a valid
+            # canonical transition. Invalid/retired history means "no prior
+            # choice"; it is not a product-default selection.
             last_type = canonicalize_transition_name(
                 self.settings_manager.get('transitions.last_random_choice', None),
-                fallback="Crossfade",
+                fallback="",
             )
             candidates = [t for t in available if t != last_type] if last_type in available else available
             if not candidates:
@@ -1904,7 +1884,7 @@ class ScreensaverEngine(QObject):
         if not self._rotation_timer:
             return
         
-        interval_seconds = self.settings_manager.get('timing.interval', 10)
+        interval_seconds = self.settings_manager.get('timing.interval')
         interval_ms = interval_seconds * 1000
         
         self._rotation_timer.setInterval(interval_ms)
@@ -1915,7 +1895,7 @@ class ScreensaverEngine(QObject):
         if not self.display_manager:
             return
         
-        display_mode_str = self.settings_manager.get('display.mode', 'fill')
+        display_mode_str = self.settings_manager.get('display.mode')
         display_mode = DisplayMode.from_string(display_mode_str)
         
         self.display_manager.set_display_mode(display_mode)
@@ -1926,7 +1906,7 @@ class ScreensaverEngine(QObject):
         if not self.image_queue:
             return
         
-        shuffle = self.settings_manager.get('queue.shuffle', True)
+        shuffle = self.settings_manager.get('queue.shuffle')
         self.image_queue.set_shuffle_enabled(shuffle)
         logger.info(f"Shuffle mode updated: {shuffle}")
     

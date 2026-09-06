@@ -2026,7 +2026,6 @@ class SettingsLogFilter(logging.Filter):
 
     _NAME_PREFIXES = (
         "core.settings",
-        "ui.tabs.settings_binding",
     )
     _NAME_EXACT = {
         "SettingsManager",

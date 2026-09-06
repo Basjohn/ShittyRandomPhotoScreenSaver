@@ -27,6 +27,7 @@ from core.settings.capability_activation import (
     DEFAULT_RECOVERY_TRANSITION,
     ensure_recovery_transition_activated,
     get_default_activated_transition,
+    get_effective_random_pool,
     is_transition_activated,
     normalize_transition_capability_state,
 )
@@ -109,26 +110,21 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
         logger.warning("No transitions configured; ignoring cycle request")
         return
 
-    raw_hw = engine.settings_manager.get('display.hw_accel', False)
-    hw = SettingsManager.to_bool(raw_hw, False)
-    transitions_config = engine.settings_manager.get('transitions', {})
+    hw = engine.settings_manager.get_bool('display.hw_accel')
+    transitions_config = engine.settings_manager.get('transitions')
     if not isinstance(transitions_config, dict):
         transitions_config = {}
     # Canonical activation normalization before manual cycling (the one authority).
     if normalize_transition_capability_state(transitions_config):
         engine.settings_manager.set('transitions', transitions_config)
         engine.settings_manager.save()
-    pool_cfg = transitions_config.get('pool', {}) if isinstance(transitions_config.get('pool', {}), dict) else {}
+    effective_pool = frozenset(get_effective_random_pool(transitions_config))
 
     def _in_pool(name: str) -> bool:
-        try:
-            descriptor = get_transition_descriptor(name)
-            pool_name = descriptor.random_pool_name if descriptor is not None and descriptor.random_pool_name else name
-            raw_flag = pool_cfg.get(pool_name, True)
-            return bool(SettingsManager.to_bool(raw_flag, True))
-        except Exception as e:
-            logger.debug("[ENGINE] Exception suppressed: %s", e)
-            return True
+        descriptor = get_transition_descriptor(name)
+        if descriptor is None:
+            return False
+        return descriptor.setting_name in effective_pool
 
     # Cycle to next transition honoring HW capabilities and per-type pool
     # membership. Types excluded from the pool will not be selected when
@@ -156,7 +152,7 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
         new_transition = _resolve_cycle_fallback(engine, transitions_config, hw)
         if new_transition in engine._transition_types:
             engine._current_transition_index = engine._transition_types.index(new_transition)
-    transitions_config = engine.settings_manager.get('transitions', {})
+    transitions_config = engine.settings_manager.get('transitions')
     if not isinstance(transitions_config, dict):
         transitions_config = {}
     transitions_config['type'] = new_transition

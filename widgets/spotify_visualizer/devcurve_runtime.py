@@ -346,13 +346,14 @@ def solve_devcurve_frame(
     aggregate_energy = _clamp(aggregate_energy, 0.0, 2.0)
 
     for idx, key in enumerate(_LAYER_ORDER):
-        ls = layer_settings.get(key, {})
-        enabled = bool(ls.get("enabled", True))
-        power = float(ls.get("power", 1.0))
-        offset = float(ls.get("offset", 0.0))
+        ls = layer_settings[key]
+        enabled = bool(ls["enabled"])
+        power = float(ls["power"])
+        offset = float(ls["offset"])
         reactive = state.smooth_energy[key] if enabled else 0.0
-        raw_nodes = layer_shape_nodes.get(key) if isinstance(layer_shape_nodes, dict) else None
-        nodes = raw_nodes if isinstance(raw_nodes, list) and raw_nodes else [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]]
+        nodes = layer_shape_nodes[key]
+        if len(nodes) < 2:
+            raise ValueError(f"DevCurve layer {key!r} requires resolved shape nodes")
         profile = _smooth_points(nodes, DEVCURVE_SAMPLE_COUNT)
         c = _build_curve(
             sample_count=DEVCURVE_SAMPLE_COUNT,
@@ -385,15 +386,15 @@ def solve_devcurve_frame(
     draw_order = sorted(
         _LAYER_ORDER,
         key=lambda src: (
-            int(layer_settings.get(src, {}).get("order", _LAYER_INDEX[src] + 1)),
+            int(layer_settings[src]["order"]),
             _LAYER_INDEX[src],
         ),
     )
     enabled_order = [
-        src for src in draw_order if bool(layer_settings.get(src, {}).get("enabled", True))
+        src for src in draw_order if bool(layer_settings[src]["enabled"])
     ]
     foreground_layer = enabled_order[-1] if enabled_order else ""
-    foreground_layer_id = _LAYER_INDEX.get(foreground_layer, -1)
+    foreground_layer_id = _LAYER_INDEX[foreground_layer] if foreground_layer else -1
     specular_slots: List[List[float]] = [[0.0, 0.0, 0.0, 0.0] for _ in range(3)]
     if foreground_layer and foreground_layer in layers_out:
         curve = layers_out[foreground_layer]

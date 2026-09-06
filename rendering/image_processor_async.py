@@ -1,19 +1,16 @@
 """Async/QImage-based image processing helpers.
 
-Optional further-async path for the image pipeline. This module mirrors the
-behaviour of ``rendering.image_processor.ImageProcessor`` but operates on
-``QImage`` instead of ``QPixmap`` and is safe to run on ThreadManager's
-COMPUTE pool.
+QImage-first processing for the active asynchronous image pipeline. The
+resolved display mode and quality booleans are required inputs; this module
+does not own product defaults and is safe to run off the GUI thread.
 """
 from __future__ import annotations
 
-from typing import Optional, Callable
 
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QImage
 
 from core.logging.logger import get_logger
-from core.threading.manager import ThreadManager, TaskResult
 from rendering.display_modes import DisplayMode
 
 
@@ -39,14 +36,11 @@ class AsyncImageProcessor:
     def process_qimage(
         image: QImage,
         screen_size: QSize,
-        mode: DisplayMode = DisplayMode.FILL,
-        use_lanczos: bool = False,
-        sharpen: bool = False,
+        mode: DisplayMode,
+        use_lanczos: bool,
+        sharpen: bool,
     ) -> QImage:
-        """Synchronous QImage processing that mirrors ImageProcessor.process_image.
-
-        Returns a QImage cropped/scaled to ``screen_size`` according to ``mode``.
-        """
+        """Process one resolved image request into the requested screen size."""
 
         if image.isNull():
             logger.warning("[CACHE][FALLBACK] QImage is null, returning empty ARGB32 image")
@@ -67,45 +61,11 @@ class AsyncImageProcessor:
                 image, screen_size, use_lanczos, sharpen
             )
 
-        logger.error(f"Unknown display mode: {mode}, defaulting to FILL (QImage)")
-        return AsyncImageProcessor._process_fill_qimage(
-            image, screen_size, use_lanczos, sharpen
-        )
-
-    @staticmethod
-    def process_qimage_async(
-        thread_manager: ThreadManager,
-        image: QImage,
-        screen_size: QSize,
-        mode: DisplayMode = DisplayMode.FILL,
-        use_lanczos: bool = False,
-        sharpen: bool = False,
-        *,
-        callback: Optional[Callable[[TaskResult], None]] = None,
-    ) -> str:
-        """Submit QImage processing work to the COMPUTE pool.
-
-        The task function runs entirely on QImage/QPainter and is safe to call on
-        worker threads. Callers must perform any promotion to QPixmap or GL
-        textures on the UI thread using ThreadManager.run_on_ui_thread.
-        """
-
-        if thread_manager is None:
-            raise ValueError("thread_manager is required for async QImage processing")
-
-        def _do_process() -> QImage:
-            return AsyncImageProcessor.process_qimage(
-                image, screen_size, mode, use_lanczos, sharpen
-            )
-
-        return thread_manager.submit_compute_task(
-            _do_process,
-            callback=callback,
-            category="image.processing",
-        )
+        raise ValueError(f"Unknown resolved display mode: {mode!r}")
 
     # ------------------------------------------------------------------
-    # Internal helpers (QImage-based equivalents of ImageProcessor paths)
+    # Internal helpers. Every product choice is passed from the resolved caller;
+    # these helpers own only image-processing mechanics.
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -113,8 +73,8 @@ class AsyncImageProcessor:
         image: QImage,
         width: int,
         height: int,
-        use_lanczos: bool = False,
-        sharpen: bool = False,
+        use_lanczos: bool,
+        sharpen: bool,
     ) -> QImage:
         """Scale a QImage using PIL Lanczos (if available) or Qt."""
 
@@ -228,8 +188,8 @@ class AsyncImageProcessor:
     def _process_fill_qimage(
         image: QImage,
         screen_size: QSize,
-        use_lanczos: bool = True,
-        sharpen: bool = False,
+        use_lanczos: bool,
+        sharpen: bool,
     ) -> QImage:
         img_size = image.size()
 
@@ -325,8 +285,8 @@ class AsyncImageProcessor:
     def _process_fit_qimage(
         image: QImage,
         screen_size: QSize,
-        use_lanczos: bool = True,
-        sharpen: bool = False,
+        use_lanczos: bool,
+        sharpen: bool,
     ) -> QImage:
         if image.height() == 0 or screen_size.height() == 0:
             logger.error(
@@ -388,8 +348,8 @@ class AsyncImageProcessor:
     def _process_shrink_qimage(
         image: QImage,
         screen_size: QSize,
-        use_lanczos: bool = True,
-        sharpen: bool = False,
+        use_lanczos: bool,
+        sharpen: bool,
     ) -> QImage:
         img_size = image.size()
 

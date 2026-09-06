@@ -1,4 +1,4 @@
-﻿<# 
+<# 
 Experimental venv build script for SRPSS Media Center one-dir build.
 
 Intended location:
@@ -219,6 +219,7 @@ foreach ($RequiredBuildCommand in @(
     'Reset-SRPSSBuildDirectory',
     'Remove-SRPSSBuildDirectory',
     'Publish-SRPSSDirectory',
+    'Assert-SRPSSDefaultsAuthority',
     'Assert-SRPSSSourceProductAssets',
     'Assert-SRPSSPythonRuntimeDependencies',
     'Assert-SRPSSOnedirQuickPayload',
@@ -227,6 +228,12 @@ foreach ($RequiredBuildCommand in @(
     if (-not (Get-Command $RequiredBuildCommand -CommandType Function -ErrorAction SilentlyContinue)) {
         throw "Shared build layout did not load required function: $RequiredBuildCommand"
     }
+}
+
+try {
+    Assert-SRPSSDefaultsAuthority -RepoRoot $Root -PythonExe $VenvPython
+} catch {
+    throw "Defaults authority preflight failed: $($_.Exception.Message)"
 }
 
 try {
@@ -317,14 +324,13 @@ $argsList = @(
     "--include-data-dir=images=images",
     "--include-data-files=resources/tutuogg.ogg=resources/tutuogg.ogg",
     "--include-data-files=resources/jedimodeyall.mp3=resources/jedimodeyall.mp3",
-    "--include-data-files=SRPSS.ico=SRPSS.ico",
     "--include-data-dir=widgets/spotify_visualizer/shaders=widgets/spotify_visualizer/shaders",
     "--include-data-dir=rendering/quick/qml=rendering/quick/qml",
     "--include-package=rendering.quick",
     "--include-package=ui.tabs",
     "--include-package=widgets.spotify_visualizer",
-    "--include-package=widgets.spotify_visualizer.renderers",
     "--include-package=rendering.gl_programs",
+    "--include-package=rendering.gl_compositor_pkg",
     "--include-package=OpenGL",
     "--include-package=pyaudiowpatch",
     "--include-package=sounddevice",

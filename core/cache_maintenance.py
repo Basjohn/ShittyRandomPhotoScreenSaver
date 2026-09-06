@@ -88,12 +88,6 @@ def get_cache_family_descriptors(
             "Account-scoped API responses and public artwork. Steam credentials are never included.",
             (CacheTarget(app_root / "steam" / "cache", recursive=True),),
         ),
-        CacheFamilyDescriptor(
-            "settings",
-            "Settings Performance Data",
-            "Cached defaults and font-list data used to open Settings faster.",
-            (CacheTarget(cache_root / "settings_dialog_cache.json"),),
-        ),
     )
 
 

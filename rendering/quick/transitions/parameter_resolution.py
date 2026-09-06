@@ -14,7 +14,7 @@ import math
 import random
 from typing import Protocol
 
-from core.settings.defaults import get_default_settings
+from core.settings.default_contract import require_canonical_default
 from .state import TransitionParameters, TransitionValue, freeze_transition_parameters
 
 
@@ -39,21 +39,20 @@ def _mapping(settings: Mapping[str, object], name: str) -> Mapping[str, object]:
 
 
 def _canonical(name: str) -> Mapping[str, object]:
-    all_defaults = get_default_settings()
-    transitions = all_defaults.get("transitions", {})
-    if not isinstance(transitions, Mapping):
-        return {}
-    value = transitions.get(name, {})
-    return value if isinstance(value, Mapping) else {}
+    value = require_canonical_default(f"transitions.{name}")
+    if not isinstance(value, Mapping):
+        raise TypeError(f"Canonical transitions.{name} default must be a mapping")
+    return value
 
 
 def _value(
     config: Mapping[str, object],
     defaults: Mapping[str, object],
     name: str,
-    fallback: object,
 ) -> object:
-    return config.get(name, defaults.get(name, fallback))
+    if name not in defaults:
+        raise KeyError(f"Canonical transition defaults are missing {name!r}")
+    return config.get(name, defaults[name])
 
 
 def _number(value: object, default: float) -> float:
@@ -105,8 +104,8 @@ def _resolve_blinds(
 ) -> ResolvedPhaseCInputs:
     cfg = _mapping(settings, "blinds")
     defaults = _canonical("blinds")
-    default_direction = str(defaults.get("direction", "Horizontal") or "Horizontal")
-    raw_direction = str(_value(cfg, defaults, "direction", default_direction) or default_direction)
+    default_direction = str(defaults["direction"])
+    raw_direction = str(_value(cfg, defaults, "direction") or default_direction)
     if raw_direction == "Random":
         raw_direction = rng.choice(("Horizontal", "Vertical", "Diagonal"))
     direction = {
@@ -115,8 +114,8 @@ def _resolve_blinds(
         "Diagonal": "diagonal",
     }.get(raw_direction, "horizontal")
 
-    default_feather = _number(defaults.get("feather", 2), 2.0)
-    ui_feather = _number(_value(cfg, defaults, "feather", default_feather), default_feather)
+    default_feather = float(defaults["feather"])
+    ui_feather = _number(_value(cfg, defaults, "feather"), default_feather)
     # Preserve TransitionFactory's UI-scale -> shader-scale conversion.
     feather = max(0.001, min(0.5, (ui_feather / 25.0) * 0.5))
     return _finish(direction, {"feather": feather})
@@ -128,16 +127,16 @@ def _resolve_diffuse(
 ) -> ResolvedPhaseCInputs:
     cfg = _mapping(settings, "diffuse")
     defaults = _canonical("diffuse")
-    default_block_size = max(1, _integer(defaults.get("block_size", 50), 50))
+    default_block_size = max(1, int(defaults["block_size"]))
     block_size = max(
         1,
         _integer(
-            _value(cfg, defaults, "block_size", default_block_size),
+            _value(cfg, defaults, "block_size"),
             default_block_size,
         ),
     )
-    default_shape = str(defaults.get("shape", "Rectangle") or "Rectangle")
-    shape = str(_value(cfg, defaults, "shape", default_shape) or default_shape).strip().lower()
+    default_shape = str(defaults["shape"])
+    shape = str(_value(cfg, defaults, "shape") or default_shape).strip().lower()
     shape_mode = {
         "rectangle": 0,
         "membrane": 1,
@@ -155,13 +154,13 @@ def _resolve_ripple(
 ) -> ResolvedPhaseCInputs:
     cfg = _mapping(settings, "ripple")
     defaults = _canonical("ripple")
-    default_count = _integer(defaults.get("ripple_count", 3), 3)
+    default_count = int(defaults["ripple_count"])
     count = max(
         1,
         min(
             8,
             _integer(
-                _value(cfg, defaults, "ripple_count", default_count),
+                _value(cfg, defaults, "ripple_count"),
                 default_count,
             ),
         ),
@@ -181,27 +180,27 @@ def _resolve_crumble(
 ) -> ResolvedPhaseCInputs:
     cfg = _mapping(settings, "crumble")
     defaults = _canonical("crumble")
-    default_pieces = max(4, _integer(defaults.get("piece_count", 14), 14))
+    default_pieces = max(4, int(defaults["piece_count"]))
     piece_count = max(
         4,
         _integer(
-            _value(cfg, defaults, "piece_count", default_pieces),
+            _value(cfg, defaults, "piece_count"),
             default_pieces,
         ),
     )
-    default_complexity = _number(defaults.get("crack_complexity", 1.0), 1.0)
+    default_complexity = float(defaults["crack_complexity"])
     complexity = max(
         0.5,
         min(
             2.0,
             _number(
-                _value(cfg, defaults, "crack_complexity", default_complexity),
+                _value(cfg, defaults, "crack_complexity"),
                 default_complexity,
             ),
         ),
     )
-    default_weighting = str(defaults.get("weighting", "Random Choice") or "Random Choice")
-    weighting = str(_value(cfg, defaults, "weighting", default_weighting) or default_weighting)
+    default_weighting = str(defaults["weighting"])
+    weighting = str(_value(cfg, defaults, "weighting") or default_weighting)
     # Deliberately preserve CURRENT old factory semantics. The Settings UI
     # exposes "Bias Old Image" / "Bias New Image", but the old factory does
     # not recognize either spelling and falls through to 0.0. H0 may repair
@@ -234,8 +233,8 @@ def _resolve_particle(
     cfg = _mapping(settings, "particle")
     defaults = _canonical("particle")
 
-    default_mode = str(defaults.get("mode", "Converge") or "Converge")
-    mode_text = str(_value(cfg, defaults, "mode", default_mode) or default_mode)
+    default_mode = str(defaults["mode"])
+    mode_text = str(_value(cfg, defaults, "mode") or default_mode)
     mode = {
         "Directional": 0,
         "Swirl": 1,
@@ -243,9 +242,9 @@ def _resolve_particle(
         "Random": 3,
     }.get(mode_text, 0)
 
-    default_direction = str(defaults.get("direction", "Left to Right") or "Left to Right")
+    default_direction = str(defaults["direction"])
     direction_text = str(
-        _value(cfg, defaults, "direction", default_direction) or default_direction
+        _value(cfg, defaults, "direction") or default_direction
     )
     # "Random" is intentionally 0: that is the current old factory's
     # fall-through for the Settings UI spelling. Legacy "Random Direction"
@@ -264,13 +263,13 @@ def _resolve_particle(
         "Random": 0,
     }.get(direction_text, 0)
 
-    default_swirl_order = _integer(defaults.get("swirl_order", 0), 0)
+    default_swirl_order = int(defaults["swirl_order"])
     swirl_order = max(
         0,
         min(
             2,
             _integer(
-                _value(cfg, defaults, "swirl_order", default_swirl_order),
+                _value(cfg, defaults, "swirl_order"),
                 default_swirl_order,
             ),
         ),
@@ -282,18 +281,18 @@ def _resolve_particle(
         else:
             swirl_order = int(rng.randint(0, 2))
 
-    default_radius = _number(defaults.get("particle_radius", 10.0), 10.0)
+    default_radius = float(defaults["particle_radius"])
     radius = max(
         8.0,
         _number(
-            _value(cfg, defaults, "particle_radius", default_radius),
+            _value(cfg, defaults, "particle_radius"),
             default_radius,
         ),
     )
-    default_overlap = _number(defaults.get("overlap", 4.0), 4.0)
+    default_overlap = float(defaults["overlap"])
     overlap = max(
         0.0,
-        _number(_value(cfg, defaults, "overlap", default_overlap), default_overlap),
+        _number(_value(cfg, defaults, "overlap"), default_overlap),
     )
     if overlap >= radius * 2.0:
         raise ValueError("resolved Particle overlap must be smaller than particle diameter")
@@ -301,33 +300,33 @@ def _resolve_particle(
     # Preserve the old runtime's numerical index contract. Current Settings
     # labels for light direction / swirl order do not match shader comments
     # one-for-one; changing meanings belongs to the later settings epoch.
-    default_light = _integer(defaults.get("light_direction", 0), 0)
+    default_light = int(defaults["light_direction"])
     light_direction = max(
         0,
         min(
             4,
             _integer(
-                _value(cfg, defaults, "light_direction", default_light),
+                _value(cfg, defaults, "light_direction"),
                 default_light,
             ),
         ),
     )
-    default_gloss = _number(defaults.get("gloss_size", 72.0), 72.0)
+    default_gloss = float(defaults["gloss_size"])
     gloss_size = max(
         16.0,
         min(
             128.0,
-            _number(_value(cfg, defaults, "gloss_size", default_gloss), default_gloss),
+            _number(_value(cfg, defaults, "gloss_size"), default_gloss),
         ),
     )
 
-    default_trail_length = _number(defaults.get("trail_length", 0.15), 0.15)
-    default_trail_strength = _number(defaults.get("trail_strength", 0.6), 0.6)
-    default_swirl_strength = _number(defaults.get("swirl_strength", 1.0), 1.0)
-    default_swirl_turns = _number(defaults.get("swirl_turns", 3.0), 3.0)
-    default_3d = _bool(defaults.get("use_3d_shading", True), True)
-    default_texture = _bool(defaults.get("texture_mapping", True), True)
-    default_wobble = _bool(defaults.get("wobble", True), True)
+    default_trail_length = float(defaults["trail_length"])
+    default_trail_strength = float(defaults["trail_strength"])
+    default_swirl_strength = float(defaults["swirl_strength"])
+    default_swirl_turns = float(defaults["swirl_turns"])
+    default_3d = bool(defaults["use_3d_shading"])
+    default_texture = bool(defaults["texture_mapping"])
+    default_wobble = bool(defaults["wobble"])
 
     return _finish(
         None,
@@ -342,7 +341,7 @@ def _resolve_particle(
                 min(
                     1.0,
                     _number(
-                        _value(cfg, defaults, "trail_length", default_trail_length),
+                        _value(cfg, defaults, "trail_length"),
                         default_trail_length,
                     ),
                 ),
@@ -352,7 +351,7 @@ def _resolve_particle(
                 min(
                     1.0,
                     _number(
-                        _value(cfg, defaults, "trail_strength", default_trail_strength),
+                        _value(cfg, defaults, "trail_strength"),
                         default_trail_strength,
                     ),
                 ),
@@ -360,27 +359,27 @@ def _resolve_particle(
             "swirl_strength": max(
                 0.0,
                 _number(
-                    _value(cfg, defaults, "swirl_strength", default_swirl_strength),
+                    _value(cfg, defaults, "swirl_strength"),
                     default_swirl_strength,
                 ),
             ),
             "swirl_turns": max(
                 0.5,
                 _number(
-                    _value(cfg, defaults, "swirl_turns", default_swirl_turns),
+                    _value(cfg, defaults, "swirl_turns"),
                     default_swirl_turns,
                 ),
             ),
             "use_3d_shading": _bool(
-                _value(cfg, defaults, "use_3d_shading", default_3d),
+                _value(cfg, defaults, "use_3d_shading"),
                 default_3d,
             ),
             "texture_mapping": _bool(
-                _value(cfg, defaults, "texture_mapping", default_texture),
+                _value(cfg, defaults, "texture_mapping"),
                 default_texture,
             ),
             "wobble": _bool(
-                _value(cfg, defaults, "wobble", default_wobble),
+                _value(cfg, defaults, "wobble"),
                 default_wobble,
             ),
             "gloss_size": gloss_size,
@@ -392,7 +391,7 @@ def _resolve_particle(
 
 def _normalized_glow_color(
     value: object,
-    fallback: object = (255, 140, 30, 255),
+    fallback: object,
     *,
     field_name: str = "glow_color",
 ) -> tuple[float, float, float, float]:
@@ -400,7 +399,7 @@ def _normalized_glow_color(
     if not isinstance(candidate, (tuple, list)) or len(candidate) != 4:
         candidate = fallback
     if not isinstance(candidate, (tuple, list)) or len(candidate) != 4:
-        candidate = (255, 140, 30, 255)
+        raise ValueError(f"Canonical Burn {field_name} colour must contain four channels")
     channels = tuple(_number(channel, 0.0) for channel in candidate)
     if any(channel < 0.0 for channel in channels):
         raise ValueError(f"Burn {field_name} channels must be non-negative")
@@ -417,9 +416,9 @@ def _resolve_burn(
 ) -> ResolvedPhaseCInputs:
     cfg = _mapping(settings, "burn")
     defaults = _canonical("burn")
-    default_direction = str(defaults.get("direction", "Random") or "Random")
+    default_direction = str(defaults["direction"])
     direction_text = str(
-        _value(cfg, defaults, "direction", default_direction) or default_direction
+        _value(cfg, defaults, "direction") or default_direction
     )
     direction_map = {
         "Left to Right": 0,
@@ -435,15 +434,15 @@ def _resolve_burn(
         else direction_map.get(direction_text, 0)
     )
 
-    default_jagged = _number(defaults.get("jaggedness", 0.5), 0.5)
-    default_glow = _number(defaults.get("glow_intensity", 0.7), 0.7)
-    default_char = _number(defaults.get("char_width", 0.5), 0.5)
-    default_smoke_enabled = _bool(defaults.get("smoke_enabled", True), True)
-    default_smoke_density = _number(defaults.get("smoke_density", 0.5), 0.5)
-    default_ash_enabled = _bool(defaults.get("ash_enabled", True), True)
-    default_ash_density = _number(defaults.get("ash_density", 0.5), 0.5)
-    default_glow_color = defaults.get("glow_color", (255, 140, 30, 255))
-    default_ember_color = defaults.get("ember_color", (230, 64, 13, 255))
+    default_jagged = float(defaults["jaggedness"])
+    default_glow = float(defaults["glow_intensity"])
+    default_char = float(defaults["char_width"])
+    default_smoke_enabled = bool(defaults["smoke_enabled"])
+    default_smoke_density = float(defaults["smoke_density"])
+    default_ash_enabled = bool(defaults["ash_enabled"])
+    default_ash_density = float(defaults["ash_density"])
+    default_glow_color = defaults["glow_color"]
+    default_ember_color = defaults["ember_color"]
 
     return _finish(
         None,
@@ -454,7 +453,7 @@ def _resolve_burn(
                 min(
                     1.0,
                     _number(
-                        _value(cfg, defaults, "jaggedness", default_jagged),
+                        _value(cfg, defaults, "jaggedness"),
                         default_jagged,
                     ),
                 ),
@@ -464,17 +463,17 @@ def _resolve_burn(
                 min(
                     1.0,
                     _number(
-                        _value(cfg, defaults, "glow_intensity", default_glow),
+                        _value(cfg, defaults, "glow_intensity"),
                         default_glow,
                     ),
                 ),
             ),
             "glow_color": _normalized_glow_color(
-                _value(cfg, defaults, "glow_color", default_glow_color),
+                _value(cfg, defaults, "glow_color"),
                 default_glow_color,
             ),
             "ember_color": _normalized_glow_color(
-                _value(cfg, defaults, "ember_color", default_ember_color),
+                _value(cfg, defaults, "ember_color"),
                 default_ember_color,
                 field_name="ember_color",
             ),
@@ -483,13 +482,13 @@ def _resolve_burn(
                 min(
                     1.0,
                     _number(
-                        _value(cfg, defaults, "char_width", default_char),
+                        _value(cfg, defaults, "char_width"),
                         default_char,
                     ),
                 ),
             ),
             "smoke_enabled": _bool(
-                _value(cfg, defaults, "smoke_enabled", default_smoke_enabled),
+                _value(cfg, defaults, "smoke_enabled"),
                 default_smoke_enabled,
             ),
             "smoke_density": max(
@@ -497,13 +496,13 @@ def _resolve_burn(
                 min(
                     1.0,
                     _number(
-                        _value(cfg, defaults, "smoke_density", default_smoke_density),
+                        _value(cfg, defaults, "smoke_density"),
                         default_smoke_density,
                     ),
                 ),
             ),
             "ash_enabled": _bool(
-                _value(cfg, defaults, "ash_enabled", default_ash_enabled),
+                _value(cfg, defaults, "ash_enabled"),
                 default_ash_enabled,
             ),
             "ash_density": max(
@@ -511,7 +510,7 @@ def _resolve_burn(
                 min(
                     1.0,
                     _number(
-                        _value(cfg, defaults, "ash_density", default_ash_density),
+                        _value(cfg, defaults, "ash_density"),
                         default_ash_density,
                     ),
                 ),

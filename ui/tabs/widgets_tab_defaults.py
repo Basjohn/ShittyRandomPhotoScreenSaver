@@ -398,10 +398,6 @@ def _on_clear_selected_caches(tab: WidgetsTab) -> None:
                     _set_cache_status(target, "Cache clearing failed safely.", state="error")
                     return
                 result = task_result.result
-                if "settings" in result.selected_ids:
-                    from ui.settings_dialog_cache import invalidate_settings_dialog_cache
-
-                    invalidate_settings_dialog_cache()
                 if result.skipped_files:
                     _set_cache_status(
                         target,
@@ -614,14 +610,14 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     appearance_toggle, appearance_body, appearance_layout = build_bucket_toggle(
         content_layout,
         "Appearance",
-        expanded=tab.get_widget_bucket_state("defaults", "appearance", default=True),
+        expanded=tab.get_widget_bucket_state("defaults", "appearance"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("defaults", "appearance", checked),
         defer_initial_visibility=True,
     )
     style_overrides_toggle, style_overrides_body, style_overrides_layout = build_bucket_toggle(
         content_layout,
         "Style Overrides",
-        expanded=tab.get_widget_bucket_state("defaults", "style_overrides", default=True),
+        expanded=tab.get_widget_bucket_state("defaults", "style_overrides"),
         on_toggle=lambda checked: tab.set_widget_bucket_state(
             "defaults", "style_overrides", checked
         ),
@@ -630,14 +626,14 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     layout_toggle, layout_body, layout_settings_layout = build_bucket_toggle(
         content_layout,
         "Layout",
-        expanded=tab.get_widget_bucket_state("defaults", "layout", default=True),
+        expanded=tab.get_widget_bucket_state("defaults", "layout"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("defaults", "layout", checked),
         defer_initial_visibility=True,
     )
     cache_toggle, cache_body, cache_layout = build_bucket_toggle(
         content_layout,
         "Cache Maintenance",
-        expanded=tab.get_widget_bucket_state("defaults", "cache", default=False),
+        expanded=tab.get_widget_bucket_state("defaults", "cache"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("defaults", "cache", checked),
         defer_initial_visibility=True,
     )
@@ -654,7 +650,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.widget_shadows_enabled.setToolTip(
         "Applies a subtle drop shadow to every widget card when enabled."
     )
-    tab.widget_shadows_enabled.setChecked(tab._default_bool("shadows", "enabled", True))
+    tab.widget_shadows_enabled.setChecked(tab._default_bool("shadows", "enabled"))
     tab.widget_shadows_enabled.stateChanged.connect(tab._save_settings)
     row.addWidget(tab.widget_shadows_enabled)
     row.addStretch()
@@ -668,7 +664,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
             "widget_shadow_darkness_spin",
             minimum=0,
             maximum=100,
-            value=int(round(tab._default_float("shadows", "frame_opacity", 0.77) * 100)),
+            value=int(round(tab._default_float("shadows", "frame_opacity") * 100)),
             suffix="%",
             tooltip="Card/frame drop-shadow darkness (opacity).",
         )
@@ -680,7 +676,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
             "widget_shadow_blur_spin",
             minimum=0,
             maximum=40,
-            value=tab._default_int("shadows", "blur_radius", 18),
+            value=tab._default_int("shadows", "blur_radius"),
             suffix=" px",
             tooltip="Card/frame drop-shadow blur radius.",
         )
@@ -692,7 +688,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
             "widget_shadow_extra_offset_spin",
             minimum=0,
             maximum=40,
-            value=tab._default_int("shadows", "frame_extra_offset", 0),
+            value=tab._default_int("shadows", "frame_extra_offset"),
             suffix=" px",
             tooltip=(
                 "Grow the card/frame shadow farther only in the selected global "
@@ -711,7 +707,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.widget_text_shadows_enabled.setToolTip(
         "Paints widget text shadows without Qt graphics effects."
     )
-    tab.widget_text_shadows_enabled.setChecked(tab._default_bool("shadows", "text_enabled", True))
+    tab.widget_text_shadows_enabled.setChecked(tab._default_bool("shadows", "text_enabled"))
     tab.widget_text_shadows_enabled.stateChanged.connect(tab._save_settings)
     row.addWidget(tab.widget_text_shadows_enabled)
     row.addStretch()
@@ -725,7 +721,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
             "widget_text_shadow_darkness_spin",
             minimum=0,
             maximum=100,
-            value=int(round(tab._default_float("shadows", "text_opacity", 0.33) * 100)),
+            value=int(round(tab._default_float("shadows", "text_opacity") * 100)),
             suffix="%",
             tooltip="Text drop-shadow darkness (opacity). There is no text blur.",
         )
@@ -737,7 +733,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
             "widget_text_shadow_extra_offset_spin",
             minimum=0,
             maximum=40,
-            value=tab._default_int("shadows", "text_extra_offset", 0),
+            value=tab._default_int("shadows", "text_extra_offset"),
             suffix=" px",
             tooltip=(
                 "Additional text-shadow glyph displacement in the selected global "
@@ -755,7 +751,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.widget_header_shadows_enabled.setToolTip(
         "Paints header-frame drop shadows without Qt graphics effects."
     )
-    tab.widget_header_shadows_enabled.setChecked(tab._default_bool("shadows", "header_enabled", True))
+    tab.widget_header_shadows_enabled.setChecked(tab._default_bool("shadows", "header_enabled"))
     tab.widget_header_shadows_enabled.stateChanged.connect(tab._save_settings)
     row.addWidget(tab.widget_header_shadows_enabled)
     row.addStretch()
@@ -764,7 +760,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _build_shadow_direction_picker(
         tab,
         appearance_layout,
-        resolve_shadow_direction(tab._default_str("shadows", "direction", DEFAULT_SHADOW_DIRECTION.value)),
+        resolve_shadow_direction(tab._default_str("shadows", "direction")),
     )
 
     row = QHBoxLayout()
@@ -776,7 +772,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "Opt-in only. When enabled, non-Custom authored widgets may be packed to reduce overlap, "
         "but this can shift them away from their exact authored spacing."
     )
-    tab.widget_stacking_enabled.setChecked(tab._default_bool("global", "stacking_enabled", False))
+    tab.widget_stacking_enabled.setChecked(tab._default_bool("global", "stacking_enabled"))
     tab.widget_stacking_enabled.stateChanged.connect(tab._save_settings)
     tab.widget_stacking_enabled.stateChanged.connect(tab._update_stack_status)
     row.addWidget(tab.widget_stacking_enabled)
@@ -960,47 +956,51 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
 
     shadows_config = widgets_config.get("shadows", {}) if isinstance(widgets_config, Mapping) else {}
     if isinstance(shadows_config, Mapping):
-        tab.widget_shadows_enabled.setChecked(tab._config_bool("shadows", shadows_config, "enabled", True))
-        tab.widget_text_shadows_enabled.setChecked(tab._config_bool("shadows", shadows_config, "text_enabled", True))
-        tab.widget_header_shadows_enabled.setChecked(tab._config_bool("shadows", shadows_config, "header_enabled", True))
+        tab.widget_shadows_enabled.setChecked(tab._config_bool("shadows", shadows_config, "enabled"))
+        tab.widget_text_shadows_enabled.setChecked(tab._config_bool("shadows", shadows_config, "text_enabled"))
+        tab.widget_header_shadows_enabled.setChecked(tab._config_bool("shadows", shadows_config, "header_enabled"))
     else:
         shadows_config = {}
-        tab.widget_shadows_enabled.setChecked(True)
-        tab.widget_text_shadows_enabled.setChecked(True)
-        tab.widget_header_shadows_enabled.setChecked(True)
+        tab.widget_shadows_enabled.setChecked(tab._default_bool("shadows", "enabled"))
+        tab.widget_text_shadows_enabled.setChecked(
+            tab._default_bool("shadows", "text_enabled")
+        )
+        tab.widget_header_shadows_enabled.setChecked(
+            tab._default_bool("shadows", "header_enabled")
+        )
 
     if hasattr(tab, "widget_shadow_darkness_spin"):
         tab.widget_shadow_darkness_spin.setValue(
-            int(round(tab._config_float("shadows", shadows_config, "frame_opacity", 0.77) * 100))
+            int(round(tab._config_float("shadows", shadows_config, "frame_opacity") * 100))
         )
     if hasattr(tab, "widget_shadow_blur_spin"):
         tab.widget_shadow_blur_spin.setValue(
-            max(0, min(40, tab._config_int("shadows", shadows_config, "blur_radius", 18)))
+            max(0, min(40, tab._config_int("shadows", shadows_config, "blur_radius")))
         )
     if hasattr(tab, "widget_shadow_extra_offset_spin"):
         tab.widget_shadow_extra_offset_spin.setValue(
-            max(0, min(40, tab._config_int("shadows", shadows_config, "frame_extra_offset", 0)))
+            max(0, min(40, tab._config_int("shadows", shadows_config, "frame_extra_offset")))
         )
     if hasattr(tab, "widget_text_shadow_darkness_spin"):
         tab.widget_text_shadow_darkness_spin.setValue(
-            int(round(tab._config_float("shadows", shadows_config, "text_opacity", 0.33) * 100))
+            int(round(tab._config_float("shadows", shadows_config, "text_opacity") * 100))
         )
     if hasattr(tab, "widget_text_shadow_extra_offset_spin"):
         tab.widget_text_shadow_extra_offset_spin.setValue(
-            max(0, min(40, tab._config_int("shadows", shadows_config, "text_extra_offset", 0)))
+            max(0, min(40, tab._config_int("shadows", shadows_config, "text_extra_offset")))
         )
     if hasattr(tab, "_shadow_direction_buttons"):
         _apply_shadow_direction(
             tab,
             resolve_shadow_direction(
-                tab._config_str("shadows", shadows_config, "direction", DEFAULT_SHADOW_DIRECTION.value)
+                tab._config_str("shadows", shadows_config, "direction")
             ),
         )
 
     global_cfg = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
-    border_width = tab._config_int("global", global_cfg, "card_border_width_px", 4)
+    border_width = tab._config_int("global", global_cfg, "card_border_width_px")
     border_width = max(0, min(12, border_width))
-    stacking_enabled = tab._config_bool("global", global_cfg, "stacking_enabled", False)
+    stacking_enabled = tab._config_bool("global", global_cfg, "stacking_enabled")
     tab._global_card_border_width = border_width
     tab.widget_stacking_enabled.setChecked(stacking_enabled)
     if hasattr(tab, "card_border_width_spin"):
@@ -1017,7 +1017,7 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
     dropped here and never re-persisted.
     """
 
-    existing_widgets = tab._settings.get("widgets", {})
+    existing_widgets = tab._settings.get("widgets")
     existing_shadows = (
         existing_widgets.get("shadows", {}) if isinstance(existing_widgets, Mapping) else {}
     )
@@ -1046,7 +1046,7 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
     selected_direction = getattr(tab, "_selected_shadow_direction", DEFAULT_SHADOW_DIRECTION)
     shadows_config["direction"] = resolve_shadow_direction(selected_direction).value
 
-    border_width = getattr(tab, "_global_card_border_width", tab._widget_default("global", "card_border_width_px", 4))
+    border_width = getattr(tab, "_global_card_border_width", tab._widget_default("global", "card_border_width_px"))
     global_config = {
         "card_border_width_px": int(border_width),
         "stacking_enabled": tab.widget_stacking_enabled.isChecked(),

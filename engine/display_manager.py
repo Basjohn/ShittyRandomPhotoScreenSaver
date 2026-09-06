@@ -3,6 +3,7 @@ Display manager for multi-monitor support.
 
 Owns one authoritative Quick display unit for each selected screen.
 """
+import math
 import os
 import time
 import weakref
@@ -26,6 +27,7 @@ from core.settings.capability_activation import (
     is_widget_family_effective,
 )
 from core.settings.defaults import get_default_settings
+from core.settings.default_contract import require_canonical_default
 from rendering.display_modes import DisplayMode
 from rendering.transition_registry import (
     canonicalize_transition_name,
@@ -441,52 +443,61 @@ class DisplayManager(QObject):
     def _get_allowed_screen_indices(self, screen_count: int) -> set[int]:
         """Resolve which screen indices should create Quick display units.
 
-        Uses the canonical display.show_on_monitors setting:
-        - 'ALL' (default) means all screens.
-        - A list/tuple/set of 1-based monitor indices (e.g. [1, 2]) selects
-          specific screens. Values outside the available range are ignored.
+        Persisted/malformed monitor routing repairs through the canonical
+        ``display.show_on_monitors`` value.  This method owns topology clamping
+        only; it does not carry a second product-default route.
         """
 
         indices: set[int] = set(range(screen_count))
+        canonical_raw = require_canonical_default("display.show_on_monitors")
         if self.settings_manager is None:
-            return indices
-
-        try:
-            raw = self.settings_manager.get('display.show_on_monitors', 'ALL')
-        except Exception as e:
-            logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
-            raw = 'ALL'
-
-        # Default: all screens
-        if isinstance(raw, str):
-            if raw.upper() == 'ALL':
-                return indices
-            if raw.upper() == 'NONE':
-                return set()
-            # Attempt to parse a stringified list such as "[1, 2]"
-            try:
-                import ast
-                parsed = ast.literal_eval(raw)
-                if not isinstance(parsed, (list, tuple, set)):
-                    return indices
-                values = {int(x) for x in parsed}
-            except Exception:
-                logger.debug("[DISPLAY] Failed to parse show_on_monitors=%r; defaulting to ALL", raw)
-                return indices
-        elif isinstance(raw, (list, tuple, set)):
-            try:
-                values = {int(x) for x in raw}
-            except Exception:
-                logger.debug("[DISPLAY] Invalid show_on_monitors=%r; defaulting to ALL", raw)
-                return indices
+            raw = canonical_raw
         else:
-            return indices
+            try:
+                raw = self.settings_manager.get("display.show_on_monitors")
+            except Exception as exc:
+                logger.debug("[DISPLAY_MANAGER] show_on_monitors read failed: %s", exc)
+                raw = canonical_raw
 
-        # Convert 1-based monitor numbers to 0-based indices and clamp to range
-        allowed = {m - 1 for m in values if 1 <= int(m) <= screen_count}
-        if not allowed:
-            logger.debug("[DISPLAY] Resolved empty show_on_monitors from %r; defaulting to ALL", raw)
-            return indices
+        def _resolve(candidate: object) -> set[int] | None:
+            if isinstance(candidate, str):
+                normalized = candidate.strip().upper()
+                if normalized == "ALL":
+                    return indices
+                if normalized == "NONE":
+                    return set()
+                try:
+                    import ast
+                    parsed = ast.literal_eval(candidate)
+                except Exception:
+                    return None
+                if not isinstance(parsed, (list, tuple, set)):
+                    return None
+                candidate = parsed
+            if not isinstance(candidate, (list, tuple, set)):
+                return None
+            try:
+                values = {int(value) for value in candidate}
+            except (TypeError, ValueError):
+                return None
+            allowed = {monitor - 1 for monitor in values if 1 <= monitor <= screen_count}
+            # A configured route whose selected displays are all currently
+            # unavailable is repaired through canonical routing rather than an
+            # implicit local "show everything" policy.
+            return allowed if allowed else None
+
+        allowed = _resolve(raw)
+        if allowed is None:
+            logger.debug(
+                "[DISPLAY] Invalid/unavailable show_on_monitors=%r; repairing through canonical value %r",
+                raw,
+                canonical_raw,
+            )
+            allowed = _resolve(canonical_raw)
+            if allowed is None:
+                raise ValueError(
+                    f"canonical display.show_on_monitors is invalid for topology: {canonical_raw!r}"
+                )
         logger.info("[DISPLAY] show_on_monitors=%r → allowed screen indices=%s", raw, sorted(allowed))
         return allowed
     
@@ -511,13 +522,13 @@ class DisplayManager(QObject):
             os.environ.get("SRPSS_MC_WINDOW_FLAGS", "").strip().lower()
             == "splash"
         )
-        always_on_top = True
         if self.settings_manager is not None:
-            from core.settings.settings_manager import SettingsManager
+            always_on_top = self.settings_manager.get_bool("mc.always_on_top")
+        else:
+            from core.settings.default_contract import MC_PROFILE, require_canonical_default
 
-            always_on_top = SettingsManager.to_bool(
-                self.settings_manager.get("mc.always_on_top", True),
-                True,
+            always_on_top = bool(
+                require_canonical_default("mc.always_on_top", MC_PROFILE)
             )
         return QuickWindowPolicy(
             role=(
@@ -535,12 +546,7 @@ class DisplayManager(QObject):
             return True
         if self.settings_manager is None:
             return False
-        from core.settings.settings_manager import SettingsManager
-
-        return SettingsManager.to_bool(
-            self.settings_manager.get("input.interaction_mode", False),
-            False,
-        )
+        return self.settings_manager.get_bool("input.interaction_mode")
 
     def _set_quick_interaction_mode_enabled(self, enabled: bool) -> None:
         """Push one Settings/context-menu interaction change to live Quick inputs."""
@@ -569,30 +575,38 @@ class DisplayManager(QObject):
         from core.settings.settings_manager import SettingsManager
 
         auxiliary = unit.runtime.auxiliary_controller
-        dimming_enabled = SettingsManager.to_bool(
-            settings.get("accessibility.dimming.enabled", False),
-            False,
-        )
+        dimming_enabled = settings.get_bool("accessibility.dimming.enabled")
         try:
             dimming_opacity = max(
                 10,
-                min(90, int(settings.get("accessibility.dimming.opacity", 30))),
+                min(90, int(settings.get("accessibility.dimming.opacity"))),
             )
         except (TypeError, ValueError):
-            dimming_opacity = 30
+            from core.settings.default_contract import require_canonical_default
+
+            dimming_opacity = int(
+                require_canonical_default(
+                    "accessibility.dimming.opacity",
+                    settings.get_application_name(),
+                )
+            )
         auxiliary.set_dimming(dimming_enabled, dimming_opacity / 100.0)
-        pixel_shift_enabled = SettingsManager.to_bool(
-            settings.get("accessibility.pixel_shift.enabled", False),
-            False,
-        )
+        pixel_shift_enabled = settings.get_bool("accessibility.pixel_shift.enabled")
         try:
             pixel_shift_rate = int(
-                settings.get("accessibility.pixel_shift.rate", 1)
+                settings.get("accessibility.pixel_shift.rate")
             )
         except (TypeError, ValueError):
-            pixel_shift_rate = 1
+            from core.settings.default_contract import require_canonical_default
+
+            pixel_shift_rate = int(
+                require_canonical_default(
+                    "accessibility.pixel_shift.rate",
+                    settings.get_application_name(),
+                )
+            )
         auxiliary.configure_pixel_shift(pixel_shift_enabled, pixel_shift_rate)
-        auxiliary.set_halo_shape(settings.get("input.halo_shape", "cursor_light"))
+        auxiliary.set_halo_shape(settings.get("input.halo_shape"))
 
         from core.settings.models import InputSettings
         from ui.widget_glow_style import resolve_widget_glow_color
@@ -631,27 +645,36 @@ class DisplayManager(QObject):
 
         from core.settings.settings_manager import SettingsManager
 
-        defaults = get_default_settings().get("transitions", {})
+        defaults = get_default_settings()["transitions"]
         transitions = (
-            self.settings_manager.get("transitions", {})
+            self.settings_manager.get("transitions")
             if self.settings_manager is not None
             else defaults
         )
         if not isinstance(transitions, dict):
             transitions = dict(defaults) if isinstance(defaults, dict) else {}
+        canonical_type = defaults.get("type")
+        canonical_random = defaults.get("random_always")
+        display_defaults = get_default_settings()["display"]
+        canonical_hw = display_defaults.get("hw_accel")
+        if not isinstance(canonical_type, str) or not canonical_type:
+            raise KeyError("canonical transition defaults missing type")
+        if not isinstance(canonical_random, bool):
+            raise KeyError("canonical transition defaults missing random_always")
+        if not isinstance(canonical_hw, bool):
+            raise KeyError("canonical display defaults missing hw_accel")
         current = canonicalize_transition_name(
-            transitions.get("type"),
-            fallback="Crossfade",
+            transitions.get("type", canonical_type),
+            fallback=canonicalize_transition_name(canonical_type, fallback=""),
         )
         random_enabled = SettingsManager.to_bool(
-            transitions.get("random_always", False),
-            False,
+            transitions.get("random_always", canonical_random),
+            canonical_random,
         )
-        hw_enabled = SettingsManager.to_bool(
-            self.settings_manager.get("display.hw_accel", False)
+        hw_enabled = (
+            self.settings_manager.get_bool("display.hw_accel")
             if self.settings_manager is not None
-            else False,
-            False,
+            else canonical_hw
         )
         random_selectable = any(
             is_transition_available_for_hw(name, hw_enabled)
@@ -696,12 +719,14 @@ class DisplayManager(QObject):
         else:
             visualizer_modes = ()
             current_visualizer = "spectrum"
-        dimming_enabled = SettingsManager.to_bool(
-            settings.get("accessibility.dimming.enabled", False)
-            if settings is not None
-            else False,
-            False,
-        )
+        if settings is not None:
+            dimming_enabled = settings.get_bool("accessibility.dimming.enabled")
+        else:
+            from core.settings.default_contract import require_canonical_default
+
+            dimming_enabled = bool(
+                require_canonical_default("accessibility.dimming.enabled")
+            )
         entries = build_quick_context_menu_entries(
             transition_names=get_activated_transition_names(transitions),
             current_transition=current,
@@ -804,7 +829,7 @@ class DisplayManager(QObject):
             return False
         try:
             if action == "transition":
-                transitions = settings.get("transitions", {})
+                transitions = settings.get("transitions")
                 if not isinstance(transitions, dict):
                     return False
                 if not apply_transition_menu_selection(transitions, payload):
@@ -846,11 +871,18 @@ class DisplayManager(QObject):
                         10,
                         min(
                             90,
-                            int(settings.get("accessibility.dimming.opacity", 30)),
+                            int(settings.get("accessibility.dimming.opacity")),
                         ),
                     ) / 100.0
                 except (TypeError, ValueError):
-                    opacity = 0.3
+                    from core.settings.default_contract import require_canonical_default
+
+                    opacity = float(
+                        require_canonical_default(
+                            "accessibility.dimming.opacity",
+                            settings.get_application_name(),
+                        )
+                    ) / 100.0
                 self.set_dimming_all_displays(enabled, opacity)
                 self._refresh_all_quick_context_menus()
                 return True
@@ -895,7 +927,7 @@ class DisplayManager(QObject):
         target = str(mode_id or "").strip().lower()
         if coerce_visualizer_mode_id(target) != target or not is_mode_active(target):
             return False
-        section = settings.get("widgets.spotify_visualizer", {})
+        section = settings.get("widgets.spotify_visualizer")
         if not isinstance(section, dict):
             return False
         # Deepest request-admission gate (pre-V5/V6): a normal runtime/UI request
@@ -968,7 +1000,7 @@ class DisplayManager(QObject):
         )
         from widgets.spotify_visualizer.technical_config import build_technical_cache
 
-        section = settings.get("widgets.spotify_visualizer", {})
+        section = settings.get("widgets.spotify_visualizer")
         custom_presets = settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
         if not isinstance(section, Mapping) or not isinstance(custom_presets, Mapping):
             logger.warning(
@@ -1476,20 +1508,18 @@ class DisplayManager(QObject):
         self._quick_scene_factory = QuickSceneFactory(parent=self)
         self._quick_ctrl_coordinator.reset()
         self._quick_readiness_by_screen.clear()
+        from core.settings.models import ShadowSettings
+
         if self.settings_manager is not None:
             self._widgets_config_snapshot = self.settings_manager.get_widgets_map()
-            from core.settings.models import ShadowSettings
-            from core.settings.shadow_direction import get_shadow_direction
-
             self._shadow_values_snapshot = asdict(
                 ShadowSettings.from_settings(self.settings_manager)
             )
-            self._shadow_values_snapshot["direction"] = get_shadow_direction(
-                self.settings_manager
-            ).value
         else:
             self._widgets_config_snapshot = {}
-            self._shadow_values_snapshot = {}
+            # Headless/focused construction still receives the same canonical
+            # resolved shadow contract; downstream Quick consumers are strict.
+            self._shadow_values_snapshot = asdict(ShadowSettings())
 
         # Resolve which screens should actually create one Quick display unit.
         allowed_indices = self._get_allowed_screen_indices(screen_count)
@@ -1615,7 +1645,6 @@ class DisplayManager(QObject):
         effective_monitor = get_effective_monitor_value_for_widget(
             "spotify_visualizer",
             widgets if isinstance(widgets, dict) else {},
-            default="ALL",
         )
         return cls._requested_visualizer_screen_index(effective_monitor)
 
@@ -1667,7 +1696,6 @@ class DisplayManager(QObject):
         effective_monitor = get_effective_monitor_value_for_widget(
             "spotify_visualizer",
             widgets,
-            default="ALL",
         )
         requested = self._requested_visualizer_screen_index(effective_monitor)
         custom = bool(
@@ -2169,13 +2197,13 @@ class DisplayManager(QObject):
             apply_preset_overlay=False,
             resolve_preset_indices=False,
         )
-        if not SettingsManager.to_bool(model.enabled, False):
+        if not bool(model.enabled):
             self._set_quick_visualizer_construct_outcome(
                 "rejected",
                 "visualizer_instance_disabled",
             )
             return False
-        if not SettingsManager.to_bool(model.visualizers_enabled, True):
+        if not bool(model.visualizers_enabled):
             self._set_quick_visualizer_construct_outcome(
                 "rejected",
                 "visualizers_disabled",
@@ -2191,61 +2219,63 @@ class DisplayManager(QObject):
 
         mode = str(model.mode)
         technical_cache = build_technical_cache(None, model)
-        shadows = widgets.get("shadows", {})
-        if not isinstance(shadows, dict):
-            shadows = {}
+        canonical_widgets = get_default_settings()["widgets"]
+
         from core.settings.shadow_direction import (
             resolve_directional_extensions,
             resolve_signed_offset,
         )
+        from rendering.quick.shadow_snapshot import QuickShadowSnapshot
         from rendering.quick.widgets.host import ORDINARY_CARD_SHADOW_BASE
+        from widgets.spotify_visualizer.presentation_geometry import (
+            VISUALIZER_CARD_CONTENT_INSET,
+            VISUALIZER_CARD_CORNER_RADIUS,
+            VISUALIZER_CARD_SHADOW_SPREAD,
+        )
 
-        direction = shadows.get("direction", "SE")
-        try:
-            frame_extra = max(0.0, min(40.0, float(shadows.get("frame_extra_offset", 0.0))))
-        except (TypeError, ValueError):
-            frame_extra = 0.0
-        try:
-            frame_opacity = max(0.0, min(1.0, float(shadows.get("frame_opacity", 0.77))))
-        except (TypeError, ValueError):
-            frame_opacity = 0.77
-        try:
-            shadow_blur = max(0.0, min(80.0, float(shadows.get("blur_radius", 18.0))))
-        except (TypeError, ValueError):
-            shadow_blur = 18.0
-        raw_shadow_color = shadows.get("color", (0, 0, 0, 255))
-        try:
-            channels = [int(value) for value in raw_shadow_color]
-        except (TypeError, ValueError):
-            channels = [0, 0, 0, 255]
-        if len(channels) == 3:
-            channels.append(255)
-        if len(channels) != 4:
-            channels = [0, 0, 0, 255]
-        channels = [max(0, min(255, value)) for value in channels]
-        channels[3] = max(0, min(255, int(round(channels[3] * frame_opacity))))
+        shadow = QuickShadowSnapshot.from_mapping(self._shadow_values_snapshot)
+        channels = list(shadow.color)
+        channels[3] = max(
+            0,
+            min(255, int(round(channels[3] * shadow.frame_opacity))),
+        )
 
         from ui.widget_theme_active import get_active_widget_theme
 
         widget_theme = get_active_widget_theme()
-        global_widgets = widgets.get("global", {})
-        if not isinstance(global_widgets, dict):
-            global_widgets = {}
-        try:
-            visualizer_border_width = max(
-                0.0, min(12.0, float(global_widgets.get("card_border_width_px", 4)))
+        canonical_global = canonical_widgets["global"]
+        persisted_global = widgets.get("global")
+        global_widgets = dict(canonical_global)
+        if isinstance(persisted_global, Mapping):
+            global_widgets.update(
+                key_value
+                for key_value in persisted_global.items()
+                if key_value[1] is not None
             )
+        canonical_border_width = float(canonical_global["card_border_width_px"])
+        try:
+            visualizer_border_width = float(global_widgets["card_border_width_px"])
         except (TypeError, ValueError):
-            visualizer_border_width = 3.0
+            visualizer_border_width = canonical_border_width
+        if not math.isfinite(visualizer_border_width):
+            visualizer_border_width = canonical_border_width
+        visualizer_border_width = max(0.0, min(12.0, visualizer_border_width))
         card_shadow_kwargs = {
             "background_color": widget_theme.color("card.background").as_tuple(),
             "border_color": widget_theme.color("card.border").as_tuple(),
             "border_width": visualizer_border_width,
-            "shadow_enabled": SettingsManager.to_bool(shadows.get("enabled", True), True),
+            "corner_radius": VISUALIZER_CARD_CORNER_RADIUS,
+            "content_inset": VISUALIZER_CARD_CONTENT_INSET,
+            "shadow_enabled": shadow.enabled,
             "shadow_color": tuple(channels),
-            "shadow_blur": shadow_blur,
-            "shadow_offset": resolve_signed_offset(direction, *ORDINARY_CARD_SHADOW_BASE),
-            "shadow_extensions": resolve_directional_extensions(direction, frame_extra),
+            "shadow_blur": min(80.0, shadow.blur_radius),
+            "shadow_offset": resolve_signed_offset(
+                shadow.direction, *ORDINARY_CARD_SHADOW_BASE
+            ),
+            "shadow_spread": VISUALIZER_CARD_SHADOW_SPREAD,
+            "shadow_extensions": resolve_directional_extensions(
+                shadow.direction, shadow.frame_extra_offset
+            ),
         }
         owner = QuickDisplayVisualizerOwner(
             chosen.runtime,
@@ -2260,7 +2290,7 @@ class DisplayManager(QObject):
             owner.configure(
                 logical_kwargs=asdict(model),
                 presentation_kwargs=asdict(model),
-                technical_config=technical_cache.get(mode),
+                technical_config=technical_cache[mode],
                 thread_manager=self._thread_manager,
                 process_supervisor=self._process_supervisor,
                 playing=False,

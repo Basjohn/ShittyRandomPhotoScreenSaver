@@ -35,42 +35,42 @@ _TRANSIENT_MIX_META: Dict[str, tuple] = {
         "spectrum_lane_transient_mix",
         "Kick Lane Mix:",
         "How much transient energy feeds the kick express lane (0%–100%).\n"
-        "Higher = snappier kick response. 65% = default.",
-        0.65, 0.0, 1.0,
+        "Higher = snappier kick response.",
+        0.0, 1.0,
     ),
     "bubble": (
         "bubble_transient_mix_bass",
         "Transient Bass Mix:",
         "Transient bass energy weight for bubble pulse (0%–100%).\n"
-        "Higher = stronger kick punch. 75% = default.",
-        0.75, 0.0, 1.0,
+        "Higher = stronger kick punch.",
+        0.0, 1.0,
     ),
     "sine_wave": (
         "sine_wave_transient_width_mix",
         "Transient Width Mix:",
         "How much transient energy widens the sine wave (0%–100%).\n"
-        "Higher = more width reaction on kicks. 40% = default.",
-        0.4, 0.0, 1.0,
+        "Higher = more width reaction on kicks.",
+        0.0, 1.0,
     ),
     "oscilloscope": (
         "oscilloscope_transient_width_mix",
         "Transient Width Mix:",
         "How much transient energy widens the oscilloscope line (0%–100%).\n"
-        "Higher = more width reaction on kicks. 35% = default.",
-        0.35, 0.0, 1.0,
+        "Higher = more width reaction on kicks.",
+        0.0, 1.0,
     ),
 }
 
 _KICK_GAIN_TIP = (
     "Kick event gain (0%–200%). Controls how strongly discrete kick help\n"
-    "pushes the mode's fast-react path. 0% = disabled, 100% = default.\n"
+    "pushes the mode's fast-react path. 0% = disabled, 100% = unity.\n"
     "Spectrum spends this in the kick lane.\n"
-    "0% = disabled, 100% = default, 200% = double."
+    "0% = disabled, 100% = unity, 200% = double."
 )
 _PULSE_GAIN_TIP = (
     "Transient pulse gain (0%–300%). Controls how strongly transient\n"
     "bass energy mixes into Bubble pulse amplitude.\n"
-    "0% = disabled, 100% = default, 300% = triple."
+    "0% = disabled, 100% = unity, 300% = triple."
 )
 
 _MODE_LABELS: Dict[str, str] = {
@@ -104,7 +104,6 @@ class _ControlDef:
     default_key: str
     widget_kind: str
     default_type: str
-    base_default: Any
     label_text: str = ""
     checkbox_text: str = ""
     section: str = "root"
@@ -128,7 +127,6 @@ class _ControlDef:
 class _BucketDef:
     key: str
     label: str
-    default_visible: bool
     helper_text: str
 
 
@@ -251,13 +249,11 @@ _BUCKET_DEFS: tuple[_BucketDef, ...] = (
     _BucketDef(
         key="agc",
         label="Show AGC Controls",
-        default_visible=False,
         helper_text="Visibility only. Hidden AGC controls still keep their saved values and remain active.",
     ),
     _BucketDef(
         key="transient",
         label="Show Transient Controls",
-        default_visible=True,
         helper_text="Visibility only. Hidden transient controls still keep their saved values and remain active.",
     ),
 )
@@ -269,7 +265,6 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         default_key="bar_count",
         widget_kind="spinbox",
         default_type="int",
-        base_default=32,
         label_text="Bar Count:",
         minimum=8,
         maximum=96,
@@ -281,7 +276,6 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         default_key="audio_block_size",
         widget_kind="combo",
         default_type="int",
-        base_default=0,
         label_text="Audio Block Size:",
         options=(
             ("Auto (Driver)", 0),
@@ -298,7 +292,6 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         default_key="adaptive_sensitivity",
         widget_kind="checkbox",
         default_type="bool",
-        base_default=True,
         checkbox_text="Use Recommended Sensitivity",
         circle_indicator=True,
     ),
@@ -308,7 +301,6 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         default_key="sensitivity",
         widget_kind="slider",
         default_type="float",
-        base_default=1.0,
         label_text="Sensitivity:",
         label_key="sensitivity_label",
         minimum=0.25,
@@ -323,7 +315,6 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         default_key="dynamic_range_enabled",
         widget_kind="checkbox",
         default_type="bool",
-        base_default=False,
         checkbox_text="Output Lift",
         circle_indicator=True,
     ),
@@ -333,7 +324,6 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         default_key="agc_strength",
         widget_kind="slider",
         default_type="float",
-        base_default=0.5,
         label_text="AGC Strength:",
         label_key="agc_strength_label",
         section="agc",
@@ -350,7 +340,6 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         default_key="input_gain",
         widget_kind="slider",
         default_type="float",
-        base_default=1.0,
         label_text="Input Gain:",
         label_key="input_gain_label",
         section="agc",
@@ -367,7 +356,6 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         default_key="kick_lane_gain",
         widget_kind="slider",
         default_type="float",
-        base_default=1.0,
         label_text="Kick Lane Gain:",
         label_key="kick_gain_label",
         section="transient",
@@ -385,7 +373,6 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         default_key="transient_pulse_gain",
         widget_kind="slider",
         default_type="float",
-        base_default=1.0,
         label_text="Transient Pulse:",
         label_key="pulse_gain_label",
         section="transient",
@@ -403,13 +390,12 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         default_key="transient_clamp",
         widget_kind="slider",
         default_type="float",
-        base_default=1.5,
         label_text="Transient Clamp:",
         label_key="clamp_label",
         section="transient",
         tooltip=(
             "Maximum transient-boosted bass energy (0%–300%). Prevents\n"
-            "transient spikes from blowing out the visualizer. 150% = default."
+            "transient spikes from blowing out the visualizer."
         ),
         minimum=0.0,
         maximum=3.0,
@@ -423,7 +409,6 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         default_key="dynamic_floor",
         widget_kind="checkbox",
         default_type="bool",
-        base_default=True,
         checkbox_text="Dynamic Noise Floor",
         circle_indicator=True,
     ),
@@ -433,7 +418,6 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         default_key="manual_floor",
         widget_kind="slider",
         default_type="float",
-        base_default=0.12,
         label_text="Noise Floor\nBaseline:",
         label_key="manual_label",
         minimum=MANUAL_FLOOR_MIN,
@@ -449,7 +433,7 @@ def _control_defs_for_mode(mode_key: str) -> tuple[_ControlDef, ...]:
     defs = [defn for defn in _BASE_CONTROL_DEFS if defn.modes is None or mode_key in defn.modes]
     mix_meta = _TRANSIENT_MIX_META.get(mode_key)
     if mix_meta is not None:
-        mix_key, mix_label, mix_tip, mix_default, mix_lo, mix_hi = mix_meta
+        mix_key, mix_label, mix_tip, mix_lo, mix_hi = mix_meta
         defs.append(
             _ControlDef(
                 control_key="mix_slider",
@@ -457,7 +441,6 @@ def _control_defs_for_mode(mode_key: str) -> tuple[_ControlDef, ...]:
                 default_key=mix_key.split("_", 1)[-1] if "_" in mix_key else mix_key,
                 widget_kind="slider",
                 default_type="float",
-                base_default=mix_default,
                 label_text=mix_label,
                 label_key="mix_label",
                 section="transient",
@@ -478,13 +461,12 @@ def _control_defs_for_mode(mode_key: str) -> tuple[_ControlDef, ...]:
                 default_key="transient_mix_vocal",
                 widget_kind="slider",
                 default_type="float",
-                base_default=0.25,
                 label_text="Transient Vocal Mix:",
                 label_key="mix_vocal_label",
                 section="transient",
                 tooltip=(
                     "Transient vocal/mid energy weight for bubble pulse (0%–100%).\n"
-                    "Higher = more mid-range response. 25% = default."
+                    "Higher = more mid-range response."
                 ),
                 minimum=0.0,
                 maximum=1.0,
@@ -525,19 +507,12 @@ def _build_visibility_toggle(
     mode_key: str,
     bucket_key: str,
     label: str,
-    default_visible: bool,
     helper_text: str,
 ) -> tuple[QCheckBox, QWidget]:
     toggle = QCheckBox(label)
     toggle.setProperty("circleIndicator", True)
     toggle.setToolTip(helper_text)
-    getter = getattr(tab, "get_visualizer_tech_bucket_state", None)
-    visible = default_visible
-    if callable(getter):
-        try:
-            visible = bool(getter(mode_key, bucket_key, default_visible))
-        except Exception:
-            visible = default_visible
+    visible = bool(tab.get_visualizer_tech_bucket_state(mode_key, bucket_key))
     toggle.blockSignals(True)
     toggle.setChecked(visible)
     toggle.blockSignals(False)
@@ -586,27 +561,15 @@ def _connect_setting(signal, tab) -> None:
         signal.connect(auto_switch)
 
 
-def _per_mode_default_bool(tab, mode_key: str, key: str, base_default: bool) -> bool:
-    baseline = tab._default_bool("spotify_visualizer", key, base_default)
-    return tab._default_bool("spotify_visualizer", f"{mode_key}_{key}", baseline)
-
-
-def _per_mode_default_int(tab, mode_key: str, key: str, base_default: int) -> int:
-    baseline = tab._default_int("spotify_visualizer", key, base_default)
-    return tab._default_int("spotify_visualizer", f"{mode_key}_{key}", baseline)
-
-
-def _per_mode_default_float(tab, mode_key: str, key: str, base_default: float) -> float:
-    baseline = tab._default_float("spotify_visualizer", key, base_default)
-    return tab._default_float("spotify_visualizer", f"{mode_key}_{key}", baseline)
-
-
 def _resolve_default(tab, mode_key: str, defn: _ControlDef) -> Any:
+    """Resolve the control baseline strictly from canonical Visualizer defaults."""
+
+    key = f"{mode_key}_{defn.default_key}"
     if defn.default_type == "bool":
-        return _per_mode_default_bool(tab, mode_key, defn.default_key, bool(defn.base_default))
+        return tab._default_bool("spotify_visualizer", key)
     if defn.default_type == "int":
-        return _per_mode_default_int(tab, mode_key, defn.default_key, int(defn.base_default))
-    return _per_mode_default_float(tab, mode_key, defn.default_key, float(defn.base_default))
+        return tab._default_int("spotify_visualizer", key)
+    return tab._default_float("spotify_visualizer", key)
 
 
 def _resolve_config_entry(config: Optional[Mapping[str, Any]], mode_key: str, key: str) -> Any:
@@ -859,7 +822,6 @@ def _build_bucket_sections(tab, layout: QVBoxLayout, mode_key: str) -> tuple[Dic
             mode_key=mode_key,
             bucket_key=bucket.key,
             label=bucket.label,
-            default_visible=bucket.default_visible,
             helper_text=bucket.helper_text,
         )
         section_layout = section.layout()
@@ -886,13 +848,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     toggle = QToolButton()
     toggle.setText("Technical")
     toggle.setCheckable(True)
-    default_expanded = True
-    getter = getattr(tab, "get_visualizer_tech_state", None)
-    if callable(getter):
-        try:
-            default_expanded = bool(getter(mode_key))
-        except Exception:
-            default_expanded = True
+    default_expanded = bool(tab.get_visualizer_tech_state(mode_key))
     toggle.setChecked(default_expanded)
     toggle.setArrowType(Qt.DownArrow if default_expanded else Qt.RightArrow)
     toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)

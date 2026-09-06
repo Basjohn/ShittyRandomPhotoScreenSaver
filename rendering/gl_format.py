@@ -33,9 +33,11 @@ _logged_reasons: set[str] = set()
 
 @dataclass(frozen=True)
 class SurfacePreferences:
+    """Resolved GL product preferences; construction requires explicit authority."""
+
     prefer_triple_buffer: bool
-    depth_bits: int = 24
-    stencil_bits: int = 8
+    depth_bits: int
+    stencil_bits: int
 
 
 def _coerce_bool(value, default: bool) -> bool:
@@ -89,18 +91,31 @@ def read_surface_preferences(
     application: str = _DEFAULT_APP,
 ) -> SurfacePreferences:
     """Resolve GL surface preferences from settings or persisted storage."""
-    triple_default = True
-    depth_default = 24
-    stencil_default = 8
+    from core.settings.default_contract import require_canonical_default
+
+    profile = (
+        settings_manager.get_application_name()
+        if settings_manager is not None
+        else application
+    )
+    triple_default = bool(
+        require_canonical_default("display.prefer_triple_buffer", profile)
+    )
+    depth_default = int(
+        require_canonical_default("display.gl_depth_bits", profile)
+    )
+    stencil_default = int(
+        require_canonical_default("display.gl_stencil_bits", profile)
+    )
 
     if settings_manager is not None:
         try:
-            triple_value = settings_manager.get("display.prefer_triple_buffer", triple_default)
+            triple_value = settings_manager.get_bool("display.prefer_triple_buffer")
             depth_value = settings_manager.get("display.gl_depth_bits", depth_default)
             stencil_value = settings_manager.get("display.gl_stencil_bits", stencil_default)
         except Exception as e:
             logger.debug(
-                "[GL FORMAT] Failed to read surface preferences from SettingsManager, using defaults: %s",
+                "[GL FORMAT] Failed to read surface preferences from SettingsManager, using canonical defaults: %s",
                 e,
                 exc_info=True,
             )

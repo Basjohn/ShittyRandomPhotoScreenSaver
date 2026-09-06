@@ -22,6 +22,7 @@ from core.constants.timing import (
     PROCESS_TERMINATE_TIMEOUT_S,
 )
 from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.settings.default_contract import require_canonical_default
 from core.process.types import (
     HealthStatus,
     MessageType,
@@ -1076,10 +1077,11 @@ class ProcessSupervisor:
         
         key = f"workers.{worker_type.value}.enabled"
         try:
-            return self._settings_manager.get(key, True)
+            return bool(self._settings_manager.get(key))
         except Exception as e:
             logger.debug("[WORKER] Exception suppressed: %s", e)
-            return True
+            # Defensive recovery still resolves through canonical product state.
+            return bool(require_canonical_default(key))
     
     def _cleanup_worker(self, worker_type: WorkerType) -> None:
         """Clean up worker resources (must hold lock)."""

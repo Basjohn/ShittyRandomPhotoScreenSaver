@@ -224,131 +224,52 @@ def process_heartbeat(widget: Any, now_ts: float) -> None:
 # ------------------------------------------------------------------
 
 _DEVCURVE_LAYERS = ("bass", "vocals", "mids", "transients")
-_DEVCURVE_LAYER_DEFAULTS = {
-    "bass": {
-        "color": (82, 167, 255, 230),
-        "alpha": 0.55,
-        "power": 1.0,
-        "offset": 0.0,
-    },
-    "vocals": {
-        "color": (136, 190, 255, 220),
-        "alpha": 0.42,
-        "power": 1.0,
-        "offset": -0.01,
-    },
-    "mids": {
-        "color": (100, 145, 255, 220),
-        "alpha": 0.46,
-        "power": 1.0,
-        "offset": 0.01,
-    },
-    "transients": {
-        "color": (215, 240, 255, 240),
-        "alpha": 0.66,
-        "power": 1.15,
-        "offset": 0.0,
-    },
-}
-_DEVCURVE_DEFAULT_NODES = (
-    (0.0, 0.58),
-    (0.35, 0.64),
-    (0.70, 0.52),
-    (1.0, 0.60),
-)
 
 
 def _devcurve_parameter_snapshot(widget: Any) -> dict[str, object]:
-    """Detach one coherent DevCurve tuning/style input for the logical step."""
+    """Detach one coherent, already-resolved DevCurve input snapshot.
+
+    Product values are initialized from canonical defaults on the logical state
+    before preset/settings overlay.  This consumer therefore has no authority to
+    synthesize another baseline when a required field is absent.
+    """
 
     values: dict[str, object] = {
-        "devcurve_base_level": float(
-            getattr(widget, "_devcurve_base_level", 0.58)
-        ),
-        "devcurve_motion_power": float(
-            getattr(widget, "_devcurve_motion_power", 1.0)
-        ),
-        "devcurve_idle_motion": float(
-            getattr(widget, "_devcurve_idle_motion", 0.20)
-        ),
-        "devcurve_idle_speed": float(
-            getattr(widget, "_devcurve_idle_speed", 0.60)
-        ),
-        "devcurve_smoothness": float(
-            getattr(widget, "_devcurve_smoothness", 0.55)
-        ),
-        "devcurve_ghosting_enabled": bool(
-            getattr(widget, "_devcurve_ghosting_enabled", False)
-        ),
-        "devcurve_ghost_alpha": float(
-            getattr(widget, "_devcurve_ghost_alpha", 0.0)
-        ),
-        "devcurve_ghost_decay": float(
-            getattr(widget, "_devcurve_ghost_decay", 0.4)
-        ),
-        "devcurve_foreground_shadow_enabled": bool(
-            getattr(widget, "_devcurve_foreground_shadow_enabled", False)
-        ),
-        "devcurve_foreground_shadow_alpha": float(
-            getattr(widget, "_devcurve_foreground_shadow_alpha", 0.36)
-        ),
-        "devcurve_foreground_shadow_darken": float(
-            getattr(widget, "_devcurve_foreground_shadow_darken", 0.42)
-        ),
-        "devcurve_foreground_shadow_offset": float(
-            getattr(widget, "_devcurve_foreground_shadow_offset", 0.10)
-        ),
-        "devcurve_foreground_specular_enabled": bool(
-            getattr(widget, "_devcurve_foreground_specular_enabled", False)
-        ),
-        "devcurve_foreground_specular_alpha": float(
-            getattr(widget, "_devcurve_foreground_specular_alpha", 0.78)
-        ),
-        "devcurve_foreground_specular_width": float(
-            getattr(widget, "_devcurve_foreground_specular_width", 0.022)
-        ),
-        "devcurve_foreground_specular_offset": float(
-            getattr(widget, "_devcurve_foreground_specular_offset", 0.028)
-        ),
-        "devcurve_foreground_specular_crest_bias": float(
-            getattr(widget, "_devcurve_foreground_specular_crest_bias", 1.05)
-        ),
-    }
-    for index, name in enumerate(_DEVCURVE_LAYERS):
-        defaults = _DEVCURVE_LAYER_DEFAULTS[name]
-        prefix = f"devcurve_layer_{name}"
-        values.update(
-            {
-                f"{prefix}_enabled": bool(
-                    getattr(widget, f"_{prefix}_enabled", True)
-                ),
-                f"{prefix}_color": getattr(
-                    widget,
-                    f"_{prefix}_color",
-                    defaults["color"],
-                ),
-                f"{prefix}_alpha": float(
-                    getattr(widget, f"_{prefix}_alpha", defaults["alpha"])
-                ),
-                f"{prefix}_power": float(
-                    getattr(widget, f"_{prefix}_power", defaults["power"])
-                ),
-                f"{prefix}_offset": float(
-                    getattr(widget, f"_{prefix}_offset", defaults["offset"])
-                ),
-                f"{prefix}_outline_color": getattr(
-                    widget,
-                    f"_{prefix}_outline_color",
-                    (255, 255, 255, 255),
-                ),
-                f"{prefix}_outline_width": float(
-                    getattr(widget, f"_{prefix}_outline_width", 0.006)
-                ),
-                f"{prefix}_order": int(
-                    getattr(widget, f"_{prefix}_order", index + 1)
-                ),
-            }
+        name: getattr(widget, f"_{name}")
+        for name in (
+            "devcurve_base_level",
+            "devcurve_motion_power",
+            "devcurve_idle_motion",
+            "devcurve_idle_speed",
+            "devcurve_smoothness",
+            "devcurve_ghosting_enabled",
+            "devcurve_ghost_alpha",
+            "devcurve_ghost_decay",
+            "devcurve_foreground_shadow_enabled",
+            "devcurve_foreground_shadow_alpha",
+            "devcurve_foreground_shadow_darken",
+            "devcurve_foreground_shadow_offset",
+            "devcurve_foreground_specular_enabled",
+            "devcurve_foreground_specular_alpha",
+            "devcurve_foreground_specular_width",
+            "devcurve_foreground_specular_offset",
+            "devcurve_foreground_specular_crest_bias",
         )
+    }
+    for name in _DEVCURVE_LAYERS:
+        prefix = f"devcurve_layer_{name}"
+        for suffix in (
+            "enabled",
+            "color",
+            "alpha",
+            "power",
+            "offset",
+            "outline_color",
+            "outline_width",
+            "order",
+        ):
+            key = f"{prefix}_{suffix}"
+            values[key] = getattr(widget, f"_{key}")
     return values
 
 
@@ -457,13 +378,7 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
     resolved_input_transient = _devcurve_transient(transient_input)
     parameters = _devcurve_parameter_snapshot(widget)
     layer_shape_nodes = {
-        name: list(
-            getattr(
-                widget,
-                f"_devcurve_layer_{name}_shape_nodes",
-                _DEVCURVE_DEFAULT_NODES,
-            )
-        )
+        name: list(getattr(widget, f"_devcurve_layer_{name}_shape_nodes"))
         for name in _DEVCURVE_LAYERS
     }
     try:
@@ -804,20 +719,24 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         "bubble_stream_reactivity": widget._bubble_stream_reactivity,
         "bubble_rotation_amount": widget._bubble_rotation_amount,
         "bubble_drift_amount": widget._bubble_drift_amount,
-        "bubble_group_drift": getattr(widget, "_bubble_group_drift", False),
+        "bubble_group_drift": widget._bubble_group_drift,
         "bubble_drift_speed": widget._bubble_drift_speed,
         "bubble_drift_frequency": widget._bubble_drift_frequency,
         "bubble_drift_direction": widget._bubble_drift_direction,
         "bubble_big_size_max": widget._bubble_big_size_max,
         "bubble_small_size_max": widget._bubble_small_size_max,
+        "bubble_big_bass_pulse": widget._bubble_big_bass_pulse,
+        "bubble_small_freq_pulse": widget._bubble_small_freq_pulse,
+        "bubble_big_contraction_bias": widget._bubble_big_contraction_bias,
+        "bubble_big_size_clamp": widget._bubble_big_size_clamp,
         "bubble_trail_strength": widget._bubble_trail_strength,
-        "bubble_ghosting_enabled": getattr(widget, "_bubble_ghosting_enabled", False),
+        "bubble_ghosting_enabled": widget._bubble_ghosting_enabled,
         "bubble_bounce_big_pct": widget._bubble_bounce_big_pct,
         "bubble_bounce_small_pct": widget._bubble_bounce_small_pct,
         "bubble_bounce_big_speed": widget._bubble_bounce_big_speed,
         "bubble_bounce_small_speed": widget._bubble_bounce_small_speed,
         "bubble_bounce_same_only": widget._bubble_bounce_same_only,
-        "bubble_collision_pop_mode": getattr(widget, "_bubble_collision_pop_mode", "off"),
+        "bubble_collision_pop_mode": widget._bubble_collision_pop_mode,
         "_event_scheduler": _event_scheduler,
     })
 
@@ -831,7 +750,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         'big_bass_pulse': widget._bubble_big_bass_pulse,
         'small_freq_pulse': widget._bubble_small_freq_pulse,
         'big_specular_max_size': widget._bubble_big_specular_max_size,
-        'big_visual_smoothing': getattr(widget, '_bubble_big_visual_smoothing', 0.5),
+        'big_visual_smoothing': widget._bubble_big_visual_smoothing,
         'big_contraction_bias': widget._bubble_big_contraction_bias,
         'big_size_clamp': widget._bubble_big_size_clamp,
     })

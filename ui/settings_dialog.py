@@ -44,7 +44,6 @@ from ui.widgets.control_shadow import (
     apply_shadows_to_existing,
     apply_shadows_to_inputs,
 )
-from ui.settings_dialog_cache import get_settings_dialog_cache
 from ui.settings_theme_runtime import (
     get_active_settings_theme,
     subscribe_settings_theme,
@@ -593,7 +592,6 @@ class SettingsDialog(QDialog):
         # AccentPolicy owner; the target state replaces the previous one directly,
         # while same-mode Glass changes stay native no-ops because Qt owns tint.
         self._native_backdrop_mode: str | None = None
-        cache = get_settings_dialog_cache()
         stored_scroll = self._settings.get('ui.last_tab_scroll', {})
         if isinstance(stored_scroll, dict):
             for key, value in stored_scroll.items():
@@ -674,7 +672,7 @@ class SettingsDialog(QDialog):
 
     def _visualizers_tab_eligibility(self) -> tuple[bool, str]:
         """Return capability admission + user-facing reason without owning it."""
-        widgets = self._settings.get("widgets", {})
+        widgets = self._settings.get("widgets")
         widgets = widgets if isinstance(widgets, dict) else {}
         if not is_widget_family_activated(widgets, "media"):
             return False, "Enable Media In Widgets"
@@ -936,7 +934,6 @@ class SettingsDialog(QDialog):
         self.content_stack.setObjectName("contentArea")
         
         # Create actual tabs lazily
-        cache = get_settings_dialog_cache()
         self._tab_builders = {
             # Build tabs with the stacked-widget as parent immediately so
             # constructors never run as transient top-level windows.
@@ -946,7 +943,6 @@ class SettingsDialog(QDialog):
             "widgets": lambda: WidgetsTab(
                 self._settings,
                 parent=self.content_stack,
-                widget_defaults=cache.widget_defaults,
                 lazy_sections=True,
                 initial_view_state=dict(
                     self._tab_state_cache.get("widgets", {}).get("view_state", {})
@@ -955,7 +951,6 @@ class SettingsDialog(QDialog):
             "visualizers": lambda: VisualizersTab(
                 self._settings,
                 parent=self.content_stack,
-                widget_defaults=cache.widget_defaults,
             ),
             "accessibility": lambda: AccessibilityTab(self._settings, parent=self.content_stack),
             "themes": lambda: ThemesTab(self._settings, parent=self.content_stack),
@@ -1497,8 +1492,8 @@ class SettingsDialog(QDialog):
     def _has_image_sources(self) -> bool:
         """Check if user has configured at least one image source (folder or RSS feed)."""
         try:
-            folders = self._settings.get('sources.folders', [])
-            rss_feeds = self._settings.get('sources.rss_feeds', [])
+            folders = self._settings.get('sources.folders')
+            rss_feeds = self._settings.get('sources.rss_feeds')
             return bool(folders) or bool(rss_feeds)
         except Exception:
             logger.debug("[SETTINGS] Exception suppressed")

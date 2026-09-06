@@ -71,13 +71,6 @@ _DEFAULT_CONFIGS: Dict[WorkerType, WorkerTuningConfig] = {
         target_latency_ms=1000,     # Network latency expected
         max_latency_ms=10000,
     ),
-    WorkerType.TRANSITION: WorkerTuningConfig(
-        request_queue_size=8,       # Precompute requests are rare
-        response_queue_size=8,      # Precomputed data cached
-        backpressure_policy=BackpressurePolicy.DROP_NEW,
-        target_latency_ms=200,      # Precompute can be slow
-        max_latency_ms=1000,
-    ),
 }
 
 

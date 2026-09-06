@@ -45,16 +45,19 @@ WIDGET_THEME_CUSTOM_KEY = "widget_theme.custom"
 CUSTOM_WIDGET_THEME_ID = "custom"
 CUSTOM_WIDGET_THEME_NAME = "Custom"
 
-DEFAULT_KEEP_SYNCED = True
 
 
 @dataclass(frozen=True, slots=True)
 class WidgetThemeState:
-    """The persisted Widget Theme selection state, normalised."""
+    """Resolved persisted Widget Theme selection state.
 
-    selected_id: str = DEFAULT_DARK_WIDGET_THEME.theme_id
-    keep_synced: bool = DEFAULT_KEEP_SYNCED
-    custom_payload: Mapping[str, Any] | None = None
+    Construction is explicit: canonical defaults are applied by the persistence
+    boundary, never by a second runtime dataclass default table.
+    """
+
+    selected_id: str
+    keep_synced: bool
+    custom_payload: Mapping[str, Any] | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,7 +218,6 @@ def begin_theme_owned_edit(
 __all__ = [
     "CUSTOM_WIDGET_THEME_ID",
     "CUSTOM_WIDGET_THEME_NAME",
-    "DEFAULT_KEEP_SYNCED",
     "ResolvedWidgetTheme",
     "WIDGET_THEME_CUSTOM_KEY",
     "WIDGET_THEME_KEEP_SYNCED_KEY",

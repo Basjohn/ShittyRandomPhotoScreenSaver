@@ -23,9 +23,13 @@ from widgets.spotify_visualizer.render_state import (
 )
 
 
-_DEFAULT_BACKGROUND_COLOR = (16, 16, 16, 179)
-_DEFAULT_BORDER_COLOR = (255, 255, 255, 230)
-_DEFAULT_SHADOW_COLOR = (0, 0, 0, 150)
+# Visualizer-shell chrome that is deliberately presentation-only rather than a
+# persisted Settings product default. Live Settings/theme fields (border width,
+# colours, shadow state/blur/direction) are supplied explicitly by the display
+# owner; these constants define only the retained Quick card's authored shape.
+VISUALIZER_CARD_CORNER_RADIUS = 8.0
+VISUALIZER_CARD_CONTENT_INSET = 0.0
+VISUALIZER_CARD_SHADOW_SPREAD = 0.0
 
 
 def _finite(value: object, *, name: str) -> float:
@@ -91,17 +95,17 @@ def resolve_visualizer_presentation(
     viewport_extent: Sequence[object] | None = None,
     scene_fade: float = 1.0,
     content_fade: float = 1.0,
-    border_width: float = 4.0,
-    corner_radius: float = 8.0,
-    content_inset: float = 0.0,
-    background_color: Sequence[object] = _DEFAULT_BACKGROUND_COLOR,
-    border_color: Sequence[object] = _DEFAULT_BORDER_COLOR,
-    shadow_enabled: bool = True,
-    shadow_color: Sequence[object] = _DEFAULT_SHADOW_COLOR,
-    shadow_blur: float = 18.0,
-    shadow_offset: Sequence[object] = (0.0, 4.0),
-    shadow_spread: float = 0.0,
-    shadow_extensions: Sequence[object] = (0.0, 0.0, 0.0, 0.0),
+    border_width: float,
+    corner_radius: float,
+    content_inset: float,
+    background_color: Sequence[object],
+    border_color: Sequence[object],
+    shadow_enabled: bool,
+    shadow_color: Sequence[object],
+    shadow_blur: float,
+    shadow_offset: Sequence[object],
+    shadow_spread: float,
+    shadow_extensions: Sequence[object],
 ) -> ResolvedVisualizerPresentation:
     """Resolve one display-local, scale-committed visualizer presentation.
 
@@ -266,11 +270,11 @@ def resize_visualizer_presentation(
         viewport_resize_capable=baseline.viewport_resize_capable,
     )
 
-    def _authored_scalar(name: str, default: float = 0.0) -> float:
-        return float(style.get(name, default)) / baseline_scale
+    def _authored_scalar(name: str) -> float:
+        return float(style[name]) / baseline_scale
 
-    shadow_offset = style.get("shadow_offset", (0.0, 0.0))
-    shadow_extensions = style.get("shadow_extensions", (0.0, 0.0, 0.0, 0.0))
+    shadow_offset = style["shadow_offset"]
+    shadow_extensions = style["shadow_extensions"]
     return resolve_visualizer_presentation(
         policy=policy,
         display_size=display_size,
@@ -280,21 +284,13 @@ def resize_visualizer_presentation(
         viewport_extent=target_extent,
         scene_fade=baseline.scene_fade,
         content_fade=baseline.content_fade,
-        border_width=float(
-            style.get(
-                "authored_border_width",
-                baseline.border_width / baseline_scale,
-            )
-        ),
+        border_width=float(style["authored_border_width"]),
         corner_radius=_authored_scalar("corner_radius"),
         content_inset=_authored_scalar("content_inset"),
-        background_color=style.get(
-            "background_color",
-            _DEFAULT_BACKGROUND_COLOR,
-        ),
-        border_color=style.get("border_color", _DEFAULT_BORDER_COLOR),
-        shadow_enabled=bool(style.get("shadow_enabled", False)),
-        shadow_color=style.get("shadow_color", _DEFAULT_SHADOW_COLOR),
+        background_color=style["background_color"],
+        border_color=style["border_color"],
+        shadow_enabled=bool(style["shadow_enabled"]),
+        shadow_color=style["shadow_color"],
         shadow_blur=_authored_scalar("shadow_blur"),
         shadow_offset=(
             float(shadow_offset[0]) / baseline_scale,
