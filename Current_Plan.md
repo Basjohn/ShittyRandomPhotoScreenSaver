@@ -11,6 +11,61 @@ After CHECKPOINT5, the working container lost the uncheckpointed source edits. T
 
 CHECKPOINT7 extends the recovered defaults sanitization boundary through strict Visualizer DSP/Quick technical admission, canonical logical-state initialization, canonical per-mode preset-index repair, removal of synthesized authored preset placeholders, and Bubble collision/reactivity parameters routed through the resolved logical contract instead of ancient local fallbacks. Focused defaults/theme authority tests remain green (21/21), all changed Python compiles, and all 30 curated preset JSONs remain byte-identical to CHECKPOINT6/5. Continue with immutable frame/render consumers, transition/image/UI shadow defaults, broader repo/default-tooling scan, then final fresh/reset/SST/preset guards.
 
+## Migration reconciliation — build/runtime/test repair (2026-09-06, Claude)
+
+The CHECKPOINT5 recovery reverted the earlier build audit and the settings
+sanitation broke test collection + startup. Status:
+
+**Build (done, pushed):** gl_compositor_pkg removed from the 4 Nuitka scripts,
+SRPSS.ico bundled as data, PEP-503 requirement normalization + requirements_helper.txt
+restored (and un-ignored), closeout/installer/defaults-audit tests reconciled.
+Preflight 0 errors; 35 build tests green.
+
+**Runtime crash fixes (done):**
+- `rendering/quick/display_presenter.py` `bind_families`: the per-widget geometry
+  binding was registered *after* `connect_overlay_preferred_size`, which on a
+  retained-runtime **recreation** (QML items already sized) synchronously ran
+  `_reflow_non_custom_layout` before the binding existed -> `RuntimeError: stack
+  participant lacks resolved geometry policy: clock` -> 0 displays -> app quit.
+  Fixed by registering the binding before connecting (final single reflow still
+  runs). This was the fatal that killed startup on both logged runs.
+- `widgets/spotify_visualizer/audio_worker.py`: `_pre_agc_bass/_mid/_treble` are in
+  `_COMPUTE_SNAPSHOT_ATTRS` and assigned only lazily per-frame but were not seeded
+  in `__init__` (siblings `_pre_agc_live_*` were) -> `make_compute_snapshot`
+  `AttributeError` before the first frame. Seeded them in `__init__` (transient DSP
+  state, not a settings default).
+
+**Still to investigate (repair plans):**
+- Lane-aware spectrum energy computes 0.0 (tests TestLaneAwareSpectrumEnergy
+  missing-bass/missing-mid). Likely the same DSP-state/defaults gap family as
+  `_pre_agc_*`; verify whether the `_pre_agc` seed resolves it or a lane profile
+  default was dropped. Recover the correct value from git (settings >=1.5 days ago)
+  and route it through canonical Settings, not a reintroduced local fallback.
+- "Reset to defaults -> missing-defaults tracebacks": the canonical defaults audit
+  is clean (0 issues), so the gaps are runtime *state/attribute* inits dropped by
+  the sanitation (like `_pre_agc_*`), not schema. Plan: reproduce the reset path,
+  collect each AttributeError/KeyError, and for each recover the intended default
+  from git history and re-home it to the correct owner (canonical Settings for
+  product defaults; `__init__`/logical-state seed for transient runtime state).
+- One-time large-migration reset: gate a single automatic reset-to-defaults on a
+  stored schema/migration version so it fires exactly once per large migration and
+  never re-wipes user state on subsequent launches. Design with the settings
+  architecture (a migration-version stamp in settings_v2), not a blanket reset.
+
+**Remaining stale tests from the migration (wind-down list, not yet repaired):**
+- `tests/test_spectrum_shaping.py::TestLaneAwareSpectrumEnergy` (2) — 0.0 lane
+  energy; treat as runtime/DSP, above.
+- `tests/test_qtquick_ordinary_widget_host.py::test_host_module_is_presentation_only`
+  — source-scan now trips on a legitimate `shiboken6` import (widget-glow work);
+  allow shiboken6 like PySide6.
+- `tests/test_qtquick_ordinary_widget_host.py::test_scene_controller_owns_and_retires_ordinary_widget_host`
+  — same two-phase deferred-retirement offscreen behavior already reconciled for
+  the overlay test; branch on `window.isSceneGraphInitialized()`.
+- A full `pytest tests/` inventory is still pending (collection was unblocked this
+  pass); expect more widget-glow/two-phase-retirement/defaults casualties to triage.
+- Add a narrow regression bar for the `bind_families` recreation ordering fix
+  (bind with a retained item reporting a synchronous size must not raise).
+
 ## PRE-V5 SETTINGS MIGRATION boundary
 
 `81019d5dd196cc5522ca9041d8773c8f2fa62df3` is the immediate pre-V5 rollback/comparison boundary. Keep it distinct for Settings before/after audits and do not rewrite it into later migration history.
