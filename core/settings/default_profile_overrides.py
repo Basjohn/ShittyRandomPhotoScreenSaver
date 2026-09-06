@@ -12,4 +12,14 @@ from __future__ import annotations
 PROFILE_DEFAULT_OVERRIDES = {'Screensaver': {},
  'Screensaver_MC': {'display': {'show_on_monitors': [1]},
                     'input': {'interaction_mode': True},
-                    'mc': {'always_on_top': True}}}
+                    'mc': {'always_on_top': True},
+                    'widgets': {'clock': {'monitor': 'ALL'},
+                                'clock2': {'monitor': 2},
+                                'clock3': {'monitor': 'ALL'},
+                                'friend_pulse': {'monitor': 'ALL'},
+                                'gmail': {'monitor': 2},
+                                'media': {'monitor': 2},
+                                'reddit': {'monitor': 2},
+                                'reddit2': {'monitor': 2},
+                                'spotify_visualizer': {'monitor': 'ALL'},
+                                'steam_progress': {'monitor': 'ALL'}}}}

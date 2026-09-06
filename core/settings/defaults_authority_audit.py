@@ -31,7 +31,16 @@ class DefaultsAuthorityIssue:
         return f"{location}: {self.message}"
 
 
-_SCAN_ROOTS = ("core", "engine", "rendering", "ui", "widgets", "utils")
+_SCAN_EXCLUDED_PARTS = frozenset({
+    ".git",
+    ".godzip",
+    ".pytest_cache",
+    ".venv",
+    "__pycache__",
+    "deleteme",
+    "tests",
+    "venv",
+})
 
 _DIRECT_DEFAULT_AUTHORITY_IMPORT_ALLOWLIST = frozenset({
     "core/settings/default_contract.py",
@@ -54,14 +63,19 @@ _SENSITIVE_MAPPING_OWNER_TOKENS = (
 
 
 def _iter_python_files(root: Path) -> Iterable[Path]:
-    for root_name in _SCAN_ROOTS:
-        base = root / root_name
-        if not base.exists():
+    """Yield every first-party Python source subject to defaults ownership rules.
+
+    The authority guard deliberately includes root entrypoints, tools, helpers,
+    providers, and future top-level source packages. Tests/caches/virtual-env or
+    deletion-staging trees are excluded because they are not production or
+    authoring surfaces.
+    """
+
+    for path in root.rglob("*.py"):
+        relative = path.relative_to(root)
+        if any(part in _SCAN_EXCLUDED_PARTS for part in relative.parts):
             continue
-        for path in base.rglob("*.py"):
-            if "__pycache__" in path.parts:
-                continue
-            yield path
+        yield path
 
 
 def _literal(node: ast.AST) -> object:

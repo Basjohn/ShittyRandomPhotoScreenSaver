@@ -73,7 +73,6 @@ class VisualizerModeDescriptor:
     # disabled experiment must not instantiate or import its solver.
     capture_module: str = ""
     capture_factory: str = ""
-    default_enabled: bool = True
     technical_controls: bool = True
 
     @property
@@ -159,7 +158,6 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         settings_builder_factory="build_sphere_ui",
         capture_module="widgets.spotify_visualizer.sphere_capture",
         capture_factory="capture_sphere",
-        default_enabled=False,
         technical_controls=False,
     ),
 )
@@ -279,19 +277,37 @@ def resolve_effective_enabled_modes(
     Keeps only canonical mode ids, de-duplicates, and preserves canonical
     ``VISUALIZER_MODE_IDS`` order regardless of stored order. Enforces the V2
     invariant that a live Visualizer family has at least one enabled mode: an
-    absent, empty, or fully-invalid selection resolves to descriptor
-    ``default_enabled`` modes. This preserves the established five-mode
-    profile while new experiments remain explicitly opt-in.
+    absent, empty, or fully-invalid selection resolves to the canonical
+    ``widgets.spotify_visualizer.enabled_modes`` product setting. Capability
+    descriptors deliberately do not own enable-state defaults.
 
     This is intentionally about the *registered* canonical set, not dev gates:
     enable-state is persisted product configuration, separate from ``is_mode_active``.
     """
 
-    default_modes = tuple(
-        descriptor.mode_id
-        for descriptor in _ALL_DESCRIPTORS
-        if descriptor.default_enabled
+    from core.settings.default_contract import require_canonical_default
+
+    configured_defaults = require_canonical_default(
+        "widgets.spotify_visualizer.enabled_modes"
     )
+    if not isinstance(configured_defaults, (list, tuple, set, frozenset)):
+        raise TypeError(
+            "canonical visualizer enabled_modes must be a sequence of mode ids"
+        )
+    configured_set = {
+        str(item or "").strip().lower() for item in configured_defaults
+    }
+    unknown_defaults = configured_set.difference(VISUALIZER_MODE_IDS)
+    if unknown_defaults:
+        raise ValueError(
+            "canonical visualizer enabled_modes contains unknown mode ids: "
+            + ", ".join(sorted(unknown_defaults))
+        )
+    default_modes = tuple(
+        mode_id for mode_id in VISUALIZER_MODE_IDS if mode_id in configured_set
+    )
+    if not default_modes:
+        raise ValueError("canonical visualizer enabled_modes must not be empty")
     if requested is None:
         return default_modes
 

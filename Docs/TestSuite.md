@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-09-05
+Last updated: 2026-09-06
 
 ## Current authority
 
@@ -143,6 +143,35 @@ rehome-or-delete judgement (not blind deletion):
 - `test_transition_registry` — live `rendering.transition_registry` + deleted
   `rendering.transition_factory`; verify redundancy vs `test_transition_catalog_imports`
   + `test_transition_distribution`.
+
+## 0A. 2026-09-06 canonical-default authority gate
+
+`tests/test_defaults_schema_authority.py` is a permanent **30-test** post-sanitization/default-baseline gate. Run it directly with:
+
+```powershell
+pytest tests/test_defaults_schema_authority.py -q --tb=short
+python -m core.settings.defaults_snapshot_builder --check-all
+```
+
+It protects the completed defaults-authority sweep rather than one UI screen. Coverage includes: single-shape
+structured roots; real persisted fallbacks present in canonical defaults; exclusion of runtime/session history
+from product defaults; fresh collapsed Settings bucket state; approved standard-profile Display-1 routing / MC route preservation / Default Dark Glass / Bubble-with-Sphere-dormant / Weather+Gmail / Random-mode baseline; exact generated JSON + Normal/MC SST parity; fresh-install/
+Reset/SST structured-root projection; schema-driven import coercion; explicit JSON `null` vs missing semantics;
+Visualizer schema and separate curated-preset authority; Settings builders free of shadow defaults; canonical
+capability activation/pool fallback resolution; Display/Transitions UI free of product fallback literals; Custom
+Visualizer ownership; retired growth/schema invalidation; empty recovery metadata; removed transition-precompute/
+QWidget renderer debris; seeded resolved runtime config; runtime/preview/stacking consumers not rebuilding product
+defaults; headless exact snapshot tooling; profile-differential purity; Custom preservation across reset/SST;
+manager-owned profile identity; canonical missing-key bool behavior; strict resolved Quick Visualizer input contracts;
+and authority-audit coverage of **all first-party Python including `tools/` and root entrypoints**.
+
+The executable anti-fragmentation implementation is `core/settings/defaults_authority_audit.py`. New product
+code/tooling that introduces a static bool/default coercion around a direct canonical product read, a duplicate
+structured-root representation, or another forbidden default owner must make this gate red. Curated Visualizer
+preset JSON is intentionally outside product-default regeneration and remains separately authored.
+
+This gate now pins the explicitly reviewed 2026-09-06 fresh-profile decisions. Future default-value changes remain product decisions and must update canonical source/profile deltas first, regenerate with `--write-all`, and then update the gate deliberately.
+
 
 ## 1. Evidence and status vocabulary
 

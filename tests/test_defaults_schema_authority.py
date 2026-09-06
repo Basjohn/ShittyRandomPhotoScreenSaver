@@ -108,6 +108,85 @@ def test_fresh_profile_collapsible_settings_ui_is_closed_by_default() -> None:
         )
 
 
+def test_approved_fresh_profile_defaults_are_canonical_and_dormancy_safe() -> None:
+    defaults = _literal("core/settings/default_settings.py", "DEFAULT_SETTINGS")
+    widgets = defaults["widgets"]
+
+    # Standard/Screensaver starts every widget route on Display 1.  Enabled
+    # state remains a separate product choice; routing must not turn anything on.
+    monitor_routes = {
+        widget_id: section["monitor"]
+        for widget_id, section in widgets.items()
+        if isinstance(section, dict) and "monitor" in section
+    }
+    assert monitor_routes
+    assert {str(value) for value in monitor_routes.values()} == {"1"}
+
+    # This tranche changes placement/default mode only.  Preserve the approved
+    # fresh-profile screen-space policy exactly: do not accidentally turn on a
+    # family merely because its route is now Display 1.
+    assert {
+        widget_id: section["enabled"]
+        for widget_id, section in widgets.items()
+        if isinstance(section, dict) and "enabled" in section and widget_id != "shadows"
+    } == {
+        "abandonment_issues": False,
+        "achievement_pulse": False,
+        "clock": True,
+        "clock2": False,
+        "clock3": False,
+        "friend_pulse": False,
+        "gmail": True,
+        "media": True,
+        "reddit": True,
+        "reddit2": True,
+        "spotify_visualizer": True,
+        "steam": False,
+        "steam_progress": False,
+        "weather": True,
+    }
+
+    assert widgets["weather"]["enabled"] is True
+    assert widgets["weather"]["location"] == ""
+    assert str(widgets["weather"]["monitor"]) == "1"
+
+    assert widgets["gmail"]["enabled"] is True
+    assert str(widgets["gmail"]["monitor"]) == "1"
+
+    visualizer = widgets["spotify_visualizer"]
+    # The Visualizer itself is ON by default; its existing Media-family and
+    # now-playing admission keep it dormant until there is media to visualize.
+    assert visualizer["enabled"] is True
+    assert visualizer["visualizers_enabled"] is True
+    assert visualizer["mode"] == "bubble"
+    assert visualizer["enabled_modes"] == [
+        "spectrum",
+        "oscilloscope",
+        "sine_wave",
+        "bubble",
+        "devcurve",
+    ]
+    assert "sphere" not in visualizer["enabled_modes"]
+
+    # Random mode is the one canonical transition-mode authority.  The concrete
+    # type remains the remembered manual choice, not a second "Random" sentinel.
+    assert defaults["transitions"]["random_always"] is True
+    assert defaults["transitions"]["type"] != "Random"
+
+    ui = defaults["ui"]
+    assert ui["settings_theme_selection"] == "file:Default Dark [Single] [Glass].srtheme"
+    bucket_roots = {
+        key: value
+        for key, value in ui.items()
+        if key.endswith("_bucket_states")
+    }
+    assert bucket_roots
+    assert all(
+        isinstance(states, dict) and states and all(value is False for value in states.values())
+        for states in bucket_roots.values()
+    )
+
+
 def test_derived_snapshot_tracks_clean_normal_defaults() -> None:
     defaults = _literal("core/settings/default_settings.py", "DEFAULT_SETTINGS")
     snapshot = json.loads(_text("core/settings/defaults_snapshot.json"))
@@ -472,7 +551,7 @@ def test_defaults_snapshot_tooling_is_headless_and_exact() -> None:
     import sys
 
     result = subprocess.run(
-        [sys.executable, "-m", "core.settings.defaults_snapshot_builder", "--check"],
+        [sys.executable, "-m", "core.settings.defaults_snapshot_builder", "--check-all"],
         cwd=ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -481,6 +560,7 @@ def test_defaults_snapshot_tooling_is_headless_and_exact() -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "defaults snapshot OK" in result.stdout
+    assert "SST defaults documents OK" in result.stdout
 
     package_init = _text("core/settings/__init__.py")
     assert "def __getattr__(name: str)" in package_init
@@ -492,6 +572,8 @@ def test_defaults_snapshot_tooling_is_headless_and_exact() -> None:
     assert "return json.dumps(build_defaults_snapshot(), indent=2, sort_keys=True)" in builder
     assert "def defaults_snapshot_matches" in builder
     assert "def write_defaults_snapshot" in builder
+    assert "def sst_defaults_documents_match" in builder
+    assert "def write_sst_defaults_documents" in builder
 
 
 def test_widget_preview_and_custom_position_repair_use_canonical_sections() -> None:
@@ -513,7 +595,7 @@ def test_widget_preview_and_custom_position_repair_use_canonical_sections() -> N
 
 
 def test_profile_layering_contains_only_real_behavioral_differences() -> None:
-    """MC profile overrides may change behavior, never just value representation."""
+    """MC profile overrides preserve its established monitor routing and behavior."""
     import sys
     sys.path.insert(0, str(ROOT))
     from core.settings.defaults import get_default_settings
@@ -535,18 +617,41 @@ def test_profile_layering_contains_only_real_behavioral_differences() -> None:
             return result
         return {} if left == right else {prefix: (left, right)}
 
+    expected_monitor_diffs = {
+        "widgets.clock.monitor": ("1", "ALL"),
+        "widgets.clock2.monitor": (1, 2),
+        "widgets.clock3.monitor": ("1", "ALL"),
+        "widgets.friend_pulse.monitor": ("1", "ALL"),
+        "widgets.gmail.monitor": (1, 2),
+        "widgets.media.monitor": (1, 2),
+        "widgets.reddit.monitor": (1, 2),
+        "widgets.reddit2.monitor": (1, 2),
+        "widgets.spotify_visualizer.monitor": ("1", "ALL"),
+        "widgets.steam_progress.monitor": ("1", "ALL"),
+    }
     assert collect_diff(normal, mc) == {
         "display.show_on_monitors": ("ALL", [1]),
         "input.interaction_mode": (False, True),
         "mc": (None, {"always_on_top": True}),
+        **expected_monitor_diffs,
     }
 
     overrides = _literal(
         "core/settings/default_profile_overrides.py",
         "PROFILE_DEFAULT_OVERRIDES",
     )["Screensaver_MC"]
-    assert "gmail" not in overrides.get("widgets", {})
-    assert "media" not in overrides.get("widgets", {})
+    assert overrides["widgets"] == {
+        "clock": {"monitor": "ALL"},
+        "clock2": {"monitor": 2},
+        "clock3": {"monitor": "ALL"},
+        "friend_pulse": {"monitor": "ALL"},
+        "gmail": {"monitor": 2},
+        "media": {"monitor": 2},
+        "reddit": {"monitor": 2},
+        "reddit2": {"monitor": 2},
+        "spotify_visualizer": {"monitor": "ALL"},
+        "steam_progress": {"monitor": "ALL"},
+    }
 
 
 def test_fresh_reset_and_sst_replace_share_canonical_projection_and_custom_ownership() -> None:
@@ -670,3 +775,22 @@ def test_quick_visualizer_renderer_inputs_are_strict_resolved_contracts() -> Non
                     assert len(node.args) == 2 and not node.keywords, (relative, node.lineno)
                 if node.func.id == "rgba":
                     assert len(node.args) == 1 and not node.keywords, (relative, node.lineno)
+
+def test_defaults_authority_audit_covers_tooling_and_root_entrypoints() -> None:
+    audit = _text("core/settings/defaults_authority_audit.py")
+
+    assert 'for path in root.rglob("*.py")' in audit
+    assert '"tests"' in audit
+    assert '"deleteme"' in audit
+    assert '_SCAN_ROOTS' not in audit
+
+    # The audit itself is first-party and therefore covers the dangerous authoring
+    # surfaces that previously escaped runtime/UI-only scans: tools and root apps.
+    from core.settings.defaults_authority_audit import _iter_python_files
+
+    scanned = {path.relative_to(ROOT).as_posix() for path in _iter_python_files(ROOT)}
+    assert "tools/build_runner.py" in scanned
+    assert "tools/check_defaults_authority.py" in scanned
+    assert "main.py" in scanned
+    assert "tests/test_defaults_schema_authority.py" not in scanned
+
