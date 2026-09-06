@@ -23,6 +23,10 @@ This document is now a **testing guide plus preserved migration reconciliation l
 
 Current membership is determined from the exact tree and `tests/run_chunked.py` profile definitions. Whenever a current checkpoint adds/removes/re-homes a maintained test, update the current additions/contract notes in this document; do not try to keep the old migration snapshot pretending to be a live filesystem listing.
 
+### 2026-09-06 — 5.0.0 installer migration-reset contract
+
+- `tests/test_installer_v5_reset_policy.py` pins the release-specific installer rule: Standard and MC reset tasks default checked for **5.0.0 only**, Diagnostic stays opt-in, and a selected reset deletes both the profile JSON snapshot and its pre-JSON `QSettings` registry tree so first launch cannot silently re-import the state that was meant to be discarded.
+
 ## 0. 2026-09-05 test-truth audit reconciliation
 
 A whole-tree test-truth audit ran the collection preflight and re-collected every

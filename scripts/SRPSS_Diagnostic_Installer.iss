@@ -35,6 +35,11 @@ Name: "runafter"; Description: "Run the diagnostic runtime after install"; Group
 Source: "..\release\diagnostic\SRPSS_Diagnostic.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
 
+[Registry]
+; Diagnostic reset remains opt-in, but when selected it must be a real ordinary-profile reset:
+; clear the pre-JSON QSettings tree as well as settings_v2.json.
+Root: HKCU; Subkey: "Software\ShittyRandomPhotoScreenSaver\Screensaver"; Flags: deletekey; Tasks: resetsettings
+
 [Icons]
 Name: "{group}\Run SRPSS Diagnostic"; Filename: "{app}\SRPSS_Diagnostic.exe"; Parameters: "/s"; IconFilename: "{app}\SRPSS.ico"
 Name: "{group}\Open SRPSS Diagnostic Settings"; Filename: "{app}\SRPSS_Diagnostic.exe"; Parameters: "/c"; IconFilename: "{app}\SRPSS.ico"

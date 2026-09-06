@@ -32,7 +32,9 @@ VersionInfoVersion=5.0.0
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "resetsettings"; Description: "Revert Settings To Defaults"; GroupDescription: "Settings:"; Flags: unchecked
+; 5.0.0 ONLY: default this migration reset ON because v5 replaced the settings/runtime architecture massively.
+; Reconsider/remove the default-on policy after the 5.0.0 migration release; the task itself remains useful manually.
+Name: "resetsettings"; Description: "Revert Settings To Defaults"; GroupDescription: "Settings:"
 
 [Files]
 ; Main screensaver from the canonical release payload.
@@ -70,7 +72,7 @@ Name: "{commonappdata}\SRPSS\logs"; Permissions: users-modify
 Name: "{commonappdata}\SRPSS\helper_signals"; Permissions: users-modify
 
 [InstallDelete]
-; Optional clean-settings install. Delete only the canonical user settings snapshot;
+; 5.0.0 migration-reset task. Delete the canonical user settings snapshot;
 ; caches, credentials, themes, presets, and other state remain untouched.
 Type: files; Name: "{userappdata}\SRPSS\settings_v2.json"; Tasks: resetsettings
 
@@ -87,6 +89,10 @@ Type: files; Name: "{commonappdata}\SRPSS\sounds\tutuogg.ogg"
 Type: files; Name: "{commonappdata}\SRPSS\sounds\jedimodeyall.mp3"
 
 [Registry]
+; When the 5.0.0 migration-reset task is selected, delete the pre-JSON QSettings tree too.
+; Deleting only settings_v2.json would otherwise let first launch re-import these legacy values.
+Root: HKCU; Subkey: "Software\ShittyRandomPhotoScreenSaver\Screensaver"; Flags: deletekey; Tasks: resetsettings
+
 ; Set SRPSS.scr as the current user's active screensaver.
 Root: HKCU; Subkey: "Control Panel\Desktop"; ValueType: string; ValueName: "SCRNSAVE.EXE"; ValueData: "{sys}\SRPSS.scr"; Flags: uninsdeletevalue
 

@@ -343,3 +343,15 @@ exact current source + current reconciled test tree
 - [x] Focused defaults-authority gate expanded to **30 tests** and passes 30/30.
 - [x] Final CHECKPOINT17 packaging gate: authority audit clean; `--check-all` exact; **434/434** Python compile; direct **30/30** CP5 preset byte parity; **534** manifested payload files with exact member/SHA/size verification and clean ZIP CRC; all four project-owned `scripts/venv/*.ps1` files retained.
 - [ ] **NEXT SEPARATE SLICE ONLY:** `dark.qss` lifecycle/theming cleanup.
+
+## CHECKPOINT18 — 5.0.0 installer migration-reset safety (2026-09-06)
+
+- [x] Standard and MC installer `resetsettings` tasks default checked for **5.0.0 only**, with inline source comments requiring the default-on policy to be reconsidered after the migration release.
+- [x] A selected reset is now complete: it deletes the profile's `settings_v2.json` **and** matching pre-JSON Qt `QSettings` registry tree, preventing first v5 launch from immediately re-importing the state the installer intended to discard.
+- [x] Diagnostic intentionally remains reset-OFF by default because it consumes the ordinary SRPSS profile, but an explicitly selected Diagnostic reset now also clears both JSON and legacy QSettings.
+- [x] `Docs/Defaults_Guide.md` records the real error/migration behavior: malformed JSON/invalid snapshot regenerates canonical defaults; valid historical state is migrated/repaired conservatively and unknown-but-valid semantics may survive unless reset.
+- [x] Historical bug record added: `Docs/Historical_Bugs/Installer_Reset_Reimported_Legacy_QSettings_2026-09-06.md`.
+- [x] New permanent installer policy guard `tests/test_installer_v5_reset_policy.py`; focused defaults + installer gate passes **32/32**.
+- [x] Defaults authority audit clean; deterministic defaults snapshot exact; first-party Python compile **435/435**.
+- [ ] Separate architectural follow-up candidate: normalize Weather/Steam CUSTOM sizing away from legacy per-value payload routes before allowing the non-CUSTOM stacker to apply transient automatic shrink broadly.
+- [ ] `dark.qss` lifecycle/theming cleanup remains a separate task.
