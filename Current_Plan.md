@@ -34,6 +34,27 @@ Preflight 0 errors; 35 build tests green.
   in `__init__` (siblings `_pre_agc_live_*` were) -> `make_compute_snapshot`
   `AttributeError` before the first frame. Seeded them in `__init__` (transient DSP
   state, not a settings default).
+- `rendering/widget_descriptors.py`: `WIDGET_DEFAULT_INIT_DESCRIPTORS` requested
+  unprefixed `spotify_visualizer.bar_fill_color` / `bar_border_color`, but those are
+  per-mode keys (`<mode>_bar_fill_color`); the KeyError crashed `WidgetsTab.__init__`
+  and thus the whole settings dialog. Removed the two descriptors -- the attrs are
+  owned/seeded by `ui/tabs/media/shared_appearance_controls.py` from
+  `spectrum_bar_*`. Runtime data mistaken for a plain schema default.
+- `core/settings/models/_spotify_visualizer.py`: `_active_visualizer_default`
+  resolved `f"{active_mode}_{key}"` unconditionally, so selecting Sphere raised 15
+  KeyErrors (Sphere is deliberately excluded from `PER_MODE_TECHNICAL_MODES`).
+  Fixed the resolver to mirror these fields from the reference technical mode for
+  non-technical active modes (matching `_normalize_mode_name`); no canonical/snapshot
+  change, schema parity intact.
+
+**Defaults sweep results (2026-09-06):** canonical defaults audit clean (0 issues);
+153 literal `_widget_default`/`_color_from_default`/`require_canonical_default`
+call-sites all resolve; 34 default descriptors -> 2 stale (fixed above); per-mode x
+per-key cross-check -> only Sphere (fixed above via resolver, correctly, not by
+inventing `sphere_<technical>` canonical keys); all 7 settings tabs build under
+fresh defaults. So the statically discoverable "runtime data mistaken for schema"
+set is closed; any remaining runtime reset tracebacks need reproduction from the
+app (not reproducible headless here).
 
 **Still to investigate (repair plans):**
 - Lane-aware spectrum energy computes 0.0 (tests TestLaneAwareSpectrumEnergy
