@@ -38,7 +38,9 @@ AllowUNCPath=False
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "resetsettings"; Description: "Revert Settings To Defaults"; GroupDescription: "Settings:"; Flags: unchecked
+; 5.0.0 ONLY: default this migration reset ON because v5 replaced the settings/runtime architecture massively.
+; Reconsider/remove the default-on policy after the 5.0.0 migration release; the task itself remains useful manually.
+Name: "resetsettings"; Description: "Revert Settings To Defaults"; GroupDescription: "Settings:"
 Name: "startmenu"; Description: "Create Start Menu Shortcuts"; GroupDescription: "Additional options:"
 Name: "desktop"; Description: "Create Desktop Shortcuts"; GroupDescription: "Additional options:"
 Name: "runafter"; Description: "Run After Install"; GroupDescription: "Post-install option:"; Flags: unchecked
@@ -61,6 +63,11 @@ Source: "..\release\media_center\SRPSS_Media_Center.exe"; DestDir: "{app}"; Flag
 ; Installer icon for shortcuts / ARP entry
 Source: "..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
 
+[Registry]
+; When the 5.0.0 migration-reset task is selected, delete the pre-JSON MC QSettings tree too.
+; Deleting only settings_v2.json would otherwise let first launch re-import these legacy values.
+Root: HKCU; Subkey: "Software\ShittyRandomPhotoScreenSaver\Screensaver_MC"; Flags: deletekey; Tasks: resetsettings
+
 [Icons]
 Name: "{group}\SRPSS - Media Center"; Filename: "{app}\SRPSS_Media_Center.exe"; Tasks: startmenu
 Name: "{userdesktop}\SRPSS - Media Center"; Filename: "{app}\SRPSS_Media_Center.exe"; Tasks: desktop
@@ -74,7 +81,7 @@ Filename: "{app}\SRPSS_Media_Center.exe"; Description: "Launch SRPSS - Media Cen
 Type: filesandordirs; Name: "{app}"
 
 [InstallDelete]
-; Optional clean-settings install for the Media Center profile only.
+; 5.0.0 migration-reset task for the Media Center profile only.
 Type: files; Name: "{userappdata}\SRPSS_MC\settings_v2.json"; Tasks: resetsettings
 
 ; Wipe both the packaged backup copy and the shared active curated tree so
