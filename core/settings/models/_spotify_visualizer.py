@@ -63,9 +63,19 @@ def _visualizer_default(key: str) -> Any:
 
 
 def _active_visualizer_default(key: str) -> Any:
-    """Return the default active-mode mirror for a non-persisted model field."""
+    """Return the default active-mode mirror for a non-persisted model field.
 
-    mode = str(_visualizer_default("mode"))
+    These mirror fields (bar_* visuals + the technical audio profile) exist only
+    for modes in ``PER_MODE_TECHNICAL_MODES``. A mode without its own technical
+    profile (e.g. ``sphere``, which reacts through its own sphere_* keys) mirrors
+    them from the reference technical mode instead of resolving a non-existent
+    ``sphere_<key>`` canonical default -- matching ``_normalize_mode_name`` used
+    for per-mode attr resolution elsewhere in this model.
+    """
+
+    mode = str(_visualizer_default("mode")).lower()
+    if mode not in PER_MODE_TECHNICAL_MODES:
+        mode = PER_MODE_TECHNICAL_MODES[0]
     return _visualizer_default(f"{mode}_{key}")
 
 
