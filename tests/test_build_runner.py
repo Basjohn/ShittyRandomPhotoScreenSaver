@@ -249,6 +249,11 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
     )
     monkeypatch.setattr(build_runner, "_find_pwsh", lambda: Path("pwsh.exe"))
     monkeypatch.setattr(build_runner, "_find_iscc", lambda: Path("ISCC.exe"))
+    # This test pins job/asset preflight against a synthetic tree. The defaults
+    # authority audit is a separate cross-cutting concern (it inspects the real
+    # settings snapshot + Python sources and has its own focused suite), so hold
+    # it neutral here rather than staging a whole derived defaults snapshot.
+    monkeypatch.setattr(build_runner, "audit_defaults_authority", lambda _root: [])
 
     result = build_runner.run_preflight("normal", tmp_path)
 
