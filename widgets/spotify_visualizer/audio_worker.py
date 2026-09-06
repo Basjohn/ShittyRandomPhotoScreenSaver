@@ -268,6 +268,14 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._pre_agc_live_bass: float = 0.0
         self._pre_agc_live_mid: float = 0.0
         self._pre_agc_live_treble: float = 0.0
+        # Pre-AGC lane snapshots are published each processed frame, but a compute
+        # snapshot can be requested before the first frame (the retained lane
+        # rebuilds on gate/activation/config boundaries). Seed them so
+        # make_compute_snapshot never hits an uninitialised attribute -- these are
+        # transient DSP state, not settings defaults.
+        self._pre_agc_bass: float = 0.0
+        self._pre_agc_mid: float = 0.0
+        self._pre_agc_treble: float = 0.0
 
         # Sensitivity configuration (driven from Settings UI).
         self._cfg_lock = threading.Lock()

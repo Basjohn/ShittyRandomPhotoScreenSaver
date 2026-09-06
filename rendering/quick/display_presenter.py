@@ -283,10 +283,19 @@ class QuickDisplayPresenter:
             if callable(set_commit_handler) and policy.has_committed_rect:
                 set_commit_handler(binding.set_committed_rect)
 
+            # Register the binding BEFORE connecting the preferred-size signal.
+            # connect_overlay_preferred_size drives an initial content-size update
+            # synchronously, and on a retained-runtime recreation the QML item
+            # already has a size -- so the geometry sink runs immediately and, for a
+            # stacking widget, triggers _reflow_non_custom_layout. If the binding
+            # were appended afterwards, that reflow would see this stack participant
+            # with a base geometry but no resolved binding and raise. The final
+            # reflow below still runs once with the complete participant set.
+            self._geometry_bindings.append((widget_id, binding))
+
             # QML reports size only; Python resolves + assigns the outer rect. A
             # committed rect (CUSTOM / Clock per-variant) wins and suppresses this.
             connect_overlay_preferred_size(overlay.item, binding)
-            self._geometry_bindings.append((widget_id, binding))
 
         if self._stacking_enabled and self._authored_layout_enabled:
             self._reflow_non_custom_layout()
