@@ -42,13 +42,10 @@ class WidgetPosition(Enum):
     CUSTOM = "custom"
 
 
-def coerce_widget_position(value: Any, fallback: WidgetPosition) -> WidgetPosition:
-    """
-    DEPRECATED: Use core.settings.normalization.normalize_widget_position() instead.
-    
-    Normalize a persisted widget position into a WidgetPosition enum.
-    Handles legacy strings such as "WidgetPosition.TOP_LEFT" or "Top Left".
-    """
-    # Import here to avoid circular dependency
-    from core.settings.normalization import normalize_widget_position
-    return normalize_widget_position(value, fallback)
+def parse_widget_position(value: Any) -> WidgetPosition:
+    """Parse a canonical widget position and fail if the schema is invalid."""
+
+    # Import lazily to avoid the models <-> normalization module cycle.
+    from core.settings.normalization import parse_enum_strict
+
+    return parse_enum_strict(value, WidgetPosition)

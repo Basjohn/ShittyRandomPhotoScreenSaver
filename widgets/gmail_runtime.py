@@ -25,9 +25,8 @@ import time
 import weakref
 from typing import Any, Mapping
 
-from core.audio.sound_paths import default_notification_sound_path
 from core.gmail.gmail_backend import GmailBackend, GmailBackendMode
-from core.gmail.gmail_client import EmailMetadata, GmailFetchCancelled, GmailLabel
+from core.gmail.gmail_client import EmailMetadata, GmailFetchCancelled
 from core.gmail.gmail_preparation import (
     PreparedGmailStartup,
     load_gmail_startup_snapshot,
@@ -38,6 +37,7 @@ from core.logging.logger import get_logger
 from core.performance import record_widget_timer_result
 from core.runtime_flags import automatic_service_updates_enabled
 from core.settings.storage_paths import resolve_app_data_dir
+from core.settings.default_contract import require_canonical_default
 from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
 from core.threading.manager import ThreadManager
 from widgets.overlay_timers import OverlayTimerHandle, create_overlay_timer
@@ -51,7 +51,11 @@ CACHE_DIR = resolve_app_data_dir() / "cache"
 CACHE_PATH = CACHE_DIR / "gmail_cache.json"
 
 
-def _to_bool(value: Any, default: bool = False) -> bool:
+def _gmail_default(key: str) -> Any:
+    return require_canonical_default(f"widgets.gmail.{key}")
+
+
+def _to_bool(value: Any, default: bool) -> bool:
     if isinstance(value, bool):
         return value
     if value is None:
@@ -75,54 +79,81 @@ def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
 
 @dataclass(frozen=True)
 class GmailRuntimeConfig:
-    """Presentation-neutral Gmail cadence/cache/notification configuration."""
+    """Presentation-neutral Gmail cadence/cache/notification configuration.
 
-    refresh_minutes: int = 5
+    Persisted product values are seeded and repaired only from canonical
+    ``widgets.gmail`` defaults. Provider/cache capacities remain runtime
+    constraints and therefore stay local to this service contract.
+    """
+
+    refresh_minutes: int = field(default_factory=lambda: int(_gmail_default("refresh_minutes")))
     fetch_window_capacity: int = LIST_WIDGET_MAX_CAPACITY
-    filter_label: str = GmailLabel.INBOX.value
-    play_sound_on_new_mail: bool = False
-    sound_file_path: str = field(default_factory=default_notification_sound_path)
-    sound_volume_percent: int = 50
+    filter_label: str = field(default_factory=lambda: str(_gmail_default("filter_label")))
+    play_sound_on_new_mail: bool = field(
+        default_factory=lambda: bool(_gmail_default("play_sound_on_new_mail"))
+    )
+    sound_file_path: str = field(default_factory=lambda: str(_gmail_default("sound_file_path")))
+    sound_volume_percent: int = field(
+        default_factory=lambda: int(_gmail_default("sound_volume_percent"))
+    )
     cache_path: Path = CACHE_PATH
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any] | None) -> "GmailRuntimeConfig":
         config = value if isinstance(value, Mapping) else {}
+        refresh_default = int(_gmail_default("refresh_minutes"))
+        filter_default = str(_gmail_default("filter_label"))
+        sound_enabled_default = bool(_gmail_default("play_sound_on_new_mail"))
+        sound_path_default = str(_gmail_default("sound_file_path"))
+        sound_volume_default = int(_gmail_default("sound_volume_percent"))
         return cls(
             refresh_minutes=_bounded_int(
-                config.get("refresh_minutes", 5), 5, 1, 24 * 60
+                config.get("refresh_minutes", refresh_default),
+                refresh_default,
+                1,
+                24 * 60,
             ),
             # Fetching a stable shared window keeps presenter limit changes from
             # changing provider I/O cardinality.
             fetch_window_capacity=LIST_WIDGET_MAX_CAPACITY,
-            filter_label=str(config.get("filter_label", GmailLabel.INBOX.value)),
+            filter_label=str(config.get("filter_label", filter_default) or filter_default),
             play_sound_on_new_mail=_to_bool(
-                config.get("play_sound_on_new_mail", False), False
+                config.get("play_sound_on_new_mail", sound_enabled_default),
+                sound_enabled_default,
             ),
             sound_file_path=str(
-                config.get("sound_file_path", default_notification_sound_path()) or ""
+                config.get("sound_file_path", sound_path_default) or sound_path_default
             ),
             sound_volume_percent=_bounded_int(
-                config.get("sound_volume_percent", 50), 50, 0, 100
+                config.get("sound_volume_percent", sound_volume_default),
+                sound_volume_default,
+                0,
+                100,
             ),
             cache_path=CACHE_PATH,
         )
 
     def normalized(self) -> "GmailRuntimeConfig":
+        refresh_default = int(_gmail_default("refresh_minutes"))
+        filter_default = str(_gmail_default("filter_label"))
+        sound_path_default = str(_gmail_default("sound_file_path"))
+        sound_volume_default = int(_gmail_default("sound_volume_percent"))
         return replace(
             self,
-            refresh_minutes=_bounded_int(self.refresh_minutes, 5, 1, 24 * 60),
+            refresh_minutes=_bounded_int(
+                self.refresh_minutes, refresh_default, 1, 24 * 60
+            ),
             fetch_window_capacity=_bounded_int(
                 self.fetch_window_capacity,
                 LIST_WIDGET_MAX_CAPACITY,
                 1,
                 LIST_WIDGET_MAX_CAPACITY,
             ),
-            filter_label=str(self.filter_label or GmailLabel.INBOX.value),
+            filter_label=str(self.filter_label or filter_default),
             play_sound_on_new_mail=bool(self.play_sound_on_new_mail),
-            sound_file_path=str(self.sound_file_path or ""),
+            sound_file_path=str(self.sound_file_path or sound_path_default),
             sound_volume_percent=_bounded_int(
-                self.sound_volume_percent, 50, 0, 100
+                self.sound_volume_percent, sound_volume_default, 0, 100
             ),
             cache_path=Path(self.cache_path),
         )

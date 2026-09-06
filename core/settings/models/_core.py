@@ -4,12 +4,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
+from core.settings.default_contract import require_canonical_default
+
 from core.settings.models._enums import (
     DisplayMode,
     TransitionType,
     WidgetPosition,
-    coerce_widget_position,
+    parse_widget_position,
 )
+from core.settings.normalization import normalize_widget_position
 
 if TYPE_CHECKING:
     from core.settings.settings_manager import SettingsManager
@@ -31,49 +34,49 @@ def _coerce_widget_glow_color(value: Any) -> Optional[List[int]]:
     return channels
 
 def _coerce_widget_glow_intensity(value: Any) -> int:
-    """Clamp the persisted percentage without turning corrupt state into a crash."""
+    """Clamp persisted percentage; corrupt state returns to canonical authority."""
 
     try:
         return max(0, min(100, int(value)))
     except (TypeError, ValueError, OverflowError):
-        return 100
+        return int(require_canonical_default("input.widget_glow_intensity"))
 
 
 def _coerce_widget_glow_distance(value: Any) -> int:
-    """Clamp the authored halo travel distance in retained-scene pixels."""
+    """Clamp authored halo distance; corrupt state returns to canonical authority."""
 
     try:
         return max(6, min(48, int(value)))
     except (TypeError, ValueError, OverflowError):
-        return 14
+        return int(require_canonical_default("input.widget_glow_distance"))
 
 
 @dataclass
 class DisplaySettings:
-    """Display-related settings."""
-    hw_accel: bool = True
-    mode: DisplayMode = DisplayMode.FILL
-    same_image_all_monitors: bool = False
-    rotation_interval: int = 45
-    
+    """Display-related settings projected from the canonical defaults authority."""
+
+    hw_accel: bool = bool(require_canonical_default("display.hw_accel"))
+    mode: DisplayMode = DisplayMode(require_canonical_default("display.mode"))
+    same_image_all_monitors: bool = bool(
+        require_canonical_default("display.same_image_all_monitors")
+    )
+    rotation_interval: int = int(require_canonical_default("timing.interval"))
+
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "DisplaySettings":
-        """Load display settings from SettingsManager."""
-        mode_str = settings.get("display.mode", "fill")
+        mode_default = DisplayMode(require_canonical_default("display.mode"))
         try:
-            mode = DisplayMode(mode_str)
-        except ValueError:
-            mode = DisplayMode.FILL
-
+            mode = DisplayMode(settings.get("display.mode"))
+        except (TypeError, ValueError):
+            mode = mode_default
         return cls(
-            hw_accel=settings.get("display.hw_accel", True),
+            hw_accel=bool(settings.get("display.hw_accel")),
             mode=mode,
-            same_image_all_monitors=settings.get("display.same_image_all_monitors", False),
-            rotation_interval=settings.get("timing.interval", 45),
+            same_image_all_monitors=bool(settings.get("display.same_image_all_monitors")),
+            rotation_interval=int(settings.get("timing.interval")),
         )
-    
+
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for saving."""
         return {
             "display.hw_accel": self.hw_accel,
             "display.mode": self.mode.value,
@@ -84,84 +87,74 @@ class DisplaySettings:
 
 @dataclass
 class TransitionSettings:
-    """Transition-related settings."""
-    type: TransitionType = TransitionType.CROSSFADE
-    random_always: bool = True
-    random_choice: Optional[str] = None
-    duration_ms: int = 2000
-    durations: Dict[str, int] = field(default_factory=dict)
-    pool: Dict[str, bool] = field(default_factory=dict)
-    
+    """Persisted transition settings; runtime random-choice history is excluded."""
+
+    type: TransitionType = TransitionType(require_canonical_default("transitions.type"))
+    random_always: bool = bool(require_canonical_default("transitions.random_always"))
+    duration_ms: int = int(require_canonical_default("transitions.duration_ms"))
+    durations: Dict[str, int] = field(
+        default_factory=lambda: require_canonical_default("transitions.durations")
+    )
+    pool: Dict[str, bool] = field(
+        default_factory=lambda: require_canonical_default("transitions.pool")
+    )
+
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "TransitionSettings":
-        """Load transition settings from SettingsManager."""
-        type_str = settings.get("transitions.type", "Crossfade")
+        type_default = TransitionType(require_canonical_default("transitions.type"))
         try:
-            trans_type = TransitionType(type_str)
-        except ValueError:
-            trans_type = TransitionType.CROSSFADE
-        
+            trans_type = TransitionType(settings.get("transitions.type"))
+        except (TypeError, ValueError):
+            trans_type = type_default
+        durations = settings.get("transitions.durations")
+        pool = settings.get("transitions.pool")
         return cls(
             type=trans_type,
-            random_always=settings.get("transitions.random_always", True),
-            random_choice=settings.get("transitions.random_choice", None),
-            duration_ms=settings.get("transitions.duration_ms", 2000),
-            durations=settings.get("transitions.durations", {}),
-            pool=settings.get("transitions.pool", {}),
+            random_always=bool(settings.get("transitions.random_always")),
+            duration_ms=int(settings.get("transitions.duration_ms")),
+            durations=dict(durations) if isinstance(durations, dict) else require_canonical_default("transitions.durations"),
+            pool=dict(pool) if isinstance(pool, dict) else require_canonical_default("transitions.pool"),
         )
-    
+
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for saving."""
         return {
             "transitions.type": self.type.value,
             "transitions.random_always": self.random_always,
-            "transitions.random_choice": self.random_choice,
             "transitions.duration_ms": self.duration_ms,
-            "transitions.durations": self.durations,
-            "transitions.pool": self.pool,
+            "transitions.durations": dict(self.durations),
+            "transitions.pool": dict(self.pool),
         }
 
 
 @dataclass
 class InputSettings:
-    """Input-related settings."""
-    interaction_mode: bool = False
-    halo_shape: str = "circle"
-    widget_glow_on_hover: bool = False
-    widget_glow_on_click: bool = False
-    widget_glow_intensity: int = 100
-    widget_glow_distance: int = 14
-    widget_glow_color: Optional[List[int]] = None
-    widget_glow_jedi_mode: bool = False
+    """Input settings projected from canonical product defaults."""
+
+    interaction_mode: bool = bool(require_canonical_default("input.interaction_mode"))
+    halo_shape: str = str(require_canonical_default("input.halo_shape"))
+    widget_glow_on_hover: bool = bool(require_canonical_default("input.widget_glow_on_hover"))
+    widget_glow_on_click: bool = bool(require_canonical_default("input.widget_glow_on_click"))
+    widget_glow_intensity: int = int(require_canonical_default("input.widget_glow_intensity"))
+    widget_glow_distance: int = int(require_canonical_default("input.widget_glow_distance"))
+    widget_glow_color: Optional[List[int]] = field(
+        default_factory=lambda: require_canonical_default("input.widget_glow_color")
+    )
+    widget_glow_jedi_mode: bool = bool(require_canonical_default("input.widget_glow_jedi_mode"))
 
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "InputSettings":
-        """Load input settings from SettingsManager."""
         return cls(
-            interaction_mode=settings.get("input.interaction_mode", False),
-            halo_shape=str(settings.get("input.halo_shape", "circle")).lower(),
-            widget_glow_on_hover=settings.to_bool(
-                settings.get("input.widget_glow_on_hover", False), False
-            ),
-            widget_glow_on_click=settings.to_bool(
-                settings.get("input.widget_glow_on_click", False), False
-            ),
-            widget_glow_intensity=_coerce_widget_glow_intensity(
-                settings.get("input.widget_glow_intensity", 100)
-            ),
-            widget_glow_distance=_coerce_widget_glow_distance(
-                settings.get("input.widget_glow_distance", 14)
-            ),
-            widget_glow_color=_coerce_widget_glow_color(
-                settings.get("input.widget_glow_color", None)
-            ),
-            widget_glow_jedi_mode=settings.to_bool(
-                settings.get("input.widget_glow_jedi_mode", False), False
-            ),
+            interaction_mode=settings.get_bool("input.interaction_mode"),
+            halo_shape=str(settings.get("input.halo_shape")).lower(),
+            widget_glow_on_hover=settings.get_bool("input.widget_glow_on_hover"),
+            widget_glow_on_click=settings.get_bool("input.widget_glow_on_click"),
+            widget_glow_intensity=_coerce_widget_glow_intensity(settings.get("input.widget_glow_intensity")),
+            widget_glow_distance=_coerce_widget_glow_distance(settings.get("input.widget_glow_distance")),
+            widget_glow_color=_coerce_widget_glow_color(settings.get("input.widget_glow_color")),
+            widget_glow_jedi_mode=settings.get_bool("input.widget_glow_jedi_mode"),
         )
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for saving."""
         return {
             "input.interaction_mode": self.interaction_mode,
             "input.halo_shape": self.halo_shape,
@@ -169,35 +162,30 @@ class InputSettings:
             "input.widget_glow_on_click": self.widget_glow_on_click,
             "input.widget_glow_intensity": self.widget_glow_intensity,
             "input.widget_glow_distance": self.widget_glow_distance,
-            "input.widget_glow_color": (
-                None
-                if self.widget_glow_color is None
-                else list(self.widget_glow_color)
-            ),
+            "input.widget_glow_color": None if self.widget_glow_color is None else list(self.widget_glow_color),
             "input.widget_glow_jedi_mode": self.widget_glow_jedi_mode,
         }
 
 
 @dataclass
 class CacheSettings:
-    """Cache-related settings."""
-    prefetch_ahead: int = 5
-    max_items: int = 16
-    max_memory_mb: int = 256
-    max_concurrent: int = 2
-    
+    """Cache settings projected from canonical product defaults."""
+
+    prefetch_ahead: int = int(require_canonical_default("cache.prefetch_ahead"))
+    max_items: int = int(require_canonical_default("cache.max_items"))
+    max_memory_mb: int = int(require_canonical_default("cache.max_memory_mb"))
+    max_concurrent: int = int(require_canonical_default("cache.max_concurrent"))
+
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "CacheSettings":
-        """Load cache settings from SettingsManager."""
         return cls(
-            prefetch_ahead=settings.get("cache.prefetch_ahead", 5),
-            max_items=settings.get("cache.max_items", 16),
-            max_memory_mb=settings.get("cache.max_memory_mb", 256),
-            max_concurrent=settings.get("cache.max_concurrent", 2),
+            prefetch_ahead=int(settings.get("cache.prefetch_ahead")),
+            max_items=int(settings.get("cache.max_items")),
+            max_memory_mb=int(settings.get("cache.max_memory_mb")),
+            max_concurrent=int(settings.get("cache.max_concurrent")),
         )
-    
+
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for saving."""
         return {
             "cache.prefetch_ahead": self.prefetch_ahead,
             "cache.max_items": self.max_items,
@@ -208,37 +196,36 @@ class CacheSettings:
 
 @dataclass
 class SourceSettings:
-    """Image source settings."""
-    folders: List[str] = field(default_factory=list)
-    rss_feeds: List[str] = field(default_factory=list)
-    rss_save_to_disk: bool = False
-    rss_save_directory: str = ""
-    rss_rotating_cache_size: int = 20
-    rss_background_cap: int = 30
-    rss_refresh_minutes: int = 10
-    rss_stale_minutes: int = 30
-    local_ratio: int = 60
-    
+    """Image-source settings projected from canonical product defaults."""
+
+    folders: List[str] = field(default_factory=lambda: require_canonical_default("sources.folders"))
+    rss_feeds: List[str] = field(default_factory=lambda: require_canonical_default("sources.rss_feeds"))
+    rss_save_to_disk: bool = bool(require_canonical_default("sources.rss_save_to_disk"))
+    rss_save_directory: str = str(require_canonical_default("sources.rss_save_directory"))
+    rss_rotating_cache_size: int = int(require_canonical_default("sources.rss_rotating_cache_size"))
+    rss_background_cap: int = int(require_canonical_default("sources.rss_background_cap"))
+    rss_refresh_minutes: int = int(require_canonical_default("sources.rss_refresh_minutes"))
+    rss_stale_minutes: int = int(require_canonical_default("sources.rss_stale_minutes"))
+    local_ratio: int = int(require_canonical_default("sources.local_ratio"))
+
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "SourceSettings":
-        """Load source settings from SettingsManager."""
         return cls(
-            folders=settings.get("sources.folders", []),
-            rss_feeds=settings.get("sources.rss_feeds", []),
-            rss_save_to_disk=settings.get("sources.rss_save_to_disk", False),
-            rss_save_directory=settings.get("sources.rss_save_directory", ""),
-            rss_rotating_cache_size=settings.get("sources.rss_rotating_cache_size", 20),
-            rss_background_cap=settings.get("sources.rss_background_cap", 30),
-            rss_refresh_minutes=settings.get("sources.rss_refresh_minutes", 10),
-            rss_stale_minutes=settings.get("sources.rss_stale_minutes", 30),
-            local_ratio=settings.get("sources.local_ratio", 60),
+            folders=list(settings.get("sources.folders")),
+            rss_feeds=list(settings.get("sources.rss_feeds")),
+            rss_save_to_disk=bool(settings.get("sources.rss_save_to_disk")),
+            rss_save_directory=str(settings.get("sources.rss_save_directory")),
+            rss_rotating_cache_size=int(settings.get("sources.rss_rotating_cache_size")),
+            rss_background_cap=int(settings.get("sources.rss_background_cap")),
+            rss_refresh_minutes=int(settings.get("sources.rss_refresh_minutes")),
+            rss_stale_minutes=int(settings.get("sources.rss_stale_minutes")),
+            local_ratio=int(settings.get("sources.local_ratio")),
         )
-    
+
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for saving."""
         return {
-            "sources.folders": self.folders,
-            "sources.rss_feeds": self.rss_feeds,
+            "sources.folders": list(self.folders),
+            "sources.rss_feeds": list(self.rss_feeds),
             "sources.rss_save_to_disk": self.rss_save_to_disk,
             "sources.rss_save_directory": self.rss_save_directory,
             "sources.rss_rotating_cache_size": self.rss_rotating_cache_size,
@@ -251,49 +238,94 @@ class SourceSettings:
 
 @dataclass
 class ShadowSettings:
-    """Widget shadow settings."""
-    enabled: bool = True
-    text_enabled: bool = True
-    header_enabled: bool = True
-    color: str = "#000000"
-    blur_radius: int = 18
-    text_opacity: float = 0.33
-    frame_opacity: float = 0.77
-    # Canonical eight-direction shadow orientation (Phase E4). Orientation only;
-    # per-class magnitudes are family-authored. Default SE.
-    direction: str = "SE"
-    # Optional Extra Offset controls (Phase F0.5). Frame Extra Offset is
-    # directional *growth*: the authored base drop offset stays in place and
-    # only the selected far edge(s) extend. Text Extra Offset remains glyph
-    # displacement because text has no stretchable card footprint. Default 0.
-    # The retired ``widgets.shadows.offset`` pair is NOT this control and is not
-    # migrated.
-    frame_extra_offset: int = 0
-    text_extra_offset: int = 0
+    """Widget shadow settings projected from canonical Widget defaults."""
+
+    enabled: bool = bool(require_canonical_default("widgets.shadows.enabled"))
+    text_enabled: bool = bool(require_canonical_default("widgets.shadows.text_enabled"))
+    header_enabled: bool = bool(require_canonical_default("widgets.shadows.header_enabled"))
+    color: List[int] = field(default_factory=lambda: require_canonical_default("widgets.shadows.color"))
+    blur_radius: int = int(require_canonical_default("widgets.shadows.blur_radius"))
+    text_opacity: float = float(require_canonical_default("widgets.shadows.text_opacity"))
+    frame_opacity: float = float(require_canonical_default("widgets.shadows.frame_opacity"))
+    direction: str = str(require_canonical_default("widgets.shadows.direction"))
+    frame_extra_offset: int = int(require_canonical_default("widgets.shadows.frame_extra_offset"))
+    text_extra_offset: int = int(require_canonical_default("widgets.shadows.text_extra_offset"))
 
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "ShadowSettings":
-        """Load shadow settings from SettingsManager."""
+        """Project persisted shadow state with canonical repair at one boundary."""
+
+        def canonical(name: str) -> Any:
+            return require_canonical_default(f"widgets.shadows.{name}")
+
+        def read(name: str) -> Any:
+            try:
+                value = settings.get(f"widgets.shadows.{name}")
+            except Exception:
+                return canonical(name)
+            return canonical(name) if value is None else value
+
+        def as_bool(name: str) -> bool:
+            raw = read(name)
+            default = bool(canonical(name))
+            if isinstance(raw, bool):
+                return raw
+            if isinstance(raw, str):
+                normalized = raw.strip().lower()
+                if normalized in {"true", "1", "yes", "on"}:
+                    return True
+                if normalized in {"false", "0", "no", "off"}:
+                    return False
+                return default
+            return bool(raw)
+
+        def as_int(name: str) -> int:
+            try:
+                return int(read(name))
+            except (TypeError, ValueError, OverflowError):
+                return int(canonical(name))
+
+        def as_float(name: str) -> float:
+            try:
+                return float(read(name))
+            except (TypeError, ValueError, OverflowError):
+                return float(canonical(name))
+
+        raw_color = read("color")
+        try:
+            color = [int(channel) for channel in raw_color]
+        except (TypeError, ValueError, OverflowError):
+            color = list(canonical("color"))
+        if len(color) != 4 or any(channel < 0 or channel > 255 for channel in color):
+            color = list(canonical("color"))
+
+        from core.settings.shadow_direction import ShadowDirection
+
+        raw_direction = str(read("direction") or "").strip().upper()
+        try:
+            direction = ShadowDirection(raw_direction).value
+        except ValueError:
+            direction = ShadowDirection(str(canonical("direction")).strip().upper()).value
+
         return cls(
-            enabled=settings.get("widgets.shadows.enabled", True),
-            text_enabled=settings.get("widgets.shadows.text_enabled", True),
-            header_enabled=settings.get("widgets.shadows.header_enabled", True),
-            color=settings.get("widgets.shadows.color", "#000000"),
-            blur_radius=settings.get("widgets.shadows.blur_radius", 18),
-            text_opacity=settings.get("widgets.shadows.text_opacity", 0.33),
-            frame_opacity=settings.get("widgets.shadows.frame_opacity", 0.77),
-            direction=settings.get("widgets.shadows.direction", "SE"),
-            frame_extra_offset=settings.get("widgets.shadows.frame_extra_offset", 0),
-            text_extra_offset=settings.get("widgets.shadows.text_extra_offset", 0),
+            enabled=as_bool("enabled"),
+            text_enabled=as_bool("text_enabled"),
+            header_enabled=as_bool("header_enabled"),
+            color=color,
+            blur_radius=as_int("blur_radius"),
+            text_opacity=as_float("text_opacity"),
+            frame_opacity=as_float("frame_opacity"),
+            direction=direction,
+            frame_extra_offset=as_int("frame_extra_offset"),
+            text_extra_offset=as_int("text_extra_offset"),
         )
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for saving."""
         return {
             "widgets.shadows.enabled": self.enabled,
             "widgets.shadows.text_enabled": self.text_enabled,
             "widgets.shadows.header_enabled": self.header_enabled,
-            "widgets.shadows.color": self.color,
+            "widgets.shadows.color": list(self.color),
             "widgets.shadows.blur_radius": self.blur_radius,
             "widgets.shadows.text_opacity": self.text_opacity,
             "widgets.shadows.frame_opacity": self.frame_opacity,
@@ -305,64 +337,64 @@ class ShadowSettings:
 
 @dataclass
 class ClockWidgetSettings:
-    """Clock widget settings."""
-    enabled: bool = True
-    monitor: str = "ALL"
-    shared_tick: bool = True
-    position: WidgetPosition = WidgetPosition.TOP_RIGHT
-    format: str = "12h"
-    show_seconds: bool = True
-    timezone: str = "local"
-    show_timezone: bool = False
-    show_day_of_week: bool = False
-    show_date: bool = False
-    show_separator: bool = False
-    separator_thickness: int = 2
-    calendar_layout: str = "shared_line"
-    calendar_font_size: int = 20
-    font_family: str = "Inter"
-    font_size: int = 48
-    text_color: str = "#FFFFFF"
-    show_background: bool = False
-    background_color: str = "#000000"
-    background_opacity: float = 0.5
-    display_mode: str = "digital"
-    show_numerals: bool = True
-    analog_face_shadow: bool = True
-    
+    """Clock widget model using only the canonical current clock schema."""
+
+    enabled: bool = bool(require_canonical_default("widgets.clock.enabled"))
+    monitor: Any = require_canonical_default("widgets.clock.monitor")
+    shared_tick: bool = bool(require_canonical_default("widgets.clock.shared_tick"))
+    position: WidgetPosition = parse_widget_position(require_canonical_default("widgets.clock.position"))
+    format: str = str(require_canonical_default("widgets.clock.format"))
+    show_seconds: bool = bool(require_canonical_default("widgets.clock.show_seconds"))
+    timezone: str = str(require_canonical_default("widgets.clock.timezone"))
+    show_timezone: bool = bool(require_canonical_default("widgets.clock.show_timezone"))
+    show_day_of_week: bool = bool(require_canonical_default("widgets.clock.show_day_of_week"))
+    show_date: bool = bool(require_canonical_default("widgets.clock.show_date"))
+    show_separator: bool = bool(require_canonical_default("widgets.clock.show_separator"))
+    separator_thickness: int = int(require_canonical_default("widgets.clock.separator_thickness"))
+    calendar_layout: str = str(require_canonical_default("widgets.clock.calendar_layout"))
+    calendar_font_size: int = int(require_canonical_default("widgets.clock.calendar_font_size"))
+    font_family: str = str(require_canonical_default("widgets.clock.font_family"))
+    font_size: int = int(require_canonical_default("widgets.clock.font_size"))
+    color: List[int] = field(default_factory=lambda: require_canonical_default("widgets.clock.color"))
+    show_background: bool = bool(require_canonical_default("widgets.clock.show_background"))
+    bg_color: List[int] = field(default_factory=lambda: require_canonical_default("widgets.clock.bg_color"))
+    bg_opacity: float = float(require_canonical_default("widgets.clock.bg_opacity"))
+    border_color: List[int] = field(default_factory=lambda: require_canonical_default("widgets.clock.border_color"))
+    border_opacity: float = float(require_canonical_default("widgets.clock.border_opacity"))
+    display_mode: str = str(require_canonical_default("widgets.clock.display_mode"))
+    show_numerals: bool = bool(require_canonical_default("widgets.clock.show_numerals"))
+    analog_face_shadow: bool = bool(require_canonical_default("widgets.clock.analog_face_shadow"))
+
     @classmethod
     def from_settings(cls, settings: "SettingsManager", prefix: str = "widgets.clock") -> "ClockWidgetSettings":
-        """Load clock widget settings from SettingsManager."""
-        position = coerce_widget_position(
-            settings.get(f"{prefix}.position", "top_right"),
-            WidgetPosition.TOP_RIGHT,
+        position = normalize_widget_position(
+            settings.get(f"{prefix}.position"),
+            parse_widget_position(require_canonical_default(f"{prefix}.position")),
         )
-        
         return cls(
-            enabled=settings.get(f"{prefix}.enabled", True),
-            monitor=settings.get(f"{prefix}.monitor", "ALL"),
-            shared_tick=settings.get(f"{prefix}.shared_tick", True),
+            enabled=bool(settings.get(f"{prefix}.enabled")),
+            monitor=settings.get(f"{prefix}.monitor"),
+            shared_tick=bool(settings.get(f"{prefix}.shared_tick")),
             position=position,
-            format=settings.get(f"{prefix}.format", "12h"),
-            show_seconds=settings.get(f"{prefix}.show_seconds", True),
-            timezone=settings.get(f"{prefix}.timezone", "local"),
-            show_timezone=settings.get(f"{prefix}.show_timezone", False),
-            show_day_of_week=settings.get(f"{prefix}.show_day_of_week", False),
-            show_date=settings.get(f"{prefix}.show_date", False),
-            show_separator=settings.get(
-                f"{prefix}.show_separator",
-                settings.get(f"{prefix}.show_digital_separator", False),
-            ),
-            separator_thickness=settings.get(f"{prefix}.separator_thickness", 2),
-            calendar_layout=settings.get(f"{prefix}.calendar_layout", "shared_line"),
-            calendar_font_size=settings.get(f"{prefix}.calendar_font_size", 20),
-            font_family=settings.get(f"{prefix}.font_family", "Inter"),
-            font_size=settings.get(f"{prefix}.font_size", 48),
-            text_color=settings.get(f"{prefix}.text_color", "#FFFFFF"),
-            show_background=settings.get(f"{prefix}.show_background", False),
-            background_color=settings.get(f"{prefix}.background_color", "#000000"),
-            background_opacity=settings.get(f"{prefix}.background_opacity", 0.5),
-            display_mode=settings.get(f"{prefix}.display_mode", "digital"),
-            show_numerals=settings.get(f"{prefix}.show_numerals", True),
-            analog_face_shadow=settings.get(f"{prefix}.analog_face_shadow", True),
+            format=str(settings.get(f"{prefix}.format")),
+            show_seconds=bool(settings.get(f"{prefix}.show_seconds")),
+            timezone=str(settings.get(f"{prefix}.timezone")),
+            show_timezone=bool(settings.get(f"{prefix}.show_timezone")),
+            show_day_of_week=bool(settings.get(f"{prefix}.show_day_of_week")),
+            show_date=bool(settings.get(f"{prefix}.show_date")),
+            show_separator=bool(settings.get(f"{prefix}.show_separator")),
+            separator_thickness=int(settings.get(f"{prefix}.separator_thickness")),
+            calendar_layout=str(settings.get(f"{prefix}.calendar_layout")),
+            calendar_font_size=int(settings.get(f"{prefix}.calendar_font_size")),
+            font_family=str(settings.get(f"{prefix}.font_family")),
+            font_size=int(settings.get(f"{prefix}.font_size")),
+            color=list(settings.get(f"{prefix}.color")),
+            show_background=bool(settings.get(f"{prefix}.show_background")),
+            bg_color=list(settings.get(f"{prefix}.bg_color")),
+            bg_opacity=float(settings.get(f"{prefix}.bg_opacity")),
+            border_color=list(settings.get(f"{prefix}.border_color")),
+            border_opacity=float(settings.get(f"{prefix}.border_opacity")),
+            display_mode=str(settings.get(f"{prefix}.display_mode")),
+            show_numerals=bool(settings.get(f"{prefix}.show_numerals")),
+            analog_face_shadow=bool(settings.get(f"{prefix}.analog_face_shadow")),
         )

@@ -5,22 +5,22 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 
-def rgba(
-    value: object,
-    *,
-    default: Sequence[object],
-) -> tuple[float, float, float, float]:
-    channels: Sequence[object]
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        channels = value
-    else:
-        channels = default
-    if len(channels) < 3:
-        channels = default
-    alpha = channels[3] if len(channels) > 3 else 255
+def rgba(value: object) -> tuple[float, float, float, float]:
+    """Normalize one required resolved RGBA value.
+
+    Renderer colours are part of the immutable resolved frame. Invalid or
+    incomplete values are contract errors; this layer owns no replacement
+    colour table.
+    """
+
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise TypeError(f"resolved RGBA value must be a channel sequence: {value!r}")
+    if len(value) < 3:
+        raise ValueError(f"resolved RGBA value needs at least three channels: {value!r}")
+    alpha = value[3] if len(value) > 3 else 255
     resolved = tuple(
         max(0.0, min(1.0, float(channel) / 255.0))
-        for channel in (*channels[:3], alpha)
+        for channel in (*value[:3], alpha)
     )
     return resolved  # type: ignore[return-value]
 
@@ -28,12 +28,18 @@ def rgba(
 def parameter(
     parameters: Mapping[str, object],
     name: str,
-    default: object,
 ) -> object:
+    """Return one required immutable-frame parameter.
+
+    Renderer input is a resolved contract. Missing authored parameters are an
+    ownership/configuration error and must never become renderer-local product
+    defaults.
+    """
+
     try:
         return parameters[name]
-    except KeyError:
-        return default
+    except KeyError as exc:
+        raise KeyError(f"immutable visualizer frame missing parameter: {name}") from exc
 
 
 def safe_hue(value: float) -> float:

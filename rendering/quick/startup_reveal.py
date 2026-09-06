@@ -24,8 +24,9 @@ from PySide6.QtCore import QEasingCurve, QObject, QVariantAnimation, Signal
 # later J Parity+ tuning never needs to import the retired QWidget fade helper.
 QUICK_STARTUP_REVEAL_DURATION_MS = 1800
 # The initial desktop snapshot is a one-session staging source, not authored
-# wallpaper state. Crossfade into the first processed wallpaper on the canonical
-# default transition duration, then release the coordinated widget reveal.
+# wallpaper state. Crossfade into the first processed wallpaper on the authored
+# startup-staging timing, then release the coordinated widget reveal. This is a
+# presentation constant, not the persisted Transitions duration default.
 QUICK_STARTUP_DESKTOP_CROSSFADE_DURATION_MS = 1300
 
 

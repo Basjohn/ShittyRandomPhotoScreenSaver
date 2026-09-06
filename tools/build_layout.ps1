@@ -87,6 +87,30 @@ function Remove-SRPSSBuildDirectory {
     }
 }
 
+
+function Assert-SRPSSDefaultsAuthority {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$PythonExe
+    )
+
+    $auditTool = Join-Path $RepoRoot 'tools\check_defaults_authority.py'
+    if (-not (Test-Path -LiteralPath $auditTool -PathType Leaf)) {
+        throw "Defaults authority audit tool is missing: $auditTool"
+    }
+
+    Push-Location $RepoRoot
+    try {
+        & $PythonExe $auditTool
+        if ($LASTEXITCODE -ne 0) {
+            throw "Defaults authority audit failed with exit code $LASTEXITCODE"
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 function Publish-SRPSSDirectory {
     [CmdletBinding()]
     param(
@@ -330,7 +354,6 @@ function Assert-SRPSSOnefileQuickPayloadContract {
         '--include-data-files=resources/jedimodeyall.mp3=resources/jedimodeyall.mp3',
         '--include-package=rendering.quick',
         '--include-package=widgets.spotify_visualizer',
-        '--include-package=widgets.spotify_visualizer.renderers',
         '--include-package=rendering.gl_programs',
         '--include-package=rendering.gl_compositor_pkg',
         '--include-package=OpenGL',

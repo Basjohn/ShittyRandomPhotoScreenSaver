@@ -14,8 +14,7 @@ Desktop.ini
 node_modules/
 dist/
 build/
-build_deps/*
-!build_deps/requirements_helper.txt
+build_deps/
 .cache/
 .tmp/
 
@@ -181,12 +180,7 @@ dmypy.json
 /build_nuitka_mc_onedir_venv/
 /build_reddit_helper/
 /build_reddit_helper_venv/
-# Ignore generated build_deps contents (helper venv stamps/caches)...
-/build_deps/*
-# ...but the pinned Reddit-helper build requirements are a tracked source input,
-# not generated output. Without this exception the file is lost on clean
-# checkouts and the reddit_helper build fails ("Requirements file not found").
-!/build_deps/requirements_helper.txt
+/build_deps/
 /dist/
 
 # SRPSS venv build-runner local junk

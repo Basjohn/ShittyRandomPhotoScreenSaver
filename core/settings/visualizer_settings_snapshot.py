@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, Mapping
 
+from core.settings.default_contract import require_canonical_default
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
@@ -41,6 +42,16 @@ _RETIRED_AUTHORED_SHARED_VISUAL_KEYS = frozenset(
     }
 )
 _RETIRED_AUTHORED_TECH_SUFFIXES = frozenset({"energy_boost", "use_raw_energy"})
+
+_RETIRED_GROWTH_KEYS = frozenset(
+    {
+        "spectrum_growth",
+        "osc_growth",
+        "sine_wave_growth",
+        "bubble_growth",
+        "devcurve_growth",
+    }
+)
 _RETIRED_AUTHORED_GLOBAL_VISUAL_KEYS = frozenset(
     {
         "ghosting_enabled",
@@ -112,9 +123,9 @@ def _resolve_per_mode_rainbow_mapping(
     *,
     prefix: str,
 ) -> Dict[str, Any]:
-    active_mode = str(normalized.get("mode", "bubble"))
-    global_enabled = bool(normalized.get("rainbow_enabled", False))
-    global_speed = float(normalized.get("rainbow_speed", 0.5))
+    active_mode = str(normalized["mode"])
+    global_enabled = bool(normalized["rainbow_enabled"])
+    global_speed = float(normalized["rainbow_speed"])
 
     for mode in VISUALIZER_MODE_IDS:
         enabled_value = None
@@ -128,16 +139,25 @@ def _resolve_per_mode_rainbow_mapping(
             if speed_value is not None:
                 break
 
+        enabled_default = require_canonical_default(
+            f"{prefix}.{mode}_rainbow_enabled"
+        )
+        speed_default = require_canonical_default(
+            f"{prefix}.{mode}_rainbow_speed"
+        )
         if enabled_value is None:
-            enabled_value = global_enabled if mode == active_mode else False
+            # A legacy shared Rainbow value belonged to the then-active mode;
+            # inactive modes inherit their own canonical baseline instead of a
+            # hard-coded secondary default.
+            enabled_value = global_enabled if mode == active_mode else enabled_default
         if speed_value is None:
-            speed_value = global_speed if mode == active_mode else 0.5
+            speed_value = global_speed if mode == active_mode else speed_default
 
         normalized[f"{mode}_rainbow_enabled"] = bool(enabled_value)
         try:
             normalized[f"{mode}_rainbow_speed"] = float(speed_value)
         except (TypeError, ValueError):
-            normalized[f"{mode}_rainbow_speed"] = 0.5
+            normalized[f"{mode}_rainbow_speed"] = float(speed_default)
 
     return normalized
 
@@ -158,6 +178,13 @@ def normalize_visualizer_section_mapping(
         return {}
 
     migrated = strip_retired_visualizer_settings(data, prefix=prefix)
+    # Per-mode card-height growth was pre-Quick geometry state. The current
+    # retained geometry contract is viewport/aspect driven; strip shipped
+    # growth leaves once here instead of teaching every consumer about them.
+    migrated = dict(migrated)
+    for retired_key in _RETIRED_GROWTH_KEYS:
+        migrated.pop(retired_key, None)
+        migrated.pop(f"{prefix}.{retired_key}", None)
     migrated = _forward_migrate_alias_keys(migrated, prefix=prefix)
     migrated = strip_legacy_global_technical_keys(migrated, prefix=prefix)
     migrated = migrate_legacy_global_visual_keys(migrated, prefix=prefix)

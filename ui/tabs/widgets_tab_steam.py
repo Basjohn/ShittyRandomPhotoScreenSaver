@@ -63,19 +63,17 @@ from ui.tabs.shared_styles import (
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from rendering.quick.widgets.achievement_pulse_layout import (
-    ACHIEVEMENT_CAPSULE_FONT_SIZE_DEFAULT,
+    ACHIEVEMENT_CAPSULE_BORDER_RGBA,
+    ACHIEVEMENT_CAPSULE_FILL_RGBA,
     ACHIEVEMENT_CAPSULE_FONT_SIZE_MAX,
     ACHIEVEMENT_CAPSULE_FONT_SIZE_MIN,
-    ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
     ACHIEVEMENT_SQUARE_ARTWORK_MAX,
     ACHIEVEMENT_SQUARE_ARTWORK_MIN,
 )
 from widgets.steam_abandonment_layout import (
     ABANDONMENT_ACCENT_RGBA,
-    ABANDONMENT_ARTWORK_SIZE_DEFAULT,
     ABANDONMENT_ARTWORK_SIZE_MAX,
     ABANDONMENT_ARTWORK_SIZE_MIN,
-    ABANDONMENT_FIELD_DEFAULTS,
     normalize_abandonment_artwork_shape,
 )
 
@@ -105,20 +103,11 @@ _ACHIEVEMENT_FIELD_OPTIONS: tuple[tuple[str, str], ...] = (
     ("source", "Show source"),
     ("selected", "Show selection"),
 )
-_ACHIEVEMENT_FIELD_DEFAULTS = {
-    "total": True,
-    "playtime": True,
-    "previous": True,
-    "source": False,
-    "selected": False,
-}
 _ACHIEVEMENT_ARTWORK_SHAPES: tuple[tuple[str, str], ...] = (
     ("Wide", "wide"),
     ("Square", "square"),
     ("Portrait", "portrait"),
 )
-_ACHIEVEMENT_CAPSULE_FILL_RGBA = (199, 213, 224, 38)
-_ACHIEVEMENT_CAPSULE_BORDER_RGBA = (199, 213, 224, 145)
 _ABANDONMENT_SELECTION_OPTIONS: tuple[tuple[str, str], ...] = (
     ("Smart Rotation", "smart_rotation"),
     ("Pinned Game", "pinned_game"),
@@ -605,12 +594,24 @@ def _finalize_bucket_body(toggle, body: QWidget) -> None:
         body.setVisible(expanded)
 
 
-def _set_achievement_selection_mode(combo: StyledComboBox, mode: str) -> None:
-    for index in range(combo.count()):
-        if combo.itemData(index) == mode:
-            combo.setCurrentIndex(index)
-            return
-    combo.setCurrentIndex(0)
+def _set_achievement_selection_mode(
+    combo: StyledComboBox,
+    mode: str,
+    *,
+    canonical_mode: str | None = None,
+) -> None:
+    candidates = [mode]
+    if canonical_mode is not None and canonical_mode != mode:
+        candidates.append(canonical_mode)
+    for candidate in candidates:
+        for index in range(combo.count()):
+            if combo.itemData(index) == candidate:
+                combo.setCurrentIndex(index)
+                return
+    raise ValueError(
+        f"Achievement selection mode is not represented by the UI: "
+        f"value={mode!r} canonical={canonical_mode!r}"
+    )
 
 
 def _achievement_selection_label(mode: str, recent_titles: tuple[str, ...]) -> str:
@@ -769,7 +770,7 @@ def _update_abandonment_controls(tab: "WidgetsTab") -> None:
 def _current_abandonment_selection(tab: "WidgetsTab") -> AbandonmentSelection:
     pinned_data = tab.abandonment_issues_pinned_game.currentData()
     return AbandonmentSelection(
-        mode=str(tab.abandonment_issues_selection_mode.currentData() or "smart_rotation"),
+        mode=str(tab._combo_data_or_widget_default("abandonment_issues", "selection_mode", tab.abandonment_issues_selection_mode)),
         pinned_appid=int(pinned_data) if pinned_data else None,
         minimum_playtime_minutes=int(tab.abandonment_issues_minimum_playtime_minutes.value()),
         preferred_max_playtime_minutes=(
@@ -844,12 +845,26 @@ def _on_abandonment_manual_refresh(tab: "WidgetsTab") -> None:
         status.setStyleSheet(f"{STATUS_LABEL_STYLE} color: #ed7777;")
 
 
-def _set_combo_data(combo: StyledComboBox, value: str) -> None:
-    for index in range(combo.count()):
-        if combo.itemData(index) == value:
-            combo.setCurrentIndex(index)
-            return
-    combo.setCurrentIndex(0)
+def _set_combo_data(
+    combo: StyledComboBox,
+    value: str,
+    *,
+    canonical_value: str | None = None,
+) -> None:
+    """Select combo data, repairing only to an explicit canonical value."""
+
+    candidates = [value]
+    if canonical_value is not None and canonical_value != value:
+        candidates.append(canonical_value)
+    for candidate in candidates:
+        for index in range(combo.count()):
+            if combo.itemData(index) == candidate:
+                combo.setCurrentIndex(index)
+                return
+    raise ValueError(
+        f"Steam Settings combo cannot represent value={value!r} "
+        f"canonical={canonical_value!r}"
+    )
 
 
 def _update_achievement_artwork_controls(tab: "WidgetsTab") -> None:
@@ -861,7 +876,7 @@ def _update_achievement_artwork_controls(tab: "WidgetsTab") -> None:
         if size is not None:
             size.setEnabled(
                 visible.isChecked()
-                and str(shape.currentData() or "portrait") in {"square", "portrait"}
+                and str(tab._combo_data_or_widget_default("achievement_pulse", "artwork_shape", shape)) in {"square", "portrait"}
             )
 
 
@@ -888,14 +903,12 @@ def _build_card_subbucket(
     card_key: str,
     bucket_key: str,
     label: str,
-    *,
-    expanded: bool = False,
 ) -> tuple[object, QWidget, QVBoxLayout]:
     state_key = f"{card_key}_{bucket_key}"
     toggle, body, layout = build_bucket_toggle(
         parent_layout,
         label,
-        expanded=tab.get_widget_bucket_state("steam", state_key, default=expanded),
+        expanded=tab.get_widget_bucket_state("steam", state_key),
         on_toggle=lambda checked, key=state_key: tab.set_widget_bucket_state(
             "steam", key, checked
         ),
@@ -917,7 +930,7 @@ def _build_card_group(
     toggle, body, card_layout = build_bucket_toggle(
         parent_layout,
         label,
-        expanded=tab.get_widget_bucket_state("steam", key, default=False),
+        expanded=tab.get_widget_bucket_state("steam", key),
         on_toggle=lambda checked, bucket=key: tab.set_widget_bucket_state("steam", bucket, checked),
         defer_initial_visibility=True,
     )
@@ -933,7 +946,7 @@ def _build_card_group(
     enabled = QCheckBox(f"Enable {label}")
     enabled.setProperty("circleIndicator", True)
     enabled.setToolTip(f"Show the {label} card.")
-    enabled.setChecked(tab._default_bool(key, "enabled", False))
+    enabled.setChecked(tab._default_bool(key, "enabled"))
     enabled.stateChanged.connect(tab._save_settings)
     setattr(tab, enabled_attr, enabled)
     card_layout.addWidget(enabled)
@@ -951,7 +964,7 @@ def _build_card_group(
     position.addItems(list(get_widget_position_option_labels(key)))
     position.setMinimumWidth(150)
     position.currentTextChanged.connect(tab._save_settings)
-    tab._set_combo_text(position, tab._default_str(key, "position", fallback_position))
+    tab._set_combo_text(position, tab._default_str(key, "position"))
     setattr(tab, position_attr, position)
     position_row.addWidget(position)
     position_row.addStretch()
@@ -961,7 +974,7 @@ def _build_card_group(
     monitor.addItems(["ALL", "1", "2", "3"])
     monitor.setMinimumWidth(120)
     monitor.currentTextChanged.connect(tab._save_settings)
-    tab._set_combo_text(monitor, str(tab._widget_default(key, "monitor", "ALL")))
+    tab._set_combo_text(monitor, str(tab._widget_default(key, "monitor")))
     setattr(tab, monitor_attr, monitor)
     display_row.addWidget(monitor)
     display_row.addStretch()
@@ -985,7 +998,7 @@ def _build_card_group(
 
     font_family_row = _aligned_row(appearance_layout, "Font:")
     font_family = StyledFontComboBox(size_variant="hero")
-    font_family.setCurrentFont(QFont(tab._default_str(key, "font_family", "Inter")))
+    font_family.setCurrentFont(QFont(tab._default_str(key, "font_family")))
     font_family.setMinimumWidth(220)
     font_family.currentFontChanged.connect(tab._save_settings)
     setattr(tab, font_family_attr, font_family)
@@ -995,7 +1008,7 @@ def _build_card_group(
     font_row = _aligned_row(appearance_layout, "Font Size:")
     font_size = QSpinBox()
     font_size.setRange(8, 40)
-    font_size.setValue(tab._default_int(key, "font_size", 14))
+    font_size.setValue(tab._default_int(key, "font_size"))
     font_size.valueChanged.connect(tab._save_settings)
     setattr(tab, font_attr, font_size)
     font_row.addWidget(font_size)
@@ -1013,21 +1026,21 @@ def _build_card_group(
         setattr(
             tab, f"_{key}_header_fill_color",
             _coerce_rgba_color(
-                tab._widget_default(key, "header_fill_color", header_fill_fallback),
+                tab._widget_default(key, "header_fill_color"),
                 header_fill_fallback,
             ),
         )
         setattr(
             tab, f"_{key}_header_text_color",
             _coerce_rgba_color(
-                tab._widget_default(key, "header_text_color", header_text_fallback),
+                tab._widget_default(key, "header_text_color"),
                 header_text_fallback,
             ),
         )
         setattr(
             tab, f"_{key}_header_border_color",
             _coerce_rgba_color(
-                tab._widget_default(key, "header_border_color", header_border_fallback),
+                tab._widget_default(key, "header_border_color"),
                 header_border_fallback,
             ),
         )
@@ -1040,7 +1053,7 @@ def _build_card_group(
         selection_mode.currentIndexChanged.connect(tab._save_settings)
         _set_achievement_selection_mode(
             selection_mode,
-            str(tab._widget_default(key, "selection_mode", "most_recent")),
+            str(tab._widget_default(key, "selection_mode")),
         )
         tab.achievement_pulse_selection_mode = selection_mode
         selection_row.addWidget(selection_mode)
@@ -1052,7 +1065,7 @@ def _build_card_group(
         custom_appid.setSpecialValueText("Not set")
         custom_appid.valueChanged.connect(tab._save_settings)
         try:
-            custom_appid.setValue(int(tab._widget_default(key, "custom_appid", 0) or 0))
+            custom_appid.setValue(int(tab._widget_default(key, "custom_appid") or 0))
         except Exception:
             custom_appid.setValue(0)
         tab.achievement_pulse_custom_appid = custom_appid
@@ -1062,7 +1075,7 @@ def _build_card_group(
         artwork_row = _aligned_row(appearance_layout, "Artwork:")
         show_artwork = QCheckBox("Show Artwork")
         show_artwork.setProperty("circleIndicator", True)
-        show_artwork.setChecked(tab._default_bool(key, "show_artwork", True))
+        show_artwork.setChecked(tab._default_bool(key, "show_artwork"))
         show_artwork.stateChanged.connect(tab._save_settings)
         show_artwork.stateChanged.connect(lambda _state: _update_achievement_artwork_controls(tab))
         tab.achievement_pulse_show_artwork = show_artwork
@@ -1073,7 +1086,7 @@ def _build_card_group(
         artwork_shape = StyledComboBox()
         for shape_label, shape_value in _ACHIEVEMENT_ARTWORK_SHAPES:
             artwork_shape.addItem(shape_label, shape_value)
-        _set_combo_data(artwork_shape, str(tab._widget_default(key, "artwork_shape", "portrait")))
+        _set_combo_data(artwork_shape, str(tab._widget_default(key, "artwork_shape")))
         artwork_shape.currentIndexChanged.connect(tab._save_settings)
         artwork_shape.currentIndexChanged.connect(lambda _index: _update_achievement_artwork_controls(tab))
         tab.achievement_pulse_artwork_shape = artwork_shape
@@ -1087,7 +1100,7 @@ def _build_card_group(
             ACHIEVEMENT_SQUARE_ARTWORK_MAX,
         )
         square_artwork_size.setValue(
-            tab._default_int(key, "square_artwork_size", ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT)
+            tab._default_int(key, "square_artwork_size")
         )
         square_artwork_size.setAccelerated(True)
         square_artwork_size.valueChanged.connect(tab._save_settings)
@@ -1099,8 +1112,8 @@ def _build_card_group(
 
         capsule_fill_row = _aligned_row(appearance_layout, "Capsule Fill:")
         tab._achievement_capsule_fill_color = _coerce_rgba_color(
-            tab._widget_default(key, "capsule_fill_color", _ACHIEVEMENT_CAPSULE_FILL_RGBA),
-            _ACHIEVEMENT_CAPSULE_FILL_RGBA,
+            tab._widget_default(key, "capsule_fill_color"),
+            ACHIEVEMENT_CAPSULE_FILL_RGBA,
         )
         tab.achievement_pulse_capsule_fill_color_btn = ColorSwatchButton(
             tab._achievement_capsule_fill_color,
@@ -1115,8 +1128,8 @@ def _build_card_group(
 
         capsule_border_row = _aligned_row(appearance_layout, "Capsule Border:")
         tab._achievement_capsule_border_color = _coerce_rgba_color(
-            tab._widget_default(key, "capsule_border_color", _ACHIEVEMENT_CAPSULE_BORDER_RGBA),
-            _ACHIEVEMENT_CAPSULE_BORDER_RGBA,
+            tab._widget_default(key, "capsule_border_color"),
+            ACHIEVEMENT_CAPSULE_BORDER_RGBA,
         )
         tab.achievement_pulse_capsule_border_color_btn = ColorSwatchButton(
             tab._achievement_capsule_border_color,
@@ -1134,7 +1147,7 @@ def _build_card_group(
         double_capsule.setToolTip(
             "Give every displayed supporting field a centered label capsule and a separate value capsule."
         )
-        double_capsule.setChecked(tab._default_bool(key, "double_capsules", True))
+        double_capsule.setChecked(tab._default_bool(key, "double_capsules"))
         double_capsule.stateChanged.connect(tab._save_settings)
         tab.achievement_pulse_double_capsules = double_capsule
         appearance_layout.addWidget(double_capsule)
@@ -1148,9 +1161,7 @@ def _build_card_group(
         capsule_font_size.setValue(
             tab._default_int(
                 key,
-                "capsule_font_size",
-                ACHIEVEMENT_CAPSULE_FONT_SIZE_DEFAULT,
-            )
+                "capsule_font_size")
         )
         capsule_font_size.setToolTip(
             "Capsule label/value text size. The authored card and capsule rails grow as needed."
@@ -1164,14 +1175,14 @@ def _build_card_group(
         latest_row = _aligned_row(content_layout, "Latest Unlocks:")
         show_latest = QCheckBox("Show Latest Unlocks")
         show_latest.setProperty("circleIndicator", True)
-        show_latest.setChecked(tab._default_bool(key, "show_latest", True))
+        show_latest.setChecked(tab._default_bool(key, "show_latest"))
         show_latest.stateChanged.connect(tab._save_settings)
         show_latest.stateChanged.connect(lambda _state: _update_achievement_latest_controls(tab))
         tab.achievement_pulse_show_latest = show_latest
         latest_row.addWidget(show_latest)
         latest_count = QSpinBox()
         latest_count.setRange(1, 5)
-        latest_count.setValue(tab._default_int(key, "latest_unlock_count", 1))
+        latest_count.setValue(tab._default_int(key, "latest_unlock_count"))
         latest_count.valueChanged.connect(tab._save_settings)
         tab.achievement_pulse_latest_unlock_count = latest_count
         latest_row.addWidget(latest_count)
@@ -1184,7 +1195,7 @@ def _build_card_group(
             "Show the newest unlocked achievement's 40px Steam icon when its schema provides one."
         )
         show_latest_artwork.setChecked(
-            tab._default_bool(key, "show_latest_achievement_artwork", True)
+            tab._default_bool(key, "show_latest_achievement_artwork")
         )
         show_latest_artwork.stateChanged.connect(tab._save_settings)
         tab.achievement_pulse_show_latest_artwork = show_latest_artwork
@@ -1198,8 +1209,7 @@ def _build_card_group(
         for field_id, label_text in _ACHIEVEMENT_FIELD_OPTIONS:
             field_toggle = QCheckBox(label_text)
             field_toggle.setProperty("circleIndicator", True)
-            fallback = _ACHIEVEMENT_FIELD_DEFAULTS[field_id]
-            field_toggle.setChecked(tab._default_bool(key, f"show_{field_id}", fallback))
+            field_toggle.setChecked(tab._default_bool(key, f"show_{field_id}"))
             field_toggle.stateChanged.connect(tab._save_settings)
             setattr(tab, f"achievement_pulse_show_{field_id}", field_toggle)
             content_layout.addWidget(field_toggle)
@@ -1213,7 +1223,7 @@ def _build_card_group(
             selection_mode.addItem(label_text, mode)
         _set_combo_data(
             selection_mode,
-            str(tab._widget_default(key, "selection_mode", "smart_rotation")),
+            str(tab._widget_default(key, "selection_mode")),
         )
         selection_mode.currentIndexChanged.connect(tab._save_settings)
         selection_mode.currentIndexChanged.connect(
@@ -1231,7 +1241,7 @@ def _build_card_group(
         pinned_game.addItem("Not set", None)
         pinned_game.completer().setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         pinned_game.completer().setFilterMode(Qt.MatchFlag.MatchContains)
-        pending_pinned = tab._widget_default(key, "pinned_appid", None)
+        pending_pinned = tab._widget_default(key, "pinned_appid")
         try:
             tab._abandonment_pending_pinned_appid = int(pending_pinned) if pending_pinned else None
         except (TypeError, ValueError):
@@ -1249,7 +1259,7 @@ def _build_card_group(
         minimum_playtime = QSpinBox()
         minimum_playtime.setRange(0, 120)
         minimum_playtime.setSuffix(" min")
-        minimum_playtime.setValue(tab._default_int(key, "minimum_playtime_minutes", 15))
+        minimum_playtime.setValue(tab._default_int(key, "minimum_playtime_minutes"))
         minimum_playtime.setToolTip(
             "Filter accidental launches while still allowing genuinely forgotten short starts."
         )
@@ -1263,7 +1273,7 @@ def _build_card_group(
         preferred_playtime.setRange(1, 1_000)
         preferred_playtime.setSuffix(" h")
         preferred_playtime.setValue(
-            tab._default_int(key, "preferred_max_playtime_hours", 2)
+            tab._default_int(key, "preferred_max_playtime_hours")
         )
         preferred_playtime.setToolTip(
             "Rank shorter starts first without forbidding games above this playtime."
@@ -1278,7 +1288,7 @@ def _build_card_group(
         preferred_unlocks.setRange(0, 100)
         preferred_unlocks.setSuffix(" cached unlocks")
         preferred_unlocks.setValue(
-            tab._default_int(key, "preferred_max_unlocked_achievements", 2)
+            tab._default_int(key, "preferred_max_unlocked_achievements")
         )
         preferred_unlocks.setToolTip(
             "Use only existing local Achievement Pulse cache. Unknown counts stay neutral; this never requests achievements."
@@ -1292,7 +1302,7 @@ def _build_card_group(
         minimum_inactivity = QSpinBox()
         minimum_inactivity.setRange(1, 1_000)
         minimum_inactivity.setSuffix(" weeks")
-        minimum_inactivity.setValue(tab._default_int(key, "minimum_inactivity_weeks", 12))
+        minimum_inactivity.setValue(tab._default_int(key, "minimum_inactivity_weeks"))
         minimum_inactivity.setToolTip(
             "Only source-verified last-played timestamps older than this threshold qualify."
         )
@@ -1306,7 +1316,7 @@ def _build_card_group(
         preferred_inactivity.setRange(1, 1_000)
         preferred_inactivity.setSuffix(" weeks")
         preferred_inactivity.setValue(
-            tab._default_int(key, "preferred_minimum_inactivity_weeks", 26)
+            tab._default_int(key, "preferred_minimum_inactivity_weeks")
         )
         preferred_inactivity.setToolTip(
             "Rank games with verified last-played age beyond this point first. Steam purchase date is not available."
@@ -1325,7 +1335,7 @@ def _build_card_group(
         )
         never_show.setText(
             format_appid_list(
-                parse_appid_list(tab._widget_default(key, "never_show_appids", ()))
+                parse_appid_list(tab._widget_default(key, "never_show_appids"))
             )
         )
         never_show.editingFinished.connect(tab._save_settings)
@@ -1354,7 +1364,7 @@ def _build_card_group(
             "Show the stable per-game rediscovery line beneath the game title."
         )
         show_message.setChecked(
-            tab._default_bool(key, "show_rediscovery_message", True)
+            tab._default_bool(key, "show_rediscovery_message")
         )
         show_message.stateChanged.connect(tab._save_settings)
         tab.abandonment_issues_show_rediscovery_message = show_message
@@ -1367,8 +1377,7 @@ def _build_card_group(
             field_toggle = QCheckBox(label_text)
             field_toggle.setProperty("circleIndicator", True)
             field_toggle.setToolTip(tooltip)
-            fallback = ABANDONMENT_FIELD_DEFAULTS[field_id]
-            field_toggle.setChecked(tab._default_bool(key, f"show_{field_id}", fallback))
+            field_toggle.setChecked(tab._default_bool(key, f"show_{field_id}"))
             field_toggle.stateChanged.connect(tab._save_settings)
             setattr(tab, f"abandonment_issues_show_{field_id}", field_toggle)
             content_layout.addWidget(field_toggle)
@@ -1376,7 +1385,7 @@ def _build_card_group(
         artwork_row = _aligned_row(appearance_layout, "Artwork:")
         show_artwork = QCheckBox("Show Game Artwork")
         show_artwork.setProperty("circleIndicator", True)
-        show_artwork.setChecked(tab._default_bool(key, "show_artwork", True))
+        show_artwork.setChecked(tab._default_bool(key, "show_artwork"))
         show_artwork.stateChanged.connect(tab._save_settings)
         show_artwork.stateChanged.connect(lambda _state: _update_abandonment_controls(tab))
         tab.abandonment_issues_show_artwork = show_artwork
@@ -1390,7 +1399,7 @@ def _build_card_group(
         _set_combo_data(
             artwork_shape,
             normalize_abandonment_artwork_shape(
-                tab._widget_default(key, "artwork_shape", "portrait")
+                tab._widget_default(key, "artwork_shape")
             ),
         )
         artwork_shape.currentIndexChanged.connect(tab._save_settings)
@@ -1405,7 +1414,7 @@ def _build_card_group(
             ABANDONMENT_ARTWORK_SIZE_MAX,
         )
         artwork_size.setValue(
-            tab._default_int(key, "artwork_size", ABANDONMENT_ARTWORK_SIZE_DEFAULT)
+            tab._default_int(key, "artwork_size")
         )
         artwork_size.setSuffix(" px")
         artwork_size.setToolTip(
@@ -1418,7 +1427,7 @@ def _build_card_group(
 
         accent_row = _aligned_row(appearance_layout, "Backlog Accent:")
         tab._abandonment_accent_color = _coerce_rgba_color(
-            tab._widget_default(key, "accent_color", ABANDONMENT_ACCENT_RGBA),
+            tab._widget_default(key, "accent_color"),
             ABANDONMENT_ACCENT_RGBA,
         )
         accent_button = ColorSwatchButton(
@@ -1436,7 +1445,7 @@ def _build_card_group(
         guilt_row = _aligned_row(appearance_layout, "Guilt Desaturater:")
         guilt = QCheckBox("Desaturate older artwork")
         guilt.setProperty("circleIndicator", True)
-        guilt.setChecked(tab._default_bool(key, "guilt_desaturater", False))
+        guilt.setChecked(tab._default_bool(key, "guilt_desaturater"))
         guilt.setToolTip(
             "Apply a smooth capped artwork-only desaturation curve from verified inactivity."
         )
@@ -1450,7 +1459,7 @@ def _build_card_group(
         guilt_strength = QSpinBox()
         guilt_strength.setRange(0, 100)
         guilt_strength.setSuffix(" %")
-        guilt_strength.setValue(tab._default_int(key, "guilt_desaturation_strength", 55))
+        guilt_strength.setValue(tab._default_int(key, "guilt_desaturation_strength"))
         guilt_strength.valueChanged.connect(tab._save_settings)
         tab.abandonment_issues_guilt_desaturation_strength = guilt_strength
         guilt_strength_row.addWidget(guilt_strength)
@@ -1486,7 +1495,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab.steam_enabled.setToolTip(
         "Master switch for the Steam widget family. Turning it off disables every Steam card and hides all Steam settings."
     )
-    tab.steam_enabled.setChecked(tab._default_bool("steam", "enabled", True))
+    tab.steam_enabled.setChecked(tab._default_bool("steam", "enabled"))
     tab.steam_enabled.stateChanged.connect(tab._save_settings)
     root.addWidget(tab.steam_enabled)
 
@@ -1498,7 +1507,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     connection_toggle, connection_body, connection_layout = build_bucket_toggle(
         _steam_controls_layout,
         "Connection & Privacy",
-        expanded=tab.get_widget_bucket_state("steam", "connection", default=False),
+        expanded=tab.get_widget_bucket_state("steam", "connection"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("steam", "connection", checked),
         defer_initial_visibility=True,
     )
@@ -1551,7 +1560,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab.steam_privacy_mode.addItems(["Strict", "Balanced", "Rich"])
     tab.steam_privacy_mode.setMinimumWidth(150)
     tab.steam_privacy_mode.currentTextChanged.connect(tab._save_settings)
-    tab._set_combo_text(tab.steam_privacy_mode, tab._default_str("steam", "privacy_mode", "Strict"))
+    tab._set_combo_text(tab.steam_privacy_mode, tab._default_str("steam", "privacy_mode"))
     privacy_row.addWidget(tab.steam_privacy_mode)
     privacy_row.addStretch()
 
@@ -1559,7 +1568,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab.steam_refresh_minutes = QSpinBox()
     tab.steam_refresh_minutes.setRange(5, 240)
     tab.steam_refresh_minutes.setSuffix(" min")
-    tab.steam_refresh_minutes.setValue(tab._default_int("steam", "refresh_minutes", 10))
+    tab.steam_refresh_minutes.setValue(tab._default_int("steam", "refresh_minutes"))
     tab.steam_refresh_minutes.setToolTip(
         "The shared freshness window for ordinary Steam data and the exact "
         "Abandonment Issues automatic game-change cadence. Long-lived sources keep "
@@ -1574,7 +1583,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab.steam_show_connection_info_icon.setToolTip(
         "Show a small orange info icon when cached Steam data is at least one day stale and the connection needs attention."
     )
-    tab.steam_show_connection_info_icon.setChecked(tab._default_bool("steam", "show_connection_info_icon", True))
+    tab.steam_show_connection_info_icon.setChecked(tab._default_bool("steam", "show_connection_info_icon"))
     tab.steam_show_connection_info_icon.stateChanged.connect(tab._save_settings)
     connection_layout.addWidget(tab.steam_show_connection_info_icon)
 
@@ -1612,44 +1621,44 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
     """Load saved non-secret Steam settings into the lazy section controls."""
     steam_config = _section_config(widgets_config, "steam")
     tab.steam_enabled.setChecked(
-        bool(steam_config.get("enabled", tab._default_bool("steam", "enabled", True)))
+        bool(steam_config.get("enabled", tab._default_bool("steam", "enabled")))
     )
     tab._set_combo_text(
         tab.steam_privacy_mode,
-        str(steam_config.get("privacy_mode", tab._default_str("steam", "privacy_mode", "Strict"))),
+        str(steam_config.get("privacy_mode", tab._default_str("steam", "privacy_mode"))),
     )
     try:
         tab.steam_refresh_minutes.setValue(
-            int(steam_config.get("refresh_minutes", tab._default_int("steam", "refresh_minutes", 10)))
+            int(steam_config.get("refresh_minutes", tab._default_int("steam", "refresh_minutes")))
         )
     except Exception:
-        tab.steam_refresh_minutes.setValue(tab._default_int("steam", "refresh_minutes", 10))
+        tab.steam_refresh_minutes.setValue(tab._default_int("steam", "refresh_minutes"))
     tab.steam_show_connection_info_icon.setChecked(
-        bool(steam_config.get("show_connection_info_icon", tab._default_bool("steam", "show_connection_info_icon", True)))
+        bool(steam_config.get("show_connection_info_icon", tab._default_bool("steam", "show_connection_info_icon")))
     )
 
     for key, _label, fallback_position in _STEAM_CARD_ORDER:
         config = _section_config(widgets_config, key)
         getattr(tab, f"{key}_enabled").setChecked(
-            bool(config.get("enabled", tab._default_bool(key, "enabled", False)))
+            bool(config.get("enabled", tab._default_bool(key, "enabled")))
         )
         tab._set_combo_text(
             getattr(tab, f"{key}_position"),
-            str(config.get("position", tab._default_str(key, "position", fallback_position))),
+            str(config.get("position", tab._default_str(key, "position"))),
         )
         tab._set_combo_text(
             getattr(tab, f"{key}_monitor_combo"),
-            str(config.get("monitor", tab._widget_default(key, "monitor", "ALL"))),
+            str(config.get("monitor", tab._widget_default(key, "monitor"))),
         )
         getattr(tab, f"{key}_font_family").setCurrentFont(
-            QFont(str(config.get("font_family", tab._default_str(key, "font_family", "Inter"))))
+            QFont(str(config.get("font_family", tab._default_str(key, "font_family"))))
         )
         try:
             getattr(tab, f"{key}_font_size").setValue(
-                int(config.get("font_size", tab._default_int(key, "font_size", 14)))
+                int(config.get("font_size", tab._default_int(key, "font_size")))
             )
         except Exception:
-            getattr(tab, f"{key}_font_size").setValue(tab._default_int(key, "font_size", 14))
+            getattr(tab, f"{key}_font_size").setValue(tab._default_int(key, "font_size"))
         if key in {"achievement_pulse", "abandonment_issues"}:
             header_fill_fallback = (11, 16, 22, 230)
             header_text_fallback = (255, 255, 255, 230)
@@ -1657,21 +1666,21 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             header_fill = _coerce_rgba_color(
                 config.get(
                     "header_fill_color",
-                    tab._widget_default(key, "header_fill_color", header_fill_fallback),
+                    tab._widget_default(key, "header_fill_color"),
                 ),
                 header_fill_fallback,
             )
             header_text = _coerce_rgba_color(
                 config.get(
                     "header_text_color",
-                    tab._widget_default(key, "header_text_color", header_text_fallback),
+                    tab._widget_default(key, "header_text_color"),
                 ),
                 header_text_fallback,
             )
             header_border = _coerce_rgba_color(
                 config.get(
                     "header_border_color",
-                    tab._widget_default(key, "header_border_color", header_border_fallback),
+                    tab._widget_default(key, "header_border_color"),
                 ),
                 header_border_fallback,
             )
@@ -1681,20 +1690,22 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
         if key == "achievement_pulse":
             _set_achievement_selection_mode(
                 tab.achievement_pulse_selection_mode,
-                str(config.get("selection_mode", tab._widget_default(key, "selection_mode", "most_recent"))),
+                str(config.get("selection_mode", tab._widget_default(key, "selection_mode"))),
+                canonical_mode=str(tab._widget_default(key, "selection_mode")),
             )
             try:
                 tab.achievement_pulse_custom_appid.setValue(
-                    int(config.get("custom_appid", tab._widget_default(key, "custom_appid", 0)) or 0)
+                    int(config.get("custom_appid", tab._widget_default(key, "custom_appid")) or 0)
                 )
             except Exception:
                 tab.achievement_pulse_custom_appid.setValue(0)
             tab.achievement_pulse_show_artwork.setChecked(
-                bool(config.get("show_artwork", tab._default_bool(key, "show_artwork", True)))
+                bool(config.get("show_artwork", tab._default_bool(key, "show_artwork")))
             )
             _set_combo_data(
                 tab.achievement_pulse_artwork_shape,
-                str(config.get("artwork_shape", tab._default_str(key, "artwork_shape", "portrait"))),
+                str(config.get("artwork_shape", tab._default_str(key, "artwork_shape"))),
+                canonical_value=tab._default_str(key, "artwork_shape"),
             )
             try:
                 tab.achievement_pulse_square_artwork_size.setValue(
@@ -1703,22 +1714,20 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
                             "square_artwork_size",
                             tab._default_int(
                                 key,
-                                "square_artwork_size",
-                                ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
-                            ),
+                                "square_artwork_size"),
                         )
                     )
                 )
             except (TypeError, ValueError):
                 tab.achievement_pulse_square_artwork_size.setValue(
-                    ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT
+                    tab._default_int(key, "square_artwork_size")
                 )
             tab._achievement_capsule_fill_color = _coerce_rgba_color(
                 config.get(
                     "capsule_fill_color",
-                    tab._widget_default(key, "capsule_fill_color", _ACHIEVEMENT_CAPSULE_FILL_RGBA),
+                    tab._widget_default(key, "capsule_fill_color"),
                 ),
-                _ACHIEVEMENT_CAPSULE_FILL_RGBA,
+                ACHIEVEMENT_CAPSULE_FILL_RGBA,
             )
             tab.achievement_pulse_capsule_fill_color_btn.set_color(
                 tab._achievement_capsule_fill_color
@@ -1726,9 +1735,9 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             tab._achievement_capsule_border_color = _coerce_rgba_color(
                 config.get(
                     "capsule_border_color",
-                    tab._widget_default(key, "capsule_border_color", _ACHIEVEMENT_CAPSULE_BORDER_RGBA),
+                    tab._widget_default(key, "capsule_border_color"),
                 ),
-                _ACHIEVEMENT_CAPSULE_BORDER_RGBA,
+                ACHIEVEMENT_CAPSULE_BORDER_RGBA,
             )
             tab.achievement_pulse_capsule_border_color_btn.set_color(
                 tab._achievement_capsule_border_color
@@ -1737,7 +1746,7 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
                 "double_capsules",
                 config.get(
                     "double_capsule_long_data",
-                    tab._default_bool(key, "double_capsules", True),
+                    tab._default_bool(key, "double_capsules"),
                 ),
             )
             tab.achievement_pulse_double_capsules.setChecked(bool(double_capsules))
@@ -1748,46 +1757,51 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
                             "capsule_font_size",
                             tab._default_int(
                                 key,
-                                "capsule_font_size",
-                                ACHIEVEMENT_CAPSULE_FONT_SIZE_DEFAULT,
-                            ),
+                                "capsule_font_size"),
                         )
                     )
                 )
             except (TypeError, ValueError):
                 tab.achievement_pulse_capsule_font_size.setValue(
-                    ACHIEVEMENT_CAPSULE_FONT_SIZE_DEFAULT
+                    tab._default_int(key, "capsule_font_size")
                 )
             tab.achievement_pulse_show_latest.setChecked(
-                bool(config.get("show_latest", tab._default_bool(key, "show_latest", True)))
+                bool(config.get("show_latest", tab._default_bool(key, "show_latest")))
             )
             tab.achievement_pulse_show_latest_artwork.setChecked(
                 bool(
                     config.get(
                         "show_latest_achievement_artwork",
-                        tab._default_bool(key, "show_latest_achievement_artwork", True),
+                        tab._default_bool(key, "show_latest_achievement_artwork"),
                     )
                 )
             )
             try:
                 tab.achievement_pulse_latest_unlock_count.setValue(
-                    int(config.get("latest_unlock_count", tab._default_int(key, "latest_unlock_count", 1)))
+                    int(config.get("latest_unlock_count", tab._default_int(key, "latest_unlock_count")))
                 )
             except Exception:
-                tab.achievement_pulse_latest_unlock_count.setValue(1)
+                tab.achievement_pulse_latest_unlock_count.setValue(
+                    tab._default_int(key, "latest_unlock_count")
+                )
             for field_id, _label_text in _ACHIEVEMENT_FIELD_OPTIONS:
-                fallback = _ACHIEVEMENT_FIELD_DEFAULTS[field_id]
                 getattr(tab, f"achievement_pulse_show_{field_id}").setChecked(
-                    bool(config.get(f"show_{field_id}", tab._default_bool(key, f"show_{field_id}", fallback)))
+                    bool(
+                        config.get(
+                            f"show_{field_id}",
+                            tab._default_bool(key, f"show_{field_id}"),
+                        )
+                    )
                 )
             _update_achievement_artwork_controls(tab)
             _update_achievement_latest_controls(tab)
         elif key == "abandonment_issues":
             _set_combo_data(
                 tab.abandonment_issues_selection_mode,
-                str(config.get("selection_mode", tab._default_str(key, "selection_mode", "smart_rotation"))),
+                str(config.get("selection_mode", tab._default_str(key, "selection_mode"))),
+                canonical_value=tab._default_str(key, "selection_mode"),
             )
-            pinned_value = config.get("pinned_appid", tab._widget_default(key, "pinned_appid", None))
+            pinned_value = config.get("pinned_appid", tab._widget_default(key, "pinned_appid"))
             try:
                 tab._abandonment_pending_pinned_appid = int(pinned_value) if pinned_value else None
             except (TypeError, ValueError):
@@ -1796,59 +1810,61 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
                 tab.abandonment_issues_pinned_game,
                 tab._abandonment_pending_pinned_appid,
             )
-            for setting_key, attr_name, fallback in (
-                ("minimum_playtime_minutes", "abandonment_issues_minimum_playtime_minutes", 15),
+            for setting_key, attr_name in (
+                ("minimum_playtime_minutes", "abandonment_issues_minimum_playtime_minutes"),
                 (
                     "preferred_max_playtime_hours",
                     "abandonment_issues_preferred_max_playtime_hours",
-                    2,
                 ),
                 (
                     "preferred_max_unlocked_achievements",
                     "abandonment_issues_preferred_max_unlocked_achievements",
-                    2,
                 ),
-                ("minimum_inactivity_weeks", "abandonment_issues_minimum_inactivity_weeks", 12),
+                ("minimum_inactivity_weeks", "abandonment_issues_minimum_inactivity_weeks"),
                 (
                     "preferred_minimum_inactivity_weeks",
                     "abandonment_issues_preferred_minimum_inactivity_weeks",
-                    26,
                 ),
-                ("artwork_size", "abandonment_issues_artwork_size", ABANDONMENT_ARTWORK_SIZE_DEFAULT),
-                ("guilt_desaturation_strength", "abandonment_issues_guilt_desaturation_strength", 55),
+                ("artwork_size", "abandonment_issues_artwork_size"),
+                ("guilt_desaturation_strength", "abandonment_issues_guilt_desaturation_strength"),
             ):
                 try:
                     getattr(tab, attr_name).setValue(
-                        int(config.get(setting_key, tab._default_int(key, setting_key, fallback)))
+                        int(config.get(setting_key, tab._default_int(key, setting_key)))
                     )
                 except (TypeError, ValueError):
-                    getattr(tab, attr_name).setValue(fallback)
+                    getattr(tab, attr_name).setValue(
+                        tab._default_int(key, setting_key)
+                    )
             tab.abandonment_issues_never_show_appids.setText(
                 format_appid_list(
                     parse_appid_list(
                         config.get(
                             "never_show_appids",
-                            tab._widget_default(key, "never_show_appids", ()),
+                            tab._widget_default(key, "never_show_appids"),
                         )
                     )
                 )
             )
             tab.abandonment_issues_show_artwork.setChecked(
-                bool(config.get("show_artwork", tab._default_bool(key, "show_artwork", True)))
+                bool(config.get("show_artwork", tab._default_bool(key, "show_artwork")))
             )
             _set_combo_data(
                 tab.abandonment_issues_artwork_shape,
                 normalize_abandonment_artwork_shape(
                     config.get(
                         "artwork_shape",
-                        tab._default_str(key, "artwork_shape", "portrait"),
+                        tab._default_str(key, "artwork_shape"),
                     )
+                ),
+                canonical_value=normalize_abandonment_artwork_shape(
+                    tab._default_str(key, "artwork_shape")
                 ),
             )
             tab._abandonment_accent_color = _coerce_rgba_color(
                 config.get(
                     "accent_color",
-                    tab._widget_default(key, "accent_color", ABANDONMENT_ACCENT_RGBA),
+                    tab._widget_default(key, "accent_color"),
                 ),
                 ABANDONMENT_ACCENT_RGBA,
             )
@@ -1856,20 +1872,24 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
                 tab._abandonment_accent_color
             )
             tab.abandonment_issues_guilt_desaturater.setChecked(
-                bool(config.get("guilt_desaturater", tab._default_bool(key, "guilt_desaturater", False)))
+                bool(config.get("guilt_desaturater", tab._default_bool(key, "guilt_desaturater")))
             )
             tab.abandonment_issues_show_rediscovery_message.setChecked(
                 bool(
                     config.get(
                         "show_rediscovery_message",
-                        tab._default_bool(key, "show_rediscovery_message", True),
+                        tab._default_bool(key, "show_rediscovery_message"),
                     )
                 )
             )
             for field_id, _label_text, _tooltip in _ABANDONMENT_FIELD_OPTIONS:
-                fallback = ABANDONMENT_FIELD_DEFAULTS[field_id]
                 getattr(tab, f"abandonment_issues_show_{field_id}").setChecked(
-                    bool(config.get(f"show_{field_id}", tab._default_bool(key, f"show_{field_id}", fallback)))
+                    bool(
+                        config.get(
+                            f"show_{field_id}",
+                            tab._default_bool(key, f"show_{field_id}"),
+                        )
+                    )
                 )
             tab.abandonment_issues_refresh_status.clear()
             _update_abandonment_controls(tab)
@@ -1880,14 +1900,16 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
 
 
 def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
-    defaults = tab._widget_defaults.get(key, {})
-    if not isinstance(defaults, dict):
-        defaults = {}
+    defaults = tab._widget_defaults.get(key)
+    if not isinstance(defaults, Mapping):
+        raise KeyError(f"Canonical widget defaults are missing widgets.{key}")
     payload = dict(defaults)
     payload.update({
         "enabled": getattr(tab, f"{key}_enabled").isChecked(),
         "position": getattr(tab, f"{key}_position").currentText(),
-        "monitor": getattr(tab, f"{key}_monitor_combo").currentText(),
+        "monitor": tab._monitor_value_from_combo(
+            key, getattr(tab, f"{key}_monitor_combo")
+        ),
         "font_family": getattr(tab, f"{key}_font_family").currentFont().family(),
         "font_size": int(getattr(tab, f"{key}_font_size").value()),
     })
@@ -1902,12 +1924,14 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
             getattr(tab, f"_{key}_header_border_color")
         )
     if key == "achievement_pulse":
-        payload["selection_mode"] = str(tab.achievement_pulse_selection_mode.currentData() or "most_recent")
+        payload["selection_mode"] = str(tab._combo_data_or_widget_default("achievement_pulse", "selection_mode", tab.achievement_pulse_selection_mode))
         custom_appid = int(tab.achievement_pulse_custom_appid.value())
         payload["custom_appid"] = custom_appid or None
         payload["show_artwork"] = bool(tab.achievement_pulse_show_artwork.isChecked())
         payload["artwork_shape"] = str(
-            tab.achievement_pulse_artwork_shape.currentData() or "portrait"
+            tab._combo_data_or_widget_default(
+                "achievement_pulse", "artwork_shape", tab.achievement_pulse_artwork_shape
+            )
         )
         payload["square_artwork_size"] = int(tab.achievement_pulse_square_artwork_size.value())
         payload.pop("double_capsule_long_data", None)
@@ -1924,7 +1948,9 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
             payload[f"show_{field_id}"] = bool(getattr(tab, f"achievement_pulse_show_{field_id}").isChecked())
     elif key == "abandonment_issues":
         payload["selection_mode"] = str(
-            tab.abandonment_issues_selection_mode.currentData() or "smart_rotation"
+            tab._combo_data_or_widget_default(
+                "abandonment_issues", "selection_mode", tab.abandonment_issues_selection_mode
+            )
         )
         pinned_data = tab.abandonment_issues_pinned_game.currentData()
         payload["pinned_appid"] = int(pinned_data) if pinned_data else None
@@ -1956,7 +1982,9 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
             tab.abandonment_issues_show_artwork.isChecked()
         )
         payload["artwork_shape"] = str(
-            tab.abandonment_issues_artwork_shape.currentData() or "portrait"
+            tab._combo_data_or_widget_default(
+                "abandonment_issues", "artwork_shape", tab.abandonment_issues_artwork_shape
+            )
         )
         payload["artwork_size"] = int(tab.abandonment_issues_artwork_size.value())
         payload["accent_color"] = _rgba_payload(tab._abandonment_accent_color)

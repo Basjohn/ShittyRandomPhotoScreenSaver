@@ -332,7 +332,7 @@ class DisplayStackParticipant:
     width: int
     height: int
     order: int
-    margin: int = 30
+    margin: int
 
 
 @dataclass(frozen=True)

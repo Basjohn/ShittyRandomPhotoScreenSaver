@@ -30,6 +30,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from enum import Enum
 
+from core.settings.default_contract import require_canonical_default
+
 
 class ShadowDirection(Enum):
     """One of eight canonical outer shadow directions. Center is not a mode."""
@@ -44,9 +46,10 @@ class ShadowDirection(Enum):
     SE = "SE"
 
 
-DEFAULT_SHADOW_DIRECTION = ShadowDirection.SE
-
 SHADOW_DIRECTION_SETTING_KEY = "widgets.shadows.direction"
+DEFAULT_SHADOW_DIRECTION = ShadowDirection(
+    str(require_canonical_default(SHADOW_DIRECTION_SETTING_KEY)).strip().upper()
+)
 
 # Orientation signs applied to an authored (magnitude) pair. Axis-only
 # directions carry a zero on the perpendicular axis.

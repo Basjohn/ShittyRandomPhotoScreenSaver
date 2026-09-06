@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Mapping, Optional, TYPE_CHECKING
 
 from core.logging.logger import (
@@ -32,48 +32,18 @@ def _should_emit_bars_snapshot(worker: "SpotifyVisualizerAudioWorker", now: floa
     return now <= 0.0 or (now - last_snapshot) >= min_interval
 
 
-_SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED = {
-    "Mid": 0.60,
-    "Vocal": 0.64,
-    "Low-Mid": 0.70,
-    "Bass": 0.80,
-}
-_SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR = {
-    "Bass": 0.80,
-    "Low-Mid": 0.70,
-    "Vocal": 0.64,
-    "Hi-Mid": 0.80,
-    "Treble": 1.00,
-}
-
-
-@dataclass
+@dataclass(frozen=True)
 class SpectrumShapeConfig:
-    """Lane-authored audio weights for the Spectrum shaper.
+    """Resolved lane-authored audio weights for the Spectrum shaper.
 
-    The node-driven profile remains the primary silhouette guide, while
-    per-lane arrows define how much real lane energy each authored region
-    contributes. Mirrored and linear layouts keep separate lane dictionaries
-    because their visible lane families differ.
-
-    Attributes:
-        lane_strengths_mirrored: `Mid / Vocal / Low-Mid / Bass` strength map.
-        lane_strengths_linear: `Bass / Low-Mid / Vocal / Hi-Mid / Treble` map.
-        wave_amplitude: Overall reactivity scaling.  0→subdued, 1→punchy.
-        profile_floor: Minimum bar height multiplier (0.05–0.30).
+    This is a value contract only. Product defaults belong to canonical
+    Settings and are resolved before the audio worker receives this object.
     """
-    lane_strengths_mirrored: Mapping[str, float] = field(
-        default_factory=lambda: dict(_SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED)
-    )
-    lane_strengths_linear: Mapping[str, float] = field(
-        default_factory=lambda: dict(_SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR)
-    )
-    wave_amplitude: float = 0.50
-    profile_floor: float = 0.12
 
-
-# Singleton default config — used when the worker has no custom config.
-_DEFAULT_SHAPE_CONFIG = SpectrumShapeConfig()
+    lane_strengths_mirrored: Mapping[str, float]
+    lane_strengths_linear: Mapping[str, float]
+    wave_amplitude: float
+    profile_floor: float
 
 
 def _lane_source_energy(label: str, bass_energy: float, mid_energy: float, treble_energy: float) -> float:
@@ -110,10 +80,10 @@ def _build_lane_energy_profile(
         if pos <= last_pos:
             pos = min(1.0, last_pos + 1e-4)
         last_pos = pos
-        try:
-            strength = max(0.0, min(1.0, float(strengths.get(str(label), 1.0))))
-        except Exception:
-            strength = 1.0
+        # ``SpectrumShapeConfig`` is already a resolved Settings contract. A
+        # missing/invalid authored lane is a configuration error, not a reason
+        # for the DSP layer to invent a 1.0 product weight.
+        strength = max(0.0, min(1.0, float(strengths[str(label)])))
         anchors.append(pos)
         values.append(_lane_source_energy(str(label), bass_energy, mid_energy, treble_energy) * strength)
 
@@ -230,15 +200,13 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
                     freq_values[b] = np.sqrt(np.mean(band_slice ** 2))
 
         # Get raw energy values — band splits driven by notch positions
-        _notch_pos = getattr(worker, '_spectrum_notch_positions', None)
-        if _notch_pos and len(_notch_pos) >= 3:
-            _fracs = sorted(float(n[0]) for n in _notch_pos)
-            # Use interior notch boundaries to define bass/mid/treble zones
-            _split1 = max(1, min(bands - 2, int(_fracs[1] * bands)))
-            _split2 = max(_split1 + 1, min(bands - 1, int(_fracs[-2] * bands)))
-        else:
-            _split1 = min(4, bands - 1)
-            _split2 = min(10, bands - 1)
+        _notch_pos = worker._spectrum_notch_positions
+        if not isinstance(_notch_pos, list) or len(_notch_pos) < 3:
+            raise RuntimeError("Spectrum notch configuration is unresolved")
+        _fracs = sorted(float(n[0]) for n in _notch_pos)
+        # Use interior notch boundaries to define bass/mid/treble zones.
+        _split1 = max(1, min(bands - 2, int(_fracs[1] * bands)))
+        _split2 = max(_split1 + 1, min(bands - 1, int(_fracs[-2] * bands)))
         raw_bass = float(np.mean(freq_values[:_split1])) if _split1 > 0 else float(freq_values[0])
         raw_mid = float(np.mean(freq_values[_split1:_split2])) if _split2 > _split1 else raw_bass * 0.5
         raw_treble = float(np.mean(freq_values[_split2:])) if _split2 < bands else raw_bass * 0.2
@@ -305,7 +273,7 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
                 min(2.5, max(0.0, mid_energy / _tb_norm)),
                 min(2.5, max(0.0, treble_energy / _tb_norm)),
             )
-            _g_clamp = getattr(worker, '_transient_clamp', 1.5)
+            _g_clamp = float(worker._transient_clamp)
             worker._transient_bass = min(_g_clamp, _t_snap.bass_transient)
             worker._transient_mid = min(_g_clamp, _t_snap.mid_transient)
             worker._transient_high = min(_g_clamp, _t_snap.high_transient)
@@ -317,21 +285,24 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         # The shape editor remains the visual guide, but lane energy now
         # routes per-bar so a silent band can genuinely collapse instead of
         # inheriting a single shared spectrum-wide scalar.
-        shape_cfg = getattr(worker, '_spectrum_shape_config', None) or _DEFAULT_SHAPE_CONFIG
-        mirrored = getattr(worker, '_spectrum_mirrored', True)
-        shape_nodes = getattr(worker, '_spectrum_shape_nodes', None)
+        shape_cfg = worker._spectrum_shape_config
+        if not isinstance(shape_cfg, SpectrumShapeConfig):
+            raise RuntimeError("Spectrum shape configuration is unresolved")
+        mirrored = worker._spectrum_mirrored
+        if not isinstance(mirrored, bool):
+            raise RuntimeError("Spectrum mirrored configuration is unresolved")
+        shape_nodes = worker._spectrum_shape_nodes
+        if not isinstance(shape_nodes, list) or not shape_nodes:
+            raise RuntimeError("Spectrum shape nodes are unresolved")
 
         # Build per-bar profile from user-drawn shape nodes
         from ui.tabs.media.spectrum_shape_editor import (
             interpolate_nodes, interpolate_nodes_mirrored,
         )
-        if shape_nodes and len(shape_nodes) >= 1:
-            if mirrored:
-                profile_list = interpolate_nodes_mirrored(shape_nodes, bands)
-            else:
-                profile_list = interpolate_nodes(shape_nodes, bands)
+        if mirrored:
+            profile_list = interpolate_nodes_mirrored(shape_nodes, bands)
         else:
-            profile_list = [0.6] * bands
+            profile_list = interpolate_nodes(shape_nodes, bands)
 
         profile_shape = np.array(profile_list, dtype="float32")
         profile_shape = np.maximum(profile_shape, shape_cfg.profile_floor)
@@ -341,13 +312,9 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         # The editor owns those lane identities; runtime just routes each
         # lane to its intended bass/mid/treble energy source.
         react_scale = 0.5 + shape_cfg.wave_amplitude  # 0→0.5 .. 1→1.5
-        active_notches = getattr(worker, '_spectrum_notch_positions', None)
+        active_notches = worker._spectrum_notch_positions
         if not isinstance(active_notches, list) or len(active_notches) < 2:
-            active_notches = (
-                [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]]
-                if mirrored
-                else [[0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"]]
-            )
+            raise RuntimeError("Spectrum notch configuration is unresolved")
 
         if mirrored:
             center_pos = (float(bands) - 1.0) * 0.5
@@ -410,7 +377,7 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
                     arr[_ri] = min(1.0, arr[_ri] * _kick_boost)
 
     # Scale
-    scale = (worker._base_output_scale or 0.8) * (worker._energy_boost or 1.0)
+    scale = float(worker._base_output_scale) * float(worker._energy_boost)
     if scale < 0.1:
         scale = 0.1
     elif scale > 1.25:
@@ -458,18 +425,18 @@ def _compute_noise_floor(
     noise_floor_base = max(0.8, 1.5 / (resolution_boost ** 0.35))
     expansion_base = 3.6 * (resolution_boost ** 0.4)
 
-    try:
-        with worker._cfg_lock:
-            use_recommended = bool(worker._use_recommended)
-            user_sens = float(worker._user_sensitivity)
-            use_dynamic_floor = bool(worker._use_dynamic_floor)
-            manual_floor = float(worker._manual_floor)
-    except Exception as e:
-        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        use_recommended = True
-        user_sens = 1.0
-        use_dynamic_floor = True
-        manual_floor = noise_floor_base
+    with worker._cfg_lock:
+        if (
+            worker._use_recommended is None
+            or worker._user_sensitivity is None
+            or worker._use_dynamic_floor is None
+            or worker._manual_floor is None
+        ):
+            raise RuntimeError("visualizer sensitivity/floor configuration is unresolved")
+        use_recommended = bool(worker._use_recommended)
+        user_sens = float(worker._user_sensitivity)
+        use_dynamic_floor = bool(worker._use_dynamic_floor)
+        manual_floor = float(worker._manual_floor)
 
     if user_sens < 0.25:
         user_sens = 0.25
@@ -477,7 +444,7 @@ def _compute_noise_floor(
         user_sens = 2.5
 
     if use_recommended:
-        auto_multiplier = float(getattr(worker, "_recommended_sensitivity_multiplier", 0.38))
+        auto_multiplier = float(worker._recommended_sensitivity_multiplier)
         auto_multiplier = max(0.25, min(2.5, auto_multiplier))
         if resolution_boost > 1.0:
             damp = min(0.4, (resolution_boost - 1.0) * 0.55)
@@ -823,7 +790,7 @@ def _apply_adaptive_normalization(
     Legacy combined envelopes (_env_short/_env_long) are still updated for
     backward compatibility with any code reading them.
     """
-    agc_str = getattr(worker, "_agc_strength", 0.5)
+    agc_str = float(worker._agc_strength)
     if agc_str < 0.01:
         return  # AGC disabled — raw output only
 
@@ -1048,7 +1015,7 @@ def compute_bars_from_samples(
 
         # Pre-FFT input gain (virtual volume): scale PCM exactly like the
         # mixer volume slider would, before peak detection and FFT.
-        _input_gain = getattr(worker, "_input_gain", 1.0)
+        _input_gain = float(worker._input_gain)
         if abs(_input_gain - 1.0) > 1e-4:
             mono = mono * _input_gain
 

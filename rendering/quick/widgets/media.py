@@ -16,10 +16,12 @@ from core.media.provider_registry import (
     get_media_provider_header_name,
     preserve_provider_setting,
 )
+from core.settings.default_contract import require_canonical_default
 from core.settings.shadow_direction import (
     resolve_directional_extensions,
     resolve_signed_offset,
 )
+from rendering.quick.shadow_snapshot import QuickShadowSnapshot
 from rendering.quick.media_artwork import MediaArtworkImageProvider
 
 if TYPE_CHECKING:
@@ -145,47 +147,47 @@ def _title_case_metadata(value: object) -> str:
 
 @dataclass(frozen=True)
 class MediaPresentationConfig:
-    widget_id: str = "media"
-    provider: str = "spotify"
-    font_family: str = "Inter"
-    font_size: int = 17
-    text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    show_background: bool = True
-    background_color: tuple[int, int, int, int] = (35, 35, 35, 255)
-    background_opacity: float = 0.3
-    border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
-    border_opacity: float = 1.0
-    header_fill_color: tuple[int, int, int, int] = (0, 0, 0, 0)
-    header_border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
-    header_text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    show_header_frame: bool = True
-    show_album: bool = True
-    show_playback_state: bool = True
-    artwork_size: int = 250
-    rounded_artwork_border: bool = True
-    show_controls: bool = True
-    playback_progress_enabled: bool = False
-    playback_progress_height: int = 6
-    playback_progress_fill_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    playback_progress_shadow_enabled: bool = False
-    playback_progress_glow_enabled: bool = False
-    playback_progress_glow_color: tuple[int, int, int, int] = (255, 255, 255, 180)
-    app_volume_enabled: bool = True
-    app_volume_fill_color: tuple[int, int, int, int] = (79, 79, 79, 150)
-    app_volume_border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
-    app_volume_track_color: tuple[int, int, int, int] = (35, 35, 35, 255)
-    controls_surface_color: tuple[int, int, int, int] = (35, 35, 35, 176)
-    controls_border_color: tuple[int, int, int, int] = (255, 255, 255, 85)
-    controls_separator_color: tuple[int, int, int, int] = (255, 255, 255, 56)
-    controls_icon_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    system_mute_background_color: tuple[int, int, int, int] = (35, 35, 35, 255)
-    system_mute_border_color: tuple[int, int, int, int] = (255, 255, 255, 65)
-    system_mute_inner_border_color: tuple[int, int, int, int] = (0, 0, 0, 60)
-    system_mute_icon_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    system_mute_muted_icon_color: tuple[int, int, int, int] = (200, 200, 200, 180)
-    playback_progress_track_color: tuple[int, int, int, int] = (255, 255, 255, 74)
-    playback_progress_shadow_color: tuple[int, int, int, int] = (0, 0, 0, 102)
-    system_mute_enabled: bool = False
+    widget_id: str
+    provider: str
+    font_family: str
+    font_size: int
+    text_color: tuple[int, int, int, int]
+    show_background: bool
+    background_color: tuple[int, int, int, int]
+    background_opacity: float
+    border_color: tuple[int, int, int, int]
+    border_opacity: float
+    header_fill_color: tuple[int, int, int, int]
+    header_border_color: tuple[int, int, int, int]
+    header_text_color: tuple[int, int, int, int]
+    show_header_frame: bool
+    show_album: bool
+    show_playback_state: bool
+    artwork_size: int
+    rounded_artwork_border: bool
+    show_controls: bool
+    playback_progress_enabled: bool
+    playback_progress_height: int
+    playback_progress_fill_color: tuple[int, int, int, int]
+    playback_progress_shadow_enabled: bool
+    playback_progress_glow_enabled: bool
+    playback_progress_glow_color: tuple[int, int, int, int]
+    app_volume_enabled: bool
+    app_volume_fill_color: tuple[int, int, int, int]
+    app_volume_border_color: tuple[int, int, int, int]
+    app_volume_track_color: tuple[int, int, int, int]
+    controls_surface_color: tuple[int, int, int, int]
+    controls_border_color: tuple[int, int, int, int]
+    controls_separator_color: tuple[int, int, int, int]
+    controls_icon_color: tuple[int, int, int, int]
+    system_mute_background_color: tuple[int, int, int, int]
+    system_mute_border_color: tuple[int, int, int, int]
+    system_mute_inner_border_color: tuple[int, int, int, int]
+    system_mute_icon_color: tuple[int, int, int, int]
+    system_mute_muted_icon_color: tuple[int, int, int, int]
+    playback_progress_track_color: tuple[int, int, int, int]
+    playback_progress_shadow_color: tuple[int, int, int, int]
+    system_mute_enabled: bool
 
     @classmethod
     def from_mapping(
@@ -194,83 +196,93 @@ class MediaPresentationConfig:
         *,
         widget_id: str = "media",
     ) -> "MediaPresentationConfig":
+        """Normalize Media state with canonical defaults as the repair baseline."""
+
+        defaults = require_canonical_default("widgets.media")
+        if not isinstance(defaults, Mapping):
+            raise TypeError("Canonical widgets.media default must be a mapping")
+        merged = dict(defaults)
+        if isinstance(values, Mapping):
+            merged.update(values)
         return cls(
             widget_id=str(widget_id or "media"),
-            provider=preserve_provider_setting(values.get("provider", "spotify")),
-            font_family=str(values.get("font_family", "Inter") or "Inter"),
-            font_size=_bounded_int(values.get("font_size"), 17, 8, 256),
-            text_color=_rgba(values.get("color"), (255, 255, 255, 230)),
-            show_background=_as_bool(values.get("show_background"), True),
-            background_color=_rgba(values.get("bg_color"), (35, 35, 35, 255)),
-            background_opacity=_bounded_float(values.get("bg_opacity"), 0.3, 0.0, 1.0),
-            border_color=_rgba(values.get("border_color"), (255, 255, 255, 255)),
-            border_opacity=_bounded_float(values.get("border_opacity"), 1.0, 0.0, 1.0),
-            header_fill_color=_rgba(values.get("header_fill_color"), (0, 0, 0, 0)),
-            header_border_color=_rgba(values.get("header_border_color"), (255, 255, 255, 255)),
-            header_text_color=_rgba(values.get("header_text_color"), (255, 255, 255, 230)),
-            show_header_frame=_as_bool(values.get("show_header_frame"), True),
-            show_album=_as_bool(values.get("show_album"), True),
-            show_playback_state=_as_bool(values.get("show_playback_state"), True),
-            artwork_size=_bounded_int(values.get("artwork_size"), 250, 48, 512),
-            rounded_artwork_border=_as_bool(values.get("rounded_artwork_border"), True),
-            show_controls=_as_bool(values.get("show_controls"), True),
+            provider=preserve_provider_setting(merged["provider"] or defaults["provider"]),
+            font_family=str(merged["font_family"] or defaults["font_family"]),
+            font_size=_bounded_int(merged["font_size"], int(defaults["font_size"]), 8, 256),
+            text_color=_rgba(merged["color"], tuple(defaults["color"])),
+            show_background=_as_bool(merged["show_background"], bool(defaults["show_background"])),
+            background_color=_rgba(merged["bg_color"], tuple(defaults["bg_color"])),
+            background_opacity=_bounded_float(merged["bg_opacity"], float(defaults["bg_opacity"]), 0.0, 1.0),
+            border_color=_rgba(merged["border_color"], tuple(defaults["border_color"])),
+            border_opacity=_bounded_float(merged["border_opacity"], float(defaults["border_opacity"]), 0.0, 1.0),
+            header_fill_color=_rgba(merged["header_fill_color"], tuple(defaults["header_fill_color"])),
+            header_border_color=_rgba(merged["header_border_color"], tuple(defaults["header_border_color"])),
+            header_text_color=_rgba(merged["header_text_color"], tuple(defaults["header_text_color"])),
+            show_header_frame=_as_bool(merged["show_header_frame"], bool(defaults["show_header_frame"])),
+            show_album=_as_bool(merged["show_album"], bool(defaults["show_album"])),
+            show_playback_state=_as_bool(merged["show_playback_state"], bool(defaults["show_playback_state"])),
+            artwork_size=_bounded_int(merged["artwork_size"], int(defaults["artwork_size"]), 48, 512),
+            rounded_artwork_border=_as_bool(merged["rounded_artwork_border"], bool(defaults["rounded_artwork_border"])),
+            show_controls=_as_bool(merged["show_controls"], bool(defaults["show_controls"])),
             playback_progress_enabled=_as_bool(
-                values.get("playback_progress_enabled"), False
+                merged["playback_progress_enabled"], bool(defaults["playback_progress_enabled"])
             ),
             playback_progress_height=_bounded_int(
-                values.get("playback_progress_height"), 6, 3, 18
+                merged["playback_progress_height"], int(defaults["playback_progress_height"]), 3, 18
             ),
             playback_progress_fill_color=_rgba(
-                values.get("playback_progress_fill_color"),
-                (255, 255, 255, 230),
+                merged["playback_progress_fill_color"], tuple(defaults["playback_progress_fill_color"])
             ),
             playback_progress_track_color=_rgba(
-                values.get("playback_progress_track_color"),
-                (255, 255, 255, 74),
+                merged["playback_progress_track_color"], tuple(defaults["playback_progress_track_color"])
             ),
             playback_progress_shadow_color=_rgba(
-                values.get("playback_progress_shadow_color"),
-                (0, 0, 0, 102),
+                merged["playback_progress_shadow_color"], tuple(defaults["playback_progress_shadow_color"])
             ),
             playback_progress_shadow_enabled=_as_bool(
-                values.get("playback_progress_shadow_enabled"), False
+                merged["playback_progress_shadow_enabled"], bool(defaults["playback_progress_shadow_enabled"])
             ),
             playback_progress_glow_enabled=_as_bool(
-                values.get("playback_progress_glow_enabled"), False
+                merged["playback_progress_glow_enabled"], bool(defaults["playback_progress_glow_enabled"])
             ),
             playback_progress_glow_color=_rgba(
-                values.get("playback_progress_glow_color"),
-                (255, 255, 255, 180),
+                merged["playback_progress_glow_color"], tuple(defaults["playback_progress_glow_color"])
             ),
             app_volume_enabled=_as_bool(
-                values.get("spotify_volume_enabled"), True
+                merged["spotify_volume_enabled"], bool(defaults["spotify_volume_enabled"])
             ),
             app_volume_fill_color=_rgba(
-                values.get("spotify_volume_fill_color"),
-                (79, 79, 79, 150),
+                merged["spotify_volume_fill_color"], tuple(defaults["spotify_volume_fill_color"])
             ),
             app_volume_border_color=_rgba(
-                values.get("spotify_volume_border_color"),
-                (255, 255, 255, 255),
+                merged["spotify_volume_border_color"], tuple(defaults["spotify_volume_border_color"])
             ),
             app_volume_track_color=_rgba(
-                values.get("spotify_volume_track_color"),
-                (35, 35, 35, 255),
+                merged["spotify_volume_track_color"], tuple(defaults["spotify_volume_track_color"])
             ),
             system_mute_enabled=_as_bool(
-                values.get("mute_button_enabled"), False
+                merged["mute_button_enabled"], bool(defaults["mute_button_enabled"])
             ),
+            controls_surface_color=_rgba(merged["bg_color"], tuple(defaults["bg_color"])),
+            controls_border_color=_rgba(merged["border_color"], tuple(defaults["border_color"])),
+            controls_separator_color=_rgba(merged["border_color"], tuple(defaults["border_color"])),
+            controls_icon_color=_rgba(merged["color"], tuple(defaults["color"])),
+            system_mute_background_color=_rgba(merged["bg_color"], tuple(defaults["bg_color"])),
+            system_mute_border_color=_rgba(merged["border_color"], tuple(defaults["border_color"])),
+            system_mute_inner_border_color=_rgba(merged["border_color"], tuple(defaults["border_color"])),
+            system_mute_icon_color=_rgba(merged["color"], tuple(defaults["color"])),
+            system_mute_muted_icon_color=_rgba(merged["color"], tuple(defaults["color"])),
         )
 
     @classmethod
     def from_widgets_mapping(
         cls, widgets: Mapping[str, object]
     ) -> "MediaPresentationConfig":
-        from core.settings.defaults import get_default_settings
-
-        defaults = get_default_settings().get("widgets", {}).get("media", {})
+        defaults = require_canonical_default("widgets.media")
+        if not isinstance(defaults, Mapping):
+            raise TypeError("Canonical widgets.media default must be a mapping")
         values = widgets.get("media", {})
-        merged = dict(defaults) if isinstance(defaults, Mapping) else {}
+        merged = dict(defaults)
         current = values if isinstance(values, Mapping) else {}
         if isinstance(values, Mapping):
             merged.update(values)
@@ -279,7 +291,7 @@ class MediaPresentationConfig:
         header_fill, header_border, header_text = resolve_header_colors(
             "media",
             values=current,
-            defaults=defaults if isinstance(defaults, Mapping) else {},
+            defaults=defaults,
             fill=config.header_fill_color,
             border=config.header_border_color,
             text=config.header_text_color,
@@ -303,36 +315,36 @@ class MediaPresentationConfig:
             "local.accent": config.playback_progress_fill_color,
         }
         volume_fill_override = configured_rgba_override(
-            current, defaults if isinstance(defaults, Mapping) else {},
+            current, defaults,
             "spotify_volume_fill_color", config.app_volume_fill_color,
         )
         volume_outline_override = configured_rgba_override(
-            current, defaults if isinstance(defaults, Mapping) else {},
+            current, defaults,
             "spotify_volume_border_color", config.app_volume_border_color,
         )
         volume_track_override = configured_rgba_override(
-            current, defaults if isinstance(defaults, Mapping) else {},
+            current, defaults,
             "spotify_volume_track_color", config.app_volume_track_color,
         )
         progress_track_override = configured_rgba_override(
-            current, defaults if isinstance(defaults, Mapping) else {},
+            current, defaults,
             "playback_progress_track_color", config.playback_progress_track_color,
         )
         progress_fill_override = configured_rgba_override(
-            current, defaults if isinstance(defaults, Mapping) else {},
+            current, defaults,
             "playback_progress_fill_color", config.playback_progress_fill_color,
         )
         progress_shadow_override = configured_rgba_override(
-            current, defaults if isinstance(defaults, Mapping) else {},
+            current, defaults,
             "playback_progress_shadow_color", config.playback_progress_shadow_color,
         )
         progress_glow_override = configured_rgba_override(
-            current, defaults if isinstance(defaults, Mapping) else {},
+            current, defaults,
             "playback_progress_glow_color", config.playback_progress_glow_color,
         )
         card_background, card_border = resolve_card_surface_colors(
             values=current,
-            defaults=defaults if isinstance(defaults, Mapping) else {},
+            defaults=defaults,
             background_color=config.background_color,
             background_opacity=config.background_opacity,
             border_color=config.border_color,
@@ -340,7 +352,7 @@ class MediaPresentationConfig:
         )
         text_color = resolve_primary_text_color(
             values=current,
-            defaults=defaults if isinstance(defaults, Mapping) else {},
+            defaults=defaults,
             text_color=config.text_color,
         )
         local_common["local.text"] = text_color
@@ -441,21 +453,23 @@ class MediaPresentationStyle:
         *,
         border_width: float = 4.0,
     ) -> "MediaPresentationStyle":
-        direction = shadow_values.get("direction", "SE")
-        frame_extra = _bounded_float(shadow_values.get("frame_extra_offset"), 0, 0, 40)
-        text_extra = _bounded_float(shadow_values.get("text_extra_offset"), 0, 0, 40)
-        card_offset = resolve_signed_offset(direction, *ORDINARY_CARD_SHADOW_BASE)
-        card_extensions = resolve_directional_extensions(direction, frame_extra)
+        shadow = QuickShadowSnapshot.from_mapping(shadow_values)
+        card_offset = resolve_signed_offset(shadow.direction, *ORDINARY_CARD_SHADOW_BASE)
+        card_extensions = resolve_directional_extensions(
+            shadow.direction, shadow.frame_extra_offset
+        )
         text_offset = resolve_signed_offset(
-            direction,
-            ORDINARY_TEXT_SHADOW_BASE[0] + text_extra,
-            ORDINARY_TEXT_SHADOW_BASE[1] + text_extra,
+            shadow.direction,
+            ORDINARY_TEXT_SHADOW_BASE[0] + shadow.text_extra_offset,
+            ORDINARY_TEXT_SHADOW_BASE[1] + shadow.text_extra_offset,
         )
         # Media sub-surfaces share the global card-shadow direction vector. QML
         # applies the small per-surface displacement multipliers and bounded cached
         # blur requested for artwork, transport, and app-volume framing.
-        surface_offset = resolve_signed_offset(direction, *ORDINARY_CARD_SHADOW_BASE)
-        shadow_rgba = _rgba(shadow_values.get("color"), (0, 0, 0, 255))
+        surface_offset = resolve_signed_offset(
+            shadow.direction, *ORDINARY_CARD_SHADOW_BASE
+        )
+        shadow_rgba = shadow.color
         return cls(
             card_style=OverlayCardStyle(
                 shell_enabled=config.show_background,
@@ -468,15 +482,13 @@ class MediaPresentationStyle:
                 padding=20.0,
                 shadow_enabled=(
                     config.show_background
-                    and _as_bool(shadow_values.get("enabled"), True)
+                    and shadow.enabled
                 ),
                 shadow_color=_with_alpha(
                     shadow_rgba,
-                    _bounded_float(shadow_values.get("frame_opacity"), 0.77, 0, 1),
+                    shadow.frame_opacity,
                 ),
-                shadow_blur=_bounded_float(
-                    shadow_values.get("blur_radius"), 18, 0, 128
-                ),
+                shadow_blur=shadow.blur_radius,
                 shadow_offset_x=float(card_offset[0]),
                 shadow_offset_y=float(card_offset[1]),
                 shadow_extend_left=card_extensions[0],
@@ -484,22 +496,21 @@ class MediaPresentationStyle:
                 shadow_extend_right=card_extensions[2],
                 shadow_extend_bottom=card_extensions[3],
             ),
-            text_shadow_enabled=_as_bool(shadow_values.get("text_enabled"), True),
+            text_shadow_enabled=shadow.text_enabled,
             text_shadow_color=_with_alpha(
                 shadow_rgba,
-                _bounded_float(shadow_values.get("text_opacity"), 0.33, 0, 1),
+                shadow.text_opacity,
             ),
             text_shadow_offset_x=float(text_offset[0]),
             text_shadow_offset_y=float(text_offset[1]),
-            surface_shadow_enabled=_as_bool(shadow_values.get("enabled"), True),
+            surface_shadow_enabled=shadow.enabled,
             surface_shadow_color=_with_alpha(
                 shadow_rgba,
-                _bounded_float(shadow_values.get("frame_opacity"), 0.77, 0, 1)
-                * 0.45,
+                shadow.frame_opacity * 0.45,
             ),
             surface_shadow_blur=max(
                 2.0,
-                min(6.0, _bounded_float(shadow_values.get("blur_radius"), 18, 0, 128) * 0.25),
+                min(6.0, shadow.blur_radius * 0.25),
             ),
             surface_shadow_offset_x=float(surface_offset[0]),
             surface_shadow_offset_y=float(surface_offset[1]),

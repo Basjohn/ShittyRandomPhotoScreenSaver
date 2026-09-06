@@ -40,7 +40,7 @@ def get_dynamic_rss_settings(engine: ScreensaverEngine) -> Tuple[int, int]:
     try:
         interval = 60  # default
         if engine.settings_manager:
-            interval = int(engine.settings_manager.get('timing.interval', 60))
+            interval = int(engine.settings_manager.get('timing.interval'))
 
         if interval <= 30:
             return (20, 30)
@@ -69,7 +69,7 @@ def get_rss_background_cap(engine: ScreensaverEngine) -> int:
         if not engine.settings_manager:
             return max(35, dynamic_min)
 
-        raw = engine.settings_manager.get('sources.rss_background_cap', 35)
+        raw = engine.settings_manager.get('sources.rss_background_cap')
         cap = int(raw)
 
         # Ensure cap is at least the dynamic minimum
@@ -86,7 +86,7 @@ def get_rss_rotating_cache_size(engine: ScreensaverEngine) -> int:
         if not engine.settings_manager:
             return 20
 
-        raw = engine.settings_manager.get('sources.rss_rotating_cache_size', 20)
+        raw = engine.settings_manager.get('sources.rss_rotating_cache_size')
         rotating = int(raw)
         return max(1, rotating)
     except Exception as e:
@@ -135,7 +135,7 @@ def get_rss_stale_minutes(engine: ScreensaverEngine) -> int:
             return dynamic_decay
 
         # Check if user has explicitly set a value (non-default)
-        raw = engine.settings_manager.get('sources.rss_stale_minutes', None)
+        raw = engine.settings_manager.get('sources.rss_stale_minutes')
         if raw is not None:
             minutes = int(raw)
             return minutes if minutes > 0 else 0
@@ -244,7 +244,7 @@ def start_rss_background_refresh_if_needed(engine: ScreensaverEngine) -> None:
         interval_min = 10
         try:
             if engine.settings_manager:
-                raw = engine.settings_manager.get('sources.rss_refresh_minutes', 10)
+                raw = engine.settings_manager.get('sources.rss_refresh_minutes')
                 interval_min = int(raw)
         except Exception as e:
             logger.debug("[ENGINE] Exception suppressed: %s", e)

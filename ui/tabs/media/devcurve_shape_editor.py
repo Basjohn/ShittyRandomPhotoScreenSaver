@@ -73,14 +73,7 @@ _PADDING_RIGHT = 12
 _PADDING_TOP = 44
 _PADDING_BOTTOM = 30  # extra room for notch labels
 
-# Default nodes define the authored spline profile.
-# x = normalized horizontal position (0 .. 1), y = normalized level (0 .. 1).
-DEFAULT_NODES: List[List[float]] = [
-    [0.00, 0.58],
-    [0.32, 0.65],
-    [0.68, 0.52],
-    [1.00, 0.60],
-]
+# Shape defaults are injected by the Settings builder from canonical defaults.
 
 _LAYER_ORDER = ("bass", "vocals", "mids", "transients")
 _LAYER_LABELS = {
@@ -88,32 +81,6 @@ _LAYER_LABELS = {
     "vocals": "Vocals",
     "mids": "Mids",
     "transients": "Transients",
-}
-
-# Bottom lane anchors as fractional x values and labels.
-_NOTCHES_MIRRORED = [
-    (0.08, "Bass"),
-    (0.35, "Vocals"),
-    (0.66, "Mids"),
-    (0.92, "Transients"),
-]
-_NOTCHES_LINEAR = [
-    (0.08, "Bass"),
-    (0.35, "Vocals"),
-    (0.66, "Mids"),
-    (0.92, "Transients"),
-]
-_LANE_STRENGTHS_MIRRORED = {
-    "Bass": 0.34,
-    "Vocals": 0.34,
-    "Mids": 0.34,
-    "Transients": 0.39,
-}
-_LANE_STRENGTHS_LINEAR = {
-    "Bass": 0.34,
-    "Vocals": 0.34,
-    "Mids": 0.34,
-    "Transients": 0.39,
 }
 
 
@@ -223,10 +190,25 @@ class DevCurveShapeEditor(QWidget):
     notch_positions_changed = Signal(list)
     lane_strengths_changed = Signal(dict)
 
-    def __init__(self, parent: Optional[QWidget] = None, mirrored: bool = False) -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        mirrored: bool = False,
+        *,
+        default_layer_nodes: Mapping[str, List[List[float]]],
+        default_layer_strengths: Mapping[str, float],
+    ) -> None:
         super().__init__(parent)
+        self._default_layer_nodes: Dict[str, List[List[float]]] = {
+            src: [list(n) for n in default_layer_nodes[src]]
+            for src in _LAYER_ORDER
+        }
+        self._default_lane_strengths: Dict[str, float] = {
+            _LAYER_LABELS[src]: max(0.0, min(1.0, float(default_layer_strengths[src])))
+            for src in _LAYER_ORDER
+        }
         self._layer_nodes: Dict[str, List[List[float]]] = {
-            src: [list(n) for n in DEFAULT_NODES] for src in _LAYER_ORDER
+            src: [list(n) for n in self._default_layer_nodes[src]] for src in _LAYER_ORDER
         }
         self._active_layer: str = "bass"
         self._nodes: List[List[float]] = self._layer_nodes[self._active_layer]
@@ -238,8 +220,8 @@ class DevCurveShapeEditor(QWidget):
         self._notch_hover_index: int = -1
         self._notches_mirrored: List[List] = [[0.5, _LAYER_LABELS[self._active_layer]]]
         self._notches_linear: List[List] = [[0.5, _LAYER_LABELS[self._active_layer]]]
-        self._lane_strengths_mirrored: Dict[str, float] = dict(_LANE_STRENGTHS_MIRRORED)
-        self._lane_strengths_linear: Dict[str, float] = dict(_LANE_STRENGTHS_LINEAR)
+        self._lane_strengths_mirrored: Dict[str, float] = dict(self._default_lane_strengths)
+        self._lane_strengths_linear: Dict[str, float] = dict(self._default_lane_strengths)
         self._lane_drag_index: int = -1
         self._lane_hover_index: int = -1
         self.setMinimumHeight(270)
@@ -260,7 +242,7 @@ class DevCurveShapeEditor(QWidget):
 
     def set_nodes(self, nodes: List[List[float]]) -> None:
         if not nodes:
-            nodes = [list(n) for n in DEFAULT_NODES]
+            nodes = [list(n) for n in self._default_layer_nodes[self._active_layer]]
         self._nodes = sorted([list(n) for n in nodes], key=lambda n: n[0])
         self._clamp_all()
         self._layer_nodes[self._active_layer] = self._nodes
@@ -286,7 +268,7 @@ class DevCurveShapeEditor(QWidget):
 
     def get_layer_nodes_map(self) -> Dict[str, List[List[float]]]:
         return {
-            src: [list(n) for n in self._layer_nodes.get(src, DEFAULT_NODES)]
+            src: [list(n) for n in self._layer_nodes.get(src, self._default_layer_nodes[src])]
             for src in _LAYER_ORDER
         }
 
@@ -327,9 +309,9 @@ class DevCurveShapeEditor(QWidget):
         if mirrored is None:
             mirrored = self._mirrored
         if mirrored:
-            self._lane_strengths_mirrored = _normalize_lane_strengths(strengths, _LANE_STRENGTHS_MIRRORED)
+            self._lane_strengths_mirrored = _normalize_lane_strengths(strengths, self._default_lane_strengths)
         else:
-            self._lane_strengths_linear = _normalize_lane_strengths(strengths, _LANE_STRENGTHS_LINEAR)
+            self._lane_strengths_linear = _normalize_lane_strengths(strengths, self._default_lane_strengths)
         self.update()
 
     def get_notch_positions(self) -> List[List]:
@@ -353,32 +335,17 @@ class DevCurveShapeEditor(QWidget):
     def get_layer_strengths(self) -> Dict[str, float]:
         strengths = self.get_lane_strengths(mirrored=False)
         return {
-            src: float(strengths.get(_LAYER_LABELS[src], _LANE_STRENGTHS_LINEAR[_LAYER_LABELS[src]]))
+            src: float(strengths.get(_LAYER_LABELS[src], self._default_lane_strengths[_LAYER_LABELS[src]]))
             for src in _LAYER_ORDER
         }
 
     def set_layer_strengths(self, strengths: Mapping[str, float]) -> None:
         mapped = {
-            _LAYER_LABELS[src]: float(strengths.get(src, _LANE_STRENGTHS_LINEAR[_LAYER_LABELS[src]]))
+            _LAYER_LABELS[src]: float(strengths.get(src, self._default_lane_strengths[_LAYER_LABELS[src]]))
             for src in _LAYER_ORDER
         }
         self.set_lane_strengths(mapped, mirrored=False)
 
-    def get_layer_positions(self) -> Dict[str, float]:
-        notches = self.get_notch_positions()
-        label_to_x = {str(label): float(x) for x, label in notches}
-        return {
-            src: float(label_to_x.get(_LAYER_LABELS[src], _NOTCHES_LINEAR[idx][0]))
-            for idx, src in enumerate(_LAYER_ORDER)
-        }
-
-    def set_layer_positions(self, positions: Mapping[str, float]) -> None:
-        mapped: List[List] = []
-        for idx, src in enumerate(_LAYER_ORDER):
-            x = float(positions.get(src, _NOTCHES_LINEAR[idx][0]))
-            mapped.append([max(0.0, min(1.0, x)), _LAYER_LABELS[src]])
-        mapped.sort(key=lambda item: float(item[0]))
-        self.set_notch_positions(mapped, mirrored=False)
 
     # ── Coordinate mapping ───────────────────────────────────────────
 
@@ -657,7 +624,7 @@ class DevCurveShapeEditor(QWidget):
         for src in _LAYER_ORDER:
             if src == self._active_layer:
                 continue
-            samples_bg = interpolate_nodes(self._layer_nodes.get(src, DEFAULT_NODES), num_pts)
+            samples_bg = interpolate_nodes(self._layer_nodes.get(src, self._default_layer_nodes[src]), num_pts)
             draw_bg = list(reversed(samples_bg)) if self._mirrored else samples_bg
             self._draw_curve_in_rect(p, er, draw_bg, primary=False, layer_alpha=0.22)
 

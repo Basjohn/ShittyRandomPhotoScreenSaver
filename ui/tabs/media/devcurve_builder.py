@@ -49,13 +49,6 @@ _TOOLTIP_FG_SPECULAR_ALPHA = "Opacity of the foreground specular highlight."
 _TOOLTIP_FG_SPECULAR_WIDTH = "Thickness of the specular band around the foreground spline."
 _TOOLTIP_FG_SPECULAR_OFFSET = "Vertical offset for the specular band relative to the foreground spline."
 _TOOLTIP_FG_SPECULAR_CREST_BIAS = "Bias toward crest zones based on local curvature."
-_LAYER_DEFAULTS = {
-    "bass": {"color": [82, 167, 255, 230], "outline_color": [255, 255, 255, 255], "outline_width": 6, "alpha": 55, "power": 100, "offset": 0, "order": 1, "x": 0.15},
-    "vocals": {"color": [136, 190, 255, 220], "outline_color": [255, 255, 255, 255], "outline_width": 6, "alpha": 42, "power": 100, "offset": -1, "order": 2, "x": 0.40},
-    "mids": {"color": [100, 145, 255, 220], "outline_color": [255, 255, 255, 255], "outline_width": 6, "alpha": 46, "power": 100, "offset": 1, "order": 3, "x": 0.65},
-    "transients": {"color": [215, 240, 255, 240], "outline_color": [255, 255, 255, 255], "outline_width": 6, "alpha": 66, "power": 115, "offset": 0, "order": 4, "x": 0.88},
-}
-
 
 def _row(parent_layout: QVBoxLayout, label_text: str):
     content, _ = add_aligned_row(parent_layout, label_text, label_width=LABEL_WIDTH, wrap=True)
@@ -121,7 +114,6 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         bucket_key="shaper",
         title="Shaper",
         helper_text="Layer-first spline editor with per-layer shape and energy arrows.",
-        default_expanded=True,
     )
     _, core_bucket = build_collapsible_bucket(
         tab,
@@ -130,7 +122,6 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         bucket_key="core",
         title="Core",
         helper_text="Global curve motion and fill styling.",
-        default_expanded=True,
     )
     _, foreground_fx_bucket = build_collapsible_bucket(
         tab,
@@ -139,7 +130,6 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         bucket_key="foreground_fx",
         title="Foreground FX",
         helper_text="Optional dynamic shadow/specular effects for the current top layer.",
-        default_expanded=False,
     )
     _, ghost_bucket = build_collapsible_bucket(
         tab,
@@ -148,7 +138,6 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         bucket_key="ghost",
         title="Ghost",
         helper_text="Optional trail for debug visibility.",
-        default_expanded=False,
     )
 
     hint = QLabel(
@@ -158,7 +147,21 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     hint.setWordWrap(True)
     shaper_bucket.addWidget(hint)
 
-    tab.devcurve_shape_editor = DevCurveShapeEditor(parent=None)
+    tab.devcurve_shape_editor = DevCurveShapeEditor(
+        parent=None,
+        default_layer_nodes={
+            src: tab._widget_default(
+                'spotify_visualizer', f'devcurve_layer_{src}_shape_nodes'
+            )
+            for src in _LAYER_ORDER
+        },
+        default_layer_strengths={
+            src: tab._default_float(
+                'spotify_visualizer', f'devcurve_layer_{src}_power'
+            ) / 3.0
+            for src in _LAYER_ORDER
+        },
+    )
     tab.devcurve_shape_editor.setToolTip(
         "Drag spline nodes for the active layer. Drag the top arrow for per-layer energy power."
     )
@@ -188,14 +191,24 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.devcurve_active_layer_order = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.devcurve_active_layer_order.setMinimum(1)
     tab.devcurve_active_layer_order.setMaximum(4)
-    tab.devcurve_active_layer_order.setValue(1)
+    active_layer_default = str(
+        tab._default_str("spotify_visualizer", "devcurve_active_layer")
+    ).strip().lower()
+    active_order_default = tab._default_int(
+        "spotify_visualizer", f"devcurve_layer_{active_layer_default}_order"
+    )
+    tab.devcurve_active_layer_order.setValue(
+        max(1, min(4, active_order_default))
+    )
     tab.devcurve_active_layer_order.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.devcurve_active_layer_order.setTickInterval(1)
     tab.devcurve_active_layer_order.setSingleStep(1)
     tab.devcurve_active_layer_order.setPageStep(1)
     tab.devcurve_active_layer_order.setFixedWidth(120)
     tab.devcurve_active_layer_order.setToolTip(_TOOLTIP_LAYER_ORDER)
-    tab.devcurve_active_layer_order_label = QLabel("1/4")
+    tab.devcurve_active_layer_order_label = QLabel(
+        f"{tab.devcurve_active_layer_order.value()}/4"
+    )
     tab.devcurve_active_layer_order_label.setToolTip(_TOOLTIP_LAYER_ORDER)
     active_color_row.addSpacing(12)
     active_color_row.addWidget(QLabel("Order:"))
@@ -209,14 +222,18 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.devcurve_active_layer_outline_width = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.devcurve_active_layer_outline_width.setMinimum(1)
     tab.devcurve_active_layer_outline_width.setMaximum(20)
-    tab.devcurve_active_layer_outline_width.setValue(6)
+    tab.devcurve_active_layer_outline_width.setValue(
+        max(1, min(20, int(tab._default_float('spotify_visualizer', 'devcurve_layer_bass_outline_width') * 1000.0)))
+    )
     tab.devcurve_active_layer_outline_width.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.devcurve_active_layer_outline_width.setTickInterval(1)
     tab.devcurve_active_layer_outline_width.setSingleStep(1)
     tab.devcurve_active_layer_outline_width.setPageStep(1)
     tab.devcurve_active_layer_outline_width.setFixedWidth(120)
     tab.devcurve_active_layer_outline_width.setToolTip(_TOOLTIP_LAYER_OUTLINE_WIDTH)
-    tab.devcurve_active_layer_outline_width_label = QLabel("0.006")
+    tab.devcurve_active_layer_outline_width_label = QLabel(
+        f"{tab.devcurve_active_layer_outline_width.value() / 1000.0:.3f}"
+    )
     tab.devcurve_active_layer_outline_width_label.setToolTip(_TOOLTIP_LAYER_OUTLINE_WIDTH)
     active_outline_row.addSpacing(12)
     active_outline_row.addWidget(QLabel("Width:"))
@@ -236,15 +253,13 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab._devcurve_layer_rows = {}
     tab._devcurve_order_syncing = False
     for src in _LAYER_ORDER:
-        order_default = int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_order", _LAYER_DEFAULTS[src]["order"]))
+        order_default = int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_order"))
         setattr(tab, f"_devcurve_layer_{src}_order", max(1, min(4, order_default)))
-        outline_width_default = int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_outline_width", _LAYER_DEFAULTS[src]["outline_width"] / 1000.0) * 1000.0)
+        outline_width_default = int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_outline_width") * 1000.0)
         setattr(tab, f"_devcurve_layer_{src}_outline_width", max(1, min(20, outline_width_default)))
         oc = tab._color_from_default(
             "spotify_visualizer",
-            f"devcurve_layer_{src}_outline_color",
-            _LAYER_DEFAULTS[src]["outline_color"],
-        )
+            f"devcurve_layer_{src}_outline_color")
         oc.setAlpha(255)
         setattr(tab, f"_devcurve_layer_{src}_outline_color", oc)
 
@@ -264,7 +279,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         max_rank = max(1, len(enabled))
         is_ranked = src in enabled
         if is_ranked:
-            ranked = sorted(enabled, key=lambda s: int(getattr(tab, f"_devcurve_layer_{s}_order", _LAYER_DEFAULTS[s]["order"])))
+            ranked = sorted(enabled, key=lambda s: int(getattr(tab, f"_devcurve_layer_{s}_order", tab._default_int("spotify_visualizer", f"devcurve_layer_{s}_order"))))
             rank = ranked.index(src) + 1
         else:
             rank = 1
@@ -288,7 +303,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
             disabled = [src for src in _LAYER_ORDER if src not in enabled]
             ordered_enabled = sorted(
                 enabled,
-                key=lambda src: int(getattr(tab, f"_devcurve_layer_{src}_order", _LAYER_DEFAULTS[src]["order"])),
+                key=lambda src: int(getattr(tab, f"_devcurve_layer_{src}_order", tab._default_int("spotify_visualizer", f"devcurve_layer_{src}_order"))),
             )
             if target_src in ordered_enabled and target_rank is not None:
                 rank = max(1, min(len(ordered_enabled), int(target_rank)))
@@ -298,7 +313,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
                 setattr(tab, f"_devcurve_layer_{src}_order", idx)
             ordered_disabled = sorted(
                 disabled,
-                key=lambda src: int(getattr(tab, f"_devcurve_layer_{src}_order", _LAYER_DEFAULTS[src]["order"])),
+                key=lambda src: int(getattr(tab, f"_devcurve_layer_{src}_order", tab._default_int("spotify_visualizer", f"devcurve_layer_{src}_order"))),
             )
             for idx, src in enumerate(ordered_disabled, start=len(ordered_enabled) + 1):
                 setattr(tab, f"_devcurve_layer_{src}_order", idx)
@@ -382,13 +397,12 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab._devcurve_apply_active_layer_ui = _apply_active_layer_ui
 
     for src in _LAYER_ORDER:
-        defaults = _LAYER_DEFAULTS[src]
         title = _LAYER_LABEL[src]
 
         en_row_widget, en_row = _row_widget(shaper_bucket, f"{title}:")
         enabled = QCheckBox("Enabled")
         enabled.setProperty("circleIndicator", True)
-        enabled.setChecked(tab._default_bool("spotify_visualizer", f"devcurve_layer_{src}_enabled", True))
+        enabled.setChecked(tab._default_bool("spotify_visualizer", f"devcurve_layer_{src}_enabled"))
         enabled.setToolTip(_TOOLTIP_LAYER_ENABLED)
         setattr(tab, f"devcurve_layer_{src}_enabled", enabled)
         bind_setting_signal(tab, enabled.stateChanged, auto_switch=True)
@@ -402,7 +416,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
             label=f"{title} Alpha:",
             min_v=0,
             max_v=100,
-            value=int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_alpha", defaults["alpha"] / 100.0) * 100),
+            value=int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_alpha") * 100),
             fmt=lambda v: f"{v}%",
             auto_switch=True,
         )
@@ -414,7 +428,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
             label=f"{title} Offset:",
             min_v=-45,
             max_v=45,
-            value=int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_offset", defaults["offset"] / 100.0) * 100),
+            value=int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_offset") * 100),
             fmt=lambda v: f"{v / 100.0:+.2f}",
             auto_switch=True,
         )
@@ -434,7 +448,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Base Level:",
         min_v=10,
         max_v=90,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_base_level", 0.58) * 100),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_base_level") * 100),
         fmt=lambda v: f"{v}%",
         auto_switch=True,
     )
@@ -446,7 +460,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Motion Power:",
         min_v=0,
         max_v=300,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_motion_power", 1.0) * 100),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_motion_power") * 100),
         fmt=lambda v: f"{v / 100.0:.2f}x",
         auto_switch=True,
     )
@@ -458,7 +472,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Idle Motion:",
         min_v=0,
         max_v=150,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_idle_motion", 0.20) * 100),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_idle_motion") * 100),
         fmt=lambda v: f"{v / 100.0:.2f}",
         auto_switch=True,
     )
@@ -470,7 +484,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Idle Speed:",
         min_v=5,
         max_v=200,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_idle_speed", 0.60) * 100),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_idle_speed") * 100),
         fmt=lambda v: f"{v / 100.0:.2f}x",
         auto_switch=True,
     )
@@ -482,31 +496,16 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Smoothness:",
         min_v=0,
         max_v=100,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_smoothness", 0.55) * 100),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_smoothness") * 100),
         fmt=lambda v: f"{v}%",
         auto_switch=True,
     )
     tab.devcurve_smoothness.setToolTip(_TOOLTIP_SMOOTHNESS)
-    grow = _add_slider(
-        tab,
-        core_bucket,
-        attr="devcurve_growth",
-        label="Card Height:",
-        min_v=100,
-        max_v=500,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_growth", 3.0) * 100),
-        fmt=lambda v: f"{v / 100.0:.1f}x",
-        auto_switch=True,
-    )
-    grow.setToolTip(_TOOLTIP_CARD_HEIGHT)
-    grow.setTickPosition(QSlider.TickPosition.TicksBelow)
-    grow.setTickInterval(50)
-
     fx_toggle_row = _row(foreground_fx_bucket, "")
     tab.devcurve_foreground_shadow_enabled = QCheckBox("Shadow")
     tab.devcurve_foreground_shadow_enabled.setProperty("circleIndicator", True)
     tab.devcurve_foreground_shadow_enabled.setChecked(
-        tab._default_bool("spotify_visualizer", "devcurve_foreground_shadow_enabled", False)
+        tab._default_bool("spotify_visualizer", "devcurve_foreground_shadow_enabled")
     )
     tab.devcurve_foreground_shadow_enabled.setToolTip(_TOOLTIP_FG_SHADOW_ENABLED)
     bind_setting_signal(tab, tab.devcurve_foreground_shadow_enabled.stateChanged, auto_switch=True)
@@ -514,7 +513,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.devcurve_foreground_specular_enabled = QCheckBox("Specular")
     tab.devcurve_foreground_specular_enabled.setProperty("circleIndicator", True)
     tab.devcurve_foreground_specular_enabled.setChecked(
-        tab._default_bool("spotify_visualizer", "devcurve_foreground_specular_enabled", False)
+        tab._default_bool("spotify_visualizer", "devcurve_foreground_specular_enabled")
     )
     tab.devcurve_foreground_specular_enabled.setToolTip(_TOOLTIP_FG_SPECULAR_ENABLED)
     bind_setting_signal(tab, tab.devcurve_foreground_specular_enabled.stateChanged, auto_switch=True)
@@ -529,7 +528,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Shadow Alpha:",
         min_v=0,
         max_v=100,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_shadow_alpha", 0.36) * 100),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_shadow_alpha") * 100),
         fmt=lambda v: f"{v}%",
         auto_switch=True,
     )
@@ -541,7 +540,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Shadow Darken:",
         min_v=0,
         max_v=100,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_shadow_darken", 0.42) * 100),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_shadow_darken") * 100),
         fmt=lambda v: f"{v}%",
         auto_switch=True,
     )
@@ -553,7 +552,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Shadow Offset:",
         min_v=0,
         max_v=45,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_shadow_offset", 0.10) * 100),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_shadow_offset") * 100),
         fmt=lambda v: f"{v / 100.0:.2f}",
         auto_switch=True,
     )
@@ -566,7 +565,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Specular Alpha:",
         min_v=0,
         max_v=100,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_alpha", 0.78) * 100),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_alpha") * 100),
         fmt=lambda v: f"{v}%",
         auto_switch=True,
     )
@@ -578,7 +577,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Specular Width:",
         min_v=2,
         max_v=120,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_width", 0.022) * 1000),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_width") * 1000),
         fmt=lambda v: f"{v / 1000.0:.3f}",
         auto_switch=True,
     )
@@ -590,7 +589,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Specular Offset:",
         min_v=-20,
         max_v=20,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_offset", 0.028) * 100),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_offset") * 100),
         fmt=lambda v: f"{v / 100.0:+.2f}",
         auto_switch=True,
     )
@@ -602,7 +601,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Specular Crest Bias:",
         min_v=0,
         max_v=200,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_crest_bias", 1.05) * 100),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_crest_bias") * 100),
         fmt=lambda v: f"{v / 100.0:.2f}x",
         auto_switch=True,
     )
@@ -636,7 +635,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     g_row = _row(ghost_bucket, "")
     tab.devcurve_ghost_enabled = QCheckBox("Enable Ghosting")
     tab.devcurve_ghost_enabled.setProperty("circleIndicator", True)
-    tab.devcurve_ghost_enabled.setChecked(tab._default_bool("spotify_visualizer", "devcurve_ghosting_enabled", False))
+    tab.devcurve_ghost_enabled.setChecked(tab._default_bool("spotify_visualizer", "devcurve_ghosting_enabled"))
     tab.devcurve_ghost_enabled.setToolTip(_TOOLTIP_GHOST_ENABLED)
     bind_setting_signal(tab, tab.devcurve_ghost_enabled.stateChanged, auto_switch=True)
     g_row.addWidget(tab.devcurve_ghost_enabled)
@@ -648,7 +647,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Ghost Opacity:",
         min_v=0,
         max_v=100,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_ghost_alpha", 0.0) * 100),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_ghost_alpha") * 100),
         fmt=lambda v: f"{v}%",
         auto_switch=True,
     )
@@ -660,7 +659,7 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         label="Ghost Decay:",
         min_v=10,
         max_v=100,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_ghost_decay", 0.4) * 100),
+        value=int(tab._default_float("spotify_visualizer", "devcurve_ghost_decay") * 100),
         fmt=lambda v: f"{v / 100.0:.2f}x",
         auto_switch=True,
     )

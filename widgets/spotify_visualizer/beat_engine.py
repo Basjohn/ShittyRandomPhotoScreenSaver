@@ -422,13 +422,10 @@ class _SpotifyBeatEngine(QObject):
 
     def reset_floor_state(self) -> None:
         """Reset dynamic/manual floor accumulator state."""
-        try:
-            self.cancel_pending_compute_tasks()
-            aw = self._audio_worker
-            aw.reset_reactivity_state()
-            aw._last_floor_config = (aw._use_dynamic_floor, aw._manual_floor)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to reset floor state", exc_info=True)
+        self.cancel_pending_compute_tasks()
+        aw = self._audio_worker
+        aw.reset_reactivity_state()
+        aw._last_floor_config = (aw._use_dynamic_floor, aw._manual_floor)
 
     def cancel_pending_compute_tasks(self) -> None:
         """Invalidate outstanding compute callbacks before restarting."""
@@ -458,110 +455,59 @@ class _SpotifyBeatEngine(QObject):
         self._smoothing_tau = max(0.05, float(tau))
     
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
-        try:
-            self._audio_worker.set_sensitivity_config(recommended, sensitivity)
-            self._invalidate_analysis_compute_state()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply sensitivity config", exc_info=True)
-    
-    def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
-        try:
-            # Floor changes intentionally reset adaptive DSP state. Fence any
-            # packet computed from the previous floor before mutating the live
-            # reset authority.
-            self.cancel_pending_compute_tasks()
-            self._audio_worker.set_floor_config(dynamic_enabled, manual_floor)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply floor config", exc_info=True)
+        self._audio_worker.set_sensitivity_config(recommended, sensitivity)
+        self._invalidate_analysis_compute_state()
 
-    def set_curved_profile(self, enabled: bool) -> None:
-        """Toggle curved vs legacy spectrum bar profile on the audio worker."""
-        try:
-            self._audio_worker.set_curved_profile(enabled)
-            self._invalidate_analysis_compute_state()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply curved profile config", exc_info=True)
+    def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
+        # Floor changes intentionally reset adaptive DSP state. Fence any
+        # packet computed from the previous floor before mutating live state.
+        self.cancel_pending_compute_tasks()
+        self._audio_worker.set_floor_config(dynamic_enabled, manual_floor)
 
     def set_drop_speed(self, speed: float) -> None:
-        """Forward drop speed multiplier to the audio worker DSP pipeline."""
-        try:
-            self._audio_worker.set_drop_speed(speed)
-            self._invalidate_analysis_compute_state()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply drop speed config", exc_info=True)
+        self._audio_worker.set_drop_speed(speed)
+        self._invalidate_analysis_compute_state()
 
     def set_notch_positions(self, positions: list) -> None:
-        """Forward frequency-zone notch positions to the audio worker."""
-        try:
-            self._audio_worker.set_notch_positions(positions)
-            self._invalidate_analysis_compute_state()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply notch positions config", exc_info=True)
+        self._audio_worker.set_notch_positions(positions)
+        self._invalidate_analysis_compute_state()
 
     def set_spectrum_shape_config(self, config) -> None:
-        """Forward SpectrumShapeConfig to the audio worker DSP pipeline."""
-        try:
-            self._audio_worker.set_spectrum_shape_config(config)
-            self._invalidate_analysis_compute_state()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply spectrum shape config", exc_info=True)
+        self._audio_worker.set_spectrum_shape_config(config)
+        self._invalidate_analysis_compute_state()
 
     def set_spectrum_mirrored(self, mirrored: bool) -> None:
-        """Forward mirrored layout toggle to the audio worker."""
-        try:
-            self._audio_worker.set_spectrum_mirrored(mirrored)
-            self._invalidate_analysis_compute_state()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply spectrum mirrored config", exc_info=True)
+        self._audio_worker.set_spectrum_mirrored(mirrored)
+        self._invalidate_analysis_compute_state()
 
     def set_spectrum_shape_nodes(self, nodes: list) -> None:
-        """Forward shape editor nodes to the audio worker."""
-        try:
-            self._audio_worker.set_spectrum_shape_nodes(nodes)
-            self._invalidate_analysis_compute_state()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply spectrum shape nodes", exc_info=True)
+        self._audio_worker.set_spectrum_shape_nodes(nodes)
+        self._invalidate_analysis_compute_state()
 
     def set_energy_boost(self, boost: float) -> None:
-        """Forward energy boost scaling to the audio worker."""
-        try:
-            self._audio_worker.set_energy_boost(boost)
-            self._invalidate_analysis_compute_state()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply energy boost config", exc_info=True)
+        self._audio_worker.set_energy_boost(boost)
+        self._invalidate_analysis_compute_state()
 
     def set_input_gain(self, gain: float) -> None:
-        """Forward pre-FFT input gain (virtual volume) to the audio worker."""
-        try:
-            self._audio_worker.set_input_gain(gain)
-            self._invalidate_analysis_compute_state()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply input gain config", exc_info=True)
+        self._audio_worker.set_input_gain(gain)
+        self._invalidate_analysis_compute_state()
 
     def set_agc_strength(self, strength: float) -> None:
-        """Forward AGC strength to the audio worker."""
-        try:
-            self._audio_worker.set_agc_strength(strength)
-            self._invalidate_analysis_compute_state()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply agc strength config", exc_info=True)
+        self._audio_worker.set_agc_strength(strength)
+        self._invalidate_analysis_compute_state()
 
     def set_transient_lane_config(
-        self, kick_lane_gain: float, spectrum_lane_transient_mix: float
+        self,
+        kick_lane_gain: float,
+        spectrum_lane_transient_mix: float,
+        transient_clamp: float,
     ) -> None:
-        """Apply transient express-lane controls and invalidate detached DSP state."""
+        """Apply resolved transient controls and invalidate detached DSP state."""
 
-        try:
-            self._audio_worker.set_transient_lane_config(
-                kick_lane_gain, spectrum_lane_transient_mix
-            )
-            self._invalidate_analysis_compute_state()
-        except Exception:
-            logger.error(
-                "[SPOTIFY_VIS] Failed to apply transient lane config",
-                exc_info=True,
-            )
-            raise
+        self._audio_worker.set_transient_lane_config(
+            kick_lane_gain, spectrum_lane_transient_mix, transient_clamp
+        )
+        self._invalidate_analysis_compute_state()
 
     def set_playback_state(self, is_playing: bool) -> None:
         """Set Spotify playback state for FFT processing gating."""
@@ -1340,8 +1286,8 @@ class _SpotifyBeatEngine(QObject):
         w = self._audio_worker
         ramp = self._get_play_ramp_factor()
         floor_snapshot = self.get_floor_snapshot()
-        dynamic_enabled = bool(floor_snapshot.get("dynamic_enabled", True))
-        support_pressure = max(0.0, min(1.0, float(floor_snapshot.get("support_pressure", 0.0) or 0.0)))
+        dynamic_enabled = bool(floor_snapshot["dynamic_enabled"])
+        support_pressure = max(0.0, min(1.0, float(floor_snapshot["support_pressure"] or 0.0)))
 
         try:
             raw_bass_avg = max(0.10, float(getattr(w, "_raw_bass_avg", 0.10) or 0.10))
@@ -1501,44 +1447,21 @@ class _SpotifyBeatEngine(QObject):
         return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
 
     def get_floor_snapshot(self) -> dict:
-        """Return the latest shared floor state for consumers that need context.
-
-        The continuous energy bands remain the source of truth; this snapshot is
-        just the shaping context that produced them. Consumers can use it to
-        distinguish real sustained support from temporarily elevated floor
-        pressure without inventing another settings path.
-        """
+        """Return the latest shared floor runtime context."""
         w = self._audio_worker
-        try:
-            dynamic_enabled = bool(getattr(w, '_use_dynamic_floor', True))
-        except Exception:
-            dynamic_enabled = True
-        try:
-            manual_floor = float(getattr(w, '_manual_floor', 0.12) or 0.12)
-        except Exception:
-            manual_floor = 0.12
-        try:
-            gate_floor = float(getattr(w, '_gate_floor', getattr(w, '_applied_noise_floor', manual_floor)) or manual_floor)
-        except Exception:
-            gate_floor = manual_floor
-        try:
-            last_noise_floor = float(getattr(w, '_last_noise_floor', gate_floor) or gate_floor)
-        except Exception:
-            last_noise_floor = gate_floor
-        try:
-            support_pressure = float(getattr(w, '_support_pressure', 0.0) or 0.0)
-        except Exception:
-            support_pressure = 0.0
-
-        manual_floor = max(0.0, min(1.0, manual_floor))
-        gate_floor = max(0.0, min(1.0, gate_floor))
-        last_noise_floor = max(0.0, min(1.0, last_noise_floor))
+        if w._use_dynamic_floor is None or w._manual_floor is None:
+            raise RuntimeError("visualizer floor configuration is unresolved")
+        dynamic_enabled = bool(w._use_dynamic_floor)
+        manual_floor = max(0.0, min(1.0, float(w._manual_floor)))
+        gate_floor = max(0.0, min(1.0, float(w._gate_floor)))
+        last_noise_floor = max(0.0, min(1.0, float(w._last_noise_floor)))
+        support_pressure = max(0.0, min(1.0, float(w._support_pressure)))
         return {
-            'dynamic_enabled': dynamic_enabled,
-            'manual_floor': manual_floor,
-            'gate_floor': gate_floor,
-            'last_noise_floor': last_noise_floor,
-            'support_pressure': max(0.0, min(1.0, support_pressure if dynamic_enabled else 0.0)),
+            "dynamic_enabled": dynamic_enabled,
+            "manual_floor": manual_floor,
+            "gate_floor": gate_floor,
+            "last_noise_floor": last_noise_floor,
+            "support_pressure": support_pressure if dynamic_enabled else 0.0,
         }
 
     def get_transient_energy_bands(self) -> TransientEnergyBands:

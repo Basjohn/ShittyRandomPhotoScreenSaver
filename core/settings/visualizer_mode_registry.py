@@ -74,6 +74,7 @@ class VisualizerModeDescriptor:
     capture_module: str = ""
     capture_factory: str = ""
     default_enabled: bool = True
+    technical_controls: bool = True
 
     @property
     def preset_key(self) -> str:
@@ -159,6 +160,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         capture_module="widgets.spotify_visualizer.sphere_capture",
         capture_factory="capture_sphere",
         default_enabled=False,
+        technical_controls=False,
     ),
 )
 
@@ -214,24 +216,24 @@ def load_mode_settings_builder(mode_id: str):
 
 
 def get_default_visualizer_mode_id() -> str:
-    """Return the canonical default active mode id."""
-    try:
-        from core.settings.default_settings import DEFAULT_SETTINGS
+    """Return the canonical default active mode id.
 
-        configured = str(DEFAULT_SETTINGS.get("widgets.spotify_visualizer.mode", "") or "").strip().lower()
-        if not configured:
-            widgets = DEFAULT_SETTINGS.get("widgets")
-            if isinstance(widgets, dict):
-                spotify_vis = widgets.get("spotify_visualizer")
-                if isinstance(spotify_vis, dict):
-                    configured = str(spotify_vis.get("mode", "") or "").strip().lower()
-        if configured in VISUALIZER_MODE_IDS and is_mode_active(configured):
-            return configured
-    except Exception:
-        pass
+    The persisted product baseline is owned by ``default_settings`` through the
+    lightweight default contract. A missing/invalid schema value is an
+    authority error, not an invitation to invent a second mode default here.
+    """
+    from core.settings.default_contract import require_canonical_default
 
-    active = _active_descriptors()
-    return active[0].mode_id if active else "spectrum"
+    configured = str(
+        require_canonical_default("widgets.spotify_visualizer.mode")
+    ).strip().lower()
+    if configured not in VISUALIZER_MODE_IDS:
+        raise ValueError(f"invalid canonical visualizer mode default: {configured!r}")
+    if not is_mode_active(configured):
+        raise ValueError(
+            f"canonical visualizer mode default is not active: {configured!r}"
+        )
+    return configured
 
 
 def get_preset_slider_attr(mode_id: str) -> str:

@@ -783,17 +783,17 @@ class QuickSphereRenderer:
             self._initialize()
         parameters = state.parameters
         if parameters != self._parameters:
-            material = parameters.get("sphere_material", "Chrome")
+            material = parameters["sphere_material"]
             if material not in _MATERIAL_IDS:
                 raise ValueError(f"unknown Sphere material: {material!r}")
-            direction = ShadowDirection(parameters.get("sphere_light_direction", "NW"))
+            direction = ShadowDirection(parameters["sphere_light_direction"])
             x, y = shadow_direction_signs(direction)
             length = math.sqrt(x*x + y*y + 2.25)
             self._light = (x / length, -y / length, 1.5 / length)
             self._shadow_offset_signs = (-float(x), -float(y))
             self._material = _MATERIAL_IDS[material]
             self._parameters = parameters
-        if bool(parameters.get("sphere_shadow_enabled", True)) and float(parameters.get("sphere_shadow_strength", 0.62)) > 0.0:
+        if bool(parameters["sphere_shadow_enabled"]) and float(parameters["sphere_shadow_strength"]) > 0.0:
             self._render_shadow(frame, state)
         u = self._uniforms
         gl.glUseProgram(self._program)
@@ -805,12 +805,12 @@ class QuickSphereRenderer:
                                       (energy.bass, energy.mid, energy.high)))
         gl.glUniform3f(
             u["uBandResponse"],
-            *(float(parameters.get(key, 1.0)) for key in (
+            *(float(parameters[key]) for key in (
                 "sphere_bass_response", "sphere_mid_response", "sphere_high_response"
             )),
         )
-        gl.glUniform1f(u["uEnergyCurve"], float(parameters.get("sphere_energy_curve", 0.60)))
-        gl.glUniform1f(u["uVocalResponse"], float(parameters.get("sphere_vocal_response", 1.4)))
+        gl.glUniform1f(u["uEnergyCurve"], float(parameters["sphere_energy_curve"]))
+        gl.glUniform1f(u["uVocalResponse"], float(parameters["sphere_vocal_response"]))
         # Whole-body breathing/elasticity is authored at the sole logical
         # cadence. The render thread consumes one immutable value and owns no
         # second filter, timer, or transient history.
@@ -824,11 +824,11 @@ class QuickSphereRenderer:
             ("uGloss", "sphere_gloss", 0.65),
             ("uSpecular", "sphere_specular", 0.8),
         ):
-            gl.glUniform1f(u[uniform], float(parameters.get(key, default)))
+            gl.glUniform1f(u[uniform], float(parameters[key]))
         gl.glUniform3f(u["uLight"], *self._light)
         gl.glUniform1i(u["uMaterial"], self._material)
-        gl.glUniform1f(u["uMaterialFx"], max(0.0, min(2.0, float(parameters.get("sphere_material_fx", 1.0)))))
-        gl.glUniform1i(u["uAntialiasing"], 1 if bool(parameters.get("sphere_antialiasing", True)) else 0)
+        gl.glUniform1f(u["uMaterialFx"], max(0.0, min(2.0, float(parameters["sphere_material_fx"]))))
+        gl.glUniform1i(u["uAntialiasing"], 1 if bool(parameters["sphere_antialiasing"]) else 0)
         p = frame.snapshot.presentation
         gl.glUniform1f(u["uFade"], p.scene_fade * p.content_fade)
         previous_function = int(gl.glGetIntegerv(gl.GL_DEPTH_FUNC))
@@ -859,7 +859,7 @@ class QuickSphereRenderer:
             gl.glBindVertexArray(self._vao)
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._vertex_count)
             if self._material in (_MATERIAL_IDS["Magma"], _MATERIAL_IDS["Water"]):
-                fx = max(0.0, min(2.0, float(parameters.get("sphere_material_fx", 1.0))))
+                fx = max(0.0, min(2.0, float(parameters["sphere_material_fx"])))
                 if fx > 0.0:
                     self._render_effects(frame, state, energy, fx)
         finally:
@@ -959,7 +959,7 @@ class QuickSphereRenderer:
 
         parameters = state.parameters
         center_x, center_y, radius = sphere_pixel_geometry(frame.snapshot.presentation)
-        deformation = max(0.0, min(4.5, float(parameters.get("sphere_deformation", 1.0))))
+        deformation = max(0.0, min(4.5, float(parameters["sphere_deformation"])))
         body_scale = 1.0 + 0.55 * max(0.0, state.size_pulse) + 0.025 * deformation
         shadow_radius = radius * body_scale
         sign_x, sign_y = self._shadow_offset_signs
@@ -983,12 +983,12 @@ class QuickSphereRenderer:
             gl.glUniform2f(u["uOffset"], offset_x, offset_y)
             gl.glUniform1f(
                 u["uStrength"],
-                max(0.0, min(1.0, float(parameters.get("sphere_shadow_strength", 0.62)))),
+                max(0.0, min(1.0, float(parameters["sphere_shadow_strength"]))),
             )
             gl.glUniform1f(u["uFade"], p.scene_fade * p.content_fade)
             gl.glUniform1i(
                 u["uAntialiasing"],
-                1 if bool(parameters.get("sphere_antialiasing", True)) else 0,
+                1 if bool(parameters["sphere_antialiasing"]) else 0,
             )
             gl.glEnable(gl.GL_BLEND)
             gl.glBlendFuncSeparate(
@@ -1109,20 +1109,20 @@ class QuickSphereRenderer:
         gl.glUniform1i(u["uMaterial"], self._material)
         gl.glUniform1f(u["uFx"], fx)
         gl.glUniform3f(u["uLight"], *self._light)
-        gl.glUniform1f(u["uDeformation"], float(parameters.get("sphere_deformation", 1.0)))
-        gl.glUniform1f(u["uIdleMotion"], float(parameters.get("sphere_idle_motion", 0.12)))
-        gl.glUniform1f(u["uRotationSpeed"], float(parameters.get("sphere_rotation_speed", 0.35)))
+        gl.glUniform1f(u["uDeformation"], float(parameters["sphere_deformation"]))
+        gl.glUniform1f(u["uIdleMotion"], float(parameters["sphere_idle_motion"]))
+        gl.glUniform1f(u["uRotationSpeed"], float(parameters["sphere_rotation_speed"]))
         gl.glUniform3f(
             u["uBandResponse"],
-            *(float(parameters.get(key, 1.0)) for key in (
+            *(float(parameters[key]) for key in (
                 "sphere_bass_response", "sphere_mid_response", "sphere_high_response"
             )),
         )
-        gl.glUniform1f(u["uEnergyCurve"], float(parameters.get("sphere_energy_curve", 0.60)))
-        gl.glUniform1f(u["uVocalResponse"], float(parameters.get("sphere_vocal_response", 1.4)))
+        gl.glUniform1f(u["uEnergyCurve"], float(parameters["sphere_energy_curve"]))
+        gl.glUniform1f(u["uVocalResponse"], float(parameters["sphere_vocal_response"]))
         gl.glUniform1f(u["uSizePulse"], state.size_pulse)
-        gl.glUniform1f(u["uSurfaceDetail"], float(parameters.get("sphere_surface_detail", 1.15)))
-        gl.glUniform1i(u["uAntialiasing"], 1 if bool(parameters.get("sphere_antialiasing", True)) else 0)
+        gl.glUniform1f(u["uSurfaceDetail"], float(parameters["sphere_surface_detail"]))
+        gl.glUniform1i(u["uAntialiasing"], 1 if bool(parameters["sphere_antialiasing"]) else 0)
         p = frame.snapshot.presentation
         gl.glUniform1f(u["uFade"], p.scene_fade * p.content_fade)
         old_src_rgb, old_dst_rgb = int(gl.glGetIntegerv(gl.GL_BLEND_SRC_RGB)), int(gl.glGetIntegerv(gl.GL_BLEND_DST_RGB))

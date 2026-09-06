@@ -481,18 +481,12 @@ class BubbleSimulation:
         self._time += dt
 
         # Read settings
-        big_target = int(settings.get("bubble_big_count", 8))
-        small_target = int(settings.get("bubble_small_count", 25))
-        surface_reach = float(settings.get("bubble_surface_reach", 0.6))
-        stream_dir = str(settings.get("bubble_stream_direction", "up"))
-        stream_const = float(settings.get(
-            "bubble_stream_constant_speed",
-            settings.get("bubble_stream_speed", 0.5),
-        ))
-        stream_cap = float(settings.get(
-            "bubble_stream_speed_cap",
-            settings.get("bubble_stream_speed", 2.0),
-        ))
+        big_target = int(settings["bubble_big_count"])
+        small_target = int(settings["bubble_small_count"])
+        surface_reach = float(settings["bubble_surface_reach"])
+        stream_dir = str(settings["bubble_stream_direction"])
+        stream_const = float(settings["bubble_stream_constant_speed"])
+        stream_cap = float(settings["bubble_stream_speed_cap"])
 
         # Consume the cached viewport gradient.  Geometry classification happens
         # only when the committed extent changes; normal audio ticks perform only
@@ -527,13 +521,13 @@ class BubbleSimulation:
             big_target = max(0, big_target - remove_big)
             small_target = max(0, small_target - remove_small)
             stream_cap *= profile.tall_stream_cap_scale
-        stream_reactivity = float(settings.get("bubble_stream_reactivity", 0.5))
-        rotation_amount = float(settings.get("bubble_rotation_amount", 0.5))
-        drift_amount_authored = float(settings.get("bubble_drift_amount", 0.5))
-        group_drift = bool(settings.get("bubble_group_drift", False))
-        drift_speed_authored = float(settings.get("bubble_drift_speed", 0.5))
-        drift_freq_authored = float(settings.get("bubble_drift_frequency", 0.5))
-        drift_dir = str(settings.get("bubble_drift_direction", "random"))
+        stream_reactivity = float(settings["bubble_stream_reactivity"])
+        rotation_amount = float(settings["bubble_rotation_amount"])
+        drift_amount_authored = float(settings["bubble_drift_amount"])
+        group_drift = bool(settings["bubble_group_drift"])
+        drift_speed_authored = float(settings["bubble_drift_speed"])
+        drift_freq_authored = float(settings["bubble_drift_frequency"])
+        drift_dir = str(settings["bubble_drift_direction"])
         drift_amount = _shape_authored_bubble_control(
             drift_amount_authored,
             low_power=1.95,
@@ -549,22 +543,22 @@ class BubbleSimulation:
             low_power=3.20,
             high_power=0.70,
         )
-        big_bass_pulse = float(settings.get("bubble_big_bass_pulse", 0.5))
-        small_freq_pulse = float(settings.get("bubble_small_freq_pulse", 0.5))
-        big_contraction_bias = float(settings.get("bubble_big_contraction_bias", 1.0))
-        big_size_clamp = float(settings.get("bubble_big_size_clamp", 4.0))
-        bounce_big_pct = max(0.0, min(100.0, float(settings.get("bubble_bounce_big_pct", 70.0))))
-        bounce_small_pct = max(0.0, min(100.0, float(settings.get("bubble_bounce_small_pct", 30.0))))
-        bounce_big_speed = max(0.0, min(2.0, float(settings.get("bubble_bounce_big_speed", 0.8))))
-        bounce_small_speed = max(0.0, min(2.0, float(settings.get("bubble_bounce_small_speed", 0.5))))
-        bounce_same_only = bool(settings.get("bubble_bounce_same_only", False))
-        collision_pop_mode = str(settings.get("bubble_collision_pop_mode", "off")).strip().lower()
+        big_bass_pulse = float(settings["bubble_big_bass_pulse"])
+        small_freq_pulse = float(settings["bubble_small_freq_pulse"])
+        big_contraction_bias = float(settings["bubble_big_contraction_bias"])
+        big_size_clamp = float(settings["bubble_big_size_clamp"])
+        bounce_big_pct = max(0.0, min(100.0, float(settings["bubble_bounce_big_pct"])))
+        bounce_small_pct = max(0.0, min(100.0, float(settings["bubble_bounce_small_pct"])))
+        bounce_big_speed = max(0.0, min(2.0, float(settings["bubble_bounce_big_speed"])))
+        bounce_small_speed = max(0.0, min(2.0, float(settings["bubble_bounce_small_speed"])))
+        bounce_same_only = bool(settings["bubble_bounce_same_only"])
+        collision_pop_mode = str(settings["bubble_collision_pop_mode"]).strip().lower()
         if collision_pop_mode not in {"off", "one", "all"}:
-            collision_pop_mode = "off"
-        self._big_size_max = float(settings.get("bubble_big_size_max", 0.038))
-        self._small_size_max = float(settings.get("bubble_small_size_max", 0.018))
-        trail_strength = float(settings.get("bubble_trail_strength", 0.0))
-        ghosting_enabled = bool(settings.get("bubble_ghosting_enabled", False))
+            raise ValueError(f"invalid resolved bubble collision pop mode: {collision_pop_mode!r}")
+        self._big_size_max = float(settings["bubble_big_size_max"])
+        self._small_size_max = float(settings["bubble_small_size_max"])
+        trail_strength = float(settings["bubble_trail_strength"])
+        ghosting_enabled = bool(settings["bubble_ghosting_enabled"])
         # big_bass_pulse / small_freq_pulse are read in snapshot(), not tick()
 
         # Ghost reuses the same three-sample motion history as the ripple trail.
@@ -1612,12 +1606,12 @@ class BubbleSimulation:
         bounce_small_pct: float,
         bounce_big_speed: float,
         bounce_small_speed: float,
-        bounce_same_only: bool = False,
-        collision_pop_mode: str = "off",
-        big_bass_pulse: float = 0.5,
-        small_freq_pulse: float = 0.5,
-        big_contraction_bias: float = 1.0,
-        big_size_clamp: float = 4.0,
+        bounce_same_only: bool,
+        collision_pop_mode: str,
+        big_bass_pulse: float,
+        small_freq_pulse: float,
+        big_contraction_bias: float,
+        big_size_clamp: float,
     ) -> None:
         """Separate overlapping bubbles by visual class.
 
@@ -1670,7 +1664,7 @@ class BubbleSimulation:
         margin_x = view_margin if baseline_collision_domain else view_margin * self._domain_w
         margin_y = view_margin if baseline_collision_domain else view_margin * self._domain_h
         if collision_pop_mode not in {"off", "one", "all"}:
-            collision_pop_mode = "off"
+            raise ValueError(f"invalid resolved bubble collision pop mode: {collision_pop_mode!r}")
 
         def _pair_policy(
             *,

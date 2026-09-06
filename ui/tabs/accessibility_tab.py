@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
+from core.settings.default_contract import require_canonical_default
 from core.logging.logger import get_logger
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
@@ -61,6 +62,9 @@ class AccessibilityTab(QWidget):
             self._loading = False
         logger.debug("[ACCESSIBILITY_TAB] Reloaded from settings")
     
+    def _canonical_default(self, key: str):
+        return require_canonical_default(key, self._settings.get_application_name())
+
     def _setup_ui(self) -> None:
         """Setup tab UI with scroll area."""
         # Create scroll area
@@ -138,13 +142,18 @@ class AccessibilityTab(QWidget):
 
         self.dimming_opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.dimming_opacity_slider.setRange(10, 90)  # 10% to 90%
-        self.dimming_opacity_slider.setValue(30)  # Default 30%
+        dimming_opacity_default = int(
+            self._canonical_default("accessibility.dimming.opacity")
+        )
+        self.dimming_opacity_slider.setValue(dimming_opacity_default)
         self.dimming_opacity_slider.setTickPosition(NoWheelSlider.TickPosition.TicksBelow)
         self.dimming_opacity_slider.setTickInterval(10)
         self.dimming_opacity_slider.valueChanged.connect(self._on_dimming_opacity_changed)
         opacity_row.addWidget(self.dimming_opacity_slider, 1)
 
-        self.dimming_opacity_value = self._add_value_label(opacity_row, "30%")
+        self.dimming_opacity_value = self._add_value_label(
+            opacity_row, f"{dimming_opacity_default}%"
+        )
         
         # Description
         dim_desc = QLabel(
@@ -181,13 +190,18 @@ class AccessibilityTab(QWidget):
 
         self.pixel_shift_rate_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.pixel_shift_rate_slider.setRange(1, 5)
-        self.pixel_shift_rate_slider.setValue(1)  # Default 1 shift per minute
+        pixel_shift_rate_default = int(
+            self._canonical_default("accessibility.pixel_shift.rate")
+        )
+        self.pixel_shift_rate_slider.setValue(pixel_shift_rate_default)
         self.pixel_shift_rate_slider.setTickPosition(NoWheelSlider.TickPosition.TicksBelow)
         self.pixel_shift_rate_slider.setTickInterval(1)
         self.pixel_shift_rate_slider.valueChanged.connect(self._on_pixel_shift_rate_changed)
         shift_row.addWidget(self.pixel_shift_rate_slider, 1)
 
-        self.pixel_shift_rate_value = self._add_value_label(shift_row, "1")
+        self.pixel_shift_rate_value = self._add_value_label(
+            shift_row, str(pixel_shift_rate_default)
+        )
         
         # Description
         shift_desc = QLabel(
@@ -207,28 +221,26 @@ class AccessibilityTab(QWidget):
         """Load settings from settings manager."""
         try:
             # Background Dimming
-            dimming_enabled = self._settings.get("accessibility.dimming.enabled", False)
-            self.dimming_enabled.setChecked(SettingsManager.to_bool(dimming_enabled, False))
+            self.dimming_enabled.setChecked(self._settings.get_bool("accessibility.dimming.enabled"))
             
-            dimming_opacity = self._settings.get("accessibility.dimming.opacity", 30)
+            dimming_opacity = self._settings.get("accessibility.dimming.opacity")
             try:
                 opacity_val = int(dimming_opacity)
                 opacity_val = max(10, min(90, opacity_val))
             except (ValueError, TypeError):
-                opacity_val = 30
+                opacity_val = int(require_canonical_default("accessibility.dimming.opacity"))
             self.dimming_opacity_slider.setValue(opacity_val)
             self.dimming_opacity_value.setText(f"{opacity_val}%")
             
             # Widget Pixel Shift
-            shift_enabled = self._settings.get("accessibility.pixel_shift.enabled", False)
-            self.pixel_shift_enabled.setChecked(SettingsManager.to_bool(shift_enabled, False))
+            self.pixel_shift_enabled.setChecked(self._settings.get_bool("accessibility.pixel_shift.enabled"))
             
-            shift_rate = self._settings.get("accessibility.pixel_shift.rate", 1)
+            shift_rate = self._settings.get("accessibility.pixel_shift.rate")
             try:
                 rate_val = int(shift_rate)
                 rate_val = max(1, min(5, rate_val))
             except (ValueError, TypeError):
-                rate_val = 1
+                rate_val = int(require_canonical_default("accessibility.pixel_shift.rate"))
             self.pixel_shift_rate_slider.setValue(rate_val)
             self.pixel_shift_rate_value.setText(str(rate_val))
             

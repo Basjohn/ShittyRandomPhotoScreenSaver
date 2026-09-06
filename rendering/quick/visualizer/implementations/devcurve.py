@@ -21,13 +21,6 @@ from ..render_contract import (
 _LAYER_NAMES = ("bass", "vocals", "mids", "transients")
 _LAYER_IDS = {name: index for index, name in enumerate(_LAYER_NAMES)}
 _MAX_SAMPLES = 96
-_LAYER_DEFAULTS = {
-    "bass": ((82, 167, 255, 230), 0.55),
-    "vocals": ((136, 190, 255, 220), 0.42),
-    "mids": ((100, 145, 255, 220), 0.46),
-    "transients": ((215, 240, 255, 240), 0.66),
-}
-
 
 @dataclass(frozen=True, slots=True)
 class QuickDevCurveLayout:
@@ -174,16 +167,13 @@ class QuickDevCurveRenderer:
             presentation.content_rect
         )
         scale = presentation.uniform_visual_scale
-        extra_inset = float(presentation.shell_style.get("content_inset", 0.0))
+        extra_inset = float(presentation.shell_style["content_inset"])
         # The shell border now follows the shared bounded visible-stroke contract,
         # so it is intentionally non-linear with visual scale. DevCurve's authored
         # baseline content extent must recover the original authored border source
         # rather than reverse-scaling the visible/clamped frame thickness.
         authored_border = float(
-            presentation.shell_style.get(
-                "authored_border_width",
-                presentation.border_width / scale,
-            )
+            presentation.shell_style["authored_border_width"]
         )
         authored_inset = authored_border + extra_inset / scale
         baseline_width, baseline_height = presentation.baseline_viewport_size
@@ -207,7 +197,7 @@ class QuickDevCurveRenderer:
         curves = _curve_mapping(mode_state.curves)
         sample_count = _sample_count(
             curves,
-            parameter(parameters, "devcurve_sample_count", _MAX_SAMPLES),
+            parameter(parameters, "devcurve_sample_count"),
         )
         order = _draw_order(mode_state.draw_order)
         uniforms = self._uniforms
@@ -240,12 +230,10 @@ class QuickDevCurveRenderer:
 
 
         for name in _LAYER_NAMES:
-            default_color, default_alpha = _LAYER_DEFAULTS[name]
             gl.glUniform4f(
                 uniforms[f"u_devcurve_layer_{name}_color"],
                 *rgba(
-                    parameter(parameters, f"devcurve_layer_{name}_color", None),
-                    default=default_color,
+                    parameter(parameters, f"devcurve_layer_{name}_color"),
                 ),
             )
             gl.glUniform4f(
@@ -254,9 +242,7 @@ class QuickDevCurveRenderer:
                     parameter(
                         parameters,
                         f"devcurve_layer_{name}_outline_color",
-                        None,
                     ),
-                    default=(255, 255, 255, 255),
                 ),
             )
             gl.glUniform1f(
@@ -266,7 +252,6 @@ class QuickDevCurveRenderer:
                         parameter(
                             parameters,
                             f"devcurve_layer_{name}_outline_width",
-                            0.006,
                         )
                     ),
                     layout,
@@ -279,7 +264,6 @@ class QuickDevCurveRenderer:
                     parameter(
                         parameters,
                         f"devcurve_layer_{name}_enabled",
-                        True,
                     )
                 )
                 else 0,
@@ -294,7 +278,6 @@ class QuickDevCurveRenderer:
                             parameter(
                                 parameters,
                                 f"devcurve_layer_{name}_alpha",
-                                default_alpha,
                             )
                         ),
                     ),
@@ -322,37 +305,33 @@ class QuickDevCurveRenderer:
                 parameter(
                     parameters,
                     "devcurve_foreground_shadow_enabled",
-                    False,
                 )
             )
             else 0,
         )
-        for uniform_name, parameter_name, default, minimum, maximum in (
+        for uniform_name, parameter_name, minimum, maximum in (
             (
                 "u_devcurve_foreground_shadow_alpha",
                 "devcurve_foreground_shadow_alpha",
-                0.36,
                 0.0,
                 1.0,
             ),
             (
                 "u_devcurve_foreground_shadow_darken",
                 "devcurve_foreground_shadow_darken",
-                0.42,
                 0.0,
                 1.0,
             ),
             (
                 "u_devcurve_foreground_shadow_offset",
                 "devcurve_foreground_shadow_offset",
-                0.10,
                 0.0,
                 0.45,
             ),
         ):
             value = max(
                 minimum,
-                min(maximum, float(parameter(parameters, parameter_name, default))),
+                min(maximum, float(parameter(parameters, parameter_name))),
             )
             if parameter_name.endswith("offset"):
                 value *= layout.normalized_y_scale
@@ -365,7 +344,6 @@ class QuickDevCurveRenderer:
                 parameter(
                     parameters,
                     "devcurve_foreground_specular_enabled",
-                    False,
                 )
             )
             else 0,
@@ -378,7 +356,6 @@ class QuickDevCurveRenderer:
                     parameter(
                         parameters,
                         "devcurve_specular_activity_alpha",
-                        1.0,
                     )
                 ),
             ),
@@ -393,7 +370,6 @@ class QuickDevCurveRenderer:
                         parameter(
                             parameters,
                             "devcurve_foreground_specular_alpha",
-                            0.78,
                         )
                     ),
                 ),
@@ -410,7 +386,6 @@ class QuickDevCurveRenderer:
                         parameter(
                             parameters,
                             "devcurve_foreground_specular_width",
-                            0.022,
                         )
                     ),
                 ),
@@ -427,7 +402,6 @@ class QuickDevCurveRenderer:
                         parameter(
                             parameters,
                             "devcurve_foreground_specular_offset",
-                            0.028,
                         )
                     ),
                 ),
@@ -444,7 +418,6 @@ class QuickDevCurveRenderer:
                         parameter(
                             parameters,
                             "devcurve_foreground_specular_crest_bias",
-                            1.05,
                         )
                     ),
                 ),
@@ -460,10 +433,10 @@ class QuickDevCurveRenderer:
             )
 
         hue = 0.0
-        if bool(parameter(parameters, "rainbow_enabled", False)):
+        if bool(parameter(parameters, "rainbow_enabled")):
             speed = max(
                 0.01,
-                min(5.0, float(parameter(parameters, "rainbow_speed", 0.5))),
+                min(5.0, float(parameter(parameters, "rainbow_speed"))),
             )
             hue = safe_hue(snapshot.logical.logical_timestamp * speed * 0.1)
         gl.glUniform1f(uniforms["u_rainbow_hue_offset"], hue)

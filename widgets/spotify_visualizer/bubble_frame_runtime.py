@@ -240,18 +240,12 @@ class BubbleFrameRuntime:
         positions, extras, trails = simulation.snapshot(
             bass=float(pulse_payload.get("bass", 0.0)),
             mid_high=float(pulse_payload.get("mid_high", 0.0)),
-            big_bass_pulse=float(pulse_payload.get("big_bass_pulse", 0.5)),
-            small_freq_pulse=float(pulse_payload.get("small_freq_pulse", 0.5)),
-            big_specular_max_size=float(
-                pulse_payload.get("big_specular_max_size", 2.5)
-            ),
-            big_visual_smoothing=float(
-                pulse_payload.get("big_visual_smoothing", 0.5)
-            ),
-            big_contraction_bias=float(
-                pulse_payload.get("big_contraction_bias", 1.0)
-            ),
-            big_size_clamp=float(pulse_payload.get("big_size_clamp", 4.0)),
+            big_bass_pulse=float(pulse_payload["big_bass_pulse"]),
+            small_freq_pulse=float(pulse_payload["small_freq_pulse"]),
+            big_specular_max_size=float(pulse_payload["big_specular_max_size"]),
+            big_visual_smoothing=float(pulse_payload["big_visual_smoothing"]),
+            big_contraction_bias=float(pulse_payload["big_contraction_bias"]),
+            big_size_clamp=float(pulse_payload["big_size_clamp"]),
         )
         frozen_positions = tuple(float(value) for value in positions)
         frozen_extras = tuple(float(value) for value in extras)
@@ -321,18 +315,10 @@ class BubbleFrameRuntime:
             ),
             "big_clamp_hits": render_diag.get("big_clamp_hits", 0.0),
             "big_render_count": render_diag.get("big_render_count", 0.0),
-            "configured_big_bass_pulse": float(
-                pulse_payload.get("big_bass_pulse", 0.5)
-            ),
-            "configured_big_size_clamp": float(
-                pulse_payload.get("big_size_clamp", 4.0)
-            ),
-            "configured_big_size_max": float(
-                settings_payload.get("bubble_big_size_max", 0.038)
-            ),
-            "configured_big_visual_smoothing": float(
-                pulse_payload.get("big_visual_smoothing", 0.5)
-            ),
+            "configured_big_bass_pulse": float(pulse_payload["big_bass_pulse"]),
+            "configured_big_size_clamp": float(pulse_payload["big_size_clamp"]),
+            "configured_big_size_max": float(settings_payload["bubble_big_size_max"]),
+            "configured_big_visual_smoothing": float(pulse_payload["big_visual_smoothing"]),
             "domain_h": float(getattr(simulation, "_domain_h", 1.0) or 1.0),
             "domain_w": float(getattr(simulation, "_domain_w", 1.0) or 1.0),
             "max_big_gated_energy": lane_diag.get(

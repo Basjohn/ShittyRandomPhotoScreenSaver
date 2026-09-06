@@ -35,15 +35,6 @@ RETRY_MAX_ATTEMPTS = 5
 # UI Timing
 # =============================================================================
 
-TRANSITION_DEFAULT_DURATION_MS = 5000
-"""Default transition animation length."""
-
-TRANSITION_MIN_DURATION_MS = 1000
-"""Minimum transition duration."""
-
-TRANSITION_MAX_DURATION_MS = 30000
-"""Maximum transition duration."""
-
 OVERLAY_FADE_DURATION_MS = 300
 """Overlay widget fade in/out time."""
 
@@ -134,9 +125,6 @@ __all__ = [
     "RETRY_MAX_DELAY_MS",
     "RETRY_MAX_ATTEMPTS",
     # UI timing
-    "TRANSITION_DEFAULT_DURATION_MS",
-    "TRANSITION_MIN_DURATION_MS",
-    "TRANSITION_MAX_DURATION_MS",
     "OVERLAY_FADE_DURATION_MS",
     "TOOLTIP_DELAY_MS",
     "CONTEXT_MENU_DELAY_MS",

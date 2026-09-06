@@ -15,15 +15,13 @@ from typing import Any
 from PySide6.QtCore import QObject, Property, Signal, Slot
 from PySide6.QtGui import QColor
 
+from core.settings.default_contract import require_canonical_default
 from core.steam.abandonment_issues import AbandonmentSelection, parse_appid_list
 from widgets.steam_abandonment_preparation import (
     AbandonmentPreparedPresentation,
     AbandonmentRuntimeConfig,
 )
 from widgets.steam_abandonment_layout import (
-    ABANDONMENT_ACCENT_RGBA,
-    ABANDONMENT_ARTWORK_SIZE_DEFAULT,
-    ABANDONMENT_FIELD_DEFAULTS,
     abandonment_authored_size,
     abandonment_field_slot_count,
     normalize_abandonment_artwork_shape,
@@ -62,41 +60,59 @@ from .steam_common import (
 
 
 _STEAM_LOGO = Path(__file__).resolve().parents[3] / "images" / "Steam_Logo_Cropped.png"
-_FIELD_DEFAULTS = tuple(ABANDONMENT_FIELD_DEFAULTS.items())
+_STEAM_DEFAULTS = require_canonical_default("widgets.steam")
+_ABANDONMENT_DEFAULTS = require_canonical_default("widgets.abandonment_issues")
+if not isinstance(_STEAM_DEFAULTS, Mapping) or not isinstance(_ABANDONMENT_DEFAULTS, Mapping):
+    raise TypeError("Canonical Steam/Abandonment defaults must be mappings")
+
+_FIELD_IDS: tuple[str, ...] = (
+    "playtime",
+    "achievements",
+    "last_unlock",
+    "last_played",
+    "archive_class",
+    "queue",
+    "source",
+    "pinned",
+)
+_FIELD_DEFAULTS: tuple[tuple[str, bool], ...] = tuple(
+    (field_id, bool(_ABANDONMENT_DEFAULTS[f"show_{field_id}"]))
+    for field_id in _FIELD_IDS
+)
 
 
 @dataclass(frozen=True)
 class AbandonmentIssuesPresentationConfig:
-    font_family: str = "Inter"
-    font_size: int = 14
-    text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    show_background: bool = True
-    background_color: tuple[int, int, int, int] = (35, 35, 35, 255)
-    background_opacity: float = 0.3
-    border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
-    border_opacity: float = 1.0
-    header_fill_color: tuple[int, int, int, int] = (11, 16, 22, 230)
-    header_border_color: tuple[int, int, int, int] = (229, 237, 244, 216)
-    header_text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    semantic_palette: SteamSemanticPalette = field(default_factory=SteamSemanticPalette)
-    selection_mode: str = "smart_rotation"
-    pinned_appid: int | None = None
-    minimum_playtime_minutes: int = 15
-    preferred_max_playtime_minutes: int = 120
-    preferred_max_unlocked_achievements: int = 2
-    minimum_inactivity_days: int = 84
-    preferred_minimum_inactivity_days: int = 182
-    never_show_appids: tuple[int, ...] = ()
-    field_visibility: tuple[tuple[str, bool], ...] = _FIELD_DEFAULTS
-    show_rediscovery_message: bool = True
-    show_artwork: bool = True
-    artwork_shape: str = "portrait"
-    artwork_size: int = ABANDONMENT_ARTWORK_SIZE_DEFAULT
-    accent_color: tuple[int, int, int, int] = ABANDONMENT_ACCENT_RGBA
-    guilt_desaturater: bool = False
-    guilt_desaturation_strength: int = 55
-    refresh_minutes: int = 10
-    show_connection_info_icon: bool = True
+    font_family: str
+    font_size: int
+    text_color: tuple[int, int, int, int]
+    show_background: bool
+    background_color: tuple[int, int, int, int]
+    background_opacity: float
+    border_color: tuple[int, int, int, int]
+    border_opacity: float
+    header_fill_color: tuple[int, int, int, int]
+    header_border_color: tuple[int, int, int, int]
+    header_text_color: tuple[int, int, int, int]
+    semantic_palette: SteamSemanticPalette
+    selection_mode: str
+    pinned_appid: int | None
+    minimum_playtime_minutes: int
+    preferred_max_playtime_minutes: int
+    preferred_max_unlocked_achievements: int
+    minimum_inactivity_days: int
+    preferred_minimum_inactivity_days: int
+    never_show_appids: tuple[int, ...]
+    field_visibility: tuple[tuple[str, bool], ...]
+    show_rediscovery_message: bool
+    show_artwork: bool
+    artwork_shape: str
+    artwork_size: int
+    accent_color: tuple[int, int, int, int]
+    guilt_desaturater: bool
+    guilt_desaturation_strength: int
+    refresh_minutes: int
+    show_connection_info_icon: bool
 
     @classmethod
     def from_widgets_mapping(
@@ -105,23 +121,16 @@ class AbandonmentIssuesPresentationConfig:
     ) -> "AbandonmentIssuesPresentationConfig":
         """Project canonical shared-Steam and Abandonment settings."""
 
-        from core.settings.defaults import get_default_settings
-
-        defaults = get_default_settings().get("widgets", {})
-        default_shared = defaults.get("steam", {}) if isinstance(defaults, Mapping) else {}
-        default_card = (
-            defaults.get("abandonment_issues", {})
-            if isinstance(defaults, Mapping)
-            else {}
-        )
+        default_shared = _STEAM_DEFAULTS
+        default_card = _ABANDONMENT_DEFAULTS
         shared = widgets.get("steam", {}) if isinstance(widgets, Mapping) else {}
         card = (
             widgets.get("abandonment_issues", {})
             if isinstance(widgets, Mapping)
             else {}
         )
-        merged_shared = dict(default_shared) if isinstance(default_shared, Mapping) else {}
-        merged_card = dict(default_card) if isinstance(default_card, Mapping) else {}
+        merged_shared = dict(default_shared)
+        merged_card = dict(default_card)
         if isinstance(shared, Mapping):
             merged_shared.update(shared)
         if isinstance(card, Mapping):
@@ -130,101 +139,142 @@ class AbandonmentIssuesPresentationConfig:
         field_visibility = tuple(
             (
                 field_id,
-                as_bool(merged_card.get(f"show_{field_id}"), default),
+                as_bool(
+                    merged_card.get(f"show_{field_id}"),
+                    bool(default_card[f"show_{field_id}"]),
+                ),
             )
-            for field_id, default in _FIELD_DEFAULTS
+            for field_id in _FIELD_IDS
         )
         config = cls(
-            font_family=str(merged_card.get("font_family", "Inter") or "Inter"),
-            font_size=bounded_int(merged_card.get("font_size"), 14, 8, 96),
+            font_family=str(
+                merged_card.get("font_family") or default_card["font_family"]
+            ),
+            font_size=bounded_int(
+                merged_card.get("font_size"),
+                int(default_card["font_size"]),
+                8,
+                96,
+            ),
             text_color=rgba(
                 merged_card.get("color"),
-                (255, 255, 255, 230),
+                tuple(default_card["color"]),
             ),
             show_background=as_bool(
-                merged_card.get("show_background"), True
+                merged_card.get("show_background"),
+                bool(default_card["show_background"]),
             ),
             background_color=rgba(
                 merged_card.get("bg_color"),
-                (35, 35, 35, 255),
+                tuple(default_card["bg_color"]),
             ),
             background_opacity=bounded_float(
-                merged_card.get("bg_opacity"), 0.3, 0.0, 1.0
+                merged_card.get("bg_opacity"),
+                float(default_card["bg_opacity"]),
+                0.0,
+                1.0,
             ),
             border_color=rgba(
                 merged_card.get("border_color"),
-                (255, 255, 255, 255),
+                tuple(default_card["border_color"]),
             ),
             border_opacity=bounded_float(
-                merged_card.get("border_opacity"), 1.0, 0.0, 1.0
+                merged_card.get("border_opacity"),
+                float(default_card["border_opacity"]),
+                0.0,
+                1.0,
             ),
             header_fill_color=rgba(
-                merged_card.get("header_fill_color"), (11, 16, 22, 230)
+                merged_card.get("header_fill_color"),
+                tuple(default_card["header_fill_color"]),
             ),
             header_border_color=rgba(
-                merged_card.get("header_border_color"), (229, 237, 244, 216)
+                merged_card.get("header_border_color"),
+                tuple(default_card["header_border_color"]),
             ),
             header_text_color=rgba(
-                merged_card.get("header_text_color"), (255, 255, 255, 230)
+                merged_card.get("header_text_color"),
+                tuple(default_card["header_text_color"]),
             ),
             selection_mode=str(
-                merged_card.get("selection_mode", "smart_rotation")
-                or "smart_rotation"
+                merged_card.get("selection_mode") or default_card["selection_mode"]
             ),
             pinned_appid=optional_appid(merged_card.get("pinned_appid")),
             minimum_playtime_minutes=bounded_int(
-                merged_card.get("minimum_playtime_minutes"), 15, 0, 1_000_000
+                merged_card.get("minimum_playtime_minutes"),
+                int(default_card["minimum_playtime_minutes"]),
+                0,
+                1_000_000,
             ),
             preferred_max_playtime_minutes=bounded_int(
-                merged_card.get("preferred_max_playtime_hours"), 2, 1, 100_000
+                merged_card.get("preferred_max_playtime_hours"),
+                int(default_card["preferred_max_playtime_hours"]),
+                1,
+                100_000,
             )
             * 60,
             preferred_max_unlocked_achievements=bounded_int(
                 merged_card.get("preferred_max_unlocked_achievements"),
-                2,
+                int(default_card["preferred_max_unlocked_achievements"]),
                 0,
                 100_000,
             ),
             minimum_inactivity_days=bounded_int(
-                merged_card.get("minimum_inactivity_weeks"), 12, 0, 100_000
+                merged_card.get("minimum_inactivity_weeks"),
+                int(default_card["minimum_inactivity_weeks"]),
+                0,
+                100_000,
             )
             * 7,
             preferred_minimum_inactivity_days=bounded_int(
                 merged_card.get("preferred_minimum_inactivity_weeks"),
-                26,
+                int(default_card["preferred_minimum_inactivity_weeks"]),
                 0,
                 100_000,
             )
             * 7,
             never_show_appids=parse_appid_list(
-                merged_card.get("never_show_appids", ())
+                merged_card.get("never_show_appids", default_card["never_show_appids"])
             ),
             field_visibility=field_visibility,
             show_rediscovery_message=as_bool(
-                merged_card.get("show_rediscovery_message"), True
+                merged_card.get("show_rediscovery_message"),
+                bool(default_card["show_rediscovery_message"]),
             ),
-            show_artwork=as_bool(merged_card.get("show_artwork"), True),
+            show_artwork=as_bool(
+                merged_card.get("show_artwork"),
+                bool(default_card["show_artwork"]),
+            ),
             artwork_shape=normalize_abandonment_artwork_shape(
-                merged_card.get("artwork_shape", "portrait")
+                merged_card.get("artwork_shape", default_card["artwork_shape"])
             ),
             artwork_size=normalize_abandonment_artwork_size(
-                merged_card.get("artwork_size", ABANDONMENT_ARTWORK_SIZE_DEFAULT)
+                merged_card.get("artwork_size", default_card["artwork_size"])
             ),
             accent_color=rgba(
                 merged_card.get("accent_color"),
-                ABANDONMENT_ACCENT_RGBA,
+                tuple(default_card["accent_color"]),
             ),
             guilt_desaturater=as_bool(
-                merged_card.get("guilt_desaturater"), False
+                merged_card.get("guilt_desaturater"),
+                bool(default_card["guilt_desaturater"]),
             ),
             guilt_desaturation_strength=bounded_int(
-                merged_card.get("guilt_desaturation_strength"), 55, 0, 100
+                merged_card.get("guilt_desaturation_strength"),
+                int(default_card["guilt_desaturation_strength"]),
+                0,
+                100,
             ),
             refresh_minutes=bounded_int(
-                merged_shared.get("refresh_minutes"), 10, 5, 1440
+                merged_shared.get("refresh_minutes"),
+                int(default_shared["refresh_minutes"]),
+                5,
+                1440,
             ),
+            semantic_palette=SteamSemanticPalette(),
             show_connection_info_icon=as_bool(
-                merged_shared.get("show_connection_info_icon"), True
+                merged_shared.get("show_connection_info_icon"),
+                bool(default_shared["show_connection_info_icon"]),
             ),
         )
         header_fill, header_border, header_text = resolve_header_colors(

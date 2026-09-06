@@ -17,6 +17,7 @@ from typing import Any
 from PySide6.QtCore import QPoint, QRect
 
 from core.logging.logger import get_logger
+from core.settings.default_contract import require_canonical_default
 from rendering.custom_layout_contract import (
     CustomLayoutEntry,
     canonicalize_screen_layout_bucket,
@@ -760,7 +761,14 @@ class QuickCustomLayoutOwner:
             )
             payload = capture_quick_size_payload(descriptor, presentation, global_rect)
             section = widgets.get(widget_id, {})
-            enabled = bool(section.get("enabled", True)) if isinstance(section, Mapping) else True
+            enabled_default = bool(
+                require_canonical_default(f"widgets.{widget_id}.enabled")
+            )
+            enabled = (
+                bool(section.get("enabled", enabled_default))
+                if isinstance(section, Mapping)
+                else enabled_default
+            )
             geometry_variant = geometry_variant_for_presentation(
                 widget_id, presentation, widgets
             )

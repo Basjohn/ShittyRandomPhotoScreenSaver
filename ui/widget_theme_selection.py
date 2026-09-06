@@ -19,12 +19,45 @@ from ui.widget_theme_catalog import (
     set_current_widget_theme_catalog,
 )
 from ui.widget_theme_runtime import (
-    DEFAULT_KEEP_SYNCED,
     ResolvedWidgetTheme,
     WidgetThemeState,
     resolve_widget_theme,
 )
 from ui.widget_theme_spec import DEFAULT_DARK_WIDGET_THEME_ID
+
+
+def _canonical_widget_theme_defaults() -> tuple[str, bool, Mapping[str, Any] | None]:
+    """Return Widget Theme defaults from the canonical defaults authority."""
+
+    from core.settings.default_contract import require_canonical_default
+
+    raw = require_canonical_default("widget_theme")
+    if not isinstance(raw, Mapping):
+        raise RuntimeError("Canonical widget_theme default must be a mapping")
+
+    selected = raw.get("selected_id")
+    if not isinstance(selected, str) or not selected.strip():
+        raise RuntimeError(
+            "Canonical defaults require non-empty widget_theme.selected_id"
+        )
+
+    keep_synced = raw.get("keep_synced")
+    if not isinstance(keep_synced, bool):
+        raise RuntimeError(
+            "Canonical defaults require boolean widget_theme.keep_synced"
+        )
+
+    custom = raw.get("custom")
+    if custom is not None and not isinstance(custom, Mapping):
+        raise RuntimeError(
+            "Canonical defaults require widget_theme.custom to be a mapping or None"
+        )
+
+    return (
+        selected.strip(),
+        keep_synced,
+        dict(custom) if isinstance(custom, Mapping) else None,
+    )
 
 
 class WidgetThemeSelectionStore(Protocol):
@@ -59,12 +92,15 @@ def _to_bool(value: object, default: bool) -> bool:
 def read_widget_theme_state(settings: WidgetThemeSelectionStore) -> WidgetThemeState:
     """Read and normalize the structured ``widget_theme`` root."""
 
-    raw = settings.get("widget_theme", {})
+    default_selected, default_keep_synced, default_custom = (
+        _canonical_widget_theme_defaults()
+    )
+    raw = settings.get("widget_theme")
     values = raw if isinstance(raw, Mapping) else {}
-    selected = str(values.get("selected_id", DEFAULT_DARK_WIDGET_THEME_ID) or "").strip()
+    selected = str(values.get("selected_id", default_selected) or "").strip()
     if not selected:
-        selected = DEFAULT_DARK_WIDGET_THEME_ID
-    custom = values.get("custom")
+        selected = default_selected
+    custom = values.get("custom", default_custom)
     custom_payload = dict(custom) if isinstance(custom, Mapping) else None
     migrated = "card_material_override" in values
     if custom_payload is not None and custom_payload.get("schema_version") in {1, 2}:
@@ -77,7 +113,7 @@ def read_widget_theme_state(settings: WidgetThemeSelectionStore) -> WidgetThemeS
         migrated = True
     state = WidgetThemeState(
         selected_id=selected,
-        keep_synced=_to_bool(values.get("keep_synced"), DEFAULT_KEEP_SYNCED),
+        keep_synced=_to_bool(values.get("keep_synced"), default_keep_synced),
         custom_payload=custom_payload,
     )
     if migrated:

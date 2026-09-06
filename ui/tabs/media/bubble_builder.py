@@ -53,7 +53,6 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
         bucket_key="appearance",
         title="Appearance",
         helper_text="Bubble shading, gradient direction, and color styling still apply when hidden.",
-        default_expanded=True,
     )
     _, motion_bucket = build_collapsible_bucket(
         tab,
@@ -62,7 +61,6 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
         bucket_key="motion",
         title="Motion",
         helper_text="Streaming, drift, swirl, and motion-tail controls still apply when hidden.",
-        default_expanded=True,
     )
     _, bounce_bucket = build_collapsible_bucket(
         tab,
@@ -71,7 +69,6 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
         bucket_key="bounce",
         title="Bounce",
         helper_text="Adjust collision rebound probability and speed by bubble class.",
-        default_expanded=True,
     )
     _, reactivity_bucket = build_collapsible_bucket(
         tab,
@@ -80,7 +77,6 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
         bucket_key="reactivity",
         title="Reactivity",
         helper_text="Audio-driven pulse behavior still applies when hidden.",
-        default_expanded=False,
     )
     _, population_bucket = build_collapsible_bucket(
         tab,
@@ -89,7 +85,6 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
         bucket_key="population",
         title="Population",
         helper_text="Bubble counts, size limits, and lifecycle controls still apply when hidden.",
-        default_expanded=False,
     )
     _, layout_bucket = build_collapsible_bucket(
         tab,
@@ -98,7 +93,6 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
         bucket_key="layout",
         title="Layout",
         helper_text="Card sizing still applies when hidden.",
-        default_expanded=False,
     )
     _, ghost_bucket = build_collapsible_bucket(
         tab,
@@ -107,7 +101,6 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
         bucket_key="ghost",
         title="Ghost",
         helper_text="Bubble ghosting still applies when hidden.",
-        default_expanded=False,
     )
 
     LABEL_WIDTH = 150
@@ -147,7 +140,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_big_bass_pulse = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_bass_pulse.setMinimum(0)
     tab.bubble_big_bass_pulse.setMaximum(200)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_big_bass_pulse', 0.5) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_big_bass_pulse') * 100)
     tab.bubble_big_bass_pulse.setValue(val)
     tab.bubble_big_bass_pulse.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_big_bass_pulse.setTickInterval(50)
@@ -164,7 +157,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_small_freq_pulse = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_small_freq_pulse.setMinimum(0)
     tab.bubble_small_freq_pulse.setMaximum(200)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_small_freq_pulse', 0.5) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_small_freq_pulse') * 100)
     tab.bubble_small_freq_pulse.setValue(val)
     tab.bubble_small_freq_pulse.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_small_freq_pulse.setTickInterval(50)
@@ -181,7 +174,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_big_visual_smoothing = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_visual_smoothing.setMinimum(0)
     tab.bubble_big_visual_smoothing.setMaximum(100)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_big_visual_smoothing', 0.5) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_big_visual_smoothing') * 100)
     tab.bubble_big_visual_smoothing.setValue(max(0, min(100, val)))
     tab.bubble_big_visual_smoothing.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_big_visual_smoothing.setTickInterval(10)
@@ -215,7 +208,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     ]
     for label, value in stream_options:
         tab.bubble_stream_direction.addItem(label, value)
-    saved_dir = tab._default_str('spotify_visualizer', 'bubble_stream_direction', 'up').lower()
+    saved_dir = tab._default_str('spotify_visualizer', 'bubble_stream_direction').lower()
     if saved_dir == "diagonal":
         saved_dir = "top_right"
     dir_index = tab.bubble_stream_direction.findData(saved_dir)
@@ -230,7 +223,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_stream_constant_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_stream_constant_speed.setMinimum(0)
     tab.bubble_stream_constant_speed.setMaximum(200)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_stream_constant_speed', 0.5) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_stream_constant_speed') * 100)
     tab.bubble_stream_constant_speed.setValue(val)
     tab.bubble_stream_constant_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_stream_constant_speed.setTickInterval(25)
@@ -247,7 +240,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_stream_speed_cap = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_stream_speed_cap.setMinimum(50)
     tab.bubble_stream_speed_cap.setMaximum(400)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_stream_speed_cap', 2.0) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_stream_speed_cap') * 100)
     tab.bubble_stream_speed_cap.setValue(val)
     tab.bubble_stream_speed_cap.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_stream_speed_cap.setTickInterval(25)
@@ -264,7 +257,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_stream_reactivity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_stream_reactivity.setMinimum(0)
     tab.bubble_stream_reactivity.setMaximum(200)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_stream_reactivity', 0.5) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_stream_reactivity') * 100)
     tab.bubble_stream_reactivity.setValue(val)
     tab.bubble_stream_reactivity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_stream_reactivity.setTickInterval(50)
@@ -281,7 +274,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_rotation_amount = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_rotation_amount.setMinimum(0)
     tab.bubble_rotation_amount.setMaximum(100)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_rotation_amount', 0.5) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_rotation_amount') * 100)
     tab.bubble_rotation_amount.setValue(val)
     bind_setting_signal(
         tab,
@@ -296,7 +289,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_drift_amount = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_drift_amount.setMinimum(0)
     tab.bubble_drift_amount.setMaximum(100)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_drift_amount', 0.5) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_drift_amount') * 100)
     tab.bubble_drift_amount.setValue(val)
     bind_setting_signal(
         tab,
@@ -311,7 +304,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_group_drift = QCheckBox("Enable")
     tab.bubble_group_drift.setProperty("circleIndicator", True)
     tab.bubble_group_drift.setChecked(
-        bool(tab._default_bool('spotify_visualizer', 'bubble_group_drift', False))
+        bool(tab._default_bool('spotify_visualizer', 'bubble_group_drift'))
     )
     tab.bubble_group_drift.setToolTip(
         "Uses one shared drift carrier for non-swirl Bubble drift modes, while still "
@@ -325,7 +318,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_drift_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_drift_speed.setMinimum(0)
     tab.bubble_drift_speed.setMaximum(100)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_drift_speed', 0.5) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_drift_speed') * 100)
     tab.bubble_drift_speed.setValue(val)
     bind_setting_signal(
         tab,
@@ -340,7 +333,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_drift_frequency = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_drift_frequency.setMinimum(0)
     tab.bubble_drift_frequency.setMaximum(100)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_drift_frequency', 0.5) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_drift_frequency') * 100)
     tab.bubble_drift_frequency.setValue(val)
     bind_setting_signal(
         tab,
@@ -364,15 +357,17 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     ]
     for label, value in drift_options:
         tab.bubble_drift_direction.addItem(label, value)
-    saved_dd = tab._default_str('spotify_visualizer', 'bubble_drift_direction', 'random').lower()
+    saved_dd = tab._default_str('spotify_visualizer', 'bubble_drift_direction').lower()
     # If stored value is a swirl direction, default drift combo to "none"
     if saved_dd in ('swirl_cw', 'swirl_ccw'):
         dd_index = tab.bubble_drift_direction.findData('none')
     else:
         dd_index = tab.bubble_drift_direction.findData(saved_dd)
     if dd_index < 0:
-        dd_index = tab.bubble_drift_direction.findData('random')
-    tab.bubble_drift_direction.setCurrentIndex(max(0, dd_index))
+        raise ValueError(
+            f"Canonical Bubble drift direction is not represented by the UI: {saved_dd!r}"
+        )
+    tab.bubble_drift_direction.setCurrentIndex(dd_index)
     bind_setting_signal(tab, tab.bubble_drift_direction.currentIndexChanged)
     drift_direction_row.addWidget(tab.bubble_drift_direction)
     drift_direction_row.addStretch()
@@ -417,7 +412,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_big_size_max = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_size_max.setMinimum(10)
     tab.bubble_big_size_max.setMaximum(60)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_big_size_max', 0.038) * 1000)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_big_size_max') * 1000)
     tab.bubble_big_size_max.setValue(max(10, min(60, val)))
     tab.bubble_big_size_max.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_big_size_max.setTickInterval(10)
@@ -435,7 +430,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_small_size_max = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_small_size_max.setMinimum(4)
     tab.bubble_small_size_max.setMaximum(30)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_small_size_max', 0.018) * 1000)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_small_size_max') * 1000)
     tab.bubble_small_size_max.setValue(max(4, min(30, val)))
     tab.bubble_small_size_max.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_small_size_max.setTickInterval(5)
@@ -453,7 +448,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_big_specular_max_size = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_specular_max_size.setMinimum(50)
     tab.bubble_big_specular_max_size.setMaximum(500)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_big_specular_max_size', 2.5) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_big_specular_max_size') * 100)
     tab.bubble_big_specular_max_size.setValue(max(50, min(500, val)))
     tab.bubble_big_specular_max_size.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_big_specular_max_size.setTickInterval(50)
@@ -474,7 +469,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_big_size_clamp = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_size_clamp.setMinimum(150)
     tab.bubble_big_size_clamp.setMaximum(800)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_big_size_clamp', 4.0) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_big_size_clamp') * 100)
     tab.bubble_big_size_clamp.setValue(max(150, min(800, val)))
     tab.bubble_big_size_clamp.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_big_size_clamp.setTickInterval(50)
@@ -495,7 +490,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_big_contraction_bias = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_contraction_bias.setMinimum(0)
     tab.bubble_big_contraction_bias.setMaximum(100)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_big_contraction_bias', 1.0) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_big_contraction_bias') * 100)
     tab.bubble_big_contraction_bias.setValue(max(0, min(100, val)))
     tab.bubble_big_contraction_bias.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_big_contraction_bias.setTickInterval(10)
@@ -516,7 +511,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_big_count = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_count.setMinimum(0)
     tab.bubble_big_count.setMaximum(30)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_big_count', 8))
+    val = int(tab._default_float('spotify_visualizer', 'bubble_big_count'))
     tab.bubble_big_count.setValue(val)
     bind_setting_signal(
         tab,
@@ -531,7 +526,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_small_count = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_small_count.setMinimum(5)
     tab.bubble_small_count.setMaximum(80)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_small_count', 25))
+    val = int(tab._default_float('spotify_visualizer', 'bubble_small_count'))
     tab.bubble_small_count.setValue(val)
     bind_setting_signal(
         tab,
@@ -546,7 +541,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_surface_reach = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_surface_reach.setMinimum(0)
     tab.bubble_surface_reach.setMaximum(100)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_surface_reach', 0.6) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_surface_reach') * 100)
     tab.bubble_surface_reach.setValue(val)
     bind_setting_signal(
         tab,
@@ -561,7 +556,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_bounce_big_pct = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_bounce_big_pct.setMinimum(0)
     tab.bubble_bounce_big_pct.setMaximum(100)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_bounce_big_pct', 70))
+    val = int(tab._default_float('spotify_visualizer', 'bubble_bounce_big_pct'))
     tab.bubble_bounce_big_pct.setValue(max(0, min(100, val)))
     tab.bubble_bounce_big_pct.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_bounce_big_pct.setTickInterval(10)
@@ -578,7 +573,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_bounce_small_pct = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_bounce_small_pct.setMinimum(0)
     tab.bubble_bounce_small_pct.setMaximum(100)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_bounce_small_pct', 30))
+    val = int(tab._default_float('spotify_visualizer', 'bubble_bounce_small_pct'))
     tab.bubble_bounce_small_pct.setValue(max(0, min(100, val)))
     tab.bubble_bounce_small_pct.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_bounce_small_pct.setTickInterval(10)
@@ -595,7 +590,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_bounce_big_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_bounce_big_speed.setMinimum(0)
     tab.bubble_bounce_big_speed.setMaximum(200)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_bounce_big_speed', 0.8) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_bounce_big_speed') * 100)
     tab.bubble_bounce_big_speed.setValue(max(0, min(200, val)))
     tab.bubble_bounce_big_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_bounce_big_speed.setTickInterval(10)
@@ -612,7 +607,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_bounce_small_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_bounce_small_speed.setMinimum(0)
     tab.bubble_bounce_small_speed.setMaximum(200)
-    val = int(tab._default_float('spotify_visualizer', 'bubble_bounce_small_speed', 0.5) * 100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_bounce_small_speed') * 100)
     tab.bubble_bounce_small_speed.setValue(max(0, min(200, val)))
     tab.bubble_bounce_small_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_bounce_small_speed.setTickInterval(10)
@@ -629,7 +624,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_bounce_same_only = QCheckBox("Same Bubbles Bounce Only")
     tab.bubble_bounce_same_only.setProperty("circleIndicator", True)
     tab.bubble_bounce_same_only.setChecked(
-        tab._default_bool('spotify_visualizer', 'bubble_bounce_same_only', False)
+        tab._default_bool('spotify_visualizer', 'bubble_bounce_same_only')
     )
     bind_setting_signal(tab, tab.bubble_bounce_same_only.stateChanged)
     bounce_same_only_row.addWidget(tab.bubble_bounce_same_only)
@@ -640,7 +635,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_collision_pop_mode.addItem("Off", "off")
     tab.bubble_collision_pop_mode.addItem("One Bubble", "one")
     tab.bubble_collision_pop_mode.addItem("All Bubbles", "all")
-    saved_pop_mode = tab._default_str('spotify_visualizer', 'bubble_collision_pop_mode', 'off').lower()
+    saved_pop_mode = tab._default_str('spotify_visualizer', 'bubble_collision_pop_mode').lower()
     pop_idx = tab.bubble_collision_pop_mode.findData(saved_pop_mode)
     if pop_idx < 0:
         pop_idx = 0
@@ -668,7 +663,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_gradient_direction.addItem("Center Out", "center_out")
     tab.bubble_gradient_direction.addItem("Center Out Reverse", "center_out_reverse")
 
-    saved_sd = tab._default_str('spotify_visualizer', 'bubble_specular_direction', 'top_left').lower()
+    saved_sd = tab._default_str('spotify_visualizer', 'bubble_specular_direction').lower()
     idx = tab.bubble_specular_direction.findData(saved_sd)
     if idx < 0:
         idx = 0
@@ -677,7 +672,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     specular_row.addWidget(tab.bubble_specular_direction)
 
     gradient_row = _aligned_row(appearance_bucket, "Gradient Direction:")
-    saved_gd = tab._default_str('spotify_visualizer', 'bubble_gradient_direction', 'top').lower()
+    saved_gd = tab._default_str('spotify_visualizer', 'bubble_gradient_direction').lower()
     gidx = tab.bubble_gradient_direction.findData(saved_gd)
     if gidx < 0:
         gidx = tab.bubble_gradient_direction.findData('top')
@@ -708,29 +703,14 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
         color_row.addWidget(btn)
         color_row.addStretch()
 
-    bubble_growth_row = _aligned_row(layout_bucket, "Card Height:")
-    tab.bubble_growth = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.bubble_growth.setMinimum(100)
-    tab.bubble_growth.setMaximum(500)
-    bubble_growth_val = int(tab._default_float('spotify_visualizer', 'bubble_growth', 3.0) * 100)
-    tab.bubble_growth.setValue(max(100, min(500, bubble_growth_val)))
-    tab.bubble_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.bubble_growth.setTickInterval(50)
-    tab.bubble_growth.setToolTip("Height multiplier for the bubble card.")
-    bind_setting_signal(
-        tab,
-        tab.bubble_growth.valueChanged,
-        updater=lambda v: tab.bubble_growth_label.setText(f"{v / 100.0:.1f}x"),
-    )
-    bubble_growth_row.addWidget(tab.bubble_growth)
-    tab.bubble_growth_label = QLabel(f"{bubble_growth_val / 100.0:.1f}x")
-    bubble_growth_row.addWidget(tab.bubble_growth_label)
-
     tail_len_row = _aligned_row(motion_bucket, "Tail Length:")
     tab.bubble_trail_strength = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_trail_strength.setMinimum(0)
     tab.bubble_trail_strength.setMaximum(150)
-    tab.bubble_trail_strength.setValue(0)
+    bubble_trail_default = int(round(
+        tab._default_float("spotify_visualizer", "bubble_trail_strength") * 100.0
+    ))
+    tab.bubble_trail_strength.setValue(max(0, min(150, bubble_trail_default)))
     tab.bubble_trail_strength.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_trail_strength.setTickInterval(10)
     tab.bubble_trail_strength.setToolTip(
@@ -742,14 +722,19 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
         updater=lambda v: tab.bubble_trail_strength_label.setText(f"{v}%"),
     )
     tail_len_row.addWidget(tab.bubble_trail_strength)
-    tab.bubble_trail_strength_label = QLabel("0%")
+    tab.bubble_trail_strength_label = QLabel(
+        f"{tab.bubble_trail_strength.value()}%"
+    )
     tail_len_row.addWidget(tab.bubble_trail_strength_label)
 
     tail_opa_row = _aligned_row(motion_bucket, "Tail Opacity:")
     tab.bubble_tail_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_tail_opacity.setMinimum(0)
     tab.bubble_tail_opacity.setMaximum(85)
-    tab.bubble_tail_opacity.setValue(0)
+    bubble_tail_default = int(round(
+        tab._default_float("spotify_visualizer", "bubble_tail_opacity") * 100.0
+    ))
+    tab.bubble_tail_opacity.setValue(max(0, min(85, bubble_tail_default)))
     tab.bubble_tail_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_tail_opacity.setTickInterval(5)
     tab.bubble_tail_opacity.setToolTip(
@@ -761,14 +746,16 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
         updater=lambda v: tab.bubble_tail_opacity_label.setText(f"{v}%"),
     )
     tail_opa_row.addWidget(tab.bubble_tail_opacity)
-    tab.bubble_tail_opacity_label = QLabel("0%")
+    tab.bubble_tail_opacity_label = QLabel(
+        f"{tab.bubble_tail_opacity.value()}%"
+    )
     tail_opa_row.addWidget(tab.bubble_tail_opacity_label)
 
     bubble_ghost_toggle_row = _aligned_row(ghost_bucket, "")
     tab.bubble_ghost_enabled = QCheckBox("Enable Ghosting")
     tab.bubble_ghost_enabled.setProperty("circleIndicator", True)
     tab.bubble_ghost_enabled.setChecked(
-        tab._default_bool('spotify_visualizer', 'bubble_ghosting_enabled', False)
+        tab._default_bool('spotify_visualizer', 'bubble_ghosting_enabled')
     )
     tab.bubble_ghost_enabled.setToolTip(
         "Show a fading afterimage trail behind moving bubbles."
@@ -786,7 +773,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_ghost_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_ghost_opacity.setMinimum(0)
     tab.bubble_ghost_opacity.setMaximum(100)
-    _bg_alpha_pct = int(tab._default_float('spotify_visualizer', 'bubble_ghost_alpha', 0.0) * 100)
+    _bg_alpha_pct = int(tab._default_float('spotify_visualizer', 'bubble_ghost_alpha') * 100)
     tab.bubble_ghost_opacity.setValue(max(0, min(100, _bg_alpha_pct)))
     tab.bubble_ghost_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_ghost_opacity.setTickInterval(5)
@@ -803,7 +790,7 @@ def build_bubble_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxL
     tab.bubble_ghost_decay_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_ghost_decay_slider.setMinimum(10)
     tab.bubble_ghost_decay_slider.setMaximum(100)
-    _bg_decay_pct = int(tab._default_float('spotify_visualizer', 'bubble_ghost_decay', 0.4) * 100)
+    _bg_decay_pct = int(tab._default_float('spotify_visualizer', 'bubble_ghost_decay') * 100)
     tab.bubble_ghost_decay_slider.setValue(max(10, min(100, _bg_decay_pct)))
     tab.bubble_ghost_decay_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_ghost_decay_slider.setTickInterval(5)

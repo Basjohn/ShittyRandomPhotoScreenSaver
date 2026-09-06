@@ -370,18 +370,14 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
     # expose a small system tray for Settings/Exit while the saver runs.
     interaction_mode_enabled = False
     try:
-        raw_interaction_mode = settings.get('input.interaction_mode', False)
-        if hasattr(SettingsManager, "to_bool"):
-            interaction_mode_enabled = SettingsManager.to_bool(raw_interaction_mode, False)
-        else:
-            interaction_mode_enabled = bool(raw_interaction_mode)
+        interaction_mode_enabled = settings.get_bool('input.interaction_mode')
     except Exception as e:
         logger.debug("[MAIN] Exception suppressed: %s", e)
         interaction_mode_enabled = False
     
     # Check if sources are configured (using dot notation)
-    folders = settings.get('sources.folders', [])
-    rss_feeds = settings.get('sources.rss_feeds', [])
+    folders = settings.get('sources.folders')
+    rss_feeds = settings.get('sources.rss_feeds')
     
     if not folders and not rss_feeds:
         logger.warning("No image sources configured - opening settings dialog")

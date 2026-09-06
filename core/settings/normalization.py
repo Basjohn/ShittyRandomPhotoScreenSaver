@@ -36,6 +36,36 @@ logger = logging.getLogger(__name__)
 T = TypeVar('T', bound=Enum)
 
 
+def parse_enum_strict(value: Any, enum_type: Type[T]) -> T:
+    """Parse one enum value without inventing a fallback.
+
+    Canonical schema values use this path: if the authority itself contains an
+    unsupported enum representation, fail loudly. Persisted/migration values
+    should use ``SettingsNormalizer.to_enum`` with the already-parsed canonical
+    enum as their repair value.
+    """
+
+    if isinstance(value, enum_type):
+        return value
+    if value is None:
+        raise ValueError(f"Missing {enum_type.__name__} value")
+
+    text = str(value)
+    if "." in text:
+        text = text.split(".")[-1]
+    text = text.strip().lower().replace(" ", "_").replace("-", "_")
+    if not text:
+        raise ValueError(f"Empty {enum_type.__name__} value")
+
+    try:
+        return enum_type(text)
+    except ValueError:
+        for member in enum_type:
+            if member.name.lower() == text:
+                return member
+    raise ValueError(f"Unsupported {enum_type.__name__} value: {value!r}")
+
+
 class SettingsNormalizer:
     """
     Centralized settings normalization with comprehensive type coercion.
@@ -236,68 +266,23 @@ class SettingsNormalizer:
             return fallback
     
     def to_enum(self, value: Any, enum_type: Type[T], fallback: T) -> T:
-        """
-        Normalize a value to an enum with comprehensive format support.
-        
-        Handles:
-        - Direct enum instances
-        - Enum values (e.g., "top_left")
-        - Qualified names (e.g., "WidgetPosition.TOP_LEFT")
-        - Display names (e.g., "Top Left")
-        - Legacy formats
-        
-        Args:
-            value: Raw value from settings
-            enum_type: Target enum class
-            fallback: Default enum value if normalization fails
-            
-        Returns:
-            Normalized enum value
-        """
-        # Already correct type
-        if isinstance(value, enum_type):
-            self._normalization_stats['successes'] += 1
-            return value
-        
-        if value is None:
-            self._normalization_stats['fallbacks'] += 1
-            return fallback
-        
-        # Convert to string for processing
-        text = str(value)
-        
-        # Strip enum class prefix if present (e.g., "WidgetPosition.TOP_LEFT" -> "TOP_LEFT")
-        if "." in text:
-            text = text.split(".")[-1]
-        
-        # Normalize: lowercase, replace spaces/hyphens with underscores
-        text = text.strip().lower().replace(" ", "_").replace("-", "_")
-        
-        if not text:
-            self._normalization_stats['fallbacks'] += 1
-            return fallback
-        
-        # Try direct value match
+        """Normalize a persisted enum value with an explicit repair value."""
+
         try:
-            result = enum_type(text)
-            self._normalization_stats['successes'] += 1
-            return result
-        except ValueError:
-            pass
-        
-        # Try name match (case-insensitive)
-        for member in enum_type:
-            if member.name.lower() == text:
-                self._normalization_stats['successes'] += 1
-                return member
-        
-        # Fallback
-        if self.log_failures:
-            logger.warning("[SETTINGS_NORM] Failed to normalize enum %s: value=%r, using fallback=%s",
-                         enum_type.__name__, value, fallback.name)
-        self._normalization_stats['fallbacks'] += 1
-        return fallback
-    
+            result = parse_enum_strict(value, enum_type)
+        except (TypeError, ValueError):
+            if self.log_failures:
+                logger.warning(
+                    "[SETTINGS_NORM] Failed to normalize enum %s: value=%r, using fallback=%s",
+                    enum_type.__name__,
+                    value,
+                    fallback.name,
+                )
+            self._normalization_stats['fallbacks'] += 1
+            return fallback
+        self._normalization_stats['successes'] += 1
+        return result
+
     def to_widget_position(self, value: Any, fallback: WidgetPosition = WidgetPosition.TOP_RIGHT) -> WidgetPosition:
         """
         Normalize a value to WidgetPosition enum.

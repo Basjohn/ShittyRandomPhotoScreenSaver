@@ -9,15 +9,15 @@ This module is ONLY used by the settings dialog and does not affect runtime.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Mapping, Tuple
 
 from core.logging.logger import get_logger
 from core.settings.widget_capacity_policy import clamp_list_capacity
-from widgets.spotify_visualizer.card_geometry import (
-    build_growth_map_from_widget,
-    resolve_card_metrics,
+from widgets.spotify_visualizer.render_state import (
+    CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO,
 )
 from rendering.widget_stacking import (
     StackObstacle,
@@ -366,193 +366,170 @@ def estimate_steam_card_size(font_size: int, width: int = 420, height: int = 180
 
 
 def estimate_spotify_vis_size(
-    vis_settings: Dict,
+    vis_settings: Mapping[str, Any],
     *,
     media_width: int,
 ) -> Tuple[int, int]:
-    """Estimate Spotify visualizer authored card size."""
-    mode_id = str(vis_settings.get("mode", "bubble") or "bubble").strip().lower()
-    growth_holder = type(
-        "_GrowthHolder",
-        (),
-        {
-            "_spectrum_growth": float(vis_settings.get("spectrum_growth", 2.0)),
-            "_osc_growth": float(vis_settings.get("osc_growth", 2.0)),
-            "_sine_wave_growth": float(vis_settings.get("sine_wave_growth", 2.0)),
-            "_bubble_growth": float(vis_settings.get("bubble_growth", 3.0)),
-            "_devcurve_growth": float(vis_settings.get("devcurve_growth", 3.5)),
-        },
-    )()
-    metrics = resolve_card_metrics(
-        mode_id,
-        int(vis_settings.get("base_height", 80)),
-        build_growth_map_from_widget(growth_holder),
-    )
-    return (max(10, int(media_width)), int(metrics.preferred_height))
+    """Estimate ordinary Visualizer geometry from the active aspect contract.
 
-
-def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
-    """Build list of enabled widget estimates from settings.
-    
-    Args:
-        settings: Full settings dict (from SettingsManager.get('widgets'))
-        
-    Returns:
-        List of WidgetEstimate for all enabled widgets
+    Mode-specific ``*_growth`` card-height tuning was retired by the Qt Quick
+    geometry migration. Normal layout uses one 1.5 presentation aspect; CUSTOM
+    viewport extent is owned by live layout state and is deliberately not
+    predicted here.
     """
-    estimates = []
-    
-    # Clock 1
-    clock = settings.get('clock', {})
-    if clock.get('enabled', False) and str(clock.get('position', '')).strip().lower() != "custom":
-        font_size = clock.get('font_size', 48)
-        show_seconds = clock.get('show_seconds', False)
-        show_tz = clock.get('show_timezone_label', False)
-        display_mode = clock.get('display_mode', 'digital')
-        show_day_of_week = clock.get('show_day_of_week', False)
-        show_date = clock.get('show_date', False)
-        calendar_layout = clock.get('calendar_layout', 'shared_line')
-        calendar_font_size = clock.get('calendar_font_size', 20)
+    _ = vis_settings  # admission/routing is resolved by the caller
+    width = max(10, int(media_width))
+    height = max(1, int(round(width / CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO)))
+    return (width, height)
+
+
+def _merge_section_defaults(
+    defaults: Mapping[str, Any],
+    current: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Overlay current section state onto its canonical product baseline."""
+    merged = deepcopy(dict(defaults))
+    if not isinstance(current, Mapping):
+        return merged
+    for key, value in current.items():
+        if isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
+            merged[key] = _merge_section_defaults(merged[key], value)
+        else:
+            merged[key] = deepcopy(value)
+    return merged
+
+
+def _resolved_widget_section(
+    settings: Mapping[str, Any],
+    defaults: Mapping[str, Any],
+    section: str,
+) -> dict[str, Any]:
+    canonical = defaults.get(section)
+    if not isinstance(canonical, Mapping):
+        raise KeyError(f"Canonical Widget defaults are missing widgets.{section}")
+    current = settings.get(section) if isinstance(settings, Mapping) else None
+    return _merge_section_defaults(canonical, current if isinstance(current, Mapping) else None)
+
+
+def build_widget_estimates(
+    settings: Mapping[str, Any],
+    *,
+    defaults: Mapping[str, Any],
+) -> List[WidgetEstimate]:
+    """Build enabled-widget estimates from current state over canonical defaults."""
+    estimates: List[WidgetEstimate] = []
+
+    clock = _resolved_widget_section(settings, defaults, "clock")
+    if bool(clock["enabled"]) and str(clock["position"]).strip().lower() != "custom":
         w, h = estimate_clock_size(
-            font_size,
-            show_seconds,
-            show_tz,
-            display_mode,
-            show_day_of_week,
-            show_date,
-            calendar_layout,
-            calendar_font_size,
+            int(clock["font_size"]),
+            bool(clock["show_seconds"]),
+            bool(clock["show_timezone"]),
+            str(clock["display_mode"]),
+            bool(clock["show_day_of_week"]),
+            bool(clock["show_date"]),
+            str(clock["calendar_layout"]),
+            int(clock["calendar_font_size"]),
         )
         estimates.append(WidgetEstimate(
             widget_type=WidgetType.CLOCK,
-            position=clock.get('position', 'Top Right'),
-            monitor=str(clock.get('monitor', 'ALL')),
-            enabled=True,
-            estimated_width=w,
-            estimated_height=h,
-        ))
-    
-    # Clock 2
-    clock2 = settings.get('clock2', {})
-    if clock2.get('enabled', False) and str(clock.get('position', '')).strip().lower() != "custom":
-        # Clock 2/3 inherit font and display_mode from Clock 1
-        font_size = clock.get('font_size', 48)
-        display_mode = clock.get('display_mode', 'digital')
-        w, h = estimate_clock_size(
-            font_size,
-            show_seconds=clock.get('show_seconds', False),
-            show_tz=clock.get('show_timezone_label', False),
-            display_mode=display_mode,
-            show_day_of_week=clock.get('show_day_of_week', False),
-            show_date=clock.get('show_date', False),
-            calendar_layout=clock.get('calendar_layout', 'shared_line'),
-            calendar_font_size=clock.get('calendar_font_size', 20),
-        )
-        estimates.append(WidgetEstimate(
-            widget_type=WidgetType.CLOCK2,
-            position=clock.get('position', 'Top Right'),  # Same position as Clock 1
-            monitor=str(clock2.get('monitor', 'ALL')),
-            enabled=True,
-            estimated_width=w,
-            estimated_height=h,
-        ))
-    
-    # Clock 3
-    clock3 = settings.get('clock3', {})
-    if clock3.get('enabled', False) and str(clock.get('position', '')).strip().lower() != "custom":
-        font_size = clock.get('font_size', 48)
-        display_mode = clock.get('display_mode', 'digital')
-        w, h = estimate_clock_size(
-            font_size,
-            show_seconds=clock.get('show_seconds', False),
-            show_tz=clock.get('show_timezone_label', False),
-            display_mode=display_mode,
-            show_day_of_week=clock.get('show_day_of_week', False),
-            show_date=clock.get('show_date', False),
-            calendar_layout=clock.get('calendar_layout', 'shared_line'),
-            calendar_font_size=clock.get('calendar_font_size', 20),
-        )
-        estimates.append(WidgetEstimate(
-            widget_type=WidgetType.CLOCK3,
-            position=clock.get('position', 'Top Right'),  # Same position as Clock 1
-            monitor=str(clock3.get('monitor', 'ALL')),
-            enabled=True,
-            estimated_width=w,
-            estimated_height=h,
-        ))
-    
-    # Weather
-    weather = settings.get('weather', {})
-    if weather.get('enabled', False) and str(weather.get('position', '')).strip().lower() != "custom":
-        font_size = weather.get('font_size', 18)
-        show_forecast = weather.get('show_forecast', False)
-        w, h = estimate_weather_size(font_size, show_forecast)
-        estimates.append(WidgetEstimate(
-            widget_type=WidgetType.WEATHER,
-            position=weather.get('position', 'Top Left'),
-            monitor=str(weather.get('monitor', 'ALL')),
-            enabled=True,
-            estimated_width=w,
-            estimated_height=h,
-        ))
-    
-    # Media
-    media = settings.get('media', {})
-    if media.get('enabled', False) and str(media.get('position', '')).strip().lower() != "custom":
-        font_size = media.get('font_size', 14)
-        artwork_size = media.get('artwork_size', 80)
-        w, h = estimate_media_size(font_size, artwork_size)
-        estimates.append(WidgetEstimate(
-            widget_type=WidgetType.MEDIA,
-            position=media.get('position', 'Bottom Right'),
-            monitor=str(media.get('monitor', 'ALL')),
-            enabled=True,
-            estimated_width=w,
-            estimated_height=h,
-        ))
-    
-    # Reddit
-    reddit = settings.get('reddit', {})
-    if reddit.get('enabled', False) and str(reddit.get('position', '')).strip().lower() != "custom":
-        font_size = reddit.get('font_size', 18)
-        item_count = reddit.get('limit', 10)
-        w, h = estimate_reddit_size(font_size, item_count)
-        estimates.append(WidgetEstimate(
-            widget_type=WidgetType.REDDIT,
-            position=reddit.get('position', 'Bottom Right'),
-            monitor=str(reddit.get('monitor', 'ALL')),
-            enabled=True,
-            estimated_width=w,
-            estimated_height=h,
-        ))
-    
-    # Reddit 2
-    reddit2 = settings.get('reddit2', {})
-    if reddit2.get('enabled', False) and str(reddit2.get('position', '')).strip().lower() != "custom":
-        # Reddit 2 inherits font from Reddit 1
-        font_size = reddit.get('font_size', 18)
-        item_count = clamp_list_capacity(reddit2.get('limit', 20), default=20)
-        w, h = estimate_reddit_size(font_size, item_count)
-        estimates.append(WidgetEstimate(
-            widget_type=WidgetType.REDDIT2,
-            position=reddit2.get('position', 'Top Left'),
-            monitor=str(reddit2.get('monitor', 'ALL')),
+            position=str(clock["position"]),
+            monitor=str(clock["monitor"]),
             enabled=True,
             estimated_width=w,
             estimated_height=h,
         ))
 
-    # Gmail
-    gmail = settings.get('gmail', {})
-    if gmail.get('enabled', False) and str(gmail.get('position', '')).strip().lower() != "custom":
-        font_size = gmail.get('font_size', 18)
-        item_count = clamp_list_capacity(gmail.get('limit', 5), default=5)
-        width = max(200, min(1200, int(gmail.get('width', gmail.get('min_width', gmail.get('max_width', 600))))))
-        width, h = estimate_gmail_size(font_size, item_count, width)
+    # Clock 2/3 have their own persisted appearance/position state. They do not
+    # expose Clock 1's calendar extensions, so those capability-only arguments
+    # remain disabled rather than borrowing another widget's product defaults.
+    for section, widget_type in (("clock2", WidgetType.CLOCK2), ("clock3", WidgetType.CLOCK3)):
+        extra_clock = _resolved_widget_section(settings, defaults, section)
+        if not bool(extra_clock["enabled"]):
+            continue
+        if str(extra_clock["position"]).strip().lower() == "custom":
+            continue
+        w, h = estimate_clock_size(
+            int(extra_clock["font_size"]),
+            bool(extra_clock["show_seconds"]),
+            bool(extra_clock["show_timezone"]),
+            str(extra_clock["display_mode"]),
+            False,
+            False,
+            "shared_line",
+            0,
+        )
+        estimates.append(WidgetEstimate(
+            widget_type=widget_type,
+            position=str(extra_clock["position"]),
+            monitor=str(extra_clock["monitor"]),
+            enabled=True,
+            estimated_width=w,
+            estimated_height=h,
+        ))
+
+    weather = _resolved_widget_section(settings, defaults, "weather")
+    if bool(weather["enabled"]) and str(weather["position"]).strip().lower() != "custom":
+        w, h = estimate_weather_size(int(weather["font_size"]), bool(weather["show_forecast"]))
+        estimates.append(WidgetEstimate(
+            widget_type=WidgetType.WEATHER,
+            position=str(weather["position"]),
+            monitor=str(weather["monitor"]),
+            enabled=True,
+            estimated_width=w,
+            estimated_height=h,
+        ))
+
+    media = _resolved_widget_section(settings, defaults, "media")
+    if bool(media["enabled"]) and str(media["position"]).strip().lower() != "custom":
+        w, h = estimate_media_size(int(media["font_size"]), int(media["artwork_size"]))
+        estimates.append(WidgetEstimate(
+            widget_type=WidgetType.MEDIA,
+            position=str(media["position"]),
+            monitor=str(media["monitor"]),
+            enabled=True,
+            estimated_width=w,
+            estimated_height=h,
+        ))
+
+    reddit = _resolved_widget_section(settings, defaults, "reddit")
+    if bool(reddit["enabled"]) and str(reddit["position"]).strip().lower() != "custom":
+        w, h = estimate_reddit_size(int(reddit["font_size"]), int(reddit["limit"]))
+        estimates.append(WidgetEstimate(
+            widget_type=WidgetType.REDDIT,
+            position=str(reddit["position"]),
+            monitor=str(reddit["monitor"]),
+            enabled=True,
+            estimated_width=w,
+            estimated_height=h,
+        ))
+
+    reddit2 = _resolved_widget_section(settings, defaults, "reddit2")
+    if bool(reddit2["enabled"]) and str(reddit2["position"]).strip().lower() != "custom":
+        item_count = clamp_list_capacity(
+            reddit2["limit"], default=int(defaults["reddit2"]["limit"])
+        )
+        w, h = estimate_reddit_size(int(reddit["font_size"]), item_count)
+        estimates.append(WidgetEstimate(
+            widget_type=WidgetType.REDDIT2,
+            position=str(reddit2["position"]),
+            monitor=str(reddit2["monitor"]),
+            enabled=True,
+            estimated_width=w,
+            estimated_height=h,
+        ))
+
+    gmail = _resolved_widget_section(settings, defaults, "gmail")
+    if bool(gmail["enabled"]) and str(gmail["position"]).strip().lower() != "custom":
+        item_count = clamp_list_capacity(
+            gmail["limit"], default=int(defaults["gmail"]["limit"])
+        )
+        width = max(200, min(1200, int(gmail["width"])))
+        width, h = estimate_gmail_size(int(gmail["font_size"]), item_count, width)
         estimates.append(WidgetEstimate(
             widget_type=WidgetType.GMAIL,
-            position=gmail.get('position', 'Top Left'),
-            monitor=str(gmail.get('monitor', 'ALL')),
+            position=str(gmail["position"]),
+            monitor=str(gmail["monitor"]),
             enabled=True,
             estimated_width=width,
             estimated_height=h,
@@ -564,54 +541,49 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
         "abandonment_issues": WidgetType.ABANDONMENT_ISSUES,
         "friend_pulse": WidgetType.FRIEND_PULSE,
     }
-    for key, widget_type in steam_type_map.items():
-        steam_card = settings.get(key, {})
-        if not isinstance(steam_card, dict):
+    for section, widget_type in steam_type_map.items():
+        steam_card = _resolved_widget_section(settings, defaults, section)
+        if not bool(steam_card["enabled"]):
             continue
-        if not steam_card.get("enabled", False):
-            continue
-        if str(steam_card.get("position", "")).strip().lower() == "custom":
+        if str(steam_card["position"]).strip().lower() == "custom":
             continue
         w, h = estimate_steam_card_size(
-            int(steam_card.get("font_size", 14)),
-            int(steam_card.get("preferred_width", 420)),
-            int(steam_card.get("preferred_height", 180)),
+            int(steam_card["font_size"]),
+            int(steam_card["preferred_width"]),
+            int(steam_card["preferred_height"]),
         )
         estimates.append(WidgetEstimate(
             widget_type=widget_type,
-            position=steam_card.get("position", "Top Right"),
-            monitor=str(steam_card.get("monitor", "ALL")),
+            position=str(steam_card["position"]),
+            monitor=str(steam_card["monitor"]),
             enabled=True,
             estimated_width=w,
             estimated_height=h,
         ))
-    
-    # Spotify visualizer reserves authored lane space relative to Media
-    # even though it is not independently stackable.
-    spotify_vis = settings.get('spotify_visualizer', {})
+
+    spotify_vis = _resolved_widget_section(settings, defaults, "spotify_visualizer")
     if (
-        media.get('enabled', False)
-        and str(media.get('position', '')).strip().lower() != "custom"
-        and spotify_vis.get('visualizers_enabled', True)
-        and spotify_vis.get('enabled', True)
-        and str(spotify_vis.get('position', '')).strip().lower() != "custom"
+        bool(media["enabled"])
+        and str(media["position"]).strip().lower() != "custom"
+        and bool(spotify_vis["visualizers_enabled"])
+        and bool(spotify_vis["enabled"])
+        and str(spotify_vis["position"]).strip().lower() != "custom"
     ):
-        media_font_size = media.get('font_size', 14)
-        artwork_size = media.get('artwork_size', 80)
-        media_width, media_height = estimate_media_size(media_font_size, artwork_size)
+        media_width, _media_height = estimate_media_size(
+            int(media["font_size"]), int(media["artwork_size"])
+        )
         vis_width, vis_height = estimate_spotify_vis_size(
-            spotify_vis,
-            media_width=media_width,
+            spotify_vis, media_width=media_width
         )
         estimates.append(WidgetEstimate(
             widget_type=WidgetType.SPOTIFY_VIS,
-            position=media.get('position', 'Bottom Right'),
-            monitor=str(media.get('monitor', 'ALL')),
+            position=str(media["position"]),
+            monitor=str(media["monitor"]),
             enabled=True,
             estimated_width=vis_width,
             estimated_height=vis_height,
         ))
-    
+
     return estimates
 
 
@@ -761,10 +733,12 @@ def predict_stacking_status(
 
 
 def get_position_status_for_widget(
-    settings: Dict,
+    settings: Mapping[str, Any],
     widget_type: WidgetType,
     position: str,
     monitor: str,
+    *,
+    defaults: Mapping[str, Any],
 ) -> Tuple[bool, str]:
     """Get stacking status for a specific widget configuration.
     
@@ -782,13 +756,11 @@ def get_position_status_for_widget(
     """
     if str(position or "").strip().lower() == "custom":
         return (True, "")
-    global_cfg = settings.get("global", {})
-    if not isinstance(global_cfg, dict):
-        global_cfg = {}
-    if not bool(global_cfg.get("stacking_enabled", False)):
+    global_cfg = _resolved_widget_section(settings, defaults, "global")
+    if not bool(global_cfg["stacking_enabled"]):
         return (True, "")
 
-    estimates = build_widget_estimates(settings)
+    estimates = build_widget_estimates(settings, defaults=defaults)
     
     # Determine the effective screen height for prediction
     # If this widget or any conflicting widget is on "ALL", use minimum height

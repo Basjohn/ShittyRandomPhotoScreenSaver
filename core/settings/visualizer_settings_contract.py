@@ -111,8 +111,17 @@ def normalize_spectrum_render_mode(value: Any, fallback: str = "bars") -> str:
     return _SPECTRUM_RENDER_MODE_ALIASES.get(normalized, fallback)
 
 
-def resolve_spectrum_render_mode(read_value: Callable[[str, Any], Any]) -> str:
-    """Resolve canonical Spectrum render mode from new or legacy keys."""
+def resolve_spectrum_render_mode(
+    read_value: Callable[[str, Any], Any],
+    *,
+    fallback: str = "bars",
+) -> str:
+    """Resolve Spectrum render mode from canonical or legacy input.
+
+    ``fallback`` is supplied by current product callers from canonical defaults.
+    The built-in value exists only for compatibility/migration callers that do
+    not have a current defaults authority in scope.
+    """
     explicit = read_value("spectrum_render_mode", None)
     if explicit is not None:
         return normalize_spectrum_render_mode(explicit)
@@ -121,11 +130,15 @@ def resolve_spectrum_render_mode(read_value: Callable[[str, Any], Any]) -> str:
     if legacy is not None:
         return "bars" if _coerce_bool(legacy) else "segment"
 
-    return "bars"
+    return normalize_spectrum_render_mode(fallback, "bars")
 
 
-def resolve_spectrum_unique_colors(read_value: Callable[[str, Any], Any]) -> bool:
-    """Resolve Spectrum unique-colour behavior from new or legacy keys."""
+def resolve_spectrum_unique_colors(
+    read_value: Callable[[str, Any], Any],
+    *,
+    fallback: bool = True,
+) -> bool:
+    """Resolve Spectrum unique-colour behavior from canonical or legacy input."""
     explicit = read_value("spectrum_unique_colors", None)
     if explicit is not None:
         return _coerce_bool(explicit)
@@ -138,7 +151,7 @@ def resolve_spectrum_unique_colors(read_value: Callable[[str, Any], Any]) -> boo
     if global_legacy is not None:
         return _coerce_bool(global_legacy)
 
-    return True
+    return bool(fallback)
 
 
 def resolve_visualizer_baselines(read_value: Callable[[str, Any], Any]) -> dict[str, Any]:

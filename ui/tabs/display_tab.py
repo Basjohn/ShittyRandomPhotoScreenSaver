@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
 
+from core.settings.default_contract import require_canonical_default
 from core.settings.settings_manager import SettingsManager
 from core.settings.models import InputSettings
 from core.logging.logger import get_logger
@@ -77,6 +78,11 @@ class DisplayTab(QWidget):
             self._loading = False
         logger.debug("[DISPLAY_TAB] Reloaded from settings")
     
+    def _canonical_default(self, key: str):
+        """Return this profile's sole persisted product default for *key*."""
+
+        return require_canonical_default(key, self._settings.get_application_name())
+
     def _setup_ui(self) -> None:
         """Build the Display tab and its pill-section navigation.
 
@@ -241,7 +247,7 @@ class DisplayTab(QWidget):
         )
         self.same_image_check = QCheckBox("Show Same Image on All Monitors")
         self.same_image_check.setProperty("circleIndicator", True)
-        self.same_image_check.setChecked(True)
+        self.same_image_check.setChecked(bool(self._canonical_default("display.same_image_all_monitors")))
         self.same_image_check.stateChanged.connect(self._save_settings)
         same_image_row.addWidget(self.same_image_check)
         same_image_row.addStretch()
@@ -281,7 +287,7 @@ class DisplayTab(QWidget):
         self.interval_spin.setSingleStep(1)
         self.interval_spin.setAccelerated(True)
         self.interval_spin.setSuffix("")
-        self.interval_spin.setValue(10)
+        self.interval_spin.setValue(int(self._canonical_default("timing.interval")))
         self.interval_spin.valueChanged.connect(self._save_settings)
         self.interval_spin.setFixedWidth(140)
         interval_row.addWidget(self.interval_spin)
@@ -296,7 +302,7 @@ class DisplayTab(QWidget):
         )
         self.shuffle_check = QCheckBox("Shuffle Images (Random Order)")
         self.shuffle_check.setProperty("circleIndicator", True)
-        self.shuffle_check.setChecked(True)
+        self.shuffle_check.setChecked(bool(self._canonical_default("queue.shuffle")))
         self.shuffle_check.stateChanged.connect(self._save_settings)
         shuffle_row.addWidget(self.shuffle_check)
         shuffle_row.addStretch()
@@ -316,7 +322,7 @@ class DisplayTab(QWidget):
             "Use Lanczos Scaling (Higher Quality, More CPU)"
         )
         self.lanczos_check.setProperty("circleIndicator", True)
-        self.lanczos_check.setChecked(True)
+        self.lanczos_check.setChecked(bool(self._canonical_default("display.use_lanczos")))
         self.lanczos_check.setToolTip(
             "Lanczos provides better image quality when scaling, especially for "
             "downscaling. Disable if experiencing performance issues during transitions."
@@ -335,7 +341,7 @@ class DisplayTab(QWidget):
             "Apply Sharpening Filter When Downscaling"
         )
         self.sharpen_check.setProperty("circleIndicator", True)
-        self.sharpen_check.setChecked(False)
+        self.sharpen_check.setChecked(bool(self._canonical_default("display.sharpen_downscale")))
         self.sharpen_check.stateChanged.connect(self._save_settings)
         sharpen_row.addWidget(self.sharpen_check)
         sharpen_row.addStretch()
@@ -357,7 +363,9 @@ class DisplayTab(QWidget):
             "Keeps the screensaver active during simple mouse movement or clicks "
             "so you can interact with widgets until you press Escape."
         )
-        self.interaction_mode_check.setChecked(False)
+        self.interaction_mode_check.setChecked(
+            bool(self._canonical_default("input.interaction_mode"))
+        )
         if self._is_mc_profile:
             self.interaction_mode_check.setEnabled(False)
             self.interaction_mode_check.setToolTip(
@@ -444,13 +452,18 @@ class DisplayTab(QWidget):
             Qt.Orientation.Horizontal
         )
         self.widget_glow_intensity_slider.setRange(0, 100)
-        self.widget_glow_intensity_slider.setValue(100)
+        widget_glow_intensity_default = int(
+            self._canonical_default("input.widget_glow_intensity")
+        )
+        self.widget_glow_intensity_slider.setValue(widget_glow_intensity_default)
         self.widget_glow_intensity_slider.setMinimumWidth(220)
         self.widget_glow_intensity_slider.setToolTip(
             "Scale the shared hover/click glow strength. 0% keeps the feature "
             "configured but visually transparent; 100% preserves full authored strength."
         )
-        self.widget_glow_intensity_label = create_inline_label("100%")
+        self.widget_glow_intensity_label = create_inline_label(
+            f"{widget_glow_intensity_default}%"
+        )
         self.widget_glow_intensity_label.setMinimumWidth(48)
         self.widget_glow_intensity_slider.valueChanged.connect(
             lambda value: self.widget_glow_intensity_label.setText(f"{value}%")
@@ -472,13 +485,18 @@ class DisplayTab(QWidget):
             Qt.Orientation.Horizontal
         )
         self.widget_glow_distance_slider.setRange(6, 48)
-        self.widget_glow_distance_slider.setValue(14)
+        widget_glow_distance_default = int(
+            self._canonical_default("input.widget_glow_distance")
+        )
+        self.widget_glow_distance_slider.setValue(widget_glow_distance_default)
         self.widget_glow_distance_slider.setMinimumWidth(220)
         self.widget_glow_distance_slider.setToolTip(
             "How far the hover/click halo travels outside the widget in pixels. "
             "Intensity controls opacity only; distance controls spread/softness."
         )
-        self.widget_glow_distance_label = create_inline_label("14 px")
+        self.widget_glow_distance_label = create_inline_label(
+            f"{widget_glow_distance_default} px"
+        )
         self.widget_glow_distance_label.setMinimumWidth(48)
         self.widget_glow_distance_slider.valueChanged.connect(
             lambda value: self.widget_glow_distance_label.setText(f"{value} px")
@@ -637,7 +655,7 @@ class DisplayTab(QWidget):
         
         try:
             # Monitor selection (new canonical: display.show_on_monitors)
-            raw_show_on = self._settings.get('display.show_on_monitors', 'ALL')
+            raw_show_on = self._settings.get('display.show_on_monitors')
 
             show_all = False
             selected_monitors: set[int] = set()
@@ -677,14 +695,14 @@ class DisplayTab(QWidget):
                         cb.setChecked(idx in selected_monitors)
             
             # Same image toggle
-            same_image = self._settings.get('display.same_image_all_monitors', False)
+            same_image = self._settings.get('display.same_image_all_monitors')
             # Convert to bool (settings may return string "true"/"false")
             if isinstance(same_image, str):
                 same_image = same_image.lower() == 'true'
             self.same_image_check.setChecked(same_image)
             
             # Display mode
-            mode = self._settings.get('display.mode', 'fill')
+            mode = self._settings.get('display.mode')
             if mode == 'fill':
                 self.mode_combo.setCurrentIndex(0)
             elif mode == 'fit':
@@ -692,30 +710,26 @@ class DisplayTab(QWidget):
             elif mode == 'shrink':
                 self.mode_combo.setCurrentIndex(2)
             
-            # Timing – use canonical default (45s) when key is missing.
-            interval = self._settings.get('timing.interval', 45)
+            # Timing – malformed/missing persisted state repairs through canonical defaults.
+            interval = self._settings.get('timing.interval')
             self.interval_spin.setValue(int(interval))
             
-            shuffle_raw = self._settings.get('queue.shuffle', True)
-            shuffle = SettingsManager.to_bool(shuffle_raw, True)
+            shuffle = self._settings.get_bool('queue.shuffle')
             self.shuffle_check.setChecked(shuffle)
             
             # Quality (Lanczos and sharpen)
-            lanczos_raw = self._settings.get('display.use_lanczos', True)
-            lanczos = SettingsManager.to_bool(lanczos_raw, True)
+            lanczos = self._settings.get_bool('display.use_lanczos')
             self.lanczos_check.setChecked(lanczos)
             
-            sharpen_raw = self._settings.get('display.sharpen_downscale', False)
-            sharpen = SettingsManager.to_bool(sharpen_raw, False)
+            sharpen = self._settings.get_bool('display.sharpen_downscale')
             self.sharpen_check.setChecked(sharpen)
 
             # Interaction Mode
-            interaction_mode_raw = self._settings.get('input.interaction_mode', False)
-            interaction_mode = True if self._is_mc_profile else SettingsManager.to_bool(interaction_mode_raw, False)
+            interaction_mode = self._settings.get_bool('input.interaction_mode')
             self.interaction_mode_check.setChecked(interaction_mode)
 
             # Cursor Halo Shape
-            halo_shape = str(self._settings.get('input.halo_shape', 'circle')).lower()
+            halo_shape = str(self._settings.get('input.halo_shape')).lower()
             shape_map = {
                 'circle': 0,
                 'ring': 1,
@@ -726,7 +740,9 @@ class DisplayTab(QWidget):
                 'cursor_dark': 6,
             }
             self.halo_shape_combo.blockSignals(True)
-            self.halo_shape_combo.setCurrentIndex(shape_map.get(halo_shape, 0))
+            default_halo_shape = str(self._canonical_default('input.halo_shape')).lower()
+            default_halo_index = shape_map[default_halo_shape]
+            self.halo_shape_combo.setCurrentIndex(shape_map.get(halo_shape, default_halo_index))
             self.halo_shape_combo.blockSignals(False)
 
             # Widget interaction glow
@@ -761,7 +777,7 @@ class DisplayTab(QWidget):
             self._update_widget_glow_detail_visibility()
 
             # Renderer backend — always OpenGL, normalize legacy values
-            backend_mode_raw = self._settings.get('display.render_backend_mode', 'opengl')
+            backend_mode_raw = self._settings.get('display.render_backend_mode')
             backend_mode = str(backend_mode_raw).lower()
             if backend_mode != 'opengl':
                 logger.info("[DISPLAY] Legacy backend '%s' detected; normalizing to OpenGL", backend_mode)
@@ -811,7 +827,9 @@ class DisplayTab(QWidget):
         # Display mode
         mode_index = self.mode_combo.currentIndex()
         mode_map = {0: 'fill', 1: 'fit', 2: 'shrink'}
-        self._settings.set('display.mode', mode_map.get(mode_index, 'fill'))
+        default_mode = str(self._canonical_default('display.mode'))
+        selected_mode = mode_map.get(mode_index, default_mode)
+        self._settings.set('display.mode', selected_mode)
         
         # Timing
         self._settings.set('timing.interval', self.interval_spin.value())
@@ -841,7 +859,11 @@ class DisplayTab(QWidget):
             'cursor_dark',
         ]
         halo_idx = self.halo_shape_combo.currentIndex()
-        self._settings.set('input.halo_shape', shape_names[halo_idx] if 0 <= halo_idx < len(shape_names) else 'circle')
+        default_halo_shape = str(self._canonical_default('input.halo_shape'))
+        self._settings.set(
+            'input.halo_shape',
+            shape_names[halo_idx] if 0 <= halo_idx < len(shape_names) else default_halo_shape,
+        )
 
         # Widget interaction glow
         self._settings.set(
@@ -879,7 +901,7 @@ class DisplayTab(QWidget):
         self.display_changed.emit()
 
         logger.info(
-            f"Saved display settings: mode={mode_map.get(mode_index, 'fill')}, "
+            f"Saved display settings: mode={selected_mode}, "
             f"lanczos={lanczos}, sharpen={sharpen}, "
             f"same_image={self.same_image_check.isChecked()}"
         )

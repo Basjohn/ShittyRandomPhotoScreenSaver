@@ -319,19 +319,19 @@ class SourcesTab(QWidget):
     def _load_sources(self) -> None:
         """Load sources from settings."""
         # Load folders using dot notation
-        folders = self._settings.get('sources.folders', [])
+        folders = self._settings.get('sources.folders')
         self.folder_list.clear()
         for folder in folders:
             self.folder_list.addItem(folder)
         
         # Load RSS feeds using dot notation
-        rss_feeds = self._settings.get('sources.rss_feeds', [])
+        rss_feeds = self._settings.get('sources.rss_feeds')
         self.rss_list.clear()
         for feed in rss_feeds:
             self.rss_list.addItem(feed)
         
         # Load and display usage ratio
-        local_ratio = self._settings.get('sources.local_ratio', 70)
+        local_ratio = self._settings.get('sources.local_ratio')
         try:
             local_ratio = int(local_ratio)
         except (ValueError, TypeError):
@@ -351,13 +351,13 @@ class SourcesTab(QWidget):
         self._update_ratio_control_state()
         
         # Load RSS save-to-disk settings with boolean normalization
-        rss_save_enabled = self._settings.get_bool('sources.rss_save_to_disk', False)
+        rss_save_enabled = self._settings.get_bool('sources.rss_save_to_disk')
 
         block = self.rss_save_to_disk.blockSignals(True)
         self.rss_save_to_disk.setChecked(rss_save_enabled)
         self.rss_save_to_disk.blockSignals(block)
         
-        rss_save_dir = self._settings.get('sources.rss_save_directory', '')
+        rss_save_dir = self._settings.get('sources.rss_save_directory')
         if rss_save_dir:
             self.rss_save_dir_input.setText(rss_save_dir)
         
@@ -386,7 +386,7 @@ class SourcesTab(QWidget):
         
         if folder:
             # Get current folders using dot notation
-            folders = self._settings.get('sources.folders', [])
+            folders = self._settings.get('sources.folders')
             
             if folder not in folders:
                 folders.append(folder)
@@ -413,7 +413,7 @@ class SourcesTab(QWidget):
         row = self.folder_list.currentRow()
 
         try:
-            folders = self._settings.get('sources.folders', [])
+            folders = self._settings.get('sources.folders')
             if not isinstance(folders, list):
                 folders = list(folders) if folders else []
 
@@ -462,7 +462,7 @@ class SourcesTab(QWidget):
                 return
 
         # Get current RSS feeds using dot notation
-        rss_feeds = self._settings.get('sources.rss_feeds', [])
+        rss_feeds = self._settings.get('sources.rss_feeds')
 
         if url not in rss_feeds:
             rss_feeds.append(url)
@@ -490,7 +490,7 @@ class SourcesTab(QWidget):
         row = self.rss_list.currentRow()
 
         try:
-            rss_feeds = self._settings.get('sources.rss_feeds', [])
+            rss_feeds = self._settings.get('sources.rss_feeds')
             if not isinstance(rss_feeds, list):
                 rss_feeds = list(rss_feeds) if rss_feeds else []
 
@@ -728,8 +728,8 @@ class SourcesTab(QWidget):
     
     def _update_ratio_control_state(self) -> None:
         """Update ratio control enabled state based on source availability."""
-        folders = self._settings.get('sources.folders', [])
-        rss_feeds = self._settings.get('sources.rss_feeds', [])
+        folders = self._settings.get('sources.folders')
+        rss_feeds = self._settings.get('sources.rss_feeds')
         
         has_folders = len(folders) > 0
         has_rss = len(rss_feeds) > 0
@@ -767,7 +767,7 @@ class SourcesTab(QWidget):
     
     def _save_ratio(self, local_ratio: int) -> None:
         """Save the local ratio setting."""
-        current = self._settings.get('sources.local_ratio', None)
+        current = self._settings.get('sources.local_ratio')
         try:
             current = int(current)
         except (TypeError, ValueError):

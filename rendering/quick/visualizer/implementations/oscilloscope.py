@@ -124,10 +124,10 @@ class QuickOscilloscopeRenderer:
         waveform = _padded(logical.common.waveform)
         previous_waveform = _padded(mode_state.previous_waveform)
         parameters = mode_state.parameters
-        rainbow_enabled = bool(parameter(parameters, "rainbow_enabled", False))
+        rainbow_enabled = bool(parameter(parameters, "rainbow_enabled"))
         rainbow_speed = max(
             0.01,
-            min(5.0, float(parameter(parameters, "rainbow_speed", 0.5))),
+            min(5.0, float(parameter(parameters, "rainbow_speed"))),
         )
         hue = (
             safe_hue(mode_state.animation_time * rainbow_speed * 0.1)
@@ -135,13 +135,13 @@ class QuickOscilloscopeRenderer:
             else 0.0
         )
         ghost_enabled = bool(
-            parameter(parameters, "osc_ghosting_enabled", False)
+            parameter(parameters, "osc_ghosting_enabled")
         )
         ghost_alpha = max(
             0.0,
             min(
                 1.0,
-                float(parameter(parameters, "osc_ghost_intensity", 0.4)),
+                float(parameter(parameters, "osc_ghost_intensity")),
             ),
         )
         if not ghost_enabled or not mode_state.previous_waveform:
@@ -185,33 +185,32 @@ class QuickOscilloscopeRenderer:
 
         gl.glUniform1i(
             uniforms["u_glow_enabled"],
-            1 if bool(parameter(parameters, "glow_enabled", True)) else 0,
+            1 if bool(parameter(parameters, "glow_enabled")) else 0,
         )
         gl.glUniform1f(
             uniforms["u_glow_intensity"],
-            max(0.0, float(parameter(parameters, "glow_intensity", 0.5))),
+            max(0.0, float(parameter(parameters, "glow_intensity"))),
         )
         gl.glUniform1f(
             uniforms["u_glow_size"],
-            max(0.1, min(3.0, float(parameter(parameters, "glow_size", 1.0)))),
+            max(0.1, min(3.0, float(parameter(parameters, "glow_size")))),
         )
         gl.glUniform1f(
             uniforms["u_glow_reactivity"],
             max(
                 0.0,
-                min(2.0, float(parameter(parameters, "glow_reactivity", 1.0))),
+                min(2.0, float(parameter(parameters, "glow_reactivity"))),
             ),
         )
         gl.glUniform4f(
             uniforms["u_glow_color"],
             *rgba(
-                parameter(parameters, "glow_color", None),
-                default=(0, 200, 255, 230),
+                parameter(parameters, "glow_color"),
             ),
         )
         gl.glUniform1i(
             uniforms["u_reactive_glow"],
-            1 if bool(parameter(parameters, "reactive_glow", True)) else 0,
+            1 if bool(parameter(parameters, "reactive_glow")) else 0,
         )
         gl.glUniform1f(
             uniforms["u_sensitivity"],
@@ -219,78 +218,54 @@ class QuickOscilloscopeRenderer:
                 0.5,
                 min(
                     10.0,
-                    float(parameter(parameters, "resolved_sensitivity", 3.0)),
+                    float(parameter(parameters, "resolved_sensitivity")),
                 ),
             ),
         )
         gl.glUniform1f(
             uniforms["u_smoothing"],
-            max(0.0, min(1.0, float(parameter(parameters, "line_smoothing", 0.7)))),
+            max(0.0, min(1.0, float(parameter(parameters, "line_smoothing")))),
         )
         gl.glUniform4f(
             uniforms["u_line_color"],
             *rgba(
-                parameter(parameters, "line_color", None),
-                default=(255, 255, 255, 255),
+                parameter(parameters, "line_color"),
             ),
         )
         gl.glUniform1i(
             uniforms["u_line_count"],
-            max(1, min(6, int(parameter(parameters, "line_count", 1)))),
+            max(1, min(6, int(parameter(parameters, "line_count")))),
         )
-        color_defaults = {
-            2: ((255, 120, 50, 230), (255, 120, 50, 180)),
-            3: ((50, 255, 120, 230), (50, 255, 120, 180)),
-            4: ((255, 0, 150, 230), (255, 0, 150, 180)),
-            5: ((0, 255, 200, 230), (0, 255, 200, 180)),
-            6: ((200, 100, 255, 230), (200, 100, 255, 180)),
-        }
-        for line_number, (line_default, glow_default) in color_defaults.items():
+        for line_number in range(2, 7):
             gl.glUniform4f(
                 uniforms[f"u_line{line_number}_color"],
-                *rgba(
-                    parameter(parameters, f"line{line_number}_color", None),
-                    default=line_default,
-                ),
+                *rgba(parameter(parameters, f"line{line_number}_color")),
             )
             gl.glUniform4f(
                 uniforms[f"u_line{line_number}_glow_color"],
-                *rgba(
-                    parameter(
-                        parameters,
-                        f"line{line_number}_glow_color",
-                        None,
-                    ),
-                    default=glow_default,
-                ),
+                *rgba(parameter(parameters, f"line{line_number}_glow_color")),
             )
             gl.glUniform1i(
                 uniforms[f"u_ghost_line{line_number}_enabled"],
                 1
-                if bool(
-                    parameter(
-                        parameters,
-                        f"ghost_line{line_number}_enabled",
-                        True,
-                    )
-                )
+                if bool(parameter(parameters, f"ghost_line{line_number}_enabled"))
                 else 0,
             )
 
         gl.glUniform1i(
             uniforms["u_osc_line_dim"],
-            1 if bool(parameter(parameters, "line_dim", False)) else 0,
+            1 if bool(parameter(parameters, "line_dim")) else 0,
         )
         gl.glUniform1f(
             uniforms["u_osc_line_offset_bias"],
             max(
                 0.0,
-                min(1.0, float(parameter(parameters, "line_offset_bias", 0.0))),
+                min(1.0, float(parameter(parameters, "line_offset_bias"))),
             ),
         )
         gl.glUniform1i(
             uniforms["u_osc_vertical_shift"],
-            max(-50, min(200, int(parameter(parameters, "osc_vertical_shift", 0)))),
+            max(-50, min(200, int(parameter(parameters, "osc_vertical_shift")))),
         )
         gl.glUniform1f(uniforms["u_rainbow_hue_offset"], hue)
 

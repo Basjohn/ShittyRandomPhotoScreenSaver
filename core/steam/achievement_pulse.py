@@ -9,18 +9,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from core.settings.default_contract import require_canonical_default
 from core.steam.models import SteamResult
 
 
 RECENT_SELECTIONS: tuple[str, ...] = ("most_recent", "recent_2", "recent_3", "recent_4", "recent_5")
+_ACHIEVEMENT_DEFAULTS = require_canonical_default("widgets.achievement_pulse")
+if not isinstance(_ACHIEVEMENT_DEFAULTS, Mapping):
+    raise TypeError("Canonical Achievement Pulse defaults must be a mapping")
 
 
 @dataclass(frozen=True)
 class AchievementPulseSelection:
     """Authored selection for the single game shown by Achievement Pulse."""
 
-    mode: str = "most_recent"
-    custom_appid: int | None = None
+    mode: str = str(_ACHIEVEMENT_DEFAULTS["selection_mode"])
+    custom_appid: int | None = _ACHIEVEMENT_DEFAULTS["custom_appid"]
 
 
 @dataclass(frozen=True)

@@ -9,16 +9,20 @@ import math
 from dataclasses import dataclass, replace
 from typing import Any, Mapping
 
+from core.settings.default_contract import require_canonical_default
 from core.steam.models import SteamResult, SteamResultStatus
 
 
 LAST_PLAYED_VERIFIED = "verified"
 LAST_PLAYED_UNKNOWN = "unknown"
-DEFAULT_MINIMUM_PLAYTIME_MINUTES = 15
-DEFAULT_PREFERRED_MAX_PLAYTIME_MINUTES = 2 * 60
-DEFAULT_PREFERRED_MAX_UNLOCKED_ACHIEVEMENTS = 2
-DEFAULT_MINIMUM_INACTIVITY_DAYS = 12 * 7
-DEFAULT_PREFERRED_MINIMUM_INACTIVITY_DAYS = 26 * 7
+_ABANDONMENT_DEFAULTS = require_canonical_default("widgets.abandonment_issues")
+if not isinstance(_ABANDONMENT_DEFAULTS, Mapping):
+    raise TypeError("Canonical Abandonment defaults must be a mapping")
+DEFAULT_MINIMUM_PLAYTIME_MINUTES = int(_ABANDONMENT_DEFAULTS["minimum_playtime_minutes"])
+DEFAULT_PREFERRED_MAX_PLAYTIME_MINUTES = int(_ABANDONMENT_DEFAULTS["preferred_max_playtime_hours"]) * 60
+DEFAULT_PREFERRED_MAX_UNLOCKED_ACHIEVEMENTS = int(_ABANDONMENT_DEFAULTS["preferred_max_unlocked_achievements"])
+DEFAULT_MINIMUM_INACTIVITY_DAYS = int(_ABANDONMENT_DEFAULTS["minimum_inactivity_weeks"]) * 7
+DEFAULT_PREFERRED_MINIMUM_INACTIVITY_DAYS = int(_ABANDONMENT_DEFAULTS["preferred_minimum_inactivity_weeks"]) * 7
 DEFAULT_EXPOSURE_COOLDOWN_DAYS = 7
 MINIMUM_REASONABLE_STEAM_TIMESTAMP = 946_684_800  # 2000-01-01 UTC
 MAXIMUM_FUTURE_SKEW_SECONDS = 24 * 60 * 60
@@ -28,14 +32,14 @@ MAXIMUM_FUTURE_SKEW_SECONDS = 24 * 60 * 60
 class AbandonmentSelection:
     """Persisted, non-secret selection policy for Abandonment Issues."""
 
-    mode: str = "smart_rotation"
-    pinned_appid: int | None = None
+    mode: str = str(_ABANDONMENT_DEFAULTS["selection_mode"])
+    pinned_appid: int | None = _ABANDONMENT_DEFAULTS["pinned_appid"]
     minimum_playtime_minutes: int = DEFAULT_MINIMUM_PLAYTIME_MINUTES
     preferred_max_playtime_minutes: int = DEFAULT_PREFERRED_MAX_PLAYTIME_MINUTES
     preferred_max_unlocked_achievements: int = DEFAULT_PREFERRED_MAX_UNLOCKED_ACHIEVEMENTS
     minimum_inactivity_days: int = DEFAULT_MINIMUM_INACTIVITY_DAYS
     preferred_minimum_inactivity_days: int = DEFAULT_PREFERRED_MINIMUM_INACTIVITY_DAYS
-    never_show_appids: tuple[int, ...] = ()
+    never_show_appids: tuple[int, ...] = tuple(_ABANDONMENT_DEFAULTS["never_show_appids"])
 
 
 @dataclass(frozen=True)

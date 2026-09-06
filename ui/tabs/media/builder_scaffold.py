@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget
 
+from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
 from ui.tabs.media.technical_controls import build_per_mode_technical_group
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import add_swatch_label
@@ -91,7 +92,6 @@ def build_collapsible_bucket(
     bucket_key: str,
     title: str,
     helper_text: str,
-    default_expanded: bool = False,
 ) -> tuple[QWidget, QVBoxLayout]:
     """Create a persisted collapsible bucket for a visualizer mode."""
     host = QWidget()
@@ -106,13 +106,7 @@ def build_collapsible_bucket(
     toggle_row.setContentsMargins(0, 0, 0, 0)
     toggle_row.setSpacing(8)
 
-    getter = getattr(tab, "get_visualizer_bucket_state", None)
-    expanded = default_expanded
-    if callable(getter):
-        try:
-            expanded = bool(getter(mode_key, bucket_key, default_expanded))
-        except Exception:
-            expanded = default_expanded
+    expanded = bool(tab.get_visualizer_bucket_state(mode_key, bucket_key))
 
     toggle = QToolButton()
     toggle.setText(title)
@@ -202,13 +196,7 @@ def build_mode_scaffold(
     toggle = QToolButton()
     toggle.setText("Advanced")
     toggle.setCheckable(True)
-    default_expanded = False
-    getter = getattr(tab, "get_visualizer_adv_state", None)
-    if callable(getter):
-        try:
-            default_expanded = bool(getter(mode_key))
-        except Exception:
-            default_expanded = False
+    default_expanded = bool(tab.get_visualizer_adv_state(mode_key))
     toggle.setChecked(default_expanded)
     toggle.setArrowType(Qt.DownArrow)
     toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -254,7 +242,11 @@ def build_mode_scaffold(
     preset_slider.advanced_toggled.connect(_handle_preset_visibility)
     _handle_preset_visibility(True)
 
-    technical_host = build_per_mode_technical_group(tab, layout, mode_key)
+    if get_visualizer_mode_descriptor(mode_key).technical_controls:
+        technical_host = build_per_mode_technical_group(tab, layout, mode_key)
+    else:
+        technical_host = QWidget(container)
+        technical_host.setVisible(False)
     preset_slider.set_technical_container(technical_host)
 
     parent_layout.addWidget(container)

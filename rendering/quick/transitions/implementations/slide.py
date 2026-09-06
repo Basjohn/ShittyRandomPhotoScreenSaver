@@ -197,7 +197,7 @@ class QuickSlideRenderer:
         progress = float(frame.sample.eased_progress)
         direction = _slide_direction_vector(frame.run.request.direction)
         motion_style = _slide_motion_style(
-            frame.run.request.parameter_dict().get("motion_style", "Linear")
+            frame.run.request.parameter_dict()["motion_style"]
         )
 
         gl.glUseProgram(self._program)

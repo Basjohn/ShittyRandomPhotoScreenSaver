@@ -29,6 +29,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Optional, Protocol, runtime_checkable
 
 from core.logging.logger import get_logger
+from core.settings.default_contract import require_canonical_default
 from rendering.widget_descriptors import widget_route_admits_screen
 
 from .host import OrdinaryWidgetPresentationHost, OverlayWidgetGeometry
@@ -58,24 +59,17 @@ def _enabled_from_candidates(
 ) -> tuple[str, ...]:
     """Filter explicit candidate instance ids by canonical per-instance enabled.
 
-    The default when an instance has no explicit ``enabled`` is the canonical
-    default for that id, falling back to enabled only for the first candidate
-    (the base instance) so unconfigured secondary instances stay off.
+    Missing instance state resolves only through the canonical Widget default
+    for that id; adapter ordering is never allowed to imply product behavior.
     """
 
-    from core.settings.defaults import get_default_settings
-
-    defaults = get_default_settings().get("widgets", {})
     enabled: list[str] = []
-    for index, widget_id in enumerate(candidate_ids):
+    for widget_id in candidate_ids:
         values = widgets_config.get(widget_id, {})
         if not isinstance(values, Mapping):
             values = {}
-        default_values = defaults.get(widget_id, {})
         default_enabled = bool(
-            default_values.get("enabled", index == 0)
-            if isinstance(default_values, Mapping)
-            else index == 0
+            require_canonical_default(f"widgets.{widget_id}.enabled")
         )
         if _enabled_flag(values.get("enabled", default_enabled), default_enabled):
             enabled.append(widget_id)

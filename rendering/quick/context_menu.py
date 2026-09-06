@@ -13,6 +13,7 @@ from core.settings.shadow_direction import (
     resolve_directional_extensions,
     resolve_signed_offset,
 )
+from rendering.quick.shadow_snapshot import QuickShadowSnapshot
 from ui.settings_theme_spec import Rgba
 from ui.widget_theme_active import get_active_widget_theme
 from ui.widget_visual_roles import resolve_widget_visual_color
@@ -85,22 +86,21 @@ def project_quick_context_menu_shadow(
     edge never loses coverage.
     """
 
-    direction = shadow_values.get("direction", "SE")
-    frame_extra = _bounded_float(
-        shadow_values.get("frame_extra_offset"), 0.0, 0.0, 40.0
+    shadow = QuickShadowSnapshot.from_mapping(shadow_values)
+    rgba = list(shadow.color)
+    rgba[3] = max(
+        0, min(255, int(round(rgba[3] * shadow.frame_opacity)))
     )
-    frame_opacity = _bounded_float(
-        shadow_values.get("frame_opacity"), 0.77, 0.0, 1.0
+    offset_x, offset_y = resolve_signed_offset(
+        shadow.direction, *_CONTEXT_MENU_SHADOW_BASE
     )
-    blur = _bounded_float(shadow_values.get("blur_radius"), 18.0, 0.0, 128.0)
-    rgba = list(_shadow_rgba(shadow_values.get("color", (0, 0, 0, 255))))
-    rgba[3] = max(0, min(255, int(round(rgba[3] * frame_opacity))))
-    offset_x, offset_y = resolve_signed_offset(direction, *_CONTEXT_MENU_SHADOW_BASE)
-    left, top, right, bottom = resolve_directional_extensions(direction, frame_extra)
+    left, top, right, bottom = resolve_directional_extensions(
+        shadow.direction, shadow.frame_extra_offset
+    )
     return QuickContextMenuShadowStyle(
-        enabled=_as_bool(shadow_values.get("enabled"), True),
+        enabled=shadow.enabled,
         color=tuple(rgba),
-        blur=blur,
+        blur=shadow.blur_radius,
         offset_x=float(offset_x),
         offset_y=float(offset_y),
         extend_left=float(left),

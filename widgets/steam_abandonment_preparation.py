@@ -14,10 +14,16 @@ from typing import Any, Mapping
 from PySide6.QtGui import QImage
 
 from core.logging.logger import get_logger
+from core.settings.default_contract import require_canonical_default
 from core.steam.abandonment_issues import AbandonmentSelection
 
 
 logger = get_logger(__name__)
+
+_ABANDONMENT_DEFAULTS = require_canonical_default("widgets.abandonment_issues")
+_STEAM_DEFAULTS = require_canonical_default("widgets.steam")
+if not isinstance(_ABANDONMENT_DEFAULTS, Mapping) or not isinstance(_STEAM_DEFAULTS, Mapping):
+    raise TypeError("Canonical Steam/Abandonment defaults must be mappings")
 
 
 @dataclass(frozen=True)
@@ -26,13 +32,13 @@ class AbandonmentRuntimeConfig:
 
     selection: AbandonmentSelection = field(default_factory=AbandonmentSelection)
     field_visibility: Mapping[str, bool] = field(default_factory=dict)
-    show_artwork: bool = True
-    artwork_shape: str = "portrait"
-    guilt_desaturater: bool = False
-    guilt_desaturation_strength: int = 55
-    refresh_minutes: int = 10
-    show_connection_info_icon: bool = True
-    show_rediscovery_message: bool = True
+    show_artwork: bool = bool(_ABANDONMENT_DEFAULTS["show_artwork"])
+    artwork_shape: str = str(_ABANDONMENT_DEFAULTS["artwork_shape"])
+    guilt_desaturater: bool = bool(_ABANDONMENT_DEFAULTS["guilt_desaturater"])
+    guilt_desaturation_strength: int = int(_ABANDONMENT_DEFAULTS["guilt_desaturation_strength"])
+    refresh_minutes: int = int(_STEAM_DEFAULTS["refresh_minutes"])
+    show_connection_info_icon: bool = bool(_STEAM_DEFAULTS["show_connection_info_icon"])
+    show_rediscovery_message: bool = bool(_ABANDONMENT_DEFAULTS["show_rediscovery_message"])
 
 
 @dataclass(frozen=True)

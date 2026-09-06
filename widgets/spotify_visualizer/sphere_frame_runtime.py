@@ -37,10 +37,10 @@ def sphere_size_pulse_target(
 ) -> float:
     """Resolve the configure-owned whole-body growth target for one logical step."""
 
-    response = max(0.0, min(3.0, float(parameters.get("sphere_size_response", 1.5))))
+    response = max(0.0, min(3.0, float(parameters["sphere_size_response"])))
     if response <= 0.0:
         return 0.0
-    curve = max(0.2, min(2.0, float(parameters.get("sphere_energy_curve", 0.60))))
+    curve = max(0.2, min(2.0, float(parameters["sphere_energy_curve"])))
     drive = max(
         float(energy.overall) * 0.25,
         float(energy.bass) * 0.35,

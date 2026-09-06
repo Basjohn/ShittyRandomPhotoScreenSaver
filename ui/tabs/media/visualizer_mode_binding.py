@@ -26,7 +26,7 @@ def load_visualizer_mode_selection(tab, spotify_vis_config: Mapping[str, Any] | 
     """
     fallback = get_visualizer_mode_fallback()
     if isinstance(spotify_vis_config, Mapping) and hasattr(tab, "_config_str"):
-        mode_id = tab._config_str("spotify_visualizer", spotify_vis_config, "mode", fallback)
+        mode_id = tab._config_str("spotify_visualizer", spotify_vis_config, "mode")
     else:
         mode_id = fallback
     tab._active_visualizer_mode_id = mode_id or fallback
@@ -74,24 +74,36 @@ def collect_visualizer_preset_indices(tab, spotify_vis_config: dict[str, Any]) -
 def load_visualizer_rainbow_state(tab, spotify_vis_config: Mapping[str, Any] | None) -> None:
     """Load per-mode rainbow state from config into the active visualizer controls."""
     config = spotify_vis_config if isinstance(spotify_vis_config, Mapping) else {}
-    global_enabled = False
-    global_speed = 50
-    if hasattr(tab, "_config_bool"):
-        global_enabled = tab._config_bool("spotify_visualizer", config, "rainbow_enabled", False)
-    if hasattr(tab, "_config_float"):
-        global_speed = int(tab._config_float("spotify_visualizer", config, "rainbow_speed", 0.5) * 100)
+    global_enabled = tab._config_bool("spotify_visualizer", config, "rainbow_enabled")
+    global_speed = int(round(
+        tab._config_float("spotify_visualizer", config, "rainbow_speed") * 100.0
+    ))
 
     rainbow_cache = {}
     for mode_id in VISUALIZER_MODE_IDS:
-        mode_enabled = config.get(f"{mode_id}_rainbow_enabled", None)
-        mode_speed = config.get(f"{mode_id}_rainbow_speed", None)
+        enabled_key = f"{mode_id}_rainbow_enabled"
+        speed_key = f"{mode_id}_rainbow_speed"
+        mode_enabled = config.get(enabled_key, None)
+        mode_speed = config.get(speed_key, None)
         enabled = bool(mode_enabled) if mode_enabled is not None else global_enabled
-        speed = int(float(mode_speed) * 100) if mode_speed is not None else global_speed
+        if mode_speed is None:
+            speed = global_speed
+        else:
+            try:
+                speed = int(round(float(mode_speed) * 100.0))
+            except (TypeError, ValueError, OverflowError):
+                speed = int(round(tab._default_float("spotify_visualizer", speed_key) * 100.0))
         rainbow_cache[mode_id] = (enabled, max(1, min(100, speed)))
 
     tab._rainbow_per_mode = rainbow_cache
     current_mode = collect_visualizer_mode_selection(tab)
-    current_enabled, current_speed = rainbow_cache.get(current_mode, (False, 50))
+    current_enabled, current_speed = rainbow_cache.get(
+        current_mode,
+        (
+            tab._default_bool("spotify_visualizer", f"{current_mode}_rainbow_enabled"),
+            int(round(tab._default_float("spotify_visualizer", f"{current_mode}_rainbow_speed") * 100.0)),
+        ),
+    )
 
     if hasattr(tab, "rainbow_enabled"):
         tab.rainbow_enabled.setChecked(current_enabled)
@@ -115,6 +127,12 @@ def collect_visualizer_rainbow_state(tab, spotify_vis_config: dict[str, Any]) ->
     tab._rainbow_per_mode = rainbow_cache
 
     for mode_id in VISUALIZER_MODE_IDS:
-        enabled, speed = rainbow_cache.get(mode_id, (False, 50))
+        default_enabled = tab._default_bool(
+            "spotify_visualizer", f"{mode_id}_rainbow_enabled"
+        )
+        default_speed = int(round(
+            tab._default_float("spotify_visualizer", f"{mode_id}_rainbow_speed") * 100.0
+        ))
+        enabled, speed = rainbow_cache.get(mode_id, (default_enabled, default_speed))
         spotify_vis_config[f"{mode_id}_rainbow_enabled"] = enabled
         spotify_vis_config[f"{mode_id}_rainbow_speed"] = speed / 100.0

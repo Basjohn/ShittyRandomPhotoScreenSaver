@@ -17,10 +17,12 @@ from typing import Any
 from PySide6.QtCore import QObject, Property, Signal
 from PySide6.QtGui import QColor
 
+from core.settings.default_contract import require_canonical_default
 from core.settings.shadow_direction import (
     resolve_directional_extensions,
     resolve_signed_offset,
 )
+from rendering.quick.shadow_snapshot import QuickShadowSnapshot
 from widgets.clock_ticker import GlobalClockTicker, get_global_clock_ticker
 
 from .theme_projection import (
@@ -126,28 +128,28 @@ def normalize_clock_display_mode(value: object) -> str:
 class ClockPresentationConfig:
     """Resolved presentation inputs for one logical Clock instance."""
 
-    widget_id: str = "clock"
-    time_format: str = "12h"
-    show_seconds: bool = True
-    timezone_name: str = "local"
-    show_timezone: bool = False
-    show_day_of_week: bool = False
-    show_date: bool = False
-    show_separator: bool = False
-    separator_thickness: float = 2.0
-    calendar_layout: str = "shared_line"
-    calendar_font_size: int = 20
-    font_family: str = "Inter"
-    font_size: int = 48
-    text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    show_background: bool = False
-    background_color: tuple[int, int, int, int] = (35, 35, 35, 255)
-    background_opacity: float = 0.3
-    border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
-    border_opacity: float = 1.0
-    display_mode: str = "digital"
-    show_numerals: bool = True
-    analog_face_shadow: bool = True
+    widget_id: str
+    time_format: str
+    show_seconds: bool
+    timezone_name: str
+    show_timezone: bool
+    show_day_of_week: bool
+    show_date: bool
+    show_separator: bool
+    separator_thickness: float
+    calendar_layout: str
+    calendar_font_size: int
+    font_family: str
+    font_size: int
+    text_color: tuple[int, int, int, int]
+    show_background: bool
+    background_color: tuple[int, int, int, int]
+    background_opacity: float
+    border_color: tuple[int, int, int, int]
+    border_opacity: float
+    display_mode: str
+    show_numerals: bool
+    analog_face_shadow: bool
 
     @classmethod
     def from_mapping(
@@ -155,42 +157,77 @@ class ClockPresentationConfig:
         widget_id: str,
         values: Mapping[str, object],
     ) -> "ClockPresentationConfig":
-        """Normalize an already-resolved Clock mapping into explicit state."""
+        """Normalize resolved Clock state using canonical repair values only."""
 
-        time_format = "24h" if str(values.get("format", "12h")).lower() == "24h" else "12h"
+        normalized_id = str(widget_id or "clock")
+        if normalized_id not in {"clock", "clock2", "clock3"}:
+            raise ValueError(f"unsupported Clock widget id: {normalized_id}")
+        canonical = require_canonical_default(f"widgets.{normalized_id}")
+        base_canonical = require_canonical_default("widgets.clock")
+        if not isinstance(canonical, Mapping) or not isinstance(base_canonical, Mapping):
+            raise TypeError("Canonical Clock defaults must be mappings")
+
+        def resolved(key: str) -> object:
+            if key in values:
+                return values[key]
+            if key in canonical:
+                return canonical[key]
+            if key in base_canonical:
+                return base_canonical[key]
+            raise KeyError(f"Canonical Clock defaults are missing {key!r}")
+
+        default_format = str(canonical.get("format", base_canonical["format"]))
+        time_format = "24h" if str(resolved("format")).lower() == "24h" else default_format
+        default_calendar_layout = str(base_canonical["calendar_layout"])
         calendar_layout = (
             "two_lines"
-            if str(values.get("calendar_layout", "shared_line")).lower() == "two_lines"
-            else "shared_line"
+            if str(resolved("calendar_layout")).lower() == "two_lines"
+            else default_calendar_layout
+        )
+        default_display_mode = normalize_clock_display_mode(
+            canonical.get("display_mode", base_canonical["display_mode"])
+        )
+        raw_display_mode = str(resolved("display_mode") or "").strip().lower()
+        display_mode = (
+            raw_display_mode
+            if raw_display_mode in {"analog", "digital"}
+            else default_display_mode
         )
         return cls(
-            widget_id=str(widget_id or "clock"),
+            widget_id=normalized_id,
             time_format=time_format,
-            show_seconds=_as_bool(values.get("show_seconds"), True),
-            timezone_name=str(values.get("timezone", "local") or "local"),
-            show_timezone=_as_bool(values.get("show_timezone"), False),
-            show_day_of_week=_as_bool(values.get("show_day_of_week"), False),
-            show_date=_as_bool(values.get("show_date"), False),
-            show_separator=_as_bool(
-                values.get("show_separator", values.get("show_digital_separator")),
-                False,
-            ),
+            show_seconds=_as_bool(resolved("show_seconds"), bool(canonical.get("show_seconds", base_canonical["show_seconds"]))),
+            timezone_name=str(resolved("timezone") or canonical.get("timezone", base_canonical["timezone"])),
+            show_timezone=_as_bool(resolved("show_timezone"), bool(canonical.get("show_timezone", base_canonical["show_timezone"]))),
+            show_day_of_week=_as_bool(resolved("show_day_of_week"), bool(base_canonical["show_day_of_week"])),
+            show_date=_as_bool(resolved("show_date"), bool(base_canonical["show_date"])),
+            show_separator=_as_bool(resolved("show_separator"), bool(base_canonical["show_separator"])),
             separator_thickness=_bounded_float(
-                values.get("separator_thickness"), 2.0, 1.0, 8.0
+                resolved("separator_thickness"), float(base_canonical["separator_thickness"]), 1.0, 8.0
             ),
             calendar_layout=calendar_layout,
-            calendar_font_size=_bounded_int(values.get("calendar_font_size"), 20, 8, 256),
-            font_family=str(values.get("font_family", "Inter") or "Inter"),
-            font_size=_bounded_int(values.get("font_size"), 48, 8, 512),
-            text_color=_rgba(values.get("color"), (255, 255, 255, 230)),
-            show_background=_as_bool(values.get("show_background"), False),
-            background_color=_rgba(values.get("bg_color"), (35, 35, 35, 255)),
-            background_opacity=_bounded_float(values.get("bg_opacity"), 0.3, 0.0, 1.0),
-            border_color=_rgba(values.get("border_color"), (255, 255, 255, 255)),
-            border_opacity=_bounded_float(values.get("border_opacity"), 1.0, 0.0, 1.0),
-            display_mode=normalize_clock_display_mode(values.get("display_mode")),
-            show_numerals=_as_bool(values.get("show_numerals"), True),
-            analog_face_shadow=_as_bool(values.get("analog_face_shadow"), True),
+            calendar_font_size=_bounded_int(
+                resolved("calendar_font_size"), int(base_canonical["calendar_font_size"]), 8, 256
+            ),
+            font_family=str(resolved("font_family") or canonical.get("font_family", base_canonical["font_family"])),
+            font_size=_bounded_int(
+                resolved("font_size"), int(canonical.get("font_size", base_canonical["font_size"])), 8, 512
+            ),
+            text_color=_rgba(
+                resolved("color"), tuple(canonical.get("color", base_canonical["color"]))
+            ),
+            show_background=_as_bool(resolved("show_background"), bool(base_canonical["show_background"])),
+            background_color=_rgba(resolved("bg_color"), tuple(base_canonical["bg_color"])),
+            background_opacity=_bounded_float(
+                resolved("bg_opacity"), float(base_canonical["bg_opacity"]), 0.0, 1.0
+            ),
+            border_color=_rgba(resolved("border_color"), tuple(base_canonical["border_color"])),
+            border_opacity=_bounded_float(
+                resolved("border_opacity"), float(base_canonical["border_opacity"]), 0.0, 1.0
+            ),
+            display_mode=display_mode,
+            show_numerals=_as_bool(resolved("show_numerals"), bool(canonical.get("show_numerals", base_canonical["show_numerals"]))),
+            analog_face_shadow=_as_bool(resolved("analog_face_shadow"), bool(base_canonical["analog_face_shadow"])),
         )
 
     @classmethod
@@ -213,27 +250,24 @@ class ClockPresentationConfig:
         if normalized_id not in {"clock", "clock2", "clock3"}:
             raise ValueError(f"unsupported Clock widget id: {normalized_id}")
 
-        from core.settings.defaults import get_default_settings
-
-        defaults = get_default_settings().get("widgets", {})
         values = widgets.get(normalized_id, {})
         base_values = widgets.get("clock", {})
-        canonical = defaults.get(normalized_id, {})
-        base_canonical = defaults.get("clock", {})
+        canonical = require_canonical_default(f"widgets.{normalized_id}")
+        base_canonical = require_canonical_default("widgets.clock")
         if not isinstance(values, Mapping):
             values = {}
         if not isinstance(base_values, Mapping):
             base_values = {}
-        if not isinstance(canonical, Mapping):
-            canonical = {}
-        if not isinstance(base_canonical, Mapping):
-            base_canonical = {}
+        if not isinstance(canonical, Mapping) or not isinstance(base_canonical, Mapping):
+            raise TypeError("Canonical Clock defaults must be mappings")
 
-        def inherited(key: str, fallback: object = None) -> object:
-            canonical_value = canonical.get(
-                key,
-                base_canonical.get(key, fallback),
-            )
+        def inherited(key: str) -> object:
+            if key in canonical:
+                canonical_value = canonical[key]
+            elif key in base_canonical:
+                canonical_value = base_canonical[key]
+            else:
+                raise KeyError(f"Canonical Clock defaults are missing {key!r}")
             if normalized_id == "clock":
                 return values.get(key, canonical_value)
             if key in base_values:
@@ -273,17 +307,17 @@ class ClockPresentationConfig:
             if normalized_id == "clock":
                 projected["show_separator"] = values.get(
                     "show_digital_separator",
-                    base_canonical.get("show_separator", base_canonical.get("show_digital_separator", False)),
+                    base_canonical["show_separator"],
                 )
             else:
                 projected["show_separator"] = base_values.get(
                     "show_digital_separator",
                     values.get(
                         "show_digital_separator",
-                        base_canonical.get("show_separator", base_canonical.get("show_digital_separator", False)),
+                        base_canonical["show_separator"],
                     ),
                 )
-        projected["timezone"] = values.get("timezone", "local")
+        projected["timezone"] = values.get("timezone", canonical["timezone"])
 
         overrides = values.get("display_mode_overrides", {})
         if display_signature and isinstance(overrides, Mapping):
@@ -350,41 +384,31 @@ class ClockPresentationStyle:
     ) -> "ClockPresentationStyle":
         """Resolve canonical settings into signed retained presentation values."""
 
-        direction = shadow_values.get("direction", "SE")
-        frame_extra = _bounded_float(
-            shadow_values.get("frame_extra_offset"), 0.0, 0.0, 40.0
+        shadow = QuickShadowSnapshot.from_mapping(shadow_values)
+        card_offset = resolve_signed_offset(shadow.direction, *ORDINARY_CARD_SHADOW_BASE)
+        card_extensions = resolve_directional_extensions(
+            shadow.direction, shadow.frame_extra_offset
         )
-        text_extra = _bounded_float(
-            shadow_values.get("text_extra_offset"), 0.0, 0.0, 40.0
-        )
-        card_offset = resolve_signed_offset(direction, *ORDINARY_CARD_SHADOW_BASE)
-        card_extensions = resolve_directional_extensions(direction, frame_extra)
         text_offset = resolve_signed_offset(
-            direction,
-            ORDINARY_TEXT_SHADOW_BASE[0] + text_extra,
-            ORDINARY_TEXT_SHADOW_BASE[1] + text_extra,
+            shadow.direction,
+            ORDINARY_TEXT_SHADOW_BASE[0] + shadow.text_extra_offset,
+            ORDINARY_TEXT_SHADOW_BASE[1] + shadow.text_extra_offset,
         )
-        ring_offset = resolve_signed_offset(direction, *_ANALOG_RING_SHADOW_BASE)
+        ring_offset = resolve_signed_offset(shadow.direction, *_ANALOG_RING_SHADOW_BASE)
         numeral_drop = 3.0 if config.show_background else 2.0
         numeral_main_offset = resolve_signed_offset(
-            direction, numeral_drop, numeral_drop
+            shadow.direction, numeral_drop, numeral_drop
         )
         numeral_contact_offset = resolve_signed_offset(
-            direction, *_ANALOG_NUMERAL_CONTACT_BASE
+            shadow.direction, *_ANALOG_NUMERAL_CONTACT_BASE
         )
-        hand_offset = resolve_signed_offset(direction, *_ANALOG_HAND_SHADOW_BASE)
+        hand_offset = resolve_signed_offset(shadow.direction, *_ANALOG_HAND_SHADOW_BASE)
 
-        shadow_rgba = _rgba(shadow_values.get("color"), (0, 0, 0, 255))
-        frame_opacity = _bounded_float(
-            shadow_values.get("frame_opacity"), 0.77, 0.0, 1.0
-        )
-        text_opacity = _bounded_float(
-            shadow_values.get("text_opacity"), 0.33, 0.0, 1.0
-        )
-        frame_shadow_enabled = _as_bool(shadow_values.get("enabled"), True)
-        text_shadow_enabled = _as_bool(
-            shadow_values.get("text_enabled"), True
-        )
+        shadow_rgba = shadow.color
+        frame_opacity = shadow.frame_opacity
+        text_opacity = shadow.text_opacity
+        frame_shadow_enabled = shadow.enabled
+        text_shadow_enabled = shadow.text_enabled
 
         return cls(
             card_style=OverlayCardStyle(
@@ -402,9 +426,7 @@ class ClockPresentationStyle:
                     config.show_background and frame_shadow_enabled
                 ),
                 shadow_color=_with_alpha(shadow_rgba, frame_opacity),
-                shadow_blur=_bounded_float(
-                    shadow_values.get("blur_radius"), 18.0, 0.0, 80.0
-                ),
+                shadow_blur=min(80.0, shadow.blur_radius),
                 shadow_offset_x=card_offset[0],
                 shadow_offset_y=card_offset[1],
                 shadow_spread=0.0,

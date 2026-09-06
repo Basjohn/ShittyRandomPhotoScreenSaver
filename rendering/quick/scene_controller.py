@@ -1486,45 +1486,37 @@ class QuickSceneController(QObject):
         )
         root.setProperty(
             "cardBackgroundColor",
-            self._color_from_style(
-                style.get("background_color", (16, 16, 16, 179))
-            ),
+            self._color_from_style(style["background_color"]),
         )
         root.setProperty(
             "cardBorderColor",
-            self._color_from_style(
-                style.get("border_color", (255, 255, 255, 230))
-            ),
+            self._color_from_style(style["border_color"]),
         )
         root.setProperty("cardBorderWidth", presentation.border_width)
         root.setProperty(
             "cardCornerRadius",
-            float(style.get("corner_radius", 0.0)),
+            float(style["corner_radius"]),
         )
         root.setProperty(
             "cardShadowEnabled",
-            bool(style.get("shadow_enabled", False)),
+            bool(style["shadow_enabled"]),
         )
         root.setProperty(
             "cardShadowColor",
-            self._color_from_style(
-                style.get("shadow_color", (0, 0, 0, 150))
-            ),
+            self._color_from_style(style["shadow_color"]),
         )
         root.setProperty(
             "cardShadowBlur",
-            float(style.get("shadow_blur", 0.0)),
+            float(style["shadow_blur"]),
         )
-        shadow_offset = style.get("shadow_offset", (0.0, 0.0))
+        shadow_offset = style["shadow_offset"]
         root.setProperty("cardShadowOffsetX", float(shadow_offset[0]))
         root.setProperty("cardShadowOffsetY", float(shadow_offset[1]))
         root.setProperty(
             "cardShadowSpread",
-            float(style.get("shadow_spread", 0.0)),
+            float(style["shadow_spread"]),
         )
-        shadow_extensions = style.get(
-            "shadow_extensions", (0.0, 0.0, 0.0, 0.0)
-        )
+        shadow_extensions = style["shadow_extensions"]
         root.setProperty("cardShadowExtendLeft", float(shadow_extensions[0]))
         root.setProperty("cardShadowExtendTop", float(shadow_extensions[1]))
         root.setProperty("cardShadowExtendRight", float(shadow_extensions[2]))

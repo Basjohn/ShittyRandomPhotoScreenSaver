@@ -1,7 +1,15 @@
 # Current Plan — Migration Closeout Authority
 
-Last updated: 2026-09-05
+Last updated: 2026-09-06
 Outside of Codex Work Began: `886e6fa419ff130ff2a9aedf5091ae6162d1e958`
+
+## Defaults sanitization continuation — RECOVERY CHECKPOINT
+
+After CHECKPOINT5, the working container lost the uncheckpointed source edits. The sanitization continuation is being reconstructed from the authoritative CHECKPOINT5 tree and this checkpoint is the first physical recovery boundary. Completed/reverified here: ancient Visualizer `*_growth` card-height authority retired end-to-end from live schema/UI/runtime while authored preset JSON remains untouched; Custom visualizer snapshots are user-authored state rather than canonical defaults and survive Reset/SST omission; fresh `custom_layout_restore` metadata is empty instead of duplicating widget routing defaults; the unused transition-precompute worker and obsolete QWidget Visualizer renderer package are deleted with build-tool references removed. Focused defaults/theme authority suite is 21/21 and all changed Python compiles; all 30 curated preset files remain byte-identical to CHECKPOINT5. Continue the remaining runtime/UI shadow-default scan and final tooling/Reset/SST/preset guards from this boundary.
+
+## Defaults sanitization continuation — CHECKPOINT7
+
+CHECKPOINT7 extends the recovered defaults sanitization boundary through strict Visualizer DSP/Quick technical admission, canonical logical-state initialization, canonical per-mode preset-index repair, removal of synthesized authored preset placeholders, and Bubble collision/reactivity parameters routed through the resolved logical contract instead of ancient local fallbacks. Focused defaults/theme authority tests remain green (21/21), all changed Python compiles, and all 30 curated preset JSONs remain byte-identical to CHECKPOINT6/5. Continue with immutable frame/render consumers, transition/image/UI shadow defaults, broader repo/default-tooling scan, then final fresh/reset/SST/preset guards.
 
 ## PRE-V5 SETTINGS MIGRATION boundary
 
@@ -126,6 +134,8 @@ Operator feedback on the current curve is **very good / much more cohesive**; th
 
 **Small non-blocking polish folded into this build slice:** DevCurve travel now integrates a smoothed cruise phase with only ±10% audio speed breathing instead of a ~12x reactive throttle/re-phase; its lines gain +1 px total at canonical and ease to +3 px total at the largest viewport. Jedi Mode is a default-OFF easter egg using existing hover/click edges + EventSystem and a hard two-player QtMultimedia pool; no timer/poller/queue/frame owner.
 
+**Defaults authority repair folded into this build slice:** `ui.settings_theme_selection` is now present in canonical Normal defaults/snapshot and missing Settings/Widget theme state resolves from that authority. The follow-up full defaults audit removed nested+dotted duplicate representations, live Settings/session captures, transition runtime-history fields and retired global preset payloads; added the real missing cache/history defaults; moved MC-only `mc.always_on_top` to the MC profile override; and made fresh-install seeding, Reset, SST/default projection and flattened-shape repair follow the shared structured-root contract. Defaults Foundry is now the product-default authority rather than one of several competing sources. The deeper sanitization also fixed explicit-`None` persistence (missing and JSON null are no longer conflated), removed dead Visualizer default leaves that normalization already discarded, added the genuinely persisted Sphere per-mode Rainbow defaults, and is removing UI save-side fallback literals. **Curated Visualizer preset JSON remains a separate highly-authored overlay authority and must stay byte-identical through this pass; Custom snapshots remain user-authored state and partial-profile repair must never deep-merge defaults into an existing Custom cache.** Fresh-profile Settings buckets are now explicitly collapsed by canonical `ui.*_bucket_states`; persisted expansion state still overlays normally. Steam/Achievement/Abandonment retained model defaults now project canonical Widget defaults instead of maintaining stale local copies; presentation-only geometry constraints remain local. Capability activation/pool, Display and Transitions defensive reads now resolve missing/invalid product state through canonical defaults rather than local literals, and the retained Phase-C parameter resolver no longer carries a duplicate table of Transition defaults.
+
 ### M3 — frozen-product performance + overnight soak proof
 
 **Goal:** measure the actual end product after M2 proves the package is complete. Python/dev-run soak is supporting evidence only; the frozen diagnostic/SCR product is final authority.
@@ -206,3 +216,88 @@ exact current source + current reconciled test tree
 -> Future_Cleanup.md / Docs/TestSuite.md (cleanup + test truth)
 -> historical/decomposition docs
 ```
+## Defaults sanitization checkpoint status — 2026-09-06
+
+- [x] CHECKPOINT8: strict Visualizer immutable frame/render contract. Logical + presentation configuration is canonical-seeded then resolved-overlayed; active render consumers no longer own fallback tuning tables.
+- [x] Structural guard proves removed shadow defaults do not leave live Visualizer settings barren; retired glow/growth keys have no active consumers.
+- [x] Focused authority/theme suite: 22 passed; changed Python compiles; all 30 curated preset JSONs hash-identical to CHECKPOINT7/6/5.
+- [ ] Remaining: transition/image/UI shadow-default scan, broader repo/default-tooling compatibility audit, fresh/reset/SST/Custom/preset final guards, final superseding GODZIP.
+
+
+## Defaults sanitization checkpoint status — CHECKPOINT9
+
+- [x] Transition requests resolve type/random/hardware/duration/per-type fields through canonical transition authority; renderer/request code no longer substitutes Crossfade/1300 product defaults.
+- [x] Image prescale/prefetch workers require resolved display mode/Lanczos/sharpen inputs; dead QPixmap ImageProcessor duplicate authority removed.
+- [x] Visualizer card Settings/theme fields are resolved before Quick admission and shell resize/render consumers are strict; presentation-only shell shape constants remain explicit presentation constants.
+- [x] DevCurve logical/frame solver requires canonical-seeded layer parameters and authored shape nodes instead of emergency local baselines.
+- [x] Focused authority/theme suite: 23 passed; changed Python compiles; all 30 curated Visualizer preset JSONs hash-identical to CHECKPOINT8/7/6/5.
+- [ ] Remaining: Settings/model/runtime secondary-default scan, default-related tooling compatibility audit, final fresh/reset/SST/Custom/preset gates, final GODZIP.
+
+## Defaults sanitization CHECKPOINT10 — strict shadow/runtime routing boundary (2026-09-06)
+
+- [x] Global Widget shadow persisted repair is owned once by `ShadowSettings.from_settings()` using canonical defaults.
+- [x] Retained Quick Context Menu / Reddit / Gmail / Media / Clock / Weather / Steam / Visualizer shell consume one complete strict generation shadow snapshot; removed downstream `SE` / `18` / `.77` / `.33` / black / `True` product fallbacks.
+- [x] Gmail runtime persisted cadence/filter/sound settings seed and repair from canonical `widgets.gmail`; stale 50% sound-volume authority removed (canonical is 25%).
+- [x] `get_default_settings()` no longer redundantly seeds Visualizer `enabled=True` / `monitor=ALL` before normalization.
+- [x] Display monitor topology repair resolves malformed/unavailable persisted routing through canonical `display.show_on_monitors` rather than an inline `ALL` product default.
+- [x] CUSTOM ordinary-item admission repairs missing enabled state from the widget's canonical section; incomplete restore metadata no longer invents monitor `ALL`.
+- [x] Effective widget monitor routing derives missing state from each widget's canonical routing section.
+- [x] Verification: 20/20 focused authority tests pass; 16 changed Python files compile; 30/30 curated Visualizer preset JSONs remain hash-identical to CHECKPOINT5.
+- [x] CHECKPOINT10 packaging must use the original supplied GODZIP manifest schema exactly; archive/manifest integrity is mechanically validated before delivery.
+- [ ] Continue broader Settings/model/runtime shadow-default scan.
+- [ ] Run broader fresh-profile / Reset / SST / Custom preservation guards.
+- [ ] Audit/migrate all repo tooling that reads/writes defaults/schema, without reintroducing shadow authority.
+- [ ] Final full compile/test/preset guards and superseding sanitized GODZIP.
+- [ ] After defaults sweep only: investigate/remove `dark.qss` lifecycle dependency without destabilizing theme semantics.
+
+## Defaults sanitization CHECKPOINT11 — Settings preview / headless tooling boundary (2026-09-06)
+
+- [x] Settings constructor/save enum repair routes Gmail date mode, Clock format/timezones/calendar layout, Accessibility values, Display glow/interaction values, Bubble/DevCurve UI values, and shadow toggles through canonical active-profile defaults rather than stale UI literals.
+- [x] WidgetsTab stack-preview descriptors no longer copy per-widget enabled/position/monitor/font/limit defaults; missing controls project from each widget's canonical section.
+- [x] CUSTOM position-option descriptors carry identity only; recovery position resolves from the effective canonical widget section.
+- [x] `core.settings` package import is headless-safe via lazy `SettingsManager` export, so defaults/schema tooling does not require PySide6 merely to import canonical builders.
+- [x] `defaults_snapshot_builder` now provides deterministic `--check` / explicit `--write`; stored `defaults_snapshot.json` exactly matches the canonical derivative.
+- [x] Stale references to an absent `tools/default_settings_editor.py` were removed from canonical data-module docs; generated artifacts are explicitly derivative, never authority.
+- [x] Verification: 22/22 focused authority tests pass; 17 Python files changed since CHECKPOINT10 compile; 30/30 curated Visualizer presets remain byte-identical to CHECKPOINT5.
+- [ ] Continue final broader Settings/model/runtime scan and fresh-profile / Reset / SST / Custom integration guards.
+- [ ] Final audit of any defaults-aware repo tooling actually present in the supplied tree; do not overwrite omitted/external tooling by inventing replacements.
+- [ ] Final full compile/test/preset/manifest gate and sanitized superseding GODZIP.
+- [ ] After defaults sweep only: investigate/remove `dark.qss` lifecycle dependency.
+
+
+## Defaults sanitization CHECKPOINT12 — profile / SST / Custom authority boundary (2026-09-06)
+
+- [x] MC profile overrides now contain only genuine behavioral differences; representation-only Gmail/Media monitor `"2"` overrides are removed.
+- [x] Canonical widget-position enums parse strictly from canonical schema; only persisted/migration input may repair to that parsed canonical value.
+- [x] SST replace begins from the same `get_flat_defaults(profile)` projection as fresh/reset, preserves user-authored Custom snapshots when omitted, and replaces them only when explicitly supplied.
+- [x] SST export consumes the manager-owned resolved profile identity; there is no transport-level fallback to `Screensaver`.
+- [x] Derived snapshot construction requires its canonical structured sections instead of manufacturing missing empty maps.
+- [x] Verification: 25/25 focused authority tests pass; all Python changed since CHECKPOINT11 compiles; defaults snapshot check passes; 30/30 curated Visualizer presets remain byte-identical to CHECKPOINT5.
+- [ ] Final repo-wide secondary product-default authority scan and cleanup.
+- [ ] Final audit of defaults-aware repo tooling actually present in the supplied authoritative tree.
+- [ ] Final full fresh/reset/SST/preset/compile/manifest gate and sanitized superseding GODZIP.
+- [ ] After defaults sweep only: investigate/remove `dark.qss` lifecycle dependency.
+
+## Defaults sanitization CHECKPOINT13 — permanent authority guard boundary (2026-09-06)
+
+- [x] Added headless `core/settings/defaults_authority_audit.py` and `tools/check_defaults_authority.py`; current authority audit passes with zero violations and without exemption tables.
+- [x] Normal product-build preflight paths invoke the defaults-authority audit so stale snapshots, revived defaults mirrors, direct authority bypasses, or default-constructible resolved presentation configs can fail builds.
+- [x] Deleted unused `core/settings/defaults_generated.py` and `core/settings/defaults_snapshot.py`; the deterministic JSON snapshot builder is the sole generated defaults derivative.
+- [x] Retained Quick widget presentation configs are no longer default-constructible product-default tables; persisted fields arrive through canonical-aware projection, semantic-only colours remain semantic/theme-owned.
+- [x] Remaining Settings/runtime literal repair cleaned across Reddit/Weather/Gmail/Clock/Media/Steam/Accessibility/Transitions/Visualizer paths; strict canonical roots replace empty-map fallback construction.
+- [x] Independent scan removed residual Sphere/Slide/Spectrum shadow defaults; current Spectrum repair table retains only historical migration signature data.
+- [x] Verification: authority audit clean; 25/25 focused authority tests pass; all Python changed since CHECKPOINT12 compiles; defaults snapshot check passes; 30/30 curated Visualizer presets remain byte-identical to CHECKPOINT5.
+- [ ] Finish independent repo-wide ownership/literal scan and classify remaining algorithm/session/presentation constants.
+- [ ] Run final fresh-profile / Reset / SST / Custom / runtime integration guards plus full Python compile.
+- [ ] Final defaults-aware tooling/build audit and final sanitized superseding GODZIP.
+- [ ] After defaults sweep only: investigate/remove `dark.qss` lifecycle dependency.
+
+## CHECKPOINT14 — final sweep boundary (2026-09-06)
+- [x] Canonical bool missing-key repair fixed in SettingsManager.get_bool.
+- [x] Early GL startup preferences derive from canonical display defaults.
+- [x] Quick Visualizer renderer parameters/colours are strict immutable-frame inputs.
+- [x] Defaults authority audit expanded for direct editable-default imports, raw QSettings product literals, bool coercion bypasses, and renderer fallbacks.
+- [x] 28 focused authority tests pass; snapshot parity passes; full active Python compile passes; 30/30 curated presets byte-identical.
+- [ ] Final independent secondary-authority classification scan.
+- [ ] Final fresh/Reset/SST/Custom integration gate and superseding sanitized GODZIP.
+- [ ] Separate post-sweep theming lifecycle cleanup (`dark.qss`) only after defaults work is closed.

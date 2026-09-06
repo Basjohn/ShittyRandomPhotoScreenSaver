@@ -35,6 +35,35 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+_CLOCK_FORMAT_TO_TEXT = {"12h": "12 Hour", "24h": "24 Hour"}
+_CLOCK_FORMAT_FROM_TEXT = {value: key for key, value in _CLOCK_FORMAT_TO_TEXT.items()}
+
+
+def _clock_format_text(tab: WidgetsTab, raw_value) -> str:
+    """Project persisted clock format into the fixed UI enum via canonical repair."""
+    canonical = tab._default_str("clock", "format").strip().lower()
+    if canonical not in _CLOCK_FORMAT_TO_TEXT:
+        raise ValueError(f"Unsupported canonical clock format: {canonical!r}")
+    value = str(raw_value).strip().lower() if raw_value is not None else canonical
+    if value not in _CLOCK_FORMAT_TO_TEXT:
+        value = canonical
+    return _CLOCK_FORMAT_TO_TEXT[value]
+
+
+def _clock_format_value(tab: WidgetsTab) -> str:
+    """Return the persisted enum for the current fixed clock format combo."""
+    text = tab.clock_format.currentText()
+    try:
+        return _CLOCK_FORMAT_FROM_TEXT[text]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported clock-format UI value: {text!r}") from exc
+
+
+def _combo_data_or_canonical(tab: WidgetsTab, combo, section: str, key: str):
+    """Use combo data when selected; otherwise repair from canonical widget state."""
+    value = combo.currentData()
+    return value if value not in (None, "") else tab._widget_default(section, key)
+
 
 def _finalize_bucket_body(toggle, body: QWidget) -> None:
     expanded = bool(toggle.isChecked())
@@ -148,7 +177,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Enable clock
     tab.clock_enabled = QCheckBox("Enable Clock")
     tab.clock_enabled.setProperty("circleIndicator", True)
-    tab.clock_enabled.setChecked(tab._default_bool('clock', 'enabled', True))
+    tab.clock_enabled.setChecked(tab._default_bool('clock', 'enabled'))
     tab.clock_enabled.stateChanged.connect(tab._save_settings)
     tab.clock_enabled.stateChanged.connect(tab._update_stack_status)
     clock_layout.addWidget(tab.clock_enabled)
@@ -162,28 +191,28 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     time_toggle, time_body, time_layout = build_bucket_toggle(
         _clock_ctrl_layout,
         "Time Content",
-        expanded=tab.get_widget_bucket_state("clock", "time", default=False),
+        expanded=tab.get_widget_bucket_state("clock", "time"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("clock", "time", checked),
         defer_initial_visibility=True,
     )
     layout_toggle, layout_body, layout_layout = build_bucket_toggle(
         _clock_ctrl_layout,
         "Layout",
-        expanded=tab.get_widget_bucket_state("clock", "layout", default=False),
+        expanded=tab.get_widget_bucket_state("clock", "layout"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("clock", "layout", checked),
         defer_initial_visibility=True,
     )
     appearance_toggle, appearance_body, appearance_layout = build_bucket_toggle(
         _clock_ctrl_layout,
         "Appearance",
-        expanded=tab.get_widget_bucket_state("clock", "appearance", default=False),
+        expanded=tab.get_widget_bucket_state("clock", "appearance"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("clock", "appearance", checked),
         defer_initial_visibility=True,
     )
     extra_toggle, extra_body, extra_layout = build_bucket_toggle(
         _clock_ctrl_layout,
         "Additional Clocks",
-        expanded=tab.get_widget_bucket_state("clock", "additional", default=False),
+        expanded=tab.get_widget_bucket_state("clock", "additional"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("clock", "additional", checked),
         defer_initial_visibility=True,
     )
@@ -193,9 +222,8 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_format = StyledComboBox(size_variant="compact")
     tab.clock_format.addItems(["12 Hour", "24 Hour"])
     tab.clock_format.currentTextChanged.connect(tab._save_settings)
-    default_format = tab._default_str('clock', 'format', '24h').lower()
-    format_map = {'12h': "12 Hour", '24h': "24 Hour"}
-    tab._set_combo_text(tab.clock_format, format_map.get(default_format, "24 Hour"))
+    default_format = tab._default_str('clock', 'format')
+    tab._set_combo_text(tab.clock_format, _clock_format_text(tab, default_format))
     tab.clock_format.setMinimumWidth(140)
     format_row.addWidget(tab.clock_format)
     format_row.addStretch()
@@ -203,7 +231,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Show seconds
     tab.clock_seconds = QCheckBox("Show Seconds")
     tab.clock_seconds.setProperty("circleIndicator", True)
-    tab.clock_seconds.setChecked(tab._default_bool('clock', 'show_seconds', True))
+    tab.clock_seconds.setChecked(tab._default_bool('clock', 'show_seconds'))
     tab.clock_seconds.stateChanged.connect(tab._save_settings)
     tab.clock_seconds.stateChanged.connect(tab._update_stack_status)
     time_layout.addWidget(tab.clock_seconds)
@@ -213,7 +241,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_timezone = StyledComboBox(size_variant="hero")
     tab.clock_timezone.setMinimumWidth(200)
     tab._populate_timezones()
-    default_timezone = tab._default_str('clock', 'timezone', 'local')
+    default_timezone = tab._default_str('clock', 'timezone')
     tab._set_combo_data(tab.clock_timezone, default_timezone)
     tab.clock_timezone.currentTextChanged.connect(tab._save_settings)
     tz_row.addWidget(tab.clock_timezone)
@@ -226,7 +254,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Show timezone abbreviation
     tab.clock_show_tz = QCheckBox("Show Timezone Abbreviation")
     tab.clock_show_tz.setProperty("circleIndicator", True)
-    tab.clock_show_tz.setChecked(tab._default_bool('clock', 'show_timezone', True))
+    tab.clock_show_tz.setChecked(tab._default_bool('clock', 'show_timezone'))
     tab.clock_show_tz.stateChanged.connect(tab._save_settings)
     tab.clock_show_tz.stateChanged.connect(tab._update_stack_status)
     time_layout.addWidget(tab.clock_show_tz)
@@ -234,7 +262,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_show_day_of_week = QCheckBox("Show Day of the Week")
     tab.clock_show_day_of_week.setProperty("circleIndicator", True)
     tab.clock_show_day_of_week.setChecked(
-        tab._default_bool('clock', 'show_day_of_week', False)
+        tab._default_bool('clock', 'show_day_of_week')
     )
     tab.clock_show_day_of_week.setToolTip(
         "Show the timezone-aware weekday below the clock."
@@ -245,7 +273,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     tab.clock_show_date = QCheckBox("Show Date")
     tab.clock_show_date.setProperty("circleIndicator", True)
-    tab.clock_show_date.setChecked(tab._default_bool('clock', 'show_date', False))
+    tab.clock_show_date.setChecked(tab._default_bool('clock', 'show_date'))
     tab.clock_show_date.setToolTip("Show the timezone-aware date as DD/MM/YYYY.")
     tab.clock_show_date.stateChanged.connect(tab._save_settings)
     tab.clock_show_date.stateChanged.connect(tab._update_stack_status)
@@ -270,7 +298,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_calendar_layout.addItem("Two Lines", "two_lines")
     tab._set_combo_data(
         tab.clock_calendar_layout,
-        tab._default_str('clock', 'calendar_layout', 'shared_line'),
+        tab._default_str('clock', 'calendar_layout'),
     )
     tab.clock_calendar_layout.setMinimumWidth(140)
     tab.clock_calendar_layout.setToolTip(
@@ -285,7 +313,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_calendar_font_size = QSpinBox()
     tab.clock_calendar_font_size.setRange(8, 96)
     tab.clock_calendar_font_size.setValue(
-        tab._default_int('clock', 'calendar_font_size', 20)
+        tab._default_int('clock', 'calendar_font_size')
     )
     tab.clock_calendar_font_size.setAccelerated(True)
     tab.clock_calendar_font_size.valueChanged.connect(tab._save_settings)
@@ -308,7 +336,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Analogue mode options
     tab.clock_analog_mode = QCheckBox("Use Analogue Clock")
     tab.clock_analog_mode.setProperty("circleIndicator", True)
-    default_display_mode = tab._default_str('clock', 'display_mode', 'analog').lower()
+    default_display_mode = tab._default_str('clock', 'display_mode').lower()
     tab.clock_analog_mode.setChecked(default_display_mode == 'analog')
     tab.clock_analog_mode.setToolTip(
         "Render the main clock as an analogue clock face with hour/minute/second hands."
@@ -325,7 +353,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     tab.clock_analog_shadow = QCheckBox("Analogue Face Shadow")
     tab.clock_analog_shadow.setProperty("circleIndicator", True)
-    tab.clock_analog_shadow.setChecked(tab._default_bool('clock', 'analog_face_shadow', True))
+    tab.clock_analog_shadow.setChecked(tab._default_bool('clock', 'analog_face_shadow'))
     tab.clock_analog_shadow.setToolTip(
         "Enable a subtle drop shadow under the analogue clock face and hands."
     )
@@ -334,7 +362,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     tab.clock_show_numerals = QCheckBox("Show Hour Numerals")
     tab.clock_show_numerals.setProperty("circleIndicator", True)
-    tab.clock_show_numerals.setChecked(tab._default_bool('clock', 'show_numerals', True))
+    tab.clock_show_numerals.setChecked(tab._default_bool('clock', 'show_numerals'))
     tab.clock_show_numerals.stateChanged.connect(tab._save_settings)
     _analog_layout.addWidget(tab.clock_show_numerals)
 
@@ -347,7 +375,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_show_separator = QCheckBox("Show Above Day / Date")
     tab.clock_show_separator.setProperty("circleIndicator", True)
     tab.clock_show_separator.setChecked(
-        tab._default_bool('clock', 'show_separator', False)
+        tab._default_bool('clock', 'show_separator')
     )
     tab.clock_show_separator.setToolTip(
         "Draw the shared horizontal separator between the clock face/time and optional day/date text."
@@ -362,7 +390,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_separator_thickness = QSpinBox()
     tab.clock_separator_thickness.setRange(1, 8)
     tab.clock_separator_thickness.setValue(
-        tab._default_int('clock', 'separator_thickness', 2)
+        tab._default_int('clock', 'separator_thickness')
     )
     tab.clock_separator_thickness.setSuffix(" px")
     tab.clock_separator_thickness.setAccelerated(True)
@@ -393,7 +421,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_position.currentTextChanged.connect(tab._update_stack_status)
     tab.clock_position.setMinimumWidth(150)
     position_row.addWidget(tab.clock_position)
-    tab._set_combo_text(tab.clock_position, tab._default_str('clock', 'position', 'Top Right'))
+    tab._set_combo_text(tab.clock_position, tab._default_str('clock', 'position'))
     tab.clock_stack_status = QLabel("")
     tab.clock_stack_status.setMinimumWidth(100)
     tab.clock_stack_status.setStyleSheet(STATUS_LABEL_STYLE)
@@ -408,14 +436,14 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_monitor_combo.currentTextChanged.connect(tab._update_stack_status)
     tab.clock_monitor_combo.setMinimumWidth(120)
     clock_disp_row.addWidget(tab.clock_monitor_combo)
-    clock_monitor_default = tab._widget_default('clock', 'monitor', 'ALL')
+    clock_monitor_default = tab._widget_default('clock', 'monitor')
     tab._set_combo_text(tab.clock_monitor_combo, str(clock_monitor_default))
     clock_disp_row.addStretch()
 
     # Font family
     font_family_row = _aligned_row(layout_layout, "Font:")
     tab.clock_font_combo = StyledFontComboBox(size_variant="hero")
-    default_clock_font = tab._default_str('clock', 'font_family', 'Inter')
+    default_clock_font = tab._default_str('clock', 'font_family')
     tab.clock_font_combo.setCurrentFont(QFont(default_clock_font))
     tab.clock_font_combo.setMinimumWidth(220)
     tab.clock_font_combo.currentFontChanged.connect(tab._save_settings)
@@ -426,7 +454,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     font_row = _aligned_row(layout_layout, "Font Size:")
     tab.clock_font_size = QSpinBox()
     tab.clock_font_size.setRange(12, 144)
-    tab.clock_font_size.setValue(tab._default_int('clock', 'font_size', 48))
+    tab.clock_font_size.setValue(tab._default_int('clock', 'font_size'))
     tab.clock_font_size.setAccelerated(True)
     tab.clock_font_size.valueChanged.connect(tab._save_settings)
     tab.clock_font_size.valueChanged.connect(tab._update_stack_status)
@@ -450,7 +478,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     margin_row = _aligned_row(layout_layout, "Margin:")
     tab.clock_margin = QSpinBox()
     tab.clock_margin.setRange(0, 100)
-    tab.clock_margin.setValue(tab._default_int('clock', 'margin', 30))
+    tab.clock_margin.setValue(tab._default_int('clock', 'margin'))
     tab.clock_margin.setAccelerated(True)
     tab.clock_margin.valueChanged.connect(tab._save_settings)
     margin_row.addWidget(tab.clock_margin)
@@ -462,7 +490,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Background frame
     tab.clock_show_background = QCheckBox("Show Background Frame")
     tab.clock_show_background.setProperty("circleIndicator", True)
-    tab.clock_show_background.setChecked(tab._default_bool('clock', 'show_background', True))
+    tab.clock_show_background.setChecked(tab._default_bool('clock', 'show_background'))
     tab.clock_show_background.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.clock_show_background)
 
@@ -471,7 +499,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.clock_bg_opacity.setMinimum(0)
     tab.clock_bg_opacity.setMaximum(100)
-    clock_bg_opacity_pct = int(tab._default_float('clock', 'bg_opacity', 0.6) * 100)
+    clock_bg_opacity_pct = int(tab._default_float('clock', 'bg_opacity') * 100)
     tab.clock_bg_opacity.setValue(clock_bg_opacity_pct)
     tab.clock_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.clock_bg_opacity.setTickInterval(10)
@@ -507,7 +535,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.clock_border_opacity.setMinimum(0)
     tab.clock_border_opacity.setMaximum(100)
-    clock_border_opacity_pct = int(tab._default_float('clock', 'border_opacity', 0.8) * 100)
+    clock_border_opacity_pct = int(tab._default_float('clock', 'border_opacity') * 100)
     tab.clock_border_opacity.setValue(clock_border_opacity_pct)
     tab.clock_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.clock_border_opacity.setTickInterval(10)
@@ -584,87 +612,85 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
     """Load clock settings from widgets config dict."""
     clock_config = widgets.get('clock', {})
-    tab.clock_enabled.setChecked(tab._config_bool('clock', clock_config, 'enabled', True))
+    tab.clock_enabled.setChecked(tab._config_bool('clock', clock_config, 'enabled'))
 
-    format_raw = tab._config_str('clock', clock_config, 'format', '24h').lower()
-    format_text = "12 Hour" if format_raw == '12h' else "24 Hour"
+    format_raw = tab._config_str('clock', clock_config, 'format')
+    format_text = _clock_format_text(tab, format_raw)
     index = tab.clock_format.findText(format_text)
     if index >= 0:
         tab.clock_format.setCurrentIndex(index)
 
-    tab.clock_seconds.setChecked(tab._config_bool('clock', clock_config, 'show_seconds', True))
+    tab.clock_seconds.setChecked(tab._config_bool('clock', clock_config, 'show_seconds'))
 
-    timezone_str = tab._config_str('clock', clock_config, 'timezone', 'local')
+    timezone_str = tab._config_str('clock', clock_config, 'timezone')
     tz_index = tab.clock_timezone.findData(timezone_str)
     if tz_index >= 0:
         tab.clock_timezone.setCurrentIndex(tz_index)
 
-    tab.clock_show_tz.setChecked(tab._config_bool('clock', clock_config, 'show_timezone', True))
+    tab.clock_show_tz.setChecked(tab._config_bool('clock', clock_config, 'show_timezone'))
     tab.clock_show_day_of_week.setChecked(
-        tab._config_bool('clock', clock_config, 'show_day_of_week', False)
+        tab._config_bool('clock', clock_config, 'show_day_of_week')
     )
     tab.clock_show_date.setChecked(
-        tab._config_bool('clock', clock_config, 'show_date', False)
+        tab._config_bool('clock', clock_config, 'show_date')
     )
     separator_value = clock_config.get(
         'show_separator',
-        clock_config.get('show_digital_separator', tab._default_bool('clock', 'show_separator', False)),
+        clock_config.get('show_digital_separator', tab._default_bool('clock', 'show_separator')),
     )
     tab.clock_show_separator.setChecked(bool(separator_value))
     tab.clock_separator_thickness.setValue(
-        max(1, min(8, tab._config_int('clock', clock_config, 'separator_thickness', 2)))
+        max(1, min(8, tab._config_int('clock', clock_config, 'separator_thickness')))
     )
     calendar_layout = tab._config_str(
         'clock',
         clock_config,
-        'calendar_layout',
-        'shared_line',
-    )
+        'calendar_layout')
     tab._set_combo_data(tab.clock_calendar_layout, calendar_layout)
     tab.clock_calendar_font_size.setValue(
-        tab._config_int('clock', clock_config, 'calendar_font_size', 20)
+        tab._config_int('clock', clock_config, 'calendar_font_size')
     )
 
-    display_mode = tab._config_str('clock', clock_config, 'display_mode', 'analog').lower()
+    display_mode = tab._config_str('clock', clock_config, 'display_mode').lower()
     tab.clock_analog_mode.setChecked(display_mode == 'analog')
-    tab.clock_show_numerals.setChecked(tab._config_bool('clock', clock_config, 'show_numerals', True))
-    tab.clock_analog_shadow.setChecked(tab._config_bool('clock', clock_config, 'analog_face_shadow', True))
+    tab.clock_show_numerals.setChecked(tab._config_bool('clock', clock_config, 'show_numerals'))
+    tab.clock_analog_shadow.setChecked(tab._config_bool('clock', clock_config, 'analog_face_shadow'))
 
-    position = tab._config_str('clock', clock_config, 'position', 'Top Right')
+    position = tab._config_str('clock', clock_config, 'position')
     index = tab.clock_position.findText(position)
     if index >= 0:
         tab.clock_position.setCurrentIndex(index)
 
-    tab.clock_font_combo.setCurrentFont(QFont(tab._config_str('clock', clock_config, 'font_family', 'Inter')))
-    tab.clock_font_size.setValue(tab._config_int('clock', clock_config, 'font_size', 78))
-    tab.clock_margin.setValue(tab._config_int('clock', clock_config, 'margin', 30))
-    tab.clock_show_background.setChecked(tab._config_bool('clock', clock_config, 'show_background', False))
-    opacity_pct = int(tab._config_float('clock', clock_config, 'bg_opacity', 0.6) * 100)
+    tab.clock_font_combo.setCurrentFont(QFont(tab._config_str('clock', clock_config, 'font_family')))
+    tab.clock_font_size.setValue(tab._config_int('clock', clock_config, 'font_size'))
+    tab.clock_margin.setValue(tab._config_int('clock', clock_config, 'margin'))
+    tab.clock_show_background.setChecked(tab._config_bool('clock', clock_config, 'show_background'))
+    opacity_pct = int(tab._config_float('clock', clock_config, 'bg_opacity') * 100)
     tab.clock_bg_opacity.setValue(opacity_pct)
     tab.clock_opacity_label.setText(f"{opacity_pct}%")
 
-    monitor_sel = clock_config.get('monitor', tab._widget_default('clock', 'monitor', 'ALL'))
-    mon_text = str(monitor_sel) if isinstance(monitor_sel, (int, str)) else 'ALL'
+    monitor_sel = clock_config.get('monitor', tab._widget_default('clock', 'monitor'))
+    mon_text = tab._monitor_text_from_value('clock', monitor_sel)
     idx = tab.clock_monitor_combo.findText(mon_text)
     if idx >= 0:
         tab.clock_monitor_combo.setCurrentIndex(idx)
 
-    color_data = clock_config.get('color', tab._widget_default('clock', 'color', [255, 255, 255, 230]))
+    color_data = clock_config.get('color', tab._widget_default('clock', 'color'))
     tab._clock_color = QColor(*color_data)
-    bg_color_data = clock_config.get('bg_color', tab._widget_default('clock', 'bg_color', [64, 64, 64, 255]))
+    bg_color_data = clock_config.get('bg_color', tab._widget_default('clock', 'bg_color'))
     try:
         tab._clock_bg_color = QColor(*bg_color_data)
     except Exception:
-        tab._clock_bg_color = QColor(64, 64, 64, 255)
-    border_color_data = clock_config.get('border_color', tab._widget_default('clock', 'border_color', [128, 128, 128, 255]))
+        tab._clock_bg_color = QColor(*tab._widget_default('clock', 'bg_color'))
+    border_color_data = clock_config.get('border_color', tab._widget_default('clock', 'border_color'))
     try:
         tab._clock_border_color = QColor(*border_color_data)
     except Exception:
-        tab._clock_border_color = QColor(128, 128, 128, 255)
+        tab._clock_border_color = QColor(*tab._widget_default('clock', 'border_color'))
     _sync_clock_swatch(tab, 'clock_color_btn', '_clock_color')
     _sync_clock_swatch(tab, 'clock_bg_color_btn', '_clock_bg_color')
     _sync_clock_swatch(tab, 'clock_border_color_btn', '_clock_border_color')
-    border_opacity_pct = int(clock_config.get('border_opacity', tab._default_float('clock', 'border_opacity', 0.8)) * 100)
+    border_opacity_pct = int(clock_config.get('border_opacity', tab._default_float('clock', 'border_opacity')) * 100)
     tab.clock_border_opacity.setValue(border_opacity_pct)
     tab.clock_border_opacity_label.setText(f"{border_opacity_pct}%")
 
@@ -674,26 +700,26 @@ def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
 
     # Clock 2
     clock2_config = widgets.get('clock2', {})
-    tab.clock2_enabled.setChecked(clock2_config.get('enabled', False))
-    monitor2 = clock2_config.get('monitor', 'ALL')
-    mon2_text = str(monitor2) if isinstance(monitor2, (int, str)) else 'ALL'
+    tab.clock2_enabled.setChecked(clock2_config.get('enabled', tab._default_bool('clock2', 'enabled')))
+    monitor2 = clock2_config.get('monitor', tab._widget_default('clock2', 'monitor'))
+    mon2_text = tab._monitor_text_from_value('clock2', monitor2)
     idx2 = tab.clock2_monitor_combo.findText(mon2_text)
     if idx2 >= 0:
         tab.clock2_monitor_combo.setCurrentIndex(idx2)
-    timezone2 = clock2_config.get('timezone', 'UTC')
+    timezone2 = clock2_config.get('timezone', tab._default_str('clock2', 'timezone'))
     tz2_index = tab.clock2_timezone.findData(timezone2)
     if tz2_index >= 0:
         tab.clock2_timezone.setCurrentIndex(tz2_index)
 
     # Clock 3
     clock3_config = widgets.get('clock3', {})
-    tab.clock3_enabled.setChecked(clock3_config.get('enabled', False))
-    monitor3 = clock3_config.get('monitor', 'ALL')
-    mon3_text = str(monitor3) if isinstance(monitor3, (int, str)) else 'ALL'
+    tab.clock3_enabled.setChecked(clock3_config.get('enabled', tab._default_bool('clock3', 'enabled')))
+    monitor3 = clock3_config.get('monitor', tab._widget_default('clock3', 'monitor'))
+    mon3_text = tab._monitor_text_from_value('clock3', monitor3)
     idx3 = tab.clock3_monitor_combo.findText(mon3_text)
     if idx3 >= 0:
         tab.clock3_monitor_combo.setCurrentIndex(idx3)
-    timezone3 = clock3_config.get('timezone', 'UTC+01:00')
+    timezone3 = clock3_config.get('timezone', tab._default_str('clock3', 'timezone'))
     tz3_index = tab.clock3_timezone.findData(timezone3)
     if tz3_index >= 0:
         tab.clock3_timezone.setCurrentIndex(tz3_index)
@@ -701,15 +727,8 @@ def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
 
 def save_clock_settings(tab: WidgetsTab) -> tuple[dict, dict, dict]:
     """Return (clock_config, clock2_config, clock3_config) from current UI state."""
-    tz_data = tab.clock_timezone.currentData()
-    timezone_str = tz_data if tz_data else 'local'
-
-    format_text = ""
-    try:
-        format_text = (tab.clock_format.currentText() or "").strip().lower()
-    except Exception:
-        format_text = ""
-    clock_format_value = '12h' if format_text.startswith('12') else '24h'
+    timezone_str = _combo_data_or_canonical(tab, tab.clock_timezone, 'clock', 'timezone')
+    clock_format_value = _clock_format_value(tab)
 
     clock_config = {
         'enabled': tab.clock_enabled.isChecked(),
@@ -721,7 +740,7 @@ def save_clock_settings(tab: WidgetsTab) -> tuple[dict, dict, dict]:
         'show_date': tab.clock_show_date.isChecked(),
         'show_separator': tab.clock_show_separator.isChecked(),
         'separator_thickness': tab.clock_separator_thickness.value(),
-        'calendar_layout': tab.clock_calendar_layout.currentData() or 'shared_line',
+        'calendar_layout': _combo_data_or_canonical(tab, tab.clock_calendar_layout, 'clock', 'calendar_layout'),
         'calendar_font_size': tab.clock_calendar_font_size.value(),
         'position': tab.clock_position.currentText(),
         'font_family': tab.clock_font_combo.currentFont().family(),
@@ -740,25 +759,20 @@ def save_clock_settings(tab: WidgetsTab) -> tuple[dict, dict, dict]:
         'show_numerals': tab.clock_show_numerals.isChecked(),
         'analog_face_shadow': tab.clock_analog_shadow.isChecked(),
     }
-    cmon_text = tab.clock_monitor_combo.currentText()
-    clock_config['monitor'] = cmon_text if cmon_text == 'ALL' else int(cmon_text)
+    clock_config['monitor'] = tab._monitor_value_from_combo('clock', tab.clock_monitor_combo)
 
-    clock2_tz_data = tab.clock2_timezone.currentData()
-    clock2_timezone = clock2_tz_data if clock2_tz_data else 'UTC'
+    clock2_timezone = _combo_data_or_canonical(tab, tab.clock2_timezone, 'clock2', 'timezone')
     clock2_config = {
         'enabled': tab.clock2_enabled.isChecked(),
         'timezone': clock2_timezone,
     }
-    c2mon_text = tab.clock2_monitor_combo.currentText()
-    clock2_config['monitor'] = c2mon_text if c2mon_text == 'ALL' else int(c2mon_text)
+    clock2_config['monitor'] = tab._monitor_value_from_combo('clock2', tab.clock2_monitor_combo)
 
-    clock3_tz_data = tab.clock3_timezone.currentData()
-    clock3_timezone = clock3_tz_data if clock3_tz_data else 'UTC+01:00'
+    clock3_timezone = _combo_data_or_canonical(tab, tab.clock3_timezone, 'clock3', 'timezone')
     clock3_config = {
         'enabled': tab.clock3_enabled.isChecked(),
         'timezone': clock3_timezone,
     }
-    c3mon_text = tab.clock3_monitor_combo.currentText()
-    clock3_config['monitor'] = c3mon_text if c3mon_text == 'ALL' else int(c3mon_text)
+    clock3_config['monitor'] = tab._monitor_value_from_combo('clock3', tab.clock3_monitor_combo)
 
     return clock_config, clock2_config, clock3_config

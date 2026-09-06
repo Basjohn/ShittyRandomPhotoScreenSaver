@@ -15,10 +15,12 @@ from typing import Any
 from PySide6.QtCore import QObject, Property, Signal
 from PySide6.QtGui import QColor
 
+from core.settings.default_contract import require_canonical_default
 from core.settings.shadow_direction import (
     resolve_directional_extensions,
     resolve_signed_offset,
 )
+from rendering.quick.shadow_snapshot import QuickShadowSnapshot
 
 from .theme_projection import (
     resolve_card_surface_colors,
@@ -185,22 +187,22 @@ def _condition_icon_source(
 class WeatherPresentationConfig:
     """Resolved presentation inputs for one Weather instance."""
 
-    widget_id: str = "weather"
-    location: str = ""
-    font_family: str = "Inter"
-    font_size: int = 25
-    text_color: tuple[int, int, int, int] = (255, 255, 255, 230)
-    show_background: bool = True
-    background_color: tuple[int, int, int, int] = (35, 35, 35, 255)
-    background_opacity: float = 0.3
-    border_color: tuple[int, int, int, int] = (255, 255, 255, 255)
-    border_opacity: float = 1.0
-    show_forecast: bool = True
-    show_condition_icon: bool = True
-    icon_alignment: str = "RIGHT"
-    icon_size: int = 96
-    show_details_row: bool = True
-    detail_icon_size: int = 16
+    widget_id: str
+    location: str
+    font_family: str
+    font_size: int
+    text_color: tuple[int, int, int, int]
+    show_background: bool
+    background_color: tuple[int, int, int, int]
+    background_opacity: float
+    border_color: tuple[int, int, int, int]
+    border_opacity: float
+    show_forecast: bool
+    show_condition_icon: bool
+    icon_alignment: str
+    icon_size: int
+    show_details_row: bool
+    detail_icon_size: int
 
     @classmethod
     def from_mapping(
@@ -209,26 +211,35 @@ class WeatherPresentationConfig:
         *,
         widget_id: str = "weather",
     ) -> "WeatherPresentationConfig":
-        alignment = str(values.get("icon_alignment", "RIGHT") or "RIGHT").upper()
+        """Normalize Weather state with canonical defaults as the repair baseline."""
+
+        defaults = require_canonical_default("widgets.weather")
+        if not isinstance(defaults, Mapping):
+            raise TypeError("Canonical widgets.weather default must be a mapping")
+        merged = dict(defaults)
+        merged.update(values if isinstance(values, Mapping) else {})
+
+        default_alignment = str(defaults["icon_alignment"]).upper()
+        alignment = str(merged["icon_alignment"] or default_alignment).upper()
         if alignment not in {"LEFT", "RIGHT", "NONE"}:
-            alignment = "RIGHT"
+            alignment = default_alignment
         return cls(
             widget_id=str(widget_id or "weather"),
-            location=str(values.get("location", "") or "").strip(),
-            font_family=str(values.get("font_family", "Inter") or "Inter"),
-            font_size=_bounded_int(values.get("font_size"), 25, 8, 256),
-            text_color=_rgba(values.get("color"), (255, 255, 255, 230)),
-            show_background=_as_bool(values.get("show_background"), True),
-            background_color=_rgba(values.get("bg_color"), (35, 35, 35, 255)),
-            background_opacity=_bounded_float(values.get("bg_opacity"), 0.3, 0.0, 1.0),
-            border_color=_rgba(values.get("border_color"), (255, 255, 255, 255)),
-            border_opacity=_bounded_float(values.get("border_opacity"), 1.0, 0.0, 1.0),
-            show_forecast=_as_bool(values.get("show_forecast"), True),
-            show_condition_icon=_as_bool(values.get("show_condition_icon"), True),
+            location=str(merged["location"] or defaults["location"]).strip(),
+            font_family=str(merged["font_family"] or defaults["font_family"]),
+            font_size=_bounded_int(merged["font_size"], int(defaults["font_size"]), 8, 256),
+            text_color=_rgba(merged["color"], tuple(defaults["color"])),
+            show_background=_as_bool(merged["show_background"], bool(defaults["show_background"])),
+            background_color=_rgba(merged["bg_color"], tuple(defaults["bg_color"])),
+            background_opacity=_bounded_float(merged["bg_opacity"], float(defaults["bg_opacity"]), 0.0, 1.0),
+            border_color=_rgba(merged["border_color"], tuple(defaults["border_color"])),
+            border_opacity=_bounded_float(merged["border_opacity"], float(defaults["border_opacity"]), 0.0, 1.0),
+            show_forecast=_as_bool(merged["show_forecast"], bool(defaults["show_forecast"])),
+            show_condition_icon=_as_bool(merged["show_condition_icon"], bool(defaults["show_condition_icon"])),
             icon_alignment=alignment,
-            icon_size=_bounded_int(values.get("icon_size"), 96, 32, 256),
-            show_details_row=_as_bool(values.get("show_details_row"), True),
-            detail_icon_size=_bounded_int(values.get("detail_icon_size"), 16, 8, 96),
+            icon_size=_bounded_int(merged["icon_size"], int(defaults["icon_size"]), 32, 256),
+            show_details_row=_as_bool(merged["show_details_row"], bool(defaults["show_details_row"])),
+            detail_icon_size=_bounded_int(merged["detail_icon_size"], int(defaults["detail_icon_size"]), 8, 96),
         )
 
     @classmethod
@@ -238,12 +249,10 @@ class WeatherPresentationConfig:
     ) -> "WeatherPresentationConfig":
         """Project canonical Weather settings without leaking persistence ownership."""
 
-        from core.settings.defaults import get_default_settings
-
-        defaults = get_default_settings().get("widgets", {}).get("weather", {})
+        defaults = require_canonical_default("widgets.weather")
         values = widgets.get("weather", {})
         if not isinstance(defaults, Mapping):
-            defaults = {}
+            raise TypeError("Canonical widgets.weather default must be a mapping")
         if not isinstance(values, Mapping):
             values = {}
         merged = dict(defaults)
@@ -288,27 +297,19 @@ class WeatherPresentationStyle:
         *,
         border_width: float = 4.0,
     ) -> "WeatherPresentationStyle":
-        direction = shadow_values.get("direction", "SE")
-        frame_extra = _bounded_float(
-            shadow_values.get("frame_extra_offset"), 0.0, 0.0, 40.0
+        shadow = QuickShadowSnapshot.from_mapping(shadow_values)
+        card_offset = resolve_signed_offset(shadow.direction, *ORDINARY_CARD_SHADOW_BASE)
+        card_extensions = resolve_directional_extensions(
+            shadow.direction, shadow.frame_extra_offset
         )
-        text_extra = _bounded_float(
-            shadow_values.get("text_extra_offset"), 0.0, 0.0, 40.0
-        )
-        card_offset = resolve_signed_offset(direction, *ORDINARY_CARD_SHADOW_BASE)
-        card_extensions = resolve_directional_extensions(direction, frame_extra)
         text_offset = resolve_signed_offset(
-            direction,
-            ORDINARY_TEXT_SHADOW_BASE[0] + text_extra,
-            ORDINARY_TEXT_SHADOW_BASE[1] + text_extra,
+            shadow.direction,
+            ORDINARY_TEXT_SHADOW_BASE[0] + shadow.text_extra_offset,
+            ORDINARY_TEXT_SHADOW_BASE[1] + shadow.text_extra_offset,
         )
-        shadow_rgba = _rgba(shadow_values.get("color"), (0, 0, 0, 255))
-        frame_opacity = _bounded_float(
-            shadow_values.get("frame_opacity"), 0.77, 0.0, 1.0
-        )
-        text_opacity = _bounded_float(
-            shadow_values.get("text_opacity"), 0.33, 0.0, 1.0
-        )
+        shadow_rgba = shadow.color
+        frame_opacity = shadow.frame_opacity
+        text_opacity = shadow.text_opacity
         return cls(
             card_style=OverlayCardStyle(
                 shell_enabled=config.show_background,
@@ -321,12 +322,10 @@ class WeatherPresentationStyle:
                 padding=14.0,
                 shadow_enabled=(
                     config.show_background
-                    and _as_bool(shadow_values.get("enabled"), True)
+                    and shadow.enabled
                 ),
                 shadow_color=_with_alpha(shadow_rgba, frame_opacity),
-                shadow_blur=_bounded_float(
-                    shadow_values.get("blur_radius"), 18.0, 0.0, 80.0
-                ),
+                shadow_blur=min(80.0, shadow.blur_radius),
                 shadow_offset_x=card_offset[0],
                 shadow_offset_y=card_offset[1],
                 shadow_extend_left=card_extensions[0],
@@ -334,9 +333,7 @@ class WeatherPresentationStyle:
                 shadow_extend_right=card_extensions[2],
                 shadow_extend_bottom=card_extensions[3],
             ),
-            text_shadow_enabled=_as_bool(
-                shadow_values.get("text_enabled"), True
-            ),
+            text_shadow_enabled=shadow.text_enabled,
             text_shadow_color=_with_alpha(shadow_rgba, text_opacity),
             text_shadow_offset_x=text_offset[0],
             text_shadow_offset_y=text_offset[1],

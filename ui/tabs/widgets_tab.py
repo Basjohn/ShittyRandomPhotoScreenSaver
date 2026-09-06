@@ -146,7 +146,6 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         self,
         settings: SettingsManager,
         parent: Optional[QWidget] = None,
-        widget_defaults: Optional[Dict[str, Any]] = None,
         lazy_sections: bool = False,
         initial_view_state: Optional[Dict[str, Any]] = None,
     ):
@@ -160,7 +159,6 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         super().__init__(parent)
         
         self._settings = settings
-        self._provided_widget_defaults = widget_defaults
         self._lazy_sections = bool(lazy_sections)
         self._initial_view_state = dict(initial_view_state) if isinstance(initial_view_state, dict) else {}
         self._widget_section_descriptors = get_widgets_tab_settings_section_descriptors()
@@ -255,28 +253,12 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         logger.debug("[WIDGETS_TAB] Reloaded from settings")
     
     def _load_widget_defaults(self) -> Dict[str, Dict[str, Any]]:
-        """Load canonical widget defaults once for reuse."""
-        try:
-            defaults = get_default_settings()
-            widgets_defaults = defaults.get('widgets', {})
-            loaded_defaults = widgets_defaults if isinstance(widgets_defaults, dict) else {}
-            if isinstance(self._provided_widget_defaults, dict):
-                merged = dict(loaded_defaults)
-                for section, section_defaults in self._provided_widget_defaults.items():
-                    if (
-                        isinstance(section_defaults, dict)
-                        and isinstance(merged.get(section), dict)
-                    ):
-                        merged_section = dict(merged[section])
-                        merged_section.update(section_defaults)
-                        merged[section] = merged_section
-                    else:
-                        merged[section] = section_defaults
-                return merged
-            return loaded_defaults
-        except Exception:
-            logger.debug("[WIDGETS_TAB] Failed to load widget defaults", exc_info=True)
-            return self._provided_widget_defaults if isinstance(self._provided_widget_defaults, dict) else {}
+        """Load canonical Widget defaults for the active application profile."""
+        defaults = get_default_settings(self._settings.get_application_name())
+        widgets_defaults = defaults["widgets"]
+        if not isinstance(widgets_defaults, dict):
+            raise TypeError("Canonical defaults are missing the widgets mapping")
+        return widgets_defaults
 
     def _initialize_descriptor_default_attrs(self) -> None:
         """Seed standard widget default-backed attrs from canonical descriptor metadata."""
@@ -284,21 +266,15 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             if descriptor.value_kind == "color":
                 value = self._color_from_default(
                     descriptor.section,
-                    descriptor.key,
-                    descriptor.fallback,
-                )
+                    descriptor.key)
             elif descriptor.value_kind == "int":
                 value = self._default_int(
                     descriptor.section,
-                    descriptor.key,
-                    descriptor.fallback,
-                )
+                    descriptor.key)
             else:
                 value = self._widget_default(
                     descriptor.section,
-                    descriptor.key,
-                    descriptor.fallback,
-                )
+                    descriptor.key)
             setattr(self, descriptor.attr_name, value)
     
     
@@ -329,23 +305,34 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
 
     def _load_gmail_bucket_states(self) -> Dict[str, bool]:
-        """Load persisted Gmail bucket expanded states."""
-        raw = self._settings.get(self._GMAIL_BUCKET_STATE_KEY, {})
-        if isinstance(raw, dict):
-            return {str(k): bool(v) for k, v in raw.items()}
-        return {}
+        """Load persisted Gmail bucket states over the canonical UI baseline."""
+        return self._load_canonical_ui_state_mapping(
+            self._GMAIL_BUCKET_STATE_KEY, "gmail_bucket_states"
+        )
 
     def _load_widget_bucket_states(self) -> Dict[str, bool]:
-        """Load persisted non-Gmail widget bucket expanded states."""
-        raw = self._settings.get(self._WIDGET_BUCKET_STATE_KEY, {})
-        if isinstance(raw, dict):
-            return {str(k): bool(v) for k, v in raw.items()}
-        return {}
+        """Load Widget bucket states and forward-repair retired Reddit bucket names."""
+        states = self._load_canonical_ui_state_mapping(
+            self._WIDGET_BUCKET_STATE_KEY, "widget_bucket_states"
+        )
+        raw = self._settings.get(self._WIDGET_BUCKET_STATE_KEY)
+        aliases = {
+            "reddit:primary": "reddit:reddit1",
+            "reddit:feed": "reddit:interaction",
+            "reddit:layout": "reddit:shared_layout",
+            "reddit:appearance": "reddit:shared_appearance",
+        }
+        if isinstance(raw, Mapping):
+            for retired, canonical in aliases.items():
+                if retired in raw and canonical not in raw:
+                    states[canonical] = bool(raw[retired])
+        for retired in aliases:
+            states.pop(retired, None)
+        return states
 
-    def get_gmail_bucket_state(self, bucket: str, default: bool = False) -> bool:
-        """Return remembered expanded state for a Gmail bucket."""
-        states = getattr(self, "_gmail_bucket_state", {})
-        return bool(states.get(bucket, default))
+    def get_gmail_bucket_state(self, bucket: str) -> bool:
+        """Return remembered expanded state for a canonical Gmail bucket."""
+        return bool(self._gmail_bucket_state[bucket])
 
     def set_gmail_bucket_state(self, bucket: str, expanded: bool) -> None:
         """Persist expanded/collapsed state for a Gmail bucket."""
@@ -361,10 +348,9 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         except Exception:
             pass
 
-    def get_widget_bucket_state(self, section: str, bucket: str, default: bool = False) -> bool:
-        """Return remembered expanded state for a non-Gmail widget bucket."""
-        states = getattr(self, "_widget_bucket_state", {})
-        return bool(states.get(f"{section}:{bucket}", default))
+    def get_widget_bucket_state(self, section: str, bucket: str) -> bool:
+        """Return remembered expanded state for a canonical Widget bucket."""
+        return bool(self._widget_bucket_state[f"{section}:{bucket}"])
 
     def set_widget_bucket_state(self, section: str, bucket: str, expanded: bool) -> None:
         """Persist expanded/collapsed state for a non-Gmail widget bucket."""
@@ -415,7 +401,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         return get_widget_custom_position_option_descriptors()
 
     def _refresh_custom_position_option_state(self) -> None:
-        widgets_cfg = self._settings.get("widgets", {}) or {}
+        widgets_cfg = self._settings.get("widgets") or {}
         if not isinstance(widgets_cfg, Mapping):
             widgets_cfg = {}
 
@@ -430,20 +416,25 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             current_section = widgets_cfg.get(settings_key, {})
             if not isinstance(current_section, Mapping):
                 current_section = {}
+            canonical_position = str(self._widget_default(settings_key, "position") or "").strip()
+            if not canonical_position:
+                raise ValueError(
+                    f"Canonical widget position is empty for {settings_key!r}"
+                )
             current_position = str(
-                current_section.get("position", binding.fallback_position) or binding.fallback_position
+                current_section.get("position", canonical_position) or canonical_position
             )
             has_custom = has_saved_custom_layout_for_widget(binding.widget_id, widgets_cfg)
             allow_custom = has_custom or current_position.strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower()
             self._set_combo_item_enabled(combo, CUSTOM_POSITION_OPTION_LABEL, allow_custom)
             if not allow_custom and combo.currentText().strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower():
-                self._set_combo_text(combo, binding.fallback_position)
+                self._set_combo_text(combo, canonical_position)
 
     def _iter_custom_resize_lock_bindings(self):
         return get_widget_custom_resize_lock_descriptors()
 
     def _widgets_config_for_custom_resize_lock_state(self) -> Mapping[str, Any]:
-        widgets_cfg = self._settings.get("widgets", {}) or {}
+        widgets_cfg = self._settings.get("widgets") or {}
         if not isinstance(widgets_cfg, Mapping):
             widgets_cfg = {}
         return widgets_cfg
@@ -566,7 +557,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             return
 
         widgets_cfg = self._settings.get_widgets_map()
-        default_widgets_cfg = get_default_settings().get("widgets", {})
+        default_widgets_cfg = get_default_settings()["widgets"]
         restored_any = restore_all_widget_positions_to_application_defaults(
             widgets_cfg,
             default_widgets_config=default_widgets_cfg if isinstance(default_widgets_cfg, Mapping) else {},
@@ -834,7 +825,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         blurb.setStyleSheet(STATUS_LABEL_STYLE)
         layout.addWidget(blurb)
 
-        widgets_config = self._settings.get('widgets', {})
+        widgets_config = self._settings.get('widgets')
         if not isinstance(widgets_config, dict):
             widgets_config = {}
 
@@ -894,7 +885,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         checkbox = checkboxes.get(family_id)
         if checkbox is not None:
             return bool(checkbox.isChecked())
-        widgets_config = self._settings.get('widgets', {})
+        widgets_config = self._settings.get('widgets')
         if not isinstance(widgets_config, dict):
             widgets_config = {}
         return is_widget_family_activated(widgets_config, family_id)
@@ -976,7 +967,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             if checkbox is None or not family.required_family_ids:
                 continue
             deps_ok = all(
-                active.get(req, is_widget_family_activated(self._settings.get('widgets', {}), req))
+                active.get(req, is_widget_family_activated(self._settings.get('widgets'), req))
                 for req in family.required_family_ids
             )
             checkbox.setEnabled(deps_ok)
@@ -1077,7 +1068,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         checkboxes = getattr(self, "_family_activation_checkboxes", {})
         if not checkboxes:
             return
-        widgets_config = self._settings.get('widgets', {})
+        widgets_config = self._settings.get('widgets')
         if not isinstance(widgets_config, dict):
             widgets_config = {}
         for family_id, checkbox in checkboxes.items():
@@ -1185,7 +1176,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         # Block all signals during load to prevent unintended saves
         blockers = []
         try:
-            widgets_value = self._settings.get('widgets', {})
+            widgets_value = self._settings.get('widgets')
             if isinstance(widgets_value, dict):
                 widgets = dict(widgets_value)
             else:
@@ -1239,7 +1230,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         previous_loading = self._loading
         self._loading = True
         try:
-            widgets_value = self._settings.get("widgets", {})
+            widgets_value = self._settings.get("widgets")
             if isinstance(widgets_value, dict):
                 widgets = dict(widgets_value)
             else:
@@ -1370,7 +1361,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
     def _choose_media_volume_fill_color(self) -> None:
         """Choose Spotify volume slider fill color."""
         color = StyledColorPicker.get_color(
-            getattr(self, "_media_volume_fill_color", self._media_volume_fill_color),
+            getattr(self, "_media_volume_fill_color", self._color_from_default("media", "spotify_volume_fill_color")),
             self,
             "Choose Spotify Volume Fill Color",
         )
@@ -1380,7 +1371,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
     def _choose_osc_line_color(self) -> None:
         color = StyledColorPicker.get_color(
-            getattr(self, '_osc_line_color', QColor(255, 255, 255, 255)),
+            getattr(self, '_osc_line_color', self._color_from_default('spotify_visualizer', 'osc_line_color')),
             self, "Choose Oscilloscope Line Color")
         if color is not None:
             self._osc_line_color = color
@@ -1388,7 +1379,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
     def _choose_osc_glow_color(self) -> None:
         color = StyledColorPicker.get_color(
-            getattr(self, '_osc_glow_color', QColor(0, 200, 255, 230)),
+            getattr(self, '_osc_glow_color', self._color_from_default('spotify_visualizer', 'osc_glow_color')),
             self, "Choose Oscilloscope Glow Color")
         if color is not None:
             self._osc_glow_color = color
@@ -1396,7 +1387,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
     def _choose_sine_glow_color(self) -> None:
         color = StyledColorPicker.get_color(
-            getattr(self, '_sine_glow_color', QColor(0, 200, 255, 230)),
+            getattr(self, '_sine_glow_color', self._color_from_default('spotify_visualizer', 'sine_glow_color')),
             self, "Choose Sine Wave Glow Color")
         if color is not None:
             self._sine_glow_color = color
@@ -1404,7 +1395,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
     def _choose_sine_line_color(self) -> None:
         color = StyledColorPicker.get_color(
-            getattr(self, '_sine_line_color', QColor(255, 255, 255, 255)),
+            getattr(self, '_sine_line_color', self._color_from_default('spotify_visualizer', 'sine_line_color')),
             self, "Choose Sine Wave Line Color")
         if color is not None:
             self._sine_line_color = color
@@ -1412,7 +1403,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
     def _choose_sine_line2_color(self) -> None:
         color = StyledColorPicker.get_color(
-            getattr(self, '_sine_line2_color', QColor(255, 120, 50, 230)),
+            getattr(self, '_sine_line2_color', self._color_from_default('spotify_visualizer', 'sine_line2_color')),
             self, "Choose Sine Line 2 Color")
         if color is not None:
             self._sine_line2_color = color
@@ -1420,7 +1411,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
     def _choose_sine_line2_glow_color(self) -> None:
         color = StyledColorPicker.get_color(
-            getattr(self, '_sine_line2_glow_color', QColor(255, 120, 50, 180)),
+            getattr(self, '_sine_line2_glow_color', self._color_from_default('spotify_visualizer', 'sine_line2_glow_color')),
             self, "Choose Sine Line 2 Glow Color")
         if color is not None:
             self._sine_line2_glow_color = color
@@ -1428,7 +1419,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
     def _choose_sine_line3_color(self) -> None:
         color = StyledColorPicker.get_color(
-            getattr(self, '_sine_line3_color', QColor(50, 255, 120, 230)),
+            getattr(self, '_sine_line3_color', self._color_from_default('spotify_visualizer', 'sine_line3_color')),
             self, "Choose Sine Line 3 Color")
         if color is not None:
             self._sine_line3_color = color
@@ -1436,7 +1427,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
     def _choose_sine_line3_glow_color(self) -> None:
         color = StyledColorPicker.get_color(
-            getattr(self, '_sine_line3_glow_color', QColor(50, 255, 120, 180)),
+            getattr(self, '_sine_line3_glow_color', self._color_from_default('spotify_visualizer', 'sine_line3_glow_color')),
             self, "Choose Sine Line 3 Glow Color")
         if color is not None:
             self._sine_line3_glow_color = color
@@ -1444,7 +1435,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
     def _choose_osc_line2_color(self) -> None:
         color = StyledColorPicker.get_color(
-            getattr(self, '_osc_line2_color', QColor(255, 120, 50, 230)),
+            getattr(self, '_osc_line2_color', self._color_from_default('spotify_visualizer', 'osc_line2_color')),
             self, "Choose Line 2 Color")
         if color is not None:
             self._osc_line2_color = color
@@ -1452,7 +1443,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
     def _choose_osc_line2_glow_color(self) -> None:
         color = StyledColorPicker.get_color(
-            getattr(self, '_osc_line2_glow_color', QColor(255, 120, 50, 180)),
+            getattr(self, '_osc_line2_glow_color', self._color_from_default('spotify_visualizer', 'osc_line2_glow_color')),
             self, "Choose Line 2 Glow Color")
         if color is not None:
             self._osc_line2_glow_color = color
@@ -1460,7 +1451,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
     def _choose_osc_line3_color(self) -> None:
         color = StyledColorPicker.get_color(
-            getattr(self, '_osc_line3_color', QColor(50, 255, 120, 230)),
+            getattr(self, '_osc_line3_color', self._color_from_default('spotify_visualizer', 'osc_line3_color')),
             self, "Choose Line 3 Color")
         if color is not None:
             self._osc_line3_color = color
@@ -1468,7 +1459,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
     def _choose_osc_line3_glow_color(self) -> None:
         color = StyledColorPicker.get_color(
-            getattr(self, '_osc_line3_glow_color', QColor(50, 255, 120, 180)),
+            getattr(self, '_osc_line3_glow_color', self._color_from_default('spotify_visualizer', 'osc_line3_glow_color')),
             self, "Choose Line 3 Glow Color")
         if color is not None:
             self._osc_line3_glow_color = color
@@ -1539,7 +1530,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 
-        existing_widgets = self._settings.get('widgets', {})
+        existing_widgets = self._settings.get('widgets')
         if not isinstance(existing_widgets, dict):
             existing_widgets = {}
 
@@ -1658,7 +1649,11 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
                 widget_type = WidgetType(target.widget_type_key)
 
                 can_stack, message = get_position_status_for_widget(
-                    widgets_config, widget_type, target.position_value, target.monitor_value
+                    widgets_config,
+                    widget_type,
+                    target.position_value,
+                    target.monitor_value,
+                    defaults=self._widget_defaults,
                 )
                 
                 if message:
@@ -1687,7 +1682,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         config = build_widget_stack_preview_config(self)
 
         # Spotify Visualizer
-        stored_widgets = self._settings.get("widgets", {}) or {}
+        stored_widgets = self._settings.get("widgets") or {}
         base_visualizer = {}
         if isinstance(stored_widgets, Mapping):
             candidate = stored_widgets.get("spotify_visualizer", {})

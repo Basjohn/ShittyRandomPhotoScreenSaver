@@ -64,7 +64,7 @@ class QuickDisplayVisualizerOwner:
         initial_mode: str,
         engine_factory: Callable[[int], Any] | None = None,
         presentation_resolver: Callable[[], Any] | None = None,
-        card_shadow_kwargs: Mapping[str, object] | None = None,
+        card_shadow_kwargs: Mapping[str, object],
         transition_clock: Callable[[], float] | None = None,
         transition_half_duration_s: float = _MODE_TRANSITION_HALF_DURATION_S,
     ) -> None:
@@ -81,7 +81,26 @@ class QuickDisplayVisualizerOwner:
             engine_factory=engine_factory,
         )
         self._presentation_resolver = presentation_resolver
-        self._card_shadow_kwargs = dict(card_shadow_kwargs or {})
+        required_card_fields = {
+            "background_color",
+            "border_color",
+            "border_width",
+            "corner_radius",
+            "content_inset",
+            "shadow_enabled",
+            "shadow_color",
+            "shadow_blur",
+            "shadow_offset",
+            "shadow_spread",
+            "shadow_extensions",
+        }
+        self._card_shadow_kwargs = dict(card_shadow_kwargs)
+        missing_card_fields = required_card_fields.difference(self._card_shadow_kwargs)
+        if missing_card_fields:
+            raise ValueError(
+                "resolved visualizer card style is incomplete: "
+                + ", ".join(sorted(missing_card_fields))
+            )
         self._transition_clock = transition_clock or time.perf_counter
         self._transition_half_duration_s = max(
             0.0, float(transition_half_duration_s)
@@ -168,9 +187,14 @@ class QuickDisplayVisualizerOwner:
             install_default_logical_tick_state,
         )
 
+        from widgets.spotify_visualizer.presentation_state import (
+            install_default_presentation_state,
+        )
+
         controller = self._controller
         state = controller.logical_tick_state
         install_default_logical_tick_state(state, bar_count=controller.bar_count)
+        install_default_presentation_state(controller.presentation_state)
         if logical_kwargs:
             apply_logical_vis_mode_kwargs(state, logical_kwargs)
         if presentation_kwargs:
@@ -183,8 +207,8 @@ class QuickDisplayVisualizerOwner:
                 "[VIS_RAINBOW] stage=CONFIG reason=%s mode=%s enabled=%s speed=%.3f",
                 reason,
                 controller.mode_id,
-                bool(getattr(presentation_state, "_rainbow_enabled", False)),
-                float(getattr(presentation_state, "_rainbow_speed", 0.5) or 0.5),
+                bool(presentation_state._rainbow_enabled),
+                float(presentation_state._rainbow_speed),
             )
         controller.enabled = True
         controller.playing = bool(playing)
@@ -211,25 +235,24 @@ class QuickDisplayVisualizerOwner:
 
             apply_engine_vis_mode_kwargs(engine, source_kwargs)
 
-        # Technical settings are already resolved by the canonical settings /
-        # preset layer.  Prefer an explicit mapping from the display
-        # orchestration caller; the controller-owned cache is the compatible
-        # neutral fallback used by settings refresh/replay paths.
+        # Technical settings are a complete canonical/preset-resolved contract.
+        # Missing mode configuration is an authority error at configuration
+        # time; it must not leak into renderer/DSP fallbacks later.
         resolved_technical = technical_config
         if resolved_technical is None:
             cache = controller.technical_config_cache
-            if isinstance(cache, dict):
-                resolved_technical = cache.get(controller.mode_id)
-        if resolved_technical:
-            from widgets.spotify_visualizer.quick_technical_config import (
-                apply_controller_technical_config,
-            )
+            if not isinstance(cache, dict):
+                raise RuntimeError("visualizer technical cache is unavailable")
+            resolved_technical = cache[controller.mode_id]
+        from widgets.spotify_visualizer.quick_technical_config import (
+            apply_controller_technical_config,
+        )
 
-            apply_controller_technical_config(
-                controller,
-                resolved_technical,
-                reason=reason,
-            )
+        apply_controller_technical_config(
+            controller,
+            resolved_technical,
+            reason=reason,
+        )
 
         controller.resolve_logical_mode_state(
             controller.mode_id, _mode_runtime_factory(controller.mode_id)

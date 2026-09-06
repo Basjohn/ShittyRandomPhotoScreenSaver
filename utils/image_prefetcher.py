@@ -412,16 +412,23 @@ class ImagePrefetcher:
             self._submit_scaled_request(request)
 
     def _submit_scaled_request(self, request: Dict[str, Any]) -> None:
-        raw_path = str(request.get("path") or "")
-        cache_key = str(request.get("cache_key") or "")
-        width = int(request.get("width") or 0)
-        height = int(request.get("height") or 0)
-        display_mode = request.get("display_mode", DisplayMode.FILL)
+        try:
+            raw_path = str(request["path"])
+            cache_key = str(request["cache_key"])
+            width = int(request["width"])
+            height = int(request["height"])
+            display_mode = request["display_mode"]
+            use_lanczos = request["use_lanczos"]
+            sharpen = request["sharpen"]
+            generation = int(request["_prefetch_generation"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"incomplete scaled-prefetch request: {exc}") from exc
         if not isinstance(display_mode, DisplayMode):
             display_mode = DisplayMode.from_string(str(display_mode))
-        use_lanczos = bool(request.get("use_lanczos", False))
-        sharpen = bool(request.get("sharpen", False))
-        generation = int(request.get("_prefetch_generation", -1))
+        if not isinstance(use_lanczos, bool) or not isinstance(sharpen, bool):
+            raise TypeError("scaled-prefetch quality fields must be resolved booleans")
+        if not raw_path or not cache_key or width <= 0 or height <= 0:
+            raise ValueError("scaled-prefetch request has invalid path/cache/geometry")
 
         def _compute_scaled_variant() -> Optional[tuple[str, QImage]]:
             try:

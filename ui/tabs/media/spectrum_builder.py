@@ -66,7 +66,6 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         bucket_key="appearance",
         title="Appearance",
         helper_text="Spectrum colors and rim-glow styling still apply when hidden.",
-        default_expanded=True,
     )
     _, shape_bucket = build_collapsible_bucket(
         tab,
@@ -75,7 +74,6 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         bucket_key="shape",
         title="Shape",
         helper_text="Spectrum layout and authored silhouette still apply when hidden.",
-        default_expanded=True,
     )
     _, render_bucket = build_collapsible_bucket(
         tab,
@@ -84,7 +82,6 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         bucket_key="render",
         title="Render",
         helper_text="Render-style controls still apply when hidden.",
-        default_expanded=True,
     )
     _, audio_bucket = build_collapsible_bucket(
         tab,
@@ -93,7 +90,6 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         bucket_key="audio",
         title="Audio",
         helper_text="Creative motion controls live here. Technical noise-floor and signal tuning live in Technical.",
-        default_expanded=True,
     )
     _, ghost_bucket = build_collapsible_bucket(
         tab,
@@ -102,7 +98,6 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         bucket_key="ghost",
         title="Ghost",
         helper_text="Ghost controls still apply when hidden.",
-        default_expanded=True,
     )
 
     def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str):
@@ -125,7 +120,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.spectrum_glow_enabled = QCheckBox("Enable Rim Glow")
     tab.spectrum_glow_enabled.setProperty("circleIndicator", True)
     tab.spectrum_glow_enabled.setChecked(
-        tab._default_bool('spotify_visualizer', 'spectrum_glow_enabled', False)
+        tab._default_bool('spotify_visualizer', 'spectrum_glow_enabled')
     )
     tab.spectrum_glow_enabled.setToolTip(
         "Add a thin emissive rim around Spectrum bars without adding bloom smear."
@@ -138,13 +133,9 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
 
     spectrum_glow_color_widget, spectrum_glow_color_row = _aligned_row_widget(appearance_bucket, "Glow Color:")
     tab._spectrum_glow_widgets.append(spectrum_glow_color_widget)
-    _spectrum_glow_default = getattr(tab, "_settings", {}).get("widgets", {}).get(
-        "spotify_visualizer", {}
-    ).get("spectrum_glow_color", [110, 220, 255, 235])
-    try:
-        tab._spectrum_glow_color = QColor(*_spectrum_glow_default)
-    except Exception:
-        tab._spectrum_glow_color = QColor(110, 220, 255, 235)
+    tab._spectrum_glow_color = tab._color_from_default(
+        "spotify_visualizer", "spectrum_glow_color"
+    )
     tab.spectrum_glow_color_btn = ColorSwatchButton(title="Choose Spectrum Rim Glow Color")
     bind_color_button(
         tab,
@@ -160,7 +151,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.spectrum_glow_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_glow_intensity.setMinimum(0)
     tab.spectrum_glow_intensity.setMaximum(150)
-    _sg_default = int(tab._default_float('spotify_visualizer', 'spectrum_glow_intensity', 0.55) * 100)
+    _sg_default = int(tab._default_float('spotify_visualizer', 'spectrum_glow_intensity') * 100)
     tab.spectrum_glow_intensity.setValue(max(0, min(150, _sg_default)))
     tab.spectrum_glow_intensity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.spectrum_glow_intensity.setTickInterval(10)
@@ -189,7 +180,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.vis_ghost_enabled = QCheckBox("Enable Ghosting")
     tab.vis_ghost_enabled.setProperty("circleIndicator", True)
     tab.vis_ghost_enabled.setChecked(
-        tab._default_bool('spotify_visualizer', 'spectrum_ghosting_enabled', True)
+        tab._default_bool('spotify_visualizer', 'spectrum_ghosting_enabled')
     )
     tab.vis_ghost_enabled.setToolTip(
         "When enabled, the visualizer draws trailing ghost bars above the current height."
@@ -207,7 +198,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.vis_ghost_opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.vis_ghost_opacity_slider.setMinimum(0)
     tab.vis_ghost_opacity_slider.setMaximum(100)
-    ghost_alpha_pct = int(tab._default_float('spotify_visualizer', 'spectrum_ghost_alpha', 0.4) * 100)
+    ghost_alpha_pct = int(tab._default_float('spotify_visualizer', 'spectrum_ghost_alpha') * 100)
     tab.vis_ghost_opacity_slider.setValue(ghost_alpha_pct)
     tab.vis_ghost_opacity_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.vis_ghost_opacity_slider.setTickInterval(5)
@@ -224,7 +215,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.vis_ghost_decay_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.vis_ghost_decay_slider.setMinimum(10)
     tab.vis_ghost_decay_slider.setMaximum(100)
-    ghost_decay_slider = int(tab._default_float('spotify_visualizer', 'spectrum_ghost_decay', 0.4) * 100)
+    ghost_decay_slider = int(tab._default_float('spotify_visualizer', 'spectrum_ghost_decay') * 100)
     tab.vis_ghost_decay_slider.setValue(max(10, min(100, ghost_decay_slider)))
     tab.vis_ghost_decay_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.vis_ghost_decay_slider.setTickInterval(5)
@@ -272,7 +263,11 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
             tab._save_settings()
 
     tab._set_spectrum_render_mode = _set_render_mode
-    tab._spectrum_render_mode = str(tab._default_str('spotify_visualizer', 'spectrum_render_mode', 'bars') or 'bars').lower()
+    tab._spectrum_render_mode = tab._default_str(
+        "spotify_visualizer", "spectrum_render_mode"
+    ).strip().lower()
+    if not tab._spectrum_render_mode:
+        raise ValueError("Canonical Spectrum render mode is empty")
     render_mode_row.addWidget(_make_render_mode_button("SEGMENTS", "segment"))
     render_mode_row.addWidget(_make_render_mode_button("BAR", "bars"))
     render_mode_row.addStretch()
@@ -285,9 +280,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.spectrum_visual_smoothing_enabled.setChecked(
         tab._default_bool(
             'spotify_visualizer',
-            'spectrum_visual_smoothing_enabled',
-            True,
-        )
+            'spectrum_visual_smoothing_enabled')
     )
     tab.spectrum_visual_smoothing_enabled.setToolTip(
         "Apply presentation-only interpolation on Spectrum's existing visualizer tick. "
@@ -308,9 +301,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
             int(
                 tab._default_float(
                     'spotify_visualizer',
-                    'spectrum_visual_smoothing',
-                    0.5,
-                )
+                    'spectrum_visual_smoothing')
                 * 100
             ),
         ),
@@ -344,7 +335,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.spectrum_rainbow_per_bar = QCheckBox("Unique Colours Per Bar")
     tab.spectrum_rainbow_per_bar.setProperty("circleIndicator", True)
     tab.spectrum_rainbow_per_bar.setChecked(
-        tab._default_bool('spotify_visualizer', 'spectrum_rainbow_per_bar', False)
+        tab._default_bool('spotify_visualizer', 'spectrum_unique_colors')
     )
     tab.spectrum_rainbow_per_bar.setToolTip(
         "When 'Taste The Rainbow' is enabled: each bar gets its own unique colour "
@@ -361,7 +352,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.spectrum_rainbow_fill = QCheckBox("Rainbow Fill")
     tab.spectrum_rainbow_fill.setProperty("circleIndicator", True)
     tab.spectrum_rainbow_fill.setChecked(
-        tab._default_bool('spotify_visualizer', 'spectrum_rainbow_fill', True)
+        tab._default_bool('spotify_visualizer', 'spectrum_rainbow_fill')
     )
     tab.spectrum_rainbow_fill.setToolTip(
         "When rainbow/unique colours are active: bar fill participates in the "
@@ -377,7 +368,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.spectrum_rainbow_border = QCheckBox("Rainbow Borders")
     tab.spectrum_rainbow_border.setProperty("circleIndicator", True)
     tab.spectrum_rainbow_border.setChecked(
-        tab._default_bool('spotify_visualizer', 'spectrum_rainbow_border', False)
+        tab._default_bool('spotify_visualizer', 'spectrum_rainbow_border')
     )
     tab.spectrum_rainbow_border.setToolTip(
         "When rainbow/unique colours are active: bar borders also participate "
@@ -392,7 +383,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.spectrum_border_radius = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_border_radius.setMinimum(0)
     tab.spectrum_border_radius.setMaximum(12)
-    _br_default = int(tab._default_float('spotify_visualizer', 'spectrum_border_radius', 0.0))
+    _br_default = int(tab._default_float('spotify_visualizer', 'spectrum_border_radius'))
     tab.spectrum_border_radius.setValue(max(0, min(12, _br_default)))
     tab.spectrum_border_radius.setToolTip("Round bar corners (0 = square, 6 = nicely rounded).")
     bind_setting_signal(
@@ -408,7 +399,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     _mirror_row = _aligned_row(shape_bucket, "Mirrored Layout:")
     tab.spectrum_mirrored = QCheckBox("Center-Out (Mirrored Shape)")
     tab.spectrum_mirrored.setProperty("circleIndicator", True)
-    _mirror_default = tab._default_bool('spotify_visualizer', 'spectrum_mirrored', True)
+    _mirror_default = tab._default_bool('spotify_visualizer', 'spectrum_mirrored')
     tab.spectrum_mirrored.setChecked(_mirror_default)
     tab.spectrum_mirrored.setToolTip(
         "On: mirrored shape profile around the center divider (center ↔ edge symmetry).\n"
@@ -429,9 +420,23 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
 
     # Visual shape editor
     from ui.tabs.media.spectrum_shape_editor import SpectrumShapeEditor
-    _mirror_default_for_editor = tab._default_bool('spotify_visualizer', 'spectrum_mirrored', True)
+    _mirror_default_for_editor = tab._default_bool('spotify_visualizer', 'spectrum_mirrored')
     tab.spectrum_shape_editor = SpectrumShapeEditor(
-        parent=None, mirrored=_mirror_default_for_editor,
+        parent=None,
+        mirrored=_mirror_default_for_editor,
+        default_nodes=tab._widget_default('spotify_visualizer', 'spectrum_shape_nodes'),
+        default_notches_mirrored=tab._widget_default(
+            'spotify_visualizer', 'spectrum_notch_positions_mirrored'
+        ),
+        default_notches_linear=tab._widget_default(
+            'spotify_visualizer', 'spectrum_notch_positions_linear'
+        ),
+        default_lane_strengths_mirrored=tab._widget_default(
+            'spotify_visualizer', 'spectrum_lane_strengths_mirrored'
+        ),
+        default_lane_strengths_linear=tab._widget_default(
+            'spotify_visualizer', 'spectrum_lane_strengths_linear'
+        ),
     )
     tab.spectrum_shape_editor.nodes_changed.connect(tab._save_settings)
     tab.spectrum_shape_editor.notch_positions_changed.connect(tab._save_settings)
@@ -456,7 +461,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.spectrum_wave_amplitude = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_wave_amplitude.setMinimum(0)
     tab.spectrum_wave_amplitude.setMaximum(100)
-    _wave_default = int(tab._default_float('spotify_visualizer', 'spectrum_wave_amplitude', 0.50) * 100)
+    _wave_default = int(tab._default_float('spotify_visualizer', 'spectrum_wave_amplitude') * 100)
     tab.spectrum_wave_amplitude.setValue(max(0, min(100, _wave_default)))
     tab.spectrum_wave_amplitude.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.spectrum_wave_amplitude.setTickInterval(25)
@@ -480,7 +485,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.spectrum_profile_floor = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_profile_floor.setMinimum(5)
     tab.spectrum_profile_floor.setMaximum(30)
-    _floor_default = int(tab._default_float('spotify_visualizer', 'spectrum_profile_floor', 0.12) * 100)
+    _floor_default = int(tab._default_float('spotify_visualizer', 'spectrum_profile_floor') * 100)
     tab.spectrum_profile_floor.setValue(max(5, min(30, _floor_default)))
     tab.spectrum_profile_floor.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.spectrum_profile_floor.setTickInterval(5)
@@ -504,7 +509,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     tab.spectrum_drop_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_drop_speed.setMinimum(50)
     tab.spectrum_drop_speed.setMaximum(300)
-    _drop_default = int(tab._default_float('spotify_visualizer', 'spectrum_drop_speed', 1.0) * 100)
+    _drop_default = int(tab._default_float('spotify_visualizer', 'spectrum_drop_speed') * 100)
     tab.spectrum_drop_speed.setValue(max(50, min(300, _drop_default)))
     tab.spectrum_drop_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.spectrum_drop_speed.setTickInterval(25)
@@ -522,27 +527,3 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     _drop_row.addWidget(tab.spectrum_drop_speed)
     tab.spectrum_drop_speed_label = QLabel(f"{_drop_default / 100.0:.1f}x")
     _drop_row.addWidget(tab.spectrum_drop_speed_label)
-
-    # Spectrum card height growth slider (1.0 .. 3.0)
-    spectrum_growth_row = _aligned_row(audio_bucket, "Card Height:")
-    tab.spectrum_growth = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.spectrum_growth.setMinimum(100)
-    tab.spectrum_growth.setMaximum(500)
-    spectrum_growth_val = int(tab._default_float('spotify_visualizer', 'spectrum_growth', 1.0) * 100)
-    tab.spectrum_growth.setValue(max(100, min(500, spectrum_growth_val)))
-    tab.spectrum_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.spectrum_growth.setTickInterval(50)
-    tab.spectrum_growth.setToolTip(
-        "Height multiplier for the Spectrum card.\n"
-        "Lower = tighter card with denser motion.\n"
-        "Higher = taller card with more vertical breathing room.\n"
-        "100% = current authored baseline."
-    )
-    bind_setting_signal(
-        tab,
-        tab.spectrum_growth.valueChanged,
-        updater=lambda v: tab.spectrum_growth_label.setText(f"{v / 100.0:.1f}x"),
-    )
-    spectrum_growth_row.addWidget(tab.spectrum_growth)
-    tab.spectrum_growth_label = QLabel(f"{spectrum_growth_val / 100.0:.1f}x")
-    spectrum_growth_row.addWidget(tab.spectrum_growth_label)

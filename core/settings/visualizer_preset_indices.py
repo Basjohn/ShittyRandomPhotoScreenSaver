@@ -1,16 +1,15 @@
 """Shared visualizer preset-index resolution helpers.
 
-These helpers are intentionally isolated from ``visualizer_presets.py`` so the
-settings model layer can resolve preset indices without importing the full
-preset-loading module at import time. That keeps the preset registry available
-to runtime callers while letting normalization utilities import the settings
-model without triggering cycles.
+Missing/invalid persisted selection repairs to the canonical per-mode selection.
+The curated preset registry owns slot availability; there is no generic
+"first preset" product-default authority.
 """
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from typing import Any, Dict
 
+from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
     coerce_visualizer_mode_id,
@@ -27,25 +26,26 @@ def _get_visualizer_presets_module():
 def get_custom_preset_index(mode: str) -> int:
     """Return the trailing Custom slot index for *mode*."""
     module = _get_visualizer_presets_module()
-    if hasattr(module, "get_custom_preset_index"):
-        return module.get_custom_preset_index(mode)
-    return 3
+    return module.get_custom_preset_index(mode)
 
 
 def get_missing_preset_fallback_index(mode: str) -> int:
-    """Return the first available non-custom preset slot for *mode*."""
-    module = _get_visualizer_presets_module()
-    if not hasattr(module, "get_presets"):
-        return 0
-    presets = module.get_presets(mode)
-    for idx, preset in enumerate(presets):
-        if not getattr(preset, "is_custom", False):
-            return idx
-    return max(0, get_custom_preset_index(mode))
+    """Resolve missing persisted state from canonical per-mode authority."""
+    mode = coerce_visualizer_mode_id(mode)
+    key = get_preset_key(mode)
+    canonical = int(
+        require_canonical_default(f"widgets.spotify_visualizer.{key}")
+    )
+    custom_idx = get_custom_preset_index(mode)
+    if custom_idx <= 0:
+        raise RuntimeError(f"visualizer mode {mode!r} has no authored curated presets")
+    # Product defaults select curated authored content, never the user-owned
+    # trailing Custom slot. Registry construction guarantees contiguity.
+    return max(0, min(custom_idx - 1, canonical))
 
 
 def get_default_preset_index(mode: str) -> int:
-    """Backward-compatible alias for missing-preset fallback resolution."""
+    """Compatibility alias for canonical missing-preset repair."""
     return get_missing_preset_fallback_index(mode)
 
 
@@ -66,10 +66,12 @@ def resolve_preset_index_from_mapping(
     try:
         idx = int(raw)
     except (TypeError, ValueError):
-        idx = fallback
+        return fallback
 
     custom_idx = get_custom_preset_index(mode)
-    return max(0, min(custom_idx, idx))
+    if idx < 0 or idx > custom_idx:
+        return fallback
+    return idx
 
 
 def resolve_all_preset_indices_from_mapping(
@@ -77,7 +79,6 @@ def resolve_all_preset_indices_from_mapping(
     *,
     prefix: str = "widgets.spotify_visualizer",
 ) -> Dict[str, int]:
-    """Resolve every visualizer mode's preset index from a sparse mapping."""
     return {
         get_preset_key(mode): resolve_preset_index_from_mapping(mode, data, prefix=prefix)
         for mode in VISUALIZER_MODE_IDS
@@ -89,7 +90,6 @@ def resolve_all_preset_indices_from_getter(
     *,
     prefix: str = "widgets.spotify_visualizer",
 ) -> Dict[str, int]:
-    """Resolve every visualizer preset index from a prefixed settings getter."""
     return resolve_all_preset_indices_from_mapping(
         {
             f"{prefix}.{get_preset_key(mode)}": read_value(

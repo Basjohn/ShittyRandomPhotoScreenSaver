@@ -36,6 +36,7 @@ from core.reddit_preparation import (
     touch_reddit_marker,
 )
 from core.runtime_flags import automatic_service_updates_enabled
+from core.settings.default_contract import require_canonical_default
 from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
 from core.threading.manager import ThreadManager
 from widgets.service_widget_runtime import StartupRefreshDecision
@@ -43,6 +44,7 @@ from widgets.service_widget_runtime import StartupRefreshDecision
 
 logger = get_logger(__name__)
 _REDDIT_CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "reddit"
+_REDDIT_PROVIDER_SORT = "hot"  # Provider request policy, not a persisted product setting.
 
 
 def normalize_subreddit(value: object) -> str:
@@ -61,12 +63,17 @@ def normalize_subreddit(value: object) -> str:
 
 @dataclass(frozen=True)
 class RedditRuntimeConfig:
-    """Provider-independent settings required to maintain one Reddit feed."""
+    """Provider-independent settings required to maintain one Reddit feed.
+
+    ``subreddit`` is product state and therefore resolves from the canonical
+    widget section. ``sort`` is an internal provider request policy; it is named
+    explicitly so it cannot masquerade as a persisted Reddit setting.
+    """
 
     widget_id: str
     subreddit: str
     cache_key: str
-    sort: str = "hot"
+    sort: str
 
     @classmethod
     def from_mapping(
@@ -75,12 +82,23 @@ class RedditRuntimeConfig:
         *,
         widget_id: str,
     ) -> "RedditRuntimeConfig":
-        member_id = str(widget_id or "reddit")
+        member_id = str(widget_id or "").strip().lower()
+        if member_id not in {"reddit", "reddit2"}:
+            raise ValueError(f"unsupported Reddit runtime member: {widget_id!r}")
+        canonical = require_canonical_default(f"widgets.{member_id}")
+        if not isinstance(canonical, Mapping):
+            raise TypeError(f"Canonical widgets.{member_id} defaults must be a mapping")
+        canonical_subreddit = normalize_subreddit(canonical["subreddit"])
+        if not canonical_subreddit:
+            raise ValueError(f"Canonical widgets.{member_id}.subreddit is empty")
+        subreddit = normalize_subreddit(values.get("subreddit", canonical_subreddit))
+        if not subreddit:
+            subreddit = canonical_subreddit
         return cls(
             widget_id=member_id,
-            subreddit=normalize_subreddit(values.get("subreddit", "pics")) or "pics",
+            subreddit=subreddit,
             cache_key=member_id,
-            sort=str(values.get("sort", "hot") or "hot"),
+            sort=_REDDIT_PROVIDER_SORT,
         )
 
 

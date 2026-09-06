@@ -21,7 +21,7 @@ from core.settings.models._enums import (  # noqa: F401
     DisplayMode,
     TransitionType,
     WidgetPosition,
-    coerce_widget_position,
+    parse_widget_position,
 )
 
 from core.settings.models._core import (  # noqa: F401
@@ -38,9 +38,6 @@ from core.settings.models._visualizer_helpers import (  # noqa: F401
     PER_MODE_TECHNICAL_MODES,
     _ACTIVE_MODE_SHARED_VISUAL_KEYS,
     _ACTIVE_MODE_TECHNICAL_KEYS,
-    _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR,
-    _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED,
-    _SPECTRUM_DEFAULT_NOTCHES_LINEAR,
     _build_live_visualizer_mode_kwargs,
     _build_live_visualizer_mode_shared_visual_kwargs,
     _clamp_lane_strength,
@@ -49,7 +46,6 @@ from core.settings.models._visualizer_helpers import (  # noqa: F401
     _coerce_live_visualizer_int,
     _normalize_spectrum_lane_strengths,
     _normalize_spectrum_linear_notches,
-    _normalize_visualizer_direction,
     _resolve_active_mode_technical_state,
     _resolve_active_mode_shared_visual_state,
 )

@@ -31,11 +31,6 @@ from enum import Enum
 from .host import OverlayWidgetGeometry
 
 
-# The universal default overlay margin (px) when neither the instance nor the
-# canonical default carries one. Matches the legacy overlay default.
-DEFAULT_MARGIN_PX = 30.0
-
-
 # Matches the legacy min-visible clamp: a widget may be dragged/anchored partly
 # off-display but always keeps this many pixels reachable on screen.
 MIN_VISIBLE_PX = 10.0
@@ -56,17 +51,15 @@ class OverlayAnchor(Enum):
 
     @classmethod
     def from_setting(cls, value: object) -> "OverlayAnchor":
-        """Normalize a persisted ``position`` value (e.g. ``"Top Right"``).
+        """Parse one resolved anchor token without inventing a product default.
 
-        Unknown/absent values resolve to ``TOP_RIGHT``, matching the legacy
-        ``OverlayPosition.from_string`` fallback exactly.
+        Persisted input is repaired against the widget's canonical position at
+        :func:`resolve_overlay_geometry_policy`; if the canonical schema itself
+        is invalid this parser intentionally raises.
         """
 
         token = str(value or "").strip().lower().replace(" ", "_")
-        try:
-            return cls(token)
-        except ValueError:
-            return cls.TOP_RIGHT
+        return cls(token)
 
 
 _LEFT_ANCHORS = frozenset(
@@ -184,13 +177,18 @@ def _resolve_margin(
     values: Mapping[str, object],
     canonical: Mapping[str, object],
 ) -> float:
-    raw = values.get("margin", canonical.get("margin"))
-    if raw is None:
-        return DEFAULT_MARGIN_PX
+    if "margin" not in canonical:
+        raise KeyError("canonical widget geometry is missing margin")
+    try:
+        canonical_margin = float(canonical["margin"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("canonical widget margin must be numeric") from exc
+
+    raw = values.get("margin", canonical_margin)
     try:
         return float(raw)
     except (TypeError, ValueError):
-        return DEFAULT_MARGIN_PX
+        return canonical_margin
 
 
 def resolve_overlay_geometry_policy(
@@ -201,13 +199,14 @@ def resolve_overlay_geometry_policy(
 ) -> OverlayGeometryPolicy:
     """Resolve the anchor + margin geometry policy for one widget instance.
 
-    Reads the persisted ``position`` (anchor) and ``margin`` for ``widget_id``,
-    falling back to canonical defaults and then to ``TOP_RIGHT`` / the default
-    margin. ``committed_rect`` is an already-resolved G CUSTOM committed
+    Reads the persisted ``position`` (anchor) and ``margin`` for ``widget_id``.
+    Missing/invalid persisted values repair only to that widget's canonical
+    values; an incomplete canonical geometry section is a schema error.
+    ``committed_rect`` is an already-resolved G CUSTOM committed
     rectangle (display-space) that, when provided, overrides anchored placement.
     """
 
-    from core.settings.defaults import get_default_settings
+    from core.settings.default_contract import require_canonical_default
 
     config: Mapping[str, object] = (
         widgets_config if isinstance(widgets_config, Mapping) else {}
@@ -215,13 +214,17 @@ def resolve_overlay_geometry_policy(
     values = config.get(widget_id, {})
     if not isinstance(values, Mapping):
         values = {}
-    canonical = get_default_settings().get("widgets", {}).get(widget_id, {})
+    canonical = require_canonical_default(f"widgets.{widget_id}")
     if not isinstance(canonical, Mapping):
-        canonical = {}
+        raise TypeError(f"canonical widget geometry section must be a mapping: {widget_id}")
+    if "position" not in canonical:
+        raise KeyError(f"canonical widget geometry is missing position: {widget_id}")
 
-    anchor = OverlayAnchor.from_setting(
-        values.get("position", canonical.get("position"))
-    )
+    canonical_anchor = OverlayAnchor.from_setting(canonical["position"])
+    try:
+        anchor = OverlayAnchor.from_setting(values.get("position", canonical["position"]))
+    except ValueError:
+        anchor = canonical_anchor
     margin = _resolve_margin(values, canonical)
     return OverlayGeometryPolicy(
         widget_id=str(widget_id),
@@ -401,7 +404,6 @@ def connect_overlay_preferred_size(item, binding: OverlayGeometryBinding):
 
 
 __all__ = [
-    "DEFAULT_MARGIN_PX",
     "MIN_VISIBLE_PX",
     "OverlayAnchor",
     "OverlayGeometryBinding",

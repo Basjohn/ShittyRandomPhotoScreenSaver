@@ -160,11 +160,44 @@ class ImageWorker(BaseWorker):
     def _handle_prescale(self, msg: WorkerMessage) -> WorkerResponse:
         """Decode and prescale an image."""
         path = msg.payload.get("path")
-        target_width = msg.payload.get("target_width", 0)
-        target_height = msg.payload.get("target_height", 0)
-        mode = msg.payload.get("mode", "fill")  # fill, fit, shrink
-        use_lanczos = msg.payload.get("use_lanczos", True)
-        sharpen = msg.payload.get("sharpen", True)
+        try:
+            target_width = int(msg.payload["target_width"])
+            target_height = int(msg.payload["target_height"])
+            mode = str(msg.payload["mode"])
+            use_lanczos = msg.payload["use_lanczos"]
+            sharpen = msg.payload["sharpen"]
+        except (KeyError, TypeError, ValueError) as exc:
+            return WorkerResponse(
+                msg_type=MessageType.ERROR,
+                seq_no=msg.seq_no,
+                correlation_id=msg.correlation_id,
+                success=False,
+                error=f"Incomplete IMAGE_PRESCALE payload: {exc}",
+            )
+        if not isinstance(use_lanczos, bool) or not isinstance(sharpen, bool):
+            return WorkerResponse(
+                msg_type=MessageType.ERROR,
+                seq_no=msg.seq_no,
+                correlation_id=msg.correlation_id,
+                success=False,
+                error="IMAGE_PRESCALE quality fields must be resolved booleans",
+            )
+        if mode not in {"fill", "fit", "shrink"}:
+            return WorkerResponse(
+                msg_type=MessageType.ERROR,
+                seq_no=msg.seq_no,
+                correlation_id=msg.correlation_id,
+                success=False,
+                error=f"Unknown IMAGE_PRESCALE display mode: {mode!r}",
+            )
+        if target_width <= 0 or target_height <= 0:
+            return WorkerResponse(
+                msg_type=MessageType.ERROR,
+                seq_no=msg.seq_no,
+                correlation_id=msg.correlation_id,
+                success=False,
+                error=f"Invalid IMAGE_PRESCALE target: {target_width}x{target_height}",
+            )
         
         if not path:
             return WorkerResponse(

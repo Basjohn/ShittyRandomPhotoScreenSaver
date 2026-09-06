@@ -22,7 +22,6 @@ class WorkerType(Enum):
     """Types of worker processes."""
     IMAGE = "image"           # decode/prescale with path|scaled:WxH cache keys
     RSS = "rss"               # fetch/parse/mirror with validated ImageMetadata
-    TRANSITION = "transition" # CPU precompute payloads
 
 
 class WorkerState(Enum):
@@ -56,10 +55,6 @@ class MessageType(Enum):
     RSS_REFRESH = "rss_refresh"
     RSS_RESULT = "rss_result"
     
-    # Transition worker messages
-    TRANSITION_PRECOMPUTE = "transition_precompute"
-    TRANSITION_RESULT = "transition_result"
-    
     # Error messages
     ERROR = "error"
 
@@ -83,7 +78,6 @@ class WorkerMessage:
     # Size caps per channel (bytes)
     MAX_IMAGE_PAYLOAD = 50 * 1024 * 1024   # 50MB for large images
     MAX_RSS_PAYLOAD = 1 * 1024 * 1024      # 1MB for RSS data
-    MAX_TRANSITION_PAYLOAD = 1 * 1024 * 1024  # 1MB for transition data
     
     def validate_size(self) -> bool:
         """Validate payload size against channel limits."""
@@ -93,7 +87,6 @@ class WorkerMessage:
         limits = {
             WorkerType.IMAGE: self.MAX_IMAGE_PAYLOAD,
             WorkerType.RSS: self.MAX_RSS_PAYLOAD,
-            WorkerType.TRANSITION: self.MAX_TRANSITION_PAYLOAD,
         }
         
         if self.worker_type and self.worker_type in limits:

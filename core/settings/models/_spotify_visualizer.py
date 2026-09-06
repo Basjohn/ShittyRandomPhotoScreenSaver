@@ -5,6 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Mapping, Tuple, TYPE_CHECKING
 
+from core.settings.default_contract import require_canonical_default
 from core.settings.bubble_gradient_semantics import (
     CURRENT_BUBBLE_GRADIENT_SEMANTICS_VERSION,
     get_bubble_gradient_semantics_version,
@@ -35,12 +36,8 @@ from core.settings.visualizer_settings_contract import (
     strip_legacy_global_technical_keys,
 )
 from core.settings.models._visualizer_helpers import (
-    _normalize_visualizer_direction,
     _normalize_spectrum_linear_notches,
     _normalize_spectrum_lane_strengths,
-    _SPECTRUM_DEFAULT_NOTCHES_LINEAR,
-    _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED,
-    _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR,
     PER_MODE_TECHNICAL_MODES,
     _ACTIVE_MODE_TECHNICAL_KEYS,
     _ACTIVE_MODE_SHARED_VISUAL_KEYS,
@@ -55,6 +52,22 @@ from core.settings.models._visualizer_helpers import (
 
 if TYPE_CHECKING:
     from core.settings.settings_manager import SettingsManager
+
+
+_VISUALIZER_DEFAULT_PREFIX = "widgets.spotify_visualizer"
+
+def _visualizer_default(key: str) -> Any:
+    """Return one persisted Visualizer product default from canonical authority."""
+
+    return require_canonical_default(f"{_VISUALIZER_DEFAULT_PREFIX}.{key}")
+
+
+def _active_visualizer_default(key: str) -> Any:
+    """Return the default active-mode mirror for a non-persisted model field."""
+
+    mode = str(_visualizer_default("mode"))
+    return _visualizer_default(f"{mode}_{key}")
+
 
 
 _PER_MODE_TECHNICAL_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
@@ -81,9 +94,9 @@ _PER_MODE_RESOLVERS: Dict[str, Callable[[Any], Any]] = {
     "dynamic_range_enabled": bool,
     "agc_strength": float,
     "input_gain": float,
-    "kick_lane_gain": lambda value: float(value if value is not None else 1.0),
-    "transient_pulse_gain": lambda value: float(value if value is not None else 1.0),
-    "transient_clamp": lambda value: float(value if value is not None else 1.5),
+    "kick_lane_gain": float,
+    "transient_pulse_gain": float,
+    "transient_clamp": float,
     "audio_block_size": int,
     "adaptive_sensitivity": bool,
     "sensitivity": float,
@@ -136,12 +149,10 @@ _OSC_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "osc_line5_glow_color": list,
     "osc_line6_color": list,
     "osc_line6_glow_color": list,
-    "spectrum_growth": float,
     "osc_speed": float,
     "osc_line_dim": bool,
     "osc_line_offset_bias": float,
     "osc_vertical_shift": int,
-    "osc_growth": float,
     "osc_ghosting_enabled": bool,
     "osc_ghost_intensity": float,
     "osc_ghost_decay": float,
@@ -179,7 +190,6 @@ _SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
 }
 
 _SINE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
-    "sine_wave_growth": float,
     "sine_wave_travel": int,
     "sine_density": float,
     "sine_displacement": float,
@@ -275,8 +285,6 @@ _BUBBLE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "bubble_big_contraction_bias": float,
     "bubble_big_size_clamp": float,
     "bubble_big_specular_max_size": float,
-    "bubble_growth": float,
-    "devcurve_growth": float,
     "bubble_trail_strength": float,
     "bubble_tail_opacity": float,
     "bubble_ghosting_enabled": bool,
@@ -284,275 +292,212 @@ _BUBBLE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "bubble_ghost_decay": float,
 }
 
-_CORE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
-    "enabled": (False, bool),
-    "visualizers_enabled": (True, bool),
-    "monitor": ("ALL", str),
-    "position": ("Follow Media", str),
-    "ghosting_enabled": (True, bool),
-    "ghost_alpha": (0.4, float),
-    "ghost_decay": (0.35, float),
-    "sine_line_dim": (False, bool),
+_CORE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
+    'enabled': bool,
+    'visualizers_enabled': bool,
+    'monitor': str,
+    'position': str,
+    'sine_line_dim': bool,
 }
 
-_SPECTRUM_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
-    "spectrum_visual_smoothing_enabled": (True, bool),
-    "spectrum_visual_smoothing": (0.5, float),
-    "spectrum_rainbow_fill": (True, bool),
-    "spectrum_rainbow_border": (False, bool),
-    "spectrum_border_radius": (0.0, float),
-    "spectrum_link_fill_border": (False, bool),
-    "spectrum_glow_enabled": (False, bool),
-    "spectrum_glow_intensity": (0.55, float),
-    "spectrum_glow_color": ([110, 220, 255, 235], list),
-    "spectrum_ghosting_enabled": (True, bool),
-    "spectrum_ghost_alpha": (0.4, float),
-    "spectrum_ghost_decay": (0.35, float),
-    "spectrum_mirrored": (True, bool),
-    "spectrum_shape_nodes": ([[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]], list),
-    "spectrum_notch_positions_mirrored": ([[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]], list),
-    "spectrum_wave_amplitude": (0.50, float),
-    "spectrum_profile_floor": (0.12, float),
-    "spectrum_drop_speed": (1.0, float),
+_SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
+    'spectrum_visual_smoothing_enabled': bool,
+    'spectrum_visual_smoothing': float,
+    'spectrum_rainbow_fill': bool,
+    'spectrum_rainbow_border': bool,
+    'spectrum_border_radius': float,
+    'spectrum_link_fill_border': bool,
+    'spectrum_glow_enabled': bool,
+    'spectrum_glow_intensity': float,
+    'spectrum_glow_color': list,
+    'spectrum_ghosting_enabled': bool,
+    'spectrum_ghost_alpha': float,
+    'spectrum_ghost_decay': float,
+    'spectrum_mirrored': bool,
+    'spectrum_shape_nodes': list,
+    'spectrum_notch_positions_mirrored': list,
+    'spectrum_wave_amplitude': float,
+    'spectrum_profile_floor': float,
+    'spectrum_drop_speed': float,
 }
 
-_BUBBLE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
-    "bubble_big_bass_pulse": (0.5, float),
-    "bubble_small_freq_pulse": (0.5, float),
-    "bubble_stream_direction": ("up", str),
-    "bubble_stream_reactivity": (0.5, float),
-    "bubble_rotation_amount": (0.5, float),
-    "bubble_drift_amount": (0.5, float),
-    "bubble_group_drift": (False, bool),
-    "bubble_drift_speed": (0.5, float),
-    "bubble_drift_frequency": (0.5, float),
-    "bubble_drift_direction": ("random", str),
-    "bubble_big_count": (8, int),
-    "bubble_small_count": (25, int),
-    "bubble_surface_reach": (0.6, float),
-    "bubble_bounce_big_pct": (70, int),
-    "bubble_bounce_small_pct": (30, int),
-    "bubble_bounce_big_speed": (0.8, float),
-    "bubble_bounce_small_speed": (0.5, float),
-    "bubble_bounce_same_only": (False, bool),
-    "bubble_outline_color": ([255, 255, 255, 230], list),
-    "bubble_specular_color": ([255, 255, 255, 255], list),
-    "bubble_gradient_light": ([210, 170, 120, 255], list),
-    "bubble_gradient_dark": ([80, 60, 50, 255], list),
-    "bubble_pop_color": ([255, 255, 255, 180], list),
-    "bubble_big_size_max": (0.038, float),
-    "bubble_small_size_max": (0.018, float),
-    "bubble_big_visual_smoothing": (0.5, float),
-    "bubble_big_contraction_bias": (1.0, float),
-    "bubble_big_size_clamp": (4.0, float),
-    "bubble_big_specular_max_size": (2.5, float),
-    "bubble_growth": (3.0, float),
-    "devcurve_growth": (3.0, float),
-    "bubble_trail_strength": (0.0, float),
-    "bubble_tail_opacity": (0.0, float),
-    "bubble_ghosting_enabled": (False, bool),
-    "bubble_ghost_alpha": (0.0, float),
-    "bubble_ghost_decay": (0.4, float),
+_BUBBLE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
+    'bubble_big_bass_pulse': float,
+    'bubble_small_freq_pulse': float,
+    'bubble_stream_direction': str,
+    'bubble_stream_reactivity': float,
+    'bubble_rotation_amount': float,
+    'bubble_drift_amount': float,
+    'bubble_group_drift': bool,
+    'bubble_drift_speed': float,
+    'bubble_drift_frequency': float,
+    'bubble_drift_direction': str,
+    'bubble_big_count': int,
+    'bubble_small_count': int,
+    'bubble_surface_reach': float,
+    'bubble_bounce_big_pct': int,
+    'bubble_bounce_small_pct': int,
+    'bubble_bounce_big_speed': float,
+    'bubble_bounce_small_speed': float,
+    'bubble_bounce_same_only': bool,
+    'bubble_outline_color': list,
+    'bubble_specular_color': list,
+    'bubble_gradient_light': list,
+    'bubble_gradient_dark': list,
+    'bubble_pop_color': list,
+    'bubble_big_size_max': float,
+    'bubble_small_size_max': float,
+    'bubble_big_visual_smoothing': float,
+    'bubble_big_contraction_bias': float,
+    'bubble_big_size_clamp': float,
+    'bubble_big_specular_max_size': float,
+    'bubble_trail_strength': float,
+    'bubble_tail_opacity': float,
+    'bubble_ghosting_enabled': bool,
+    'bubble_ghost_alpha': float,
+    'bubble_ghost_decay': float,
 }
 
-_OSC_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
-    "osc_glow_enabled": (False, bool),
-    "osc_glow_intensity": (1.0, float),
-    "osc_glow_reactivity": (1.0, float),
-    "osc_glow_color": ([0, 200, 255, 230], list),
-    "osc_reactive_glow": (True, bool),
-    "osc_line_amplitude": (1.0, float),
-    "osc_smoothing": (0.7, float),
-    "osc_line_color": ([255, 255, 255, 255], list),
-    "osc_line_count": (1, int),
-    "osc_line2_color": ([255, 120, 50, 230], list),
-    "osc_line2_glow_color": ([255, 120, 50, 180], list),
-    "osc_line3_color": ([50, 255, 120, 230], list),
-    "osc_line3_glow_color": ([50, 255, 120, 180], list),
-    "osc_line4_color": ([255, 0, 150, 230], list),
-    "osc_line4_glow_color": ([255, 0, 150, 180], list),
-    "osc_line5_color": ([0, 255, 200, 230], list),
-    "osc_line5_glow_color": ([0, 255, 200, 180], list),
-    "osc_line6_color": ([200, 100, 255, 230], list),
-    "osc_line6_glow_color": ([200, 100, 255, 180], list),
-    "spectrum_growth": (1.0, float),
-    "osc_speed": (1.0, float),
-    "osc_line_dim": (False, bool),
-    "osc_line_offset_bias": (0.0, float),
-    "osc_vertical_shift": (0, int),
-    "osc_growth": (1.0, float),
+_OSC_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
+    'osc_glow_enabled': bool,
+    'osc_glow_intensity': float,
+    'osc_glow_reactivity': float,
+    'osc_glow_color': list,
+    'osc_reactive_glow': bool,
+    'osc_line_amplitude': float,
+    'osc_smoothing': float,
+    'osc_line_color': list,
+    'osc_line_count': int,
+    'osc_line2_color': list,
+    'osc_line2_glow_color': list,
+    'osc_line3_color': list,
+    'osc_line3_glow_color': list,
+    'osc_line4_color': list,
+    'osc_line4_glow_color': list,
+    'osc_line5_color': list,
+    'osc_line5_glow_color': list,
+    'osc_line6_color': list,
+    'osc_line6_glow_color': list,
+    'osc_speed': float,
+    'osc_line_dim': bool,
+    'osc_line_offset_bias': float,
+    'osc_vertical_shift': int,
 }
 
-_SINE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
-    "sine_wave_growth": (1.0, float),
-    "sine_wave_travel": (0, int),
-    "sine_density": (1.0, float),
-    "sine_displacement": (0.0, float),
-    "sine_glow_enabled": (True, bool),
-    "sine_glow_intensity": (0.5, float),
-    "sine_glow_color": ([0, 200, 255, 230], list),
-    "sine_line_color": ([255, 255, 255, 255], list),
-    "sine_reactive_glow": (True, bool),
-    "sine_ghosting_enabled": (True, bool),
-    "sine_ghost_alpha": (0.45, float),
-    "sine_ghost_decay": (0.3, float),
-    "sine_ghost_line2_enabled": (True, bool),
-    "sine_ghost_line3_enabled": (True, bool),
-    "sine_ghost_line4_enabled": (True, bool),
-    "sine_ghost_line5_enabled": (True, bool),
-    "sine_ghost_line6_enabled": (True, bool),
-    "sine_sensitivity": (1.0, float),
-    "sine_smoothing": (0.7, float),
-    "sine_speed": (1.0, float),
-    "sine_line_count": (1, int),
-    "sine_line_offset_bias": (0.0, float),
-    "sine_line2_color": ([255, 255, 255, 230], list),
-    "sine_line2_glow_color": ([7, 114, 255, 180], list),
-    "sine_line3_color": ([255, 255, 255, 230], list),
-    "sine_line3_glow_color": ([14, 159, 255, 180], list),
-    "sine_line4_color": ([255, 120, 50, 230], list),
-    "sine_line4_glow_color": ([255, 120, 50, 180], list),
-    "sine_line5_color": ([50, 255, 120, 230], list),
-    "sine_line5_glow_color": ([50, 255, 120, 180], list),
-    "sine_line6_color": ([255, 0, 150, 230], list),
-    "sine_line6_glow_color": ([255, 0, 150, 180], list),
-    "sine_travel_line2": (0, int),
-    "sine_travel_line3": (0, int),
-    "sine_travel_line4": (0, int),
-    "sine_travel_line5": (0, int),
-    "sine_travel_line6": (0, int),
-    "sine_line1_shift": (0.0, float),
-    "sine_line2_shift": (0.0, float),
-    "sine_line3_shift": (0.0, float),
-    "sine_line4_shift": (0.0, float),
-    "sine_line5_shift": (0.0, float),
-    "sine_line6_shift": (0.0, float),
-    "sine_vertical_shift": (0, int),
-    "sine_card_adaptation": (0.3, float),
-    "sine_micro_wobble": (0.0, float),
-    "sine_crawl_amount": (0.25, float),
-    "sine_width_reaction": (0.0, float),
-    "osc_ghosting_enabled": (False, bool),
-    "osc_ghost_intensity": (0.4, float),
-    "osc_ghost_decay": (0.4, float),
-    "osc_ghost_line2_enabled": (True, bool),
-    "osc_ghost_line3_enabled": (True, bool),
-    "osc_ghost_line4_enabled": (True, bool),
-    "osc_ghost_line5_enabled": (True, bool),
-    "osc_ghost_line6_enabled": (True, bool),
-    "sine_heartbeat": (0.0, float),
+_SINE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
+    'sine_wave_travel': int,
+    'sine_density': float,
+    'sine_displacement': float,
+    'sine_glow_enabled': bool,
+    'sine_glow_intensity': float,
+    'sine_glow_color': list,
+    'sine_line_color': list,
+    'sine_reactive_glow': bool,
+    'sine_ghosting_enabled': bool,
+    'sine_ghost_alpha': float,
+    'sine_ghost_decay': float,
+    'sine_ghost_line2_enabled': bool,
+    'sine_ghost_line3_enabled': bool,
+    'sine_ghost_line4_enabled': bool,
+    'sine_ghost_line5_enabled': bool,
+    'sine_ghost_line6_enabled': bool,
+    'sine_sensitivity': float,
+    'sine_smoothing': float,
+    'sine_speed': float,
+    'sine_line_count': int,
+    'sine_line_offset_bias': float,
+    'sine_line2_color': list,
+    'sine_line2_glow_color': list,
+    'sine_line3_color': list,
+    'sine_line3_glow_color': list,
+    'sine_line4_color': list,
+    'sine_line4_glow_color': list,
+    'sine_line5_color': list,
+    'sine_line5_glow_color': list,
+    'sine_line6_color': list,
+    'sine_line6_glow_color': list,
+    'sine_travel_line2': int,
+    'sine_travel_line3': int,
+    'sine_travel_line4': int,
+    'sine_travel_line5': int,
+    'sine_travel_line6': int,
+    'sine_line1_shift': float,
+    'sine_line2_shift': float,
+    'sine_line3_shift': float,
+    'sine_line4_shift': float,
+    'sine_line5_shift': float,
+    'sine_line6_shift': float,
+    'sine_vertical_shift': int,
+    'sine_card_adaptation': float,
+    'sine_micro_wobble': float,
+    'sine_crawl_amount': float,
+    'sine_width_reaction': float,
+    'osc_ghosting_enabled': bool,
+    'osc_ghost_intensity': float,
+    'osc_ghost_decay': float,
+    'osc_ghost_line2_enabled': bool,
+    'osc_ghost_line3_enabled': bool,
+    'osc_ghost_line4_enabled': bool,
+    'osc_ghost_line5_enabled': bool,
+    'osc_ghost_line6_enabled': bool,
+    'sine_heartbeat': float,
 }
 
-_OSCILLOSCOPE_COLOR_DEFAULTS: Dict[str, list[int]] = {
-    "osc_line_color": [255, 255, 255, 255],
-    "osc_line2_color": [255, 120, 50, 230],
-    "osc_line2_glow_color": [255, 120, 50, 180],
-    "osc_line3_color": [50, 255, 120, 230],
-    "osc_line3_glow_color": [50, 255, 120, 180],
-    "osc_line4_color": [255, 0, 150, 230],
-    "osc_line4_glow_color": [255, 0, 150, 180],
-    "osc_line5_color": [0, 255, 200, 230],
-    "osc_line5_glow_color": [0, 255, 200, 180],
-    "osc_line6_color": [200, 100, 255, 230],
-    "osc_line6_glow_color": [200, 100, 255, 180],
-}
-
-_SINE_COLOR_DEFAULTS: Dict[str, list[int]] = {
-    "sine_glow_color": [0, 200, 255, 230],
-    "sine_line_color": [255, 255, 255, 255],
-    "sine_line2_color": [255, 255, 255, 230],
-    "sine_line2_glow_color": [7, 114, 255, 180],
-    "sine_line3_color": [255, 255, 255, 230],
-    "sine_line3_glow_color": [14, 159, 255, 180],
-    "sine_line4_color": [255, 120, 50, 230],
-    "sine_line4_glow_color": [255, 120, 50, 180],
-    "sine_line5_color": [50, 255, 120, 230],
-    "sine_line5_glow_color": [50, 255, 120, 180],
-    "sine_line6_color": [255, 0, 150, 230],
-    "sine_line6_glow_color": [255, 0, 150, 180],
-}
-
-_BUBBLE_COLOR_DEFAULTS: Dict[str, list[int]] = {
-    "bubble_outline_color": [255, 255, 255, 230],
-    "bubble_specular_color": [255, 255, 255, 255],
-    "bubble_gradient_light": [210, 170, 120, 255],
-    "bubble_gradient_dark": [80, 60, 50, 255],
-    "bubble_pop_color": [255, 255, 255, 180],
-}
-
-_DEVCURVE_COLOR_DEFAULTS: Dict[str, list[int]] = {
-    "devcurve_layer_bass_color": [82, 167, 255, 230],
-    "devcurve_layer_vocals_color": [136, 190, 255, 220],
-    "devcurve_layer_mids_color": [100, 145, 255, 220],
-    "devcurve_layer_transients_color": [215, 240, 255, 240],
-    "devcurve_layer_bass_outline_color": [255, 255, 255, 255],
-    "devcurve_layer_vocals_outline_color": [255, 255, 255, 255],
-    "devcurve_layer_mids_outline_color": [255, 255, 255, 255],
-    "devcurve_layer_transients_outline_color": [255, 255, 255, 255],
-}
-
-_DEVCURVE_DEFAULT_SHAPE_NODES: list[list[float]] = [
-    [0.0, 0.58],
-    [0.35, 0.64],
-    [0.70, 0.52],
-    [1.0, 0.60],
-]
-
-_DEVCURVE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
-    "devcurve_active_layer": ("bass", str),
-    "devcurve_layer_bass_shape_nodes": (_DEVCURVE_DEFAULT_SHAPE_NODES, list),
-    "devcurve_layer_vocals_shape_nodes": (_DEVCURVE_DEFAULT_SHAPE_NODES, list),
-    "devcurve_layer_mids_shape_nodes": (_DEVCURVE_DEFAULT_SHAPE_NODES, list),
-    "devcurve_layer_transients_shape_nodes": (_DEVCURVE_DEFAULT_SHAPE_NODES, list),
-    "devcurve_base_level": (0.58, float),
-    "devcurve_motion_power": (1.0, float),
-    "devcurve_idle_motion": (0.20, float),
-    "devcurve_idle_speed": (0.60, float),
-    "devcurve_smoothness": (0.55, float),
-    "devcurve_layer_bass_enabled": (True, bool),
-    "devcurve_layer_bass_color": (_DEVCURVE_COLOR_DEFAULTS["devcurve_layer_bass_color"], list),
-    "devcurve_layer_bass_alpha": (0.55, float),
-    "devcurve_layer_bass_power": (1.0, float),
-    "devcurve_layer_bass_offset": (0.0, float),
-    "devcurve_layer_bass_outline_color": (_DEVCURVE_COLOR_DEFAULTS["devcurve_layer_bass_outline_color"], list),
-    "devcurve_layer_bass_outline_width": (0.006, float),
-    "devcurve_layer_bass_order": (1, int),
-    "devcurve_layer_vocals_enabled": (True, bool),
-    "devcurve_layer_vocals_color": (_DEVCURVE_COLOR_DEFAULTS["devcurve_layer_vocals_color"], list),
-    "devcurve_layer_vocals_alpha": (0.42, float),
-    "devcurve_layer_vocals_power": (1.0, float),
-    "devcurve_layer_vocals_offset": (-0.01, float),
-    "devcurve_layer_vocals_outline_color": (_DEVCURVE_COLOR_DEFAULTS["devcurve_layer_vocals_outline_color"], list),
-    "devcurve_layer_vocals_outline_width": (0.006, float),
-    "devcurve_layer_vocals_order": (2, int),
-    "devcurve_layer_mids_enabled": (True, bool),
-    "devcurve_layer_mids_color": (_DEVCURVE_COLOR_DEFAULTS["devcurve_layer_mids_color"], list),
-    "devcurve_layer_mids_alpha": (0.46, float),
-    "devcurve_layer_mids_power": (1.0, float),
-    "devcurve_layer_mids_offset": (0.01, float),
-    "devcurve_layer_mids_outline_color": (_DEVCURVE_COLOR_DEFAULTS["devcurve_layer_mids_outline_color"], list),
-    "devcurve_layer_mids_outline_width": (0.006, float),
-    "devcurve_layer_mids_order": (3, int),
-    "devcurve_layer_transients_enabled": (True, bool),
-    "devcurve_layer_transients_color": (_DEVCURVE_COLOR_DEFAULTS["devcurve_layer_transients_color"], list),
-    "devcurve_layer_transients_alpha": (0.66, float),
-    "devcurve_layer_transients_power": (1.15, float),
-    "devcurve_layer_transients_offset": (0.0, float),
-    "devcurve_layer_transients_outline_color": (_DEVCURVE_COLOR_DEFAULTS["devcurve_layer_transients_outline_color"], list),
-    "devcurve_layer_transients_outline_width": (0.006, float),
-    "devcurve_layer_transients_order": (4, int),
-    "devcurve_ghosting_enabled": (False, bool),
-    "devcurve_ghost_alpha": (0.0, float),
-    "devcurve_ghost_decay": (0.4, float),
-    "devcurve_foreground_shadow_enabled": (False, bool),
-    "devcurve_foreground_shadow_alpha": (0.36, float),
-    "devcurve_foreground_shadow_darken": (0.42, float),
-    "devcurve_foreground_shadow_offset": (0.10, float),
-    "devcurve_foreground_specular_enabled": (False, bool),
-    "devcurve_foreground_specular_alpha": (0.78, float),
-    "devcurve_foreground_specular_width": (0.022, float),
-    "devcurve_foreground_specular_offset": (0.028, float),
-    "devcurve_foreground_specular_crest_bias": (1.05, float),
+_DEVCURVE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
+    'devcurve_active_layer': str,
+    'devcurve_layer_bass_shape_nodes': list,
+    'devcurve_layer_vocals_shape_nodes': list,
+    'devcurve_layer_mids_shape_nodes': list,
+    'devcurve_layer_transients_shape_nodes': list,
+    'devcurve_base_level': float,
+    'devcurve_motion_power': float,
+    'devcurve_idle_motion': float,
+    'devcurve_idle_speed': float,
+    'devcurve_smoothness': float,
+    'devcurve_layer_bass_enabled': bool,
+    'devcurve_layer_bass_color': list,
+    'devcurve_layer_bass_alpha': float,
+    'devcurve_layer_bass_power': float,
+    'devcurve_layer_bass_offset': float,
+    'devcurve_layer_bass_outline_color': list,
+    'devcurve_layer_bass_outline_width': float,
+    'devcurve_layer_bass_order': int,
+    'devcurve_layer_vocals_enabled': bool,
+    'devcurve_layer_vocals_color': list,
+    'devcurve_layer_vocals_alpha': float,
+    'devcurve_layer_vocals_power': float,
+    'devcurve_layer_vocals_offset': float,
+    'devcurve_layer_vocals_outline_color': list,
+    'devcurve_layer_vocals_outline_width': float,
+    'devcurve_layer_vocals_order': int,
+    'devcurve_layer_mids_enabled': bool,
+    'devcurve_layer_mids_color': list,
+    'devcurve_layer_mids_alpha': float,
+    'devcurve_layer_mids_power': float,
+    'devcurve_layer_mids_offset': float,
+    'devcurve_layer_mids_outline_color': list,
+    'devcurve_layer_mids_outline_width': float,
+    'devcurve_layer_mids_order': int,
+    'devcurve_layer_transients_enabled': bool,
+    'devcurve_layer_transients_color': list,
+    'devcurve_layer_transients_alpha': float,
+    'devcurve_layer_transients_power': float,
+    'devcurve_layer_transients_offset': float,
+    'devcurve_layer_transients_outline_color': list,
+    'devcurve_layer_transients_outline_width': float,
+    'devcurve_layer_transients_order': int,
+    'devcurve_ghosting_enabled': bool,
+    'devcurve_ghost_alpha': float,
+    'devcurve_ghost_decay': float,
+    'devcurve_foreground_shadow_enabled': bool,
+    'devcurve_foreground_shadow_alpha': float,
+    'devcurve_foreground_shadow_darken': float,
+    'devcurve_foreground_shadow_offset': float,
+    'devcurve_foreground_specular_enabled': bool,
+    'devcurve_foreground_specular_alpha': float,
+    'devcurve_foreground_specular_width': float,
+    'devcurve_foreground_specular_offset': float,
+    'devcurve_foreground_specular_crest_bias': float,
 }
 
 _DEVCURVE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
@@ -612,24 +557,28 @@ _DEVCURVE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "devcurve_foreground_specular_crest_bias": float,
 }
 
-_SPHERE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
-    "sphere_material": ("Chrome", str), "sphere_deformation": (1.0, float),
-    "sphere_rotation_speed": (0.35, float), "sphere_gloss": (0.65, float),
-    "sphere_specular": (0.8, float), "sphere_light_direction": ("NW", str),
-    "sphere_idle_motion": (0.12, float), "sphere_surface_detail": (1.15, float),
-    "sphere_bass_response": (1.0, float), "sphere_mid_response": (1.0, float),
-    "sphere_high_response": (1.0, float), "sphere_vocal_response": (1.4, float),
-    "sphere_bump_reactivity": (0.65, float),
-    "sphere_size_response": (1.5, float),
-    "sphere_energy_curve": (0.60, float),
-    "sphere_material_fx": (1.0, float),
-    "sphere_antialiasing": (True, bool),
-    "sphere_shadow_enabled": (True, bool),
-    "sphere_shadow_strength": (0.62, float),
+_SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
+    'sphere_material': str,
+    'sphere_deformation': float,
+    'sphere_rotation_speed': float,
+    'sphere_gloss': float,
+    'sphere_specular': float,
+    'sphere_light_direction': str,
+    'sphere_idle_motion': float,
+    'sphere_surface_detail': float,
+    'sphere_bass_response': float,
+    'sphere_mid_response': float,
+    'sphere_high_response': float,
+    'sphere_vocal_response': float,
+    'sphere_bump_reactivity': float,
+    'sphere_size_response': float,
+    'sphere_energy_curve': float,
+    'sphere_material_fx': float,
+    'sphere_antialiasing': bool,
+    'sphere_shadow_enabled': bool,
+    'sphere_shadow_strength': float,
 }
-_SPHERE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
-    key: caster for key, (_default, caster) in _SPHERE_BUILD_SPECS.items()
-}
+_SPHERE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_SPHERE_BUILD_SPECS)
 
 _DEVCURVE_ACTIVE_LAYERS = {"bass", "vocals", "mids", "transients"}
 _DEVCURVE_OUTLINE_WIDTH_LIMITS: Dict[str, Tuple[float, float]] = {
@@ -688,8 +637,6 @@ def _build_visualizer_model_kwargs(
     active_visuals: Mapping[str, Any],
     rainbow_kwargs: Mapping[str, Any],
     preset_kwargs: Mapping[str, Any],
-    bubble_stream_constant_speed_default: float,
-    bubble_stream_speed_cap_default: float,
     ) -> Dict[str, Any]:
     """Build the shared constructor payload for visualizer ingestion paths."""
 
@@ -708,8 +655,6 @@ def _build_visualizer_model_kwargs(
         _build_visualizer_bubble_kwargs(
             read_value,
             bubble_gradient_semantics_version=bubble_gradient_semantics_version,
-            bubble_stream_constant_speed_default=bubble_stream_constant_speed_default,
-            bubble_stream_speed_cap_default=bubble_stream_speed_cap_default,
         ),
         _build_visualizer_devcurve_kwargs(read_value),
         _build_visualizer_sphere_kwargs(read_value),
@@ -755,7 +700,7 @@ def _build_visualizer_osc_kwargs(
 ) -> Dict[str, Any]:
     data = _build_read_value_map(read_value, _OSC_BUILD_SPECS)
     data["osc_glow_reactivity"] = float(
-        read_value("osc_glow_reactivity", read_value("osc_glow_size", 1.0))
+        read_value("osc_glow_reactivity", _visualizer_default("osc_glow_reactivity"))
     )
     return data
 
@@ -764,18 +709,24 @@ def _build_visualizer_spectrum_kwargs(
     read_value: Callable[[str, Any], Any],
 ) -> Dict[str, Any]:
     data = _build_read_value_map(read_value, _SPECTRUM_BUILD_SPECS)
-    data["spectrum_render_mode"] = resolve_spectrum_render_mode(read_value)
-    data["spectrum_unique_colors"] = resolve_spectrum_unique_colors(read_value)
+    data["spectrum_render_mode"] = resolve_spectrum_render_mode(
+        read_value, fallback=str(_visualizer_default("spectrum_render_mode"))
+    )
+    data["spectrum_unique_colors"] = resolve_spectrum_unique_colors(
+        read_value, fallback=bool(_visualizer_default("spectrum_unique_colors"))
+    )
+    canonical_linear_notches = _visualizer_default("spectrum_notch_positions_linear")
     data["spectrum_notch_positions_linear"] = _normalize_spectrum_linear_notches(
-        read_value("spectrum_notch_positions_linear", _SPECTRUM_DEFAULT_NOTCHES_LINEAR)
+        read_value("spectrum_notch_positions_linear", canonical_linear_notches),
+        canonical_linear_notches,
     )
     data["spectrum_lane_strengths_mirrored"] = _normalize_spectrum_lane_strengths(
-        read_value("spectrum_lane_strengths_mirrored", _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED),
-        _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED,
+        read_value("spectrum_lane_strengths_mirrored", _visualizer_default("spectrum_lane_strengths_mirrored")),
+        _visualizer_default("spectrum_lane_strengths_mirrored"),
     )
     data["spectrum_lane_strengths_linear"] = _normalize_spectrum_lane_strengths(
-        read_value("spectrum_lane_strengths_linear", _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR),
-        _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR,
+        read_value("spectrum_lane_strengths_linear", _visualizer_default("spectrum_lane_strengths_linear")),
+        _visualizer_default("spectrum_lane_strengths_linear"),
     )
     return data
 
@@ -785,10 +736,10 @@ def _build_visualizer_sine_kwargs(
 ) -> Dict[str, Any]:
     data = _build_read_value_map(read_value, _SINE_BUILD_SPECS)
     data["sine_glow_reactivity"] = float(
-        read_value("sine_glow_reactivity", read_value("sine_glow_size", 1.0))
+        read_value("sine_glow_reactivity", _visualizer_default("sine_glow_reactivity"))
     )
     data["sine_wave_effect"] = float(
-        read_value("sine_wave_effect", read_value("sine_wobble_amount", 0.0))
+        read_value("sine_wave_effect", _visualizer_default("sine_wave_effect"))
     )
     return data
 
@@ -797,32 +748,25 @@ def _build_visualizer_bubble_kwargs(
     read_value: Callable[[str, Any], Any],
     *,
     bubble_gradient_semantics_version: int,
-    bubble_stream_constant_speed_default: float,
-    bubble_stream_speed_cap_default: float,
 ) -> Dict[str, Any]:
     data = _build_read_value_map(read_value, _BUBBLE_BUILD_SPECS)
     data["bubble_stream_constant_speed"] = float(
-        read_value(
-            "bubble_stream_constant_speed",
-            read_value("bubble_stream_speed", bubble_stream_constant_speed_default),
-        )
+        read_value("bubble_stream_constant_speed", _visualizer_default("bubble_stream_constant_speed"))
     )
     data["bubble_stream_speed_cap"] = float(
-        read_value(
-            "bubble_stream_speed_cap",
-            read_value("bubble_stream_speed", bubble_stream_speed_cap_default),
-        )
+        read_value("bubble_stream_speed_cap", _visualizer_default("bubble_stream_speed_cap"))
     )
     data["bubble_collision_pop_mode"] = str(
-        read_value("bubble_collision_pop_mode", "off")
+        read_value("bubble_collision_pop_mode", _visualizer_default("bubble_collision_pop_mode"))
     ).strip().lower()
     data["bubble_specular_direction"] = normalize_bubble_specular_direction(
-        read_value("bubble_specular_direction", "top_left")
+        read_value("bubble_specular_direction", _visualizer_default("bubble_specular_direction"))
     )
+    default_gradient_direction = str(_visualizer_default("bubble_gradient_direction"))
     data["bubble_gradient_direction"] = resolve_bubble_gradient_direction(
-        read_value("bubble_gradient_direction", "top"),
+        read_value("bubble_gradient_direction", default_gradient_direction),
         semantics_version=bubble_gradient_semantics_version,
-        default="top",
+        default=default_gradient_direction,
     )
     return data
 
@@ -933,7 +877,10 @@ def _resolve_mapping_preset_kwargs(
         get_preset_key(mode_id): _coerce_preset_index(
             raw.get(
                 get_preset_key(mode_id),
-                raw.get(f"{prefix}.{get_preset_key(mode_id)}", 0),
+                raw.get(
+                    f"{prefix}.{get_preset_key(mode_id)}",
+                    _visualizer_default(get_preset_key(mode_id)),
+                ),
             )
         )
         for mode_id in VISUALIZER_MODE_IDS
@@ -988,23 +935,26 @@ def _merge_serialized_sections(
     return data
 
 
-def _apply_list_defaults(target: Any, defaults: Mapping[str, list[int]]) -> None:
-    """Apply list-valued defaults to missing attributes on the target."""
+def _apply_canonical_list_defaults(
+    target: Any,
+    serializers: Mapping[str, Callable[[Any], Any]],
+) -> None:
+    """Repair missing list-valued model attributes from canonical defaults."""
 
-    for attr, value in defaults.items():
-        if getattr(target, attr) is None:
-            setattr(target, attr, list(value))
+    for attr, serializer in serializers.items():
+        if serializer is list and getattr(target, attr) is None:
+            setattr(target, attr, deepcopy(_visualizer_default(attr)))
 
 
 def _build_read_value_map(
     read_value: Callable[[str, Any], Any],
-    specs: Mapping[str, Tuple[Any, Callable[[Any], Any]]],
+    specs: Mapping[str, Callable[[Any], Any]],
 ) -> Dict[str, Any]:
-    """Build a kwargs mapping from keyed defaults and coercers."""
+    """Build kwargs using canonical defaults as the only missing-value authority."""
 
     return {
-        attr_name: coercer(read_value(attr_name, default))
-        for attr_name, (default, coercer) in specs.items()
+        attr_name: coercer(read_value(attr_name, _visualizer_default(attr_name)))
+        for attr_name, coercer in specs.items()
     }
 
 
@@ -1039,350 +989,338 @@ def _normalize_ranked_attrs(target: Any, attrs: Tuple[str, ...]) -> None:
 class SpotifyVisualizerSettings:
     """Spotify visualizer widget settings."""
 
-    enabled: bool = False
-    visualizers_enabled: bool = True
-    monitor: str = "ALL"
-    position: str = "Follow Media"
-    bar_count: int = 32
-    bar_fill_color: list | None = None
-    bar_border_color: list | None = None
-    bar_border_opacity: float = 0.85
-    spectrum_bar_fill_color: list | None = None
-    spectrum_bar_border_color: list | None = None
-    spectrum_bar_border_opacity: float = 0.85
-    bubble_bar_fill_color: list | None = None
-    bubble_bar_border_color: list | None = None
-    bubble_bar_border_opacity: float = 0.85
-    sine_wave_bar_fill_color: list | None = None
-    sine_wave_bar_border_color: list | None = None
-    sine_wave_bar_border_opacity: float = 0.85
-    oscilloscope_bar_fill_color: list | None = None
-    oscilloscope_bar_border_color: list | None = None
-    oscilloscope_bar_border_opacity: float = 0.85
-    devcurve_bar_fill_color: list | None = None
-    devcurve_bar_border_color: list | None = None
-    devcurve_bar_border_opacity: float = 0.85
-    ghosting_enabled: bool = True
-    ghost_alpha: float = 0.4
-    ghost_decay: float = 0.35
-    adaptive_sensitivity: bool = True
-    sensitivity: float = 1.0
-    dynamic_floor: bool = True
-    manual_floor: float = 0.12
-    dynamic_range_enabled: bool = False
-    agc_strength: float = 0.5
-    input_gain: float = 1.0
-    kick_lane_gain: float = 1.0
-    transient_pulse_gain: float = 1.0
-    transient_clamp: float = 1.5
-    spectrum_lane_transient_mix: float = 0.65
-    spectrum_dynamic_floor: bool = True
-    spectrum_manual_floor: float = 0.12
-    spectrum_dynamic_range_enabled: bool = False
-    spectrum_agc_strength: float = 0.5
-    spectrum_input_gain: float = 1.0
-    spectrum_kick_lane_gain: float = 1.0
-    spectrum_transient_pulse_gain: float = 1.0
-    spectrum_transient_clamp: float = 1.5
-    spectrum_audio_block_size: int = 512
-    spectrum_adaptive_sensitivity: bool = True
-    spectrum_sensitivity: float = 0.4
-    spectrum_bar_count: int = 33
-    bubble_dynamic_floor: bool = True
-    bubble_manual_floor: float = 0.12
-    bubble_dynamic_range_enabled: bool = False
-    bubble_agc_strength: float = 0.5
-    bubble_input_gain: float = 1.0
-    bubble_kick_lane_gain: float = 1.0
-    bubble_transient_pulse_gain: float = 1.0
-    bubble_transient_clamp: float = 1.5
-    bubble_transient_mix_bass: float = 0.75
-    bubble_transient_mix_vocal: float = 0.25
-    bubble_audio_block_size: int = 512
-    bubble_adaptive_sensitivity: bool = True
-    bubble_sensitivity: float = 0.4
-    bubble_bar_count: int = 48
-    sine_wave_dynamic_floor: bool = True
-    sine_wave_manual_floor: float = 0.12
-    sine_wave_dynamic_range_enabled: bool = False
-    sine_wave_agc_strength: float = 0.5
-    sine_wave_input_gain: float = 1.0
-    sine_wave_kick_lane_gain: float = 1.0
-    sine_wave_transient_pulse_gain: float = 1.0
-    sine_wave_transient_clamp: float = 1.5
-    sine_wave_transient_width_mix: float = 0.4
-    sine_wave_audio_block_size: int = 512
-    sine_wave_adaptive_sensitivity: bool = True
-    sine_wave_sensitivity: float = 0.4
-    sine_wave_bar_count: int = 40
-    oscilloscope_dynamic_floor: bool = True
-    oscilloscope_manual_floor: float = 0.12
-    oscilloscope_dynamic_range_enabled: bool = False
-    oscilloscope_agc_strength: float = 0.5
-    oscilloscope_input_gain: float = 1.0
-    oscilloscope_kick_lane_gain: float = 1.0
-    oscilloscope_transient_pulse_gain: float = 1.0
-    oscilloscope_transient_clamp: float = 1.5
-    oscilloscope_transient_width_mix: float = 0.35
-    oscilloscope_audio_block_size: int = 512
-    oscilloscope_adaptive_sensitivity: bool = True
-    oscilloscope_sensitivity: float = 0.4
-    oscilloscope_bar_count: int = 32
-    devcurve_dynamic_floor: bool = True
-    devcurve_manual_floor: float = 0.12
-    devcurve_dynamic_range_enabled: bool = False
-    devcurve_agc_strength: float = 0.5
-    devcurve_input_gain: float = 1.0
-    devcurve_kick_lane_gain: float = 1.0
-    devcurve_transient_pulse_gain: float = 1.0
-    devcurve_transient_clamp: float = 1.5
-    devcurve_audio_block_size: int = 0
-    devcurve_adaptive_sensitivity: bool = True
-    devcurve_sensitivity: float = 1.0
-    devcurve_bar_count: int = 32
-    mode: str = "bubble"
+    enabled: bool = field(default_factory=lambda: _visualizer_default('enabled'))
+    visualizers_enabled: bool = field(default_factory=lambda: _visualizer_default('visualizers_enabled'))
+    monitor: str = field(default_factory=lambda: _visualizer_default('monitor'))
+    position: str = field(default_factory=lambda: _visualizer_default('position'))
+    bar_count: int = field(default_factory=lambda: _active_visualizer_default('bar_count'))
+    bar_fill_color: list | None = field(default_factory=lambda: _active_visualizer_default('bar_fill_color'))
+    bar_border_color: list | None = field(default_factory=lambda: _active_visualizer_default('bar_border_color'))
+    bar_border_opacity: float = field(default_factory=lambda: _active_visualizer_default('bar_border_opacity'))
+    spectrum_bar_fill_color: list | None = field(default_factory=lambda: _visualizer_default('spectrum_bar_fill_color'))
+    spectrum_bar_border_color: list | None = field(default_factory=lambda: _visualizer_default('spectrum_bar_border_color'))
+    spectrum_bar_border_opacity: float = field(default_factory=lambda: _visualizer_default('spectrum_bar_border_opacity'))
+    bubble_bar_fill_color: list | None = field(default_factory=lambda: _visualizer_default('bubble_bar_fill_color'))
+    bubble_bar_border_color: list | None = field(default_factory=lambda: _visualizer_default('bubble_bar_border_color'))
+    bubble_bar_border_opacity: float = field(default_factory=lambda: _visualizer_default('bubble_bar_border_opacity'))
+    sine_wave_bar_fill_color: list | None = field(default_factory=lambda: _visualizer_default('sine_wave_bar_fill_color'))
+    sine_wave_bar_border_color: list | None = field(default_factory=lambda: _visualizer_default('sine_wave_bar_border_color'))
+    sine_wave_bar_border_opacity: float = field(default_factory=lambda: _visualizer_default('sine_wave_bar_border_opacity'))
+    oscilloscope_bar_fill_color: list | None = field(default_factory=lambda: _visualizer_default('oscilloscope_bar_fill_color'))
+    oscilloscope_bar_border_color: list | None = field(default_factory=lambda: _visualizer_default('oscilloscope_bar_border_color'))
+    oscilloscope_bar_border_opacity: float = field(default_factory=lambda: _visualizer_default('oscilloscope_bar_border_opacity'))
+    devcurve_bar_fill_color: list | None = field(default_factory=lambda: _visualizer_default('devcurve_bar_fill_color'))
+    devcurve_bar_border_color: list | None = field(default_factory=lambda: _visualizer_default('devcurve_bar_border_color'))
+    devcurve_bar_border_opacity: float = field(default_factory=lambda: _visualizer_default('devcurve_bar_border_opacity'))
+    adaptive_sensitivity: bool = field(default_factory=lambda: _active_visualizer_default('adaptive_sensitivity'))
+    sensitivity: float = field(default_factory=lambda: _active_visualizer_default('sensitivity'))
+    dynamic_floor: bool = field(default_factory=lambda: _active_visualizer_default('dynamic_floor'))
+    manual_floor: float = field(default_factory=lambda: _active_visualizer_default('manual_floor'))
+    dynamic_range_enabled: bool = field(default_factory=lambda: _active_visualizer_default('dynamic_range_enabled'))
+    agc_strength: float = field(default_factory=lambda: _active_visualizer_default('agc_strength'))
+    input_gain: float = field(default_factory=lambda: _active_visualizer_default('input_gain'))
+    kick_lane_gain: float = field(default_factory=lambda: _active_visualizer_default('kick_lane_gain'))
+    transient_pulse_gain: float = field(default_factory=lambda: _active_visualizer_default('transient_pulse_gain'))
+    transient_clamp: float = field(default_factory=lambda: _active_visualizer_default('transient_clamp'))
+    spectrum_lane_transient_mix: float = field(default_factory=lambda: _visualizer_default('spectrum_lane_transient_mix'))
+    spectrum_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('spectrum_dynamic_floor'))
+    spectrum_manual_floor: float = field(default_factory=lambda: _visualizer_default('spectrum_manual_floor'))
+    spectrum_dynamic_range_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_dynamic_range_enabled'))
+    spectrum_agc_strength: float = field(default_factory=lambda: _visualizer_default('spectrum_agc_strength'))
+    spectrum_input_gain: float = field(default_factory=lambda: _visualizer_default('spectrum_input_gain'))
+    spectrum_kick_lane_gain: float = field(default_factory=lambda: _visualizer_default('spectrum_kick_lane_gain'))
+    spectrum_transient_pulse_gain: float = field(default_factory=lambda: _visualizer_default('spectrum_transient_pulse_gain'))
+    spectrum_transient_clamp: float = field(default_factory=lambda: _visualizer_default('spectrum_transient_clamp'))
+    spectrum_audio_block_size: int = field(default_factory=lambda: _visualizer_default('spectrum_audio_block_size'))
+    spectrum_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('spectrum_adaptive_sensitivity'))
+    spectrum_sensitivity: float = field(default_factory=lambda: _visualizer_default('spectrum_sensitivity'))
+    spectrum_bar_count: int = field(default_factory=lambda: _visualizer_default('spectrum_bar_count'))
+    bubble_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('bubble_dynamic_floor'))
+    bubble_manual_floor: float = field(default_factory=lambda: _visualizer_default('bubble_manual_floor'))
+    bubble_dynamic_range_enabled: bool = field(default_factory=lambda: _visualizer_default('bubble_dynamic_range_enabled'))
+    bubble_agc_strength: float = field(default_factory=lambda: _visualizer_default('bubble_agc_strength'))
+    bubble_input_gain: float = field(default_factory=lambda: _visualizer_default('bubble_input_gain'))
+    bubble_kick_lane_gain: float = field(default_factory=lambda: _visualizer_default('bubble_kick_lane_gain'))
+    bubble_transient_pulse_gain: float = field(default_factory=lambda: _visualizer_default('bubble_transient_pulse_gain'))
+    bubble_transient_clamp: float = field(default_factory=lambda: _visualizer_default('bubble_transient_clamp'))
+    bubble_transient_mix_bass: float = field(default_factory=lambda: _visualizer_default('bubble_transient_mix_bass'))
+    bubble_transient_mix_vocal: float = field(default_factory=lambda: _visualizer_default('bubble_transient_mix_vocal'))
+    bubble_audio_block_size: int = field(default_factory=lambda: _visualizer_default('bubble_audio_block_size'))
+    bubble_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('bubble_adaptive_sensitivity'))
+    bubble_sensitivity: float = field(default_factory=lambda: _visualizer_default('bubble_sensitivity'))
+    bubble_bar_count: int = field(default_factory=lambda: _visualizer_default('bubble_bar_count'))
+    sine_wave_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('sine_wave_dynamic_floor'))
+    sine_wave_manual_floor: float = field(default_factory=lambda: _visualizer_default('sine_wave_manual_floor'))
+    sine_wave_dynamic_range_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_wave_dynamic_range_enabled'))
+    sine_wave_agc_strength: float = field(default_factory=lambda: _visualizer_default('sine_wave_agc_strength'))
+    sine_wave_input_gain: float = field(default_factory=lambda: _visualizer_default('sine_wave_input_gain'))
+    sine_wave_kick_lane_gain: float = field(default_factory=lambda: _visualizer_default('sine_wave_kick_lane_gain'))
+    sine_wave_transient_pulse_gain: float = field(default_factory=lambda: _visualizer_default('sine_wave_transient_pulse_gain'))
+    sine_wave_transient_clamp: float = field(default_factory=lambda: _visualizer_default('sine_wave_transient_clamp'))
+    sine_wave_transient_width_mix: float = field(default_factory=lambda: _visualizer_default('sine_wave_transient_width_mix'))
+    sine_wave_audio_block_size: int = field(default_factory=lambda: _visualizer_default('sine_wave_audio_block_size'))
+    sine_wave_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('sine_wave_adaptive_sensitivity'))
+    sine_wave_sensitivity: float = field(default_factory=lambda: _visualizer_default('sine_wave_sensitivity'))
+    sine_wave_bar_count: int = field(default_factory=lambda: _visualizer_default('sine_wave_bar_count'))
+    oscilloscope_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('oscilloscope_dynamic_floor'))
+    oscilloscope_manual_floor: float = field(default_factory=lambda: _visualizer_default('oscilloscope_manual_floor'))
+    oscilloscope_dynamic_range_enabled: bool = field(default_factory=lambda: _visualizer_default('oscilloscope_dynamic_range_enabled'))
+    oscilloscope_agc_strength: float = field(default_factory=lambda: _visualizer_default('oscilloscope_agc_strength'))
+    oscilloscope_input_gain: float = field(default_factory=lambda: _visualizer_default('oscilloscope_input_gain'))
+    oscilloscope_kick_lane_gain: float = field(default_factory=lambda: _visualizer_default('oscilloscope_kick_lane_gain'))
+    oscilloscope_transient_pulse_gain: float = field(default_factory=lambda: _visualizer_default('oscilloscope_transient_pulse_gain'))
+    oscilloscope_transient_clamp: float = field(default_factory=lambda: _visualizer_default('oscilloscope_transient_clamp'))
+    oscilloscope_transient_width_mix: float = field(default_factory=lambda: _visualizer_default('oscilloscope_transient_width_mix'))
+    oscilloscope_audio_block_size: int = field(default_factory=lambda: _visualizer_default('oscilloscope_audio_block_size'))
+    oscilloscope_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('oscilloscope_adaptive_sensitivity'))
+    oscilloscope_sensitivity: float = field(default_factory=lambda: _visualizer_default('oscilloscope_sensitivity'))
+    oscilloscope_bar_count: int = field(default_factory=lambda: _visualizer_default('oscilloscope_bar_count'))
+    devcurve_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('devcurve_dynamic_floor'))
+    devcurve_manual_floor: float = field(default_factory=lambda: _visualizer_default('devcurve_manual_floor'))
+    devcurve_dynamic_range_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_dynamic_range_enabled'))
+    devcurve_agc_strength: float = field(default_factory=lambda: _visualizer_default('devcurve_agc_strength'))
+    devcurve_input_gain: float = field(default_factory=lambda: _visualizer_default('devcurve_input_gain'))
+    devcurve_kick_lane_gain: float = field(default_factory=lambda: _visualizer_default('devcurve_kick_lane_gain'))
+    devcurve_transient_pulse_gain: float = field(default_factory=lambda: _visualizer_default('devcurve_transient_pulse_gain'))
+    devcurve_transient_clamp: float = field(default_factory=lambda: _visualizer_default('devcurve_transient_clamp'))
+    devcurve_audio_block_size: int = field(default_factory=lambda: _visualizer_default('devcurve_audio_block_size'))
+    devcurve_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('devcurve_adaptive_sensitivity'))
+    devcurve_sensitivity: float = field(default_factory=lambda: _visualizer_default('devcurve_sensitivity'))
+    devcurve_bar_count: int = field(default_factory=lambda: _visualizer_default('devcurve_bar_count'))
+    mode: str = field(default_factory=lambda: _visualizer_default('mode'))
     # V2 persisted per-mode enable set. Default = every registered mode enabled,
     # which preserves today's behavior and is the migration default for existing
     # users (an absent key resolves to descriptor defaults). Disabling a mode never
     # deletes its settings/presets; it only removes it from this list.
-    enabled_modes: list = field(default_factory=lambda: list(resolve_effective_enabled_modes(None)))
-    osc_glow_enabled: bool = True
-    osc_glow_intensity: float = 0.5
-    osc_glow_reactivity: float = 1.0
-    osc_glow_color: list = None
-    osc_reactive_glow: bool = True
-    osc_line_amplitude: float = 3.0
-    osc_smoothing: float = 0.7
-    osc_line_color: list = None
-    osc_line_count: int = 1
-    osc_line2_color: list = None
-    osc_line2_glow_color: list = None
-    osc_line3_color: list = None
-    osc_line3_glow_color: list = None
-    osc_line4_color: list = None
-    osc_line4_glow_color: list = None
-    osc_line5_color: list = None
-    osc_line5_glow_color: list = None
-    osc_line6_color: list = None
-    osc_line6_glow_color: list = None
-    spectrum_growth: float = 1.0
-    osc_speed: float = 1.0
-    osc_line_dim: bool = False
-    osc_line_offset_bias: float = 0.0
-    osc_vertical_shift: int = 0
-    osc_growth: float = 1.0
-    spectrum_render_mode: str = "bars"
-    spectrum_visual_smoothing_enabled: bool = True
-    spectrum_visual_smoothing: float = 0.5
-    spectrum_unique_colors: bool = True
-    spectrum_rainbow_fill: bool = True
-    spectrum_rainbow_border: bool = False
-    spectrum_border_radius: float = 0.0
-    spectrum_link_fill_border: bool = False
-    spectrum_glow_enabled: bool = False
-    spectrum_glow_intensity: float = 0.55
-    spectrum_glow_color: List[int] = field(default_factory=lambda: [110, 220, 255, 235])
-    spectrum_ghosting_enabled: bool = True
-    spectrum_ghost_alpha: float = 0.4
-    spectrum_ghost_decay: float = 0.4
-    spectrum_mirrored: bool = True
-    spectrum_shape_nodes: List[List[float]] = field(default_factory=lambda: [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]])
-    spectrum_notch_positions_mirrored: List[List] = field(default_factory=lambda: [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]])
-    spectrum_notch_positions_linear: List[List] = field(default_factory=lambda: [[0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"]])
-    spectrum_lane_strengths_mirrored: Dict[str, float] = field(
-        default_factory=lambda: dict(_SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED)
-    )
-    spectrum_lane_strengths_linear: Dict[str, float] = field(
-        default_factory=lambda: dict(_SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR)
-    )
-    spectrum_wave_amplitude: float = 0.50
-    spectrum_profile_floor: float = 0.12
-    spectrum_drop_speed: float = 1.0
-    sine_wave_growth: float = 1.0
-    sine_wave_travel: int = 0
-    sine_density: float = 1.0
-    sine_displacement: float = 0.0
-    sine_glow_enabled: bool = True
-    sine_glow_intensity: float = 0.5
-    sine_glow_reactivity: float = 1.0
-    sine_glow_color: list = None
-    sine_line_color: list = None
-    sine_reactive_glow: bool = True
-    sine_ghosting_enabled: bool = True
-    sine_ghost_alpha: float = 0.45
-    sine_ghost_decay: float = 0.3
-    sine_ghost_line2_enabled: bool = True
-    sine_ghost_line3_enabled: bool = True
-    sine_ghost_line4_enabled: bool = True
-    sine_ghost_line5_enabled: bool = True
-    sine_ghost_line6_enabled: bool = True
-    sine_sensitivity: float = 1.0
-    sine_smoothing: float = 0.7
-    sine_speed: float = 1.0
-    sine_line_count: int = 1
-    sine_line_offset_bias: float = 0.0
-    sine_line2_color: list = None
-    sine_line2_glow_color: list = None
-    sine_line3_color: list = None
-    sine_line3_glow_color: list = None
-    sine_line4_color: list = None
-    sine_line4_glow_color: list = None
-    sine_line5_color: list = None
-    sine_line5_glow_color: list = None
-    sine_line6_color: list = None
-    sine_line6_glow_color: list = None
-    sine_travel_line2: int = 0
-    sine_travel_line3: int = 0
-    sine_travel_line4: int = 0
-    sine_travel_line5: int = 0
-    sine_travel_line6: int = 0
-    sine_line1_shift: float = 0.0
-    sine_line2_shift: float = 0.0
-    sine_line3_shift: float = 0.0
-    sine_line4_shift: float = 0.0
-    sine_line5_shift: float = 0.0
-    sine_line6_shift: float = 0.0
-    sine_wave_effect: float = 0.0
-    sine_vertical_shift: int = 0
-    sine_micro_wobble: float = 0.0  # legacy, hidden
-    sine_crawl_amount: float = 0.25
-    sine_width_reaction: float = 0.0
-    sine_card_adaptation: float = 0.3
-    rainbow_enabled: bool = False
-    rainbow_speed: float = 0.5
-    osc_ghosting_enabled: bool = False
-    osc_ghost_intensity: float = 0.4
-    osc_ghost_decay: float = 0.4
-    osc_ghost_line2_enabled: bool = True
-    osc_ghost_line3_enabled: bool = True
-    osc_ghost_line4_enabled: bool = True
-    osc_ghost_line5_enabled: bool = True
-    osc_ghost_line6_enabled: bool = True
-    sine_heartbeat: float = 0.0
+    enabled_modes: list = field(default_factory=lambda: _visualizer_default('enabled_modes'))
+    osc_glow_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_glow_enabled'))
+    osc_glow_intensity: float = field(default_factory=lambda: _visualizer_default('osc_glow_intensity'))
+    osc_glow_reactivity: float = field(default_factory=lambda: _visualizer_default('osc_glow_reactivity'))
+    osc_glow_color: list = field(default_factory=lambda: _visualizer_default('osc_glow_color'))
+    osc_reactive_glow: bool = field(default_factory=lambda: _visualizer_default('osc_reactive_glow'))
+    osc_line_amplitude: float = field(default_factory=lambda: _visualizer_default('osc_line_amplitude'))
+    osc_smoothing: float = field(default_factory=lambda: _visualizer_default('osc_smoothing'))
+    osc_line_color: list = field(default_factory=lambda: _visualizer_default('osc_line_color'))
+    osc_line_count: int = field(default_factory=lambda: _visualizer_default('osc_line_count'))
+    osc_line2_color: list = field(default_factory=lambda: _visualizer_default('osc_line2_color'))
+    osc_line2_glow_color: list = field(default_factory=lambda: _visualizer_default('osc_line2_glow_color'))
+    osc_line3_color: list = field(default_factory=lambda: _visualizer_default('osc_line3_color'))
+    osc_line3_glow_color: list = field(default_factory=lambda: _visualizer_default('osc_line3_glow_color'))
+    osc_line4_color: list = field(default_factory=lambda: _visualizer_default('osc_line4_color'))
+    osc_line4_glow_color: list = field(default_factory=lambda: _visualizer_default('osc_line4_glow_color'))
+    osc_line5_color: list = field(default_factory=lambda: _visualizer_default('osc_line5_color'))
+    osc_line5_glow_color: list = field(default_factory=lambda: _visualizer_default('osc_line5_glow_color'))
+    osc_line6_color: list = field(default_factory=lambda: _visualizer_default('osc_line6_color'))
+    osc_line6_glow_color: list = field(default_factory=lambda: _visualizer_default('osc_line6_glow_color'))
+    osc_speed: float = field(default_factory=lambda: _visualizer_default('osc_speed'))
+    osc_line_dim: bool = field(default_factory=lambda: _visualizer_default('osc_line_dim'))
+    osc_line_offset_bias: float = field(default_factory=lambda: _visualizer_default('osc_line_offset_bias'))
+    osc_vertical_shift: int = field(default_factory=lambda: _visualizer_default('osc_vertical_shift'))
+    spectrum_render_mode: str = field(default_factory=lambda: _visualizer_default('spectrum_render_mode'))
+    spectrum_visual_smoothing_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing_enabled'))
+    spectrum_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing'))
+    spectrum_unique_colors: bool = field(default_factory=lambda: _visualizer_default('spectrum_unique_colors'))
+    spectrum_rainbow_fill: bool = field(default_factory=lambda: _visualizer_default('spectrum_rainbow_fill'))
+    spectrum_rainbow_border: bool = field(default_factory=lambda: _visualizer_default('spectrum_rainbow_border'))
+    spectrum_border_radius: float = field(default_factory=lambda: _visualizer_default('spectrum_border_radius'))
+    spectrum_link_fill_border: bool = field(default_factory=lambda: _visualizer_default('spectrum_link_fill_border'))
+    spectrum_glow_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_glow_enabled'))
+    spectrum_glow_intensity: float = field(default_factory=lambda: _visualizer_default('spectrum_glow_intensity'))
+    spectrum_glow_color: List[int] = field(default_factory=lambda: _visualizer_default('spectrum_glow_color'))
+    spectrum_ghosting_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_ghosting_enabled'))
+    spectrum_ghost_alpha: float = field(default_factory=lambda: _visualizer_default('spectrum_ghost_alpha'))
+    spectrum_ghost_decay: float = field(default_factory=lambda: _visualizer_default('spectrum_ghost_decay'))
+    spectrum_mirrored: bool = field(default_factory=lambda: _visualizer_default('spectrum_mirrored'))
+    spectrum_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('spectrum_shape_nodes'))
+    spectrum_notch_positions_mirrored: List[List] = field(default_factory=lambda: _visualizer_default('spectrum_notch_positions_mirrored'))
+    spectrum_notch_positions_linear: List[List] = field(default_factory=lambda: _visualizer_default('spectrum_notch_positions_linear'))
+    spectrum_lane_strengths_mirrored: Dict[str, float] = field(default_factory=lambda: _visualizer_default('spectrum_lane_strengths_mirrored'))
+    spectrum_lane_strengths_linear: Dict[str, float] = field(default_factory=lambda: _visualizer_default('spectrum_lane_strengths_linear'))
+    spectrum_wave_amplitude: float = field(default_factory=lambda: _visualizer_default('spectrum_wave_amplitude'))
+    spectrum_profile_floor: float = field(default_factory=lambda: _visualizer_default('spectrum_profile_floor'))
+    spectrum_drop_speed: float = field(default_factory=lambda: _visualizer_default('spectrum_drop_speed'))
+    sine_wave_travel: int = field(default_factory=lambda: _visualizer_default('sine_wave_travel'))
+    sine_density: float = field(default_factory=lambda: _visualizer_default('sine_density'))
+    sine_displacement: float = field(default_factory=lambda: _visualizer_default('sine_displacement'))
+    sine_glow_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_glow_enabled'))
+    sine_glow_intensity: float = field(default_factory=lambda: _visualizer_default('sine_glow_intensity'))
+    sine_glow_reactivity: float = field(default_factory=lambda: _visualizer_default('sine_glow_reactivity'))
+    sine_glow_color: list = field(default_factory=lambda: _visualizer_default('sine_glow_color'))
+    sine_line_color: list = field(default_factory=lambda: _visualizer_default('sine_line_color'))
+    sine_reactive_glow: bool = field(default_factory=lambda: _visualizer_default('sine_reactive_glow'))
+    sine_ghosting_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghosting_enabled'))
+    sine_ghost_alpha: float = field(default_factory=lambda: _visualizer_default('sine_ghost_alpha'))
+    sine_ghost_decay: float = field(default_factory=lambda: _visualizer_default('sine_ghost_decay'))
+    sine_ghost_line2_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line2_enabled'))
+    sine_ghost_line3_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line3_enabled'))
+    sine_ghost_line4_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line4_enabled'))
+    sine_ghost_line5_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line5_enabled'))
+    sine_ghost_line6_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line6_enabled'))
+    sine_sensitivity: float = field(default_factory=lambda: _visualizer_default('sine_sensitivity'))
+    sine_smoothing: float = field(default_factory=lambda: _visualizer_default('sine_smoothing'))
+    sine_speed: float = field(default_factory=lambda: _visualizer_default('sine_speed'))
+    sine_line_count: int = field(default_factory=lambda: _visualizer_default('sine_line_count'))
+    sine_line_offset_bias: float = field(default_factory=lambda: _visualizer_default('sine_line_offset_bias'))
+    sine_line2_color: list = field(default_factory=lambda: _visualizer_default('sine_line2_color'))
+    sine_line2_glow_color: list = field(default_factory=lambda: _visualizer_default('sine_line2_glow_color'))
+    sine_line3_color: list = field(default_factory=lambda: _visualizer_default('sine_line3_color'))
+    sine_line3_glow_color: list = field(default_factory=lambda: _visualizer_default('sine_line3_glow_color'))
+    sine_line4_color: list = field(default_factory=lambda: _visualizer_default('sine_line4_color'))
+    sine_line4_glow_color: list = field(default_factory=lambda: _visualizer_default('sine_line4_glow_color'))
+    sine_line5_color: list = field(default_factory=lambda: _visualizer_default('sine_line5_color'))
+    sine_line5_glow_color: list = field(default_factory=lambda: _visualizer_default('sine_line5_glow_color'))
+    sine_line6_color: list = field(default_factory=lambda: _visualizer_default('sine_line6_color'))
+    sine_line6_glow_color: list = field(default_factory=lambda: _visualizer_default('sine_line6_glow_color'))
+    sine_travel_line2: int = field(default_factory=lambda: _visualizer_default('sine_travel_line2'))
+    sine_travel_line3: int = field(default_factory=lambda: _visualizer_default('sine_travel_line3'))
+    sine_travel_line4: int = field(default_factory=lambda: _visualizer_default('sine_travel_line4'))
+    sine_travel_line5: int = field(default_factory=lambda: _visualizer_default('sine_travel_line5'))
+    sine_travel_line6: int = field(default_factory=lambda: _visualizer_default('sine_travel_line6'))
+    sine_line1_shift: float = field(default_factory=lambda: _visualizer_default('sine_line1_shift'))
+    sine_line2_shift: float = field(default_factory=lambda: _visualizer_default('sine_line2_shift'))
+    sine_line3_shift: float = field(default_factory=lambda: _visualizer_default('sine_line3_shift'))
+    sine_line4_shift: float = field(default_factory=lambda: _visualizer_default('sine_line4_shift'))
+    sine_line5_shift: float = field(default_factory=lambda: _visualizer_default('sine_line5_shift'))
+    sine_line6_shift: float = field(default_factory=lambda: _visualizer_default('sine_line6_shift'))
+    sine_wave_effect: float = field(default_factory=lambda: _visualizer_default('sine_wave_effect'))
+    sine_vertical_shift: int = field(default_factory=lambda: _visualizer_default('sine_vertical_shift'))
+    sine_micro_wobble: float = field(default_factory=lambda: _visualizer_default('sine_micro_wobble'))  # legacy, hidden
+    sine_crawl_amount: float = field(default_factory=lambda: _visualizer_default('sine_crawl_amount'))
+    sine_width_reaction: float = field(default_factory=lambda: _visualizer_default('sine_width_reaction'))
+    sine_card_adaptation: float = field(default_factory=lambda: _visualizer_default('sine_card_adaptation'))
+    rainbow_enabled: bool = field(default_factory=lambda: _visualizer_default('rainbow_enabled'))
+    rainbow_speed: float = field(default_factory=lambda: _visualizer_default('rainbow_speed'))
+    osc_ghosting_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_ghosting_enabled'))
+    osc_ghost_intensity: float = field(default_factory=lambda: _visualizer_default('osc_ghost_intensity'))
+    osc_ghost_decay: float = field(default_factory=lambda: _visualizer_default('osc_ghost_decay'))
+    osc_ghost_line2_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_ghost_line2_enabled'))
+    osc_ghost_line3_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_ghost_line3_enabled'))
+    osc_ghost_line4_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_ghost_line4_enabled'))
+    osc_ghost_line5_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_ghost_line5_enabled'))
+    osc_ghost_line6_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_ghost_line6_enabled'))
+    sine_heartbeat: float = field(default_factory=lambda: _visualizer_default('sine_heartbeat'))
     # Bubble visualizer
-    bubble_big_bass_pulse: float = 0.5
-    bubble_small_freq_pulse: float = 0.5
-    bubble_stream_direction: str = "up"
-    bubble_stream_constant_speed: float = 0.5
-    bubble_stream_speed_cap: float = 2.0
-    bubble_stream_reactivity: float = 0.5
-    bubble_rotation_amount: float = 0.5
-    bubble_drift_amount: float = 0.5
-    bubble_group_drift: bool = False
-    bubble_drift_speed: float = 0.5
-    bubble_drift_frequency: float = 0.5
-    bubble_drift_direction: str = "random"  # none/left/right/diagonal/swish_{horizontal,vertical}/swirl_{cw,ccw}/random
-    bubble_big_count: int = 8
-    bubble_small_count: int = 25
-    bubble_surface_reach: float = 0.6
-    bubble_bounce_big_pct: int = 70
-    bubble_bounce_small_pct: int = 30
-    bubble_bounce_big_speed: float = 0.8
-    bubble_bounce_small_speed: float = 0.5
-    bubble_bounce_same_only: bool = False
-    bubble_collision_pop_mode: str = "off"  # off/one/all
-    bubble_outline_color: Any = None
-    bubble_specular_color: Any = None
-    bubble_gradient_light: Any = None
-    bubble_gradient_dark: Any = None
-    bubble_pop_color: Any = None
-    bubble_specular_direction: str = "top_left"  # top/bottom/left/right + diagonals
-    bubble_gradient_direction: str = "top"  # gradient vector independent of specular highlight
-    bubble_big_size_max: float = 0.038
-    bubble_small_size_max: float = 0.018
-    bubble_big_visual_smoothing: float = 0.5
-    bubble_big_contraction_bias: float = 1.0
-    bubble_big_size_clamp: float = 4.0
-    bubble_big_specular_max_size: float = 2.5
-    bubble_growth: float = 3.0
-    devcurve_growth: float = 3.0
-    bubble_tail_opacity: float = 0.3
-    bubble_trail_strength: float = 0.0
-    bubble_ghosting_enabled: bool = False
-    bubble_ghost_alpha: float = 0.0
-    bubble_ghost_decay: float = 0.4
-    sine_line_dim: bool = False
+    bubble_big_bass_pulse: float = field(default_factory=lambda: _visualizer_default('bubble_big_bass_pulse'))
+    bubble_small_freq_pulse: float = field(default_factory=lambda: _visualizer_default('bubble_small_freq_pulse'))
+    bubble_stream_direction: str = field(default_factory=lambda: _visualizer_default('bubble_stream_direction'))
+    bubble_stream_constant_speed: float = field(default_factory=lambda: _visualizer_default('bubble_stream_constant_speed'))
+    bubble_stream_speed_cap: float = field(default_factory=lambda: _visualizer_default('bubble_stream_speed_cap'))
+    bubble_stream_reactivity: float = field(default_factory=lambda: _visualizer_default('bubble_stream_reactivity'))
+    bubble_rotation_amount: float = field(default_factory=lambda: _visualizer_default('bubble_rotation_amount'))
+    bubble_drift_amount: float = field(default_factory=lambda: _visualizer_default('bubble_drift_amount'))
+    bubble_group_drift: bool = field(default_factory=lambda: _visualizer_default('bubble_group_drift'))
+    bubble_drift_speed: float = field(default_factory=lambda: _visualizer_default('bubble_drift_speed'))
+    bubble_drift_frequency: float = field(default_factory=lambda: _visualizer_default('bubble_drift_frequency'))
+    bubble_drift_direction: str = field(default_factory=lambda: _visualizer_default('bubble_drift_direction'))  # none/left/right/diagonal/swish_{horizontal,vertical}/swirl_{cw,ccw}/random
+    bubble_big_count: int = field(default_factory=lambda: _visualizer_default('bubble_big_count'))
+    bubble_small_count: int = field(default_factory=lambda: _visualizer_default('bubble_small_count'))
+    bubble_surface_reach: float = field(default_factory=lambda: _visualizer_default('bubble_surface_reach'))
+    bubble_bounce_big_pct: int = field(default_factory=lambda: _visualizer_default('bubble_bounce_big_pct'))
+    bubble_bounce_small_pct: int = field(default_factory=lambda: _visualizer_default('bubble_bounce_small_pct'))
+    bubble_bounce_big_speed: float = field(default_factory=lambda: _visualizer_default('bubble_bounce_big_speed'))
+    bubble_bounce_small_speed: float = field(default_factory=lambda: _visualizer_default('bubble_bounce_small_speed'))
+    bubble_bounce_same_only: bool = field(default_factory=lambda: _visualizer_default('bubble_bounce_same_only'))
+    bubble_collision_pop_mode: str = field(default_factory=lambda: _visualizer_default('bubble_collision_pop_mode'))  # off/one/all
+    bubble_outline_color: Any = field(default_factory=lambda: _visualizer_default('bubble_outline_color'))
+    bubble_specular_color: Any = field(default_factory=lambda: _visualizer_default('bubble_specular_color'))
+    bubble_gradient_light: Any = field(default_factory=lambda: _visualizer_default('bubble_gradient_light'))
+    bubble_gradient_dark: Any = field(default_factory=lambda: _visualizer_default('bubble_gradient_dark'))
+    bubble_pop_color: Any = field(default_factory=lambda: _visualizer_default('bubble_pop_color'))
+    bubble_specular_direction: str = field(default_factory=lambda: _visualizer_default('bubble_specular_direction'))  # top/bottom/left/right + diagonals
+    bubble_gradient_direction: str = field(default_factory=lambda: _visualizer_default('bubble_gradient_direction'))  # gradient vector independent of specular highlight
+    bubble_big_size_max: float = field(default_factory=lambda: _visualizer_default('bubble_big_size_max'))
+    bubble_small_size_max: float = field(default_factory=lambda: _visualizer_default('bubble_small_size_max'))
+    bubble_big_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('bubble_big_visual_smoothing'))
+    bubble_big_contraction_bias: float = field(default_factory=lambda: _visualizer_default('bubble_big_contraction_bias'))
+    bubble_big_size_clamp: float = field(default_factory=lambda: _visualizer_default('bubble_big_size_clamp'))
+    bubble_big_specular_max_size: float = field(default_factory=lambda: _visualizer_default('bubble_big_specular_max_size'))
+    bubble_tail_opacity: float = field(default_factory=lambda: _visualizer_default('bubble_tail_opacity'))
+    bubble_trail_strength: float = field(default_factory=lambda: _visualizer_default('bubble_trail_strength'))
+    bubble_ghosting_enabled: bool = field(default_factory=lambda: _visualizer_default('bubble_ghosting_enabled'))
+    bubble_ghost_alpha: float = field(default_factory=lambda: _visualizer_default('bubble_ghost_alpha'))
+    bubble_ghost_decay: float = field(default_factory=lambda: _visualizer_default('bubble_ghost_decay'))
+    sine_line_dim: bool = field(default_factory=lambda: _visualizer_default('sine_line_dim'))
     # Dev Curve visualizer
-    devcurve_active_layer: str = "bass"
-    devcurve_layer_bass_shape_nodes: List[List[float]] = field(default_factory=lambda: [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])
-    devcurve_layer_vocals_shape_nodes: List[List[float]] = field(default_factory=lambda: [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])
-    devcurve_layer_mids_shape_nodes: List[List[float]] = field(default_factory=lambda: [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])
-    devcurve_layer_transients_shape_nodes: List[List[float]] = field(default_factory=lambda: [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])
-    devcurve_base_level: float = 0.58
-    devcurve_motion_power: float = 1.0
-    devcurve_idle_motion: float = 0.20
-    devcurve_idle_speed: float = 0.60
-    devcurve_smoothness: float = 0.55
-    devcurve_layer_bass_enabled: bool = True
-    devcurve_layer_bass_color: Any = None
-    devcurve_layer_bass_alpha: float = 0.55
-    devcurve_layer_bass_power: float = 1.0
-    devcurve_layer_bass_offset: float = 0.0
-    devcurve_layer_bass_outline_color: Any = None
-    devcurve_layer_bass_outline_width: float = 0.006
-    devcurve_layer_bass_order: int = 1
-    devcurve_layer_vocals_enabled: bool = True
-    devcurve_layer_vocals_color: Any = None
-    devcurve_layer_vocals_alpha: float = 0.42
-    devcurve_layer_vocals_power: float = 1.0
-    devcurve_layer_vocals_offset: float = -0.01
-    devcurve_layer_vocals_outline_color: Any = None
-    devcurve_layer_vocals_outline_width: float = 0.006
-    devcurve_layer_vocals_order: int = 2
-    devcurve_layer_mids_enabled: bool = True
-    devcurve_layer_mids_color: Any = None
-    devcurve_layer_mids_alpha: float = 0.46
-    devcurve_layer_mids_power: float = 1.0
-    devcurve_layer_mids_offset: float = 0.01
-    devcurve_layer_mids_outline_color: Any = None
-    devcurve_layer_mids_outline_width: float = 0.006
-    devcurve_layer_mids_order: int = 3
-    devcurve_layer_transients_enabled: bool = True
-    devcurve_layer_transients_color: Any = None
-    devcurve_layer_transients_alpha: float = 0.66
-    devcurve_layer_transients_power: float = 1.15
-    devcurve_layer_transients_offset: float = 0.0
-    devcurve_layer_transients_outline_color: Any = None
-    devcurve_layer_transients_outline_width: float = 0.006
-    devcurve_layer_transients_order: int = 4
-    devcurve_ghosting_enabled: bool = False
-    devcurve_ghost_alpha: float = 0.0
-    devcurve_ghost_decay: float = 0.4
-    devcurve_foreground_shadow_enabled: bool = False
-    devcurve_foreground_shadow_alpha: float = 0.36
-    devcurve_foreground_shadow_darken: float = 0.42
-    devcurve_foreground_shadow_offset: float = 0.10
-    devcurve_foreground_specular_enabled: bool = False
-    devcurve_foreground_specular_alpha: float = 0.78
-    devcurve_foreground_specular_width: float = 0.022
-    devcurve_foreground_specular_offset: float = 0.028
-    devcurve_foreground_specular_crest_bias: float = 1.05
-    sphere_material: str = "Chrome"
-    sphere_deformation: float = 1.0
-    sphere_rotation_speed: float = 0.35
-    sphere_gloss: float = 0.65
-    sphere_specular: float = 0.8
-    sphere_light_direction: str = "NW"
-    sphere_idle_motion: float = 0.12
-    sphere_surface_detail: float = 1.15
-    sphere_bass_response: float = 1.0
-    sphere_mid_response: float = 1.0
-    sphere_high_response: float = 1.0
-    sphere_vocal_response: float = 1.4
-    sphere_bump_reactivity: float = 0.65
-    sphere_size_response: float = 1.5
-    sphere_energy_curve: float = 0.60
-    sphere_material_fx: float = 1.0
-    sphere_antialiasing: bool = True
-    sphere_shadow_enabled: bool = True
-    sphere_shadow_strength: float = 0.62
+    devcurve_active_layer: str = field(default_factory=lambda: _visualizer_default('devcurve_active_layer'))
+    devcurve_layer_bass_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('devcurve_layer_bass_shape_nodes'))
+    devcurve_layer_vocals_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('devcurve_layer_vocals_shape_nodes'))
+    devcurve_layer_mids_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('devcurve_layer_mids_shape_nodes'))
+    devcurve_layer_transients_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_shape_nodes'))
+    devcurve_base_level: float = field(default_factory=lambda: _visualizer_default('devcurve_base_level'))
+    devcurve_motion_power: float = field(default_factory=lambda: _visualizer_default('devcurve_motion_power'))
+    devcurve_idle_motion: float = field(default_factory=lambda: _visualizer_default('devcurve_idle_motion'))
+    devcurve_idle_speed: float = field(default_factory=lambda: _visualizer_default('devcurve_idle_speed'))
+    devcurve_smoothness: float = field(default_factory=lambda: _visualizer_default('devcurve_smoothness'))
+    devcurve_layer_bass_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_layer_bass_enabled'))
+    devcurve_layer_bass_color: Any = field(default_factory=lambda: _visualizer_default('devcurve_layer_bass_color'))
+    devcurve_layer_bass_alpha: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_bass_alpha'))
+    devcurve_layer_bass_power: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_bass_power'))
+    devcurve_layer_bass_offset: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_bass_offset'))
+    devcurve_layer_bass_outline_color: Any = field(default_factory=lambda: _visualizer_default('devcurve_layer_bass_outline_color'))
+    devcurve_layer_bass_outline_width: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_bass_outline_width'))
+    devcurve_layer_bass_order: int = field(default_factory=lambda: _visualizer_default('devcurve_layer_bass_order'))
+    devcurve_layer_vocals_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_layer_vocals_enabled'))
+    devcurve_layer_vocals_color: Any = field(default_factory=lambda: _visualizer_default('devcurve_layer_vocals_color'))
+    devcurve_layer_vocals_alpha: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_vocals_alpha'))
+    devcurve_layer_vocals_power: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_vocals_power'))
+    devcurve_layer_vocals_offset: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_vocals_offset'))
+    devcurve_layer_vocals_outline_color: Any = field(default_factory=lambda: _visualizer_default('devcurve_layer_vocals_outline_color'))
+    devcurve_layer_vocals_outline_width: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_vocals_outline_width'))
+    devcurve_layer_vocals_order: int = field(default_factory=lambda: _visualizer_default('devcurve_layer_vocals_order'))
+    devcurve_layer_mids_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_layer_mids_enabled'))
+    devcurve_layer_mids_color: Any = field(default_factory=lambda: _visualizer_default('devcurve_layer_mids_color'))
+    devcurve_layer_mids_alpha: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_mids_alpha'))
+    devcurve_layer_mids_power: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_mids_power'))
+    devcurve_layer_mids_offset: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_mids_offset'))
+    devcurve_layer_mids_outline_color: Any = field(default_factory=lambda: _visualizer_default('devcurve_layer_mids_outline_color'))
+    devcurve_layer_mids_outline_width: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_mids_outline_width'))
+    devcurve_layer_mids_order: int = field(default_factory=lambda: _visualizer_default('devcurve_layer_mids_order'))
+    devcurve_layer_transients_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_enabled'))
+    devcurve_layer_transients_color: Any = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_color'))
+    devcurve_layer_transients_alpha: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_alpha'))
+    devcurve_layer_transients_power: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_power'))
+    devcurve_layer_transients_offset: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_offset'))
+    devcurve_layer_transients_outline_color: Any = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_outline_color'))
+    devcurve_layer_transients_outline_width: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_outline_width'))
+    devcurve_layer_transients_order: int = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_order'))
+    devcurve_ghosting_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_ghosting_enabled'))
+    devcurve_ghost_alpha: float = field(default_factory=lambda: _visualizer_default('devcurve_ghost_alpha'))
+    devcurve_ghost_decay: float = field(default_factory=lambda: _visualizer_default('devcurve_ghost_decay'))
+    devcurve_foreground_shadow_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_foreground_shadow_enabled'))
+    devcurve_foreground_shadow_alpha: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_shadow_alpha'))
+    devcurve_foreground_shadow_darken: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_shadow_darken'))
+    devcurve_foreground_shadow_offset: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_shadow_offset'))
+    devcurve_foreground_specular_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_foreground_specular_enabled'))
+    devcurve_foreground_specular_alpha: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_specular_alpha'))
+    devcurve_foreground_specular_width: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_specular_width'))
+    devcurve_foreground_specular_offset: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_specular_offset'))
+    devcurve_foreground_specular_crest_bias: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_specular_crest_bias'))
+    sphere_material: str = field(default_factory=lambda: _visualizer_default('sphere_material'))
+    sphere_deformation: float = field(default_factory=lambda: _visualizer_default('sphere_deformation'))
+    sphere_rotation_speed: float = field(default_factory=lambda: _visualizer_default('sphere_rotation_speed'))
+    sphere_gloss: float = field(default_factory=lambda: _visualizer_default('sphere_gloss'))
+    sphere_specular: float = field(default_factory=lambda: _visualizer_default('sphere_specular'))
+    sphere_light_direction: str = field(default_factory=lambda: _visualizer_default('sphere_light_direction'))
+    sphere_idle_motion: float = field(default_factory=lambda: _visualizer_default('sphere_idle_motion'))
+    sphere_surface_detail: float = field(default_factory=lambda: _visualizer_default('sphere_surface_detail'))
+    sphere_bass_response: float = field(default_factory=lambda: _visualizer_default('sphere_bass_response'))
+    sphere_mid_response: float = field(default_factory=lambda: _visualizer_default('sphere_mid_response'))
+    sphere_high_response: float = field(default_factory=lambda: _visualizer_default('sphere_high_response'))
+    sphere_vocal_response: float = field(default_factory=lambda: _visualizer_default('sphere_vocal_response'))
+    sphere_bump_reactivity: float = field(default_factory=lambda: _visualizer_default('sphere_bump_reactivity'))
+    sphere_size_response: float = field(default_factory=lambda: _visualizer_default('sphere_size_response'))
+    sphere_energy_curve: float = field(default_factory=lambda: _visualizer_default('sphere_energy_curve'))
+    sphere_material_fx: float = field(default_factory=lambda: _visualizer_default('sphere_material_fx'))
+    sphere_antialiasing: bool = field(default_factory=lambda: _visualizer_default('sphere_antialiasing'))
+    sphere_shadow_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_shadow_enabled'))
+    sphere_shadow_strength: float = field(default_factory=lambda: _visualizer_default('sphere_shadow_strength'))
     # Visualizer presets (0=Preset 1/Default, 1=Preset 2, 2=Preset 3, 3=Custom)
-    preset_spectrum: int = field(default_factory=lambda: get_missing_preset_fallback_index("spectrum"))
-    preset_oscilloscope: int = field(default_factory=lambda: get_missing_preset_fallback_index("oscilloscope"))
-    preset_sine_wave: int = field(default_factory=lambda: get_missing_preset_fallback_index("sine_wave"))
-    preset_bubble: int = field(default_factory=lambda: get_missing_preset_fallback_index("bubble"))
-    preset_devcurve: int = field(default_factory=lambda: get_missing_preset_fallback_index("devcurve"))
-    preset_sphere: int = field(default_factory=lambda: get_missing_preset_fallback_index("sphere"))
+    preset_spectrum: int = field(default_factory=lambda: _visualizer_default('preset_spectrum'))
+    preset_oscilloscope: int = field(default_factory=lambda: _visualizer_default('preset_oscilloscope'))
+    preset_sine_wave: int = field(default_factory=lambda: _visualizer_default('preset_sine_wave'))
+    preset_bubble: int = field(default_factory=lambda: _visualizer_default('preset_bubble'))
+    preset_devcurve: int = field(default_factory=lambda: _visualizer_default('preset_devcurve'))
+    preset_sphere: int = field(default_factory=lambda: _visualizer_default('preset_sphere'))
 
     def __post_init__(self):
         self._apply_core_visual_defaults()
@@ -1396,43 +1334,43 @@ class SpotifyVisualizerSettings:
         if getattr(self, attr) is None:
             setattr(self, attr, list(value))
 
-    def _ensure_non_empty_nodes(self, attr: str, default_nodes: list[list[float]]) -> None:
+    def _ensure_non_empty_nodes(self, attr: str) -> None:
         value = getattr(self, attr)
         if not isinstance(value, list) or not value:
-            setattr(self, attr, deepcopy(default_nodes))
+            setattr(self, attr, deepcopy(_visualizer_default(attr)))
 
     def _apply_core_visual_defaults(self) -> None:
         if self.osc_glow_color is None:
-            self.osc_glow_color = [0, 200, 255, 230]
+            self.osc_glow_color = deepcopy(_visualizer_default("osc_glow_color"))
         if self.bar_fill_color is None:
-            self.bar_fill_color = [0, 255, 128, 230]
+            self.bar_fill_color = deepcopy(_active_visualizer_default("bar_fill_color"))
         if self.bar_border_color is None:
-            self.bar_border_color = [255, 255, 255, 230]
+            self.bar_border_color = deepcopy(_active_visualizer_default("bar_border_color"))
         for mode in PER_MODE_TECHNICAL_MODES:
             fill_attr = f"{mode}_bar_fill_color"
             border_attr = f"{mode}_bar_border_color"
             opacity_attr = f"{mode}_bar_border_opacity"
             if getattr(self, fill_attr) is None:
-                setattr(self, fill_attr, list(self.bar_fill_color))
+                setattr(self, fill_attr, deepcopy(_visualizer_default(fill_attr)))
             if getattr(self, border_attr) is None:
-                setattr(self, border_attr, list(self.bar_border_color))
+                setattr(self, border_attr, deepcopy(_visualizer_default(border_attr)))
             try:
                 mode_opacity = float(getattr(self, opacity_attr))
             except Exception:
-                mode_opacity = float(self.bar_border_opacity)
+                mode_opacity = float(_visualizer_default(opacity_attr))
             setattr(self, opacity_attr, mode_opacity)
  
     def _apply_oscilloscope_defaults(self) -> None:
-        _apply_list_defaults(self, _OSCILLOSCOPE_COLOR_DEFAULTS)
+        _apply_canonical_list_defaults(self, _OSC_SERIALIZERS)
 
     def _apply_sine_defaults(self) -> None:
-        _apply_list_defaults(self, _SINE_COLOR_DEFAULTS)
+        _apply_canonical_list_defaults(self, _SINE_SERIALIZERS)
 
     def _apply_bubble_defaults(self) -> None:
-        _apply_list_defaults(self, _BUBBLE_COLOR_DEFAULTS)
+        _apply_canonical_list_defaults(self, _BUBBLE_SERIALIZERS)
 
     def _apply_devcurve_defaults(self) -> None:
-        _apply_list_defaults(self, _DEVCURVE_COLOR_DEFAULTS)
+        _apply_canonical_list_defaults(self, _DEVCURVE_SERIALIZERS)
         self.devcurve_active_layer = (
             str(self.devcurve_active_layer).strip().lower()
             if str(self.devcurve_active_layer).strip().lower() in _DEVCURVE_ACTIVE_LAYERS
@@ -1444,7 +1382,7 @@ class SpotifyVisualizerSettings:
         for attr_name, (minimum, maximum) in _DEVCURVE_CLAMP_LIMITS.items():
             _clamp_attr_range(self, attr_name, minimum, maximum)
         for attr in _DEVCURVE_SHAPE_NODE_ATTRS:
-            self._ensure_non_empty_nodes(attr, _DEVCURVE_DEFAULT_SHAPE_NODES)
+            self._ensure_non_empty_nodes(attr)
         _normalize_ranked_attrs(self, _DEVCURVE_ORDER_ATTRS)
 
     def _apply_sphere_defaults(self) -> None:
@@ -1467,8 +1405,6 @@ class SpotifyVisualizerSettings:
         active_mode: str,
         preset_kwargs: Mapping[str, Any],
         bubble_gradient_semantics_version: int,
-        bubble_stream_constant_speed_default: float,
-        bubble_stream_speed_cap_default: float,
     ) -> Dict[str, Any]:
         """Assemble constructor kwargs from shared active-mode reader state."""
 
@@ -1495,8 +1431,6 @@ class SpotifyVisualizerSettings:
             active_visuals=active_visuals,
             rainbow_kwargs=rainbow_kwargs,
             preset_kwargs={**preset_kwargs, **mode_kwargs, **mode_visual_kwargs},
-            bubble_stream_constant_speed_default=bubble_stream_constant_speed_default,
-            bubble_stream_speed_cap_default=bubble_stream_speed_cap_default,
         )
 
     @classmethod
@@ -1506,11 +1440,20 @@ class SpotifyVisualizerSettings:
         _get, _mode_value = _build_settings_readers(settings, prefix=prefix)
 
         try:
-            bubble_gradient_semantics_version = int(_get("bubble_gradient_semantics_version", 0))
+            bubble_gradient_semantics_version = int(
+                _get(
+                    "bubble_gradient_semantics_version",
+                    _visualizer_default("bubble_gradient_semantics_version"),
+                )
+            )
         except (TypeError, ValueError):
-            bubble_gradient_semantics_version = 0
+            bubble_gradient_semantics_version = int(
+                _visualizer_default("bubble_gradient_semantics_version")
+            )
         _preset_kwargs = resolve_all_preset_indices_from_getter(get, prefix=prefix)
-        _active_mode = coerce_visualizer_mode_id(str(get(f"{prefix}.mode", "bubble")))
+        _active_mode = coerce_visualizer_mode_id(
+            str(get(f"{prefix}.mode", _visualizer_default("mode")))
+        )
 
         kwargs = cls._build_constructor_kwargs_from_mode_state(
             _get,
@@ -1523,11 +1466,11 @@ class SpotifyVisualizerSettings:
             active_mode=_active_mode,
             preset_kwargs=_preset_kwargs,
             bubble_gradient_semantics_version=bubble_gradient_semantics_version,
-            bubble_stream_constant_speed_default=0.5,
-            bubble_stream_speed_cap_default=2.0,
         )
         kwargs["enabled_modes"] = list(
-            resolve_effective_enabled_modes(get(f"{prefix}.enabled_modes", None))
+            resolve_effective_enabled_modes(
+                get(f"{prefix}.enabled_modes", _visualizer_default("enabled_modes"))
+            )
         )
         return cls(**kwargs)
 
@@ -1549,7 +1492,10 @@ class SpotifyVisualizerSettings:
         _raw = strip_legacy_global_technical_keys(_raw, prefix=prefix)
         _raw = migrate_legacy_global_visual_keys(_raw, prefix=prefix)
         _mode = coerce_visualizer_mode_id(
-            _raw.get("mode", _raw.get(f"{prefix}.mode", "bubble"))
+            _raw.get(
+                "mode",
+                _raw.get(f"{prefix}.mode", _visualizer_default("mode")),
+            )
         )
         bubble_gradient_semantics_version = get_bubble_gradient_semantics_version(_raw, prefix=prefix)
         if apply_preset_overlay:
@@ -1576,11 +1522,11 @@ class SpotifyVisualizerSettings:
             active_mode=_mode,
             preset_kwargs=_preset_kwargs,
             bubble_gradient_semantics_version=bubble_gradient_semantics_version,
-            bubble_stream_constant_speed_default=0.6,
-            bubble_stream_speed_cap_default=1.0,
         )
         kwargs["enabled_modes"] = list(
-            resolve_effective_enabled_modes(_get("enabled_modes", None))
+            resolve_effective_enabled_modes(
+                _get("enabled_modes", _visualizer_default("enabled_modes"))
+            )
         )
         return cls(**kwargs)
 
@@ -1662,7 +1608,11 @@ class SpotifyVisualizerSettings:
 
     def _resolve_mode_value_with(self, mode: str, base_key: str) -> Any:
         resolver = _PER_MODE_RESOLVERS[base_key]
-        return resolver(self._resolve_mode_value(mode, base_key))
+        attr_name = self._mode_attr_name(mode, base_key)
+        value = getattr(self, attr_name)
+        if value is None:
+            value = _visualizer_default(attr_name)
+        return resolver(value)
 
     def resolve_dynamic_floor(self, mode: str) -> bool:
         return self._resolve_mode_value_with(mode, "dynamic_floor")
