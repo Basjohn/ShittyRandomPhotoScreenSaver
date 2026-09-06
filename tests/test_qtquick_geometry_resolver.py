@@ -11,7 +11,6 @@ from __future__ import annotations
 import pytest
 
 from rendering.quick.widgets.geometry_resolver import (
-    DEFAULT_MARGIN_PX,
     MIN_VISIBLE_PX,
     OverlayAnchor,
     OverlayGeometryBinding,
@@ -96,10 +95,13 @@ def test_position_token_spellings_and_fallback() -> None:
     assert OverlayAnchor.from_setting("bottom_center") is OverlayAnchor.BOTTOM_CENTER
     assert OverlayAnchor.from_setting("  Middle Left  ") is OverlayAnchor.MIDDLE_LEFT
     assert OverlayAnchor.from_setting("Center") is OverlayAnchor.CENTER
-    # Unknown / empty resolve to TOP_RIGHT, matching the legacy fallback.
-    assert OverlayAnchor.from_setting("nonsense") is OverlayAnchor.TOP_RIGHT
-    assert OverlayAnchor.from_setting("") is OverlayAnchor.TOP_RIGHT
-    assert OverlayAnchor.from_setting(None) is OverlayAnchor.TOP_RIGHT
+    # Unknown/empty tokens no longer silently fall back to TOP_RIGHT. The parser
+    # now raises so an invalid *canonical* schema surfaces; persisted instance
+    # values are repaired against canonical at resolve_overlay_geometry_policy,
+    # not here.
+    for invalid in ("nonsense", "", None):
+        with pytest.raises(ValueError):
+            OverlayAnchor.from_setting(invalid)
 
 
 def test_center_anchor_centers_content() -> None:
@@ -193,11 +195,16 @@ def test_policy_prefers_instance_overrides_over_canonical() -> None:
     assert policy.margin == pytest.approx(12.0)
 
 
-def test_policy_falls_back_to_default_margin_when_none() -> None:
-    # reddit2's canonical margin is None (it inherits); a missing/None margin
-    # resolves to the universal default rather than crashing.
+def test_policy_falls_back_to_canonical_margin_when_config_empty() -> None:
+    # The universal DEFAULT_MARGIN_PX constant was removed in the settings
+    # sanitation: margin is now strictly per-widget canonical. An empty/missing
+    # persisted config resolves to that widget's own canonical margin rather than
+    # crashing or inventing a universal default.
+    from core.settings.default_contract import require_canonical_default
+
+    canonical_margin = float(require_canonical_default("widgets.reddit2")["margin"])
     policy = resolve_overlay_geometry_policy("reddit2", {})
-    assert policy.margin == pytest.approx(DEFAULT_MARGIN_PX)
+    assert policy.margin == pytest.approx(canonical_margin)
 
 
 def test_policy_resolve_anchors_live_content_size() -> None:
