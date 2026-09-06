@@ -91,8 +91,6 @@ class FactoryWidgetDescriptor:
     startup_stage: str = "primary"
     settings_key_kwarg: bool = False
     overlay_name: str | None = None
-    default_position: str | None = None
-    default_font_size: int | None = None
     base_settings_key: str | None = None
     base_settings_kwarg: str | None = None
     base_enabled_gate: bool = False
@@ -117,10 +115,6 @@ class FactoryWidgetDescriptor:
     ) -> Dict[str, Any]:
         """Build the concrete config mapping passed into the factory."""
         config: Dict[str, Any] = dict(widget_config) if isinstance(widget_config, Mapping) else {}
-        if self.default_position is not None:
-            config["_default_position"] = self.default_position
-        if self.default_font_size is not None:
-            config["_default_font_size"] = self.default_font_size
         if self.inject_shadows_into_config:
             config["_shadows_config"] = dict(shadows_config) if isinstance(shadows_config, Mapping) else {}
         return config
@@ -1923,7 +1917,7 @@ def restore_widget_family_to_application_default_layout(
     if not isinstance(defaults_candidate, Mapping):
         defaults_candidate = get_default_settings()["widgets"]
     if not isinstance(defaults_candidate, Mapping):
-        defaults_candidate = {}
+        raise TypeError("canonical widget defaults must be a mapping")
 
     displays = custom_layout_map.get("displays", {})
     if not isinstance(displays, dict):
@@ -1940,19 +1934,39 @@ def restore_widget_family_to_application_default_layout(
                 family_widget_id
             )
 
-            position_defaults = defaults_candidate.get(position_settings_key, {})
-            if not isinstance(position_defaults, Mapping):
-                position_defaults = {}
-            monitor_defaults = defaults_candidate.get(monitor_settings_key, {})
-            if not isinstance(monitor_defaults, Mapping):
-                monitor_defaults = {}
+            position_defaults = defaults_candidate.get(position_settings_key)
+            if not isinstance(position_defaults, Mapping) or "position" not in position_defaults:
+                raise KeyError(
+                    f"canonical position missing for {family_widget_id!r} via "
+                    f"{position_settings_key!r}"
+                )
+            monitor_defaults = defaults_candidate.get(monitor_settings_key)
+            if not isinstance(monitor_defaults, Mapping) or "monitor" not in monitor_defaults:
+                raise KeyError(
+                    f"canonical monitor route missing for {family_widget_id!r} via "
+                    f"{monitor_settings_key!r}"
+                )
+
+            default_position = str(position_defaults["position"] or "").strip()
+            if not default_position:
+                raise ValueError(
+                    f"canonical position empty for {family_widget_id!r} via "
+                    f"{position_settings_key!r}"
+                )
+            default_monitor = monitor_defaults["monitor"]
+            if default_monitor is None or (
+                isinstance(default_monitor, str) and not default_monitor.strip()
+            ):
+                raise ValueError(
+                    f"canonical monitor route empty for {family_widget_id!r} via "
+                    f"{monitor_settings_key!r}"
+                )
 
             position_section = widgets_config.get(position_settings_key, {})
             if not isinstance(position_section, dict) or position_settings_key not in widgets_config:
                 position_section = {}
                 widgets_config[position_settings_key] = position_section
-            default_position = str(position_defaults.get("position", "") or "").strip()
-            if default_position and position_section.get("position") != default_position:
+            if position_section.get("position") != default_position:
                 restored_any = True
                 position_section["position"] = default_position
 
@@ -1960,15 +1974,6 @@ def restore_widget_family_to_application_default_layout(
             if not isinstance(monitor_section, dict) or monitor_settings_key not in widgets_config:
                 monitor_section = {}
                 widgets_config[monitor_settings_key] = monitor_section
-            if "monitor" not in monitor_defaults:
-                raise KeyError(
-                    f"canonical monitor route missing for {family_widget_id!r}"
-                )
-            default_monitor = str(monitor_defaults["monitor"] or "").strip()
-            if not default_monitor:
-                raise ValueError(
-                    f"canonical monitor route empty for {family_widget_id!r}"
-                )
             if monitor_section.get("monitor") != default_monitor:
                 restored_any = True
                 monitor_section["monitor"] = default_monitor
@@ -1995,7 +2000,7 @@ def restore_all_widget_positions_to_application_defaults(
     if not isinstance(defaults_candidate, Mapping):
         defaults_candidate = get_default_settings()["widgets"]
     if not isinstance(defaults_candidate, Mapping):
-        defaults_candidate = {}
+        raise TypeError("canonical widget defaults must be a mapping")
 
     candidate_widget_ids: list[str] = []
     for descriptor in get_widget_runtime_descriptors():

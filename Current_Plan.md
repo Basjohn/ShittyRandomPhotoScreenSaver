@@ -301,3 +301,45 @@ exact current source + current reconciled test tree
 - [ ] Final independent secondary-authority classification scan.
 - [ ] Final fresh/Reset/SST/Custom integration gate and superseding sanitized GODZIP.
 - [ ] Separate post-sweep theming lifecycle cleanup (`dark.qss`) only after defaults work is closed.
+
+## CHECKPOINT15 — defaults authority sanitization CLOSED (2026-09-06)
+
+- [x] Post-CHECKPOINT14 authority audit clean after the final registry/descriptor/CUSTOM cleanup.
+- [x] Focused defaults-authority suite passes **29/29**.
+- [x] `defaults_snapshot.json` exactly matches the canonical deterministic builder.
+- [x] Full first-party Python syntax compile passes **434/434** files.
+- [x] All **30/30** curated Visualizer preset payloads are directly byte-identical to the actual CHECKPOINT5 archive.
+- [x] Final repo-wide literal/ownership classification found no remaining secondary product-default table. Remaining literals are explicit algorithm/presentation constraints, migration signatures, recovery/session sentinels, platform constants, or separate compiled theme authority.
+- [x] Permanent defaults-authority audit now scans all first-party Python, including `tools/`, helpers/providers and root entrypoints; only tests, caches, virtual environments and deletion staging are excluded.
+- [x] `Docs/Guardrails.md` now carries the concise canonical-default prohibitions; defaults-aware tooling may not become a second authority or narrow the audit to hide violations.
+- [x] Historical record added: `Docs/Historical_Bugs/2026-09-06_Canonical_Defaults_Authority_Fragmentation.md`.
+- [x] Retired Python mirrors remain deleted: `core/settings/defaults_generated.py` and `core/settings/defaults_snapshot.py`; final GODZIP records them as explicit reversible debris moves rather than relying on omission.
+- [x] Final superseding GODZIP rebuilt with the last known-good `srpss-godzip` manifest schema; full ordinary payload preservation, manifest size/SHA parity, member inventory and ZIP CRC are mechanically verified.
+- [ ] **NEXT SEPARATE SLICE ONLY:** investigate/remove the `dark.qss` lifecycle dependency without reopening canonical-default sanitization unless one of the permanent gates proves a real regression.
+
+
+## CHECKPOINT16 — defaults documentation / dormancy authoring closeout (2026-09-06)
+
+- [x] `Docs/Defaults_Guide.md` now describes the post-sanitization single-authority contract, canonical missing-key resolution, structured-root/Foundry boundaries, and safe add/remove rules for widget-family and transition capabilities.
+- [x] `Docs/10_WIDGET_GUIDELINES.md` now makes family activation, ordinary enabled state, catalog/descriptor ownership and provider/import dormancy explicit so families can be added or retired without parallel registries or hidden runtime owners.
+- [x] `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md` and `Docs/Transition_Change_Checklist.md` now make registry/default/implementation ownership, lazy import dormancy, packaging visibility and coherent add/remove retirement explicit.
+- [x] `Docs/TestSuite.md` records the permanent 29-test `tests/test_defaults_schema_authority.py` gate and its whole-first-party-Python audit coverage.
+- [x] Packaging self-audit caught and repaired a CP15 over-broad virtual-environment exclusion: project-owned `scripts/venv/*.ps1` build scripts are ordinary payload and must never be excluded merely because a path component is named `venv`.
+- [x] Final documentation gate: defaults authority **29/29**, authority audit clean, deterministic defaults snapshot exact; no product-default values changed in this documentation slice.
+- [ ] Product decision only: review the new-user default recommendations from this checkpoint before intentionally changing canonical values and regenerating snapshot/SST artifacts.
+- [ ] **NEXT SEPARATE SLICE ONLY:** investigate/remove the `dark.qss` lifecycle dependency without reopening canonical-default sanitization unless one of the permanent gates proves a real regression.
+
+## CHECKPOINT17 — approved new-user defaults baseline (2026-09-06)
+
+- [x] Standard/Screensaver widget routing baseline moved to **Display 1** for every widget/Visualizer section that owns a monitor route; no ordinary `enabled` values were changed by this tranche.
+- [x] MC preserves its established routing through genuine profile overrides: existing Display-2 and `ALL` widget routes remain MC-specific rather than inheriting the new standard Display-1 baseline.
+- [x] Spotify Visualizer remains **ON** by default and its default mode changed from DevCurve to **Bubble** through canonical settings; existing Media/now-playing admission keeps it dormant when there is nothing to visualize. Experimental Sphere remains excluded from canonical `enabled_modes`, so Sphere stays dormant until explicitly enabled.
+- [x] Weather remains **ON** with blank location and Display 1; location remains user-specific/preserved rather than baked into defaults.
+- [x] Gmail remains **ON** and moves to Display 1 in the standard profile; MC Gmail remains Display 2.
+- [x] Default Settings theme remains `Default Dark [Single] [Glass]`; Widget Theme stays linked to `default_dark`; all canonical UI bucket-state maps remain collapsed.
+- [x] Transitions remain in canonical Random mode via `transitions.random_always=True`; the remembered manual `type` is not rewritten to the retired `"Random"` sentinel and saved Random-pool membership was not opportunistically changed.
+- [x] `core.settings.defaults_snapshot_builder` now regenerates/checks the JSON snapshot plus both checked-in Normal/MC SST defaults documents (`--write-all` / `--check-all`) directly from canonical source; no absent legacy generator is required.
+- [x] `Docs/Defaults_Guide.md` and `Docs/TestSuite.md` record the approved baseline and deterministic regeneration path.
+- [x] Focused defaults-authority gate expanded to **30 tests** and passes 30/30.
+- [x] Final CHECKPOINT17 packaging gate: authority audit clean; `--check-all` exact; **434/434** Python compile; direct **30/30** CP5 preset byte parity; **534** manifested payload files with exact member/SHA/size verification and clean ZIP CRC; all four project-owned `scripts/venv/*.ps1` files retained.
+- [ ] **NEXT SEPARATE SLICE ONLY:** `dark.qss` lifecycle/theming cleanup.

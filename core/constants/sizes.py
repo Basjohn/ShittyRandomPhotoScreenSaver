@@ -30,9 +30,6 @@ WORKER_REQUEST_QUEUE_SIZE = 64
 WORKER_RESPONSE_QUEUE_SIZE = 64
 """Maximum pending responses in worker queues."""
 
-TRIPLE_BUFFER_DEFAULT_SIZE = 3
-"""Default size for triple buffers (lock-free)."""
-
 # =============================================================================
 # Memory Thresholds
 # =============================================================================
@@ -75,9 +72,6 @@ THUMBNAIL_SIZE = 256
 FFT_SAMPLE_SIZE = 2048
 """Number of samples for FFT processing."""
 
-FFT_BAR_COUNT_DEFAULT = 32
-"""Default number of bars for visualizer."""
-
 FFT_BAR_COUNT_MIN = 8
 """Minimum number of visualizer bars."""
 
@@ -97,12 +91,6 @@ OVERLAY_MIN_HEIGHT = 88
 CONTEXT_MENU_MIN_WIDTH = 150
 """Minimum width for context menus."""
 
-BORDER_WIDTH_DEFAULT = 2
-"""Default border width for widgets."""
-
-CORNER_RADIUS_DEFAULT = 8
-"""Default corner radius for rounded widgets."""
-
 # =============================================================================
 # Export all constants
 # =============================================================================
@@ -116,7 +104,6 @@ __all__ = [
     # Queue sizes
     "WORKER_REQUEST_QUEUE_SIZE",
     "WORKER_RESPONSE_QUEUE_SIZE",
-    "TRIPLE_BUFFER_DEFAULT_SIZE",
     # Memory thresholds
     "SHARED_MEMORY_THRESHOLD_MB",
     "SHARED_MEMORY_MAX_SIZE_MB",
@@ -130,13 +117,10 @@ __all__ = [
     "THUMBNAIL_SIZE",
     # Audio processing
     "FFT_SAMPLE_SIZE",
-    "FFT_BAR_COUNT_DEFAULT",
     "FFT_BAR_COUNT_MIN",
     "FFT_BAR_COUNT_MAX",
     "AUDIO_SAMPLE_RATE",
     # UI sizes
     "OVERLAY_MIN_HEIGHT",
     "CONTEXT_MENU_MIN_WIDTH",
-    "BORDER_WIDTH_DEFAULT",
-    "CORNER_RADIUS_DEFAULT",
 ]
