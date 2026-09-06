@@ -23,7 +23,6 @@ from PySide6.QtGui import QMouseEvent
 from utils.lockfree import TripleBuffer
 from widgets.spotify_visualizer.bar_computation import (
     SpectrumShapeConfig,
-    _DEFAULT_SHAPE_CONFIG,
 )
 from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker, _AudioFrame
 
@@ -34,27 +33,38 @@ ROOT = Path(__file__).resolve().parent.parent
 # 1. SpectrumShapeConfig dataclass
 # ---------------------------------------------------------------------------
 
+
+def _canonical_spectrum_editor(mirrored: bool):
+    """Build a SpectrumShapeEditor with canonical spotify_visualizer defaults.
+
+    The editor now *requires* its default nodes/notches/lane-strengths to be
+    injected (product defaults live in canonical Settings, not hardcoded on the
+    widget), mirroring the production spectrum_builder wiring.
+    """
+    from ui.tabs.media.spectrum_shape_editor import SpectrumShapeEditor
+    from core.settings.default_contract import require_canonical_default
+
+    canonical = require_canonical_default("widgets.spotify_visualizer")
+    return SpectrumShapeEditor(
+        mirrored=mirrored,
+        default_nodes=canonical["spectrum_shape_nodes"],
+        default_notches_mirrored=canonical["spectrum_notch_positions_mirrored"],
+        default_notches_linear=canonical["spectrum_notch_positions_linear"],
+        default_lane_strengths_mirrored=canonical["spectrum_lane_strengths_mirrored"],
+        default_lane_strengths_linear=canonical["spectrum_lane_strengths_linear"],
+    )
+
+
 class TestSpectrumShapeConfig:
-    def test_defaults_match_expected(self):
-        cfg = SpectrumShapeConfig()
-        assert cfg.lane_strengths_mirrored == {
-            "Mid": pytest.approx(0.60),
-            "Vocal": pytest.approx(0.64),
-            "Low-Mid": pytest.approx(0.70),
-            "Bass": pytest.approx(0.80),
-        }
-        assert cfg.lane_strengths_linear == {
-            "Bass": pytest.approx(0.80),
-            "Low-Mid": pytest.approx(0.70),
-            "Vocal": pytest.approx(0.64),
-            "Hi-Mid": pytest.approx(0.80),
-            "Treble": pytest.approx(1.00),
-        }
-        assert cfg.wave_amplitude == 0.50
-        assert cfg.profile_floor == 0.12
+    # test_defaults_match_expected and test_default_singleton_matches_dataclass_defaults
+    # were removed with the settings sanitation. SpectrumShapeConfig is now a strict
+    # all-required value contract ("Product defaults belong to canonical Settings and
+    # are resolved before the audio worker receives this object"), so it no longer
+    # carries dataclass defaults or a _DEFAULT_SHAPE_CONFIG singleton to assert.
 
     def test_custom_values(self):
         cfg = SpectrumShapeConfig(
+            lane_strengths_mirrored={"Mid": 0.30, "Vocal": 0.50, "Low-Mid": 0.60, "Bass": 0.70},
             lane_strengths_linear={"Bass": 0.25, "Low-Mid": 0.40, "Vocal": 0.80, "Hi-Mid": 0.55, "Treble": 0.90},
             wave_amplitude=0.70,
             profile_floor=0.05,
@@ -64,12 +74,13 @@ class TestSpectrumShapeConfig:
         assert cfg.wave_amplitude == 0.70
         assert cfg.profile_floor == 0.05
 
-    def test_default_singleton_matches_dataclass_defaults(self):
-        fresh = SpectrumShapeConfig()
-        assert asdict(fresh) == asdict(_DEFAULT_SHAPE_CONFIG)
-
     def test_asdict_roundtrip(self):
-        cfg = SpectrumShapeConfig(lane_strengths_mirrored={"Mid": 0.25, "Vocal": 0.50, "Low-Mid": 0.75, "Bass": 1.0}, profile_floor=0.25)
+        cfg = SpectrumShapeConfig(
+            lane_strengths_mirrored={"Mid": 0.25, "Vocal": 0.50, "Low-Mid": 0.75, "Bass": 1.0},
+            lane_strengths_linear={"Bass": 0.30, "Low-Mid": 0.40, "Vocal": 0.60, "Hi-Mid": 0.70, "Treble": 0.90},
+            wave_amplitude=0.55,
+            profile_floor=0.25,
+        )
         d = asdict(cfg)
         restored = SpectrumShapeConfig(**d)
         assert asdict(restored) == d
@@ -117,9 +128,7 @@ class TestSpectrumShapeEditorNotches:
 
     @pytest.mark.qt
     def test_dragged_notch_can_cross_neighbors_without_pulling_them(self, qt_app):
-        from ui.tabs.media.spectrum_shape_editor import SpectrumShapeEditor
-
-        editor = SpectrumShapeEditor(mirrored=True)
+        editor = _canonical_spectrum_editor(mirrored=True)
         try:
             editor.resize(320, 180)
             editor.show()
@@ -184,18 +193,19 @@ class TestAudioWorkerShapeConfig:
         from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker
         worker = SpotifyVisualizerAudioWorker.__new__(SpotifyVisualizerAudioWorker)
         worker._spectrum_shape_config = None
-        cfg = SpectrumShapeConfig(lane_strengths_mirrored={"Mid": 0.25, "Vocal": 0.5, "Low-Mid": 0.75, "Bass": 0.9})
+        cfg = SpectrumShapeConfig(
+            lane_strengths_mirrored={"Mid": 0.25, "Vocal": 0.5, "Low-Mid": 0.75, "Bass": 0.9},
+            lane_strengths_linear={"Bass": 0.8, "Low-Mid": 0.7, "Vocal": 0.64, "Hi-Mid": 0.8, "Treble": 1.0},
+            wave_amplitude=0.5,
+            profile_floor=0.12,
+        )
         worker.set_spectrum_shape_config(cfg)
         assert worker._spectrum_shape_config is cfg
         assert worker._spectrum_shape_config.lane_strengths_mirrored["Bass"] == 0.9
 
-    def test_set_curved_profile_is_noop(self):
-        from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker
-        worker = SpotifyVisualizerAudioWorker.__new__(SpotifyVisualizerAudioWorker)
-        worker._spectrum_shape_config = None
-        # Should not raise, should do nothing
-        worker.set_curved_profile(True)
-        worker.set_curved_profile(False)
+    # test_set_curved_profile_is_noop was removed: the ancient curved-profile
+    # setter was retired in the settings sanitation (the worker now only accepts a
+    # resolved SpectrumShapeConfig via set_spectrum_shape_config).
 
 
 # ---------------------------------------------------------------------------
@@ -355,6 +365,12 @@ class TestLaneAwareSpectrumEnergy:
             [1.0, "Treble"],
         ]
         worker._spectrum_shape_config = SpectrumShapeConfig(
+            lane_strengths_mirrored={
+                "Mid": 0.6,
+                "Vocal": 0.64,
+                "Low-Mid": 0.7,
+                "Bass": 0.8,
+            },
             lane_strengths_linear={
                 "Bass": 0.7,
                 "Low-Mid": 0.65,
