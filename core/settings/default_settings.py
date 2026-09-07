@@ -1,9 +1,8 @@
 """Canonical Normal-profile defaults.
 
 This literal is the authoritative fresh-install and Reset to Defaults source.
-Repository tooling may edit this literal, but generated defaults artifacts must
-follow this source rather than override it. Regenerate/check the derived JSON with
-``python -m core.settings.defaults_snapshot_builder --write/--check``.
+It may be edited directly or through ``tools/default_settings_editor.py``.
+Generated defaults artifacts must follow this source rather than override it.
 """
 from __future__ import annotations
 
@@ -206,7 +205,9 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                  'weather:appearance': False,
                                  'weather:content': False,
                                  'weather:source_layout': False}},
- 'widget_theme': {'custom': None, 'keep_synced': True, 'selected_id': 'default_dark'},
+ 'widget_theme': {'custom': None,
+                  'keep_synced': True,
+                  'selected_id': 'mirror:file:Default Dark [Single] [Glass].srtheme'},
  'widgets': {'abandonment_issues': {'accent_color': [211, 209, 222, 225],
                                     'artwork_shape': 'portrait',
                                     'artwork_size': 140,
@@ -687,7 +688,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'preset_spectrum': 0,
                                     'preset_sphere': 0,
                                     'rainbow_enabled': False,
-                                    'rainbow_speed': 0.5,
+                                    'rainbow_speed': 0.15,
                                     'sine_card_adaptation': 0.24,
                                     'sine_crawl_amount': 0.0,
                                     'sine_density': 1.6,

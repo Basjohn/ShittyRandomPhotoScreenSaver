@@ -175,6 +175,8 @@ COLORS = {
     "amber": "#f4c66d",
     "amber_dark": "#d59b42",
     "amber_hover": "#efb65a",
+    "orange": "#f0a35a",
+    "violet": "#c59af3",
     "green": "#9fc9bd",
     "red": "#ef7f7f",
     "close_hover": "#e81123",
@@ -410,7 +412,7 @@ class Panel(QFrame):
 
 class RelationBanner(QLabel):
     def set_relation(self, relation: str, text: str) -> None:
-        relation = relation if relation in {"same", "compatible", "conflict", "future", "diverged", "unknown"} else "unknown"
+        relation = relation if relation in {"same", "compatible", "conflict", "future", "diverged", "unknown", "stale", "dirty"} else "unknown"
         self.setProperty("relation", relation)
         self.setText(text)
         self.style().unpolish(self)
@@ -620,6 +622,8 @@ class ApplyTab(QWidget):
         self.current_zip: Path | None = None
         self._discovery_loaded = False
         self._discovered_zips: list[Path] = []
+        self._browser_expanded = False
+        self._main_items: dict[str, QTreeWidgetItem] = {}
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -627,15 +631,15 @@ class ApplyTab(QWidget):
         layout.setContentsMargins(0, 12, 0, 0)
         layout.setSpacing(10)
 
-        drop = Panel()
-        drop.setObjectName("dropPanel")
-        d = QHBoxLayout(drop)
+        self.drop_panel = Panel()
+        self.drop_panel.setObjectName("dropPanel")
+        d = QHBoxLayout(self.drop_panel)
         d.setContentsMargins(16, 14, 16, 14)
         left = QVBoxLayout()
         t = QLabel("DROP A GOD ZIP ANYWHERE ON THIS WINDOW")
         t.setObjectName("sectionTitle")
         left.addWidget(t)
-        s = QLabel("Explorer drag/drop or Browse. Manifest GODZIPs get SHA-256 validation + Git ancestry proof before mutation.")
+        s = QLabel("Explorer drag/drop or Browse. Manifest GODZIPs get SHA-256, per-file timestamp and Git ancestry validation before mutation.")
         s.setObjectName("muted")
         s.setWordWrap(True)
         left.addWidget(s)
@@ -669,10 +673,10 @@ class ApplyTab(QWidget):
         quick_row.addWidget(browse)
         quick.addLayout(quick_row)
         d.addLayout(quick)
-        layout.addWidget(drop)
+        layout.addWidget(self.drop_panel)
 
-        info = Panel()
-        info_l = QVBoxLayout(info)
+        self.info_panel = Panel()
+        info_l = QVBoxLayout(self.info_panel)
         info_l.setContentsMargins(14, 12, 14, 12)
         self.archive_label = QLabel("No GODZIP loaded")
         self.archive_label.setObjectName("archiveName")
@@ -691,9 +695,28 @@ class ApplyTab(QWidget):
             chips.addWidget(chip)
         chips.addStretch(1)
         info_l.addLayout(chips)
+
+        status_row = QHBoxLayout()
+        status_row.setSpacing(10)
+        git_box = QVBoxLayout()
+        git_title = QLabel("GIT BASELINE CONTEXT")
+        git_title.setObjectName("faint")
+        git_box.addWidget(git_title)
         self.relation = RelationBanner("Archive baseline applicability cannot be proven.")
         self.relation.setWordWrap(True)
-        info_l.addWidget(self.relation)
+        git_box.addWidget(self.relation, 1)
+        status_row.addLayout(git_box, 1)
+
+        freshness_box = QVBoxLayout()
+        freshness_title = QLabel("FILE FRESHNESS / APPLY RISK")
+        freshness_title.setObjectName("faint")
+        freshness_box.addWidget(freshness_title)
+        self.freshness = RelationBanner("Load a GODZIP to compare incoming file timestamps.")
+        self.freshness.setWordWrap(True)
+        freshness_box.addWidget(self.freshness, 1)
+        status_row.addLayout(freshness_box, 1)
+        info_l.addLayout(status_row)
+
         self.warning_label = QLabel("")
         self.warning_label.setObjectName("warningText")
         self.warning_label.setWordWrap(True)
@@ -703,7 +726,23 @@ class ApplyTab(QWidget):
         self.strip_wrapper.hide()
         self.strip_wrapper.toggled.connect(self._wrapper_changed)
         info_l.addWidget(self.strip_wrapper)
-        layout.addWidget(info)
+        layout.addWidget(self.info_panel)
+
+        self.browser_panel = Panel()
+        browser_l = QVBoxLayout(self.browser_panel)
+        browser_l.setContentsMargins(10, 0, 10, 10)
+        browser_l.setSpacing(8)
+
+        notch = QHBoxLayout()
+        notch.addStretch(1)
+        self.expand_button = QPushButton("▲")
+        self.expand_button.setObjectName("expandButton")
+        self.expand_button.setFixedWidth(46)
+        self.expand_button.setToolTip("Expand the Apply file browser to use the full tab height")
+        self.expand_button.clicked.connect(self.toggle_browser_expanded)
+        notch.addWidget(self.expand_button)
+        notch.addStretch(1)
+        browser_l.addLayout(notch)
 
         tools = QHBoxLayout()
         self.filter_edit = QLineEdit()
@@ -718,14 +757,38 @@ class ApplyTab(QWidget):
             b = QPushButton(label)
             b.clicked.connect(handler)
             tools.addWidget(b)
-        layout.addLayout(tools)
+        browser_l.addLayout(tools)
+        legend = QLabel("Orange = timestamp-old · Red = timestamp-old + Git-old · Violet = local dirty")
+        legend.setObjectName("faint")
+        browser_l.addWidget(legend)
 
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.setObjectName("applySplitter")
         self.tree = CheckPathTree(["Target path", "Local", "Size", "SHA-256"])
+        self.tree.setMinimumHeight(260)
         self.tree.itemChanged.connect(lambda *_: self._update_apply_summary())
-        layout.addWidget(self.tree, 1)
+        self.splitter.addWidget(self.tree)
 
-        bottom = Panel()
-        btm = QVBoxLayout(bottom)
+        self.changes_tree = QTreeWidget()
+        self.changes_tree.setObjectName("changesTree")
+        self.changes_tree.setHeaderLabels(["CHANGING FILES"])
+        self.changes_tree.setRootIsDecorated(False)
+        self.changes_tree.setUniformRowHeights(True)
+        self.changes_tree.setAlternatingRowColors(True)
+        self.changes_tree.setMinimumWidth(180)
+        self.changes_tree.setMaximumWidth(360)
+        self.changes_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.changes_tree.itemClicked.connect(self._locate_changed_item)
+        self.changes_tree.itemActivated.connect(self._locate_changed_item)
+        self.splitter.addWidget(self.changes_tree)
+        self.splitter.setStretchFactor(0, 4)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setSizes([820, 230])
+        browser_l.addWidget(self.splitter, 1)
+        layout.addWidget(self.browser_panel, 1)
+
+        self.bottom_panel = Panel()
+        btm = QVBoxLayout(self.bottom_panel)
         btm.setContentsMargins(14, 12, 14, 12)
         opts = QHBoxLayout()
         self.rollback = QCheckBox("Create rollback snapshot of overwritten files in /deleteme")
@@ -737,7 +800,7 @@ class ApplyTab(QWidget):
         opts.addWidget(self.include_debris)
         opts.addStretch(1)
         btm.addLayout(opts)
-        self.history_ack = QCheckBox("I reviewed the selected commit-history overlap")
+        self.history_ack = QCheckBox("I reviewed the selected timestamp + commit-history risk")
         self.history_ack.setObjectName("dangerCheck")
         self.history_ack.hide()
         self.history_ack.toggled.connect(self._update_apply_summary)
@@ -752,7 +815,30 @@ class ApplyTab(QWidget):
         row.addWidget(self.summary, 1)
         row.addWidget(self.apply_button)
         btm.addLayout(row)
-        layout.addWidget(bottom)
+        layout.addWidget(self.bottom_panel)
+
+    def toggle_browser_expanded(self) -> None:
+        self._browser_expanded = not self._browser_expanded
+        for widget in (self.drop_panel, self.info_panel, self.bottom_panel):
+            widget.setVisible(not self._browser_expanded)
+        self.expand_button.setText("▼" if self._browser_expanded else "▲")
+        self.expand_button.setToolTip(
+            "Restore the normal Apply layout"
+            if self._browser_expanded
+            else "Expand the Apply file browser to use the full tab height"
+        )
+
+    def _locate_changed_item(self, item: QTreeWidgetItem, _column: int = 0) -> None:
+        path = str(item.data(0, ROLE_PATH) or "")
+        target = self._main_items.get(path)
+        if target is None:
+            return
+        parent = target.parent()
+        while parent is not None:
+            parent.setExpanded(True)
+            parent = parent.parent()
+        self.tree.setCurrentItem(target)
+        self.tree.scrollToItem(target, QAbstractItemView.ScrollHint.PositionAtCenter)
 
     def _zip_search_dirs(self) -> list[Path]:
         return self.window.zip_search_dirs()
@@ -845,13 +931,36 @@ class ApplyTab(QWidget):
         inspection = self.inspection
         assert inspection is not None
         self.archive_label.setText(str(inspection.zip_path))
-        self.kind_chip.setText("LEGACY / UNMANIFESTED" if inspection.legacy else "MANIFEST v1")
+        manifest_version = inspection.manifest.get("version") if inspection.manifest else None
+        self.kind_chip.setText("LEGACY / UNMANIFESTED" if inspection.legacy else f"MANIFEST v{manifest_version}")
         self.head_chip.setText(f"baseline {inspection.source_head[:10] if inspection.source_head else 'unknown'}")
         self.branch_chip.setText(f"branch {inspection.source_branch or 'unknown'}")
         self.dirty_chip.setText("archive from DIRTY worktree" if inspection.dirty_worktree else "archive source clean")
         self.relation.set_relation(inspection.relation, inspection.relation_detail)
+
+        overlap = {path.casefold() for path in inspection.history_overlap_paths}
+        changed_entries = [entry for entry in inspection.files if entry.local_state != "SAME"]
+        stale_entries = [entry for entry in changed_entries if entry.timestamp_stale]
+        dangerous_entries = [
+            entry for entry in stale_entries if entry.target_path.casefold() in overlap
+        ]
+        dirty_entries = [entry for entry in changed_entries if entry.local_dirty]
+        current_entries = [entry for entry in changed_entries if not entry.timestamp_stale]
+        freshness_text = (
+            f"{len(current_entries)} current/newer · {len(stale_entries)} timestamp-old · "
+            f"{len(dangerous_entries)} timestamp-old + Git-old · {len(dirty_entries)} local dirty"
+        )
+        if dangerous_entries:
+            self.freshness.set_relation("conflict", freshness_text)
+        elif stale_entries:
+            self.freshness.set_relation("stale", freshness_text)
+        elif dirty_entries:
+            self.freshness.set_relation("dirty", freshness_text)
+        else:
+            self.freshness.set_relation("compatible", freshness_text)
+
         warnings = list(inspection.warnings)
-        dirty_count = sum(1 for item in inspection.files if item.local_state == "LOCAL DIRTY")
+        dirty_count = len(dirty_entries)
         if dirty_count:
             warnings.insert(0, f"{dirty_count} selected-capable target(s) have local uncommitted changes. Rollback snapshots are strongly recommended.")
         self.warning_label.setText("\n".join(f"• {warning}" for warning in warnings))
@@ -865,23 +974,50 @@ class ApplyTab(QWidget):
         self.strip_wrapper.blockSignals(False)
 
         self.tree.clear()
-        overlap = {path.casefold() for path in inspection.history_overlap_paths}
+        self.changes_tree.clear()
+        self._main_items.clear()
         for entry in inspection.files:
             committed_overlap = entry.target_path.casefold() in overlap
-            state_text = entry.local_state + (" + COMMITTED SINCE BASE" if committed_overlap else "")
+            tags = [entry.local_state]
+            if entry.timestamp_stale:
+                tags.append("TIMESTAMP OLD")
+            elif entry.local_state not in {"SAME", "NEW"} and entry.local_mtime_ns:
+                tags.append("TIMESTAMP CURRENT/NEWER")
+            if committed_overlap:
+                tags.append("GIT CHANGED")
+            state_text = " · ".join(tags)
             item = self.tree.add_path(
                 entry.target_path,
                 [entry.target_path, state_text, human_size(entry.size), entry.sha256[:12]],
                 checked=entry.default_selected,
                 payload=entry,
             )
-            if entry.local_state == "LOCAL DIRTY" or committed_overlap:
-                for col in range(self.tree.columnCount()):
-                    item.setForeground(col, QColor(COLORS["red"]))
+            self._main_items[entry.target_path] = item
+
+            row_color: QColor | None = None
+            if entry.timestamp_stale and committed_overlap:
+                row_color = QColor(COLORS["red"])
+            elif entry.timestamp_stale:
+                row_color = QColor(COLORS["orange"])
+            elif entry.local_dirty:
+                row_color = QColor(COLORS["violet"])
             elif entry.local_state == "NEW":
-                item.setForeground(1, QColor(COLORS["green"]))
+                row_color = QColor(COLORS["green"])
             elif entry.local_state == "SAME":
-                item.setForeground(1, QColor(COLORS["faint"]))
+                row_color = QColor(COLORS["faint"])
+            if row_color is not None:
+                for col in range(self.tree.columnCount()):
+                    item.setForeground(col, row_color)
+
+            if entry.local_state != "SAME":
+                changed_item = QTreeWidgetItem([entry.target_path])
+                changed_item.setData(0, ROLE_PATH, entry.target_path)
+                changed_item.setToolTip(0, state_text)
+                if row_color is not None:
+                    changed_item.setForeground(0, row_color)
+                self.changes_tree.addTopLevelItem(changed_item)
+
+        self.changes_tree.setHeaderLabel(f"CHANGING FILES · {self.changes_tree.topLevelItemCount()}")
         self.tree.expandToDepth(0)
         self.history_ack.blockSignals(True)
         self.history_ack.setChecked(False)
@@ -891,10 +1027,16 @@ class ApplyTab(QWidget):
         self.include_debris.setText(
             f"Apply checked archive debris moves ({len(inspection.debris)}) — review in Debris tab"
         )
+        self.tree_filter(self.filter_edit.text())
         self._update_apply_summary()
 
     def tree_filter(self, text: str) -> None:
         self.tree.apply_filter(text)
+        needle = text.strip().casefold()
+        for index in range(self.changes_tree.topLevelItemCount()):
+            item = self.changes_tree.topLevelItem(index)
+            path = str(item.data(0, ROLE_PATH) or "")
+            item.setHidden(bool(needle and needle not in path.casefold()))
 
     def select_changes(self) -> None:
         self.tree.set_leaf_checks(lambda payload: payload.local_state != "SAME")
@@ -922,8 +1064,13 @@ class ApplyTab(QWidget):
             if self.include_debris.isChecked()
             else []
         )
+        stale = sum(1 for entry in changed if entry.timestamp_stale)
+        overlap = {path.casefold() for path in inspection.history_overlap_paths}
+        danger = sum(1 for entry in changed if entry.timestamp_stale and entry.target_path.casefold() in overlap)
         self.summary.setText(
             f"{len(chosen)} file target(s) · {len(changed)} actual change(s)"
+            + (f" · {stale} timestamp-old" if stale else "")
+            + (f" · {danger} timestamp+Git risk" if danger else "")
             + (f" · {dirty} LOCAL DIRTY" if dirty else "")
             + (f" · {len(debris)} debris move(s)" if debris else "")
         )
@@ -933,12 +1080,13 @@ class ApplyTab(QWidget):
             self.history_ack.setVisible(history_ack_required)
             if history_ack_required:
                 if inspection.baseline_relation == "older":
-                    overlap_count = len(
-                        ({path.casefold() for path in checked} | {path.casefold() for path in debris})
-                        & {path.casefold() for path in inspection.history_overlap_paths}
-                    )
+                    overlap = {path.casefold() for path in inspection.history_overlap_paths}
+                    stale = {path.casefold() for path in inspection.timestamp_stale_paths}
+                    risky_files = {path.casefold() for path in checked} & overlap & stale
+                    risky_debris = {path.casefold() for path in debris} & overlap
+                    overlap_count = len(risky_files | risky_debris)
                     self.history_ack.setText(
-                        f"I reviewed {overlap_count} selected target(s) changed by commits after the archive baseline"
+                        f"I reviewed {overlap_count} selected timestamp-stale + Git-overlap/debris risk target(s)"
                     )
                 elif inspection.baseline_relation == "newer":
                     self.history_ack.setText("I understand this archive was built on a newer baseline than my local HEAD")
@@ -975,11 +1123,14 @@ class ApplyTab(QWidget):
             lines.append(f"WARNING: {len(dirty)} selected target(s) contain local uncommitted changes.")
         if inspection.selection_requires_history_ack(selected, debris):
             if inspection.baseline_relation == "older":
+                overlap = {path.casefold() for path in inspection.history_overlap_paths}
+                stale = {path.casefold() for path in inspection.timestamp_stale_paths}
                 selected_overlap = (
-                    {path.casefold() for path in selected} | {path.casefold() for path in debris}
-                ) & {path.casefold() for path in inspection.history_overlap_paths}
+                    ({path.casefold() for path in selected} & overlap & stale)
+                    | ({path.casefold() for path in debris} & overlap)
+                )
                 lines.append(
-                    f"WARNING: {len(selected_overlap)} selected target(s) were also changed by commits after the archive baseline."
+                    f"WARNING: {len(selected_overlap)} selected target(s) are timestamp-stale + Git-overlapped, or overlapping debris."
                 )
             elif inspection.baseline_relation == "newer":
                 lines.append("WARNING: this archive was built on a newer baseline than local HEAD.")
@@ -1704,8 +1855,10 @@ class PushTab(QWidget):
         self.summary.setObjectName("muted")
         bl.addWidget(self.summary)
         msgrow = QHBoxLayout()
-        self.message = QLineEdit()
+        settings = _load_local_settings(self.repo_root)
+        self.message = QLineEdit(str(settings.get("git_commit_message", "")))
         self.message.setPlaceholderText("Commit message…")
+        self.message.editingFinished.connect(self.persist_message)
         msgrow.addWidget(QLabel("Message"))
         msgrow.addWidget(self.message, 1)
         bl.addLayout(msgrow)
@@ -1723,6 +1876,9 @@ class PushTab(QWidget):
         buttons.addWidget(self.commit_push_button)
         bl.addLayout(buttons)
         layout.addWidget(box)
+
+    def persist_message(self) -> None:
+        _save_local_setting(self.repo_root, "git_commit_message", self.message.text())
 
     def refresh(self) -> None:
         try:
@@ -1759,6 +1915,7 @@ class PushTab(QWidget):
         if not message:
             QMessageBox.warning(self, "Commit message required", "Enter a commit message first.")
             return
+        self.persist_message()
         if not self._confirm_commit(push):
             return
         self.window.set_busy(True, "Committing Git changes…")
@@ -1772,7 +1929,7 @@ class PushTab(QWidget):
                 if pushed:
                     detail += f"\n{pushed}"
             QMessageBox.information(self, "Git operation complete", detail)
-            self.message.clear()
+            self.persist_message()
             self.refresh()
             self.window.create_tab.refresh()
         except Exception as exc:
@@ -2401,6 +2558,10 @@ class GodzipFoundryWindow(QMainWindow):
             return
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
+        try:
+            self.push_tab.persist_message()
+        except Exception:
+            pass
         if sys.platform == "win32":
             try:
                 destroy_icon = ctypes.windll.user32.DestroyIcon
@@ -2622,9 +2783,14 @@ class GodzipFoundryWindow(QMainWindow):
             QPushButton#primaryButton:hover {{ background: {c['amber_hover']}; }}
             QPushButton#dangerButton {{ color: {c['red']}; border-color: {c['red']}; font-weight: 750; }}
             QPushButton#dangerButton:hover {{ background: #3a1c1c; }}
-            QLineEdit {{ background: #0e1517; color: {c['text']}; border: 1px solid #59625f; border-radius: 5px; padding: 7px 9px; selection-background-color: {c['amber_dark']}; selection-color: #111; }}
-            QLineEdit:focus {{ border-color: {c['amber']}; }}
+            QPushButton#expandButton {{ background: {c['panel']}; color: {c['amber']}; border: 1px solid {c['border']}; border-top: none; border-radius: 0px; border-bottom-left-radius: 7px; border-bottom-right-radius: 7px; padding: 2px 10px 4px 10px; min-height: 16px; }}
+            QPushButton#expandButton:hover {{ background: {c['panel_hover']}; color: {c['text']}; }}
+            QLineEdit, QComboBox, QPlainTextEdit {{ background: #0e1517; color: {c['text']}; border: 1px solid #59625f; border-radius: 5px; padding: 7px 9px; selection-background-color: {c['amber_dark']}; selection-color: #111; }}
+            QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus {{ border-color: {c['amber']}; }}
+            QComboBox::drop-down {{ border: none; width: 24px; }}
+            QComboBox QAbstractItemView {{ background: #0e1517; color: {c['text']}; border: 1px solid {c['border']}; selection-background-color: #314340; }}
             QTreeWidget {{ background: #0d1517; alternate-background-color: #121d1f; color: {c['text']}; border: 1px solid #4f5956; outline: none; }}
+            QTreeWidget#changesTree {{ background: #0a1214; }}
             QTreeWidget::item {{ padding: 4px 3px; }}
             QTreeWidget::item:selected {{ background: #314340; color: white; }}
             QTreeWidget::item:hover {{ background: {c['panel_hover']}; }}
@@ -2634,12 +2800,24 @@ class GodzipFoundryWindow(QMainWindow):
             QCheckBox::indicator {{ width: 16px; height: 16px; }}
             QProgressBar {{ background: #0e1517; border: 1px solid {c['border']}; border-radius: 4px; text-align: center; }}
             QProgressBar::chunk {{ background: {c['amber_dark']}; }}
+            QSplitter#applySplitter::handle {{ background: #394542; width: 3px; margin: 2px 3px; }}
+            QSplitter#applySplitter::handle:hover {{ background: {c['amber_dark']}; }}
+            QScrollBar:vertical {{ background: #0a1214; width: 11px; margin: 0; }}
+            QScrollBar::handle:vertical {{ background: #465652; min-height: 28px; border-radius: 5px; }}
+            QScrollBar::handle:vertical:hover {{ background: #5d706b; }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+            QScrollBar:horizontal {{ background: #0a1214; height: 11px; margin: 0; }}
+            QScrollBar::handle:horizontal {{ background: #465652; min-width: 28px; border-radius: 5px; }}
+            QScrollBar::handle:horizontal:hover {{ background: #5d706b; }}
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
             QLabel[relation="same"] {{ color: {c['green']}; background: #15231f; border: 1px solid {c['green']}; border-radius: 5px; padding: 7px; font-weight: 650; }}
             QLabel[relation="compatible"] {{ color: {c['green']}; background: #15231f; border: 1px solid {c['green']}; border-radius: 5px; padding: 7px; font-weight: 650; }}
             QLabel[relation="conflict"] {{ color: {c['red']}; background: #2d1717; border: 1px solid {c['red']}; border-radius: 5px; padding: 7px; font-weight: 800; }}
             QLabel[relation="future"] {{ color: {c['amber']}; background: #2a2114; border: 1px solid {c['amber']}; border-radius: 5px; padding: 7px; font-weight: 750; }}
             QLabel[relation="diverged"] {{ color: {c['red']}; background: #2d1717; border: 1px solid {c['red']}; border-radius: 5px; padding: 7px; font-weight: 800; }}
             QLabel[relation="unknown"] {{ color: {c['amber']}; background: #241d12; border: 1px solid {c['amber_dark']}; border-radius: 5px; padding: 7px; }}
+            QLabel[relation="stale"] {{ color: {c['orange']}; background: #2b1d12; border: 1px solid {c['orange']}; border-radius: 5px; padding: 7px; font-weight: 750; }}
+            QLabel[relation="dirty"] {{ color: {c['violet']}; background: #21182b; border: 1px solid {c['violet']}; border-radius: 5px; padding: 7px; font-weight: 700; }}
             QToolTip {{ color: {c['text']}; background: {c['panel_alt']}; border: 1px solid {c['amber_dark']}; padding: 5px; }}
             """
         )

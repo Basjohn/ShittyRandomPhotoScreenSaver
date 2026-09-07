@@ -23,7 +23,7 @@ from pathlib import Path, PurePosixPath
 from typing import Iterable, Mapping, Sequence
 
 FORMAT_NAME = "srpss-godzip"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 MANIFEST_MEMBER = ".godzip/manifest.json"
 MANIFEST_CANDIDATES = (
     MANIFEST_MEMBER,
@@ -108,6 +108,9 @@ class ArchiveFile:
     local_state: str
     local_dirty: bool
     default_selected: bool
+    source_mtime_ns: int = 0
+    local_mtime_ns: int = 0
+    timestamp_stale: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +135,7 @@ class ArchiveInspection:
     relation_detail: str = "Archive baseline applicability cannot be proven."
     baseline_relation: str = "unknown"
     history_overlap_paths: list[str] = field(default_factory=list)
+    timestamp_stale_paths: list[str] = field(default_factory=list)
     legacy: bool = False
     legacy_common_prefix: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -150,16 +154,20 @@ class ArchiveInspection:
         selected_targets: Sequence[str],
         selected_debris: Sequence[str] = (),
     ) -> bool:
-        selected = {validate_repo_relpath(path).casefold() for path in selected_targets}
-        selected.update(validate_debris_relpath(path).casefold() for path in selected_debris)
-        if not selected:
+        selected_files = {validate_repo_relpath(path).casefold() for path in selected_targets}
+        selected_debris_set = {validate_debris_relpath(path).casefold() for path in selected_debris}
+        if not selected_files and not selected_debris_set:
             return False
         if self.baseline_relation in {"newer", "diverged"}:
             return True
         if self.baseline_relation != "older":
             return False
         overlap = {path.casefold() for path in self.history_overlap_paths}
-        return bool(selected & overlap)
+        stale = {path.casefold() for path in self.timestamp_stale_paths}
+        # Replacement files need BOTH stale file time and newer committed history
+        # before they become a history-danger case. Debris carries no incoming file
+        # timestamp, so committed overlap remains an explicit acknowledgement case.
+        return bool((selected_files & overlap & stale) or (selected_debris_set & overlap))
 
 
 @dataclass(frozen=True, slots=True)
@@ -494,12 +502,14 @@ def build_manifest(
         full = repo_root / Path(*PurePosixPath(rel).parts)
         if not full.is_file():
             raise GodzipError(f"Selected archive file does not exist: {rel}")
+        stat_result = full.stat()
         records.append(
             {
                 "path": rel,
                 "action": "replace_file",
                 "sha256": sha256_file(full),
-                "size": full.stat().st_size,
+                "size": stat_result.st_size,
+                "mtime_ns": stat_result.st_mtime_ns,
                 "source_status": statuses.get(rel, ""),
             }
         )
@@ -645,6 +655,15 @@ def _validate_manifest_shape(manifest: Mapping) -> None:
     debris = manifest.get("debris", [])
     if not isinstance(files, list) or not isinstance(debris, list):
         raise GodzipError("Manifest files/debris must be arrays")
+    for entry in files:
+        if not isinstance(entry, dict):
+            raise GodzipError("Manifest file entry must be an object")
+        try:
+            mtime_ns = int(entry["mtime_ns"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise GodzipError("Manifest v2 file entry is missing a valid mtime_ns") from exc
+        if mtime_ns < 0:
+            raise GodzipError("Manifest v2 file mtime_ns cannot be negative")
 
 
 def _common_top_folder(member_names: Sequence[str]) -> str:
@@ -750,10 +769,13 @@ def inspect_godzip(
             expected_size = int(record.get("size", info.file_size))
             if info.file_size != expected_size:
                 raise GodzipError(f"Size mismatch for archived file: {target}")
+            source_mtime_ns = int(record["mtime_ns"])
             full = repo_root / Path(*PurePosixPath(target).parts)
-            local_hash = sha256_file(full) if full.is_file() else ""
+            local_exists = full.is_file()
+            local_hash = sha256_file(full) if local_exists else ""
+            local_mtime_ns = full.stat().st_mtime_ns if local_exists else 0
             dirty = bool(statuses.get(target, ""))
-            if full.is_file() and local_hash == actual_hash:
+            if local_exists and local_hash == actual_hash:
                 state = "SAME"
                 selected = False
             elif not full.exists():
@@ -765,8 +787,26 @@ def inspect_godzip(
             else:
                 state = "OVERWRITE"
                 selected = True
+            timestamp_stale = bool(
+                local_exists
+                and local_hash != actual_hash
+                and source_mtime_ns < local_mtime_ns
+            )
+            if timestamp_stale:
+                inspection.timestamp_stale_paths.append(target)
             inspection.files.append(
-                ArchiveFile(target, target, info.file_size, actual_hash, state, dirty, selected)
+                ArchiveFile(
+                    target_path=target,
+                    member_name=target,
+                    size=info.file_size,
+                    sha256=actual_hash,
+                    local_state=state,
+                    local_dirty=dirty,
+                    default_selected=selected,
+                    source_mtime_ns=source_mtime_ns,
+                    local_mtime_ns=local_mtime_ns,
+                    timestamp_stale=timestamp_stale,
+                )
             )
 
         debris_seen: set[str] = set()
@@ -803,24 +843,41 @@ def inspect_godzip(
             archive_paths = {item.target_path for item in inspection.files} | {item.path for item in inspection.debris}
             overlap = sorted(archive_paths & changed, key=str.casefold)
             inspection.history_overlap_paths = overlap
-            if overlap:
+            stale = {path.casefold() for path in inspection.timestamp_stale_paths}
+            file_overlap = {item.target_path for item in inspection.files} & changed
+            stale_overlap = sorted(
+                (path for path in file_overlap if path.casefold() in stale),
+                key=str.casefold,
+            )
+            debris_overlap = sorted(
+                ({item.path for item in inspection.debris} & changed),
+                key=str.casefold,
+            )
+            if stale_overlap or debris_overlap:
                 inspection.relation = "conflict"
                 inspection.relation_detail = (
-                    f"Archive baseline {inspection.source_head[:10]} predates local HEAD {local_head[:10]}, "
-                    f"and {len(overlap)} archive target(s) were also changed by newer local commits. "
-                    "The archive itself is not assumed stale; review overlapping targets before applying."
+                    f"Archive baseline {inspection.source_head[:10]} predates local HEAD {local_head[:10]}. "
+                    f"{len(stale_overlap)} replacement file(s) are both timestamp-stale and changed by newer commits"
+                    + (f", with {len(debris_overlap)} overlapping debris instruction(s)" if debris_overlap else "")
+                    + "."
                 )
-                preview = ", ".join(overlap[:5])
-                if len(overlap) > 5:
-                    preview += f", +{len(overlap) - 5} more"
-                inspection.warnings.append(f"Committed-history overlap: {preview}")
+            elif overlap:
+                inspection.relation = "compatible"
+                inspection.relation_detail = (
+                    f"Archive baseline {inspection.source_head[:10]} predates local HEAD {local_head[:10]} and "
+                    f"{len(overlap)} carried path(s) changed in newer commits, but no incoming changed file is timestamp-stale."
+                )
             else:
                 inspection.relation = "compatible"
                 inspection.relation_detail = (
                     f"Archive baseline {inspection.source_head[:10]} predates local HEAD {local_head[:10]}, "
-                    "but newer commits do not touch any file/debris target carried by this partial GODZIP. "
-                    "No committed-history conflict was found."
+                    "but newer commits do not touch any file/debris target carried by this GODZIP."
                 )
+            if overlap:
+                preview = ", ".join(overlap[:5])
+                if len(overlap) > 5:
+                    preview += f", +{len(overlap) - 5} more"
+                inspection.warnings.append(f"Committed-history overlap: {preview}")
         elif inspection.baseline_relation == "newer":
             inspection.relation = "future"
             inspection.relation_detail = (
@@ -921,7 +978,12 @@ def apply_godzip(
             raise GodzipError(f"Archive debris manifest changed after inspection: {rel}")
     for item in targets:
         now = fresh_by_target.get(item.target_path)
-        if now is None or now.sha256 != item.sha256 or now.member_name != item.member_name:
+        if (
+            now is None
+            or now.sha256 != item.sha256
+            or now.member_name != item.member_name
+            or now.source_mtime_ns != item.source_mtime_ns
+        ):
             raise GodzipError(f"Archive changed after inspection: {item.target_path}")
 
     deleteme_root = repo_root / "deleteme"
@@ -964,6 +1026,8 @@ def apply_godzip(
                         out.write(chunk)
                 if digest.hexdigest() != item.sha256:
                     raise GodzipError(f"SHA-256 changed during extraction: {item.target_path}")
+                if item.source_mtime_ns:
+                    os.utime(dest, ns=(item.source_mtime_ns, item.source_mtime_ns))
 
         # Snapshot every target before any mutation, even if persistent backup is disabled.
         for item in targets:
