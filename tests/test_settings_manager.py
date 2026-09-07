@@ -168,7 +168,9 @@ class TestSettingsManagerCacheInvalidation:
         )
 
         visualizer = manager.get("widgets")["spotify_visualizer"]
-        assert visualizer["position"] == "Follow Media"
+        # Canonical shipped position (the retired 'Follow Media' schema-model
+        # shadow default was consolidated away to the single canonical value).
+        assert visualizer["position"] == "Bottom Left"
         assert "bubble_input_gain" in visualizer
         assert (
             manager._settings.metadata().get("visualizer_schema_version")
@@ -227,7 +229,11 @@ class TestSettingsManagerCacheInvalidation:
 
         manager.remove("widgets.clock.enabled")
 
-        assert manager.get("widgets.clock.enabled", "missing") == "missing"
+        # widgets.clock.enabled is a canonical product key, so get() always
+        # resolves the canonical default (caller literals are deliberately not a
+        # shadow authority). Removal is proven by the store no longer containing
+        # the key plus the change signal firing.
+        assert manager.contains("widgets.clock.enabled") is False
         assert received == [("widgets.clock.enabled", None)]
 
     def test_clear_emits_global_change(self, tmp_path: Path) -> None:
@@ -276,10 +282,18 @@ class TestSettingsManagerCacheInvalidation:
         assert manager.get("preset", "missing") == "missing"
 
     def test_import_from_sst_replace_mode_clears_stale_settings(self, tmp_path: Path) -> None:
+        from core.settings.defaults import get_default_settings
+
         manager = _make_manager(tmp_path)
+        canonical_width = get_default_settings()["widgets"]["gmail"]["width"]
+
         manager.set("display.mode", "fill")
-        manager.set("widgets", {"clock": {"enabled": True}, "gmail": {"enabled": True}})
-        assert manager.get("widgets.gmail.enabled") is True
+        # Stale gmail width differs from canonical so its clearing is observable.
+        manager.set(
+            "widgets",
+            {"clock": {"enabled": True}, "gmail": {"enabled": True, "width": canonical_width + 123}},
+        )
+        assert manager.get("widgets.gmail.width") == canonical_width + 123
 
         snapshot_path = tmp_path / "replace_import.sst"
         snapshot_payload = {
@@ -294,7 +308,10 @@ class TestSettingsManagerCacheInvalidation:
 
         assert manager.get("display.mode") == "fit"
         assert manager.get("widgets.clock.enabled") is False
-        assert manager.get("widgets.gmail.enabled", "missing") == "missing"
+        # Replace-mode drops the stale user gmail override: the raw store no longer
+        # holds it and get() resolves the canonical default instead.
+        assert manager._settings.contains("widgets.gmail.width") is False
+        assert manager.get("widgets.gmail.width") == canonical_width
 
     def test_import_from_sst_marks_visualizer_schema_current_after_widget_normalization(
         self,
@@ -320,7 +337,9 @@ class TestSettingsManagerCacheInvalidation:
         assert manager.import_from_sst(str(snapshot_path), merge=True) is True
 
         visualizer = manager.get("widgets")["spotify_visualizer"]
-        assert visualizer["position"] == "Follow Media"
+        # Canonical shipped position (the retired 'Follow Media' schema-model
+        # shadow default was consolidated away to the single canonical value).
+        assert visualizer["position"] == "Bottom Left"
         assert "bubble_input_gain" in visualizer
         assert (
             manager._settings.metadata().get("visualizer_schema_version")
@@ -481,8 +500,9 @@ class TestSettingsManagerDefaults:
 
         assert manager.get("input.interaction_mode") is True
         assert manager.get("display.show_on_monitors") == [1]
-        assert manager.get("widgets.gmail.monitor") == "2"
-        assert manager.get("widgets.media.monitor") == "2"
+        # MC profile ships numbered widgets on monitor 2 (int, matching canonical).
+        assert manager.get("widgets.gmail.monitor") == 2
+        assert manager.get("widgets.media.monitor") == 2
 
     def test_legacy_hard_exit_alias_migrates_to_interaction_mode(self, tmp_path: Path) -> None:
         manager = _make_manager(tmp_path)
