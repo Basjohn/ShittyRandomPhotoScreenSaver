@@ -1171,12 +1171,16 @@ class TestPerModeTechnicalControlPresentation:
 
 
 class TestVisualizerPresetDefaultResolution:
-    def test_from_mapping_uses_first_preset_for_missing_mode_preset(self):
+    def test_from_mapping_uses_canonical_fallback_for_missing_mode_preset(self):
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.visualizer_presets import get_missing_preset_fallback_index
 
         model = SpotifyVisualizerSettings.from_mapping({"mode": "sine_wave"})
 
-        assert model.preset_sine_wave == 0
+        # A missing selection repairs to the shipped canonical per-mode default
+        # (sine_wave ships preset 4), not a generic first slot.
+        assert model.preset_sine_wave == get_missing_preset_fallback_index("sine_wave")
+        assert model.preset_sine_wave == 4
 
     def test_from_settings_uses_first_preset_for_missing_mode_preset(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -1196,8 +1200,11 @@ class TestVisualizerPresetDefaultResolution:
 
         assert model.preset_bubble == 0
 
-    def test_get_active_preset_index_uses_first_preset_when_missing(self):
-        from core.settings.visualizer_presets import get_active_preset_index
+    def test_get_active_preset_index_uses_canonical_fallback_when_missing(self):
+        from core.settings.visualizer_presets import (
+            get_active_preset_index,
+            get_missing_preset_fallback_index,
+        )
 
         class _DummySettings:
             def get(self, _key, default=None):
@@ -1205,7 +1212,10 @@ class TestVisualizerPresetDefaultResolution:
 
         settings = _DummySettings()
 
-        assert get_active_preset_index(settings, "sine_wave") == 0
+        # No persisted selection -> shipped canonical per-mode default.
+        assert get_active_preset_index(settings, "sine_wave") == get_missing_preset_fallback_index("sine_wave")
+        assert get_active_preset_index(settings, "sine_wave") == 4
+        assert get_active_preset_index(settings, "bubble") == get_missing_preset_fallback_index("bubble")
         assert get_active_preset_index(settings, "bubble") == 0
 
 
@@ -1230,12 +1240,27 @@ class TestVisualizerModeRegistryContract:
         descriptor = get_visualizer_mode_descriptor("devcurve")
         assert descriptor.display_name == "Spline Curve"
 
-    def test_missing_preset_fallback_comes_from_registry_not_shipped_defaults(self):
-        from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
-        from core.settings.visualizer_presets import get_missing_preset_fallback_index
+    def test_missing_preset_fallback_uses_canonical_per_mode_default(self):
+        from core.settings.default_contract import require_canonical_default
+        from core.settings.visualizer_mode_registry import (
+            VISUALIZER_MODE_IDS,
+            get_preset_key,
+        )
+        from core.settings.visualizer_presets import (
+            get_custom_preset_index,
+            get_missing_preset_fallback_index,
+        )
 
+        # The fallback is the shipped canonical preset_<mode> default, clamped to
+        # the curated range (never the trailing Custom slot). There is no generic
+        # first-slot authority: sine_wave ships preset 4, every other mode ships 0.
         for mode in VISUALIZER_MODE_IDS:
-            assert get_missing_preset_fallback_index(mode) == 0
+            canonical = int(
+                require_canonical_default(f"widgets.spotify_visualizer.{get_preset_key(mode)}")
+            )
+            expected = max(0, min(get_custom_preset_index(mode) - 1, canonical))
+            assert get_missing_preset_fallback_index(mode) == expected
+        assert get_missing_preset_fallback_index("sine_wave") == 4
 
     def test_unknown_mode_falls_back_to_default_mode(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -1246,7 +1271,10 @@ class TestVisualizerModeRegistryContract:
 
     def test_resolve_all_preset_indices_from_mapping_uses_registry_for_sparse_input(self):
         from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
-        from core.settings.visualizer_presets import resolve_all_preset_indices_from_mapping
+        from core.settings.visualizer_presets import (
+            get_missing_preset_fallback_index,
+            resolve_all_preset_indices_from_mapping,
+        )
 
         resolved = resolve_all_preset_indices_from_mapping(
             {"mode": "bubble", "preset_bubble": 2}
@@ -1257,11 +1285,15 @@ class TestVisualizerModeRegistryContract:
             if key == "preset_bubble":
                 assert resolved[key] == 2
                 continue
-            assert resolved[key] == 0
+            # Unspecified modes resolve to their shipped canonical fallback.
+            assert resolved[key] == get_missing_preset_fallback_index(mode)
 
     def test_resolve_all_preset_indices_from_getter_uses_shared_prefixed_contract(self):
         from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
-        from core.settings.visualizer_presets import resolve_all_preset_indices_from_getter
+        from core.settings.visualizer_presets import (
+            get_missing_preset_fallback_index,
+            resolve_all_preset_indices_from_getter,
+        )
 
         data = {"widgets.spotify_visualizer.preset_bubble": 2}
 
@@ -1274,7 +1306,8 @@ class TestVisualizerModeRegistryContract:
             if key == "preset_bubble":
                 assert resolved[key] == 2
                 continue
-            assert resolved[key] == 0
+            # Unspecified modes resolve to their shipped canonical fallback.
+            assert resolved[key] == get_missing_preset_fallback_index(mode)
 
 
 class TestVisualizerSettingsContract:
