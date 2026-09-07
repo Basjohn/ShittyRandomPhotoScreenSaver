@@ -26,7 +26,6 @@ uniform int u_playing;
 uniform float u_ghost_alpha;
 uniform float u_bar_height_scale;  // visual boost for taller cards (1.0 = default height)
 uniform int u_single_piece;        // 1 = solid bars (no segment gaps)
-uniform int u_slanted;             // 1 = diagonal-sliced bar edges facing center
 uniform float u_border_radius;     // border radius in px (0 = square, ~6 = rounded)
 uniform int u_spectrum_glow_enabled;
 uniform float u_spectrum_glow_intensity;
@@ -236,24 +235,6 @@ void main() {
         boosted_peak = 0.95;
     }
 
-    // --- Slanted profile: compute diagonal clip for inner bar edge ---
-    // The inner edge (facing center) gets a diagonal cut.
-    // Center bar gets both edges slanted.
-    float slant_clip = 0.0;  // extra x-inset at top of bar (0 at bottom)
-    bool slant_active = (u_slanted == 1 && bar_width > 4.0 * authored_scale);
-
-    // Determine which side faces center for this bar
-    int center_bar = bar_count_int / 2;
-    bool bar_left_of_center = (bar_index < center_bar);
-    bool bar_right_of_center = (bar_index > center_bar);
-    bool bar_is_center = (bar_index == center_bar);
-
-    // Linchpin bars: offset 3 from center (bars 8 and 14 in 21-bar)
-    // These get BOTH sides slanted lightly as visual anchors
-    int bar_offset = abs(bar_index - center_bar);
-    // Hardcoded offset 3 — avoids GLSL float→int truncation issues
-    bool bar_is_linchpin = (bar_offset == 3);
-
     // ========== SINGLE PIECE MODE ==========
     // Render solid continuous bars with no segment gaps.
     if (u_single_piece == 1) {
@@ -274,28 +255,6 @@ void main() {
 
         if (!is_bar && !is_ghost) {
             discard;
-        }
-
-        // Slanted clip for single-piece bars
-        if (slant_active && active_height > 4.0 * authored_scale) {
-            float slant_amount = min(bar_width * 0.35, 8.0 * authored_scale);
-            float y_frac = clamp(y_rel / max(active_height, 1.0), 0.0, 1.0);
-            float clip_px = slant_amount * y_frac;
-            if (bar_is_center) {
-                // Center bar: both edges slanted
-                float half_clip = clip_px * 0.5;
-                if (bar_local_x < half_clip || bar_local_x > bar_width - half_clip) discard;
-            } else if (bar_is_linchpin) {
-                // Linchpin bars: both edges slanted lightly (40% strength)
-                float lp_clip = clip_px * 0.4;
-                if (bar_local_x < lp_clip || bar_local_x > bar_width - lp_clip) discard;
-            } else if (bar_left_of_center) {
-                // Right edge (facing center) gets diagonal
-                if (bar_local_x > bar_width - clip_px) discard;
-            } else if (bar_right_of_center) {
-                // Left edge (facing center) gets diagonal
-                if (bar_local_x < clip_px) discard;
-            }
         }
 
         // Border radius: each shape (bar / ghost) gets its own independent
@@ -443,26 +402,6 @@ void main() {
     float seg_local_y = y_rel - float(seg_index) * step_y;
     if (seg_local_y < 0.0 || seg_local_y >= seg_height) {
         discard;
-    }
-
-    // Slanted clip for segmented bars
-    if (slant_active && seg_height > 2.0 * authored_scale) {
-        float slant_amount = min(bar_width * 0.35, 8.0 * authored_scale);
-        // Use global y position within the bar (not segment-local) for consistent diagonal
-        float total_bar_h = float(u_segments) * step_y;
-        float y_global_frac = clamp(y_rel / max(total_bar_h, 1.0), 0.0, 1.0);
-        float clip_px = slant_amount * y_global_frac;
-        if (bar_is_center) {
-            float half_clip = clip_px * 0.5;
-            if (bar_local_x < half_clip || bar_local_x > bar_width - half_clip) discard;
-        } else if (bar_is_linchpin) {
-            float lp_clip = clip_px * 0.4;
-            if (bar_local_x < lp_clip || bar_local_x > bar_width - lp_clip) discard;
-        } else if (bar_left_of_center) {
-            if (bar_local_x > bar_width - clip_px) discard;
-        } else if (bar_right_of_center) {
-            if (bar_local_x < clip_px) discard;
-        }
     }
 
     // Border radius clip for segmented bars (all 4 corners of each segment)
