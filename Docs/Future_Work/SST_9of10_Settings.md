@@ -78,14 +78,17 @@ Confirmed NOT regressions vs pre-migration: canonical default *values* for
 block_size/preset are unchanged; `resolve_audio_block_size` is byte-identical to
 the pre tree.
 
-### Cluster status (2026-09-07)
-- [x] `test_visualizer_settings_plumbing.py` — GREEN (91). Mock staleness ->
-  CanonicalWidgetDefaultsStub; retired `*_growth` dropped; canonical preset
-  fallback; block_size literal 512->128.
-- [x] `test_visualizer_presets.py` — GREEN (58). Fail-loud curated/override
-  contract; `_seed_curated_slots` helper; sphere release artifact regenerated.
-- [ ] `test_settings_manager.py` (~9), `test_transient_preset_preservation.py`
-  (~6), `test_gmail_settings_roundtrip.py` (~6) — pending triage.
+### Cluster status (2026-09-07) — ALL GREEN
+- [x] `test_visualizer_settings_plumbing.py` — 91. CanonicalWidgetDefaultsStub;
+  retired `*_growth` dropped; canonical preset fallback; block_size 512->128.
+- [x] `test_visualizer_presets.py` — 58. Fail-loud curated/override contract;
+  `_seed_curated_slots` helper; sphere release artifact regenerated.
+- [x] `test_transient_preset_preservation.py` — 10. PER_MODE_TECHNICAL_MODES
+  (sphere excluded); per-mode canonical gains, not uniform.
+- [x] `test_gmail_settings_roundtrip.py` — 21. Canonical accessor + fresh-load;
+  header_logo_px_adjust non-key dropped; moved widget plumbing.
+- [x] `test_settings_manager.py` — 56. Canonical-authority get(); consolidated
+  'Follow Media'->'Bottom Left'; MC monitor int 2.
 
 ### Production bugs found & fixed during reconciliation
 - preset-repair `_normalize_spectrum_linear_notches` missing canonical_default
@@ -93,6 +96,17 @@ the pre tree.
 - `technical_controls` transient-mix default_key doubled the two-token
   `sine_wave_` prefix (`sine_wave_wave_transient_width_mix`) -> fail-loud KeyError
   crashing the sine_wave Settings body.
+- SettingsManager startup called cleanup_obsolete_settings() +
+  cleanup_legacy_global_preset_state() but both were dropped in the migration and
+  the calls were in swallowing try/except -> retired keys (intense_shadow,
+  display.vsync_enabled/fps_cap, transitions.easing, legacy preset roots) silently
+  never purged. Restored both methods + _OBSOLETE_KEYS.
+
+### Operator note (no action unless wanted)
+- Visualizer position 'Follow Media' (schema-model shadow default) was
+  consolidated away; the shipped canonical is 'Bottom Left' (unchanged in
+  DEFAULT_SETTINGS pre/post). 'Follow Media' has no supporting code anywhere now.
+  Flag if the "follow the media widget" position mode should be rebuilt.
 
 ## Phase 4 — 9/10 architecture upgrades (no parity/feature loss)
 - [ ] Kill the literal-vs-derived dual representation: schema GENERATES the
