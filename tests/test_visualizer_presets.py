@@ -24,16 +24,47 @@ def _restore_visualizer_preset_registry():
     vp._CURATED_TREE_SYNCED = original_synced
 
 
-def test_snapshot_presets_expand_slots_and_filter_settings(tmp_path, monkeypatch):
-    """Snapshot presets expand slot count and drop invalid keys."""
+def _seed_curated_slots(curated_root: Path, mode: str, count: int) -> None:
+    """Write ``count`` contiguous authored curated preset files for ``mode``.
+
+    The fail-loud preset builder requires authored, contiguous curated slots on
+    disk -- snapshots override those slots, they never stand alone or grow the
+    count -- so any test exercising snapshot overrides must seed real curated
+    presets first. Callers set ``vp._CURATED_TREE_SYNCED = True`` (restored by the
+    autouse fixture) so the bundled-tree sync does not touch the seeded root.
+    """
+    mode_dir = curated_root / mode
+    mode_dir.mkdir(parents=True, exist_ok=True)
+    for slot in range(count):
+        (mode_dir / f"preset_{slot + 1}_slot{slot + 1}.json").write_text(
+            json.dumps(
+                {
+                    "mode": mode,
+                    "name": f"Preset {slot + 1}",
+                    "preset_index": slot,
+                    "snapshot": {"widgets": {"spotify_visualizer": {"mode": mode}}},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+
+def test_snapshot_override_replaces_authored_slot_and_filters_settings(tmp_path, monkeypatch):
+    """A marked snapshot overrides an authored curated slot's settings.
+
+    Post-migration the builder is fail-loud: curated slots are authored and
+    contiguous, and a marked snapshot overrides an existing slot's settings
+    (keeping the curated slot name) rather than standing alone or growing count.
+    """
 
     curated_root = tmp_path / "curated"
     snapshots_root = tmp_path / "snapshots"
-    (curated_root / "sine_wave").mkdir(parents=True)
     snapshots_root.mkdir()
+    _seed_curated_slots(curated_root, "sine_wave", 5)
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
+    vp._CURATED_TREE_SYNCED = True
 
     payload = {
         "visualizer_preset_override": True,
@@ -54,22 +85,18 @@ def test_snapshot_presets_expand_slots_and_filter_settings(tmp_path, monkeypatch
 
     presets = vp._build_presets_for_mode("sine_wave")
 
-    assert len(presets) == 6  # 5 curated slots + Custom
-    glow_burst = presets[4]
-    assert glow_burst.name == "Preset 5 (Glow Burst)"
-    assert glow_burst.settings.get("sine_wave_effect") == 0.42
+    assert len(presets) == 6  # 5 authored curated slots + Custom
+    overridden = presets[4]
+    # Override replaces settings but keeps the authored curated slot name.
+    assert overridden.name.startswith("Preset 5")
+    assert overridden.settings.get("sine_wave_effect") == 0.42
     # rainbow_enabled migrated to the canonical mode-id scoped key.
-    assert glow_burst.settings.get("sine_wave_rainbow_enabled") is True
-    assert "rainbow_enabled" not in glow_burst.settings
+    assert overridden.settings.get("sine_wave_rainbow_enabled") is True
+    assert "rainbow_enabled" not in overridden.settings
 
     # Update global registry temporarily to validate helper behavior
-    original = vp._PRESETS.get("sine_wave")
     monkeypatch.setitem(vp._PRESETS, "sine_wave", presets)
-    try:
-        assert vp.get_custom_preset_index("sine_wave") == len(presets) - 1
-    finally:
-        if original is not None:
-            monkeypatch.setitem(vp._PRESETS, "sine_wave", original)
+    assert vp.get_custom_preset_index("sine_wave") == len(presets) - 1
 
 
 def test_get_visualizer_presets_dir_uses_shared_programdata_tree_for_frozen_builds(tmp_path, monkeypatch):
@@ -248,18 +275,18 @@ def test_preset_repair_defaults_loader_uses_canonical_defaults_entrypoint(monkey
 def test_generic_sst_snapshot_does_not_override_curated_presets(tmp_path, monkeypatch):
     curated_root = tmp_path / "curated"
     snapshots_root = tmp_path / "snapshots"
-    (curated_root / "spectrum").mkdir(parents=True)
     snapshots_root.mkdir()
+    _seed_curated_slots(curated_root, "spectrum", 4)
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
+    vp._CURATED_TREE_SYNCED = True
 
     generic_sst = {
         "snapshot": {
             "widgets": {
                 "spotify_visualizer": {
                     "mode": "spectrum",
-                    "spectrum_growth": 4.0,
                     "spectrum_lane_strengths_linear": {"Bass": 0.8, "Low-Mid": 0.7, "Vocal": 0.64, "Hi-Mid": 0.8, "Treble": 1.0},
                 }
             }
@@ -268,19 +295,27 @@ def test_generic_sst_snapshot_does_not_override_curated_presets(tmp_path, monkey
     (snapshots_root / "preset_1_exported_profile.json").write_text(json.dumps(generic_sst), encoding="utf-8")
 
     presets = vp._build_presets_for_mode("spectrum")
-    # No explicit override marker -> snapshot should be ignored.
-    assert len(presets) == 4
-    assert presets[0].settings == {}
+    # No explicit override marker -> snapshot should be ignored; authored slots
+    # stay as seeded (4 curated + Custom).
+    assert len(presets) == 5
+
+    # Rebuild without the markerless snapshot: slot 0 must be identical, proving
+    # the generic SST contributed nothing (it did not override the authored slot).
+    (snapshots_root / "preset_1_exported_profile.json").unlink()
+    vp._CURATED_TREE_SYNCED = True
+    baseline = vp._build_presets_for_mode("spectrum")
+    assert presets[0].settings == baseline[0].settings
 
 
 def test_snapshot_override_fallback_without_marker(tmp_path, monkeypatch):
     curated_root = tmp_path / "curated"
     snapshots_root = tmp_path / "snapshots"
-    (curated_root / "spectrum").mkdir(parents=True)
     snapshots_root.mkdir()
+    _seed_curated_slots(curated_root, "spectrum", 4)
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
+    vp._CURATED_TREE_SYNCED = True
 
     payload = {
         # No visualizer_preset_override / visualizer_preset_mode markers
@@ -289,7 +324,7 @@ def test_snapshot_override_fallback_without_marker(tmp_path, monkeypatch):
             "widgets": {
                 "spotify_visualizer": {
                     "mode": "spectrum",
-                    "spectrum_growth": 6.0,
+                    "spectrum_drop_speed": 1.9,
                     "spectrum_profile_floor": 0.2,
                 }
             }
@@ -300,10 +335,10 @@ def test_snapshot_override_fallback_without_marker(tmp_path, monkeypatch):
     presets = vp._build_presets_for_mode("spectrum")
 
     # Marker-less snapshots reuse the existing curated slot; they no longer grow
-    # the preset count beyond the curated allocation.
-    assert len(presets) == 4
+    # the preset count beyond the curated allocation (4 curated + Custom).
+    assert len(presets) == 5
     slot = presets[2]
-    assert slot.settings["spectrum_growth"] == 6.0
+    assert slot.settings["spectrum_drop_speed"] == 1.9
     assert slot.settings["spectrum_profile_floor"] == 0.2
 
 
@@ -372,22 +407,24 @@ def test_parse_preset_payload_promotes_legacy_shared_bar_visuals_to_mode_owned_k
 
 def test_snapshot_widgets_override_custom_backup(tmp_path, monkeypatch):
     curated_root = tmp_path / "curated"
-    (curated_root / "spectrum").mkdir(parents=True)
+    # Seed slot 0 so slot 1 (written below) forms a contiguous authored range.
+    _seed_curated_slots(curated_root, "spectrum", 1)
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
+    vp._CURATED_TREE_SYNCED = True
 
     payload = {
         "mode": "spectrum",
         "preset_index": 1,
         "snapshot": {
             "custom_preset_backup": {
-                "widgets.spotify_visualizer.spectrum_growth": 2.0,
+                "widgets.spotify_visualizer.spectrum_drop_speed": 1.1,
                 "widgets.spotify_visualizer.spectrum_profile_floor": 0.05,
             },
             "widgets": {
                 "spotify_visualizer": {
                     "mode": "spectrum",
-                    "spectrum_growth": 4.5,
+                    "spectrum_drop_speed": 2.4,
                     "spectrum_profile_floor": 0.3,
                 }
             },
@@ -400,7 +437,7 @@ def test_snapshot_widgets_override_custom_backup(tmp_path, monkeypatch):
     presets = vp._build_presets_for_mode("spectrum")
     slot = presets[1]
     # snapshot.widgets should win over backup defaults
-    assert slot.settings["spectrum_growth"] == 4.5
+    assert slot.settings["spectrum_drop_speed"] == 2.4
     assert slot.settings["spectrum_profile_floor"] == 0.3
 
 
@@ -664,7 +701,7 @@ def test_snapshot_override_keeps_curated_slot_name(tmp_path, monkeypatch):
             "widgets": {
                 "spotify_visualizer": {
                     "mode": mode,
-                    "bubble_growth": 1.0,
+                    "bubble_big_bass_pulse": 0.2,
                 }
             }
         },
@@ -681,7 +718,7 @@ def test_snapshot_override_keeps_curated_slot_name(tmp_path, monkeypatch):
             "widgets": {
                 "spotify_visualizer": {
                     "mode": mode,
-                    "bubble_growth": 9.0,
+                    "bubble_big_bass_pulse": 0.61,
                 }
             }
         },
@@ -690,19 +727,23 @@ def test_snapshot_override_keeps_curated_slot_name(tmp_path, monkeypatch):
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
+    vp._CURATED_TREE_SYNCED = True
 
     presets = vp._build_presets_for_mode(mode)
     assert presets[0].name == "Preset 1 (Deep Sea)"
-    assert presets[0].settings["bubble_growth"] == pytest.approx(9.0)
+    assert presets[0].settings["bubble_big_bass_pulse"] == pytest.approx(0.61)
 
 
 @pytest.mark.parametrize(
     ("mode", "slider_attr", "mode_key", "mode_value"),
     [
-        ("spectrum", "_spectrum_preset_slider", "spectrum_growth", 2.9),
-        ("bubble", "_bubble_preset_slider", "bubble_growth", 3.2),
-        ("sine_wave", "_sine_preset_slider", "sine_wave_growth", 1.7),
-        ("oscilloscope", "_osc_preset_slider", "osc_growth", 2.4),
+        # A live mode-owned key must survive the save-over-curated roundtrip while
+        # the retired compat keys are stripped (*_growth is itself retired now, so
+        # use current per-mode controls as the surviving-key witnesses).
+        ("spectrum", "_spectrum_preset_slider", "spectrum_drop_speed", 1.9),
+        ("bubble", "_bubble_preset_slider", "bubble_big_bass_pulse", 0.61),
+        ("sine_wave", "_sine_preset_slider", "sine_micro_wobble", 0.15),
+        ("oscilloscope", "_osc_preset_slider", "osc_line_amplitude", 4.7),
     ],
 )
 def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
