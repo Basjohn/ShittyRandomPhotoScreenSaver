@@ -700,6 +700,24 @@ class QuickSceneController(QObject):
                 )
         return changed
 
+    def apply_admitted_pointer_press(
+        self, state: QuickInputState, scene_position: Any
+    ) -> bool:
+        """Dismiss any widget action popup on an admitted press outside its widget.
+
+        Runs on every admitted scene press (independent of Click-Glow), so a press
+        anywhere outside an open Gmail three-dot menu closes it. No timer/poll.
+        """
+
+        if (
+            not isinstance(state, QuickInputState)
+            or not self._readiness.admission_open
+            or state.runtime_generation != self._readiness.runtime_generation
+            or state.screen_index != self._window.screen_index
+        ):
+            return False
+        return self.ordinary_widget_host.dismiss_outside_action_popups(scene_position)
+
     def apply_context_menu_shadow_style(
         self, style: QuickContextMenuShadowStyle
     ) -> bool:
