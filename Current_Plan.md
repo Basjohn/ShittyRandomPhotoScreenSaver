@@ -14,6 +14,12 @@ Outside of Codex Work Began: `886e6fa419ff130ff2a9aedf5091ae6162d1e958`
 - **SST 9/10 settings closeout reference:**
   [Docs/Future_Work/SST_9of10_Settings.md](Docs/Future_Work/SST_9of10_Settings.md)
   (settings-migration closeout evidence; defaults/plumbing working and protected).
+- **Ordinary widget resize normalization → one uniform-transform seam:**
+  [Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md](Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md).
+  Move Abandonment/Achievement/Weather off per-value CUSTOM resize payloads onto the
+  shared `uniformScaleTransform` seam so CUSTOM resize is geometry-only for every
+  ordinary widget — and make that seam the default path so new widgets are cheap to
+  add (C4 + new-widget checklist). Not started; C0 evidence harness first.
 
 ## Defaults sanitization continuation — RECOVERY CHECKPOINT
 
