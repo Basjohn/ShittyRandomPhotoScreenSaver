@@ -4,12 +4,13 @@
 ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver that is suprisingly less shit than the majority of ancient decrepid screensavers around today. Born from my sheer exhaustion of still using a screensaver from 2005 to do less than what this does.
 
 
-<img width="1935" height="1080" alt="3-6-Still-1080p-3" src="https://github.com/user-attachments/assets/5f33a700-f409-4582-98b6-d2a462213bd2" />
+<img width="3825" height="2159" alt="widebubble" src="https://github.com/user-attachments/assets/2f7273e4-3e91-4491-88c2-a00d31cc514f" />
+
 
 
 ---
 
-## Features
+## Features (an extremely out of date readme mostly)
 
 - **Random Image Slideshow**
   - Local folders (recursive) as primary source
