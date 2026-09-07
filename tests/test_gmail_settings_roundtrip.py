@@ -90,7 +90,7 @@ def test_gmail_defaults_are_complete_and_do_not_contain_credentials() -> None:
     expected_keys = {
         "enabled", "monitor", "position", "width", "limit", "refresh_minutes",
         "filter_label", "account_slot", "font_family", "font_size", "margin",
-        "header_logo_px_adjust", "show_sender", "show_subject", "show_envelope_icon",
+        "show_sender", "show_subject", "show_envelope_icon",
         "show_three_dot_menu", "show_refresh_spiral", "show_unread_count_in_header", "show_header_border",
         "show_separators", "show_timestamp", "date_display_mode", "group_threads",
         "auto_title_case", "clean_sender_names", "max_sender_words",
@@ -128,7 +128,6 @@ def test_gmail_signal_block_attrs_cover_newer_controls() -> None:
     expected_attrs = {
         "gmail_backend_combo",
         "gmail_width",
-        "gmail_header_logo_px_adjust",
         "gmail_show_header_border",
         "gmail_show_refresh_spiral",
         "gmail_date_display_mode",
@@ -150,12 +149,14 @@ def test_gmail_default_accessor_requires_canonical_default() -> None:
 
     import pytest
 
-    from ui.tabs.widgets_tab_gmail import _gmail_default
+    from ui.tabs.widgets_tab_gmail import _MISSING_DEFAULT, _gmail_default
 
+    # The canonical _widget_default takes (section, key) and yields _MISSING_DEFAULT
+    # for an unknown key; _gmail_default turns that into a fail-loud KeyError.
     tab = SimpleNamespace(
-        _widget_default=lambda section, key, fallback: "INBOX"
+        _widget_default=lambda section, key: "INBOX"
         if (section, key) == ("gmail", "filter_label")
-        else fallback
+        else _MISSING_DEFAULT
     )
 
     assert _gmail_default(tab, "filter_label") == "INBOX"
@@ -163,18 +164,25 @@ def test_gmail_default_accessor_requires_canonical_default() -> None:
         _gmail_default(tab, "missing_key")
 
 
-def test_widget_defaults_merge_stale_cache_with_canonical_defaults() -> None:
-    """A stale settings-dialog cache must not hide newly added Gmail defaults."""
+def test_widget_defaults_are_loaded_fresh_from_canonical() -> None:
+    """Widget defaults come straight from the canonical authority.
+
+    The old provided-cache merge was removed: ``_load_widget_defaults`` returns
+    the canonical ``widgets`` tree for the active profile, so a stale settings
+    cache can never hide newly added Gmail defaults.
+    """
+    from types import SimpleNamespace
+
     from core.settings.defaults import get_default_settings
     from ui.tabs.widgets_tab import WidgetsTab
 
     tab = WidgetsTab.__new__(WidgetsTab)
-    tab._provided_widget_defaults = {"gmail": {"enabled": True}}
+    tab._settings = SimpleNamespace(get_application_name=lambda: None)
 
     defaults = WidgetsTab._load_widget_defaults(tab)
 
-    assert defaults["gmail"]["enabled"] is True
-    canonical_gmail = get_default_settings()["widgets"]["gmail"]
+    canonical_gmail = get_default_settings(None)["widgets"]["gmail"]
+    assert defaults["gmail"]["enabled"] == canonical_gmail["enabled"]
     assert defaults["gmail"]["width"] == canonical_gmail["width"]
     assert defaults["gmail"]["filter_label"] == canonical_gmail["filter_label"]
 
@@ -283,19 +291,20 @@ def test_gmail_buckets_defer_initial_collapse_until_children_exist() -> None:
     source = Path("ui/tabs/widgets_tab_gmail.py").read_text(encoding="utf-8")
 
     assert source.count("defer_initial_visibility=True") == 5
-    assert 'expanded=tab.get_gmail_bucket_state("backend", default=True)' in source
+    assert 'expanded=tab.get_gmail_bucket_state("backend")' in source
     assert "_finalize_bucket_body(toggle, body)" in source
 
 
 def test_gmail_is_not_dev_gated() -> None:
     """Gmail should be ordinary feature plumbing, not hidden behind a CLI gate."""
+    # The rendering/widget_factories.py + widget_setup*.py plumbing was retired;
+    # widget creation now lives in widget_descriptors.py and the Quick widget host.
     sources = [
         Path("core/dev_gates.py"),
         Path("ui/tabs/widgets_tab.py"),
         Path("ui/tabs/widgets_tab_gmail.py"),
-        Path("rendering/widget_factories.py"),
-        Path("rendering/widget_setup.py"),
-        Path("rendering/widget_setup_all.py"),
+        Path("rendering/widget_descriptors.py"),
+        Path("rendering/quick/widgets/host.py"),
     ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in sources)
 
