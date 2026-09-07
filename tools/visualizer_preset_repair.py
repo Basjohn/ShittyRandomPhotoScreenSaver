@@ -162,6 +162,15 @@ def _canonical_mode_defaults(mode: str) -> Dict[str, Any]:
     return normalize_visualizer_mode_payload(mode, defaults)
 
 
+def _canonical_spectrum_linear_notches() -> Any:
+    """Canonical ``spectrum_notch_positions_linear`` for repair-from-canonical.
+
+    ``_normalize_spectrum_linear_notches`` repairs only from canonical state (no
+    hardcoded fallback), so it requires the canonical default explicitly.
+    """
+    return _load_visualizer_defaults()["spectrum_notch_positions_linear"]
+
+
 def _canonical_mode_prefix(mode: str) -> str:
     prefixes = vp.MODE_KEY_PREFIXES.get(mode)  # type: ignore[attr-defined]
     preferred = f"{mode}_"
@@ -342,7 +351,8 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
     sanitized = {key: value for key, value in sanitized.items() if key in allowed_keys}
     if mode == "spectrum" and "spectrum_notch_positions_linear" in sanitized:
         sanitized["spectrum_notch_positions_linear"] = _normalize_spectrum_linear_notches(
-            sanitized["spectrum_notch_positions_linear"]
+            sanitized["spectrum_notch_positions_linear"],
+            _canonical_spectrum_linear_notches(),
         )
     sanitized["mode"] = mode
     _promote_global_technical_settings(mode, sanitized)
@@ -406,7 +416,10 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
             if (
                 mode == "spectrum"
                 and key == "spectrum_notch_positions_linear"
-                and _normalize_spectrum_linear_notches(section.get(key)) != section.get(key)
+                and _normalize_spectrum_linear_notches(
+                    section.get(key), _canonical_spectrum_linear_notches()
+                )
+                != section.get(key)
             ):
                 issues["legacy_spectrum_linear_notch_family"] = True
             if any(prefix and key.startswith(f"{prefix}{prefix}") for prefix in prefixes):
