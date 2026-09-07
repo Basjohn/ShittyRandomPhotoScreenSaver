@@ -1,8 +1,8 @@
 {
   "accessibility": {
     "dimming": {
-      "enabled": false,
-      "opacity": 30
+      "enabled": true,
+      "opacity": 15
     },
     "pixel_shift": {
       "enabled": false,
