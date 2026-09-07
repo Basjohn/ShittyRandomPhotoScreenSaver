@@ -14,7 +14,19 @@ DEVCURVE_SAMPLE_COUNT = 96
 # shape/amplitude reaction; it may only breathe this cruise rate gently.
 DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE = 0.23 / 1.35
 DEVCURVE_MATERIAL_TRAVEL_VARIATION = 0.10
-DEVCURVE_MATERIAL_TRAVEL_SMOOTH_TAU_S = 0.35
+# (DEVCURVE_MATERIAL_TRAVEL_SMOOTH_TAU_S retired: rate smoothing is now the
+# asymmetric attack/release pair below.)
+# Travel speed is driven ONLY by sustained transient activity -- never by
+# aggregate energy (bass beats / vocals / mids), which used to make it lurch.
+# Brief transient kicks are rejected by a slow de-kick low-pass so a single hit
+# never jerks travel; the surviving "how busy are the transients" signal is
+# normalised against this reference before it may nudge the cruise rate +/-10%.
+DEVCURVE_TRAVEL_TRANSIENT_DEKICK_TAU_S = 0.45
+DEVCURVE_TRAVEL_TRANSIENT_REFERENCE = 0.35
+# Asymmetric ramp: travel speeds up quickly when transient activity rises but
+# eases back down slowly, so no direction of change is jerky.
+DEVCURVE_TRAVEL_ATTACK_TAU_S = 0.30
+DEVCURVE_TRAVEL_RELEASE_TAU_S = 1.60
 _LAYER_ORDER = ("bass", "vocals", "mids", "transients")
 _LAYER_INDEX = {name: idx for idx, name in enumerate(_LAYER_ORDER)}
 
@@ -160,17 +172,21 @@ def _update_specular_streams(
     dt: float,
     curve: List[float],
     energy_drive: float,
+    travel_drive: float,
 ) -> List[List[float]]:
     _ensure_specular_streams(state)
     slots: List[List[float]] = []
 
-    # Before the Quick migration closeout this path accidentally treated audio
-    # energy as a material-travel throttle: shipped presets could swing from
-    # about 0.014 to 0.170 units/s (~12x) and visibly lurch/stop.  Travel is a
-    # continuous authored motion; strong reaction belongs in curve shape, fill,
-    # transients and highlights.  Energy therefore nudges the cruise rate only
-    # +/-10%, and the rate itself is time-smoothed before integration.
-    active_mix = _smoothstep(_clamp(energy_drive / 0.35, 0.0, 1.0))
+    # Travel is a continuous authored motion.  It reacts ONLY to sustained
+    # transient activity (``travel_drive``), never to aggregate energy: strong
+    # bass/vocal reaction belongs in curve shape, fill and highlights.  The
+    # drive is already de-kicked upstream (brief kicks rejected), and here it may
+    # nudge the cruise rate only +/-10%.  The rate then ramps up quickly but
+    # eases down slowly so neither direction of change is jerky.  (Historic bug:
+    # this path once used audio energy as a throttle and swung ~12x, lurching.)
+    active_mix = _smoothstep(
+        _clamp(travel_drive / DEVCURVE_TRAVEL_TRANSIENT_REFERENCE, 0.0, 1.0)
+    )
     variation = DEVCURVE_MATERIAL_TRAVEL_VARIATION
     target_rate = DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE * (
         (1.0 - variation) + (2.0 * variation) * active_mix
@@ -179,9 +195,12 @@ def _update_specular_streams(
     if previous_rate <= 0.0:
         material_rate = target_rate
     else:
-        alpha = 1.0 - math.exp(
-            -dt / max(DEVCURVE_MATERIAL_TRAVEL_SMOOTH_TAU_S, 1e-6)
+        tau = (
+            DEVCURVE_TRAVEL_ATTACK_TAU_S
+            if target_rate >= previous_rate
+            else DEVCURVE_TRAVEL_RELEASE_TAU_S
         )
+        alpha = 1.0 - math.exp(-dt / max(tau, 1e-6))
         material_rate = previous_rate + (target_rate - previous_rate) * alpha
 
     state.foreground_travel_rate = material_rate
@@ -231,6 +250,8 @@ class DevCurveRuntimeState:
     foreground_travel_rate: float = 0.0
     foreground_travel_pos: float = 0.0
     specular_travel_rate: float = 0.0
+    # De-kicked sustained transient activity; the sole driver of travel speed.
+    transient_travel_drive: float = 0.0
     specular_streams: List[Dict[str, float]] = field(
         default_factory=lambda: [
             {"x": 1.06, "speed": 0.26, "strength": 0.72, "variant": 0.08},
@@ -345,6 +366,17 @@ def solve_devcurve_frame(
     )
     aggregate_energy = _clamp(aggregate_energy, 0.0, 2.0)
 
+    # Travel-speed driver: the transient layer only, low-passed slowly so brief
+    # kicks are rejected and only sustained changes in transient activity move
+    # travel.  ``smooth_energy["transients"]`` is already lightly smoothed; this
+    # second slow envelope is what strips the individual kicks.
+    dekick_alpha = 1.0 - math.exp(
+        -dt / max(DEVCURVE_TRAVEL_TRANSIENT_DEKICK_TAU_S, 1e-6)
+    )
+    state.transient_travel_drive += (
+        state.smooth_energy.get("transients", 0.0) - state.transient_travel_drive
+    ) * dekick_alpha
+
     for idx, key in enumerate(_LAYER_ORDER):
         ls = layer_settings[key]
         enabled = bool(ls["enabled"])
@@ -411,6 +443,7 @@ def solve_devcurve_frame(
             dt=dt,
             curve=curve,
             energy_drive=energy_drive,
+            travel_drive=state.transient_travel_drive,
         )
 
     return {
