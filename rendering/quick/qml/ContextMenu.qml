@@ -53,8 +53,17 @@ Item {
         id: dismissScrim
         anchors.fill: parent
         acceptedButtons: Qt.AllButtons
-        enabled: false
-        onPressed: menuRoot.contextMenuModel.dismiss()
+        // Stays enabled for the whole life of the visible menu (menuRoot.enabled
+        // gates it to the visible state), so an enabled full-scene MouseArea always
+        // consumes presses outside the menu surface -- nothing clicks through to the
+        // widgets behind. Only the DISMISS action is deferred: `armed` is set one
+        // event-loop cycle after open (Qt.callLater below), so the opening press is
+        // swallowed here without immediately self-dismissing the menu.
+        property bool armed: false
+        onPressed: {
+            if (dismissScrim.armed)
+                menuRoot.contextMenuModel.dismiss()
+        }
     }
 
     // Context-menu shadow is intentionally inside the menu's z=300 scene plane:
@@ -400,14 +409,15 @@ Item {
         function onVisibilityChanged(visible) {
             if (!visible) {
                 menuRoot.activeSubmenuIndex = -1
-                dismissScrim.enabled = false
+                dismissScrim.armed = false
             } else {
                 // Defer arming past the opening event's delivery so the press
-                // that opened the menu cannot immediately dismiss it.
-                dismissScrim.enabled = false
+                // that opened the menu cannot immediately dismiss it. The scrim
+                // still CONSUMES that press (no clickthrough) while disarmed.
+                dismissScrim.armed = false
                 Qt.callLater(function() {
                     if (menuRoot.contextMenuModel && menuRoot.contextMenuModel.menuVisible)
-                        dismissScrim.enabled = true
+                        dismissScrim.armed = true
                 })
             }
         }
