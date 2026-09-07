@@ -66,12 +66,10 @@ from tools.defaults_foundry_core import (  # noqa: E402
     validate_no_absolute_machine_paths,
     validate_no_private_fields,
 )
-from ui.settings_theme import load_theme  # noqa: E402
+from ui.settings_theme import get_active_settings_theme, load_theme  # noqa: E402
 from ui.settings_theme_catalog import (  # noqa: E402
-    SETTINGS_THEME_SELECTION_KEY,
     activate_catalog_theme,
     build_settings_theme_catalog,
-    resolve_persisted_settings_theme,
 )
 from ui.settings_theme_paths import resolve_settings_themes_directory  # noqa: E402
 from ui.styled_popup import ColorSwatchButton  # noqa: E402
@@ -834,37 +832,6 @@ class DefaultValueDelegate(QStyledItemDelegate):
             self.validation_failed.emit(f"Value was not changed: {exc}")
 
 
-class _PersistedThemeSelectionStore:
-    """Read-only view of the user's persisted Settings-theme id.
-
-    Satisfies the ``.get(key, default)`` selection-store contract so the Foundry
-    can open in the active theme, without constructing a full ``SettingsManager``
-    (which would run startup migrations/cleanup against the user's real settings
-    file). Reads the nested ``snapshot.ui.settings_theme_selection`` leaf directly;
-    any read failure yields ``None`` so resolution falls back to Default Dark.
-    """
-
-    def __init__(self, app_name: str = NORMAL_PROFILE) -> None:
-        self._value: Any = None
-        try:
-            from core.settings.json_store import determine_storage_path
-
-            payload = json.loads(
-                determine_storage_path(app_name).read_text(encoding="utf-8")
-            )
-            snapshot = payload.get("snapshot", {}) if isinstance(payload, Mapping) else {}
-            ui = snapshot.get("ui", {}) if isinstance(snapshot, Mapping) else {}
-            if isinstance(ui, Mapping):
-                self._value = ui.get("settings_theme_selection")
-        except Exception:
-            self._value = None
-
-    def get(self, key: str, default: Any = None) -> Any:
-        if key == SETTINGS_THEME_SELECTION_KEY:
-            return self._value if self._value is not None else default
-        return default
-
-
 class DefaultSettingsEditor(QMainWindow):
     def __init__(
         self,
@@ -1054,24 +1021,12 @@ class DefaultSettingsEditor(QMainWindow):
         self._reload_tree()
 
     def _populate_theme_combo(self) -> None:
-        """Discover every selectable Settings theme; open in the persisted one.
-
-        The Foundry opens in the user's persisted Settings theme (parity with the
-        Settings window) rather than always Default Dark. The persisted id is read
-        read-only via ``_PersistedThemeSelectionStore`` -- never a full
-        SettingsManager, which would run migrations/cleanup on the user's file.
-        An absent/invalid selection resolves to the Default Dark built-in.
-        """
+        """Discover every selectable Settings theme and select the active one."""
         self._theme_catalog = build_settings_theme_catalog(
             resolve_settings_themes_directory()
         )
-        resolution = resolve_persisted_settings_theme(
-            _PersistedThemeSelectionStore(), self._theme_catalog
-        )
-        # Activate now so load_theme() (end of __init__) applies the persisted
-        # theme; the combo change signal is blocked below so this is not re-fired.
-        activate_catalog_theme(resolution.entry)
-        selected_id = resolution.entry.theme_id
+        active = get_active_settings_theme()
+        active_id = getattr(active, "theme_id", None)
         blocker = QSignalBlocker(self.theme_combo)
         self.theme_combo.clear()
         selected = 0
@@ -1081,7 +1036,7 @@ class DefaultSettingsEditor(QMainWindow):
                 self.theme_combo.setItemData(
                     index, entry.source_path.name, Qt.ItemDataRole.ToolTipRole
                 )
-            if entry.theme_id == selected_id:
+            if active_id is not None and entry.theme_id == active_id:
                 selected = index
         self.theme_combo.setCurrentIndex(selected)
         del blocker
