@@ -1,4 +1,6 @@
-# SST 9/10 Settings — live checklist (Strategy B)
+# SST 9/10 Settings — closeout/reference checklist (Strategy B)
+
+Status: **SETTINGS-MIGRATION CLOSEOUT REFERENCE — canonical defaults/settings plumbing is working and protected. Completed phases are historical evidence; residual runtime symptoms and optional architecture ideas below do not become active work unless separately admitted.**
 
 Goal: a 9/10 single-authority, fail-loud SST settings system that behaves as well
 as the pre-migration build, with none of the migration rot. Chosen over revert (C)
@@ -10,14 +12,11 @@ Audit: `python tools/settings_migration_audit.py` (0 blocking gaps as of 2026-09
 ## Phase 0 — Baseline (DONE)
 - [x] Build pre-migration-oracle harness (`tools/settings_migration_audit.py`).
 - [x] Confirm defaults migration sound: 0 dropped-needed defaults, 0 unresolved
-  runtime-resolvable keys. The 370 "dropped" were runtime/session state correctly
+  settings/default-resolvable keys. The 370 "dropped" were runtime/session state correctly
   purged (367) + retired-by-design (_growth, dead glow/line keys).
 
-## Phase 1 — Lock the defaults gate (9/10 completeness proof)
-- [ ] Permanent regression test wrapping the harness's resolve-gap check (no
-  reference tree needed): descriptors + per-mode×key + literal call-sites must all
-  resolve to a canonical default or be derivable-by-design. This is the proof that
-  makes fail-loud safe.
+## Phase 1 — Lock the persisted-settings/defaults gate (DONE)
+- [x] Permanent reference-independent regression gate exists in `tests/test_settings_defaults_completeness.py`, backed by the current audit helpers. It covers settings/default-resolvable descriptors and per-mode technical keys and permits explicit derivation-by-design. **This is not a runtime-state completeness test:** transient runtime/DSP/lifecycle attributes belong to their runtime owners and must not be promoted into schema merely because a consumer needs them.
 - [x] Review the 59 changed default values; classify intended vs regression
   (audit 2026-09-07). Breakdown:
   - ~45 `ui.*_bucket_states` / `*_tech_states` True->False: collapse-on-fresh-install.
@@ -101,8 +100,7 @@ the pre tree.
   (sphere excluded); per-mode canonical gains, not uniform.
 - [x] `test_gmail_settings_roundtrip.py` — 21. Canonical accessor + fresh-load;
   header_logo_px_adjust non-key dropped; moved widget plumbing.
-- [x] `test_settings_manager.py` — 56. Canonical-authority get(); consolidated
-  'Follow Media'->'Bottom Left'; MC monitor int 2.
+- [x] `test_settings_manager.py` — 56 at this reconciliation point. Canonical-authority `get()` behavior and MC profile routing reconciled. **Follow Media is the restored canonical Visualizer position default**; Bottom Left was the accidental shadow survivor and must not be reintroduced as a replacement.
 
 ### Production bugs found & fixed during reconciliation
 - preset-repair `_normalize_spectrum_linear_notches` missing canonical_default
@@ -116,16 +114,12 @@ the pre tree.
   display.vsync_enabled/fps_cap, transitions.easing, legacy preset roots) silently
   never purged. Restored both methods + _OBSOLETE_KEYS.
 
-### Operator note (no action unless wanted)
-- Visualizer position 'Follow Media' (schema-model shadow default) was
-  consolidated away; the shipped canonical is 'Bottom Left' (unchanged in
-  DEFAULT_SETTINGS pre/post). 'Follow Media' has no supporting code anywhere now.
-  Flag if the "follow the media widget" position mode should be rebuilt.
+## Deferred architecture ideas — not migration requirements
 
-## Phase 4 — 9/10 architecture upgrades (no parity/feature loss)
-- [ ] Kill the literal-vs-derived dual representation: schema GENERATES the
-  canonical set (retire the parity test; one artifact, drift impossible).
-- [ ] Explicit `required` vs `derivable-from-reference` tags on keys (sphere-class
-  derivations are declared, not implicit).
-- [ ] One-time large-migration reset gated on a settings_v2 schema-version stamp
-  (fires once, never re-wipes).
+These are optional future design ideas, not prerequisites for the now-working Settings system and not authority to reshape schema:
+
+- consider more explicit metadata for **persisted required** vs **persisted derivable** settings only where it reduces ambiguity; do not classify transient runtime state as schema;
+- generated artifacts may be simplified only if `default_settings.py` remains the clear authoring authority and current Foundry/reset/SST workflows do not lose transparency;
+- the 5.0.0 installer already owns the operator-approved one-release default reset policy. Do not add a second automatic runtime reset mechanism without a new product decision.
+
+Any such work must preserve the categorical boundary: consumer/runtime need != persisted Settings membership.

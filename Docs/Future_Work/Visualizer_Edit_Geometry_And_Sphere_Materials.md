@@ -1,9 +1,10 @@
 # Visualizer Edit Layout geometry and Sphere materials
 
-Last updated: 2026-09-05
+Last updated: 2026-09-07
 
-The operator accepts recovered colours/glows and confirms Sphere now animates. This is the next
-explicitly authorized slice; `FWPlan.md` owns sequencing. Preserve one logical clock, immutable
+Status: **MIXED REFERENCE — E1 geometry, Bubble/glow recovery and live Edit work are CLOSED/HISTORICAL. Sphere material/representation fidelity remains future product work through the dedicated Sphere decomposition/FWPlan.**
+
+The operator accepted the recovered colours/glows and the geometry tranche later closed through M0/M1. The completed sections below are historical evidence. Only unresolved Sphere fidelity/material/representation work remains future product work, admitted through `FWPlan.md` / `Sphere_Visualizer_Decomposition.md`. Preserve one logical clock, immutable
 publication, independent CUSTOM extent/whole-scale intents, source fences and context retirement.
 Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_material_2026_09_05`.
 

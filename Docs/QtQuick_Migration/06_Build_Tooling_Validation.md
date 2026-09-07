@@ -1,6 +1,6 @@
 # 06 — Build, Tooling, Tests, Installed Validation and Cutover Evidence
 
-Status: **current post-cutover validation contract; H/I closed, J+ active under `Current_Plan.md`**  
+Status: **current post-cutover validation contract; H/I closed. `Current_Plan.md` owns the live migration-close/product-readiness gate labels and ordering.**  
 Last updated: 2026-09-01
 
 Cross-links:
@@ -359,7 +359,7 @@ legacy software/backend-demotion presenter path
 ```
 
 `QQuickWidget` is prohibited. Historical evidence may still name these owners. Do not keep them executable merely to
-preserve a half-migrated product path. I removes/re-homes caller-dead residue only after current-owner contract proof.
+preserve a half-migrated product path. Caller-dead residue is removed/re-homed only after current-owner contract proof; surviving cleanup debt is tracked explicitly after Phase-I closure.
 
 J then performs the comprehensive installed/physical matrix against the Quick-only product.
 

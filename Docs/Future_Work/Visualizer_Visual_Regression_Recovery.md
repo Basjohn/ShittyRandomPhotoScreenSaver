@@ -2,11 +2,7 @@
 
 Last updated: 2026-09-05
 
-Original operator rejection of `2f221905`: Bubble aspect response remains wrong and outlines remain too
-thin; all modes show aliasing/washed glow/wrong colours (Organs must have black bars over a rainbow
-backdrop); Sphere is tiny and apparently static, including after Edit Layout scaling. This supersedes
-the earlier prototype acceptance. `FWPlan.md` owns the live repair sequence. Preserve the sole logical
-clock, event-driven ownership, source/generation fences and native float32 transport.
+The rejection and repair sequence below is preserved as historical evidence. Its recovered Bubble/colour/glow requirements are now owned by current Visualizer contracts and M1 acceptance; do not execute the old repair sequence as current work.
 
 Evidence copied before any test can rotate logs: `logs/evidence_chest/fw_visual_regression_2026_09_05`.
 The previous injected-frame/canonical-geometry tests missed the persisted profile and production

@@ -1,6 +1,6 @@
 # Qt Quick Production Migration — Technical Index
 
-Last updated: 2026-09-01
+Last updated: 2026-09-07
 
 Sequence/work admission comes only from `Current_Plan.md`.
 
@@ -69,6 +69,16 @@ The all-five-mode viewport capability policy and core edge-resize path are lande
 deterministic committed-vs-temporary CUSTOM ownership, Bubble BTF and the exact canonical baseline path.
 
 ## Sequence rule
+
+## Retired implementation/attribution references
+
+These files remain useful evidence but are **not current work admission**:
+
+- `Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md` — V0-V7 landed; Sphere exercised the bounded new-mode architecture.
+- `Visualizer_Hitch_Attribution_And_Optimization_Plan_2026-09-03.md` — old P0 attribution sequence; reuse measurements only under fresh optimization admission.
+- G/H/I checkpoint/decomposition files marked CLOSED/SUPERSEDED/HISTORICAL — retain provenance/negative controls, never replay old phase checklists.
+
+Experimental Sphere remains dormant-by-default future visual-fidelity work; its current reference is `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`, not the retired modularization sequence.
 
 `Current_Plan.md` owns admission, active checkpoint, stop gates and live sequencing. This index must not duplicate those
 volatile facts.

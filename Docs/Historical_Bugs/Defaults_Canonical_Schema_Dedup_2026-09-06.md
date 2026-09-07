@@ -66,3 +66,23 @@ A literal settings-read audit was classified after the repair. The remaining app
 - Capability activation/pool readers previously retained hard-coded `True`/`False` missing-member behavior despite canonical `widgets.family_activation` and `transitions.activation/pool/random_always` maps. Known capabilities now resolve missing members through canonical defaults; only genuinely unknown capability ids retain compatibility admission behavior.
 - Display and Transitions Settings pages had defensive parser/save literals (`fill`, `circle`, boolean fallbacks, `3000`, `Ripple`, etc.) that could become a second authority under malformed/partial state. Defensive repair now derives from the active profile's canonical defaults.
 - The Phase-C transition parameter resolver claimed canonical fallback ownership while still carrying a second table of local numbers/colours. Its canonical sub-maps now fail loudly when schema is incomplete, and invalid persisted values repair against those canonical values instead of local product-default literals.
+
+
+## Post-close correction — schema membership vs runtime state (2026-09-07)
+
+The initial sanitization correctly identified many session/history values that did not belong in product defaults, but one verification assumption was too broad: **a runtime consumer needing a value is not proof that the value belongs in persisted Settings schema**. This distinction must remain explicit.
+
+Two concrete failure classes surfaced during reconciliation:
+
+- transient Visualizer DSP snapshot attributes were required by `make_compute_snapshot()` but belonged to `audio_worker` runtime initialization; adding them to canonical defaults would have been the wrong repair;
+- stale default-init descriptors requested unprefixed Visualizer appearance fields (`bar_fill_color` / `bar_border_color`) as if they were plain canonical settings even though current ownership projects the real mode-specific values elsewhere. The repair was to remove the false descriptor request, not invent new schema keys.
+
+Therefore the permanent invariant is stronger than “every runtime-resolvable key has a default”:
+
+1. persisted user/product configuration has one canonical Settings/default authority;
+2. derived runtime configuration is projected from that authority/environment;
+3. transient runtime/DSP/lifecycle state is initialized by its runtime owner;
+4. static capability/renderer metadata belongs to registries/descriptors, not persisted Settings;
+5. a canonical setting may not be removed until every current consumer/import/persistence path has a legitimate replacement authority in the same change.
+
+`tests/test_settings_defaults_completeness.py` is intentionally scoped to **settings/default-resolvable contracts**. Runtime initialization requires separate owner-specific tests and must never be used to expand schema by reflex.

@@ -1,7 +1,7 @@
 # 07 — Settings Capability Activation and Lazy Navigation
 
-Status: **landed permanent capability/Settings contract; F/G/H closed. Future V5-V8 Visualizer Settings rehost must preserve it.**  
-Last updated: 2026-08-28
+Status: **LANDED permanent capability/Settings contract. Visualizer V0-V7 modularization/rehost is also landed; future work must preserve this boundary.**  
+Last updated: 2026-09-07
 
 ## Durable capability model
 
@@ -28,6 +28,8 @@ Imgur was removed in F0 and is no longer current capability/default surface.
 Visualizers is application capability and requires Media: `media=false -> visualizers=false`. Reactivating
 Media does not silently reactivate Visualizers. Capability membership does not move special Visualizer
 logical/render ownership under ordinary WidgetRuntimeManager presentation.
+
+The dedicated top-level `VisualizersTab` is now landed. It owns Visualizer Settings navigation/admission UI only: enabled modes produce mode pills, mode bodies are constructed lazily, and Media capability ineligibility greys the tab with `Enable Media In Widgets`. The tab does not own Media activation/runtime and disabled/unselected mode bodies remain dormant.
 
 ## Persisted schema
 

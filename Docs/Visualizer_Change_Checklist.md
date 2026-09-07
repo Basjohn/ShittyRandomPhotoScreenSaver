@@ -1,6 +1,6 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-09-03
+Last updated: 2026-09-07
 
 Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavior or presentation.
 
@@ -20,7 +20,7 @@ If source contradicts these durable destination contracts, determine whether sou
 
 ## 1A. Mode modularization / enable-disable preflight
 
-When changing mode registry, mode enablement, mode cycling or the planned Visualizers Settings tab:
+When changing mode registry, mode enablement, mode cycling or the landed Visualizers Settings tab:
 
 - [ ] Treat **all registered canonical modes** and **currently enabled modes** as different sets. Schema/default/preset migration may need all registered modes; runtime selection/cycling/render imports/Settings pills use enabled modes only.
 - [ ] If the Visualizer family is ON, at least one mode remains enabled, but any mode may be the sole enabled mode. Zero enabled modes is not a second family-disable mechanism.
@@ -31,7 +31,7 @@ When changing mode registry, mode enablement, mode cycling or the planned Visual
 - [ ] Existing mode-specific branches that encode real physics/render semantics were not generified merely to make the registry look uniform.
 - [ ] The existing preset slider and mode-level `Custom` system are preserved. Do not confuse mode preset Custom with global layout CUSTOM.
 - [ ] The global CUSTOM three-entry contract remains untouched: persisted/effective Custom, live Edit Layout start, and number-key saved-layout load all keep authored stacking/Media↔Visualizer adjacency dormant.
-- [ ] Media dependency remains one-way admission. If Media is disabled, the planned Visualizers tab may grey out with `Enable Media In Widgets`; it must not auto-enable or own Media.
+- [ ] Media dependency remains one-way admission. If Media is disabled, the Visualizers tab greys out with `Enable Media In Widgets`; it must not auto-enable or own Media.
 - [ ] Before/after evidence covers canonical + wide + tall geometry for every affected mode. Registry/UI refactoring is never permission to retune scaling/reactivity.
 
 ## 1B. Hitch / delivery optimization preflight
@@ -43,7 +43,7 @@ When a visible freeze, jump or flicker is reported:
 - [ ] Separate steady-state periodic hitches from startup/recreation first-frame age.
 - [ ] Keep R-76 Spectrum height-aware temporal scaling intact while global delivery is unhealthy; retest renderer quantization/pixel pitch only after deterministic hitches are removed.
 - [ ] Keep Bubble R-69/BTF intact; no viewport compensation, radius/motion compression or lower cadence as a hitch workaround.
-- [ ] Before deep active-path optimization, complete V0-V4 behavior-floor/authority/dormancy so work from disabled modes cannot pollute the owner graph. V5-V8 Settings extraction/rehosting/dependency/future-mode work may wait.
+- [ ] Preserve the landed V0-V7 modularization boundary: centralized lazy wiring, persisted enabled-mode admission, dormant disabled runtimes/renderers/Settings bodies, dedicated Visualizers tab, and Media dependency UX. The old V0-V7 sequence is historical evidence, not work to replay.
 - [ ] A periodic diagnostics task that correlates with hitches is not exempt because it is "only diagnostics"; redesign it without losing needed observability.
 - [ ] A GC hitch is an allocation/lifetime/scheduling problem to attribute, not permission to globally disable GC or accept unbounded retention.
 
@@ -137,7 +137,7 @@ top/bottom     -> viewport height; scale unchanged
 Viewport expansion changes available world/layout and current aspect; it never stretches final pixels independently on
 X/Y.
 
-**All five current modes must support viewport resizing, including Bubble.** The all-five-mode capability policy is landed;
+**All six registered modes must remain viewport-resize-capable through their declared policy.** The five established carded modes, including Bubble, share the card geometry contract; Sphere uses FRAMELESS + VIEWPORT_RECT. The capability policy is landed;
 do not reintroduce a false Bubble gate to mask a resize/reflow bug.
 
 For viewport changes also verify ownership precedence: ordinary committed extent remains truth outside CUSTOM, the working
@@ -192,7 +192,7 @@ GPU resources retire on the legal render owner.
 
 ## 11. Required proof for geometry changes
 
-- all five modes from canonical settings/preset resolution through technical-engine/logical/presentation ownership,
+- the five established technical modes from canonical settings/preset resolution through technical-engine/logical/presentation ownership, plus Sphere through its separate experimental capture/render path,
   logical publication and complete retained Quick snapshot consumption;
 - baseline + wide + tall extents;
 - no anisotropic final-pixel stretch;

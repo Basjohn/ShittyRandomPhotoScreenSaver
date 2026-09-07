@@ -1,6 +1,6 @@
 # Keep retained presentation alive after geometry-only Edit Save
 
-Status: **geometry-only live commit accepted; interactive cross-display Visualizer transfer Save now also live-commits when the transfer graph is coherent (awaiting physical validation); family-presence/monitor-route changes and layout-slot save/load still reconcile**. Live sequencing: `FWPlan.md`.
+Status: **RETIRED / HISTORICAL REFERENCE — M0 live Save/cross-display CUSTOM terminalization was physically accepted. Preserve the resulting no-teardown Save contract; do not replay this as an implementation plan.**
 
 The retained path now keeps ordinary same-display geometry Save in the current runtime generation. The operator reports
 that live visualizer adjustment and Save are flowing extremely well: no visible teardown/rebuild is required to commit the

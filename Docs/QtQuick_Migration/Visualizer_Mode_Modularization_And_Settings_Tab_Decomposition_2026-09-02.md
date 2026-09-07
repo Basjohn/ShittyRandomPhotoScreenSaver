@@ -1,14 +1,15 @@
 # Visualizer Mode Modularization + Settings Tab — Decomposition
 
 Date: 2026-09-02
-Status: **V0-V4 COMPLETE (2026-09-03) — mode wiring centralized, per-mode enable state persisted (no settings lost) + routed + dormancy-proven; V5-V8 UI REHOST/FUTURE-MODE WORK STILL DEFERRED UNTIL HITCH OWNERS ARE STABLE**
+Status: **RETIRED / HISTORICAL IMPLEMENTATION DECOMPOSITION — V0-V7 LANDED. V8 bounded future-mode authoring has been exercised by experimental Sphere; Sphere visual fidelity remains separate future product work.**
+
+Current-state routing (2026-09-07): the descriptor registry owns lazy runtime/renderer/Settings-builder wiring; `enabled_modes` is persisted admission; disabled modes retain state and remain runtime/renderer/Settings-body dormant; `VisualizersTab` is top-level and mode bodies are lazy; Media eligibility greys the tab without auto-enabling Media. Sphere is the sixth registered experimental mode and demonstrates the bounded descriptor/module/builder path while remaining excluded from the default enabled-mode set. The phase prose below is retained to explain how this architecture was reached; it is **not an active V5-V8 plan**.
 
 V0-V4 landed as commits 54c87e0c (V1), dc8d6670 (V2), c5c0d69e (V3), fd3fbbe8 (V4)
 on top of the reconciled green visualizer floor (V0). Descriptor is now the single
 per-mode runtime/renderer wiring source; `enabled_modes` persists additively with a
 full no-settings-lost audit; cycling/context-menu/initial-mode route through the
-effective enabled set; dormancy is proven in a fresh interpreter. Behavior is
-transparent today because every mode is enabled by default (no disable UI until V5-V8).
+effective enabled set; dormancy is proven in a fresh interpreter. Behavior remained transparent during V0-V4 because the then-current modes were enabled; the later Settings rehost added explicit enabled-mode controls. The current default enabled set excludes experimental Sphere.
 
 **PRE-V5 boundary:** `81019d5dd196cc5522ca9041d8773c8f2fa62df3` is the immediate
 pre-V5 Settings-migration rollback/comparison boundary (pre-V5/V6 gate items 1-3
@@ -26,7 +27,7 @@ ownership contract for pre-V5/V6 gate item 4 but does NOT rewire the live dialog
 `build_visualizers_ui` still builds all five bodies eagerly. The mechanical rehost
 that adopts the host and retires the eager path is V6/V7 and closes gate item 4.
 
-This document decomposes a future refactor that makes each Visualizer mode genuinely optional/dormant and then moves Visualizer Settings out of the overloaded Widgets tab into a dedicated top-level Visualizers tab.
+This document preserves the implementation decomposition that made each Visualizer mode optional/dormant and moved Visualizer Settings out of the overloaded Widgets tab into the dedicated top-level Visualizers tab.
 
 The work is worthwhile because the existing architecture is already partly mode-modular, but it is **not yet safe** to treat individual modes like fully plugin-like components. The UI move must come **after** activation/dormancy is made real.
 
@@ -41,7 +42,7 @@ This plan is subordinate to:
 
 If a convenient registry/UI refactor conflicts with those visualizer contracts, the refactor loses.
 
-Current sequencing authority (2026-09-03): after a short hitch-attribution baseline, V0-V4 may proceed because they establish the final enabled-mode owner graph and prove disabled modes dormant. Deep active-path performance optimization then targets only the surviving work. V5-V8 Settings-host extraction/rehosting/dependency/future-mode proof remain deferred until the main hitch owners are stable. See `Docs/QtQuick_Migration/Visualizer_Hitch_Attribution_And_Optimization_Plan_2026-09-03.md`.
+Historical sequencing note: V0-V4 established the enabled-mode owner graph before the Settings move; V5-V7 then extracted/rehosted the Settings surface and Media dependency UX. Do not use this old phase order to admit current work. Current changes start from the landed architecture and follow `Docs/Visualizer_Change_Checklist.md`.
 
 ---
 

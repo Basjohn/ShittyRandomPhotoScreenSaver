@@ -1,6 +1,6 @@
 # Widget interaction glow
 
-Status: follow-up source implemented; operator timing/intensity acceptance pending. Live sequencing: `FWPlan.md`.
+Status: **RETIRED / HISTORICAL REFERENCE — Widget interaction Glow is implemented and operator-accepted. Preserve finite event-driven feedback; no timer/poller/worker/new cadence.**
 Pre-implementation comparison/rollback HEAD: `0fd64b3d002834614131b46581e41fe497d5cbc5`.
 
 ## Existing foundation and owning boundaries

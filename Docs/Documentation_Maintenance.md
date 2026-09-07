@@ -1,6 +1,6 @@
 # Documentation Maintenance
 
-Last updated: 2026-09-01
+Last updated: 2026-09-07
 
 ## Roles
 
@@ -15,11 +15,14 @@ Last updated: 2026-09-01
 | `Docs/TestSuite.md` | live test inventory/status ledger |
 | `Future_Cleanup.md` | deferred deletion/debt |
 | `Future_Work.md` | genuinely deferred features/experiments |
+| `Docs/Documentation_Status_Ledger_2026-09-07.md` | per-file lifecycle classification for this sweep; routing aid, not sequence authority |
 | historical plans/reports/bugs/evidence | history only |
 
 Temporary working/theme-plan files may help an active migration but are not durable architecture. When a focused current
 contract exists, route permanent invariants there and retire the temporary plan rather than making other docs depend on
 it.
+
+A file may remain physically under `Docs/Future_Work/` after its implementation closes if moving it would create noisy reference churn. In that case its header must say **RETIRED / HISTORICAL REFERENCE** and name any genuinely surviving future tail. Folder name alone never admits work. The status ledger records these lifecycle classifications so a later agent does not execute completed decompositions as plans.
 
 Reorientation/handoff summaries are operator/conversation aids by default, not repository architecture. Keep them outside
 `Docs/` unless the operator explicitly asks for a repository handoff artifact. The repository should route through

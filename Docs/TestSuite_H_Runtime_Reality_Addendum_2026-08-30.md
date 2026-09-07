@@ -1,4 +1,6 @@
-# TestSuite H Runtime-Reality Addendum — Superseded
+# TestSuite H Runtime-Reality Addendum — Superseded / Debris Candidate
+
+Status: **DEBRIS CANDIDATE — the durable cross-layer testing lesson is already captured in current TestSuite/Qt Quick contracts. Safe to delete after operator approval; retained in this sweep so deletion is explicit rather than silent.**
 
 Date: 2026-08-30
 

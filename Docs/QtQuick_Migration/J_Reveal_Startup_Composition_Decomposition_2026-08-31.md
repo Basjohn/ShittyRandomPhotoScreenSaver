@@ -2,6 +2,8 @@
 
 Date: 2026-08-31
 
+Status: **RETIRED / HISTORICAL DECOMPOSITION — coordinated startup reveal and desktop->first-wallpaper crossfade are physically accepted in the current Quick runtime. Preserve the resulting startup/reveal contract; do not replay this checklist as open J work.**
+
 Successor to the (now solved) recurring black flash. This decomposes how a display
 goes from nothing to full application state, and the consistency of that reveal
 across widgets. This is J Parity+ quality, not H correctness — but it is grounded

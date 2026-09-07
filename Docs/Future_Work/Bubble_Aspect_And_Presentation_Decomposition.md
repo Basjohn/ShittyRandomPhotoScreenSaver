@@ -2,8 +2,7 @@
 
 Last updated: 2026-09-05
 
-The operator activated this investigation after Sphere implementation/visual review. `FWPlan.md`
-owns its sequence; `Current_Plan.md` retains broader J optimization and physical acceptance.
+This document preserves the closed Bubble aspect/presentation investigation. Current behavior is owned by `Docs/Visualizer_Reference.md`, BTF/R-69 and the Performance Optimization Contract; the checklist below is evidence, not live sequence.
 Starting source: `66be7344`. BTF, R-69 and the Performance Optimization Contract remain binding.
 
 ## Superseding operator correction

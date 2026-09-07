@@ -117,7 +117,7 @@ VisualizerModePresentationPolicy
     viewport_resize_capable
 ```
 
-All five current production modes use:
+The five established technical modes use:
 
 ```text
 shell_policy = CARD
@@ -342,7 +342,7 @@ owner.
 
 ### 8.1 Canonical default aspect vs internal reference size
 
-All five current Quick modes share one canonical **default/baseline aspect ratio: 1.5**.
+The five established carded modes share one canonical **default/baseline aspect ratio: 1.5**.
 
 Mode changes and built-in visualizer preset changes do not resize that baseline shape. Presets tune
 authored visual behavior rather than viewport/card dimensions.
@@ -406,7 +406,7 @@ top/bottom edge -> viewport height only
 That intentionally changes available world/layout playroom and may produce a wide/tall aspect other than 1.5. Modes
 reflow/adapt; final rendered pixels are not anisotropically stretched.
 
-All five current production modes must be viewport-resize-capable, including Bubble. That policy flip and the core Bubble
+All six registered modes must be viewport-resize-capable through their declared policy. The five established carded modes include Bubble; Sphere uses FRAMELESS + VIEWPORT_RECT. That policy flip and the core Bubble
 reflow are landed; do not re-gate Bubble to avoid fixing a viewport defect. Focused G proof must preserve Bubble spatial/BTF
 semantics and the canonical baseline path.
 
@@ -451,8 +451,7 @@ reactive_source_ready
 A presentation-owned idle scene may reveal without fabricating reactive source identity. Paused
 Spectrum is the canonical case.
 
-Readiness depends only on resources required by the resolved shell policy; a future frameless mode does
-not wait for card resources it deliberately does not own.
+Readiness depends only on resources required by the resolved shell policy; experimental Sphere demonstrates the frameless case and does not wait for card resources it deliberately does not own.
 
 ## 10. Baseline/wide/tall renderer compatibility
 
@@ -601,7 +600,7 @@ The visualizer participates in the retained Quick edit scene through the same co
 CUSTOM edit handles/session behavior use the real retained Quick presentation, never a permanent QWidget screenshot
 shell.
 
-Persist/restore whole-size scale and viewport extent as separate values. Edge resize is required for all five current
+Persist/restore whole-size scale and viewport extent as separate values. Edge resize is required for all registered
 modes; no current production mode is a destination opt-out.
 
 ## 13A. Product display admission and semantic mode/preset actions
@@ -657,7 +656,7 @@ Keep focused proof for:
 - sole authored logical clock;
 - every authored logical step integrated before presentation coalescing;
 - generation `0`;
-- all five modes;
+- the five established technical modes plus experimental Sphere through its separate frameless path;
 - source freshness;
 - protected Bubble consequences and BTF;
 - Pause/Play identity;
@@ -713,13 +712,13 @@ That list is historical migration rationale, **not a to-do list**.
 
 ## 17. Phase-D closure
 
-Phase D is complete because all five modes use the Quick visualizer boundary with:
+Phase D is complete for the established technical modes because they use the Quick visualizer boundary with:
 
 - authored logical runtime intact;
 - mode-owned logical frame runtimes;
 - immutable latest-state publication;
 - generation-fenced lifecycle/resources;
-- `CARD + CARD_INTERIOR` fidelity for the current five;
+- `CARD + CARD_INTERIOR` fidelity for the five established technical modes;
 - no old compositor/QWidget dependency inside the new renderer;
 - no assumption that every future mode must draw a card;
 - geometry that separates default aspect, uniform scale and viewport extent;

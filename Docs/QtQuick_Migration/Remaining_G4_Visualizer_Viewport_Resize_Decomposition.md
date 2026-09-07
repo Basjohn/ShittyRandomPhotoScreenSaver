@@ -39,7 +39,7 @@ viewport_extent = (world_width, world_height)
 Visible outer size is derived from scale + extent. Do not create an independently writable persisted width/height authority
 that can disagree with them.
 
-All five current modes participate: Spectrum, Oscilloscope, Sine, Bubble and DevCurve. Bubble is not exempt.
+Historical G4 scope covered the five established carded modes: Spectrum, Oscilloscope, Sine, Bubble and DevCurve; Bubble was not exempt. Experimental Sphere was registered later and follows the same scale/extent ownership through its FRAMELESS + VIEWPORT_RECT policy.
 
 ## 2. Landed owner path
 
