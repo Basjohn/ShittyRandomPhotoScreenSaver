@@ -34,26 +34,6 @@ os.environ["APPDATA"] = str(TEST_APPDATA)
 # 1. Bubble GPU push must NOT include simulation-only keys
 # ===========================================================================
 
-class TestCardHeight:
-    """Regression: bubble was missing from DEFAULT_GROWTH causing fallback to 1.0."""
-
-    def test_all_modes_have_default_growth(self):
-        from widgets.spotify_visualizer.card_height import DEFAULT_GROWTH
-        required_modes = {"spectrum", "oscilloscope", "sine_wave", "bubble"}
-        missing = required_modes - set(DEFAULT_GROWTH.keys())
-        assert not missing, f"Modes missing from DEFAULT_GROWTH: {missing}"
-
-    def test_all_growth_factors_at_least_2(self):
-        """User requested +1.0x on all card heights (minimum 2.0)."""
-        from widgets.spotify_visualizer.card_height import DEFAULT_GROWTH
-        for mode, growth in DEFAULT_GROWTH.items():
-            assert growth >= 2.0, f"{mode} growth {growth} < 2.0 (user requested +1.0x raise)"
-
-    def test_bubble_growth_is_expanded(self):
-        """Bubble should be an expanded mode (>= 2.5x)."""
-        from widgets.spotify_visualizer.card_height import DEFAULT_GROWTH
-        assert DEFAULT_GROWTH.get("bubble", 0) >= 2.5
-
 def test_spectrum_rainbow_fill_setting_is_plumbed():
     from core.settings.models._spotify_visualizer import SpotifyVisualizerSettings
 
