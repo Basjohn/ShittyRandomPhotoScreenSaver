@@ -92,6 +92,23 @@ def _is_literal_default(node: ast.AST) -> bool:
     )
 
 
+def _is_none_constant(node: ast.AST) -> bool:
+    return isinstance(node, ast.Constant) and node.value is None
+
+
+def _has_dataclass_decorator(class_node: ast.ClassDef) -> bool:
+    for decorator in class_node.decorator_list:
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        name = (
+            target.attr if isinstance(target, ast.Attribute)
+            else target.id if isinstance(target, ast.Name)
+            else ""
+        )
+        if name == "dataclass":
+            return True
+    return False
+
+
 def _audit_python_file(root: Path, path: Path) -> list[DefaultsAuthorityIssue]:
     relative = path.relative_to(root).as_posix()
     try:
@@ -160,6 +177,33 @@ def _audit_python_file(root: Path, path: Path) -> list[DefaultsAuthorityIssue]:
                             member.lineno,
                             f"{class_node.name}.{field_name} has a literal runtime-config default; "
                             "use canonical authority or an explicitly named runtime constraint",
+                        )
+                    )
+
+        # Settings-schema model dataclasses mirror the canonical product keys.
+        # Every field default must resolve from the canonical authority
+        # (require_canonical_default / a canonical-derived factory), never a bare
+        # literal that becomes a second product-default source -- exactly the
+        # retired shadow ``position: str = "Follow Media"`` that diverged from
+        # DEFAULT_SETTINGS. ``None`` is exempt (a real optional-field sentinel).
+        if relative.startswith("core/settings/models/") and _has_dataclass_decorator(class_node):
+            for member in class_node.body:
+                if (
+                    isinstance(member, ast.AnnAssign)
+                    and member.value is not None
+                    and _is_literal_default(member.value)
+                    and not _is_none_constant(member.value)
+                ):
+                    field_name = (
+                        member.target.id if isinstance(member.target, ast.Name) else "<field>"
+                    )
+                    issues.append(
+                        DefaultsAuthorityIssue(
+                            relative,
+                            member.lineno,
+                            f"{class_node.name}.{field_name} has a literal schema default; "
+                            "source it from require_canonical_default(...) so it cannot become a "
+                            "second product-default authority",
                         )
                     )
 
