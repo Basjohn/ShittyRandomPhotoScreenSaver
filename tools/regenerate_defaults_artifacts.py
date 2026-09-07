@@ -55,17 +55,20 @@ def _runtime_builders():
 
 
 def _build_sst_payload(application: str) -> dict[str, Any]:
-    _build_defaults_snapshot, build_sst_defaults_snapshot, snapshot_version = _runtime_builders()
-    snapshot = build_sst_defaults_snapshot(application)
-    validate_no_private_fields(snapshot, label=f"{application} canonical SST snapshot")
-    return {
-        "settings_version": 2,
-        "application": application,
-        "profile": application,
-        "snapshot_version": snapshot_version,
-        "metadata": dict(GENERATED_METADATA),
-        "snapshot": snapshot,
-    }
+    # Single source of truth: the SST document is built by the one authority in
+    # core.settings.defaults_snapshot_builder, not a second divergent payload
+    # (which only differed by a metadata.generator string and drove spurious
+    # snapshot-stale reports).
+    from core.settings.defaults_snapshot_builder import (
+        build_sst_defaults_document,
+        build_sst_defaults_snapshot,
+    )
+
+    validate_no_private_fields(
+        build_sst_defaults_snapshot(application),
+        label=f"{application} canonical SST snapshot",
+    )
+    return build_sst_defaults_document(application)
 
 
 def _validate_sst_payload(payload: Mapping[str, Any], application: str) -> None:
@@ -87,24 +90,41 @@ def build_artifact_bytes(
     include_json: bool = True,
     include_sst: bool = True,
 ) -> dict[Path, bytes]:
-    """Build and validate requested artifacts entirely in memory."""
-    build_defaults_snapshot, _build_sst_defaults_snapshot, _snapshot_version = _runtime_builders()
+    """Build and validate requested artifacts entirely in memory.
+
+    Serialization is delegated to the single authority in
+    ``core.settings.defaults_snapshot_builder`` so this tool, the runtime
+    ``write_defaults_snapshot``/``write_sst_defaults_documents`` writers, and the
+    ``defaults_authority_audit`` / parity tests all produce byte-identical
+    artifacts. There is deliberately no second snapshot/SST serializer here -- a
+    divergent format was exactly what made the checked-in snapshot flap between
+    "stale" and GREEN depending on which tool wrote it last.
+    """
+    from core.settings.defaults_snapshot_builder import (
+        build_defaults_snapshot,
+        build_sst_defaults_snapshot,
+        serialize_defaults_snapshot,
+        serialize_sst_defaults_document,
+    )
+
     payloads: dict[Path, bytes] = {}
 
     if include_json:
-        defaults_snapshot = build_defaults_snapshot("Screensaver")
-        validate_no_private_fields(defaults_snapshot, label="canonical defaults JSON snapshot")
-        # Preserve the established checked-in artifact format (4-space JSON +
-        # CRLF) to avoid a formatting-only repo rewrite.
-        import json
-        snapshot_text = json.dumps(defaults_snapshot, indent=4, sort_keys=True) + "\n"
-        payloads[Path(defaults_json_path)] = snapshot_text.replace("\n", "\r\n").encode("utf-8")
+        validate_no_private_fields(
+            build_defaults_snapshot("Screensaver"),
+            label="canonical defaults JSON snapshot",
+        )
+        payloads[Path(defaults_json_path)] = serialize_defaults_snapshot().encode("utf-8")
 
     if include_sst:
         for application, filename in EXPORT_TARGETS:
-            payload = _build_sst_payload(application)
-            _validate_sst_payload(payload, application)
-            payloads[Path(docs_dir) / filename] = stable_json_bytes(payload)
+            validate_no_private_fields(
+                build_sst_defaults_snapshot(application),
+                label=f"{application} canonical SST snapshot",
+            )
+            payloads[Path(docs_dir) / filename] = (
+                serialize_sst_defaults_document(application).encode("utf-8")
+            )
 
     return payloads
 
