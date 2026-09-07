@@ -8,7 +8,7 @@ follow this source rather than override it. Regenerate/check the derived JSON wi
 from __future__ import annotations
 
 
-DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 30},
+DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15},
                    'pixel_shift': {'enabled': False, 'rate': 1}},
  'cache': {'max_concurrent': 2, 'max_items': 16, 'max_memory_mb': 256, 'prefetch_ahead': 5},
  'display': {'gl_depth_bits': 24,

@@ -27,7 +27,7 @@ def test_canonical_defaults_have_one_shape_for_previously_duplicated_roots() -> 
     defaults = _literal("core/settings/default_settings.py", "DEFAULT_SETTINGS")
 
     assert defaults["accessibility"] == {
-        "dimming": {"enabled": False, "opacity": 30},
+        "dimming": {"enabled": True, "opacity": 15},
         "pixel_shift": {"enabled": False, "rate": 1},
     }
     assert defaults["workers"] == {

@@ -9,8 +9,8 @@
   "settings_version": 2,
   "snapshot": {
     "accessibility": {
-      "dimming.enabled": false,
-      "dimming.opacity": 30,
+      "dimming.enabled": true,
+      "dimming.opacity": 15,
       "pixel_shift.enabled": false,
       "pixel_shift.rate": 1
     },
