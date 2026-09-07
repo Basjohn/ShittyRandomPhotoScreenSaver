@@ -438,7 +438,14 @@ def _control_defs_for_mode(mode_key: str) -> tuple[_ControlDef, ...]:
             _ControlDef(
                 control_key="mix_slider",
                 config_key=mix_key,
-                default_key=mix_key.split("_", 1)[-1] if "_" in mix_key else mix_key,
+                # Strip the full mode prefix, not just the first underscore token:
+                # a two-token prefix (sine_wave_) would otherwise leave "wave_..."
+                # and re-prefix to the doubled key sine_wave_wave_... at resolve.
+                default_key=(
+                    mix_key[len(mode_key) + 1:]
+                    if mix_key.startswith(f"{mode_key}_")
+                    else mix_key
+                ),
                 widget_kind="slider",
                 default_type="float",
                 label_text=mix_label,
