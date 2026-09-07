@@ -21,7 +21,7 @@ import sys
 import time
 from typing import Any, Callable, Iterable, Mapping
 
-from PySide6.QtCore import QAbstractItemModel, QEvent, QModelIndex, Qt, QSignalBlocker, Signal
+from PySide6.QtCore import QAbstractItemModel, QEvent, QModelIndex, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -66,12 +66,7 @@ from tools.defaults_foundry_core import (  # noqa: E402
     validate_no_absolute_machine_paths,
     validate_no_private_fields,
 )
-from ui.settings_theme import get_active_settings_theme, load_theme  # noqa: E402
-from ui.settings_theme_catalog import (  # noqa: E402
-    activate_catalog_theme,
-    build_settings_theme_catalog,
-)
-from ui.settings_theme_paths import resolve_settings_themes_directory  # noqa: E402
+from ui.settings_theme import load_theme  # noqa: E402
 from ui.styled_popup import ColorSwatchButton  # noqa: E402
 
 DEFAULT_SETTINGS_PATH = REPO_ROOT / "core" / "settings" / "default_settings.py"
@@ -899,18 +894,6 @@ class DefaultSettingsEditor(QMainWindow):
         )
         self.profile_combo.currentIndexChanged.connect(self._on_profile_changed)
         controls.addWidget(self.profile_combo)
-        theme_label = QLabel("Theme")
-        controls.addWidget(theme_label)
-        self.theme_combo = QComboBox()
-        self.theme_combo.setMinimumWidth(240)
-        self.theme_combo.setToolTip(
-            "Preview the Foundry under any discovered Settings theme (the same "
-            "SettingsThemeSpec the Settings window uses). Discovers the built-in "
-            "Default Dark plus every themes/*.srtheme file."
-        )
-        self._populate_theme_combo()
-        self.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
-        controls.addWidget(self.theme_combo)
         self.import_button = QPushButton("Import SST / JSON Into Selected Profile")
         self.import_button.setToolTip(
             "Merge a main-application SST or settings JSON snapshot into the selected defaults view. "
@@ -973,16 +956,6 @@ class DefaultSettingsEditor(QMainWindow):
         layout.addLayout(actions)
 
         load_theme(self)
-        self._apply_foundry_chrome()
-
-    def _apply_foundry_chrome(self) -> None:
-        """Re-append the Foundry's identity chrome over the active Settings theme.
-
-        ``load_theme`` (and any later theme activation) replaces the whole
-        stylesheet with the resolved Settings ThemeSpec, so the Foundry's own
-        distinctive gradient/gold accents must be re-appended after each apply,
-        or a theme switch would strip them.
-        """
         self.setStyleSheet(
             self.styleSheet()
             + """
@@ -1019,43 +992,6 @@ class DefaultSettingsEditor(QMainWindow):
     def _on_profile_changed(self) -> None:
         self._profile = str(self.profile_combo.currentData() or NORMAL_PROFILE)
         self._reload_tree()
-
-    def _populate_theme_combo(self) -> None:
-        """Discover every selectable Settings theme and select the active one."""
-        self._theme_catalog = build_settings_theme_catalog(
-            resolve_settings_themes_directory()
-        )
-        active = get_active_settings_theme()
-        active_id = getattr(active, "theme_id", None)
-        blocker = QSignalBlocker(self.theme_combo)
-        self.theme_combo.clear()
-        selected = 0
-        for index, entry in enumerate(self._theme_catalog.entries):
-            self.theme_combo.addItem(entry.name, entry.theme_id)
-            if entry.source_path is not None:
-                self.theme_combo.setItemData(
-                    index, entry.source_path.name, Qt.ItemDataRole.ToolTipRole
-                )
-            if active_id is not None and entry.theme_id == active_id:
-                selected = index
-        self.theme_combo.setCurrentIndex(selected)
-        del blocker
-
-    def _on_theme_changed(self, _index: int) -> None:
-        theme_id = self.theme_combo.currentData()
-        entry = (
-            self._theme_catalog.entry_by_id(str(theme_id))
-            if theme_id is not None
-            else None
-        )
-        if entry is None:
-            return
-        # Activate the resolved ThemeSpec process-wide; the subscription from
-        # load_theme() re-applies it to this window. Re-append the Foundry chrome
-        # so its identity survives the base-theme swap.
-        activate_catalog_theme(entry)
-        self._apply_foundry_chrome()
-        self._set_status(f"Previewing Settings theme: {entry.name}")
 
     def _origin_for(self, path: tuple[str, ...]) -> str:
         if self._profile == NORMAL_PROFILE:
