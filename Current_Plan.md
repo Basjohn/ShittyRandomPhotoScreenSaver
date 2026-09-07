@@ -1,6 +1,6 @@
 # Current Plan — Migration Closeout Authority
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 Outside of Codex Work Began: `886e6fa419ff130ff2a9aedf5091ae6162d1e958`
 
 ## Active planned work (linked)
@@ -20,6 +20,17 @@ Outside of Codex Work Began: `886e6fa419ff130ff2a9aedf5091ae6162d1e958`
   shared `uniformScaleTransform` seam so CUSTOM resize is geometry-only for every
   ordinary widget — and make that seam the default path so new widgets are cheap to
   add (C4 + new-widget checklist). Not started; C0 evidence harness first.
+  - [ ] **Weather `preferredContentHeight` binding loop:** the physical torture run
+    produced repeated QML binding-loop warnings at `WeatherPresentation.qml`'s
+    `preferredContentHeight` binding during aggressive CUSTOM resize/reposition and
+    multi-display geometry churn. Treat this as a small sizing-correctness/polish bug,
+    not performance degradation. Repair it in the same normalization slice by making
+    the Weather preferred-height path one-directional: content/scale may determine the
+    preferred height, but host/parent geometry must not feed back into the same binding.
+    Do not add a timer, poller, debounce, fallback size authority or second geometry
+    owner. Regression bar: repeated CUSTOM resize/reposition, cross-display movement and
+    runtime recreation must emit zero Weather binding-loop warnings while preserving the
+    current Weather visual size, uniform scaling and stacking behaviour.
 - **Visualizer replay reactivity floor (recreate for this environment):**
   [Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md](Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md).
   Rebuild the deleted replay harness headlessly and arm the 67 existing goldens'

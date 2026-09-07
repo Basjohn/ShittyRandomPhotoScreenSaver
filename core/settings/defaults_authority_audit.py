@@ -17,7 +17,10 @@ from pathlib import Path
 from typing import Iterable
 
 from core.settings.default_contract import MISSING_DEFAULT, get_canonical_default
-from core.settings.defaults_snapshot_builder import defaults_snapshot_matches
+from core.settings.defaults_snapshot_builder import (
+    defaults_snapshot_matches,
+    sst_defaults_documents_match,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -366,6 +369,20 @@ def audit_defaults_authority(root: str | Path | None = None) -> list[DefaultsAut
                 snapshot.relative_to(repo_root).as_posix(),
                 0,
                 "derived defaults snapshot is stale",
+            )
+        )
+
+    # Both checked-in .sst defaults documents are derived artifacts too; guard
+    # their byte-sync here so the single authority audit (and every consumer of
+    # it -- the Build Foundry preflight and the build scripts' preflight tool)
+    # blocks on .sst drift, not only the JSON snapshot.
+    if not sst_defaults_documents_match(repo_root / "Docs"):
+        issues.append(
+            DefaultsAuthorityIssue(
+                "Docs",
+                0,
+                "derived SST defaults documents are stale "
+                "(run: python -m core.settings.defaults_snapshot_builder --write-all)",
             )
         )
 
