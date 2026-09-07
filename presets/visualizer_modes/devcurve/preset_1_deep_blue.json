@@ -7,9 +7,7 @@
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "monitor": "2",
-        "devcurve_growth": 5.0,
-        "devcurve_active_layer": "bass",
+        "devcurve_active_layer": "transients",
         "devcurve_layer_bass_shape_nodes": [
           [
             0.0,
@@ -70,12 +68,16 @@
             0.09353741496598658
           ],
           [
-            0.24796245421245414,
-            0.0901360544217691
+            0.24733953117329405,
+            0.20952380952380995
           ],
           [
-            0.7509500915750915,
-            0.09693877551020408
+            0.4974754540991654,
+            0.14795918367346939
+          ],
+          [
+            0.7521278227785958,
+            0.20553935860058306
           ],
           [
             1.0,
@@ -83,9 +85,9 @@
           ]
         ],
         "devcurve_base_level": 0.3,
-        "devcurve_motion_power": 1.65,
-        "devcurve_idle_motion": 0.06,
-        "devcurve_idle_speed": 0.1,
+        "devcurve_motion_power": 1.72,
+        "devcurve_idle_motion": 0.28,
+        "devcurve_idle_speed": 0.07,
         "devcurve_smoothness": 0.5,
         "devcurve_layer_bass_enabled": true,
         "devcurve_layer_bass_color": [
@@ -148,9 +150,9 @@
           255,
           240
         ],
-        "devcurve_layer_transients_alpha": 0.4,
-        "devcurve_layer_transients_power": 3.0,
-        "devcurve_layer_transients_offset": 0.0,
+        "devcurve_layer_transients_alpha": 0.3,
+        "devcurve_layer_transients_power": 1.6153846153846154,
+        "devcurve_layer_transients_offset": 0.02,
         "devcurve_layer_transients_outline_color": [
           255,
           255,
@@ -187,7 +189,7 @@
         "devcurve_dynamic_floor": true,
         "devcurve_manual_floor": 0.15,
         "devcurve_dynamic_range_enabled": false,
-        "devcurve_agc_strength": 0.1,
+        "devcurve_agc_strength": 0.14,
         "devcurve_input_gain": 1.1,
         "devcurve_kick_lane_gain": 1.0,
         "devcurve_transient_pulse_gain": 1.0,

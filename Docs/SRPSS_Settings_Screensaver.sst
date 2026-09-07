@@ -36,11 +36,11 @@
       "halo_shape": "cursor_light",
       "interaction_mode": false,
       "widget_glow_color": null,
-      "widget_glow_distance": 14,
-      "widget_glow_intensity": 100,
+      "widget_glow_distance": 25,
+      "widget_glow_intensity": 80,
       "widget_glow_jedi_mode": false,
       "widget_glow_on_click": false,
-      "widget_glow_on_hover": false
+      "widget_glow_on_hover": true
     },
     "queue": {
       "history_size": 50,
@@ -183,7 +183,7 @@
         "appearance": false,
         "backend": false,
         "layout": false,
-        "separators": false,
+        "separators": true,
         "sound": false
       },
       "settings_theme_selection": "file:Default Dark [Single] [Glass].srtheme",
@@ -474,14 +474,14 @@
         "margin": 30,
         "monitor": "1",
         "position": "Top Right",
-        "separator_thickness": 2,
+        "separator_thickness": 3,
         "shared_tick": true,
         "show_background": false,
         "show_date": false,
         "show_day_of_week": true,
         "show_numerals": true,
         "show_seconds": true,
-        "show_separator": false,
+        "show_separator": true,
         "show_timezone": true,
         "timezone": "local"
       },
