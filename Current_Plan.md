@@ -20,6 +20,25 @@ Outside of Codex Work Began: `886e6fa419ff130ff2a9aedf5091ae6162d1e958`
   shared `uniformScaleTransform` seam so CUSTOM resize is geometry-only for every
   ordinary widget — and make that seam the default path so new widgets are cheap to
   add (C4 + new-widget checklist). Not started; C0 evidence harness first.
+- **Visualizer replay reactivity floor (recreate for this environment):**
+  [Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md](Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md).
+  Rebuild the deleted replay harness headlessly and arm the 67 existing goldens'
+  quantitative metrics as a **minimum bar** (thresholds below current healthy
+  reactivity, which per operator experience passes today). Floors only — it never
+  constrains or re-blesses current behaviour, only catches a genuine reactivity
+  regression or recovers from a mistake; no exact-pixel goldens, no runtime
+  coupling. Not started.
+- **Gmail `_SharedGmailRuntimeOwner` timer lifecycle leak (bug):** every
+  Settings/runtime reconstruction leaves **another** `_SharedGmailRuntimeOwner`
+  and its poll timer registered — the shared-owner registry
+  (`_SHARED_GMAIL_OWNERS` in `widgets/gmail_runtime.py`) and its
+  `create_overlay_timer`/`OverlayTimerHandle` accumulate across generations
+  instead of the prior owner retiring. Fix at the owning boundary: reconstruction
+  must retire the previous shared owner (stop `_stop_poll_timer` and drop it from
+  `_SHARED_GMAIL_OWNERS` / the overlay-timer registry) so timers do not stack —
+  runtime-owned async work retires with its generation. See existing coverage
+  `tests/test_gmail_retiring_runtime.py`; add a bar that fails when a
+  reconstruction leaves a second live owner/timer. Not started.
 
 ## Defaults sanitization continuation — RECOVERY CHECKPOINT
 
