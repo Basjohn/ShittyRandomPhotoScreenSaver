@@ -751,6 +751,32 @@ class OrdinaryWidgetPresentationHost:
             changed = True
         return changed
 
+    def dismiss_outside_action_popups(self, scene_position: QPointF) -> bool:
+        """Dismiss any widget's transient action popup when a press lands outside it.
+
+        Event-driven, no timer/poll: called once per admitted scene press. A press
+        that lands inside the owning widget is left to that widget's own in-bounds
+        dismiss scrim (which also selects popup rows), so only presses outside the
+        widget's item close its popup. Generic over any widget exposing the QML
+        ``activeActionIdentity`` string property (currently Gmail's three-dot menu).
+        """
+
+        if self._retired:
+            return False
+        changed = False
+        for widget in tuple(self._live):
+            item = widget.item
+            identity = item.property("activeActionIdentity")
+            if not identity:
+                # None -> widget has no action-popup concept; "" -> already closed.
+                continue
+            if item.contains(item.mapFromScene(scene_position)):
+                continue
+            item.setProperty("activeActionIdentity", "")
+            item.setProperty("activeActionMessageId", "")
+            changed = True
+        return changed
+
     def transfer_widget_to(
         self,
         widget: RetainedOverlayWidget,

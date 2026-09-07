@@ -18,6 +18,7 @@ class QuickInputController(RuntimeInputOwner):
 
     input_state_changed = Signal(object)
     widget_glow_pressed = Signal(object, object)
+    admitted_pointer_pressed = Signal(object, object)
     custom_layout_save_requested = Signal()
     custom_layout_cancel_requested = Signal()
 
@@ -168,6 +169,10 @@ class QuickInputController(RuntimeInputOwner):
             return True
         handled = super().handle_mouse_press(event, global_ctrl_held)
         state = self._state
+        # Every admitted press (independent of Click-Glow) can dismiss a widget's
+        # transient action popup when it lands outside that widget. A press inside
+        # the widget is left to the widget's own in-bounds scrim.
+        self.admitted_pointer_pressed.emit(state, event.position())
         if (
             not handled and state.widget_glow_on_click
             and state.admission_open and not state.exiting
