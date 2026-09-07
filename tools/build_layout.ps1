@@ -355,7 +355,6 @@ function Assert-SRPSSOnefileQuickPayloadContract {
         '--include-package=rendering.quick',
         '--include-package=widgets.spotify_visualizer',
         '--include-package=rendering.gl_programs',
-        '--include-package=rendering.gl_compositor_pkg',
         '--include-package=OpenGL',
         '--include-package=pyaudiowpatch',
         '--include-package=sounddevice',
