@@ -268,14 +268,25 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._pre_agc_live_bass: float = 0.0
         self._pre_agc_live_mid: float = 0.0
         self._pre_agc_live_treble: float = 0.0
-        # Pre-AGC lane snapshots are published each processed frame, but a compute
-        # snapshot can be requested before the first frame (the retained lane
-        # rebuilds on gate/activation/config boundaries). Seed them so
-        # make_compute_snapshot never hits an uninitialised attribute -- these are
-        # transient DSP state, not settings defaults.
+        # Every attribute in _COMPUTE_SNAPSHOT_ATTRS must be initialised here.
+        # make_compute_snapshot() deep-copies each one via getattr with no default,
+        # and it can be requested before the first processed frame (the retained
+        # compute lane rebuilds on gate/activation/config boundaries). If any is
+        # assigned only lazily during processing, the snapshot raises AttributeError
+        # every frame -> the beat engine produces zero frames (engine=0/0) -> the
+        # visualizer shows only idle motion even while audio is playing. These are
+        # transient DSP state, not settings defaults; seed them to their first-use
+        # values (see the reset block near _fft_to_bars).
         self._pre_agc_bass: float = 0.0
         self._pre_agc_mid: float = 0.0
         self._pre_agc_treble: float = 0.0
+        self._last_raw_bass: float = 0.0
+        self._last_raw_mid: float = 0.0
+        self._last_raw_treble: float = 0.0
+        self._prev_raw_bass: float = 0.0
+        self._bar_gate_prev1 = None
+        self._bar_gate_prev2 = None
+        self._bar_gate_output = None
 
         # Sensitivity configuration (driven from Settings UI).
         self._cfg_lock = threading.Lock()
