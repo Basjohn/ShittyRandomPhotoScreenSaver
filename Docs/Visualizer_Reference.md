@@ -1,6 +1,6 @@
 # Visualizer Reference
 
-Last updated: 2026-09-02
+Last updated: 2026-09-07
 
 Current visualizer behavior and accepted presentation destination.
 
@@ -13,13 +13,14 @@ Canonical current mode ids remain owned by the settings/mode registry:
 - `sine_wave`
 - `bubble`
 - `devcurve`
+- `sphere` — experimental, FRAMELESS, dormant by default
 
-The mode registry may also own cheap presentation policy metadata. Do not put renderer objects or
+The first five are the established carded technical modes. Sphere is a registered experimental mode with separate frameless presentation policy and no technical-controls profile. The mode registry may also own cheap presentation policy metadata. Do not put renderer objects or
 heavy implementation imports into it.
 
-## 1A. Registered modes vs enabled modes — planned modularization boundary
+## 1A. Registered modes vs enabled modes — landed admission boundary
 
-Current source already has a canonical descriptor registry and some active-descriptor consumers, but per-mode product enable/disable is **not yet a complete production contract**. The planned modularization is decomposed in `Docs/QtQuick_Migration/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md`.
+Per-mode admission/dormancy is implemented. `core/settings/visualizer_mode_registry.py` owns all registered descriptors and lazy wiring; persisted `enabled_modes` owns user mode admission; the top-level Visualizers Settings tab builds mode bodies lazily and keeps disabled/unselected bodies dormant. The old modularization decomposition is retained as historical implementation evidence in `Docs/QtQuick_Migration/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md`.
 
 The destination distinction is:
 
@@ -31,9 +32,7 @@ currently enabled modes
     -> Settings mode pills, selection/cycling, frame-runtime construction, renderer import/construction
 ```
 
-Disabled modes must retain their configuration without contributing meaningful runtime work. If the Visualizer family is enabled, at least one mode remains enabled, but any current mode may be the sole enabled mode. This future admission layer must be behaviorally transparent to cadence, source freshness, presets, renderer transfer, scale/extent and Bubble/BTF.
-
-Do not treat this section as evidence that per-mode enablement is already implemented. `Current_Plan.md` owns admission.
+Disabled modes retain their configuration without contributing meaningful runtime work. If the Visualizer family is enabled, at least one mode remains enabled, but any registered mode may be the sole enabled mode when explicitly admitted. The default enabled-mode set intentionally excludes experimental Sphere, so Sphere remains dormant until the user enables it. Admission must remain behaviorally transparent to cadence, source freshness, presets, renderer transfer, scale/extent and Bubble/BTF.
 
 ## 2. Capability model
 
@@ -44,6 +43,7 @@ Do not treat this section as evidence that per-mode enablement is already implem
 | Sine | yes | yes | no | yes |
 | Oscilloscope | yes | yes | no | yes |
 | DevCurve | yes | yes | no | yes |
+| Sphere (experimental) | yes | yes | no | yes |
 
 Paused Spectrum remains intentionally mixed:
 
@@ -68,7 +68,7 @@ Durable accepted destination flow:
 ```text
 source / engine
     -> sole VisualizerLogicalRuntime
-    -> mode-owned logical frame runtime (spectrum/oscilloscope/sine/bubble/devcurve)
+    -> mode-owned logical frame runtime / capture (spectrum/oscilloscope/sine/bubble/devcurve/sphere)
     -> immutable latest logical publication
     -> GUI/Quick synchronization owner
         -> current resolved presentation state
@@ -149,13 +149,19 @@ clip:
     VIEWPORT_RECT
 ```
 
-All five current production modes remain:
+The five established technical modes remain:
 
 ```text
 CARD + CARD_INTERIOR
 ```
 
-A future mode may explicitly opt into `FRAMELESS + VIEWPORT_RECT`.
+Experimental Sphere is currently:
+
+```text
+FRAMELESS + VIEWPORT_RECT
+```
+
+Future modes must declare one of these policies explicitly.
 
 That removes card background/frame/shadow while preserving the same QQuickWindow, presentation root,
 fade/lifecycle and assigned viewport.
@@ -218,7 +224,7 @@ Preserve visual fidelity:
 
 Stable shell pixels must not be expensively rebuilt every visualizer frame.
 
-### Future frameless modes
+### Frameless modes
 
 Architecture permits a mode to omit:
 
@@ -226,7 +232,7 @@ Architecture permits a mode to omit:
 - border/frame;
 - card shadow.
 
-This is useful for a free-standing 3D object such as the planned deformable sphere.
+Sphere is the current experimental example: a free-standing 3D object using FRAMELESS + VIEWPORT_RECT while remaining inside the same retained Quick scene/lifecycle.
 
 Frameless does not mean display-global or separate-window rendering.
 
@@ -246,13 +252,13 @@ Those values altered card height independently of common width and were already 
 geometry owned the old visualizer. They are not authored mode behavior and are not destination
 settings.
 
-All five current Quick modes share one canonical baseline viewport aspect ratio. A mode switch or
+The five established carded modes share one canonical baseline viewport aspect ratio. A mode switch or
 preset load does not change viewport/card shape.
 
 That canonical baseline aspect is **1.5**. It is the sensible DEFAULT shape for ordinary non-CUSTOM
 layout, not a universal invariant. Distinguish three concepts:
 
-- **default/baseline aspect (1.5)** — the default shape shared by all five modes;
+- **default/baseline aspect (1.5)** — the default card shape shared by the five established carded modes;
 - **resolved runtime size** — for normal non-CUSTOM layout the layout owner resolves an appropriate
   width from widget/media/free-space rules and derives height from the 1.5 baseline aspect (screen-fit
   clamps uniformly); mode presets tune authored visual behaviour, never viewport/card dimensions;
@@ -298,9 +304,9 @@ Expected adaptation at constant scale:
 - Bubble expands/reflows its position, trail and motion world without stretching circles; stream/drift deltas project once per expanded axis, nonbaseline trail smear is solved in renderer-content coordinates, and swirl orbit/birth geometry removes the independent domain axes so visible travel does not fall by `1 / domain_axis` or distort with aspect; its authored radius projects through the equal-area canonical height described below; collision/spawn policy remains canonical normalized content-space separation, with unchanged BTF event behavior;
 - Bubble lifecycle distances (entry depth/margin, cluster spread, exit/drain and contraction grace, overlap retry and pre-entry prediction) are likewise renderer-content values projected once per expanded axis; canonical literals and random draw order remain exact;
 - Oscilloscope/Sine/DevCurve adapt domain while keeping stroke scale;
-- a future 3D sphere uses aspect-correct projection and stays round.
+- Sphere uses aspect-correct projection and stays round.
 
-All five current modes support this destination operation and the core Bubble capability/reflow path is landed. Do not
+All six registered modes are viewport-resize-capable through their declared presentation policy; the five established carded modes share the card geometry contract, while Sphere uses its frameless viewport policy. The core Bubble capability/reflow path is landed. Do not
 reintroduce a Bubble false gate to conceal an implementation defect. Current G4 audit work is narrower: keep committed
 viewport truth separate from the temporary CUSTOM working override and close the remaining nonbaseline Bubble spatial edge
 cases without changing authored behavior. `Current_Plan.md` owns the exact open correction list.

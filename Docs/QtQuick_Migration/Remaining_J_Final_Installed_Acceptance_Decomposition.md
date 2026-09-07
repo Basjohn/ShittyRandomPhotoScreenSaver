@@ -237,7 +237,7 @@ subject.
 
 ### Visualizer — all modes
 
-Physically inspect all five current modes under representative music/source conditions:
+Physically inspect the five established production/technical modes under representative music/source conditions. Experimental Sphere is dormant-by-default and is **not** a migration-close visual-fidelity gate; assess it only when current Future Work explicitly admits Sphere:
 
 ```text
 Spectrum

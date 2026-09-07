@@ -1,6 +1,6 @@
 # Historical Bug Records
 
-Last updated: 2026-09-01
+Last updated: 2026-09-07
 
 Authoritative standalone incident records for significant SRPSS regressions.
 `Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory own the full
@@ -30,6 +30,8 @@ Rehome surviving regression coverage before deleting an old owner.
 
 Current migration implementation sequencing is **not** owned by this folder. Read `Current_Plan.md` for current status.
 
+Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDATION` describe the incident record unless this index and `Current_Plan.md` explicitly promote the item as current. They do not independently admit work.
+
 - R-69 Bubble extreme-viewport scaling is **accepted as a golden contract**: never reintroduce global viewport compression of authored head/Ghost response. Any oversized extreme expansion tail is separate J visual debt.
 
 ## R Records
@@ -48,6 +50,7 @@ Current migration implementation sequencing is **not** owned by this folder. Rea
 - [R-63 — Display-1 Black Flash From Fullscreen-Flip PresentMode Transitions](R-63_Display1_Black_Flash_Fullscreen_Flip_Promotion.md)
 - [R-62 — Transition-Scoped Presentation Deferral Degraded Bubble](R-62_Transition_Scoped_Presentation_Deferral_Bubble_Regression.md)
 - [R-61 — Settings Glass Used The Wrong Composition Family For A Layered QWidget](R-61_Settings_Glass_Layered_HWND_Backdrop_Mismatch.md)
+- [R-61B — Visualizer Presentation Became Bound To Transition Timing](R-61B_Visualizer_Presentation_Bound_To_Transition_Timer.md)
 - [R-60 — ImagePresenter DPR Split Rekeyed The Retained Current Texture](R-60_ImagePresenter_DPR_Texture_Identity.md)
 - [R-59 — Frozen Settings/Edit Recreation Retained Compiled Bound Methods](R-59_Runtime_Settings_Request_Input_Stack_Teardown.md)
 - [R-58 — Move To Custom Copied Stale Backing Values Instead Of The Curated Runtime State](R-58_Visualizer_Move_To_Custom_Preset_Authority.md)

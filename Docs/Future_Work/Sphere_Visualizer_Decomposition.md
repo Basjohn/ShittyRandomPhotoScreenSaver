@@ -1,6 +1,6 @@
 # Deformable Sphere visualizer
 
-Status: implemented and automatic/visual prototype checks passed; operator acceptance remains below. Live sequencing: `FWPlan.md`.
+Status: **CURRENT FUTURE-WORK REFERENCE — implementation substrate exists and is dormant-by-default, but visual fidelity is not accepted. Preserve reusable lazy 3D architecture while reassessing representation/material quality through `FWPlan.md`.**
 Pre-implementation comparison/rollback HEAD: `f8def8ee8cbd99527b513494bb2068417144452c`.
 The operator explicitly requested an ambitious 3D item after Glow and Slide. This is a new experiment;
 it does not claim to reconstruct the lost historical Blob.

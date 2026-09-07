@@ -1,6 +1,6 @@
 # Project Overview
 
-Last updated: 2026-09-01
+Last updated: 2026-09-07
 
 SRPSS is a Windows screensaver/media runtime with multi-display image presentation, accelerated transitions, a
 high-fidelity multi-mode visualizer, configurable runtime overlays and durable settings.
@@ -25,14 +25,14 @@ The old `DisplayWidget` / QRhiWidget / `GLCompositorWidget` physical path was re
 
 Exact sequence and source checkpoint live only in `Current_Plan.md`; this overview deliberately does not carry a commit hash.
 
-- F/G are closed;
-- H is closed: Quick is the sole production presentation authority and post-cutover functional/performance acceptance is preserved in `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md`;
-- the production cutover and caller-proven Phase-I cleanup are closed; surviving residue/deletion debt is tracked explicitly in `Future_Cleanup.md` rather than treated as an active migration phase;
-- the project is in post-cutover **J+** acceptance/polish: current visual parity, Visualizer recreation-delivery quality, resource/optimization work and final compiled/installed/physical acceptance are sequenced only by `Current_Plan.md`.
+- F/G/H and caller-proven Phase-I cleanup are closed; Quick is the sole production presentation authority.
+- Visualizer CUSTOM/lifecycle closeout and Bubble reference parity are closed evidence.
+- remaining migration-close work is product-readiness/build/install/physical acceptance and any specifically admitted current regression; exact status/sequence lives only in `Current_Plan.md`.
+- surviving cleanup/deletion debt belongs in `Future_Cleanup.md`; deferred product work belongs in `FWPlan.md` / focused Future Work references. Closed migration slices are not re-opened merely because their decompositions remain on disk.
 
 ## Visualizer geometry
 
-All five current visualizer modes support the destination scale/extent model:
+Visualizer mode identity now has two useful sets: five established carded technical modes (Spectrum, Oscilloscope, Sine, Bubble, DevCurve) plus the separately registered experimental Sphere. All registered modes use the destination scale/extent ownership model; Sphere is FRAMELESS + VIEWPORT_RECT and dormant by default.
 
 ```text
 wheel/corners -> uniform scale

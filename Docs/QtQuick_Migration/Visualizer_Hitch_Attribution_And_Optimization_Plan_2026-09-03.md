@@ -1,6 +1,6 @@
 # Visualizer Hitch Attribution + Optimization Plan — 2026-09-03
 
-Status: **P0 ACTIVE / evidence-led**  
+Status: **RETIRED / HISTORICAL ATTRIBUTION PLAN — its P0 sequence is superseded by later closeout evidence. Reuse only proven measurements/guardrails; current optimization requires fresh admission through `Current_Plan.md` + Performance Optimization Contract.**  
 Scope: recurring and activation/recreation delivery stalls that are visible in retained Qt Quick Visualizer presentation.  
 Primary physical oracles: **Bubble** and **extreme-tall Spectrum**.
 

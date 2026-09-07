@@ -152,17 +152,19 @@ clip:
     VIEWPORT_RECT
 ```
 
-All current five modes remain:
+The five established technical modes remain:
 
 ```text
 CARD + CARD_INTERIOR
 ```
 
-A future explicitly authored frameless mode may use:
+Experimental Sphere currently uses:
 
 ```text
 FRAMELESS + VIEWPORT_RECT
 ```
+
+Future modes must declare one of these policies explicitly.
 
 `FRAMELESS` removes card background/frame/shadow only. It does not create a new native window and does
 not grant unrestricted display-wide drawing.
@@ -224,7 +226,7 @@ Card frame and custom GL may not use competing geometry calculations.
 
 ## 9. Geometry: one baseline aspect; scale and viewport extent are distinct
 
-All five current modes share one canonical baseline viewport aspect in the Quick architecture. Mode changes and mode presets do not resize that baseline viewport. The legacy per-mode `spectrum_growth`, `osc_growth`, `sine_wave_growth`, `bubble_growth`, and `devcurve_growth` card-height controls are retired and must not be copied into Quick.
+The five established carded modes share one canonical baseline viewport aspect in the Quick architecture. Mode changes and mode presets do not resize that baseline viewport. The legacy per-mode `spectrum_growth`, `osc_growth`, `sine_wave_growth`, `bubble_growth`, and `devcurve_growth` card-height controls are retired and must not be copied into Quick.
 
 The visualizer geometry model must distinguish:
 
@@ -247,8 +249,7 @@ left/right edge -> viewport width only
 top/bottom edge -> viewport height only
 ```
 
-All five current production modes must support this destination operation, including Bubble. The core capability policy is
-landed for all five modes; do not reintroduce a false Bubble gate as a workaround for viewport defects.
+All six registered modes must remain viewport-resize-capable through their declared policy. The five established carded modes, including Bubble, share this destination operation; Sphere uses its frameless viewport policy. The core capability policy is landed; do not reintroduce a false Bubble gate as a workaround for viewport defects.
 
 Do not implement wide/tall visualizers by stretching a rendered texture or scaling X and Y independently. Do not use a
 retired per-mode growth value as a hidden viewport-extent alias.
@@ -284,7 +285,7 @@ Axis rules:
 - stroke widths, glow radii and other pixel-like authored sizes normally follow `uniform_visual_scale`, not edge-expanded viewport extent;
 - BeatEngine/DSP/source magnitude is upstream authored signal and must not be attenuated to hide a renderer/presentation scaling defect.
 
-Current five-mode audit (2026-09-02):
+Historical five-technical-mode audit (2026-09-02):
 
 | Mode | Edge-expanded geometry | Temporal/scaling status | Guardrail |
 | --- | --- | --- | --- |

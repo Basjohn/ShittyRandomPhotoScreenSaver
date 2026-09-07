@@ -1,10 +1,10 @@
 # Test Suite Guide
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
 ## Current authority
 
-The production Qt Quick cutover and caller-proven I cleanup are complete. Current testing is post-cutover: P0 Visualizer delivery/hitch removal, mode dormancy/modularity, remaining J/Parity+ visual acceptance, theme/runtime correctness and resource/lifecycle hardening. `Current_Plan.md` owns sequence; the exact current source/test tree and the maintained `destination` profile own executable test membership.
+The production Qt Quick cutover and caller-proven I cleanup are complete. M0 CUSTOM/lifecycle and M1 Bubble-reference parity are closed evidence; current maintained testing is migration-close/product-readiness plus any specifically admitted regression, build/install/physical acceptance, theme/runtime correctness and resource/lifecycle hardening. `Current_Plan.md` alone owns sequence; the exact current source/test tree and maintained `destination` profile own executable membership.
 
 Permanent destination guardrails include:
 
@@ -22,6 +22,12 @@ Permanent destination guardrails include:
 This document is now a **testing guide plus preserved migration reconciliation ledger**, not a second hand-maintained inventory authority. The large section-10 tables are a dated 2026-09-01 migration-audit snapshot explaining why old tests were kept/re-homed/deleted. They may mention files that have since been removed or renamed. Do not restore an old owner or stale test merely because a historical row names it.
 
 Current membership is determined from the exact tree and `tests/run_chunked.py` profile definitions. Whenever a current checkpoint adds/removes/re-homes a maintained test, update the current additions/contract notes in this document; do not try to keep the old migration snapshot pretending to be a live filesystem listing.
+
+### 2026-09-07 — Settings schema completeness vs runtime-state initialization
+
+- `tests/test_settings_defaults_completeness.py` is a **settings-contract** gate: descriptor-required/default-resolvable settings and per-mode technical keys must resolve canonically or be explicitly derivable-by-design. It is not permission to turn arbitrary runtime attributes into persisted Settings.
+- Runtime-only state (for example DSP snapshot history/readiness/caches) must be seeded and tested at its runtime owner. A constructor/read path requiring a field does not by itself establish schema membership.
+- Removing a canonical setting requires a consumer/persistence/import audit proving the replacement authority in the same slice; adding one requires proof that it is durable user/product configuration.
 
 ### 2026-09-06 — 5.0.0 installer migration-reset contract
 

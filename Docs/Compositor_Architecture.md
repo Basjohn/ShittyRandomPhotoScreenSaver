@@ -170,7 +170,7 @@ The presenter never advances authored visualizer simulation.
 
 Card existence is a presentation policy, not a universal visualizer invariant.
 
-All five current production modes use:
+The five established technical modes use:
 
 ```text
 shell_policy = CARD
@@ -210,7 +210,7 @@ One visualizer geometry authority feeds retained shell/chrome, clip geometry, cu
 runtime base is the committed presentation geometry; an active CUSTOM session may supply a temporary working override.
 Those are precedence levels within one geometry/configuration contract, not competing writable authorities.
 
-All five current modes share one canonical baseline viewport aspect. Mode changes and visualizer
+The five established carded modes share one canonical baseline viewport aspect. Mode changes and visualizer
 presets do not change it.
 
 The old per-mode card-height/growth controls are not destination geometry:
@@ -236,7 +236,7 @@ aspect.
 
 Required retained CUSTOM left/right edge resize changes viewport width only, while top/bottom edge resize changes
 viewport height only, at unchanged visual scale. That changes available mode playroom rather than stretching final
-rendered pixels. All five current modes must support it, including Bubble.
+rendered pixels. All six registered modes must remain viewport-resize-capable through their declared policy; the five carded modes include Bubble and Sphere uses FRAMELESS + VIEWPORT_RECT.
 
 Where a logical mode needs spatial bounds, the effective viewport metrics are configuration input to the logical side and
 never another clock. Outside CUSTOM the committed extent is truth; while editing, the working CUSTOM extent temporarily

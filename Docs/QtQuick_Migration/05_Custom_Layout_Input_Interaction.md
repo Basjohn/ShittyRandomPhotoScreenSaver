@@ -96,7 +96,7 @@ top/bottom edge -> viewport extent height only
 This changes world/layout playroom and current aspect while keeping `uniform_visual_scale` constant. It is not X/Y
 stretch of a rendered image.
 
-All five current modes participate: Spectrum, Oscilloscope, Sine, Bubble and DevCurve. The core Bubble logical reflow and
+All six registered modes participate. Spectrum, Oscilloscope, Sine, Bubble and DevCurve use the established carded path; experimental Sphere uses the frameless viewport path. The core Bubble logical reflow and
 all-five-mode capability policy are landed; do not reintroduce a false gate as a workaround.
 
 Bubble receives viewport bounds as spatial configuration, preserving circles/radii, trajectories/collisions,

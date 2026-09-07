@@ -1,6 +1,6 @@
 # Presentation / Cadence Change Preflight
 
-Last updated: 2026-09-01
+Last updated: 2026-09-07
 
 Read before changing physical presentation, visualizer delivery, cadence or render-state ownership.
 
@@ -45,7 +45,7 @@ left/right edge        -> viewport width
  top/bottom edge       -> viewport height
 ```
 
-All five current modes, including Bubble, must support the viewport operation. Bubble viewport changes are spatial
+All six registered modes must remain viewport-resize-capable through their declared policy. The five established carded modes include Bubble; experimental Sphere uses its frameless viewport policy. Bubble viewport changes are spatial
 configuration and remain subordinate to BTF; they are not grounds for algorithm/cadence retuning.
 
 R-69 is a hard preflight veto: do not make wide/tall geometry look tidier by globally shrinking authored response amplitude, Bubble head radius, motion or already-normalized Ghost/history displacement. Apply the same principle to every mode. Extreme-tail polish must target only the proven visual tail.

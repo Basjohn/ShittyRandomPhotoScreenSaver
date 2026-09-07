@@ -1,6 +1,6 @@
 # Defaults Guide
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
 Canonical guidance for defaults, reset behavior, snapshots, import safety and runtime application.
 
@@ -39,6 +39,21 @@ presentation policy rather than a user-facing product setting, keep it local and
 
 `None` is a real persisted value when the schema permits it; it is not interchangeable with a missing key.
 Fresh Settings bucket-expansion state is canonical under `ui.*_bucket_states` and currently starts collapsed.
+
+### Schema admission is not runtime initialization
+
+A runtime consumer needing a value **does not make that value persisted Settings schema**. Classify the value before adding/removing a canonical default:
+
+```text
+user/product configuration meant to survive restart -> persisted Settings + canonical default
+derived configuration from persisted state/environment -> resolved runtime projection
+transient DSP/lifecycle/readiness/cache/history state -> runtime owner initialization/state
+renderer/catalog/implementation capability fact -> implementation metadata
+```
+
+Never add a canonical key merely to silence an `AttributeError`/`KeyError` from transient runtime state. Conversely, never remove a canonical setting merely because it looks presentation/runtime-like: first prove every current consumer and persistence/import path has a legitimate replacement authority in the same change. The 2026-09-06 sanitization exposed both failure directions: unseeded transient Visualizer DSP snapshot attributes belonged in `audio_worker.__init__`, while stale default-init descriptors incorrectly requested unprefixed Visualizer appearance fields that were actually projected from mode-owned settings.
+
+The permanent completeness tests are therefore intentionally **settings-contract** tests, not a claim that every runtime attribute belongs in schema. `tests/test_settings_defaults_completeness.py` covers current settings/default-resolvable descriptors and per-mode technical keys, allowing explicit derivation-by-design; runtime-state initialization needs its own owner-specific tests.
 
 ## Approved fresh-profile baseline (2026-09-06)
 

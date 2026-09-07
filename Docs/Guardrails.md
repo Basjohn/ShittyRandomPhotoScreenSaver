@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-09-01
+Last updated: 2026-09-07
 
 ## Architecture decision
 
@@ -18,7 +18,7 @@ Do not use `QQuickWidget`, second accelerated runtime surfaces, or restore/deepe
 
 A working legacy screensaver during intermediate migration slices is **not** required. Do not preserve, restore or
 invent old QWidget/compositor presentation solely so the half-migrated app keeps running. Caller-dead old pixels may be
-deleted once their destination contract is owned and proven. H already established final production ownership; I removes caller-dead residue and J proves final visual/compiled/installed/physical quality.
+deleted once their destination contract is owned and proven. H established final production ownership and caller-proven Phase-I cleanup is closed. Surviving residue is explicit cleanup debt; final compiled/installed/physical quality is proven through the current migration-close acceptance gates.
 
 ## Priority
 
@@ -80,7 +80,7 @@ uniform_visual_scale   # wheel/corner whole-size scaling
 viewport_extent        # independent world/playroom width/height
 ```
 
-All five current modes support both destination operations. Edge viewport resize is configuration, not a clock. Bubble
+All six registered modes are viewport-resize-capable through their declared presentation policy. The five established carded technical modes share the card geometry path; experimental Sphere uses FRAMELESS + VIEWPORT_RECT. Edge viewport resize is configuration, not a clock. Bubble
 must receive changed spatial bounds without deforming circles or compromising BTF. Ordinary committed viewport extent
 remains truth outside CUSTOM; a working CUSTOM extent is a temporary override only. Leaving CUSTOM must not reset a saved
 non-baseline layout to canonical by confusing "no override" with "baseline".

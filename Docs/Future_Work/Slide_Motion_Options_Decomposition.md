@@ -1,6 +1,6 @@
 # Slide motion options
 
-Status: Elastic, Wobble and Flex timing correction validated automatically; physical acceptance open. Live sequence: `FWPlan.md`.
+Status: **RETIRED / HISTORICAL REFERENCE — Elastic, Wobble and Flex are landed/closed. Perspective remains a separately designed future feature and is not admitted by this old implementation checklist.**
 Pre-implementation comparison/rollback HEAD: `a90c0f0d26cc80e7739cc39fbe81e1c1d4e943d7`.
 
 ## Foundation and ownership
