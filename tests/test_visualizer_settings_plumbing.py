@@ -18,6 +18,8 @@ import pytest
 from PySide6.QtCore import QRect
 from PySide6.QtGui import QColor
 
+from tests._settings_context_stub import CanonicalWidgetDefaultsStub
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -59,7 +61,17 @@ def test_spectrum_rainbow_fill_setting_is_plumbed():
     assert model.spectrum_rainbow_fill is False
 
     from widgets.spotify_visualizer.config_applier import _populate_shared_visualizer_extras
-    host = type("Host", (), {"_spectrum_rainbow_fill": False})()
+
+    class _Host:
+        # Only _spectrum_rainbow_fill is asserted here; the shared-extras copier
+        # reads the full presentation contract, so fabricate the rest so the copy
+        # resolves (a bare host reads its own attributes -- no presentation state).
+        _spectrum_rainbow_fill = False
+
+        def __getattr__(self, _name):
+            return False
+
+    host = _Host()
     extra = {}
     _populate_shared_visualizer_extras(extra, host)
     assert extra["spectrum_rainbow_fill"] is False
@@ -611,24 +623,42 @@ class TestPresetOverlayRuntimeOverrides:
 class TestBubbleSimulationThreadSafety:
     """Verify bubble simulation accepts dict energy_bands (for COMPUTE thread)."""
 
+    @staticmethod
+    def _bubble_settings(**overrides):
+        """A complete bubble tick config from canonical defaults, plus overrides.
+
+        ``BubbleSimulation.tick`` reads its bubble settings fail-loud
+        (``settings[key]`` with no default), matching how production always hands
+        it a fully-resolved config. Building from canonical keeps the test aligned
+        with the schema as bubble controls are added, instead of hand-listing keys.
+        """
+        from core.settings.default_contract import require_canonical_default
+
+        canonical = require_canonical_default("widgets.spotify_visualizer")
+        settings = {
+            key: value for key, value in canonical.items() if key.startswith("bubble_")
+        }
+        settings.update(overrides)
+        return settings
+
     def test_tick_accepts_dict_energy_bands(self):
         from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
         sim = BubbleSimulation()
         eb_dict = {"bass": 0.5, "mid": 0.3, "high": 0.2, "overall": 0.4}
-        settings = {
-            "bubble_big_count": 5,
-            "bubble_small_count": 10,
-            "bubble_surface_reach": 0.6,
-            "bubble_stream_direction": "up",
-            "bubble_stream_constant_speed": 0.5,
-            "bubble_stream_speed_cap": 2.0,
-            "bubble_stream_reactivity": 0.5,
-            "bubble_rotation_amount": 0.5,
-            "bubble_drift_amount": 0.5,
-            "bubble_drift_speed": 0.5,
-            "bubble_drift_frequency": 0.5,
-            "bubble_drift_direction": "random",
-        }
+        settings = self._bubble_settings(
+            bubble_big_count=5,
+            bubble_small_count=10,
+            bubble_surface_reach=0.6,
+            bubble_stream_direction="up",
+            bubble_stream_constant_speed=0.5,
+            bubble_stream_speed_cap=2.0,
+            bubble_stream_reactivity=0.5,
+            bubble_rotation_amount=0.5,
+            bubble_drift_amount=0.5,
+            bubble_drift_speed=0.5,
+            bubble_drift_frequency=0.5,
+            bubble_drift_direction="random",
+        )
         # Should not raise — dict must be accepted, not just objects
         sim.tick(0.016, eb_dict, settings)
         pos, extra, trail = sim.snapshot(
@@ -643,16 +673,20 @@ class TestBubbleSimulationThreadSafety:
         """Graceful handling of None energy bands."""
         from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
         sim = BubbleSimulation()
-        settings = {
-            "bubble_big_count": 3, "bubble_small_count": 5,
-            "bubble_surface_reach": 0.6, "bubble_stream_direction": "none",
-            "bubble_stream_constant_speed": 0.5,
-            "bubble_stream_speed_cap": 0.5,
-            "bubble_stream_reactivity": 0.0,
-            "bubble_rotation_amount": 0.0, "bubble_drift_amount": 0.0,
-            "bubble_drift_speed": 0.0, "bubble_drift_frequency": 0.0,
-            "bubble_drift_direction": "none",
-        }
+        settings = self._bubble_settings(
+            bubble_big_count=3,
+            bubble_small_count=5,
+            bubble_surface_reach=0.6,
+            bubble_stream_direction="none",
+            bubble_stream_constant_speed=0.5,
+            bubble_stream_speed_cap=0.5,
+            bubble_stream_reactivity=0.0,
+            bubble_rotation_amount=0.0,
+            bubble_drift_amount=0.0,
+            bubble_drift_speed=0.0,
+            bubble_drift_frequency=0.0,
+            bubble_drift_direction="none",
+        )
         # None energy bands should not crash
         sim.tick(0.016, None, settings)
 
@@ -942,19 +976,11 @@ class TestPerModeTechnicalControlPresentation:
             def get(self, *_args, **_kwargs):
                 return {}
 
-        class _DummyTab(QWidget):
+        class _DummyTab(CanonicalWidgetDefaultsStub, QWidget):
             def __init__(self):
-                super().__init__()
+                QWidget.__init__(self)
+                CanonicalWidgetDefaultsStub.__init__(self)
                 self._settings = _DummySettings()
-
-            def _default_bool(self, *_args):
-                return False
-
-            def _default_int(self, _section, _key, default):
-                return default
-
-            def _default_float(self, _section, _key, default):
-                return default
 
             def _save_settings(self):
                 return None
@@ -1359,7 +1385,9 @@ class TestVisualizerSettingsSnapshotNormalization:
                 "mode": "bubble",
                 "manual_floor": 0.22,
                 "input_gain": 0.75,
-                "bubble_growth": 3.1,
+                # An already mode-prefixed non-technical key must pass through
+                # unchanged (bubble_growth was retired; use a live bubble key).
+                "bubble_big_bass_pulse": 0.61,
             },
         )
 
@@ -1368,7 +1396,7 @@ class TestVisualizerSettingsSnapshotNormalization:
         defaults = SpotifyVisualizerSettings()
         assert normalized["bubble_manual_floor"] == pytest.approx(defaults.resolve_manual_floor("bubble"))
         assert normalized["bubble_input_gain"] == pytest.approx(defaults.resolve_input_gain("bubble"))
-        assert normalized["bubble_growth"] == pytest.approx(3.1)
+        assert normalized["bubble_big_bass_pulse"] == pytest.approx(0.61)
 
     def test_section_normalizer_preserves_bubble_bounce_keys(self):
         from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
@@ -1467,21 +1495,16 @@ class TestVisualizerModeBinding:
             def setText(self, text):
                 self.text = text
 
-        class _Tab:
+        class _Tab(CanonicalWidgetDefaultsStub):
             def __init__(self):
                 # V7: mode selection is context-owned, not combo-owned. The active
                 # mode is the canonical id the pills write.
+                super().__init__()
                 self._active_visualizer_mode_id = "bubble"
                 self.rainbow_enabled = _Check()
                 self.rainbow_speed_slider = _Slider()
                 self.rainbow_speed_label = _Label()
                 self.rainbow_updates = 0
-
-            def _config_bool(self, _section, config, key, default):
-                return config.get(key, default)
-
-            def _config_float(self, _section, config, key, default):
-                return config.get(key, default)
 
             def _update_rainbow_visibility(self):
                 self.rainbow_updates += 1
@@ -1520,9 +1543,10 @@ class TestVisualizerModeBinding:
             def value(self):
                 return self._value
 
-        class _Tab:
+        class _Tab(CanonicalWidgetDefaultsStub):
             def __init__(self):
                 # V7: the active mode is the context-owned canonical id.
+                super().__init__()
                 self._active_visualizer_mode_id = "bubble"
                 self.rainbow_enabled = _Check(True)
                 self.rainbow_speed_slider = _Slider(63)
@@ -1688,8 +1712,9 @@ class TestOscilloscopeSettingsBinding:
             def setText(self, text):
                 self.text = text
 
-        class _Tab:
+        class _Tab(CanonicalWidgetDefaultsStub):
             def __init__(self):
+                super().__init__()
                 self.osc_glow_enabled = _Check()
                 self.osc_glow_intensity = _Slider()
                 self.osc_glow_intensity_label = _Label()
@@ -1700,8 +1725,6 @@ class TestOscilloscopeSettingsBinding:
                 self.osc_line_amplitude_label = _Label()
                 self.osc_smoothing = _Slider()
                 self.osc_smoothing_label = _Label()
-                self.osc_growth = _Slider()
-                self.osc_growth_label = _Label()
                 self.osc_speed = _Slider()
                 self.osc_speed_label = _Label()
                 self.osc_line_dim = _Check()
@@ -1719,12 +1742,6 @@ class TestOscilloscopeSettingsBinding:
                 self.osc_ghost_decay_label = _Label()
                 self.osc_ghost_line2_enabled = _Check()
                 self.osc_ghost_line3_enabled = _Check()
-
-            def _config_bool(self, _section, config, key, default):
-                return config.get(key, default)
-
-            def _config_float(self, _section, config, key, default):
-                return config.get(key, default)
 
         tab = _Tab()
         synced = []
@@ -1745,7 +1762,6 @@ class TestOscilloscopeSettingsBinding:
                 "osc_reactive_glow": False,
                 "osc_line_amplitude": 4.7,
                 "osc_smoothing": 0.58,
-                "osc_growth": 2.6,
                 "osc_speed": 0.72,
                 "osc_line_dim": True,
                 "osc_line_offset_bias": 0.23,
@@ -1774,7 +1790,6 @@ class TestOscilloscopeSettingsBinding:
         assert tab.osc_glow_reactivity.value == 144
         assert tab.osc_line_amplitude.value == 47
         assert tab.osc_line_amplitude_label.text == "4.7x"
-        assert tab.osc_growth.value == 260
         assert tab.osc_speed.value == 72
         assert tab.osc_line_dim.checked is True
         assert tab.osc_line_offset_bias.value == 23
@@ -1822,14 +1837,13 @@ class TestOscilloscopeSettingsBinding:
             def value(self):
                 return self._value
 
-        class _Tab:
+        class _Tab(CanonicalWidgetDefaultsStub):
             osc_glow_enabled = _Check(True)
             osc_glow_intensity = _Slider(66)
             osc_glow_reactivity = _Slider(135)
             osc_reactive_glow = _Check(False)
             osc_line_amplitude = _Slider(42)
             osc_smoothing = _Slider(77)
-            osc_growth = _Slider(245)
             osc_speed = _Slider(81)
             osc_line_dim = _Check(True)
             osc_line_offset_bias = _Slider(18)
@@ -1863,7 +1877,6 @@ class TestOscilloscopeSettingsBinding:
         assert payload["osc_line_color"] == [1, 2, 3, 4]
         assert payload["osc_glow_color"] == [5, 6, 7, 8]
         assert payload["osc_line_count"] == 3
-        assert payload["osc_growth"] == pytest.approx(2.45)
         assert payload["osc_speed"] == pytest.approx(0.81)
         assert payload["osc_line_dim"] is True
         assert payload["osc_line_offset_bias"] == pytest.approx(0.18)
@@ -1908,8 +1921,9 @@ class TestSineWaveSettingsBinding:
             def setCurrentIndex(self, index):
                 self.index = index
 
-        class _Tab:
+        class _Tab(CanonicalWidgetDefaultsStub):
             def __init__(self):
+                super().__init__()
                 self.sine_glow_enabled = _Check()
                 self.sine_glow_intensity = _Slider()
                 self.sine_glow_intensity_label = _Label()
@@ -1955,8 +1969,6 @@ class TestSineWaveSettingsBinding:
                 self.sine_line_offset_bias_label = _Label()
                 self.sine_card_adaptation = _Slider()
                 self.sine_card_adaptation_label = _Label()
-                self.sine_wave_growth = _Slider()
-                self.sine_wave_growth_label = _Label()
                 self.sine_ghost_enabled = _Check()
                 self.sine_ghost_opacity = _Slider()
                 self.sine_ghost_opacity_label = _Label()
@@ -1964,15 +1976,6 @@ class TestSineWaveSettingsBinding:
                 self.sine_ghost_decay_label = _Label()
                 self.sine_ghost_line2_enabled = _Check()
                 self.sine_ghost_line3_enabled = _Check()
-
-            def _config_bool(self, _section, config, key, default):
-                return config.get(key, default)
-
-            def _config_float(self, _section, config, key, default):
-                return config.get(key, default)
-
-            def _default_float(self, _section, key, default):
-                return default
 
         tab = _Tab()
         synced = []
@@ -2012,7 +2015,6 @@ class TestSineWaveSettingsBinding:
                 "sine_line_dim": True,
                 "sine_line_offset_bias": 0.29,
                 "sine_card_adaptation": 0.41,
-                "sine_wave_growth": 2.9,
                 "sine_ghosting_enabled": False,
                 "sine_ghost_alpha": 0.36,
                 "sine_ghost_decay": 0.47,
@@ -2052,7 +2054,6 @@ class TestSineWaveSettingsBinding:
         assert tab.sine_line_dim.checked is True
         assert tab.sine_line_offset_bias.value == 28
         assert tab.sine_card_adaptation.value == 41
-        assert tab.sine_wave_growth.value == 290
         assert tab.sine_ghost_enabled.checked is False
         assert tab.sine_ghost_opacity.value == 36
         assert tab.sine_ghost_decay_slider.value == 47
@@ -2100,7 +2101,7 @@ class TestSineWaveSettingsBinding:
             def currentIndex(self):
                 return self._index
 
-        class _Tab:
+        class _Tab(CanonicalWidgetDefaultsStub):
             sine_glow_enabled = _Check(True)
             sine_glow_intensity = _Slider(64)
             sine_glow_reactivity = _Slider(145)
@@ -2127,7 +2128,6 @@ class TestSineWaveSettingsBinding:
             sine_line_dim = _Check(True)
             sine_line_offset_bias = _Slider(26)
             sine_card_adaptation = _Slider(37)
-            sine_wave_growth = _Slider(305)
             _sine_line2_color = QColor(9, 10, 11, 12)
             _sine_line2_glow_color = QColor(13, 14, 15, 16)
             _sine_line3_color = QColor(17, 18, 19, 20)
@@ -2167,7 +2167,6 @@ class TestSineWaveSettingsBinding:
         assert payload["sine_line_dim"] is True
         assert payload["sine_line_offset_bias"] == pytest.approx(0.26)
         assert payload["sine_card_adaptation"] == pytest.approx(0.37)
-        assert payload["sine_wave_growth"] == pytest.approx(3.05)
         assert payload["sine_line2_color"] == [9, 10, 11, 12]
         assert payload["sine_line3_glow_color"] == [21, 22, 23, 24]
         assert payload["sine_line2_shift"] == pytest.approx(0.18)
@@ -2224,10 +2223,9 @@ class TestSpectrumSettingsBinding:
                     self.lane_strengths = []
                 self.lane_strengths.append((mirrored, strengths))
 
-        class _Tab:
+        class _Tab(CanonicalWidgetDefaultsStub):
             def __init__(self):
-                self.spectrum_growth = _Slider()
-                self.spectrum_growth_label = _Label()
+                super().__init__()
                 self._spectrum_render_mode = None
                 self.spectrum_visual_smoothing_enabled = _Check()
                 self.spectrum_visual_smoothing = _Slider()
@@ -2257,12 +2255,6 @@ class TestSpectrumSettingsBinding:
             def _set_spectrum_render_mode(self, mode, save=False):
                 self._spectrum_render_mode = mode
 
-            def _config_bool(self, _section, config, key, default):
-                return config.get(key, default)
-
-            def _config_float(self, _section, config, key, default):
-                return config.get(key, default)
-
         tab = _Tab()
         synced = []
         ghost_visibility_calls = []
@@ -2270,7 +2262,6 @@ class TestSpectrumSettingsBinding:
         load_spectrum_mode_settings(
             tab,
             {
-                "spectrum_growth": 2.4,
                 "spectrum_render_mode": "bars",
                 "spectrum_visual_smoothing_enabled": False,
                 "spectrum_visual_smoothing": 0.72,
@@ -2298,8 +2289,6 @@ class TestSpectrumSettingsBinding:
             update_ghost_visibility=lambda tab_obj: ghost_visibility_calls.append(tab_obj),
         )
 
-        assert tab.spectrum_growth.value == 240
-        assert tab.spectrum_growth_label.text == "2.4x"
         assert tab._spectrum_render_mode == "bars"
         assert tab.spectrum_visual_smoothing_enabled.checked is False
         assert tab.spectrum_visual_smoothing.value == 72
@@ -2362,11 +2351,10 @@ class TestSpectrumSettingsBinding:
             def get_lane_strengths(self, mirrored=None):
                 return dict(self._lane_strengths_mirrored if mirrored else self._lane_strengths_linear)
 
-        class _Tab:
+        class _Tab(CanonicalWidgetDefaultsStub):
             vis_ghost_enabled = _Check(True)
             vis_ghost_opacity_slider = _Slider(43)
             vis_ghost_decay_slider = _Slider(38)
-            spectrum_growth = _Slider(260)
             _spectrum_render_mode = "bars"
             spectrum_visual_smoothing_enabled = _Check(False)
             spectrum_visual_smoothing = _Slider(64)
@@ -2388,7 +2376,6 @@ class TestSpectrumSettingsBinding:
         assert payload["spectrum_ghosting_enabled"] is True
         assert payload["spectrum_ghost_alpha"] == pytest.approx(0.43)
         assert payload["spectrum_ghost_decay"] == pytest.approx(0.38)
-        assert payload["spectrum_growth"] == pytest.approx(2.6)
         assert payload["spectrum_render_mode"] == "bars"
         assert payload["spectrum_visual_smoothing_enabled"] is False
         assert payload["spectrum_visual_smoothing"] == pytest.approx(0.64)
@@ -2453,10 +2440,9 @@ class TestSpectrumSettingsBinding:
                     self.lane_strengths = []
                 self.lane_strengths.append((mirrored, strengths))
 
-        class _Tab:
+        class _Tab(CanonicalWidgetDefaultsStub):
             def __init__(self):
-                self.spectrum_growth = _Slider()
-                self.spectrum_growth_label = _Label()
+                super().__init__()
                 self._spectrum_render_mode = None
                 self.spectrum_rainbow_per_bar = _Check()
                 self.spectrum_rainbow_border = _Check()
@@ -2481,12 +2467,6 @@ class TestSpectrumSettingsBinding:
 
             def _set_spectrum_render_mode(self, mode, save=False):
                 self._spectrum_render_mode = mode
-
-            def _config_bool(self, _section, config, key, default):
-                return config.get(key, default)
-
-            def _config_float(self, _section, config, key, default):
-                return config.get(key, default)
 
         tab = _Tab()
 
@@ -2549,10 +2529,9 @@ class TestSpectrumSettingsBinding:
                     self.lane_strengths = []
                 self.lane_strengths.append((mirrored, strengths))
 
-        class _Tab:
+        class _Tab(CanonicalWidgetDefaultsStub):
             def __init__(self):
-                self.spectrum_growth = _Slider()
-                self.spectrum_growth_label = _Label()
+                super().__init__()
                 self._spectrum_render_mode = None
                 self.spectrum_rainbow_per_bar = _Check()
                 self.spectrum_rainbow_border = _Check()
@@ -2577,12 +2556,6 @@ class TestSpectrumSettingsBinding:
 
             def _set_spectrum_render_mode(self, mode, save=False):
                 self._spectrum_render_mode = mode
-
-            def _config_bool(self, _section, config, key, default):
-                return config.get(key, default)
-
-            def _config_float(self, _section, config, key, default):
-                return config.get(key, default)
 
         tab = _Tab()
 
@@ -2712,8 +2685,9 @@ class TestBubbleSettingsBinding:
             def setCurrentIndex(self, index):
                 self._index = index
 
-        class _Tab:
+        class _Tab(CanonicalWidgetDefaultsStub):
             def __init__(self):
+                super().__init__()
                 self.bubble_ghost_enabled = _Check()
                 self.bubble_ghost_opacity = _Slider()
                 self.bubble_ghost_opacity_label = _Label()
@@ -2746,22 +2720,8 @@ class TestBubbleSettingsBinding:
                 self.bubble_bounce_small_speed_label = _Label()
                 self.bubble_bounce_same_only = _Check()
                 self.bubble_collision_pop_mode = _Combo(["off", "one", "all"])
-                self.bubble_growth = _Slider()
-                self.bubble_growth_label = _Label()
                 self.bubble_tail_opacity = _Slider()
                 self.bubble_tail_opacity_label = _Label()
-
-            def _config_bool(self, _section, config, key, default):
-                return config.get(key, default)
-
-            def _config_float(self, _section, config, key, default):
-                return config.get(key, default)
-
-            def _config_int(self, _section, config, key, default):
-                return config.get(key, default)
-
-            def _config_str(self, _section, config, key, default):
-                return config.get(key, default)
 
         tab = _Tab()
         synced = []
@@ -2786,7 +2746,6 @@ class TestBubbleSettingsBinding:
                 "bubble_collision_pop_mode": "all",
                 "bubble_specular_direction": "bottom_right",
                 "bubble_gradient_direction": "center_out",
-                "bubble_growth": 3.2,
                 "bubble_tail_opacity": 0.17,
                 "bubble_outline_color": [5, 6, 7, 8],
             },
@@ -2813,7 +2772,6 @@ class TestBubbleSettingsBinding:
         assert tab.bubble_collision_pop_mode.currentData() == "all"
         assert tab.bubble_specular_direction.currentData() == "bottom_right"
         assert tab.bubble_gradient_direction.currentData() == "center_out"
-        assert tab.bubble_growth.value == 320
         assert tab.bubble_tail_opacity.value == 17
         assert (tab._bubble_outline_color.red(), tab._bubble_outline_color.green(), tab._bubble_outline_color.blue(), tab._bubble_outline_color.alpha()) == (5, 6, 7, 8)
         assert synced == [
@@ -2855,7 +2813,7 @@ class TestBubbleSettingsBinding:
             def currentText(self):
                 return self._text
 
-        class _Tab:
+        class _Tab(CanonicalWidgetDefaultsStub):
             bubble_ghost_enabled = _Check(True)
             bubble_ghost_opacity = _Slider(33)
             bubble_ghost_decay_slider = _Slider(48)
@@ -2890,7 +2848,6 @@ class TestBubbleSettingsBinding:
             bubble_big_specular_max_size = _Slider(260)
             bubble_big_size_clamp = _Slider(420)
             bubble_big_contraction_bias = _Slider(64)
-            bubble_growth = _Slider(310)
             bubble_trail_strength = _Slider(18)
             bubble_tail_opacity = _Slider(11)
             _bubble_outline_color = QColor(1, 2, 3, 4)
@@ -2917,7 +2874,6 @@ class TestBubbleSettingsBinding:
         assert payload["bubble_bounce_small_speed"] == pytest.approx(0.44)
         assert payload["bubble_bounce_same_only"] is True
         assert payload["bubble_collision_pop_mode"] == "one"
-        assert payload["bubble_growth"] == pytest.approx(3.10)
         assert payload["bubble_tail_opacity"] == pytest.approx(0.11)
 
 
@@ -3031,7 +2987,9 @@ def test_custom_bubble_activation_ignores_legacy_global_audio_block_size():
 
     assert payload.is_custom is True
     assert "audio_block_size" not in payload.resolved_config
-    assert model.resolve_audio_block_size("bubble") == 512
+    # Legacy global audio_block_size (0) is ignored; bubble falls back to its own
+    # canonical default (128), not the stripped legacy global.
+    assert model.resolve_audio_block_size("bubble") == 128
 
 
 def test_custom_bubble_activation_preserves_explicit_mode_owned_block_size_over_legacy_global():
