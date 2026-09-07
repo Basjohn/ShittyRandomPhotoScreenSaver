@@ -150,6 +150,52 @@ _TEXT_OPTIONS_BY_KEY: dict[str, tuple[str, ...]] = {
     "format": ("12h", "24h"),
 }
 
+# Theme-selection defaults whose value is a portable theme id. The Foundry edits
+# these through a discovered-theme dropdown (name shown, id stored) so the shipped
+# default theme is chosen from the live catalogue instead of a hand-typed id.
+_SETTINGS_THEME_DEFAULT_PATH: tuple[str, ...] = ("ui", "settings_theme_selection")
+_WIDGET_THEME_DEFAULT_PATH: tuple[str, ...] = ("widget_theme", "selected_id")
+_THEME_CHOICES_CACHE: dict[tuple[str, ...], tuple[tuple[str, str], ...]] = {}
+
+
+def _theme_choices_for_path(path: Any) -> tuple[tuple[str, str], ...] | None:
+    """Return ``((display_name, theme_id), ...)`` for a theme-selection default.
+
+    Discovers every selectable Settings (``*.srtheme``) or Widget (``*.srwtheme``)
+    theme via the same catalogues the Settings window uses, including the built-in
+    Default Dark. Returns ``None`` for any other path. Cached for the session
+    because the theme files do not change while the Foundry is open.
+    """
+
+    if not isinstance(path, tuple):
+        return None
+    cached = _THEME_CHOICES_CACHE.get(path)
+    if cached is not None:
+        return cached
+    choices: tuple[tuple[str, str], ...] | None = None
+    try:
+        if path == _SETTINGS_THEME_DEFAULT_PATH:
+            from ui.settings_theme_catalog import build_settings_theme_catalog
+            from ui.settings_theme_paths import resolve_settings_themes_directory
+
+            catalog = build_settings_theme_catalog(resolve_settings_themes_directory())
+            choices = tuple((entry.name, entry.theme_id) for entry in catalog.entries)
+        elif path == _WIDGET_THEME_DEFAULT_PATH:
+            from ui.settings_theme_paths import resolve_settings_themes_directory
+            from ui.widget_theme_catalog import build_widget_theme_catalog
+            from ui.widget_theme_paths import resolve_widget_themes_directory
+
+            widget_dir = resolve_widget_themes_directory(
+                resolve_settings_themes_directory()
+            )
+            catalog = build_widget_theme_catalog(widget_dir)
+            choices = tuple((entry.name, entry.theme_id) for entry in catalog.entries)
+    except Exception:
+        choices = None
+    if choices:
+        _THEME_CHOICES_CACHE[path] = choices
+    return choices
+
 _SECTION_DESCRIPTIONS = {
     "accessibility": "accessibility and display-protection behavior",
     "display": "image presentation and rendering behavior",
@@ -757,6 +803,13 @@ class DefaultValueDelegate(QStyledItemDelegate):
             editor.addItem("false", False)
             return editor
         if isinstance(value, str) and isinstance(path, tuple):
+            theme_choices = _theme_choices_for_path(path)
+            if theme_choices:
+                editor = QComboBox(parent)
+                editor.setMinimumWidth(280)
+                for display_name, theme_id in theme_choices:
+                    editor.addItem(display_name, theme_id)
+                return editor
             options = _TEXT_OPTIONS_BY_PATH.get(path) or _TEXT_OPTIONS_BY_KEY.get(path[-1])
             if options:
                 editor = QComboBox(parent)
