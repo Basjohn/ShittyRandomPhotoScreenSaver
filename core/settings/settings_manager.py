@@ -58,6 +58,13 @@ class SettingsManager(QObject):
         "analog_shadow_intense",
         "digital_shadow_intense",
     })
+    _OBSOLETE_KEYS = frozenset({
+        # Retired product keys dropped on load, never migrated (absent from
+        # canonical defaults and unreferenced in current source).
+        "display.vsync_enabled",
+        "display.fps_cap",
+        "transitions.easing",
+    })
     _RETIRED_WIDGET_SHADOW_DOTTED_KEYS = frozenset({
         "widgets.clock.analog_shadow_intense",
         "widgets.clock.digital_shadow_intense",
@@ -933,6 +940,61 @@ class SettingsManager(QObject):
             return deepcopy(canonical)
 
         return self._to_plain_value(value)
+
+    def cleanup_legacy_global_preset_state(self) -> List[str]:
+        """Remove retired global preset schema keys from persisted settings."""
+        removed: List[str] = []
+        with self._lock:
+            for key in self._LEGACY_GLOBAL_PRESET_KEYS:
+                if self._settings.contains(key):
+                    self._settings.remove(key)
+                    removed.append(key)
+            if removed:
+                self._clear_cache_locked()
+                self._settings.sync()
+                logger.info("Removed legacy global preset keys: %s", removed)
+        return removed
+
+    def cleanup_obsolete_settings(self) -> List[str]:
+        """Remove obsolete/retired settings from the JSON store.
+
+        Basic settings hygiene: drop keys that are no longer part of the
+        architecture (retired widget shadow keys) so stale values do not persist
+        across upgrades. Returns the list of removed keys.
+        """
+        removed: List[str] = []
+        with self._lock:
+            for key in self._OBSOLETE_KEYS | self._RETIRED_WIDGET_SHADOW_DOTTED_KEYS:
+                removed_structured = self._remove_structured_key_locked(key)
+                if removed_structured:
+                    removed.append(key)
+                    logger.debug("Removed obsolete structured setting: %s", key)
+                elif self._settings.contains(key):
+                    self._settings.remove(key)
+                    removed.append(key)
+                    logger.debug("Removed obsolete setting: %s", key)
+            widgets = self._settings.value("widgets")
+            if isinstance(widgets, Mapping):
+                widgets_copy = deepcopy(dict(widgets))
+                widgets_changed = False
+                for section_name, section in list(widgets_copy.items()):
+                    if not isinstance(section, Mapping):
+                        continue
+                    section_copy = dict(section)
+                    for retired_key in self._RETIRED_WIDGET_SHADOW_KEYS:
+                        if retired_key in section_copy:
+                            section_copy.pop(retired_key, None)
+                            removed.append(f"widgets.{section_name}.{retired_key}")
+                            widgets_changed = True
+                    if section_copy != section:
+                        widgets_copy[section_name] = section_copy
+                if widgets_changed:
+                    self._store_widgets_root_locked(widgets_copy)
+            if removed:
+                self._clear_cache_locked()
+                self._settings.sync()
+                logger.info("Cleaned up %d obsolete settings: %s", len(removed), removed)
+        return removed
 
     def set(self, key: str, value: Any) -> None:
         """
