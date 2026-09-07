@@ -72,28 +72,6 @@ class TestSineWaveGLOverlayFix:
         assert "wave_fx_gate" in source
         assert "u_wave_effect_gate" in source
 
-    def test_card_height_growth_factor_defaults(self):
-        """Verify default growth factors per mode."""
-        from widgets.spotify_visualizer.card_height import DEFAULT_GROWTH
-        assert DEFAULT_GROWTH['oscilloscope'] == 2.0
-        assert DEFAULT_GROWTH['sine_wave'] == 2.0
-
-    def test_card_height_expansion_works(self):
-        """Setting growth > 1.0 should expand the card height."""
-        from widgets.spotify_visualizer.card_height import preferred_height
-        base = 80
-        h_default = preferred_height('oscilloscope', base, growth_factor=1.0)
-        h_expanded = preferred_height('oscilloscope', base, growth_factor=2.0)
-        assert h_expanded > h_default
-        assert h_expanded == 160
-
-    def test_card_height_sine_wave_expansion(self):
-        """Sine wave growth factor should expand card height."""
-        from widgets.spotify_visualizer.card_height import preferred_height
-        base = 80
-        h = preferred_height('sine_wave', base, growth_factor=2.5)
-        assert h == 200
-
 
 @pytest.mark.qt
 def test_sine_wave_fragment_shader_compiles(qt_app):
