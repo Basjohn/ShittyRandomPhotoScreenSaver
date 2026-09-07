@@ -18,10 +18,25 @@ Audit: `python tools/settings_migration_audit.py` (0 blocking gaps as of 2026-09
   reference tree needed): descriptors + per-mode×key + literal call-sites must all
   resolve to a canonical default or be derivable-by-design. This is the proof that
   makes fail-loud safe.
-- [ ] Review the 59 changed default values; classify intended vs regression.
-  Known-intended: UI bucket-states True->False (collapsed), spotify_visualizer.mode
-  devcurve->bubble. **Flag for operator:** `widgets.*.monitor` normalized ALL/2 -> 1
-  (fresh-install default now single-monitor) — confirm intended.
+- [x] Review the 59 changed default values; classify intended vs regression
+  (audit 2026-09-07). Breakdown:
+  - ~45 `ui.*_bucket_states` / `*_tech_states` True->False: collapse-on-fresh-install.
+    Cosmetic, intended-by-design.
+  - `spotify_visualizer.mode` devcurve->bubble: intended (devcurve is a dev mode).
+  - **Behavioural — operator decision (see AskUserQuestion 2026-09-07):**
+    - `widgets.*.monitor` (10 widgets) ALL/2 -> '1'. Note: a '2' default breaks
+      single-monitor installs, so '1' is the safe fresh default.
+    - `accessibility.dimming.enabled` True->False; `dimming.opacity` 15->30.
+    - `accessibility.pixel_shift.enabled` True->False (OLED burn-in protection).
+- [ ] **Missing-preset fallback behaviour change (blocks 5 plumbing tests).**
+  Pre-migration `get_missing_preset_fallback_index` returned 0 (first curated slot)
+  for every mode. The migration rewrote it (visualizer_preset_indices.py) to return
+  the canonical per-mode `preset_<mode>` default clamped to the curated range, and
+  documented that as intent ("no generic first-preset authority"). Net runtime
+  effect: sine_wave with no persisted selection now defaults to preset 4 (its
+  shipped canonical) instead of 0; all other modes unchanged (canonical 0). Held
+  for operator confirmation; then either update the 5 tests to the canonical
+  contract, or restore first-slot(0) fallback.
 
 ## Phase 2 — Behavioral runtime regressions (post-migration, operator-felt)
 Not defaults problems; code regressions from the migration's broad rewrite.
@@ -47,10 +62,26 @@ Not defaults problems; code regressions from the migration's broad rewrite.
   triage sidecars.
 
 ## Phase 3 — Stale test reconciliation
-- [ ] Triage the ~347 focused settings/visualizer/widget failures: separate
-  contract-staleness (update to current owners) from real regressions (fix at the
-  owning boundary). Prior wind-down items: lane-energy 0.0, ordinary_widget_host
-  shiboken6 source-scan + two-phase retirement, `_pre_agc` families.
+Triage done (2026-09-07). The "347" is inflated by cross-test Qt contamination in
+the big -k batch + display-gated noise; isolated settings clusters:
+plumbing 25, presets 13, settings_manager 9, transient 6, gmail 6 (~59 real).
+Root breakdown (from settings_plumbing sample):
+- **Test-mock staleness (majority):** local `_Tab`/`_DummyTab`/`Host` mocks lack the
+  migration's strict API -- `_config_bool`/`_default_int` now require a `default`
+  arg; new `_default_str`/`_widget_default`/`_default_bool`. Production is the new
+  strict owner; UPDATE the mocks. Mechanical, no design input, restores the safety
+  net. (~40+ of the 59.)
+- **Migration-internal test inconsistencies (need operator intent):** e.g.
+  `resolve_audio_block_size("bubble") == 512` while canonical `bubble_audio_block_size`
+  is (and always was) 128; sine_wave preset/fallback index `== 0` vs canonical 4.
+  These are CHECKPOINT7 WIP where the test and the canonical disagree -- fixing the
+  wrong side changes real audio/preset behavior. **Blocked on operator decision.**
+- Prior wind-down: lane-energy 0.0, ordinary_widget_host shiboken6 source-scan +
+  two-phase retirement.
+
+Confirmed NOT regressions vs pre-migration: canonical default *values* for
+block_size/preset are unchanged; `resolve_audio_block_size` is byte-identical to
+the pre tree.
 
 ## Phase 4 — 9/10 architecture upgrades (no parity/feature loss)
 - [ ] Kill the literal-vs-derived dual representation: schema GENERATES the
