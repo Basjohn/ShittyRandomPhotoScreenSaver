@@ -11,14 +11,16 @@ from __future__ import annotations
 
 
 from core.settings.defaults import get_default_settings
-from core.settings.models import SpotifyVisualizerSettings
-from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
+from core.settings.models import PER_MODE_TECHNICAL_MODES, SpotifyVisualizerSettings
 from tools import visualizer_preset_repair as repair
 
 
 # The three new transient bus keys that must appear per-mode
 _TRANSIENT_KEYS = ("kick_lane_gain", "transient_pulse_gain", "transient_clamp")
-_MODES = VISUALIZER_MODE_IDS
+# Transient controls are mode-owned only for the technical modes; sphere is
+# excluded from per-mode technical resolution by design and derives from the
+# reference mode, so it has no sphere_* transient canonical keys.
+_MODES = PER_MODE_TECHNICAL_MODES
 
 
 class TestDefaultSettingsContainTransientKeys:
@@ -54,22 +56,27 @@ class TestSettingsModelResolvers:
         return SpotifyVisualizerSettings(**overrides)
 
     def test_resolve_kick_lane_gain_default(self):
+        # A default model resolves each mode's canonical per-mode value (these
+        # legitimately differ per mode; there is no uniform gain default).
         model = self._make_model()
+        viz = get_default_settings()["widgets"]["spotify_visualizer"]
         for mode in _MODES:
             val = model.resolve_kick_lane_gain(mode)
-            assert val == 1.0, f"{mode}: expected 1.0, got {val}"
+            assert val == viz[f"{mode}_kick_lane_gain"], f"{mode}: got {val}"
 
     def test_resolve_transient_pulse_gain_default(self):
         model = self._make_model()
+        viz = get_default_settings()["widgets"]["spotify_visualizer"]
         for mode in _MODES:
             val = model.resolve_transient_pulse_gain(mode)
-            assert val == 1.0, f"{mode}: expected 1.0, got {val}"
+            assert val == viz[f"{mode}_transient_pulse_gain"], f"{mode}: got {val}"
 
     def test_resolve_transient_clamp_default(self):
         model = self._make_model()
+        viz = get_default_settings()["widgets"]["spotify_visualizer"]
         for mode in _MODES:
             val = model.resolve_transient_clamp(mode)
-            assert val == 1.5, f"{mode}: expected 1.5, got {val}"
+            assert val == viz[f"{mode}_transient_clamp"], f"{mode}: got {val}"
 
     def test_resolve_custom_value(self):
         model = self._make_model(spectrum_kick_lane_gain=1.8)
