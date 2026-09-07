@@ -23,20 +23,15 @@ Audit: `python tools/settings_migration_audit.py` (0 blocking gaps as of 2026-09
   - ~45 `ui.*_bucket_states` / `*_tech_states` True->False: collapse-on-fresh-install.
     Cosmetic, intended-by-design.
   - `spotify_visualizer.mode` devcurve->bubble: intended (devcurve is a dev mode).
-  - **Behavioural — operator decision (see AskUserQuestion 2026-09-07):**
-    - `widgets.*.monitor` (10 widgets) ALL/2 -> '1'. Note: a '2' default breaks
-      single-monitor installs, so '1' is the safe fresh default.
-    - `accessibility.dimming.enabled` True->False; `dimming.opacity` 15->30.
-    - `accessibility.pixel_shift.enabled` True->False (OLED burn-in protection).
-- [ ] **Missing-preset fallback behaviour change (blocks 5 plumbing tests).**
-  Pre-migration `get_missing_preset_fallback_index` returned 0 (first curated slot)
-  for every mode. The migration rewrote it (visualizer_preset_indices.py) to return
-  the canonical per-mode `preset_<mode>` default clamped to the curated range, and
-  documented that as intent ("no generic first-preset authority"). Net runtime
-  effect: sine_wave with no persisted selection now defaults to preset 4 (its
-  shipped canonical) instead of 0; all other modes unchanged (canonical 0). Held
-  for operator confirmation; then either update the 5 tests to the canonical
-  contract, or restore first-slot(0) fallback.
+  - **Behavioural — operator DECIDED 2026-09-07:**
+    - `widgets.*.monitor` ALL/2 -> '1': KEEP migrated '1' (safe on any install).
+    - `accessibility.dimming` -> RESTORED ON @ opacity 15 (commit; parity restored).
+    - `accessibility.pixel_shift.enabled` False: KEEP migrated OFF.
+- [x] **Missing-preset fallback: operator chose HONOR CANONICAL** (2026-09-07).
+  Pre-migration returned 0 (first slot) for every mode; the migration honors the
+  shipped canonical `preset_<mode>` (sine_wave 4, others 0), clamped to curated
+  range. Kept the resolver; updated the 5 plumbing tests to the canonical
+  contract. `test_visualizer_settings_plumbing.py` fully green (91 passed).
 
 ## Phase 2 — Behavioral runtime regressions (post-migration, operator-felt)
 Not defaults problems; code regressions from the migration's broad rewrite.
@@ -82,6 +77,22 @@ Root breakdown (from settings_plumbing sample):
 Confirmed NOT regressions vs pre-migration: canonical default *values* for
 block_size/preset are unchanged; `resolve_audio_block_size` is byte-identical to
 the pre tree.
+
+### Cluster status (2026-09-07)
+- [x] `test_visualizer_settings_plumbing.py` — GREEN (91). Mock staleness ->
+  CanonicalWidgetDefaultsStub; retired `*_growth` dropped; canonical preset
+  fallback; block_size literal 512->128.
+- [x] `test_visualizer_presets.py` — GREEN (58). Fail-loud curated/override
+  contract; `_seed_curated_slots` helper; sphere release artifact regenerated.
+- [ ] `test_settings_manager.py` (~9), `test_transient_preset_preservation.py`
+  (~6), `test_gmail_settings_roundtrip.py` (~6) — pending triage.
+
+### Production bugs found & fixed during reconciliation
+- preset-repair `_normalize_spectrum_linear_notches` missing canonical_default
+  (both tool callers) — would crash preset repair on any spectrum payload.
+- `technical_controls` transient-mix default_key doubled the two-token
+  `sine_wave_` prefix (`sine_wave_wave_transient_width_mix`) -> fail-loud KeyError
+  crashing the sine_wave Settings body.
 
 ## Phase 4 — 9/10 architecture upgrades (no parity/feature loss)
 - [ ] Kill the literal-vs-derived dual representation: schema GENERATES the
