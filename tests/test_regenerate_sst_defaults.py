@@ -7,8 +7,12 @@ from typing import Any, Mapping
 import pytest
 
 from core.settings.defaults import MC_PROFILE, NORMAL_PROFILE, get_profile_default_overrides
-from core.settings.defaults_snapshot_builder import build_sst_defaults_snapshot
+from core.settings.defaults_snapshot_builder import (
+    build_sst_defaults_document,
+    build_sst_defaults_snapshot,
+)
 from tools import regenerate_sst_defaults as module
+from tools.defaults_foundry_core import walk_private_paths
 
 
 def _flatten_leaves(value: Mapping[str, Any], prefix: str = "") -> dict[str, Any]:
@@ -47,13 +51,15 @@ def test_sst_regeneration_is_byte_reproducible_and_profile_canonical(tmp_path) -
         assert payload == second[application]
         assert payload["application"] == application
         assert payload["profile"] == application
-        assert payload["metadata"] == module.GENERATED_METADATA
+        # Single source of truth: the whole SST document (metadata included) is
+        # exactly what the canonical builder emits -- no second metadata constant.
+        assert payload == build_sst_defaults_document(application)
         assert "migrated_at" not in payload["metadata"]
         assert "last_migration_completed" not in payload["metadata"]
         assert payload["snapshot"] == build_sst_defaults_snapshot(application)
         assert "latitude" not in payload["snapshot"]["widgets"]["weather"]
         assert "longitude" not in payload["snapshot"]["widgets"]["weather"]
-        assert not module._walk_private_paths(payload["snapshot"])
+        assert not walk_private_paths(payload["snapshot"])
 
 
 def test_mc_sst_delta_is_exactly_the_canonical_profile_override(tmp_path) -> None:
@@ -136,14 +142,18 @@ def test_generated_sst_import_matches_fresh_profile_reset(
 
 
 def test_sst_generation_rejects_private_credential_fields(monkeypatch) -> None:
-    original_builder = module.build_sst_defaults_snapshot
+    # Patch the single builder authority that _build_sst_payload resolves, so an
+    # injected secret is caught by the shared privacy validation.
+    from core.settings import defaults_snapshot_builder as builder
+
+    original_builder = builder.build_sst_defaults_snapshot
 
     def _defaults_with_secret(application: str) -> dict[str, Any]:
         snapshot = original_builder(application)
         snapshot["widgets"]["steam"]["api_key"] = "must-not-export"
         return snapshot
 
-    monkeypatch.setattr(module, "build_sst_defaults_snapshot", _defaults_with_secret)
+    monkeypatch.setattr(builder, "build_sst_defaults_snapshot", _defaults_with_secret)
 
-    with pytest.raises(ValueError, match="private credential fields"):
+    with pytest.raises(ValueError, match="private/credential fields"):
         module._build_payload(NORMAL_PROFILE)
