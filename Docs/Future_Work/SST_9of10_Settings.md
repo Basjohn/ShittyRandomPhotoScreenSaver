@@ -35,6 +35,20 @@ Audit: `python tools/settings_migration_audit.py` (0 blocking gaps as of 2026-09
 
 ## Phase 2 — Behavioral runtime regressions (post-migration, operator-felt)
 Not defaults problems; code regressions from the migration's broad rewrite.
+- [x] **THE STALL ROOT CAUSE — SettingsManager.get() deep-copied the whole
+  ~1454-node defaults tree on every call** (get_canonical_default ->
+  get_raw_default_settings -> deepcopy(DEFAULT_SETTINGS)), BEFORE the value cache,
+  so even cache hits paid ~0.48ms. Pre-migration get() checked its cache first and
+  never touched the canonical tree. Any settings-read burst (context-menu build,
+  transition setup, per-frame/per-cursor reads) stalled tens of ms; scaled WORSE
+  as the product grows (O(tree size)/read). FIX: cache the immutable canonical
+  tree per profile (lru_cache) and deep-copy only the returned leaf -> ~0.002ms,
+  O(path depth), flat vs tree size. settings_manager suite time 90s -> 2.6s.
+  Explains transitions/context-menu/random stalls. Halo needs runtime confirm
+  (its keys are intact; may have been starved by the stalls).
+- [x] **Visualizer 'Follow Media' restored** as the canonical position default
+  (was consolidated to the shadow 'Bottom Left'). Adjacency engine was never lost;
+  only the default label. Non-custom media-adjacency; custom-safe.
 - [x] **Visualizer never receives audio** — FIXED (c9b25510). Real root: playback
   IS detected at runtime (`VIS_PLAYBACK_EDGE playing=True`), but the migration left
   7 more `_COMPUTE_SNAPSHOT_ATTRS` unseeded in `audio_worker.__init__`
