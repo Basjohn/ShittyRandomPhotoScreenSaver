@@ -62,6 +62,9 @@ are the focused live-checklist decompositions it links:
   per-value ordinary-widget CUSTOM resize families onto the single
   `uniformScaleTransform` seam so resize is geometry-only, and make that the
   default path for new widgets (+ the deferred non-CUSTOM stacker auto-shrink).
+- `Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md` — recreate the deleted
+  replay harness headlessly and arm the existing goldens' metrics as a reactivity
+  minimum bar (floors only; never re-blesses or constrains current behaviour).
 - `Docs/Settings_Dark_QSS_Retirement.md` — retire `themes/dark.qss` so
   `SettingsThemeSpec` is the sole Settings-dialog authority (colour and structure).
 - `Docs/Future_Work/SST_9of10_Settings.md` — settings-migration closeout evidence.
