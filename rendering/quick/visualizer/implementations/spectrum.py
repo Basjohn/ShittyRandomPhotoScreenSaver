@@ -219,10 +219,6 @@ class QuickSpectrumRenderer:
             uniforms["u_single_piece"],
             1 if bool(style["single_piece"]) else 0,
         )
-        gl.glUniform1i(
-            uniforms["u_slanted"],
-            1 if bool(parameter(parameters, "slanted")) else 0,
-        )
         gl.glUniform1f(
             uniforms["u_border_radius"],
             max(0.0, float(style["border_radius"]))
@@ -326,7 +322,6 @@ class QuickSpectrumRenderer:
                 "u_ghost_alpha",
                 "u_bar_height_scale",
                 "u_single_piece",
-                "u_slanted",
                 "u_border_radius",
                 "u_spectrum_glow_enabled",
                 "u_spectrum_glow_intensity",
