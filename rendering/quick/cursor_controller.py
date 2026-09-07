@@ -110,12 +110,19 @@ class QuickCursorController(QObject):
         if current == previous:
             return False
 
+        # The native cursor is only shown while it owns the pointer (e.g. an open
+        # context menu). When it yields back to the Halo, re-assert Halo
+        # visibility even if an intermediate auxiliary update already flipped
+        # ``halo_enabled`` true (which would otherwise skip the enable edge below
+        # and leave the Halo enabled-but-invisible until the next motion). This is
+        # a state edge, not the idle fade (which never toggles native visibility).
+        native_yielded_to_halo = bool(previous[2]) and not self._native_cursor_visible
         if not self._halo_enabled:
             self._motion_visible = False
             self._last_motion_ns = 0
             self._fade_step = 0
             self._timer.stop()
-        elif not previous[1]:
+        elif not previous[1] or native_yielded_to_halo:
             # Event-driven admission may occur while the pointer is already
             # stationary over this display. Preserve the historical immediate
             # Halo appearance with one native position query at admission; this
