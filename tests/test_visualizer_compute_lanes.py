@@ -190,3 +190,25 @@ def test_required_audio_lane_creation_failure_is_loud_and_has_no_future_fallback
 
     assert manager.general_submissions == 0
     assert engine._analysis_lane is None
+
+
+def test_compute_snapshot_seeds_every_attr_before_first_frame():
+    """Regression: every _COMPUTE_SNAPSHOT_ATTRS must be initialised in __init__.
+
+    make_compute_snapshot() reads each attr with getattr and no default, and it can
+    be requested before the first processed frame (the retained compute lane
+    rebuilds on gate/activation/config boundaries). A lazily-assigned snapshot attr
+    therefore raises AttributeError every frame -> the beat engine produces zero
+    frames (engine=0/0) -> the visualizer shows only idle motion while audio plays.
+    This was the migration regression that killed visualizer audio reactivity.
+    """
+    from widgets.spotify_visualizer.audio_worker import _COMPUTE_SNAPSHOT_ATTRS
+
+    engine = _SpotifyBeatEngine(bar_count=4)
+    worker = engine._audio_worker
+    unseeded = [name for name in _COMPUTE_SNAPSHOT_ATTRS if not hasattr(worker, name)]
+    assert unseeded == [], f"uninitialised compute-snapshot attrs: {unseeded}"
+
+    snapshot = worker.make_compute_snapshot()
+    for name in _COMPUTE_SNAPSHOT_ATTRS:
+        assert hasattr(snapshot, name), name
