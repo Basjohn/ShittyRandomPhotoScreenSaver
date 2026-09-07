@@ -1276,7 +1276,7 @@
       "oscilloscope_transient_clamp": 1.5,
       "oscilloscope_transient_pulse_gain": 1.0,
       "oscilloscope_transient_width_mix": 0.35,
-      "position": "Bottom Left",
+      "position": "Follow Media",
       "preset_bubble": 0,
       "preset_devcurve": 0,
       "preset_oscilloscope": 0,

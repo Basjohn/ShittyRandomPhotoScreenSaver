@@ -168,9 +168,9 @@ class TestSettingsManagerCacheInvalidation:
         )
 
         visualizer = manager.get("widgets")["spotify_visualizer"]
-        # Canonical shipped position (the retired 'Follow Media' schema-model
-        # shadow default was consolidated away to the single canonical value).
-        assert visualizer["position"] == "Bottom Left"
+        # Follow Media is the visualizer's single canonical default: it drives the
+        # ordinary media-adjacency placement (active in non-custom modes only).
+        assert visualizer["position"] == "Follow Media"
         assert "bubble_input_gain" in visualizer
         assert (
             manager._settings.metadata().get("visualizer_schema_version")
@@ -337,9 +337,9 @@ class TestSettingsManagerCacheInvalidation:
         assert manager.import_from_sst(str(snapshot_path), merge=True) is True
 
         visualizer = manager.get("widgets")["spotify_visualizer"]
-        # Canonical shipped position (the retired 'Follow Media' schema-model
-        # shadow default was consolidated away to the single canonical value).
-        assert visualizer["position"] == "Bottom Left"
+        # Follow Media is the visualizer's single canonical default: it drives the
+        # ordinary media-adjacency placement (active in non-custom modes only).
+        assert visualizer["position"] == "Follow Media"
         assert "bubble_input_gain" in visualizer
         assert (
             manager._settings.metadata().get("visualizer_schema_version")
