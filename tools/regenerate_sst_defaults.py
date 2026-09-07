@@ -18,7 +18,6 @@ if str(REPO_ROOT) not in sys.path:
 from tools.regenerate_defaults_artifacts import (  # noqa: E402
     DOCS_DIR,
     EXPORT_TARGETS,
-    GENERATED_METADATA,
     _build_sst_payload,
     _validate_sst_payload,
     build_artifact_bytes,

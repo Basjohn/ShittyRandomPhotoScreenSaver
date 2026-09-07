@@ -22,7 +22,6 @@ if str(REPO_ROOT) not in sys.path:
 from tools.defaults_foundry_core import (  # noqa: E402
     atomic_write_many,
     sha256_bytes,
-    stable_json_bytes,
     validate_no_private_fields,
 )
 
@@ -32,26 +31,6 @@ EXPORT_TARGETS: tuple[tuple[str, str], ...] = (
     ("Screensaver", "SRPSS_Settings_Screensaver.sst"),
     ("Screensaver_MC", "SRPSS_Settings_Screensaver_MC.sst"),
 )
-GENERATED_METADATA = {
-    "artifact_kind": "canonical_defaults",
-    # Keep historical metadata stable so adopting the unified transaction does
-    # not churn checked-in SST bytes for bookkeeping alone.
-    "generator": "tools/regenerate_sst_defaults.py",
-    "source": "core.settings.defaults_snapshot_builder.build_sst_defaults_snapshot",
-}
-
-
-def _runtime_builders():
-    # Lazy import keeps module discovery/help free of SettingsManager creation.
-    # The imported package may load Qt symbols, but this tool never constructs
-    # SettingsManager, QSettings, JsonSettingsStore, or profile storage owners.
-    from core.settings.defaults_snapshot_builder import (
-        build_defaults_snapshot,
-        build_sst_defaults_snapshot,
-    )
-    from core.settings.sst_io import SNAPSHOT_VERSION
-
-    return build_defaults_snapshot, build_sst_defaults_snapshot, SNAPSHOT_VERSION
 
 
 def _build_sst_payload(application: str) -> dict[str, Any]:
@@ -72,14 +51,15 @@ def _build_sst_payload(application: str) -> dict[str, Any]:
 
 
 def _validate_sst_payload(payload: Mapping[str, Any], application: str) -> None:
-    if payload.get("application") != application or payload.get("profile") != application:
-        raise ValueError(f"Generated SST profile mismatch for {application}")
-    if payload.get("metadata") != GENERATED_METADATA:
-        raise ValueError(f"Generated SST metadata is not deterministic for {application}")
-    _build_defaults_snapshot, build_sst_defaults_snapshot, _snapshot_version = _runtime_builders()
-    expected = build_sst_defaults_snapshot(application)
-    if payload.get("snapshot") != expected:
-        raise ValueError(f"Generated SST snapshot drifted from canonical {application} defaults")
+    # Validate against the single builder authority: the SST document -- metadata
+    # included -- must be exactly what core.settings.defaults_snapshot_builder
+    # emits. No local expected-metadata constant that could drift from it.
+    from core.settings.defaults_snapshot_builder import build_sst_defaults_document
+
+    if dict(payload) != build_sst_defaults_document(application):
+        raise ValueError(
+            f"Generated SST payload for {application} diverges from the canonical builder document"
+        )
     validate_no_private_fields(payload.get("snapshot", {}), label=f"{application} generated SST")
 
 
