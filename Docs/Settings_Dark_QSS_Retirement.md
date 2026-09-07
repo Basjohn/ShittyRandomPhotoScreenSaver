@@ -1,6 +1,6 @@
 # Settings `dark.qss` Retirement
 
-Last updated: 2026-08-28
+Last updated: 2026-09-07
 
 ## Purpose
 
@@ -50,6 +50,69 @@ At the reviewed 2026-08-28 source state, there are two production loaders that m
 2. `ui/system_tray.py::_load_tray_menu_stylesheet()` independently reads the same whole file and applies it to a single `QMenu`.
 
 Repository-wide search must be repeated immediately before implementation. Historical documents and diagnostic tools that mention the file are not production runtime dependencies, but no agent may assume the loader inventory above remains complete after later commits.
+
+---
+
+## Current measured surface (2026-09-07)
+
+Concrete ground truth to plan against. Re-measure before implementing — these
+counts move as `SettingsThemeSpec` grows.
+
+The competing-authority mechanism is `ui/settings_theme.py`:
+`widget.setStyleSheet(dark_qss + _build_custom_styles(theme))`. `dark.qss` is
+applied **first**, and the appended ThemeSpec-driven custom styles only cover the
+selectors they explicitly target, so `dark.qss` hardcodes win everywhere else.
+Two consequences: (1) **themes don't fully apply** — a non-dark theme comes out
+partially dark wherever ThemeSpec's overrides don't reach; (2) **structure lives
+only in `dark.qss`** — geometry/borders/radii/spacing/typography for the selectors
+ThemeSpec doesn't cover, so a naive deletion shifts layout and drops borders.
+
+Measured:
+
+- `dark.qss` ~989 lines, ~98 selectors; `_build_custom_styles` covers ~34 →
+  **~89 dark-only selectors** to port (About dialog, subsettings dialog, every
+  button family — start/select/settings/about/action/`QSmolselect`/
+  `QBasicBitchButton`/`QComboArrow` — `QMenu`, scrollbars, title bars, borders,
+  `ResizeIndicator`, `*`, `QMainWindow`, …).
+- **~47 distinct colour literals.** Against `SettingsThemeSpec`'s dark tokens,
+  roughly **24 value-match an existing token** and **~23 need a new token**
+  (e.g. `#2B2B2B`, `#444444`, close-button red `#E81123`, error reds
+  `#FF5757`/`#F1707A`, several white/black/grey alphas).
+- **Alpha-format hazard:** `dark.qss` uses **float** alphas (`rgba(…,1.0)`,
+  `rgba(…,0.8)`) while the ThemeSpec renderer emits **int** alphas (its own
+  comment warns Qt truncates float alpha to 0). Normalising float→int (1.0→255,
+  0.8→204) is visually identical and removes a latent truncation bug — do it as a
+  **standalone, eyeball-once** step (Stage 3 precursor), not mixed into a port.
+
+### Safety net — byte-identity guard (the migration hangs on this)
+
+Render the tokenised structural base with the **dark** theme's token values and
+assert it equals the current (alpha-normalised) `dark.qss`. If identity holds, the
+dark theme cannot regress; only non-dark themes change (which is the point). This
+is the automated substitute for the eyes-on oracle where pixels can't be proven.
+
+### Token vocabulary plan (Stage 3 detail)
+
+- For the ~24 value-matches, **semantic-review each** — reuse an existing token
+  only when the roles truly move together (do NOT tie a button's black to a
+  swatch mix just because the value matches); otherwise add a dedicated token.
+- Add the ~23 new tokens to `_DEFAULT_DARK_COLORS` (`ui/settings_theme_spec.py`)
+  with dark values = the exact `dark.qss` colours, named semantically
+  (`window.close.hover` = `#E81123`, `feedback.error.text` = `#FF5757`, …), falling
+  back to `settings.<role>` for genuinely generic roles.
+- Extend theme schema/catalog/IO (`ui/settings_theme_catalog.py`,
+  `ui/settings_theme_io.py`, `ui/settings_theme_spec.py`) so a theme file can set
+  every new token; a theme omitting one inherits the dark default.
+- Relocate structure into a Python-rendered base
+  (`_build_base_structural_styles(theme)` in `ui/settings_theme.py` or a new
+  `ui/settings_base_qss.py`), colours as `%(token)s`, **all structure verbatim**.
+- Installer/tooling tail: `scripts/*.iss` copy `themes/*` to the shipped theme
+  dir — confirm removing `dark.qss` breaks no packaged-theme assumption; retire
+  `tools/flicker_test.py`'s `dark.qss` path; grep `styled_popup.py` /
+  `settings_theme_spec.py` for "legacy dark.qss" comments after deletion.
+- Stage-6 guard (mirror `defaults_authority_audit`): **no hardcoded colour
+  literal in the Settings base QSS** — every colour must be a ThemeSpec token, so
+  a later edit cannot reintroduce a shadow colour authority.
 
 ---
 

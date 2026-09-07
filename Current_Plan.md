@@ -6,10 +6,10 @@ Outside of Codex Work Began: `886e6fa419ff130ff2a9aedf5091ae6162d1e958`
 ## Active planned work (linked)
 
 - **dark.qss retirement → ThemeSpec sole authority:**
-  [Docs/Future_Work/DarkQSS_Retirement.md](Docs/Future_Work/DarkQSS_Retirement.md).
-  Live-checklist plan to migrate the Settings dialog's colour **and** structure out
-  of `themes/dark.qss` (a competing style authority: 89 dark-only selectors, ~47
-  colours) into `SettingsThemeSpec`, so themes fully apply and the file can be
+  [Docs/Settings_Dark_QSS_Retirement.md](Docs/Settings_Dark_QSS_Retirement.md).
+  Execution authority for migrating the Settings dialog's colour **and** structure
+  out of `themes/dark.qss` (a competing style authority: ~89 dark-only selectors,
+  ~47 colours) into `SettingsThemeSpec`, so themes fully apply and the file can be
   deleted with zero dark-theme regression (byte-identity guarded). Not started.
 - **SST 9/10 settings closeout reference:**
   [Docs/Future_Work/SST_9of10_Settings.md](Docs/Future_Work/SST_9of10_Settings.md)

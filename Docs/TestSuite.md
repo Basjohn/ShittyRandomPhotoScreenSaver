@@ -629,7 +629,6 @@ The inventory below accounts for every executable `test_*.py` file present after
 | `tests/test_visualizer_analysis_acceptance.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_architecture_split.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_capability_admission.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
-| `tests/test_visualizer_card_geometry.py` | **STALE I RESIDUE — OLD PHYSICAL OWNER** | Tests pre-Quick mode growth/relative card geometry that destination explicitly retires; Quick geometry tests are the destination authority. |
 | `tests/test_visualizer_compute_lanes.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain as permanent current coverage. |
 | `tests/test_visualizer_doc_references.py` | **KEEP — RECONCILED / PERMANENT** | Current docs are checked for owner/guardrail facts rather than obsolete exact phrases or global bans on legitimate historical negative-control wording. |
 | `tests/test_visualizer_failover_reclaim.py` | **KEEP — MIGRATION PERMANENT** | E2.7 canonical global-singleton/grace/reclaim/capability lifecycle suite. Must remain authoritative until successor owner inherits it. |

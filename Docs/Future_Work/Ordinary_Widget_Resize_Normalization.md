@@ -320,19 +320,36 @@ Prior art: `Docs/Historical_Bugs/R-70_Gmail_Custom_Uniform_Scale_Preferred_Dimen
 
 ## Deferred follow-up — bounded non-CUSTOM stacker auto-shrink (NOT C1–C4)
 
-Separate future feature; do not start with the tranche above.
+Separate future feature; do not start with the tranche above. But it is the reason
+C1–C4 are worth doing: normalization produces the whole-card transform, and this
+feature is the consumer that makes that transform pay off. The two are a matched
+pair — a widget is only *eligible* to shrink cleanly once it scales as one whole
+card (C1–C4); shrinking a per-value family would distort fixed insets/rows.
 
-The current non-CUSTOM stacker is deterministic and event-edge driven: it moves
-ordinary cards through authored/canonical/free-space candidates and reports
-unresolved placements when the immutable card rectangles cannot all fit. It does
-not need polling to add shrink.
+### The trigger already exists — this is a consumer, not a new solver
 
-Desired later algorithm: run the solver at 1.0; if all cards fit, stop (never
-shrink for aesthetics); if unresolved, compute a bounded automatic presentation
-scale for eligible ordinary cards and re-run at the largest scale that resolves the
-overfull display, respecting a conservative product floor (~`0.75–0.80`, subject to
-physical validation); if still unresolved at the floor, keep explicit
-unresolved/fail-loud behaviour rather than crushing cards.
+The non-CUSTOM display packer is `build_display_stack_plan(...)` in
+`rendering/widget_stacking.py`. It is already deterministic and event-edge driven:
+each widget tries its authored canonical slot, then nearby slots (same column
+before cross-column spill), then a bounded set of edge-derived free-space
+candidates. It returns `DisplayStackPlan(placements, all_fit, unresolved)`, and
+when **no** collision-free rectangle exists it *keeps the authored rectangle and
+records the widget in `unresolved`* (never overlaps, never shrinks today). That
+`unresolved` tuple is the exact, existing signal to hang shrink on.
+
+Desired later algorithm (a wrapper around the existing solver — add no second
+placement engine, no polling):
+
+1. Run `build_display_stack_plan` at scale 1.0.
+2. If `all_fit` (i.e. `unresolved` is empty), stop. **Shrink is gated strictly on
+   post-placement collision; never shrink for aesthetics.**
+3. If `unresolved` is non-empty, re-run the *same* solver with the eligible
+   participants' `DisplayStackParticipant.width/height` multiplied by a trial
+   presentation scale (ineligible widgets and obstacles keep their size).
+4. Take the largest trial scale that yields `all_fit`, down to a conservative
+   product floor (~`0.75–0.80`, subject to physical validation).
+5. If still unresolved at the floor, keep the current explicit
+   `unresolved`/fail-loud behaviour rather than crushing cards indefinitely.
 
 The auto-scale must be **presentation state, not authored state**: non-CUSTOM only;
 transient/derived from the current logical display budget; never persisted as
@@ -340,12 +357,12 @@ family font/artwork/icon Settings or as CUSTOM-authored geometry; reset to 1.0
 before entering CUSTOM edit; recomputed only on real layout/topology/preferred-size
 events. No timer, no polling.
 
-Recompute on existing event edges only: family admission/removal;
-preferred-content-size publication; screen topology/geometry change; authored
-position change; Media/Visualizer relationship change; leaving/entering global
-CUSTOM. Prefer families with a proven whole-card retained transform — which is
-exactly what C1–C4 produce, so this feature gets materially easier afterward. Do
-not force Weather/Clock normalization solely to make the stacker symmetrical.
+Recompute on the existing event edges that already drive a placement pass:
+family admission/removal; preferred-content-size publication; screen
+topology/geometry change; authored position change; Media/Visualizer relationship
+change; leaving/entering global CUSTOM. **Eligibility = a proven whole-card retained
+transform** (the C1–C4 output), which is why the tranche above is the prerequisite.
+Do not force Weather/Clock normalization solely to make the stacker symmetrical.
 Preserve the stronger Media/Visualizer adjacency contract as a combined obstacle,
 and do not alter Visualizer viewport/reactivity to solve display crowding. Use
 logical geometry (`QScreen.geometry()`); useful test budgets: 3840×2160, 2560×1440,
