@@ -12,29 +12,18 @@ from rendering.custom_layout_session import CustomLayoutSessionItem
 from rendering.widget_descriptors import WidgetRuntimeDescriptor
 
 
-# H9: resize modes that obey the single uniform retained-presentation scale
-# (``OverlayWidget.uniformScaleTransform``). Their CUSTOM resize is purely
-# geometric - the QML derives one whole-widget scale from the outer-rect /
-# baseline-preferred ratio - so they carry NO per-value size payload. Font and
-# other authored sizes stay Settings-owned; nothing Settings-like is mutated or
-# persisted by a temporary CUSTOM resize. Families that still project a handful
-# of family values (clock/weather/steam) remain on their existing payload path;
-# Gmail joins Reddit/Media because fixed header/row minima must scale with the
-# whole retained card rather than diverge from the outer geometry.
+# Uniform retained transforms are the default for ordinary-widget CUSTOM resize:
+# one outer-rect / preferred-baseline scale; authored values remain Settings-owned.
+# Clock retains its variant-aware per-value path. Visualizer owns a distinct viewport contract.
 CUSTOM_LAYOUT_MIN_RESIZE_SCALE = 0.40
 CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY = "_custom_resize_scale"
 _PAYLOAD_MINIMUMS: dict[str, int] = {
     "font_size": 8,
-    "icon_size": 12,
-    "detail_icon_size": 8,
-    "artwork_size": 48,
-    "square_artwork_size": 48,
-    "capsule_font_size": 8,
 }
 
 
 UNIFORM_TRANSFORM_RESIZE_MODES: frozenset[str] = frozenset(
-    {"reddit_font", "media_scale", "gmail_font"}
+    {"ordinary_uniform", "reddit_font", "media_scale", "gmail_font", "steam_card_scale", "weather_scale"}
 )
 
 
@@ -56,22 +45,6 @@ def capture_quick_size_payload(
         return {}
     if mode == "clock_font":
         return {"font_size": int(getattr(config, "font_size", 48))}
-    if mode == "weather_scale":
-        return {
-            "font_size": int(getattr(config, "font_size", 18)),
-            "icon_size": int(getattr(config, "icon_size", 32)),
-            "detail_icon_size": int(getattr(config, "detail_icon_size", 16)),
-        }
-    if mode == "steam_card_scale":
-        payload = {"font_size": int(getattr(config, "font_size", 14))}
-        if hasattr(config, "square_artwork_size"):
-            payload.update(
-                square_artwork_size=int(config.square_artwork_size),
-                capsule_font_size=int(config.capsule_font_size),
-            )
-        if hasattr(config, "artwork_size"):
-            payload["artwork_size"] = int(config.artwork_size)
-        return payload
     if mode == "visualizer_rect":
         return {"width": rect.width(), "height": rect.height()}
     return {}

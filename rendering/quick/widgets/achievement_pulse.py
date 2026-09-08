@@ -649,16 +649,6 @@ class AchievementPulsePresentationModel(QObject):
         self.stateChanged.emit()
         return True
 
-    def apply_custom_layout_config(
-        self,
-        config: AchievementPulsePresentationConfig,
-    ) -> bool:
-        if self._retired or config == self.config:
-            return False
-        self._snapshot = replace(self._snapshot, config=config)
-        self.stateChanged.emit()
-        return True
-
     def apply_style(self, style: AchievementPulsePresentationStyle) -> bool:
         if self._retired or style == self.style:
             return False
@@ -960,19 +950,9 @@ class RetainedAchievementPulsePresentation:
         self,
         payload: Mapping[str, Any],
     ) -> None:
-        config = self._model.config
-        self._model.apply_custom_layout_config(
-            replace(
-                config,
-                font_size=int(payload.get("font_size", config.font_size)),
-                square_artwork_size=int(
-                    payload.get("square_artwork_size", config.square_artwork_size)
-                ),
-                capsule_font_size=int(
-                    payload.get("capsule_font_size", config.capsule_font_size)
-                ),
-            )
-        )
+        # CUSTOM owns outer geometry only. Historical per-value entries must not
+        # mutate the Settings-authored baseline during committed layout replay.
+        del payload
 
     def apply_input_state(self, input_state: object) -> bool:
         if isinstance(input_state, Mapping):

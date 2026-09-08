@@ -247,6 +247,10 @@ def test_weather_model_is_stable_runtime_consumer_for_loading_ready_and_cached_e
     assert model.viewState == "ready"
     assert model.locationText == "Cape Town"
     assert model.conditionText == "22°C - Partly Cloudy"
+    assert model.conditionMarkup == (
+        f'<span style="font-size: {model.conditionFontSize * .9:g}pt">'
+        '22°C</span> - Partly Cloudy'
+    )
     assert model.rainText == "17%"
     assert model.humidityText == "68%"
     assert model.windText == "12.6 km/h"

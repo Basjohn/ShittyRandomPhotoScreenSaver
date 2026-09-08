@@ -251,6 +251,8 @@ Settings-window theme/shadow ownership is separate from runtime overlay-widget s
 
 ## Geometry / CUSTOM
 
+Ordinary card CUSTOM resize uses one retained whole-card transform, with Settings-authored baseline values unchanged. Clock retains variant-aware sizing; Visualizer retains separate viewport and visual-scale intents. New-widget implementation starts with the [authoring checklist](Docs/10_WIDGET_GUIDELINES.md#whole-card-custom-resize-default).
+
 Outer geometry is Python/session-owned. Variant key supports `(widget_id, display_identity, geometry_variant)`.
 Clock digital/analogue are the first required example.
 

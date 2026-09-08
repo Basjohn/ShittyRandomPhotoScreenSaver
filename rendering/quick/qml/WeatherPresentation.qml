@@ -3,6 +3,7 @@ import QtQuick
 OverlayWidget {
     id: weatherRoot
     objectName: "weatherPresentation"
+    uniformScaleTransform: true
 
     required property var weatherModel
     semanticDoubleClickEnabled: weatherModel.viewState !== "missing"
@@ -47,7 +48,9 @@ OverlayWidget {
             + 2.0 * weatherRoot.legacyTextInset
     )
     preferredContentHeight: Math.max(
-        60.0, readyColumn.childrenRect.height
+        // Intrinsic Column layout only; its positioned child bounding box must
+        // not become a feedback source during CUSTOM geometry changes.
+        60.0, readyColumn.implicitHeight
     ) + weatherRoot.shellInset
         + 2.0 * weatherRoot.legacyVerticalInset
 
@@ -143,7 +146,8 @@ OverlayWidget {
                         objectName: "weatherConditionText"
                         width: primaryText.width
                         height: implicitHeight
-                        text: weatherRoot.weatherModel.conditionText
+                        text: weatherRoot.weatherModel.conditionMarkup
+                        textFormat: Text.RichText
                         color: weatherRoot.weatherModel.textColor
                         font.family: weatherRoot.weatherModel.fontFamily
                         font.pointSize: weatherRoot.weatherModel.conditionFontSize
@@ -194,7 +198,7 @@ OverlayWidget {
 
                     Separator {
                         width: parent.width
-                        height: weatherRoot.scaleAwareStrokeWidth(1.0)
+                        height: 1.0
                         thickness: weatherRoot.scaleAwareStrokeWidth(1.0)
                         lineColor: weatherRoot.weatherModel.separatorColor
                     }
@@ -291,7 +295,7 @@ OverlayWidget {
 
                     Separator {
                         width: parent.width
-                        height: weatherRoot.scaleAwareStrokeWidth(1.0)
+                        height: 1.0
                         thickness: weatherRoot.scaleAwareStrokeWidth(1.0)
                         lineColor: weatherRoot.weatherModel.separatorColor
                     }

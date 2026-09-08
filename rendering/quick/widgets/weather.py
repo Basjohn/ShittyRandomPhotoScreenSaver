@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -347,6 +348,7 @@ class WeatherPresentationSnapshot:
     view_state: str
     location_text: str
     condition_text: str
+    temperature_text: str
     forecast_text: str
     error_text: str
     condition_icon_source: str
@@ -367,6 +369,7 @@ def _initial_snapshot(
         view_state="missing" if missing else "loading",
         location_text="Weather location required" if missing else config.location.title(),
         condition_text="Open Weather Settings" if missing else "Loading weather…",
+        temperature_text="",
         forecast_text="",
         error_text="",
         condition_icon_source="",
@@ -565,7 +568,8 @@ class WeatherPresentationModel(QObject):
                 self._snapshot,
                 view_state="ready",
                 location_text=str(location or self.config.location).title(),
-                condition_text=f"{temp:.0f}°C - {condition_text}",
+                condition_text=condition_text,
+                temperature_text=f"{temp:.0f}°C",
                 forecast_text=str(data.get("forecast") or ""),
                 error_text="",
                 condition_icon_source=_condition_icon_source(
@@ -594,7 +598,21 @@ class WeatherPresentationModel(QObject):
 
     @Property(str, notify=stateChanged)
     def conditionText(self) -> str:
+        if self._snapshot.view_state == "ready":
+            return f"{self._snapshot.temperature_text} - {self._snapshot.condition_text}"
         return self._snapshot.condition_text
+
+    @Property(str, notify=stateChanged)
+    def conditionMarkup(self) -> str:
+        # One wrapped/baseline-aligned line; only the temperature is 10% smaller.
+        # Escape provider text before admitting it to Qt's rich-text parser.
+        if self._snapshot.view_state != "ready":
+            return escape(self.conditionText)
+        return (
+            f'<span style="font-size: {self.conditionFontSize * 0.9:g}pt">'
+            f'{escape(self._snapshot.temperature_text)}</span> - '
+            f'{escape(self._snapshot.condition_text)}'
+        )
 
     @Property(str, notify=stateChanged)
     def forecastText(self) -> str:
@@ -766,17 +784,9 @@ class RetainedWeatherPresentation:
         self,
         payload: Mapping[str, object],
     ) -> None:
-        config = self._model.config
-        self._model.apply_config(
-            replace(
-                config,
-                font_size=int(payload.get("font_size", config.font_size)),
-                icon_size=int(payload.get("icon_size", config.icon_size)),
-                detail_icon_size=int(
-                    payload.get("detail_icon_size", config.detail_icon_size)
-                ),
-            )
-        )
+        # Current-format older saves may contain per-value sizes. Geometry now
+        # owns CUSTOM scaling; replay must not rewrite the Settings baseline.
+        del payload
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

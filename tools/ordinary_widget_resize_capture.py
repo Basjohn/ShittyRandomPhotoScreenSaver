@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
+from html import escape
 import json
+import os
 from pathlib import Path
 import platform
 import subprocess
@@ -248,6 +250,20 @@ def compare(before, after, output, *, max_channel_delta=0):
                 # Opaque mask also exposes alpha-only drift when viewed on black.
                 Image.fromarray((mask * 255).astype("uint8")).save(output / f"{case}__difference.png")
     (output / "comparison.json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
+    sections = []
+    for case, row in rows.items():
+        pictures = []
+        for label, directory in (("Before", before), ("After", after)):
+            source = escape(Path(os.path.relpath(directory / f"{case}.png", output)).as_posix(), quote=True)
+            pictures.append(f'<figure><figcaption>{label}</figcaption><a href="{source}"><img loading="lazy" src="{source}"></a></figure>')
+        sections.append(f'<details><summary>{escape(case)} — {row["changed_pixels"]} changed pixels; '
+            f'{row["pixels_above_tolerance"]} above tolerance</summary><div>{"".join(pictures)}</div></details>')
+    (output / "review.html").write_text('<!doctype html><meta charset="utf-8"><title>Widget resize comparison</title>'
+        '<style>body{font:16px sans-serif;background:#222;color:#eee;margin:24px}details{margin:12px 0}'
+        'summary{cursor:pointer}div{display:flex;gap:12px}figure{width:50%;margin:12px 0}img{width:100%}'
+        'a{color:#9df}</style><h1>Widget resize comparison</h1><p>Expand a case; click either image for full resolution. '
+        'Counts are evidence, not automatic acceptance. See comparison.json for geometry and exact RGBA differences.</p>'
+        + ''.join(sections), encoding="utf-8")
     normal = [row for case, row in rows.items() if case.endswith("__1.00")]
     print(f"Identical pixels: {sum(row['changed_pixels'] == 0 for row in rows.values())}/{len(rows)}")
     print(f"Identical normal-size pixels: {sum(row['changed_pixels'] == 0 for row in normal)}/{len(normal)}")

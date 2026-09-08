@@ -13,10 +13,7 @@ OverlayWidget {
 
     readonly property real authoredWidth: abandonmentModel.authoredWidth
     readonly property real authoredHeight: abandonmentModel.authoredHeight
-    readonly property real contentScale: Math.max(
-        0.05,
-        Math.min(width / authoredWidth, height / authoredHeight)
-    )
+    uniformScaleTransform: true
 
     // Rotation fades only data that actually changes. Archive chrome, shelves,
     // separators, labels (including LAST VISIT), and artwork framing remain stable;
@@ -49,9 +46,6 @@ OverlayWidget {
         objectName: "abandonmentAuthoredCanvas"
         width: abandonmentRoot.authoredWidth
         height: abandonmentRoot.authoredHeight
-        x: (abandonmentRoot.width - width * scale) / 2.0
-        y: (abandonmentRoot.height - height * scale) / 2.0
-        scale: abandonmentRoot.contentScale
         transformOrigin: Item.TopLeft
 
         BrandedHeader {
@@ -67,7 +61,7 @@ OverlayWidget {
             borderColor: abandonmentRoot.abandonmentModel.headerBorderColor
             borderWidth: abandonmentRoot.scaleAwareStrokeWidthForScale(
                 abandonmentRoot.abandonmentModel.headerBorderWidth,
-                abandonmentRoot.contentScale
+                abandonmentRoot.presentationScale
             )
             textColor: abandonmentRoot.abandonmentModel.headerTextColor
             fontFamily: abandonmentRoot.abandonmentModel.fontFamily
@@ -97,7 +91,7 @@ OverlayWidget {
             color: abandonmentRoot.abandonmentModel.steamInfoSurfaceColor
             border.color: abandonmentRoot.abandonmentModel.steamInfoBorderColor
             border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                1.0, abandonmentRoot.contentScale
+                1.0, abandonmentRoot.presentationScale
             )
             z: 5
 
@@ -138,7 +132,7 @@ OverlayWidget {
             color: abandonmentRoot.abandonmentModel.steamTooltipSurfaceColor
             border.color: abandonmentRoot.abandonmentModel.steamTooltipBorderColor
             border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                1.0, abandonmentRoot.contentScale
+                1.0, abandonmentRoot.presentationScale
             )
             z: 10
 
@@ -205,7 +199,7 @@ OverlayWidget {
                         0.80
                     )
                     strokeWidth: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                        1.0, abandonmentRoot.contentScale
+                        1.0, abandonmentRoot.presentationScale
                     )
                     fillColor: Qt.rgba(
                         abandonmentRoot.abandonmentModel.accentColor.r,
@@ -323,7 +317,7 @@ OverlayWidget {
                                 y: artworkFrame.height
                                 width: artworkFrame.height * 1.45
                                 height: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                                    1.0, abandonmentRoot.contentScale
+                                    1.0, abandonmentRoot.presentationScale
                                 )
                                 rotation: -45.0
                                 transformOrigin: Item.Left
@@ -364,7 +358,7 @@ OverlayWidget {
                             color: "transparent"
                             border.color: abandonmentRoot.abandonmentModel.steamArtworkBorderColor
                             border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                                2.0, abandonmentRoot.contentScale
+                                2.0, abandonmentRoot.presentationScale
                             )
                         }
                     }
@@ -431,7 +425,7 @@ OverlayWidget {
                     color: abandonmentRoot.abandonmentModel.steamMetricSurfaceColor
                     border.color: abandonmentRoot.abandonmentModel.steamMetricBorderColor
                     border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                        2.0, abandonmentRoot.contentScale
+                        2.0, abandonmentRoot.presentationScale
                     )
 
                     Rectangle {
@@ -441,7 +435,7 @@ OverlayWidget {
                         color: "transparent"
                         border.color: abandonmentRoot.abandonmentModel.steamMetricInnerBorderColor
                         border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                            1.0, abandonmentRoot.contentScale
+                            1.0, abandonmentRoot.presentationScale
                         )
                     }
 
@@ -514,7 +508,7 @@ OverlayWidget {
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
                             height: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                                1.0, abandonmentRoot.contentScale
+                                1.0, abandonmentRoot.presentationScale
                             )
                             color: abandonmentRoot.abandonmentModel.steamMetricSeparatorColor
                         }

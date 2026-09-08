@@ -33,42 +33,18 @@ and Quick snapshot path. Fixed floors, fixture integrity, presentation independe
 lane/travel contracts and production-seam negative controls pass 78 tests.
 [Harness contract](Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md).
 
-## 3. Ordinary widget resize normalization → one uniform-transform seam
+## 3. Ordinary widget resize normalization — Awaiting Validation
 
-[Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md](Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md).
+C0–C4 are implemented: Abandonment/Achievement/Weather use one whole-card transform;
+CUSTOM replay no longer mutates their authored Settings. The permanent capture and
+comparison harness remains available. Steam and Weather whole-card appearance were
+user-accepted; Weather temperature is intentionally 10% smaller at the user's request.
+New-card guidance and the per-value-exception regression bar protect the default seam.
+[Focused evidence and remaining physical checklist](Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md).
 
-Move Abandonment/Achievement/Weather off per-value CUSTOM resize payloads onto the
-shared `uniformScaleTransform` seam so CUSTOM resize is geometry-only for every
-ordinary widget — and make that seam the default path so new widgets are cheap to
-add (C4 + new-widget checklist). This is also the prerequisite for the deferred
-non-CUSTOM stacker auto-shrink (a widget is only eligible to shrink cleanly once it
-scales as one whole card). **C0 harness landed; C1–C3 candidate in the working tree,
-not yet accepted/committed.** The maintained [capture/compare harness](Docs/Ordinary_Widget_Resize_Capture.md)
-captures 112 states/envelopes and geometry ledgers on real OpenGL. Initial populated
-1.0 cards were visually inspected at DPR 1.5 with zero Qt messages. Settled repeated
-captures have identical geometry in all 112 cases; all 14 normal cases stay within
-2 channel levels of rendering variation. Evidence: `logs/widget_resize_normalization/settled_*`.
-Complete the remaining physical/interaction gates before claiming product parity.
-
-- [ ] Finish C1–C3 review: candidate captures have zero Qt messages; Steam's normal
-  cases stay within measured rendering variation. Weather long-location normal
-  output has a repeatable 4-channel-level difference at identical geometry (baseline
-  repeat variation is 2); investigate before closing normal parity. Evidence:
-  `uniform_candidate`, `uniform_comparison`, `weather_candidate_repeat` under the
-  capture root. Stale replay and two live saves/Cancel pass for all three families;
-  non-1.0 acceptance, slots, tooltip/glow and physical topology remain open.
-
-- [ ] **Weather `preferredContentHeight` binding loop:** the physical torture run
-  produced repeated QML binding-loop warnings at `WeatherPresentation.qml`'s
-  `preferredContentHeight` binding during aggressive CUSTOM resize/reposition and
-  multi-display geometry churn. Treat this as a small sizing-correctness/polish bug,
-  not performance degradation. Repair it in the same normalization slice by making
-  the Weather preferred-height path one-directional: content/scale may determine the
-  preferred height, but host/parent geometry must not feed back into the same binding.
-  Do not add a timer, poller, debounce, fallback size authority or second geometry
-  owner. Regression bar: repeated CUSTOM resize/reposition, cross-display movement and
-  runtime recreation must emit zero Weather binding-loop warnings while preserving the
-  current Weather visual size, uniform scaling and stacking behaviour.
+- [ ] Validate live Weather resize/reposition/recreation across displays produces no
+  binding-loop warnings (48 final Weather captures at DPR 1.5 produce zero warnings).
+- [ ] Validate scaled tooltip/hit/glow/shadow bounds and mixed-DPR edit/replay behavior.
 
 ## 4. dark.qss retirement → ThemeSpec sole authority
 
@@ -96,8 +72,6 @@ Concrete open items, do alongside the work above:
 - [ ] `tests/test_qtquick_ordinary_widget_host.py::test_scene_controller_owns_and_retires_ordinary_widget_host`
   — branch on `window.isSceneGraphInitialized()` for the two-phase deferred-retirement
   offscreen path (already reconciled for the overlay test).
-- [ ] Add a narrow regression bar for the `bind_families` recreation ordering fix
-  (binding with a retained item reporting a synchronous size must not raise).
 - [ ] `tests/test_qtquick_media_presentation.py` — reconcile the Media Volume
   border/volume-colour/artwork presentation contract if that suite owns the seam.
 - [ ] Delete the caller-dead `widgets/spotify_visualizer/renderers/` island and

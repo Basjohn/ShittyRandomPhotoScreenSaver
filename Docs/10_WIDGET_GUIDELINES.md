@@ -1,6 +1,6 @@
 # Ordinary Widget Authoring Guide
 
-Last updated: 2026-09-02
+Last updated: 2026-09-08
 
 Canonical guide for adding or deeply refactoring a **non-Visualizer runtime widget** in the accepted Qt
 Quick architecture. This guide is based on the landed retained Quick families: Clock, Weather, Media, Reddit/Reddit2, Gmail, Achievement Pulse and Abandonment Issues. It also incorporates the shared colour-only Widget Theme semantics, smart-stacking and global-CUSTOM architecture that later slices added across those families.
@@ -219,6 +219,37 @@ Materially different shapes may have stable variants:
 Clock digital/analogue is the first proven case. Never repeatedly derive one saved variant from the other and accumulate drift.
 
 Content-driven natural height may derive from accepted state. Keep it separate from transient overlays. Opening Gmail's three-dot menu must not rewrite Gmail's committed CUSTOM height.
+
+### Whole-card CUSTOM resize (default)
+
+New ordinary widgets use one shared transform. Author a truthful **outer** baseline
+per axis; check whether model dimensions already include shell inset before adding
+padding. Do not introduce a local content scale or resize-driven Settings updates.
+
+```qml
+OverlayWidget {
+    required property var cardModel
+    uniformScaleTransform: true
+    preferredContentWidth: cardModel.authoredOuterWidth
+    preferredContentHeight: cardModel.authoredOuterHeight
+    // Authored children use this baseline coordinate space.
+}
+```
+
+Set the runtime descriptor's `custom_layout_resize_mode="ordinary_uniform"` and
+`supports_layout_resize_edit=True`. That mode already belongs to the shared
+`UNIFORM_TRANSFORM_RESIZE_MODES`; no new capture/scale branch, payload handler,
+minimum-value entry or product Settings key is needed. Geometry carries the scale;
+centred letterboxing, transformed shadow/glow bounds and the shared absolute 40%
+floor follow the same retained root. Use `scaleAwareStrokeWidthForScale(width,
+presentationScale)` for thin strokes. Prove stale payload replay, Save/Cancel and
+reconstruction keep the authored baseline stable, then visually inspect the
+[permanent capture matrix](Ordinary_Widget_Resize_Capture.md) and live hit targets.
+
+Clock's variant-aware `clock_font` and Visualizer's `visualizer_rect` are explicit
+exceptions. The descriptor regression bar rejects new per-value families without
+a deliberate contract change. Genuine family font/artwork Settings remain active;
+CUSTOM geometry is not their authority.
 
 ### Non-CUSTOM authored stacking
 
