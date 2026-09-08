@@ -42,13 +42,21 @@ shared `uniformScaleTransform` seam so CUSTOM resize is geometry-only for every
 ordinary widget — and make that seam the default path so new widgets are cheap to
 add (C4 + new-widget checklist). This is also the prerequisite for the deferred
 non-CUSTOM stacker auto-shrink (a widget is only eligible to shrink cleanly once it
-scales as one whole card). **C0 capture harness implemented; production normalization
-not yet applied.** The maintained [capture/compare harness](Docs/Ordinary_Widget_Resize_Capture.md)
+scales as one whole card). **C0 harness landed; C1–C3 candidate in the working tree,
+not yet accepted/committed.** The maintained [capture/compare harness](Docs/Ordinary_Widget_Resize_Capture.md)
 captures 112 states/envelopes and geometry ledgers on real OpenGL. Initial populated
 1.0 cards were visually inspected at DPR 1.5 with zero Qt messages. Settled repeated
 captures have identical geometry in all 112 cases; all 14 normal cases stay within
 2 channel levels of rendering variation. Evidence: `logs/widget_resize_normalization/settled_*`.
 Complete the remaining physical/interaction gates before claiming product parity.
+
+- [ ] Finish C1–C3 review: candidate captures have zero Qt messages; Steam's normal
+  cases stay within measured rendering variation. Weather long-location normal
+  output has a repeatable 4-channel-level difference at identical geometry (baseline
+  repeat variation is 2); investigate before closing normal parity. Evidence:
+  `uniform_candidate`, `uniform_comparison`, `weather_candidate_repeat` under the
+  capture root. Stale replay and two live saves/Cancel pass for all three families;
+  non-1.0 acceptance, slots, tooltip/glow and physical topology remain open.
 
 - [ ] **Weather `preferredContentHeight` binding loop:** the physical torture run
   produced repeated QML binding-loop warnings at `WeatherPresentation.qml`'s
@@ -73,6 +81,13 @@ with zero dark-theme regression (byte-identity guarded). Large and independent; 
 it after the above. **Not started.**
 
 ## Test reconciliation (small, ongoing — owned by `Docs/TestSuite.md` / `Future_Cleanup.md`)
+
+First Edit-entry jump is repaired: quiesce authored placement without resetting
+visible geometry. Real started-owner regression and before/after OpenGL captures
+confirm the Visualizer stays at `(730,420)` as edit handles appear. Evidence:
+`logs/widget_resize_normalization/edit_entry_fixed`. Deferred shrink/stack ordering
+is recorded in the resize decomposition: stack first, shrink unresolved collisions,
+then re-stack with the reduced footprints.
 
 Concrete open items, do alongside the work above:
 

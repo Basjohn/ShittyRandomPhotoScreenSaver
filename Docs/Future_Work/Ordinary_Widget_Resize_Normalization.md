@@ -359,10 +359,24 @@ placement engine, no polling):
 5. If still unresolved at the floor, keep the current explicit
    `unresolved`/fail-loud behaviour rather than crushing cards indefinitely.
 
+Operator clarification (2026-09-08): stacking must get the first opportunity to
+fit authored-size cards. Only unavoidable post-stacking collisions admit shrink.
+Every trial must re-run placement with its new footprints, and apply the resulting
+positions together with the accepted scales; shrinking at old stacked positions
+wastes the space it freed. Validate clearance as well as intersection so cards do
+not touch. Prefer the largest fitting cards and avoid shrinking unaffected cards
+unnecessarily. Recompute from authored sizes on each layout event, never from a
+previously shrunken result. Bound the search deterministically; a greedy placement
+solver need not have monotonic success as scale changes, so do not assume an
+unchecked binary search proves the best fit. No polling or second placement owner.
+
 The auto-scale must be **presentation state, not authored state**: non-CUSTOM only;
 transient/derived from the current logical display budget; never persisted as
-family font/artwork/icon Settings or as CUSTOM-authored geometry; reset to 1.0
-before entering CUSTOM edit; recomputed only on real layout/topology/preferred-size
+family font/artwork/icon Settings or as CUSTOM-authored geometry. Entering Edit
+must preserve the visible position/footprint while transferring authority; do not
+reset to 1.0 before capture and cause another entry jump. Define explicit conversion
+of the visible footprint into session geometry when this feature is implemented.
+Auto-scale is recomputed only on real layout/topology/preferred-size
 events. No timer, no polling.
 
 Recompute on the existing event edges that already drive a placement pass:

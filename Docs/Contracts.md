@@ -327,7 +327,8 @@ CUSTOM layout admission is global. As soon as any effective family route is `Cus
 transaction starts, generic authored stacking and the stronger ordinary Media/Visualizer adjacency owner are dormant
 for the whole retained layout. Number-key layout-slot loads quiesce the same subsystem before their fenced runtime
 rebuild. No CUSTOM family participates as a movable card *or* obstacle because the planner is not invoked at all in
-that mode. An uncommitted Visualizer falls back to Media's plain authored anchor while dormant; adjacency is restored
+that mode. Live Edit captures existing visible rectangles without resetting their stacked/adjacent positions.
+A newly constructed uncommitted Visualizer uses Media's plain authored anchor; adjacency is restored
 only after returning to a globally non-CUSTOM generation/session. This switch is event-bound and must never gain a
 recurring timer, polling loop, render callback, or worker.
 

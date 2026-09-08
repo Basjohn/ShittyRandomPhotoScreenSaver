@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from tools.visualizer_replay.engine import ReplayBeatEngine
 from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
+from core.settings.default_contract import require_canonical_default
 from PySide6.QtCore import QEvent, QPoint, QRect, Qt
 from PySide6.QtGui import QKeyEvent
 
-from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
+from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, resolve_effective_enabled_modes
 
 from engine.display_manager import DisplayManager
 from rendering.custom_layout_contract import (
@@ -45,6 +47,23 @@ from widgets.spotify_visualizer.quick_display_visualizer_owner import (
 )
 
 
+def _configure_visualizer(owner, *, playing=False):
+    from dataclasses import asdict
+    from core.settings.models import SpotifyVisualizerSettings
+    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from widgets.spotify_visualizer.technical_config import build_technical_cache
+
+    mode = owner.controller.mode_id
+    activation = resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": 0})
+    model = SpotifyVisualizerSettings.from_mapping(
+        activation.resolved_config, apply_preset_overlay=False, resolve_preset_indices=False)
+    owner.controller.settings_model = model
+    owner.controller.record_resolved_activation(activation)
+    owner.controller.technical_config_cache = build_technical_cache(None, model)
+    owner.configure(playing=playing, logical_kwargs=asdict(model), presentation_kwargs=asdict(model),
+        technical_config=owner.controller.technical_config_cache[mode])
+
+
 class _Settings:
     def __init__(self, widgets: dict) -> None:
         self.widgets = deepcopy(widgets)
@@ -66,6 +85,9 @@ class _Settings:
                 return default
             current = current[part]
         return deepcopy(current)
+
+    def get_bool(self, key: str) -> bool:
+        return bool(self.get(key, require_canonical_default(key)))
 
     def set(self, key: str, value) -> None:
         if key == "widgets":
@@ -117,12 +139,57 @@ def _clock_unit(
     )
     unit.bind_families(
         widgets_config=widgets,
+        shadow_values=require_canonical_default("widgets.shadows"),
         committed_rect_resolver=lambda widget_id: resolve_quick_committed_geometry(
             widgets, screen, widget_id
         ),
     )
     apply_quick_committed_payloads(unit, widgets)
     return unit, factory
+
+
+def test_first_edit_entry_preserves_visible_visualizer_origin(qt_app):
+    widgets = _clock_widgets()
+    settings = _Settings(widgets)
+    unit, factory = _clock_unit(qt_app, widgets, generation=918)
+    visualizer = QuickDisplayVisualizerOwner(unit.runtime, initial_mode="spectrum", bar_count=24,
+        engine_factory=lambda _count: _LiveCommitEngine(),
+        card_shadow_kwargs={"background_color": (0, 0, 0, 0), "border_color": (255, 255, 255, 255),
+            "border_width": 4., "corner_radius": 6., "content_inset": 14.,
+            "shadow_enabled": False, "shadow_color": (0, 0, 0, 0), "shadow_blur": 0.,
+            "shadow_offset": (0., 0.), "shadow_spread": 0., "shadow_extensions": (0., 0., 0., 0.)})
+    unit.attach_visualizer_owner(visualizer)
+    layout = QuickCustomLayoutOwner(settings_manager=settings, participants_provider=lambda: (unit,),
+        visualizer_provider=lambda: (visualizer, unit), reload_request=lambda _kind: None)
+    manager = DisplayManager.__new__(DisplayManager)
+    manager.displays = [unit]
+    manager.settings_manager = settings
+    manager._quick_custom_layout_owner = layout
+    manager._quick_visualizer_owner = visualizer
+    manager._quick_visualizer_unit = unit
+    manager._widgets_config_snapshot = widgets
+    manager._refresh_all_quick_context_menus = lambda: None
+    try:
+        _configure_visualizer(visualizer, playing=True)
+        visualizer.set_authored_outer_origin(730., 420.)
+        visualizer.bind(engine_generation=3, activation_id=5)
+        visualizer._apply_resolved_presentation(visualizer._resolve_current_presentation())
+        visualizer.start(interval_s=10.)
+        before = unit.runtime.scene_controller.visualizer_item.presentation.outer_rect
+        assert before[:2] == (730., 420.)
+        assert manager._start_quick_custom_layout_session()
+        after = unit.runtime.scene_controller.visualizer_item.presentation.outer_rect
+        assert after == before
+        entry = next(item for item in layout.session.items() if item.model_identity == "spotify_visualizer")
+        screen = unit.runtime.window.screen().geometry()
+        assert entry.current_global_rect.x() == round(before[0]) + screen.x()
+        assert entry.current_global_rect.y() == round(before[1]) + screen.y()
+        assert not unit.presenter.authored_layout_enabled
+    finally:
+        layout.retire()
+        unit.retire()
+        factory.deleteLater()
+        qt_app.processEvents()
 
 
 def test_authored_clock_switch_stays_anchored_until_custom_save_installs_binding(qt_app) -> None:
@@ -722,11 +789,14 @@ def test_cross_display_transfer_coherence_gate_is_fail_safe() -> None:
     assert check(_stub([_item("spotify_visualizer", "display:a", "display:a")], source_unit)) is True
 
 
-class _LiveCommitEngine:
-    """Complete immutable-capture fake for a real started owner."""
+class _LiveCommitEngine(ReplayBeatEngine):
+    """Real source-config contract, fixed capture lanes, no audio admission."""
+
+    def __init__(self):
+        super().__init__(24)
 
     def acquire(self): pass
-    def release(self): pass
+    def release(self): self.deleteLater()
     def set_playback_state(self, _playing): pass
     def get_activation_id(self): return 5
     def get_generation_id(self): return 3
@@ -743,7 +813,7 @@ class _LiveCommitEngine:
     def get_perf_diagnostics(self): return {}
 
 
-@pytest.mark.parametrize("mode_id", VISUALIZER_MODE_IDS)
+@pytest.mark.parametrize("mode_id", resolve_effective_enabled_modes(None))
 @pytest.mark.parametrize("edge", ("left", "right", "top", "bottom"))
 @pytest.mark.parametrize(
     ("initial_rect", "initial_extent"),
@@ -771,6 +841,13 @@ def test_live_visualizer_session_save_preserves_visible_projection_and_identity(
     )
     visualizer = QuickDisplayVisualizerOwner(
         unit.runtime, bar_count=24, initial_mode=mode_id,
+        card_shadow_kwargs={
+            "background_color": (0, 0, 0, 0), "border_color": (255, 255, 255, 255),
+            "border_width": 4., "corner_radius": 6., "content_inset": 14.,
+            "shadow_enabled": False, "shadow_color": (0, 0, 0, 0),
+            "shadow_blur": 0., "shadow_offset": (0., 0.), "shadow_spread": 0.,
+            "shadow_extensions": (0., 0., 0., 0.),
+        },
         engine_factory=lambda _count: _LiveCommitEngine(),
     )
     unit.attach_visualizer_owner(visualizer)
@@ -780,7 +857,7 @@ def test_live_visualizer_session_save_preserves_visible_projection_and_identity(
         visualizer_provider=lambda: (visualizer, unit), reload_request=lambda _kind: None,
     )
     try:
-        visualizer.configure(playing=True)
+        _configure_visualizer(visualizer, playing=True)
         # Fractional extent forces the same independent-QRect rounding envelope
         # used in production; old 1e-4 equality rejects this legitimate save.
         visualizer.configure_committed_layout(
@@ -937,10 +1014,17 @@ def test_visualizer_custom_transfer_retargets_same_owner_publication(qt_app) -> 
         source,
         bar_count=24,
         initial_mode="bubble",
-        engine_factory=lambda _count: object(),
+        card_shadow_kwargs={
+            "background_color": (0, 0, 0, 0), "border_color": (255, 255, 255, 255),
+            "border_width": 4., "corner_radius": 6., "content_inset": 14.,
+            "shadow_enabled": False, "shadow_color": (0, 0, 0, 0),
+            "shadow_blur": 0., "shadow_offset": (0., 0.), "shadow_spread": 0.,
+            "shadow_extensions": (0., 0., 0., 0.),
+        },
+        engine_factory=lambda _count: _LiveCommitEngine(),
     )
     try:
-        owner.configure()
+        _configure_visualizer(owner)
         owner.configure_committed_layout(
             local_rect=(120.0, 80.0, 630.0, 280.0),
             viewport_extent=(630.0, 280.0),
@@ -954,6 +1038,7 @@ def test_visualizer_custom_transfer_retargets_same_owner_publication(qt_app) -> 
                 policy=owner.controller.presentation_policy,
                 display_size=(1920.0, 1080.0),
                 viewport_extent=(420.0, 280.0),
+                **owner._card_shadow_kwargs,
             )
         )
         owner.bind(engine_generation=3, activation_id=5)
@@ -976,6 +1061,7 @@ def test_visualizer_custom_transfer_retargets_same_owner_publication(qt_app) -> 
             display_size=(1920.0, 1080.0),
             outer_origin=(260.0, 190.0),
             viewport_extent=(630.0, 280.0),
+            **owner._card_shadow_kwargs,
         )
         owner._apply_resolved_presentation(second)
 
