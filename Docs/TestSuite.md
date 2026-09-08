@@ -8,6 +8,13 @@ The production Qt Quick cutover and caller-proven I cleanup are complete. M0 CUS
 
 Permanent destination guardrails include:
 
+- `test_qtquick_visualizer_roundtrip_lifetime.py` is an isolated fresh-process
+  target: repeated source/target admission transfer, deferred deletion and Python/QML
+  GC preserve exact display roots, ordinary roots, Edit overlays, screens and
+  display-local render items. It replaces the old single-hop owner-file test.
+  Process isolation avoids unrelated prior tests' queued teardown contaminating
+  this lifetime oracle, consistent with the destination runner's target policy.
+
 - ordinary host/Media presentation fixtures use complete canonical shadows, current
   two-phase scene retirement and QML-owned artwork rounding. Media volume RGBA
   projects the authored config exactly; its retired hidden alpha conversion is not
