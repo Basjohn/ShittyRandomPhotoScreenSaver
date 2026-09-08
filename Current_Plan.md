@@ -38,7 +38,8 @@ lane/travel contracts and production-seam negative controls pass 78 tests.
 C0–C4 are implemented: Abandonment/Achievement/Weather use one whole-card transform;
 CUSTOM replay no longer mutates their authored Settings. The permanent capture and
 comparison harness remains available. Steam and Weather whole-card appearance were
-user-accepted; Weather temperature is intentionally 10% smaller at the user's request.
+user-accepted; Weather temperature is intentionally 81% of its original size after two requested
+10% reductions; location/temperature visible left edges are font-metric aligned.
 New-card guidance and the per-value-exception regression bar protect the default seam.
 [Focused evidence and remaining physical checklist](Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md).
 

@@ -19,7 +19,8 @@ removing scale feedback through preferred height. `readyContentFitScale` is unch
 
 The user explicitly accepted Steam whole-card sizing and the shown Weather result,
 confirmed no excessive side/top blank space, and requested a slightly smaller
-Weather temperature. Only the temperature is now 90% of the condition font size;
+Weather temperature. Only the temperature is now 81% of the condition font size (two successive 10%
+reductions); location/temperature glyph left edges are font-metric aligned;
 the condition text remains full size on the same wrapped, baseline-aligned line.
 That requested normal-size typography change is intentional, superseding the
 original strict unchanged-pixel gate for this label.
@@ -34,7 +35,7 @@ retained for long-term use. Evidence under `logs/widget_resize_normalization/`:
 - `uniform_candidate`: reviewed whole-card proposal; Steam normal cases within
   that variation. Weather long-location had a repeatable 4-channel text-edge delta
   at identical geometry, disclosed during review before user acceptance.
-- `weather_temperature_richtext`: final requested temperature size; all 48 Weather
+- `weather_aligned_temperature_81`: final alignment and second temperature reduction; all 48 Weather
   states/envelopes captured at DPR 1.5 with zero Qt warnings. Normal, 75% and long
   location results visually inspected; no added card padding.
 - `tests/test_qtquick_resize_normalization.py`: real retained host stale replay,

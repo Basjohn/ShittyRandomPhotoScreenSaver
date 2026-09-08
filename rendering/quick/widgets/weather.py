@@ -603,13 +603,21 @@ class WeatherPresentationModel(QObject):
         return self._snapshot.condition_text
 
     @Property(str, notify=stateChanged)
+    def temperatureText(self) -> str:
+        return self._snapshot.temperature_text
+
+    @Property(float, notify=stateChanged)
+    def temperatureFontSize(self) -> float:
+        return self.conditionFontSize * 0.81
+
+    @Property(str, notify=stateChanged)
     def conditionMarkup(self) -> str:
-        # One wrapped/baseline-aligned line; only the temperature is 10% smaller.
+        # Two requested 10% reductions; condition text retains its authored size.
         # Escape provider text before admitting it to Qt's rich-text parser.
         if self._snapshot.view_state != "ready":
             return escape(self.conditionText)
         return (
-            f'<span style="font-size: {self.conditionFontSize * 0.9:g}pt">'
+            f'<span style="font-size: {self.temperatureFontSize:g}pt">'
             f'{escape(self._snapshot.temperature_text)}</span> - '
             f'{escape(self._snapshot.condition_text)}'
         )
