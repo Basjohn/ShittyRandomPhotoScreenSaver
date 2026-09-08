@@ -194,6 +194,19 @@ class OrdinaryFamilyPresentationBinder:
                 return presentation
         return None
 
+    def transfer_presentation_to(self, widget_id: str, target: "OrdinaryFamilyPresentationBinder") -> None:
+        """Move the same family and service retirement records after pixel transfer."""
+        if self._retired or target._retired:
+            raise RuntimeError("cannot transfer a retired family binder")
+        if target.presentation_for_widget_id(widget_id) is not None:
+            raise RuntimeError(f"target already owns family: {widget_id}")
+        index = self._bound_widget_ids.index(widget_id)
+        self._runtime_manager.transfer_widget_service_to(widget_id, target._runtime_manager)
+        presentation = self._bound.pop(index)
+        self._bound_widget_ids.pop(index)
+        target._bound.append(presentation)
+        target._bound_widget_ids.append(widget_id)
+
     def bind(self, widgets_config: Mapping[str, object] | None) -> tuple[str, ...]:
         """Build every admitted family instance once for this display generation.
 
@@ -369,17 +382,17 @@ class ClockFamilyAdapter:
         mode_callback = None
         if self._on_mode_toggle is not None:
             mode_callback = (
-                lambda target_mode, geometry, size_payload, wid=widget_id, identity=display_identity: (
+                lambda target_mode, geometry, size_payload, wid=widget_id: (
                     self._on_mode_toggle(
                         wid,
-                        identity,
+                        presentation_ref().display_identity,
                         str(target_mode),
                         geometry,
                         size_payload,
                     )
                 )
             )
-        return RetainedClockPresentation(
+        presentation = RetainedClockPresentation(
             host=host,
             model=model,
             geometry=geometry,
@@ -387,6 +400,9 @@ class ClockFamilyAdapter:
             display_identity=display_identity,
             on_mode_toggle=mode_callback,
         )
+        from weakref import ref
+        presentation_ref = ref(presentation)
+        return presentation
 
 
 class WeatherFamilyAdapter:

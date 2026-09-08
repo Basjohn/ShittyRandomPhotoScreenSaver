@@ -357,6 +357,46 @@ class QuickDisplayPresenter:
             self._reflow_non_custom_layout()
         return changed
 
+    def transfer_live_custom_layout_item_to(self, widget_id: str, target: "QuickDisplayPresenter") -> None:
+        """Complete an already-rendered ordinary transfer without rebuilding providers.
+
+        The Edit coordinator moved the retained root/shadow during the gesture.
+        Save moves the family/binding/service records before promoting target geometry.
+        Cancel before Save never enters this path.
+        """
+        if self._retired or target._retired or self._binder is None or target._binder is None:
+            raise RuntimeError("ordinary transfer requires two live presenters")
+        family = self.presentation_for_widget_id(widget_id)
+        target_host = target._runtime.scene_controller.ordinary_widget_host
+        retained = target_host.presentation_for_model_identity(widget_id)
+        binding = next((bound for key, bound in self._geometry_bindings if key == widget_id), None)
+        if family is None or binding is None or widget_id not in self._geometry_sinks:
+            raise RuntimeError(f"ordinary transfer source is incomplete: {widget_id}")
+        if retained is None or retained.item is not family.item:
+            raise RuntimeError(f"ordinary transfer lost exact retained item: {widget_id}")
+        if target.presentation_for_widget_id(widget_id) is not None or widget_id in target._geometry_sinks:
+            raise RuntimeError(f"ordinary transfer target already owns binding: {widget_id}")
+        if target._display_bounds is None:
+            raise RuntimeError("ordinary transfer target lacks bounds")
+        self._binder.transfer_presentation_to(widget_id, target._binder)
+        self._geometry_bindings.remove((widget_id, binding))
+        target._geometry_bindings.append((widget_id, binding))
+        target._geometry_sinks[widget_id] = self._geometry_sinks.pop(widget_id)
+        self._stack_order.remove(widget_id)
+        target._stack_order.append(widget_id)
+        base = self._base_geometries.pop(widget_id, None)
+        if base is not None:
+            target._base_geometries[widget_id] = base
+        self._custom_widget_ids.discard(widget_id)
+        target._custom_widget_ids.add(widget_id)
+        binding.retarget(target._display_bounds,
+            lambda geometry: target._apply_binding_geometry(widget_id, geometry))
+        set_context = getattr(family, "set_display_context", None)
+        if callable(set_context):
+            set_context(str(target._runtime.display_identity.screen_key), target._display_bounds)
+        self._last_stack_inputs = target._last_stack_inputs = None
+        self._last_stack_result = target._last_stack_result = None
+
     def commit_live_custom_layout_item(
         self,
         widget_id: str,

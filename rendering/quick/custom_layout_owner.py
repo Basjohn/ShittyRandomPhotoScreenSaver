@@ -299,16 +299,10 @@ class QuickCustomLayoutOwner:
         self._settings_manager.set_widgets_map(widgets, emit_change=False)
         self._settings_manager.save()
         topology_reason = self._live_commit_topology_reason()
-        # Interactive Edit Save may now live-commit a cross-display Visualizer
-        # move. The drag already transferred the retained scene AND the
-        # runtime/pacer/manager-unit/retirement to the target as one atomic
-        # transaction (`_transfer_visualizer_display_transaction`), so a coherent
-        # transfer leaves the generation already reconciled and needs no rebuild.
-        # This is deliberately limited: only the interactive path (never a
-        # layout-slot save, which defers), only when the sole topology change is a
-        # `display_transfer`, and only when the transfer graph is fully
-        # target-owned. Any other change (family presence, monitor route,
-        # incoherent transfer) or a layout-slot save still reconciles.
+        # A cross-display gesture has already moved the retained pixels.
+        # Visualizer ownership moves atomically during the gesture; ordinary
+        # family/binding/service records are promoted below before Edit closes.
+        # Slot transactions retain their explicit deferred replacement contract.
         live_committing = topology_reason is None
         if (
             not live_committing
@@ -318,7 +312,7 @@ class QuickCustomLayoutOwner:
         ):
             live_committing = True
             logger.info(
-                "[CUSTOM_LAYOUT] Save live-committed cross-display Visualizer "
+                "[CUSTOM_LAYOUT] Save live-committed cross-display "
                 "transfer without generation reconciliation"
             )
         promotion_error: Exception | None = None
@@ -1411,9 +1405,10 @@ class QuickCustomLayoutOwner:
         session = self._session
         if session is None:
             raise RuntimeError("CUSTOM live-commit admission requires a session")
-        for item in session.items():
-            if item.removed or not item.current_enabled or not item.baseline_enabled:
-                return "family_presence_changed"
+        items = session.items()
+        if any(item.removed or not item.current_enabled or not item.baseline_enabled for item in items):
+            return "family_presence_changed"
+        for item in items:
             if item.current_display_identity != item.source_key.display_identity:
                 return "display_transfer"
             if item.current_monitor_route != item.source_monitor_route:
@@ -1421,15 +1416,11 @@ class QuickCustomLayoutOwner:
         return None
 
     def _cross_display_transfer_is_coherent(self) -> bool:
-        """Return whether an already-live cross-display Visualizer transfer left a
-        fully target-owned graph, so an interactive Save can promote in place
-        instead of reinitialising the generation.
+        """Validate exact moved item identity before committing its target owners.
 
-        Fail-safe: any cross-display item that is not the Visualizer, or a
-        Visualizer whose current owner/unit is not the transfer target, forces the
-        normal generation reconciliation. This never promotes a partially moved
-        graph (the exact split that produced the historic retained-scene-admission
-        warning storm and shutdown barrier timeout).
+        The Visualizer requires its runtime/unit transfer already complete.
+        Ordinary items require the source family and target retained root to be
+        the same object; promotion moves their existing binding/service records.
         """
 
         session = self._session
@@ -1440,7 +1431,15 @@ class QuickCustomLayoutOwner:
             if item.current_display_identity == item.source_key.display_identity:
                 continue
             if item.model_identity != "spotify_visualizer":
-                return False
+                source = self._bindings.get(item.source_key.display_identity)
+                target = self._bindings.get(item.current_display_identity)
+                if source is None or target is None:
+                    return False
+                family = source.unit.presenter.presentation_for_widget_id(item.model_identity)
+                retained = target.unit.runtime.scene_controller.ordinary_widget_host.presentation_for_model_identity(item.model_identity)
+                if family is None or retained is None or family.item is not retained.item:
+                    return False
+                continue
             if owner is None or unit is None:
                 return False
             target_binding = self._bindings.get(item.current_display_identity)
@@ -1479,6 +1478,11 @@ class QuickCustomLayoutOwner:
                     viewport_extent=extent,
                 )
                 continue
+            if item.current_display_identity != item.source_key.display_identity:
+                source = self._bindings[item.source_key.display_identity]
+                source.unit.presenter.transfer_live_custom_layout_item_to(
+                    item.model_identity, binding.unit.presenter,
+                )
             binding.unit.presenter.commit_live_custom_layout_item(
                 item.model_identity,
                 local,

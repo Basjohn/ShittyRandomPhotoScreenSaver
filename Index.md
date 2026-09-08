@@ -28,7 +28,7 @@ tracked in `Current_Plan.md` / `Future_Cleanup.md` / `Docs/TestSuite.md`.
 | Settings theme / Acrylic / Glass / Foundry architecture | `Docs/Settings_Theme_Architecture.md` |
 | runtime Widget Theme precedence / semantic role / Custom transition | `Docs/Custom_Style_Implementation.md` + `Docs/Contracts.md` |
 | `dark.qss` retirement execution | `Docs/Settings_Dark_QSS_Retirement.md` |
-| CUSTOM / edit / geometry ownership | `Docs/Contracts.md` (Geometry / CUSTOM) + `Docs/Future_Work/Edit_Layout_Live_Commit.md` |
+| CUSTOM / edit / geometry ownership | `Docs/Contracts.md` (Geometry / CUSTOM) + `Docs/Future_Work/Edit_Layout_Live_Commit.md` (same-generation cross-display Save) |
 | ordinary widget authoring | `Docs/10_WIDGET_GUIDELINES.md` |
 | defaults / SSOT / import / reset | `Docs/Defaults_Guide.md` |
 | visualizer authored/reference behavior | `Docs/Visualizer_Reference.md` |

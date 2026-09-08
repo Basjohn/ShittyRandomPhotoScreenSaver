@@ -409,3 +409,23 @@ def test_steam_family_gated_off_builds_nothing_but_enabling_admits_card(
         runtime.close_runtime()
         factory.deleteLater()
         qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_clock_action_uses_live_display_context_after_transfer(qt_app):
+    runtime, factory = _make_runtime(qt_app, 883)
+    calls = []
+    binder = _binder(runtime, adapters=(ClockFamilyAdapter(
+        on_mode_toggle=lambda *args: calls.append(args)),))
+    try:
+        binder.bind(_widgets_config(clock={"enabled": True, "monitor": "ALL"}))
+        family = binder.presentation_for_widget_id("clock")
+        family.set_display_context("screen:b", OverlayWidgetGeometry(0., 0., 800., 600.))
+        family.toggle_display_mode()
+        assert calls[-1][0:2] == ("clock", "screen:b")
+        assert family.geometry.x + family.geometry.width <= 800.
+    finally:
+        binder.retire_all()
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()

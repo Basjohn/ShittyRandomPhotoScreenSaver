@@ -1011,6 +1011,15 @@ class RetainedClockPresentation:
                 font_size=self._model.config.font_size,
             )
 
+    @property
+    def display_identity(self) -> str:
+        return self._display_identity
+
+    def set_display_context(self, identity: str, bounds: OverlayWidgetGeometry) -> None:
+        """Retarget variant lookup and semantic actions after a live display move."""
+        self._display_identity = str(identity)
+        self._display_bounds = bounds
+
     def set_geometry_commit_handler(
         self,
         handler: Callable[[OverlayWidgetGeometry], object] | None,

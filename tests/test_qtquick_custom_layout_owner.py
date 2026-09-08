@@ -746,8 +746,9 @@ def test_cross_display_transfer_coherence_gate_is_fail_safe() -> None:
     """
 
     owner = object()
-    source_unit = object()
-    target_unit = object()
+    source_unit = SimpleNamespace(presenter=SimpleNamespace(presentation_for_widget_id=lambda _: None))
+    target_unit = SimpleNamespace(runtime=SimpleNamespace(scene_controller=SimpleNamespace(
+        ordinary_widget_host=SimpleNamespace(presentation_for_model_identity=lambda _: None))))
 
     def _item(model: str, current_display: str, source_display: str):
         return SimpleNamespace(
@@ -783,7 +784,7 @@ def test_cross_display_transfer_coherence_gate_is_fail_safe() -> None:
             _visualizer_provider=lambda: (None, None),
         )
     ) is False
-    # A non-visualizer family moving displays cannot live-commit yet -> reconcile.
+    # Missing ordinary retained/family identity is still incoherent.
     assert check(_stub([_item("clock", "display:b", "display:a")], target_unit)) is False
     # No cross-display item at all -> nothing blocks a live commit.
     assert check(_stub([_item("spotify_visualizer", "display:a", "display:a")], source_unit)) is True
@@ -1046,6 +1047,11 @@ def test_routed_ordinary_custom_transfer_moves_same_item_cancel_and_save(qt_app)
     family = units[0].presenter.presentation_for_widget_id("clock")
     assert family is not None
     retained_item = family.item
+    service = object()
+    retired_services = []
+    source_manager = units[0].runtime.widget_runtime_manager
+    target_manager = units[1].runtime.widget_runtime_manager
+    source_manager._services["clock"] = (service, SimpleNamespace(retire=retired_services.append))
 
     def _move_to_target() -> None:
         source_model = units[0].runtime.scene_controller.custom_layout_overlay.model
@@ -1078,7 +1084,29 @@ def test_routed_ordinary_custom_transfer_moves_same_item_cancel_and_save(qt_app)
         assert moved.item is retained_item
         assert settings.widgets["clock"]["monitor"] == "2"
         assert settings.widgets["clock"]["position"] == "Custom"
-        assert reloads == ["save_continue"]
+        assert reloads == []
+        assert units[0].presenter.presentation_for_widget_id("clock") is None
+        assert units[1].presenter.presentation_for_widget_id("clock") is family
+        assert "clock" not in source_manager._services
+        assert target_manager._services["clock"][0] is service
+        assert retired_services == []
+        saved = units[1].presenter.geometry_for("clock")
+        binding = units[1].presenter._geometry_bindings[0][1]
+        binding.update_content_size((700., 300.))
+        assert units[1].presenter.geometry_for("clock") == saved
+        assert owner.start() is True
+        target_model = units[1].runtime.scene_controller.custom_layout_overlay.model
+        assert target_model.rowCount() == 1
+        target_model.moveItem(0, -700., 120., -650., 150.)
+        assert owner.save() is True
+        assert reloads == []
+        assert units[0].presenter.presentation_for_widget_id("clock") is family
+        assert units[1].presenter.presentation_for_widget_id("clock") is None
+        assert family.item is retained_item
+        assert settings.widgets["clock"]["monitor"] == "1"
+        assert source_manager._services["clock"][0] is service
+        assert "clock" not in target_manager._services
+        assert retired_services == []
     finally:
         owner.retire()
         units[0].retire()
