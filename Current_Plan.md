@@ -35,7 +35,9 @@ lane/travel contracts and production-seam negative controls pass 78 tests.
 
 ## 3. Widget resize / Edit lifetime / non-CUSTOM auto-shrink
 
-Latest operator logs are preserved at `logs/edit_roundtrip_20260908_1522`.
+Original failure logs are preserved at `logs/edit_roundtrip_20260908_1522`.
+Latest operator sessions are preserved at `logs/shrink_audit_20260908_1544`;
+both have zero Qt warnings, including the logged Visualizer return hop.
 The two return-hop failures invalidate QScreen/Edit/ordinary wrappers after mid-scene
 Visualizer deletion. Transfer now moves admission between stable display-local shells;
 one logical owner remains, and render resources still retire on their existing event.
@@ -43,15 +45,19 @@ A fresh-process return-hop/deferred-delete/GC regression passes; physical repeat
 
 - [ ] Physically repeat Visualizer display A -> B -> A twice in one Edit session;
   all widget move/resize and guide actions must remain usable without re-entering Edit.
-Non-CUSTOM auto-shrink is implemented: full-size stacking first; bounded 1% trials
-and re-stacking down to 80%; restore unaffected cards toward 100%. The presenter
+Non-CUSTOM auto-shrink is implemented: full-size stacking first; bounded 5% bands with 1% refinement
+and re-stacking down to the shared 40% floor; restore cards toward 100%. The presenter
 applies positions and sizes together, recomputes from authored geometry and preserves
 the visible footprint on Edit entry. Real-Quick packing captures show clearance and
 full-size restoration with zero Qt warnings (`logs/widget_auto_shrink/packing_v1`).
 
 - [ ] Physically validate automatic packing with the operator's crowded widget set
-  and mixed-DPR displays. An impossible fit above 80% remains explicit/overfull;
-  the planner does not silently crush cards below the readability floor.
+  and mixed-DPR displays. The earlier 80% cutoff discarded useful shrink as content
+  loaded; the shared 40% limit now applies. Impossible fits remain explicit.
+- [ ] Inspect changed-input solve diagnostics in fresh logs for final provider
+  footprints/fixed obstacles and steady-state event tails. Identical events now
+  reuse one generation-scoped result and skip unchanged geometry writes; measured
+  seven-card synthetic solves are 11–33ms, so latency neutrality is not claimed.
 
 ### Normalization â€” implementation landed, physical validation open
 
@@ -172,13 +178,16 @@ exact current source + current reconciled test tree
 
 ## Latest log audit / test inventory
 
-- 1,105 QML warnings in the preserved operator run all name deleted QScreen during
-  Edit movement; no Weather binding-loop warning occurs in that run.
-- Repeated overfull stacking reports name Reddit2/Gmail/Steam cards; the activated
-  shrink tranche owns these collisions.
+- Original 15:21/15:22 failure: 1,105 deleted-QScreen warnings. Both newer
+  15:41/15:44 sessions contain zero Qt warnings, including the logged return hop.
+- Latest overfull reports follow successful interim auto-shrink as provider content
+  arrives. The independent 80% cutoff and excessive repeated solving are repaired;
+  final-footprint/pacing confirmation remains in the active checklist above.
 - Reddit public endpoints return 429/403 and enter the existing 900s cooldown;
   this is external provider rejection, not a widget geometry failure.
-- One Bubble tick spike (70ms) and one slow Media refresh (2.1s elapsed, 47ms worker)
-  remain observations for a clean post-repair run; no cadence retuning is justified.
+- Latest startup/recreation windows include 3.6–3.9s GlobalClockTicker gaps and
+  slow Media refresh elapsed time with only 32–63ms worker work. Their attribution
+  is not proven. A 42.5ms Bubble interval near session end also remains observed.
+  Check fresh post-repair event timings before attributing these or retuning cadence.
 - Scene-controller tests still omit 11 required style arguments in 21 cases;
   reconcile fixtures against the current owner during the remaining test inventory.

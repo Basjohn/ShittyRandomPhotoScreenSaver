@@ -320,7 +320,9 @@ the replacement mode obtains a frame. Sync and pointer movement create no cleanu
 ## Geometry / CUSTOM
 
 Non-CUSTOM stacking first attempts full authored sizes, then bounded whole-card
-shrink/re-stack trials down to 80% only when placement remains unresolved. Each
+shrink/re-stack trials down to the shared 40% whole-card floor only when placement remains unresolved.
+The bounded search samples 5% bands and refines the first fitting band in 1% steps;
+it proves accepted fits without claiming exhaustive or globally optimal packing. Each
 accepted scale carries its freshly solved placement and 10px clearance; growth
 restores authored size as space returns. Clock and fixed Media/Visualizer obstacles
 are excluded from shrink. No-fit remains an explicit overfull diagnostic. Global

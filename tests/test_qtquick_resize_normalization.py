@@ -168,7 +168,8 @@ def test_two_live_saves_and_cancel_preserve_scale_and_identity(qt_app, family, t
         qt_app.processEvents()
 
 
-def test_auto_shrink_restores_authored_size_and_transfers_visible_footprint_to_edit(qt_app, tmp_path):
+@pytest.mark.parametrize("target_scale", [.85, .65])
+def test_auto_shrink_restores_authored_size_and_transfers_visible_footprint_to_edit(qt_app, tmp_path, monkeypatch, target_scale):
     from tests.test_qtquick_custom_layout_owner import _Settings
     from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
     from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
@@ -204,22 +205,34 @@ def test_auto_shrink_restores_authored_size_and_transfers_visible_footprint_to_e
         config = card.model.config
         baseline = presenter.authored_geometry_for("weather")
         margin = presenter._geometry_bindings[0][1].policy.margin
-        narrow = OverlayWidgetGeometry(0., 0., round(baseline.width * .85) + 2 * margin,
+        narrow = OverlayWidgetGeometry(0., 0., round(baseline.width * target_scale) + 2 * margin,
                                        baseline.height + 2 * margin + 100.)
         presenter.set_display_bounds(narrow)
         small = presenter.geometry_for("weather")
-        assert .8 <= small.width / baseline.width <= .86
+        assert target_scale - .02 <= small.width / baseline.width <= target_scale + .01
         assert card.model.config == config
         presenter.set_display_bounds(OverlayWidgetGeometry(0., 0., baseline.width + 2 * margin + 100., narrow.height))
         assert presenter.geometry_for("weather").width == baseline.width
         presenter.set_display_bounds(narrow)
         assert presenter.geometry_for("weather") == small
+        # Repeated unchanged events must neither solve nor replay Qt geometry.
+        import rendering.quick.display_presenter as presenter_module
+        with monkeypatch.context() as patch:
+            patch.setattr(presenter_module, "build_display_auto_scale_plan",
+                          lambda *a, **k: pytest.fail("unchanged input solved again"))
+            patch.setitem(presenter._geometry_sinks, "weather",
+                          lambda *_: pytest.fail("unchanged geometry replayed"))
+            presenter.set_display_bounds(narrow)
+            presenter.set_external_stack_obstacles(())
         presenter.set_authored_layout_enabled(False, restore_base=False)
+        visible_width = round(baseline.width * card.item.property("presentationScale"))
         assert owner.start()
         session_item = owner.session.items()[0]
-        assert session_item.current_global_rect.width() == round(small.width)
+        # Edit removes the rounded envelope's subpixel letterbox, preserving
+        # the actual visible card width rather than its one-pixel dead margin.
+        assert session_item.current_global_rect.width() == visible_width
         assert session_item.resize_scale == pytest.approx(card.item.property("presentationScale"), abs=.003)
-        assert presenter.geometry_for("weather") == small
+        assert presenter.geometry_for("weather").width == visible_width
         assert owner.cancel()
         assert card.model.config == config
         assert settings.save_calls == 0

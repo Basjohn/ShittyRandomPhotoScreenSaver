@@ -5,6 +5,9 @@ from dataclasses import dataclass, replace
 from typing import Dict, Iterable, Literal
 
 
+ORDINARY_WIDGET_MIN_RESIZE_SCALE = 0.40
+
+
 StackLane = Literal["left", "center", "right"]
 StackBand = Literal["top", "middle", "bottom"]
 
@@ -519,15 +522,17 @@ def _free_edge_candidates(
         )
 
     candidates: list[tuple[int, int, str]] = []
+    valid_ys = tuple(y for y in sorted(ys) if margin <= y <= container_height - margin - height)
     for x in sorted(xs):
-        for y in sorted(ys):
-            rect = (int(x), int(y), width, height)
-            if not _rect_fits(
-                rect,
-                container_width=container_width,
-                container_height=container_height,
-                margin=margin,
-            ):
+        if not margin <= x <= container_width - margin - width:
+            continue
+        # Only obstacles intersecting this X interval can reject a Y position.
+        # Filter before sorting rather than allocating/sorting already-blocked cells.
+        blocked_y = tuple((oy - height - spacing, oy + oh + spacing)
+                          for ox, oy, ow, oh in occupied
+                          if x < ox + ow + spacing and x + width + spacing > ox)
+        for y in valid_ys:
+            if any(lo < y < hi for lo, hi in blocked_y):
                 continue
             candidates.append((int(x), int(y), "free"))
     candidates.sort(
@@ -584,30 +589,24 @@ def build_display_stack_plan(
         p_width = max(1, int(participant.width))
         p_height = max(1, int(participant.height))
         margin = max(0, int(participant.margin))
-        candidates: list[tuple[int, int, str]] = []
-        for slot in _slot_preference(participant.position_key):
-            x, y = _slot_xy(
-                slot,
-                width=p_width,
-                height=p_height,
-                container_width=width_limit,
-                container_height=height_limit,
-                margin=margin,
+        def candidates():
+            # Most cards fit a canonical slot. Build the larger edge search only
+            # after those slots fail, preserving the exact placement order.
+            for slot in _slot_preference(participant.position_key):
+                x, y = _slot_xy(
+                    slot, width=p_width, height=p_height,
+                    container_width=width_limit, container_height=height_limit,
+                    margin=margin,
+                )
+                yield x, y, slot
+            yield from _free_edge_candidates(
+                participant, occupied, container_width=width_limit,
+                container_height=height_limit, spacing=spacing_px,
             )
-            candidates.append((x, y, slot))
-        candidates.extend(
-            _free_edge_candidates(
-                participant,
-                occupied,
-                container_width=width_limit,
-                container_height=height_limit,
-                spacing=spacing_px,
-            )
-        )
 
         chosen: tuple[int, int, str] | None = None
         seen: set[tuple[int, int]] = set()
-        for x, y, slot in candidates:
+        for x, y, slot in candidates():
             xy = (int(x), int(y))
             if xy in seen:
                 continue
@@ -620,7 +619,7 @@ def build_display_stack_plan(
                 margin=margin,
             ):
                 continue
-            if any(_rects_conflict(rect, other, spacing_px) for other in occupied):
+            if slot != "free" and any(_rects_conflict(rect, other, spacing_px) for other in occupied):
                 continue
             chosen = (xy[0], xy[1], slot)
             break
@@ -658,12 +657,12 @@ def build_display_auto_scale_plan(
     container_width: int,
     container_height: int,
     spacing: int = 10,
-    minimum_percent: int = 80,
+    minimum_percent: int = round(100 * ORDINARY_WIDGET_MIN_RESIZE_SCALE),
 ) -> tuple[DisplayStackPlan, dict[str, float]]:
     """Stack first, then find a bounded whole-card reduction only if needed.
 
     Every trial uses the same placement solver with newly scaled footprints.
-    Descending 1% trials avoid assuming greedy packing is monotonic. Once a fit
+    Bounded coarse trials and 1% refinement do not assume monotonicity. Once a fit
     exists, restore individual cards toward their authored size without losing
     clearance. All inputs are authored geometry, never the previous output.
     """
@@ -686,32 +685,66 @@ def build_display_auto_scale_plan(
     if original.all_fit or not eligible:
         return original, full
 
-    # Try to leave already-fitting cards alone. Only expand to all eligible
-    # cards when shrinking the unresolved group cannot produce a complete fit.
+    # Search bounded 5% bands, then refine the first fitting band in 1% steps.
+    # Greedy packing is not monotonic: accept only explicitly proved fits. This
+    # does not claim an exhaustive or globally optimal packing search.
     groups = [eligible & set(original.unresolved)]
     if groups[0] != eligible:
         groups.append(eligible)
-    for group in groups:
-        if not group:
-            continue
-        for percent in range(99, minimum_percent - 1, -1):
+
+    def trial_at(percent):
+        for group in groups:
+            if not group:
+                continue
             scales = {key: percent / 100.0 if key in group else 1.0 for key in full}
             plan = place(scales)
-            if not plan.all_fit:
+            if plan.all_fit:
+                return plan, scales, group
+        return None
+
+    upper = 99
+    for percent in (*range(95, minimum_percent, -5), minimum_percent):
+        result = trial_at(percent)
+        if result is None:
+            upper = percent - 1
+            continue
+        for refined in range(upper, percent, -1):
+            finer = trial_at(refined)
+            if finer is not None:
+                result = finer
+                break
+        plan, scales, group = result
+        # Restore each reduced card using the same bounded bands. Every growth
+        # carries a newly proved placement; no stale positions survive resizing.
+        for member in members:
+            key = member.key
+            if key not in group:
                 continue
-            # Preserve this proved fit; independent growth is committed only
-            # alongside its new placement. Never apply scale at stale positions.
-            for member in members:
-                key = member.key
-                if key not in group:
+            floor = round(scales[key] * 100)
+            upper = 100
+            for restored in range(100, floor, -5):
+                trial = {**scales, key: restored / 100.0}
+                candidate = place(trial)
+                if not candidate.all_fit:
+                    upper = restored - 1
                     continue
-                for restored in range(100, percent, -1):
-                    trial = {**scales, key: restored / 100.0}
+                for refined in range(upper, restored, -1):
+                    finer = {**scales, key: refined / 100.0}
+                    finer_plan = place(finer)
+                    if finer_plan.all_fit:
+                        trial, candidate = finer, finer_plan
+                        break
+                scales, plan = trial, candidate
+                break
+            else:
+                # The known fitting scale anchors the last incomplete 5% band.
+                for refined in range(upper, floor, -1):
+                    trial = {**scales, key: refined / 100.0}
                     candidate = place(trial)
                     if candidate.all_fit:
                         scales, plan = trial, candidate
                         break
-            return plan, scales
+        return plan, scales
     # No acceptable complete fit: retain authored sizes and explicit unresolved
     # diagnostics rather than spending readability on an unsuccessful shrink.
     return original, full

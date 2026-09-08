@@ -53,3 +53,8 @@ stack-only, crowded auto-shrink/re-stack, and expanded/restored layouts with sca
 geometry and Qt messages. It refuses existing directories and activates no providers.
 This is visual evidence for the shared pure planner; the retained-presenter/Edit
 integration is covered separately by `test_qtquick_resize_normalization.py`.
+
+The packing companion also captures `dense_before` / `dense_after` at 900x550,
+which exercises reduction below the former 80% cutoff, followed by full-size
+restoration in the same scene. These are fixed-snapshot visual checks, not live
+provider/topology or performance acceptance.

@@ -76,3 +76,34 @@ def test_infeasible_floor_is_explicit_and_does_not_waste_shrink():
         container_width=800, container_height=400)
     assert plan.unresolved == ("weather",)
     assert scales == {"weather": 1.}
+
+
+def test_shared_floor_allows_fit_below_old_eighty_percent_cutoff():
+    from rendering.widget_stacking import ORDINARY_WIDGET_MIN_RESIZE_SCALE
+    from rendering.quick.custom_layout_size import CUSTOM_LAYOUT_MIN_RESIZE_SCALE
+    assert ORDINARY_WIDGET_MIN_RESIZE_SCALE == CUSTOM_LAYOUT_MIN_RESIZE_SCALE == .4
+    cards = [_card("weather", 0, 1000, 400)]
+    old, _ = build_display_auto_scale_plan(cards, eligible_keys=("weather",),
+        container_width=800, container_height=400, minimum_percent=80)
+    assert not old.all_fit
+    plan, scales = build_display_auto_scale_plan(cards, eligible_keys=("weather",),
+        container_width=800, container_height=400)
+    assert plan.all_fit and scales == {"weather": .76}
+    _assert_clear(plan, cards, scales)
+
+
+def test_larger_joint_fit_precedes_deep_selective_shrink():
+    cards = [_card("weather", 0, 550, 350), _card("gmail", 1, 550, 350)]
+    plan, scales = build_display_auto_scale_plan(cards, eligible_keys=("weather", "gmail"),
+        container_width=800, container_height=400)
+    assert plan.all_fit
+    assert min(scales.values()) >= .67
+    _assert_clear(plan, cards, scales)
+
+
+def test_canonical_fit_does_not_build_free_edge_candidates(monkeypatch):
+    import rendering.widget_stacking as stacking
+    monkeypatch.setattr(stacking, "_free_edge_candidates",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("unneeded edge search")))
+    assert build_display_stack_plan([_card("weather", 0)],
+        container_width=800, container_height=400).all_fit

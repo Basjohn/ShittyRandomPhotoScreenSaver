@@ -45,7 +45,9 @@ def capture(output: Path) -> None:
             for order, (family, card) in enumerate(cards.items())]
         for label, width, height, auto in (
             ("full", 1500, 1000, True), ("crowded_before", 1100, 650, False),
-            ("crowded_after", 1100, 650, True), ("restored", 1500, 1000, True),
+            ("crowded_after", 1100, 650, True),
+            ("dense_before", 900, 550, False), ("dense_after", 900, 550, True),
+            ("restored", 1500, 1000, True),
         ):
             window.setGeometry(80, 80, width, height)
             if auto:

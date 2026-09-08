@@ -27,6 +27,7 @@ and are driven by the display orchestrator (DisplayManager), not duplicated here
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from time import perf_counter
 from typing import Any
 
 from core.logging.logger import get_logger
@@ -82,6 +83,8 @@ class QuickDisplayPresenter:
         self._layout_observer: Callable[[str, OverlayWidgetGeometry], None] | None = None
         self._layout_suspended = 0
         self._layout_reflow_active = False
+        self._last_stack_inputs = None
+        self._last_stack_result = None
         self._bound_once = False
         self._retired = False
 
@@ -534,14 +537,23 @@ class QuickDisplayPresenter:
                 descriptor.custom_layout_resize_mode
             ):
                 eligible.append(participant.key)
-        plan, scales = build_display_auto_scale_plan(
-            participants,
-            eligible_keys=eligible,
-            obstacles=self._external_stack_obstacles,
-            container_width=max(1, int(round(self._display_bounds.width))),
-            container_height=max(1, int(round(self._display_bounds.height))),
-            spacing=10,
-        )
+        width = max(1, int(round(self._display_bounds.width)))
+        height = max(1, int(round(self._display_bounds.height)))
+        inputs = (tuple(participants), tuple(eligible), self._external_stack_obstacles, width, height)
+        changed = inputs != self._last_stack_inputs
+        if changed:
+            started = perf_counter()
+            result = build_display_auto_scale_plan(
+                participants, eligible_keys=eligible, obstacles=self._external_stack_obstacles,
+                container_width=width, container_height=height, spacing=10,
+            )
+            self._last_stack_inputs, self._last_stack_result = inputs, result
+            logger.debug(
+                "[WIDGET_STACKING] Solve bounds=%sx%s elapsed_ms=%.2f participants=%s obstacles=%s",
+                width, height, (perf_counter() - started) * 1000.0,
+                participants, self._external_stack_obstacles,
+            )
+        plan, scales = self._last_stack_result
         self._layout_reflow_active = True
         try:
             for participant in participants:
@@ -553,21 +565,19 @@ class QuickDisplayPresenter:
                 scale = scales[participant.key]
                 width = base.width if scale == 1.0 else float(max(1, round(participant.width * scale)))
                 height = base.height if scale == 1.0 else float(max(1, round(participant.height * scale)))
-                sink(
-                    OverlayWidgetGeometry(
-                        self._display_bounds.x + float(placement.desired_x),
-                        self._display_bounds.y + float(placement.desired_y),
-                        width,
-                        height,
-                    )
+                geometry = OverlayWidgetGeometry(
+                    self._display_bounds.x + float(placement.desired_x),
+                    self._display_bounds.y + float(placement.desired_y), width, height,
                 )
+                if geometry != self.geometry_for(participant.key):
+                    sink(geometry)
         finally:
             self._layout_reflow_active = False
-        if any(scale < 1.0 for scale in scales.values()):
+        if changed and any(scale < 1.0 for scale in scales.values()):
             logger.debug("[WIDGET_STACKING] Auto-fit accepted scales=%s", scales)
-        if not plan.all_fit:
+        if changed and not plan.all_fit:
             logger.warning(
-                "[WIDGET_STACKING] Display is overfull; unresolved=%s",
+                "[WIDGET_STACKING] Display has no complete fit at or above the whole-card floor; unresolved=%s",
                 ",".join(plan.unresolved),
             )
 
@@ -602,6 +612,8 @@ class QuickDisplayPresenter:
         self._authored_layout_enabled = False
         self._stack_order = []
         self._base_geometries = {}
+        self._last_stack_inputs = None
+        self._last_stack_result = None
         self._geometry_sinks = {}
         self._custom_widget_ids = set()
         self._external_stack_obstacles = ()

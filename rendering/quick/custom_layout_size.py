@@ -10,12 +10,13 @@ from PySide6.QtCore import QRect, QSize
 from rendering.custom_layout_contract import CUSTOM_LAYOUT_MIN_WIDGET_SIZE
 from rendering.custom_layout_session import CustomLayoutSessionItem
 from rendering.widget_descriptors import WidgetRuntimeDescriptor
+from rendering.widget_stacking import ORDINARY_WIDGET_MIN_RESIZE_SCALE
 
 
 # Uniform retained transforms are the default for ordinary-widget CUSTOM resize:
 # one outer-rect / preferred-baseline scale; authored values remain Settings-owned.
 # Clock retains its variant-aware per-value path. Visualizer owns a distinct viewport contract.
-CUSTOM_LAYOUT_MIN_RESIZE_SCALE = 0.40
+CUSTOM_LAYOUT_MIN_RESIZE_SCALE = ORDINARY_WIDGET_MIN_RESIZE_SCALE
 CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY = "_custom_resize_scale"
 _PAYLOAD_MINIMUMS: dict[str, int] = {
     "font_size": 8,
