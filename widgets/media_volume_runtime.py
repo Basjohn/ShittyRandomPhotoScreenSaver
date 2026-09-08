@@ -347,7 +347,11 @@ class _SharedMediaVolumeRuntimeOwner:
 
         _result._srpss_runtime_generation = self._runtime_generation
         try:
-            self._thread_manager.submit_io_task(_read, callback=_result)
+            self._thread_manager.submit_io_task(
+                _read,
+                callback=_result,
+                category="media_volume_read",
+            )
         except Exception:
             if self._read_in_flight_request == request_id:
                 self._read_in_flight_request = 0
@@ -541,7 +545,10 @@ class _SharedMediaVolumeRuntimeOwner:
 
         _write._srpss_runtime_generation = self._runtime_generation
         try:
-            self._thread_manager.submit_io_task(_write)
+            self._thread_manager.submit_io_task(
+                _write,
+                category="media_volume_write",
+            )
         except Exception:
             logger.error("[MEDIA_VOLUME_RUNTIME] Failed to schedule volume write", exc_info=True)
 

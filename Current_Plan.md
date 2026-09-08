@@ -2,128 +2,51 @@
 
 Last updated: 2026-09-08
 
-The Qt Quick migration is **closed** (M0–M3 accepted; see "Closed — do not reopen"
-below). Everything here is ordinary post-migration product work. This file owns the
-**order of upcoming work and its live status**; durable subsystem detail lives in the
-focused docs, test/debris archaeology in `Docs/TestSuite.md` + `Future_Cleanup.md`,
-and deferred features in `FWPlan.md`.
+Outside of Codex Work Began: `886e6fa419ff130ff2a9aedf5091ae6162d1e958`
 
-Order below is the recommended sequence (small isolated bug → the reactivity
-safety net → the big widget-resize feature → the large theming cleanup). Reorder
-freely; each item is self-contained unless noted.
+The Qt Quick migration is closed and operator-accepted. This file contains **active work only**; completed Gmail lifecycle, widget resize/Edit lifetime, non-CUSTOM auto-shrink, Weather binding-loop validation, Visualizer replay-floor work, and other accepted closeout items are intentionally absent.
 
 ---
 
-## 1. Gmail timer lifecycle — Awaiting Logs
+## 1. `dark.qss` retirement → ThemeSpec sole authority
 
-Generation propagation and terminal Qt timer destruction are repaired. The real-Qt
-reconstruction bar in `tests/test_gmail_runtime.py` verifies one shared owner/timer
-for two displays and zero owner/resource records after final retirement over three
-generations; the focused lifecycle gate passes 140 tests. Existing explicit lease
-retirement already removed the shared-owner registry entry; stopped QTimers retained
-their callbacks/resource records, and the family adapter omitted generation identity.
+Execution authority: `Docs/Settings_Dark_QSS_Retirement.md`.
 
-- [ ] Confirm fresh Settings/reconstruction lifecycle logs keep Gmail timer records
-  at one while admitted and zero after retirement, with the correct runtime generation.
+Migrate the Settings dialog's remaining colour **and** structure authority out of
+`themes/dark.qss` into `SettingsThemeSpec`, leaving ThemeSpec as the sole Settings GUI
+style authority. Preserve the accepted dark-theme appearance and eliminate the
+competing stylesheet authority completely.
 
-## 2. Visualizer replay reactivity floor — closed
+- [ ] Inventory every remaining selector/property in `themes/dark.qss` against current
+  `SettingsThemeSpec` ownership.
+- [ ] Move required structural and colour semantics into the ThemeSpec-backed path
+  without creating a second fallback authority.
+- [ ] Delete `themes/dark.qss` once no runtime/build path requires it.
+- [ ] Preserve dark-theme appearance with focused regression coverage and physical
+  Settings GUI validation.
+- [ ] Confirm widget themes/runtime theming remain unaffected by the Settings-only
+  authority retirement.
 
-The 66 cases (plus the historical manifest) run through the current authored tick
-and Quick snapshot path. Fixed floors, fixture integrity, presentation independence,
-lane/travel contracts and production-seam negative controls pass 78 tests.
-[Harness contract](Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md).
+---
 
-## 3. Widget resize / Edit lifetime / non-CUSTOM auto-shrink
+## 2. Test / debris reconciliation
 
-Latest logs: `logs/live_edit_audit_20260908_1606`. Two healthy cross-display Saves
-rebuilt the generation solely because ordinary widgets crossed displays. The source
-binder/service records now move to the retained target on Save; providers/items and
-preferred-size subscriptions remain live. [Ownership and regression evidence](Docs/Future_Work/Edit_Layout_Live_Commit.md).
-
-- [ ] Repeat multi-widget cross-display Save/re-enter/return-Save; confirm no
-  `save_continue` / `custom_edit` replacement and all actions remain usable.
-- [ ] Confirm final exit and saved-slot load retire the transferred service/item once.
-
-Original failure logs are preserved at `logs/edit_roundtrip_20260908_1522`.
-Latest operator sessions are preserved at `logs/shrink_audit_20260908_1544`;
-both have zero Qt warnings, including the logged Visualizer return hop.
-The two return-hop failures invalidate QScreen/Edit/ordinary wrappers after mid-scene
-Visualizer deletion. Transfer now moves admission between stable display-local shells;
-one logical owner remains, and render resources still retire on their existing event.
-A fresh-process return-hop/deferred-delete/GC regression passes; physical repeat is owed.
-
-- [ ] Physically repeat Visualizer display A -> B -> A twice in one Edit session;
-  all widget move/resize and guide actions must remain usable without re-entering Edit.
-Non-CUSTOM auto-shrink is implemented: full-size stacking first; bounded 5% bands with 1% refinement
-and re-stacking down to the shared 40% floor; restore cards toward 100%. The presenter
-applies positions and sizes together, recomputes from authored geometry and preserves
-the visible footprint on Edit entry. Real-Quick packing captures show clearance and
-full-size restoration with zero Qt warnings (`logs/widget_auto_shrink/packing_v1`).
-
-- [ ] Physically validate automatic packing with the operator's crowded widget set
-  and mixed-DPR displays. The earlier 80% cutoff discarded useful shrink as content
-  loaded; the shared 40% limit now applies. Impossible fits remain explicit.
-- [ ] Inspect changed-input solve diagnostics in fresh logs for final provider
-  footprints/fixed obstacles and steady-state event tails. Identical events now
-  reuse one generation-scoped result and skip unchanged geometry writes; measured
-  seven-card synthetic solves are 11�33ms, so latency neutrality is not claimed.
-
-### Normalization — implementation landed, physical validation open
-
-C0–C4 are implemented: Abandonment/Achievement/Weather use one whole-card transform;
-CUSTOM replay no longer mutates their authored Settings. The permanent capture and
-comparison harness remains available. Steam and Weather whole-card appearance were
-user-accepted; Weather temperature is intentionally 81% of its original size after two requested
-10% reductions; location/temperature visible left edges are font-metric aligned.
-New-card guidance and the per-value-exception regression bar protect the default seam.
-[Focused evidence and remaining physical checklist](Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md).
-
-- [ ] Validate live Weather resize/reposition/recreation across displays produces no
-  binding-loop warnings (48 final Weather captures at DPR 1.5 produce zero warnings).
-- [ ] Validate scaled tooltip/hit/glow/shadow bounds and mixed-DPR edit/replay behavior.
-
-## 4. dark.qss retirement → ThemeSpec sole authority
-
-[Docs/Settings_Dark_QSS_Retirement.md](Docs/Settings_Dark_QSS_Retirement.md).
-
-Execution authority for migrating the Settings dialog's colour **and** structure out
-of `themes/dark.qss` (a competing style authority: ~89 dark-only selectors, ~47
-colours) into `SettingsThemeSpec`, so themes fully apply and the file can be deleted
-with zero dark-theme regression (byte-identity guarded). Large and independent; do
-it after the above. **Not started.**
-
-## Test reconciliation (small, ongoing — owned by `Docs/TestSuite.md` / `Future_Cleanup.md`)
-
-First Edit-entry jump is repaired: quiesce authored placement without resetting
-visible geometry. Real started-owner regression and before/after OpenGL captures
-confirm the Visualizer stays at `(730,420)` as edit handles appear. Evidence:
-`logs/widget_resize_normalization/edit_entry_fixed`. Activated shrink/stack ordering
-is recorded in the resize decomposition: stack first, shrink unresolved collisions,
-then re-stack with the reduced footprints.
-
-Concrete open items, do alongside the work above:
+Owned in detail by `Docs/TestSuite.md` and `Future_Cleanup.md`.
 
 - [ ] Delete the caller-dead `widgets/spotify_visualizer/renderers/` island and
-  `rendering/image_processor.py` (both proven no-production-importer) after splitting
-  their mixed test files; then restore the two relaxed removal assertions in
-  `test_defaults_schema_authority.py`. Tracked in `Future_Cleanup.md`.
-- [ ] Broad `pytest tests/` inventory pass to triage remaining widget-glow /
-  two-phase-retirement / defaults casualties against current owners.
-
-## Reference (not a task)
-
-- **SST 9/10 settings closeout evidence:**
-  [Docs/Future_Work/SST_9of10_Settings.md](Docs/Future_Work/SST_9of10_Settings.md) —
-  settings-migration closeout evidence; defaults/plumbing working and protected. The
-  derived defaults artifacts (`defaults_snapshot.json` + both `.sst`) are canonical-
-  generated and gated: the single `audit_defaults_authority` (run by the Build Foundry
-  preflight and `tools/check_defaults_authority.py`) fails on drift; regenerate with
-  `python -m core.settings.defaults_snapshot_builder --write-all` or the Build Foundry
-  "Regen Defaults" button.
+  `rendering/image_processor.py` after splitting any mixed tests that still rely on
+  them; then restore the two relaxed removal assertions in
+  `test_defaults_schema_authority.py`.
+- [ ] Run the broad `pytest tests/` inventory and reconcile remaining stale
+  widget-glow / two-phase-retirement / defaults casualties against current owners.
+- [ ] Reconcile nine Clock presentation tests whose shadow fixtures omit current
+  required fields. Do **not** add production defaults merely to satisfy old fixtures.
+- [ ] Reconcile 21 scene-controller cases whose fixtures omit the 11 current required
+  style arguments.
 
 ---
 
-## Standing guardrails (constrain all work above)
+## Standing guardrails
 
 - **Visualizer fidelity / scaling (R-69, binding):** extreme CUSTOM geometry must
   never be solved by globally reducing head radius, authored reaction amplitude,
@@ -136,7 +59,7 @@ Concrete open items, do alongside the work above:
   independent X/Y extent; wheel = uniform whole-Visualizer scale. **Save is not a
   teardown boundary.**
 - **CUSTOM is global layout mode:** the first widget entering CUSTOM disables authored
-  stacking/adjacency globally (including number-key saved-layout load). Visualizer
+  stacking/adjacency globally, including number-key saved-layout load. Visualizer
   preset `Custom` is a separate concept.
 - **Media ownership:** GSMTC/event ownership is primary; no fast Media polling or
   process-probe fallbacks. Visualizer consumes Media admission but never acquires a
@@ -147,25 +70,8 @@ Concrete open items, do alongside the work above:
   `Docs/Guardrails/Performance_Optimization_Contract.md`.
 - **Defaults SSOT:** `core/settings/default_settings.py` is the sole authority;
   `.json`/`.sst` are derived and audit-gated. Never add a second default authority.
-
-## Closed — do not reopen without new contradictory evidence
-
-- Qt Quick migration M0–M3: **closed and operator-accepted.** M0 (Visualizer CUSTOM
-  geometry + cross-display lifecycle) and M1 (Bubble reference parity) passed focused
-  + physical torture runs; see `Docs/Historical_Bugs/Visualizer_Cross_Display_Split_Ownership_2026-09-05.md`.
-- M3 frozen-product performance: confirmed good on
-  `logs/evidence_chest/QTQUICKlogs2099b25d60MIXEDSOAK.zip`; reopen only for an obvious
-  safe optimization with zero fidelity/reactivity/latency risk.
-- Widget Glow: physically accepted.
-- Sphere: dormant-by-default; current fidelity deferred. `FWPlan.md` owns the future
-  status (needs much higher-fidelity rework; keep the 3D architecture unless fully
-  superseded — consider voxels). Dormancy has no runtime cost.
-- Deterministic GC / Gen2-rescan / usage-sampler owners and the owned-resource
-  plateau (2026-09-04 ~7h53m soak) remain closed.
-- Defaults authority sanitization: closed and permanently guarded (`audit_defaults_authority`,
-  the 30-test `tests/test_defaults_schema_authority.py`, deterministic snapshot/SST).
-- Shared widget-theme/style polish, narrow theme fragility and transition experiments
-  are Future Work (`FWPlan.md`), not blockers, unless they expose a concrete regression.
+- **No fallback architecture:** failures should remain explicit and diagnosable; do
+  not solve closeout work by adding silent fallback ownership, timers, or pollers.
 
 ## Authority order
 
@@ -180,48 +86,8 @@ exact current source + current reconciled test tree
 
 ## Durable references
 
-- `Docs/Index.md` — routing map to all current owners.
-- `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md`
-- `Docs/Historical_Bugs/Visualizer_Cross_Display_Split_Ownership_2026-09-05.md`
-- `Docs/TestSuite.md`, `Future_Cleanup.md`, `FWPlan.md`
-
-## Latest log audit / test inventory
-
-- Original 15:21/15:22 failure: 1,105 deleted-QScreen warnings. Both newer
-  15:41/15:44 sessions contain zero Qt warnings, including the logged return hop.
-- Latest overfull reports follow successful interim auto-shrink as provider content
-  arrives. The independent 80% cutoff and excessive repeated solving are repaired;
-  final-footprint/pacing confirmation remains in the active checklist above.
-- Reddit public endpoints return 429/403 and enter the existing 900s cooldown;
-  this is external provider rejection, not a widget geometry failure.
-- Latest startup/recreation windows include 3.6�3.9s GlobalClockTicker gaps and
-  slow Media refresh elapsed time with only 32�63ms worker work. Their attribution
-  is not proven. A 42.5ms Bubble interval near session end also remains observed.
-  Check fresh post-repair event timings before attributing these or retuning cadence.
-- Scene-controller tests still omit 11 required style arguments in 21 cases;
-  reconcile fixtures against the current owner during the remaining test inventory.
-
-### 16:01�16:06 log audit follow-up
-
-- Shrink succeeds: 44 accepted fits, no unresolved report; final crowded cards are
-  56�79%. The 51 startup solves peak at 65.51ms. No later solves occur during CUSTOM.
-- Qt/QML and native logs are clean. Gmail has one owner per reconstructed generation;
-  no duplicate-owner evidence. Rebuilds cause repeated provider startup and temporary
-  memory pressure, not a demonstrated leak.
-- [ ] Follow up two cumulative stale Visualizer presentation rejections immediately
-  after later Saves. HUD repetition is the retained counter, not repeated new errors.
-- [x] Settings persistence recurring Windows `WinError 5` is hardened at the actual
-  atomic-replace boundary: only transient access/sharing denials receive a tiny bounded
-  retry on the process-owned writer thread; Qt remains unblocked and the required result
-  is still the same atomic durable replacement. Terminal diagnostics now distinguish a
-  recovered historical write failure from genuinely undurable shutdown.
-- [x] Expected Reddit public-source exhaustion (429/403/empty authoritative listing)
-  remains WARNING-level provider/runtime telemetry and no longer escapes as a red
-  `CORE THREADING` task failure. Reddit IO now carries explicit `reddit_*` diagnostic
-  categories; unexpected worker/code exceptions still fail ThreadManager normally.
-- Startup clock gap 2.31s; steady-state Visualizer events include a 62.05ms tick
-  with 57.32ms publication and an 81.55ms interval. Attribution remains open; no
-  cadence retuning is justified. RSS-cache resource registration failed once at
-  startup although 26 cached images loaded; record for focused resource follow-up.
-- [ ] Reconcile nine Clock presentation tests whose shadow fixtures omit current
-  required fields. Do not add production defaults to satisfy these old fixtures.
+- `Docs/Index.md` — routing map to current owners.
+- `Docs/TestSuite.md`
+- `Future_Cleanup.md`
+- `FWPlan.md`
+- `Docs/Settings_Dark_QSS_Retirement.md`

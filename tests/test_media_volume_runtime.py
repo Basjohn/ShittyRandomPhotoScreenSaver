@@ -50,9 +50,11 @@ class _TaskResult:
 class _ThreadManager:
     def __init__(self) -> None:
         self.jobs: list[tuple[Any, Any]] = []
+        self.categories: list[str | None] = []
 
-    def submit_io_task(self, worker, callback=None, **_kwargs) -> None:
+    def submit_io_task(self, worker, callback=None, **kwargs) -> None:
         self.jobs.append((worker, callback))
+        self.categories.append(kwargs.get("category"))
 
     def complete(self, index: int = 0, *, success: bool = True) -> Any:
         worker, callback = self.jobs.pop(index)
@@ -162,6 +164,7 @@ def test_two_display_leases_share_one_controller_read_debounce_and_projection(
     assert shared_media_volume_owner_count() == 1
     assert len(factory.controllers) == 1
     assert len(manager.jobs) == 1
+    assert manager.categories == ["media_volume_read"]
 
     manager.complete()
 
@@ -174,6 +177,7 @@ def test_two_display_leases_share_one_controller_read_debounce_and_projection(
 
     delayed.pop()[1]()
     assert len(manager.jobs) == 1
+    assert manager.categories[-1] == "media_volume_write"
     manager.complete()
 
     assert factory.controllers[0].write_calls == [pytest.approx(0.73)]
