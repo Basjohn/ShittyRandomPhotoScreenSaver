@@ -10,6 +10,7 @@ content-anchored families, and retirement drops everything exactly once.
 from __future__ import annotations
 
 import pytest
+from core.settings.default_contract import require_canonical_default
 
 from rendering.quick.display_presenter import QuickDisplayPresenter
 from rendering.quick.runtime import QuickDisplayRuntime
@@ -24,7 +25,7 @@ from rendering.quick.widgets.host import OverlayWidgetGeometry
 
 
 _BOUNDS = OverlayWidgetGeometry(0.0, 0.0, 1920.0, 1080.0)
-_SHADOWS = {"enabled": True, "direction": "SE"}
+_SHADOWS = require_canonical_default("widgets.shadows")
 
 
 def _make_runtime(qt_app, generation: int):
@@ -49,7 +50,7 @@ def test_presenter_places_content_anchored_families(qt_app) -> None:
         presenter = QuickDisplayPresenter(runtime, adapters=(ClockFamilyAdapter(),))
 
         built = presenter.bind_families(
-            widgets_config={"clock": {"enabled": True, "position": "Top Right"}},
+            widgets_config={"clock": {"enabled": True, "monitor": "ALL", "position": "Top Right"}},
             display_bounds=_BOUNDS,
             shadow_values=_SHADOWS,
         )
@@ -90,7 +91,7 @@ def test_presenter_committed_rect_overrides_content_anchoring(qt_app) -> None:
         committed = OverlayWidgetGeometry(200.0, 150.0, 480.0, 300.0)
 
         presenter.bind_families(
-            widgets_config={"clock": {"enabled": True, "position": "Top Right"}},
+            widgets_config={"clock": {"enabled": True, "monitor": "ALL", "position": "Top Right"}},
             display_bounds=_BOUNDS,
             shadow_values=_SHADOWS,
             committed_rect_resolver=lambda wid: committed if wid == "clock" else None,
@@ -121,8 +122,8 @@ def test_presenter_reanchors_content_family_but_not_committed_on_topology(qt_app
         committed = OverlayWidgetGeometry(100.0, 100.0, 500.0, 260.0)
         presenter.bind_families(
             widgets_config={
-                "clock": {"enabled": True, "position": "Top Right"},
-                "weather": {"enabled": True, "position": "Bottom Right"},
+                "clock": {"enabled": True, "monitor": "ALL", "position": "Top Right"},
+                "weather": {"enabled": True, "monitor": "ALL", "position": "Bottom Right"},
             },
             display_bounds=_BOUNDS,
             shadow_values=_SHADOWS,
@@ -156,13 +157,13 @@ def test_presenter_binds_once_and_retires_idempotently(qt_app) -> None:
         host = runtime.scene_controller.ordinary_widget_host
         presenter = QuickDisplayPresenter(runtime, adapters=(ClockFamilyAdapter(),))
         presenter.bind_families(
-            widgets_config={"clock": {"enabled": True}},
+            widgets_config={"clock": {"enabled": True, "monitor": "ALL"}},
             display_bounds=_BOUNDS,
             shadow_values=_SHADOWS,
         )
         with pytest.raises(RuntimeError):
             presenter.bind_families(
-                widgets_config={"clock": {"enabled": True}},
+                widgets_config={"clock": {"enabled": True, "monitor": "ALL"}},
                 display_bounds=_BOUNDS,
             )
         presenter.retire()

@@ -31,11 +31,15 @@ from typing import Any
 
 from core.logging.logger import get_logger
 from core.settings.default_contract import require_canonical_default
-from rendering.widget_descriptors import is_global_custom_layout_mode_selected
+from rendering.widget_descriptors import (
+    is_global_custom_layout_mode_selected,
+    get_widget_runtime_descriptor,
+)
+from rendering.quick.custom_layout_size import is_uniform_transform_resize_mode
 from rendering.widget_stacking import (
     DisplayStackObstacle,
     DisplayStackParticipant,
-    build_display_stack_plan,
+    build_display_auto_scale_plan,
 )
 
 from .widgets.family_binder import (
@@ -108,6 +112,12 @@ class QuickDisplayPresenter:
         geometry = getattr(presentation, "geometry", None)
         if isinstance(geometry, OverlayWidgetGeometry):
             return geometry
+        item = getattr(presentation, "item", None)
+        if item is not None:
+            # Binding geometry is the authored baseline. Stacking/auto-scale
+            # project through the retained sink, so Edit must capture that
+            # actual outer footprint rather than restoring the binding cache.
+            return OverlayWidgetGeometry(item.x(), item.y(), item.width(), item.height())
         for bound_id, binding in self._geometry_bindings:
             if bound_id == widget_id:
                 return binding.current_geometry
@@ -517,8 +527,16 @@ class QuickDisplayPresenter:
 
         if not participants:
             return
-        plan = build_display_stack_plan(
+        eligible = []
+        for participant in participants:
+            descriptor = get_widget_runtime_descriptor(participant.key)
+            if descriptor is not None and is_uniform_transform_resize_mode(
+                descriptor.custom_layout_resize_mode
+            ):
+                eligible.append(participant.key)
+        plan, scales = build_display_auto_scale_plan(
             participants,
+            eligible_keys=eligible,
             obstacles=self._external_stack_obstacles,
             container_width=max(1, int(round(self._display_bounds.width))),
             container_height=max(1, int(round(self._display_bounds.height))),
@@ -532,16 +550,21 @@ class QuickDisplayPresenter:
                 placement = plan.placements.get(participant.key)
                 if base is None or sink is None or placement is None:
                     continue
+                scale = scales[participant.key]
+                width = base.width if scale == 1.0 else float(max(1, round(participant.width * scale)))
+                height = base.height if scale == 1.0 else float(max(1, round(participant.height * scale)))
                 sink(
                     OverlayWidgetGeometry(
                         self._display_bounds.x + float(placement.desired_x),
                         self._display_bounds.y + float(placement.desired_y),
-                        base.width,
-                        base.height,
+                        width,
+                        height,
                     )
                 )
         finally:
             self._layout_reflow_active = False
+        if any(scale < 1.0 for scale in scales.values()):
+            logger.debug("[WIDGET_STACKING] Auto-fit accepted scales=%s", scales)
         if not plan.all_fit:
             logger.warning(
                 "[WIDGET_STACKING] Display is overfull; unresolved=%s",

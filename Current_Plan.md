@@ -43,9 +43,15 @@ A fresh-process return-hop/deferred-delete/GC regression passes; physical repeat
 
 - [ ] Physically repeat Visualizer display A -> B -> A twice in one Edit session;
   all widget move/resize and guide actions must remain usable without re-entering Edit.
-- [ ] Implement activated non-CUSTOM stack -> shrink -> re-stack, including maximum
-  fitting size, restoration on increased space and preservation of the visible Edit footprint.
-  This is authorized current work, not deferred. See the focused decomposition.
+Non-CUSTOM auto-shrink is implemented: full-size stacking first; bounded 1% trials
+and re-stacking down to 80%; restore unaffected cards toward 100%. The presenter
+applies positions and sizes together, recomputes from authored geometry and preserves
+the visible footprint on Edit entry. Real-Quick packing captures show clearance and
+full-size restoration with zero Qt warnings (`logs/widget_auto_shrink/packing_v1`).
+
+- [ ] Physically validate automatic packing with the operator's crowded widget set
+  and mixed-DPR displays. An impossible fit above 80% remains explicit/overfull;
+  the planner does not silently crush cards below the readability floor.
 
 ### Normalization — implementation landed, physical validation open
 

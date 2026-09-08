@@ -57,84 +57,40 @@ retained for long-term use. Evidence under `logs/widget_resize_normalization/`:
 No timers, polling, additional geometry owners or Settings defaults were introduced.
 The shrink feature below is explicitly activated by the user and is being implemented.
 
-## Active — bounded non-CUSTOM stacker auto-shrink
+## Non-CUSTOM auto-shrink — implemented, physical validation open
 
-Activated implementation after the normalization prerequisite. This is the reason
-C1–C4 are worth doing: normalization produces the whole-card transform, and this
-feature is the consumer that makes that transform pay off. The two are a matched
-pair — a widget is only *eligible* to shrink cleanly once it scales as one whole
-card (C1–C4); shrinking a per-value family would distort fixed insets/rows.
+`build_display_auto_scale_plan` wraps the existing display packer. Full-size stacking
+runs first and is returned unchanged whenever it fits. Otherwise the unresolved
+eligible cards get descending 1% size trials down to 80%, each through the same
+placement solver. If those cards alone cannot fit, all eligible cards participate.
+Once a fit exists, individual cards are restored toward 100%, accepting growth only
+with a newly proved collision-free placement. The deterministic search is bounded;
+it does not assume greedy packing success is monotonic or claim global optimality.
 
-### The trigger already exists — this is a consumer, not a new solver
+The presenter applies accepted positions and dimensions together. Geometry is
+recomputed from authored baselines on existing admission/size/topology/layout events;
+no timer, Settings field, cadence owner or independent placement engine is added.
+Clock remains ineligible, and fixed Media/Visualizer relationship obstacles retain
+their geometry. Whole-card families use their existing transform, shadow and glow.
 
-The non-CUSTOM display packer is `build_display_stack_plan(...)` in
-`rendering/widget_stacking.py`. It is already deterministic and event-edge driven:
-each widget tries its authored canonical slot, then nearby slots (same column
-before cross-column spill), then a bounded set of edge-derived free-space
-candidates. It returns `DisplayStackPlan(placements, all_fit, unresolved)`, and
-when **no** collision-free rectangle exists it *keeps the authored rectangle and
-records the widget in `unresolved`* (never overlaps, never shrinks today). That
-`unresolved` tuple is the exact, existing signal to hang shrink on.
+The automatic floor is 80%. When no complete fit above that floor is found, the
+original full-size plan and its explicit unresolved diagnostic are retained rather
+than shrinking unsuccessfully or clipping/hiding widgets. This limit needs operator
+review against real crowded layouts; it is not a promise that every possible widget
+set fits every screen.
 
-Implementation algorithm (a wrapper around the existing solver — add no second
-placement engine, no polling):
+Global CUSTOM disables the planner. First Edit captures the actual retained outer
+rectangle (not the binding's authored-size cache), preserving both position and
+shrunken footprint; the existing absolute CUSTOM scalar is inferred from that visible
+rectangle. Explicit Save then authors the accepted working layout, while Cancel and
+ordinary reflow preserve Settings-owned baseline values. More room restores full size.
 
-1. Run `build_display_stack_plan` at scale 1.0.
-2. If `all_fit` (i.e. `unresolved` is empty), stop. **Shrink is gated strictly on
-   post-placement collision; never shrink for aesthetics.**
-3. If `unresolved` is non-empty, re-run the *same* solver with the eligible
-   participants' `DisplayStackParticipant.width/height` multiplied by a trial
-   presentation scale (ineligible widgets and obstacles keep their size).
-4. Take the largest trial scale that yields `all_fit`, down to a conservative
-   product floor (~`0.75–0.80`, subject to physical validation).
-5. If still unresolved at the floor, keep the current explicit
-   `unresolved`/fail-loud behaviour rather than crushing cards indefinitely.
-
-Operator clarification (2026-09-08): stacking must get the first opportunity to
-fit authored-size cards. Only unavoidable post-stacking collisions admit shrink.
-Every trial must re-run placement with its new footprints, and apply the resulting
-positions together with the accepted scales; shrinking at old stacked positions
-wastes the space it freed. Validate clearance as well as intersection so cards do
-not touch. Prefer the largest fitting cards and avoid shrinking unaffected cards
-unnecessarily. Recompute from authored sizes on each layout event, never from a
-previously shrunken result. Bound the search deterministically; a greedy placement
-solver need not have monotonic success as scale changes, so do not assume an
-unchecked binary search proves the best fit. No polling or second placement owner.
-
-The auto-scale must be **presentation state, not authored state**: non-CUSTOM only;
-transient/derived from the current logical display budget; never persisted as
-family font/artwork/icon Settings or as CUSTOM-authored geometry. Entering Edit
-must preserve the visible position/footprint while transferring authority; do not
-reset to 1.0 before capture and cause another entry jump. Define explicit conversion
-of the visible footprint into session geometry when this feature is implemented.
-Auto-scale is recomputed only on real layout/topology/preferred-size
-events. No timer, no polling.
-
-Recompute on the existing event edges that already drive a placement pass:
-family admission/removal; preferred-content-size publication; screen
-topology/geometry change; authored position change; Media/Visualizer relationship
-change; leaving/entering global CUSTOM. **Eligibility = a proven whole-card retained
-transform** (the C1–C4 output), which is why the tranche above is the prerequisite.
-Do not force Weather/Clock normalization solely to make the stacker symmetrical.
-Preserve the stronger Media/Visualizer adjacency contract as a combined obstacle,
-and do not alter Visualizer viewport/reactivity to solve display crowding. Use
-logical geometry (`QScreen.geometry()`); useful test budgets: 3840×2160, 2560×1440,
-2048×1152, 1920×1080, 1707×960, 1600×900, 1536×864, 1280×720, 3440×1440.
-
-Acceptance: 1.0 always preferred; no overlap when a solution above floor exists;
-deterministic placement for identical inputs; no Settings pollution; no CUSTOM
-pollution; no Visualizer reactivity/cadence change; mixed-DPR user validation.
-
-### Implementation checkpoints
-
-- [ ] Pure bounded wrapper: first full-size placement; then 1% descending trials
-  for unresolved eligible cards, then all eligible cards only if needed. Re-run the
-  existing solver on every trial; refine accepted results by restoring each card
-  toward 1.0 while retaining clearance. Use a conservative 80% automatic floor.
-- [ ] Presenter consumes accepted positions and dimensions together from authored
-  baselines; Clock and fixed Media/Visualizer obstacles remain unscaled. No new
-  Settings keys, polling or second placement solver.
-- [ ] Test full-size fast path, post-stack-only shrink, positive clearance,
-  restored unaffected cards, obstacle exclusions, bounded infeasible case,
-  event-driven growth/reflow and unchanged first Edit footprint.
-- [ ] Visually inspect real Quick shrunken cards/packing and record physical gates.
+Evidence: `tests/test_widget_auto_shrink.py` covers the full-size path, selective/joint
+shrink, 10px clearance, largest tested fit, fixed obstacles, growth and impossible
+floor. `tests/test_qtquick_resize_normalization.py` crosses the real presenter,
+preferred-size reflow and Edit/Cancel boundary. The maintained packing companion
+`tools/ordinary_widget_stack_capture.py` captures real Quick cards before/after
+crowding and after restoration. `logs/widget_auto_shrink/packing_v1` has zero Qt
+warnings: Abandonment stays 100%, Achievement fits at 83%, Weather at 88%; all return
+to 100% when the budget grows. Resulting card proportions and clearance were visually
+inspected. Mixed-DPR/live operator packing remains in the checklist above and Current_Plan.

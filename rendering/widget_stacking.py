@@ -1,7 +1,7 @@
 """Shared authored widget stacking planner for non-CUSTOM overlays."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Dict, Iterable, Literal
 
 
@@ -648,3 +648,70 @@ def build_display_stack_plan(
         all_fit=not unresolved,
         unresolved=tuple(unresolved),
     )
+
+
+def build_display_auto_scale_plan(
+    participants: Iterable[DisplayStackParticipant],
+    *,
+    eligible_keys: Iterable[str],
+    obstacles: Iterable[DisplayStackObstacle] | None = None,
+    container_width: int,
+    container_height: int,
+    spacing: int = 10,
+    minimum_percent: int = 80,
+) -> tuple[DisplayStackPlan, dict[str, float]]:
+    """Stack first, then find a bounded whole-card reduction only if needed.
+
+    Every trial uses the same placement solver with newly scaled footprints.
+    Descending 1% trials avoid assuming greedy packing is monotonic. Once a fit
+    exists, restore individual cards toward their authored size without losing
+    clearance. All inputs are authored geometry, never the previous output.
+    """
+    if not 1 <= minimum_percent <= 100:
+        raise ValueError("automatic scale floor must be between 1 and 100 percent")
+    members = tuple(sorted(participants, key=lambda item: (item.order, item.key)))
+    fixed = tuple(obstacles or ())
+    eligible = {item.key for item in members} & set(eligible_keys)
+    full = {item.key: 1.0 for item in members}
+
+    def place(scales: dict[str, float]) -> DisplayStackPlan:
+        return build_display_stack_plan(
+            (replace(item, width=max(1, round(item.width * scales[item.key])),
+                     height=max(1, round(item.height * scales[item.key]))) for item in members),
+            obstacles=fixed, container_width=container_width,
+            container_height=container_height, spacing=spacing,
+        )
+
+    original = place(full)
+    if original.all_fit or not eligible:
+        return original, full
+
+    # Try to leave already-fitting cards alone. Only expand to all eligible
+    # cards when shrinking the unresolved group cannot produce a complete fit.
+    groups = [eligible & set(original.unresolved)]
+    if groups[0] != eligible:
+        groups.append(eligible)
+    for group in groups:
+        if not group:
+            continue
+        for percent in range(99, minimum_percent - 1, -1):
+            scales = {key: percent / 100.0 if key in group else 1.0 for key in full}
+            plan = place(scales)
+            if not plan.all_fit:
+                continue
+            # Preserve this proved fit; independent growth is committed only
+            # alongside its new placement. Never apply scale at stale positions.
+            for member in members:
+                key = member.key
+                if key not in group:
+                    continue
+                for restored in range(100, percent, -1):
+                    trial = {**scales, key: restored / 100.0}
+                    candidate = place(trial)
+                    if candidate.all_fit:
+                        scales, plan = trial, candidate
+                        break
+            return plan, scales
+    # No acceptable complete fit: retain authored sizes and explicit unresolved
+    # diagnostics rather than spending readability on an unsuccessful shrink.
+    return original, full

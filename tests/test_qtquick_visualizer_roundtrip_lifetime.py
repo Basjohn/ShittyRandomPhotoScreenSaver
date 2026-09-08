@@ -91,17 +91,25 @@ def test_visualizer_custom_transfer_retargets_same_owner_publication(qt_app) -> 
             is middle_admission
         )
         assert owner.controller.committed_viewport_extent == (630.0, 280.0)
-        from PySide6.QtCore import QCoreApplication, QEvent
+        from PySide6.QtCore import QCoreApplication, QEvent, QRect
         from shiboken6 import isValid
+        from rendering.custom_layout_session import CustomLayoutSession
+        from tests.test_qtquick_custom_layout_overlay import _item
         import gc
 
         protected = [screen]
-        for runtime in (source, target):
+        probes = []
+        for index, runtime in enumerate((source, target)):
             scene = runtime.scene_controller
             protected.extend([scene._scene_root, scene._visualizer_loader,
                               scene.custom_layout_overlay.item])
-            protected.append(scene.ordinary_widget_host.create_widget(
-                geometry=OverlayWidgetGeometry(10., 10., 100., 100.)).item)
+            probe = scene.ordinary_widget_host.create_widget(model_identity="weather",
+                geometry=OverlayWidgetGeometry(10., 10., 100., 100.))
+            protected.append(probe.item)
+            session = CustomLayoutSession()
+            session.add_item(_item("weather", str(index), QRect(10, 10, 100, 100), resizable=True))
+            scene.bind_custom_layout_session(session, display_identity=str(index))
+            probes.append(probe)
         current = target
         shells = [runtime.scene_controller._visualizer_item for runtime in (source, target)]
         for destination in (source, target, source, target):
@@ -120,6 +128,11 @@ def test_visualizer_custom_transfer_retargets_same_owner_publication(qt_app) -> 
             assert [runtime.scene_controller._visualizer_item for runtime in (source, target)] == shells
             current.scene_controller.set_custom_layout_guides()
             destination.scene_controller.set_custom_layout_guides()
+            for runtime, probe in zip((source, target), probes):
+                model = runtime.scene_controller.custom_layout_overlay.model
+                model.moveItem(0, 40., 50., 45., 55.)
+                assert (probe.item.x(), probe.item.y()) == (40., 50.)
+                model.finishMove()
             current = destination
     finally:
         owner.retire()
@@ -127,4 +140,3 @@ def test_visualizer_custom_transfer_retargets_same_owner_publication(qt_app) -> 
         target.close_runtime()
         factory.deleteLater()
         qt_app.processEvents()
-
