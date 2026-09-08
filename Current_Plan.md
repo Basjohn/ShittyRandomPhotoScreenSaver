@@ -26,17 +26,12 @@ their callbacks/resource records, and the family adapter omitted generation iden
 - [ ] Confirm fresh Settings/reconstruction lifecycle logs keep Gmail timer records
   at one while admitted and zero after retirement, with the correct runtime generation.
 
-## 2. Visualizer replay reactivity floor — recreate for this environment
+## 2. Visualizer replay reactivity floor — closed
 
-[Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md](Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md).
-
-Rebuild the deleted replay harness headlessly and arm the 67 existing goldens'
-quantitative metrics as a **minimum bar** (thresholds below current healthy
-reactivity, which per operator experience passes today). Floors only — it never
-constrains or re-blesses current behaviour, only catches a genuine reactivity
-regression or recovers from a mistake; no exact-pixel goldens, no runtime coupling.
-Done early on purpose: it becomes the safety net for any later visualizer/DSP
-tuning. **Not started.**
+The 66 cases (plus the historical manifest) run through the current authored tick
+and Quick snapshot path. Fixed floors, fixture integrity, presentation independence,
+lane/travel contracts and production-seam negative controls pass 78 tests.
+[Harness contract](Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md).
 
 ## 3. Ordinary widget resize normalization → one uniform-transform seam
 

@@ -1,0 +1,3537 @@
+{
+  "description": "Current authored preset zero; 50% response floors. Silence constrains audio lanes only.",
+  "cases": {
+    "beats_120_bpm__spectrum": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.6674383,
+        "bar_centroid": 14.394353,
+        "bar_flux": 55.2326589,
+        "bar_mean": 0.1553053,
+        "bar_peak": 0.8933488,
+        "beat_count": 5,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 7,
+        "decay_to_half_ms": 140.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.3059814,
+        "mode_summary": {
+          "spectrum": {
+            "activity": 0.1553053,
+            "frames": 101
+          }
+        },
+        "onset_count": 5,
+        "overshoot_ratio": 1.531455,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 8.4373434,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.590785,
+        "waveform_rms": 0.0503871,
+        "waveform_zero_crossings": 650
+      },
+      "reference_mode_metrics": {
+        "output_flux": 82.85722014033908,
+        "output_peak": 0.8933487669710036
+      },
+      "minimums": {
+        "bar_peak": 0.4466744,
+        "bar_flux": 27.61632945,
+        "integrated_bar_energy": 0.1529907,
+        "attack_slope_per_s": 22.33371915,
+        "waveform_rms": 0.02519355,
+        "output_flux": 41.42861007016954
+      },
+      "maximums": {}
+    },
+    "beats_120_bpm__oscilloscope": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.6674383,
+        "bar_centroid": 12.9545414,
+        "bar_flux": 61.2357488,
+        "bar_mean": 0.145837,
+        "bar_peak": 0.8933488,
+        "beat_count": 5,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 7,
+        "decay_to_half_ms": 140.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.2864396,
+        "mode_summary": {
+          "oscilloscope": {
+            "activity": 0.145837,
+            "frames": 101
+          }
+        },
+        "onset_count": 5,
+        "overshoot_ratio": 1.531455,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 11.0691929,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.2351765,
+        "waveform_rms": 0.0235015,
+        "waveform_zero_crossings": 628
+      },
+      "reference_mode_metrics": {
+        "output_flux": 63.544527057947874,
+        "output_peak": 1.034776465064555
+      },
+      "minimums": {
+        "bar_peak": 0.4466744,
+        "bar_flux": 30.6178744,
+        "integrated_bar_energy": 0.1432198,
+        "attack_slope_per_s": 22.33371915,
+        "waveform_rms": 0.01175075,
+        "output_flux": 31.772263528973937
+      },
+      "maximums": {}
+    },
+    "beats_120_bpm__sine_wave": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.6674383,
+        "bar_centroid": 16.3350207,
+        "bar_flux": 76.4976517,
+        "bar_mean": 0.1457475,
+        "bar_peak": 0.8933488,
+        "beat_count": 5,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 7,
+        "decay_to_half_ms": 140.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.2862629,
+        "mode_summary": {
+          "sine_wave": {
+            "activity": 0.1457475,
+            "frames": 101
+          }
+        },
+        "onset_count": 5,
+        "overshoot_ratio": 1.531455,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 11.0475478,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.590785,
+        "waveform_rms": 0.0503871,
+        "waveform_zero_crossings": 650
+      },
+      "reference_mode_metrics": {
+        "output_flux": 4.721607285076242,
+        "output_peak": 1.0
+      },
+      "minimums": {
+        "bar_peak": 0.4466744,
+        "bar_flux": 38.24882585,
+        "integrated_bar_energy": 0.14313145,
+        "attack_slope_per_s": 22.33371915,
+        "waveform_rms": 0.02519355,
+        "output_flux": 2.360803642538121
+      },
+      "maximums": {}
+    },
+    "beats_120_bpm__bubble": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.6674383,
+        "bar_centroid": 19.7188142,
+        "bar_flux": 91.7783411,
+        "bar_mean": 0.1457359,
+        "bar_peak": 0.8933488,
+        "beat_count": 5,
+        "bubble_centroid_speed_peak": 1.4439792,
+        "bubble_count_change_peak": 1,
+        "bubble_particle_peak": 60,
+        "bubble_radius_change_peak_per_s": 0.3097033,
+        "bubble_radius_excursion": 0.0064941,
+        "bubble_radius_overshoot_ratio": 0.0034785,
+        "bubble_radius_peak": 0.0395463,
+        "bubble_radius_rebound_count": 7,
+        "bubble_radius_settling_time_ms": 1500.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 7,
+        "decay_to_half_ms": 140.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.2862413,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.1457359,
+            "frames": 101
+          }
+        },
+        "onset_count": 5,
+        "overshoot_ratio": 1.531455,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 11.0408436,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.590785,
+        "waveform_rms": 0.0503871,
+        "waveform_zero_crossings": 650
+      },
+      "reference_mode_metrics": {
+        "output_flux": 182.17831277903966,
+        "output_peak": 1.0548606695586449
+      },
+      "minimums": {
+        "bar_peak": 0.4466744,
+        "bar_flux": 45.88917055,
+        "integrated_bar_energy": 0.14312065,
+        "attack_slope_per_s": 22.33371915,
+        "waveform_rms": 0.02519355,
+        "output_flux": 91.08915638951983,
+        "bubble_radius_excursion": 0.00324705,
+        "bubble_particle_peak": 30.0
+      },
+      "maximums": {}
+    },
+    "beats_120_bpm__devcurve": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.6674383,
+        "bar_centroid": 14.2280723,
+        "bar_flux": 66.975957,
+        "bar_mean": 0.1458597,
+        "bar_peak": 0.8933488,
+        "beat_count": 5,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 7,
+        "decay_to_half_ms": 140.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.2864848,
+        "mode_summary": {
+          "devcurve": {
+            "activity": 0.1458597,
+            "frames": 101
+          }
+        },
+        "onset_count": 5,
+        "overshoot_ratio": 1.531455,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 11.0615916,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.590785,
+        "waveform_rms": 0.0503871,
+        "waveform_zero_crossings": 650
+      },
+      "reference_mode_metrics": {
+        "output_flux": 62.92197511544089,
+        "output_peak": 0.7395016917323517
+      },
+      "minimums": {
+        "bar_peak": 0.4466744,
+        "bar_flux": 33.4879785,
+        "integrated_bar_energy": 0.1432424,
+        "attack_slope_per_s": 22.33371915,
+        "waveform_rms": 0.02519355,
+        "output_flux": 31.460987557720443
+      },
+      "maximums": {}
+    },
+    "beats_180_bpm__spectrum": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.7847523,
+        "bar_centroid": 14.2072607,
+        "bar_flux": 67.3238505,
+        "bar_mean": 0.1828201,
+        "bar_peak": 0.895695,
+        "beat_count": 6,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 7,
+        "decay_to_half_ms": 140.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.3628648,
+        "mode_summary": {
+          "spectrum": {
+            "activity": 0.1828201,
+            "frames": 101
+          }
+        },
+        "onset_count": 6,
+        "overshoot_ratio": 1.5354772,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 7.9790699,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.5930775,
+        "waveform_rms": 0.0543659,
+        "waveform_zero_crossings": 650
+      },
+      "reference_mode_metrics": {
+        "output_flux": 93.70508968057526,
+        "output_peak": 0.8956950452838013
+      },
+      "minimums": {
+        "bar_peak": 0.4478475,
+        "bar_flux": 33.66192525,
+        "integrated_bar_energy": 0.1814324,
+        "attack_slope_per_s": 22.39237615,
+        "waveform_rms": 0.02718295,
+        "output_flux": 46.85254484028763
+      },
+      "maximums": {}
+    },
+    "beats_180_bpm__oscilloscope": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.7847523,
+        "bar_centroid": 12.7689165,
+        "bar_flux": 77.5014351,
+        "bar_mean": 0.1725037,
+        "bar_peak": 0.895695,
+        "beat_count": 6,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 6,
+        "decay_to_half_ms": 120.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.3421497,
+        "mode_summary": {
+          "oscilloscope": {
+            "activity": 0.1725037,
+            "frames": 101
+          }
+        },
+        "onset_count": 6,
+        "overshoot_ratio": 1.5354772,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 10.6761011,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.2361826,
+        "waveform_rms": 0.0243199,
+        "waveform_zero_crossings": 658
+      },
+      "reference_mode_metrics": {
+        "output_flux": 72.85223268320908,
+        "output_peak": 1.039203644693472
+      },
+      "minimums": {
+        "bar_peak": 0.4478475,
+        "bar_flux": 38.75071755,
+        "integrated_bar_energy": 0.17107485,
+        "attack_slope_per_s": 22.39237615,
+        "waveform_rms": 0.01215995,
+        "output_flux": 36.42611634160454
+      },
+      "maximums": {}
+    },
+    "beats_180_bpm__sine_wave": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.7847523,
+        "bar_centroid": 16.1025447,
+        "bar_flux": 96.8170611,
+        "bar_mean": 0.172397,
+        "bar_peak": 0.895695,
+        "beat_count": 6,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 6,
+        "decay_to_half_ms": 120.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.3419379,
+        "mode_summary": {
+          "sine_wave": {
+            "activity": 0.172397,
+            "frames": 101
+          }
+        },
+        "onset_count": 6,
+        "overshoot_ratio": 1.5354772,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 10.6560413,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.5930775,
+        "waveform_rms": 0.0543659,
+        "waveform_zero_crossings": 650
+      },
+      "reference_mode_metrics": {
+        "output_flux": 5.314846172410771,
+        "output_peak": 1.0
+      },
+      "minimums": {
+        "bar_peak": 0.4478475,
+        "bar_flux": 48.40853055,
+        "integrated_bar_energy": 0.17096895,
+        "attack_slope_per_s": 22.39237615,
+        "waveform_rms": 0.02718295,
+        "output_flux": 2.6574230862053856
+      },
+      "maximums": {}
+    },
+    "beats_180_bpm__bubble": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.7847523,
+        "bar_centroid": 19.4435556,
+        "bar_flux": 116.1544267,
+        "bar_mean": 0.1723701,
+        "bar_peak": 0.895695,
+        "beat_count": 6,
+        "bubble_centroid_speed_peak": 1.4666765,
+        "bubble_count_change_peak": 1,
+        "bubble_particle_peak": 61,
+        "bubble_radius_change_peak_per_s": 0.3074517,
+        "bubble_radius_excursion": 0.0077051,
+        "bubble_radius_overshoot_ratio": 0.4222942,
+        "bubble_radius_peak": 0.0466551,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": 260.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 6,
+        "decay_to_half_ms": 120.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.3418846,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.1723701,
+            "frames": 101
+          }
+        },
+        "onset_count": 6,
+        "overshoot_ratio": 1.5354772,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 10.6487639,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.5930775,
+        "waveform_rms": 0.0543659,
+        "waveform_zero_crossings": 650
+      },
+      "reference_mode_metrics": {
+        "output_flux": 240.11328887736906,
+        "output_peak": 1.02407909854833
+      },
+      "minimums": {
+        "bar_peak": 0.4478475,
+        "bar_flux": 58.07721335,
+        "integrated_bar_energy": 0.1709423,
+        "attack_slope_per_s": 22.39237615,
+        "waveform_rms": 0.02718295,
+        "output_flux": 120.05664443868453,
+        "bubble_radius_excursion": 0.00385255,
+        "bubble_particle_peak": 30.5
+      },
+      "maximums": {}
+    },
+    "beats_180_bpm__devcurve": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.7847523,
+        "bar_centroid": 14.0237837,
+        "bar_flux": 84.7776045,
+        "bar_mean": 0.1725214,
+        "bar_peak": 0.895695,
+        "beat_count": 6,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 6,
+        "decay_to_half_ms": 120.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.3421848,
+        "mode_summary": {
+          "devcurve": {
+            "activity": 0.1725214,
+            "frames": 101
+          }
+        },
+        "onset_count": 6,
+        "overshoot_ratio": 1.5354772,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 10.6697172,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.5930775,
+        "waveform_rms": 0.0543659,
+        "waveform_zero_crossings": 650
+      },
+      "reference_mode_metrics": {
+        "output_flux": 82.64841511831222,
+        "output_peak": 0.7395016917323517
+      },
+      "minimums": {
+        "bar_peak": 0.4478475,
+        "bar_flux": 42.38880225,
+        "integrated_bar_energy": 0.1710924,
+        "attack_slope_per_s": 22.39237615,
+        "waveform_rms": 0.02718295,
+        "output_flux": 41.32420755915611
+      },
+      "maximums": {}
+    },
+    "beats_60_bpm__spectrum": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.530608,
+        "bar_centroid": 14.638304,
+        "bar_flux": 34.4949827,
+        "bar_mean": 0.121733,
+        "bar_peak": 0.8906122,
+        "beat_count": 3,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 7,
+        "decay_to_half_ms": 140.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.2382376,
+        "mode_summary": {
+          "spectrum": {
+            "activity": 0.121733,
+            "frames": 101
+          }
+        },
+        "onset_count": 3,
+        "overshoot_ratio": 1.5267637,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 8.8573807,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.5905075,
+        "waveform_rms": 0.041312,
+        "waveform_zero_crossings": 661
+      },
+      "reference_mode_metrics": {
+        "output_flux": 58.62152558894683,
+        "output_peak": 0.8906121603366162
+      },
+      "minimums": {
+        "bar_peak": 0.4453061,
+        "bar_flux": 17.24749135,
+        "integrated_bar_energy": 0.1191188,
+        "attack_slope_per_s": 22.265304,
+        "waveform_rms": 0.020656,
+        "output_flux": 29.310762794473415
+      },
+      "maximums": {}
+    },
+    "beats_60_bpm__oscilloscope": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.530608,
+        "bar_centroid": 13.2385134,
+        "bar_flux": 35.8549203,
+        "bar_mean": 0.1141389,
+        "bar_peak": 0.8906122,
+        "beat_count": 3,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 6,
+        "decay_to_half_ms": 120.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.2224647,
+        "mode_summary": {
+          "oscilloscope": {
+            "activity": 0.1141389,
+            "frames": 101
+          }
+        },
+        "onset_count": 3,
+        "overshoot_ratio": 1.5267637,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 11.2699577,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.2351023,
+        "waveform_rms": 0.0227453,
+        "waveform_zero_crossings": 691
+      },
+      "reference_mode_metrics": {
+        "output_flux": 49.940557548480925,
+        "output_peak": 1.0344500203651192
+      },
+      "minimums": {
+        "bar_peak": 0.4453061,
+        "bar_flux": 17.92746015,
+        "integrated_bar_energy": 0.11123235,
+        "attack_slope_per_s": 22.265304,
+        "waveform_rms": 0.01137265,
+        "output_flux": 24.970278774240462
+      },
+      "maximums": {}
+    },
+    "beats_60_bpm__sine_wave": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.530608,
+        "bar_centroid": 16.6933582,
+        "bar_flux": 44.5937772,
+        "bar_mean": 0.1142391,
+        "bar_peak": 0.8906122,
+        "beat_count": 3,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 6,
+        "decay_to_half_ms": 120.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.2226714,
+        "mode_summary": {
+          "sine_wave": {
+            "activity": 0.1142391,
+            "frames": 101
+          }
+        },
+        "onset_count": 3,
+        "overshoot_ratio": 1.5267637,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 11.2388452,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.5905075,
+        "waveform_rms": 0.041312,
+        "waveform_zero_crossings": 661
+      },
+      "reference_mode_metrics": {
+        "output_flux": 2.819901460252072,
+        "output_peak": 1.0
+      },
+      "minimums": {
+        "bar_peak": 0.4453061,
+        "bar_flux": 22.2968886,
+        "integrated_bar_energy": 0.1113357,
+        "attack_slope_per_s": 22.265304,
+        "waveform_rms": 0.020656,
+        "output_flux": 1.409950730126036
+      },
+      "maximums": {}
+    },
+    "beats_60_bpm__bubble": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.530608,
+        "bar_centroid": 20.1466171,
+        "bar_flux": 53.4736304,
+        "bar_mean": 0.1142598,
+        "bar_peak": 0.8906122,
+        "beat_count": 3,
+        "bubble_centroid_speed_peak": 2.6159942,
+        "bubble_count_change_peak": 1,
+        "bubble_particle_peak": 59,
+        "bubble_radius_change_peak_per_s": 0.311897,
+        "bubble_radius_excursion": 0.0066244,
+        "bubble_radius_overshoot_ratio": 0.0390345,
+        "bubble_radius_peak": 0.0450702,
+        "bubble_radius_rebound_count": 5,
+        "bubble_radius_settling_time_ms": 1000.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 6,
+        "decay_to_half_ms": 120.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.2227149,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.1142598,
+            "frames": 101
+          }
+        },
+        "onset_count": 3,
+        "overshoot_ratio": 1.5267637,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 11.2335183,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.5905075,
+        "waveform_rms": 0.041312,
+        "waveform_zero_crossings": 661
+      },
+      "reference_mode_metrics": {
+        "output_flux": 163.6876541179589,
+        "output_peak": 1.0277449388152171
+      },
+      "minimums": {
+        "bar_peak": 0.4453061,
+        "bar_flux": 26.7368152,
+        "integrated_bar_energy": 0.11135745,
+        "attack_slope_per_s": 22.265304,
+        "waveform_rms": 0.020656,
+        "output_flux": 81.84382705897946,
+        "bubble_radius_excursion": 0.0033122,
+        "bubble_particle_peak": 29.5
+      },
+      "maximums": {}
+    },
+    "beats_60_bpm__devcurve": {
+      "reference_metrics": {
+        "attack_slope_per_s": 44.530608,
+        "bar_centroid": 14.5417786,
+        "bar_flux": 39.037557,
+        "bar_mean": 0.1143327,
+        "bar_peak": 0.8906122,
+        "beat_count": 3,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 6,
+        "decay_to_half_ms": 120.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.2228541,
+        "mode_summary": {
+          "devcurve": {
+            "activity": 0.1143327,
+            "frames": 101
+          }
+        },
+        "onset_count": 3,
+        "overshoot_ratio": 1.5267637,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 11.2577189,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.5905075,
+        "waveform_rms": 0.041312,
+        "waveform_zero_crossings": 661
+      },
+      "reference_mode_metrics": {
+        "output_flux": 37.393320063191126,
+        "output_peak": 0.7395016917323517
+      },
+      "minimums": {
+        "bar_peak": 0.4453061,
+        "bar_flux": 19.5187785,
+        "integrated_bar_energy": 0.11142705,
+        "attack_slope_per_s": 22.265304,
+        "waveform_rms": 0.020656,
+        "output_flux": 18.696660031595563
+      },
+      "maximums": {}
+    },
+    "broadband_noise__spectrum": {
+      "reference_metrics": {
+        "attack_slope_per_s": 42.7930838,
+        "bar_centroid": 16.5673723,
+        "bar_flux": 64.3691647,
+        "bar_mean": 0.599282,
+        "bar_peak": 0.8558617,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.7885128,
+        "integrated_bar_energy": 0.5650067,
+        "mode_summary": {
+          "spectrum": {
+            "activity": 0.599282,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.0854126,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 6.1282199,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.7938875,
+        "waveform_rms": 0.1781056,
+        "waveform_zero_crossings": 313
+      },
+      "reference_mode_metrics": {
+        "output_flux": 87.85403972724153,
+        "output_peak": 0.8558616752340916
+      },
+      "minimums": {
+        "bar_peak": 0.42793085,
+        "bar_flux": 32.18458235,
+        "integrated_bar_energy": 0.28250335,
+        "attack_slope_per_s": 21.3965419,
+        "waveform_rms": 0.0890528,
+        "output_flux": 43.927019863620764
+      },
+      "maximums": {}
+    },
+    "broadband_noise__oscilloscope": {
+      "reference_metrics": {
+        "attack_slope_per_s": 42.7930838,
+        "bar_centroid": 15.1097975,
+        "bar_flux": 82.68737,
+        "bar_mean": 0.5994958,
+        "bar_peak": 0.8558617,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.7885128,
+        "integrated_bar_energy": 0.5652087,
+        "mode_summary": {
+          "oscilloscope": {
+            "activity": 0.5994958,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.0854126,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 7.8387025,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.2125941,
+        "waveform_rms": 0.0683088,
+        "waveform_zero_crossings": 322
+      },
+      "reference_mode_metrics": {
+        "output_flux": 44.175438873467286,
+        "output_peak": 0.9621042991120874
+      },
+      "minimums": {
+        "bar_peak": 0.42793085,
+        "bar_flux": 41.343685,
+        "integrated_bar_energy": 0.28260435,
+        "attack_slope_per_s": 21.3965419,
+        "waveform_rms": 0.0341544,
+        "output_flux": 22.087719436733643
+      },
+      "maximums": {}
+    },
+    "broadband_noise__sine_wave": {
+      "reference_metrics": {
+        "attack_slope_per_s": 42.7930838,
+        "bar_centroid": 19.0219673,
+        "bar_flux": 101.6941865,
+        "bar_mean": 0.5971195,
+        "bar_peak": 0.8558617,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.7885128,
+        "integrated_bar_energy": 0.5629626,
+        "mode_summary": {
+          "sine_wave": {
+            "activity": 0.5971195,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.0854126,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 7.7363432,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.7938875,
+        "waveform_rms": 0.1781056,
+        "waveform_zero_crossings": 313
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.2439803203086654,
+        "output_peak": 1.0
+      },
+      "minimums": {
+        "bar_peak": 0.42793085,
+        "bar_flux": 50.84709325,
+        "integrated_bar_energy": 0.2814813,
+        "attack_slope_per_s": 21.3965419,
+        "waveform_rms": 0.0890528,
+        "output_flux": 0.1219901601543327
+      },
+      "maximums": {}
+    },
+    "broadband_noise__bubble": {
+      "reference_metrics": {
+        "attack_slope_per_s": 42.7930838,
+        "bar_centroid": 22.9362847,
+        "bar_flux": 122.2495665,
+        "bar_mean": 0.5974113,
+        "bar_peak": 0.8558617,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 1.5075056,
+        "bubble_count_change_peak": 2,
+        "bubble_particle_peak": 62,
+        "bubble_radius_change_peak_per_s": 0.3073281,
+        "bubble_radius_excursion": 0.0277976,
+        "bubble_radius_overshoot_ratio": 0.274498,
+        "bubble_radius_peak": 0.0973995,
+        "bubble_radius_rebound_count": 14,
+        "bubble_radius_settling_time_ms": 540.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.7885128,
+        "integrated_bar_energy": 0.5632446,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.5974113,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.0854126,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 7.7824517,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.7938875,
+        "waveform_rms": 0.1781056,
+        "waveform_zero_crossings": 313
+      },
+      "reference_mode_metrics": {
+        "output_flux": 440.3080520732617,
+        "output_peak": 1.0316262252628003
+      },
+      "minimums": {
+        "bar_peak": 0.42793085,
+        "bar_flux": 61.12478325,
+        "integrated_bar_energy": 0.2816223,
+        "attack_slope_per_s": 21.3965419,
+        "waveform_rms": 0.0890528,
+        "output_flux": 220.15402603663085,
+        "bubble_radius_excursion": 0.0138988,
+        "bubble_particle_peak": 31.0
+      },
+      "maximums": {}
+    },
+    "broadband_noise__devcurve": {
+      "reference_metrics": {
+        "attack_slope_per_s": 42.7930838,
+        "bar_centroid": 16.5771345,
+        "bar_flux": 89.8179856,
+        "bar_mean": 0.59869,
+        "bar_peak": 0.8558617,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.7885128,
+        "integrated_bar_energy": 0.564452,
+        "mode_summary": {
+          "devcurve": {
+            "activity": 0.59869,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.0854126,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 7.8211178,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.7938875,
+        "waveform_rms": 0.1781056,
+        "waveform_zero_crossings": 313
+      },
+      "reference_mode_metrics": {
+        "output_flux": 96.28972652725373,
+        "output_peak": 0.9285822901793519
+      },
+      "minimums": {
+        "bar_peak": 0.42793085,
+        "bar_flux": 44.9089928,
+        "integrated_bar_energy": 0.282226,
+        "attack_slope_per_s": 21.3965419,
+        "waveform_rms": 0.0890528,
+        "output_flux": 48.14486326362687
+      },
+      "maximums": {}
+    },
+    "gradual_ramp__spectrum": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.9617634,
+        "bar_centroid": 13.7795702,
+        "bar_flux": 19.9320121,
+        "bar_mean": 0.2697911,
+        "bar_peak": 0.8655871,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.64,
+        "integrated_bar_energy": 0.2533046,
+        "mode_summary": {
+          "spectrum": {
+            "activity": 0.2697911,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.3524798,
+        "response_frame": 4,
+        "response_latency_ms": 40.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.9339564,
+        "time_to_peak_ms": 900.0,
+        "waveform_peak": 0.6466385,
+        "waveform_rms": 0.1313729,
+        "waveform_zero_crossings": 308
+      },
+      "reference_mode_metrics": {
+        "output_flux": 39.86402412956199,
+        "output_peak": 0.8655870702333646
+      },
+      "minimums": {
+        "bar_peak": 0.43279355,
+        "bar_flux": 9.96600605,
+        "integrated_bar_energy": 0.1266523,
+        "attack_slope_per_s": 0.4808817,
+        "waveform_rms": 0.06568645,
+        "output_flux": 19.932012064780995
+      },
+      "maximums": {}
+    },
+    "gradual_ramp__oscilloscope": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.9698174,
+        "bar_centroid": 12.887004,
+        "bar_flux": 18.6506957,
+        "bar_mean": 0.2837717,
+        "bar_peak": 0.8728357,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.64,
+        "integrated_bar_energy": 0.2665925,
+        "mode_summary": {
+          "oscilloscope": {
+            "activity": 0.2837717,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.3638058,
+        "response_frame": 2,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.719995,
+        "time_to_peak_ms": 900.0,
+        "waveform_peak": 0.2070598,
+        "waveform_rms": 0.0388065,
+        "waveform_zero_crossings": 302
+      },
+      "reference_mode_metrics": {
+        "output_flux": 38.78822602004654,
+        "output_peak": 0.9464349307851885
+      },
+      "minimums": {
+        "bar_peak": 0.43641785,
+        "bar_flux": 9.32534785,
+        "integrated_bar_energy": 0.13329625,
+        "attack_slope_per_s": 0.4849087,
+        "waveform_rms": 0.01940325,
+        "output_flux": 19.39411301002327
+      },
+      "maximums": {}
+    },
+    "gradual_ramp__sine_wave": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.9698174,
+        "bar_centroid": 16.2484286,
+        "bar_flux": 23.3019419,
+        "bar_mean": 0.283655,
+        "bar_peak": 0.8728357,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.64,
+        "integrated_bar_energy": 0.2664833,
+        "mode_summary": {
+          "sine_wave": {
+            "activity": 0.283655,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.3638058,
+        "response_frame": 2,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.7153136,
+        "time_to_peak_ms": 900.0,
+        "waveform_peak": 0.6466385,
+        "waveform_rms": 0.1313729,
+        "waveform_zero_crossings": 308
+      },
+      "reference_mode_metrics": {
+        "output_flux": 1.1816766590612775,
+        "output_peak": 0.9999999723359234
+      },
+      "minimums": {
+        "bar_peak": 0.43641785,
+        "bar_flux": 11.65097095,
+        "integrated_bar_energy": 0.13324165,
+        "attack_slope_per_s": 0.4849087,
+        "waveform_rms": 0.06568645,
+        "output_flux": 0.5908383295306388
+      },
+      "maximums": {}
+    },
+    "gradual_ramp__bubble": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.9698174,
+        "bar_centroid": 19.6162252,
+        "bar_flux": 27.9579983,
+        "bar_mean": 0.2836047,
+        "bar_peak": 0.8728357,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 2.0986058,
+        "bubble_count_change_peak": 2,
+        "bubble_particle_peak": 52,
+        "bubble_radius_change_peak_per_s": 0.1143293,
+        "bubble_radius_excursion": 0.0331482,
+        "bubble_radius_overshoot_ratio": 0.048803,
+        "bubble_radius_peak": 0.1282278,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": 20.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.64,
+        "integrated_bar_energy": 0.2664359,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.2836047,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.3638058,
+        "response_frame": 2,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.714758,
+        "time_to_peak_ms": 900.0,
+        "waveform_peak": 0.6466385,
+        "waveform_rms": 0.1313729,
+        "waveform_zero_crossings": 308
+      },
+      "reference_mode_metrics": {
+        "output_flux": 247.96565420807858,
+        "output_peak": 1.024944910546342
+      },
+      "minimums": {
+        "bar_peak": 0.43641785,
+        "bar_flux": 13.97899915,
+        "integrated_bar_energy": 0.13321795,
+        "attack_slope_per_s": 0.4849087,
+        "waveform_rms": 0.06568645,
+        "output_flux": 123.98282710403929,
+        "bubble_radius_excursion": 0.0165741,
+        "bubble_particle_peak": 26.0
+      },
+      "maximums": {}
+    },
+    "gradual_ramp__devcurve": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.9698174,
+        "bar_centroid": 14.1510525,
+        "bar_flux": 20.4031542,
+        "bar_mean": 0.2838479,
+        "bar_peak": 0.8728357,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.64,
+        "integrated_bar_energy": 0.2666645,
+        "mode_summary": {
+          "devcurve": {
+            "activity": 0.2838479,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.3638058,
+        "response_frame": 2,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.7161789,
+        "time_to_peak_ms": 900.0,
+        "waveform_peak": 0.6466385,
+        "waveform_rms": 0.1313729,
+        "waveform_zero_crossings": 308
+      },
+      "reference_mode_metrics": {
+        "output_flux": 38.538571119636124,
+        "output_peak": 0.9520952373426876
+      },
+      "minimums": {
+        "bar_peak": 0.43641785,
+        "bar_flux": 10.2015771,
+        "integrated_bar_energy": 0.13333225,
+        "attack_slope_per_s": 0.4849087,
+        "waveform_rms": 0.06568645,
+        "output_flux": 19.269285559818062
+      },
+      "maximums": {}
+    },
+    "irregular_input_cadence__spectrum": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.4230061,
+        "bar_centroid": 14.5185453,
+        "bar_flux": 23.1059117,
+        "bar_mean": 0.2035434,
+        "bar_peak": 0.6002456,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.51,
+        "integrated_bar_energy": 0.2844771,
+        "mode_summary": {
+          "spectrum": {
+            "activity": 0.2035434,
+            "frames": 50
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.1769522,
+        "response_frame": 9,
+        "response_latency_ms": 275.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 2.5464305,
+        "time_to_peak_ms": 1419.0,
+        "waveform_peak": 0.5194659,
+        "waveform_rms": 0.125007,
+        "waveform_zero_crossings": 326
+      },
+      "reference_mode_metrics": {
+        "output_flux": 44.0408215352931,
+        "output_peak": 0.6002456064022612
+      },
+      "minimums": {
+        "bar_peak": 0.3001228,
+        "bar_flux": 11.55295585,
+        "integrated_bar_energy": 0.14223855,
+        "attack_slope_per_s": 0.21150305,
+        "waveform_rms": 0.0625035,
+        "output_flux": 22.02041076764655
+      },
+      "maximums": {}
+    },
+    "irregular_input_cadence__oscilloscope": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.4355376,
+        "bar_centroid": 13.355033,
+        "bar_flux": 27.7568305,
+        "bar_mean": 0.2095558,
+        "bar_peak": 0.6180279,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.51,
+        "integrated_bar_energy": 0.2926234,
+        "mode_summary": {
+          "oscilloscope": {
+            "activity": 0.2095558,
+            "frames": 50
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.2118194,
+        "response_frame": 8,
+        "response_latency_ms": 251.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 2.6716064,
+        "time_to_peak_ms": 1419.0,
+        "waveform_peak": 0.139324,
+        "waveform_rms": 0.0422735,
+        "waveform_zero_crossings": 329
+      },
+      "reference_mode_metrics": {
+        "output_flux": 45.13960676045942,
+        "output_peak": 0.6296452873881698
+      },
+      "minimums": {
+        "bar_peak": 0.30901395,
+        "bar_flux": 13.87841525,
+        "integrated_bar_energy": 0.1463117,
+        "attack_slope_per_s": 0.2177688,
+        "waveform_rms": 0.02113675,
+        "output_flux": 22.56980338022971
+      },
+      "maximums": {}
+    },
+    "irregular_input_cadence__sine_wave": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.4355376,
+        "bar_centroid": 16.8304908,
+        "bar_flux": 34.6801275,
+        "bar_mean": 0.209472,
+        "bar_peak": 0.6180279,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.51,
+        "integrated_bar_energy": 0.2925079,
+        "mode_summary": {
+          "sine_wave": {
+            "activity": 0.209472,
+            "frames": 50
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.2118194,
+        "response_frame": 8,
+        "response_latency_ms": 251.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 2.6663248,
+        "time_to_peak_ms": 1419.0,
+        "waveform_peak": 0.5194659,
+        "waveform_rms": 0.125007,
+        "waveform_zero_crossings": 326
+      },
+      "reference_mode_metrics": {
+        "output_flux": 1.2074429297873999,
+        "output_peak": 0.9999999870483285
+      },
+      "minimums": {
+        "bar_peak": 0.30901395,
+        "bar_flux": 17.34006375,
+        "integrated_bar_energy": 0.14625395,
+        "attack_slope_per_s": 0.2177688,
+        "waveform_rms": 0.0625035,
+        "output_flux": 0.6037214648936999
+      },
+      "maximums": {}
+    },
+    "irregular_input_cadence__bubble": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.4355376,
+        "bar_centroid": 20.3104123,
+        "bar_flux": 41.6185015,
+        "bar_mean": 0.2094819,
+        "bar_peak": 0.6180279,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 1.518393,
+        "bubble_count_change_peak": 3,
+        "bubble_particle_peak": 73,
+        "bubble_radius_change_peak_per_s": 0.5982437,
+        "bubble_radius_excursion": 0.0270633,
+        "bubble_radius_overshoot_ratio": 0.2878194,
+        "bubble_radius_peak": 0.0915164,
+        "bubble_radius_rebound_count": 15,
+        "bubble_radius_settling_time_ms": 1144.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.51,
+        "integrated_bar_energy": 0.2925207,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.2094819,
+            "frames": 50
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.2118194,
+        "response_frame": 8,
+        "response_latency_ms": 251.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 2.6664391,
+        "time_to_peak_ms": 1419.0,
+        "waveform_peak": 0.5194659,
+        "waveform_rms": 0.125007,
+        "waveform_zero_crossings": 326
+      },
+      "reference_mode_metrics": {
+        "output_flux": 463.380420854474,
+        "output_peak": 1.0458587449636731
+      },
+      "minimums": {
+        "bar_peak": 0.30901395,
+        "bar_flux": 20.80925075,
+        "integrated_bar_energy": 0.14626035,
+        "attack_slope_per_s": 0.2177688,
+        "waveform_rms": 0.0625035,
+        "output_flux": 231.690210427237,
+        "bubble_radius_excursion": 0.01353165,
+        "bubble_particle_peak": 36.5
+      },
+      "maximums": {}
+    },
+    "irregular_input_cadence__devcurve": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.4355376,
+        "bar_centroid": 14.6615365,
+        "bar_flux": 30.3665086,
+        "bar_mean": 0.2096198,
+        "bar_peak": 0.6180279,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.51,
+        "integrated_bar_energy": 0.292713,
+        "mode_summary": {
+          "devcurve": {
+            "activity": 0.2096198,
+            "frames": 50
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.2118194,
+        "response_frame": 8,
+        "response_latency_ms": 251.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 2.6707668,
+        "time_to_peak_ms": 1419.0,
+        "waveform_peak": 0.5194659,
+        "waveform_rms": 0.125007,
+        "waveform_zero_crossings": 326
+      },
+      "reference_mode_metrics": {
+        "output_flux": 37.78780870749179,
+        "output_peak": 0.7722474813177771
+      },
+      "minimums": {
+        "bar_peak": 0.30901395,
+        "bar_flux": 15.1832543,
+        "integrated_bar_energy": 0.1463565,
+        "attack_slope_per_s": 0.2177688,
+        "waveform_rms": 0.0625035,
+        "output_flux": 18.893904353745896
+      },
+      "maximums": {}
+    },
+    "isolated_impulse__spectrum": {
+      "reference_metrics": {
+        "attack_slope_per_s": 18.6980268,
+        "bar_centroid": 8.4996342,
+        "bar_flux": 11.9552452,
+        "bar_mean": 0.0746089,
+        "bar_peak": 0.3739605,
+        "beat_count": 1,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 6,
+        "decay_to_half_ms": 120.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.0353565,
+        "mode_summary": {
+          "spectrum": {
+            "activity": 0.0746089,
+            "frames": 24
+          }
+        },
+        "onset_count": 1,
+        "overshoot_ratio": 0.6410752,
+        "response_frame": 8,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 10.4598049,
+        "time_to_peak_ms": 20.0,
+        "waveform_peak": 0.5861591,
+        "waveform_rms": 0.0419898,
+        "waveform_zero_crossings": 7
+      },
+      "reference_mode_metrics": {
+        "output_flux": 21.22340426866915,
+        "output_peak": 0.37396053520127037
+      },
+      "minimums": {
+        "bar_peak": 0.18698025,
+        "bar_flux": 5.9776226,
+        "integrated_bar_energy": 0.01767825,
+        "attack_slope_per_s": 9.3490134,
+        "waveform_rms": 0.0209949,
+        "output_flux": 10.611702134334575
+      },
+      "maximums": {}
+    },
+    "isolated_impulse__oscilloscope": {
+      "reference_metrics": {
+        "attack_slope_per_s": 21.7640939,
+        "bar_centroid": 7.430919,
+        "bar_flux": 13.954545,
+        "bar_mean": 0.0688172,
+        "bar_peak": 0.4352819,
+        "beat_count": 1,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 6,
+        "decay_to_half_ms": 120.0,
+        "discontinuity_count": 1,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.0327158,
+        "mode_summary": {
+          "oscilloscope": {
+            "activity": 0.0688172,
+            "frames": 24
+          }
+        },
+        "onset_count": 1,
+        "overshoot_ratio": 0.7461975,
+        "response_frame": 8,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 13.0429426,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.022776,
+        "waveform_rms": 0.0037375,
+        "waveform_zero_crossings": 112
+      },
+      "reference_mode_metrics": {
+        "output_flux": 7.404680674470602,
+        "output_peak": 0.10171950310043122
+      },
+      "minimums": {
+        "bar_peak": 0.21764095,
+        "bar_flux": 6.9772725,
+        "integrated_bar_energy": 0.0163579,
+        "attack_slope_per_s": 10.88204695,
+        "waveform_rms": 0.00186875,
+        "output_flux": 3.702340337235301
+      },
+      "maximums": {}
+    },
+    "isolated_impulse__sine_wave": {
+      "reference_metrics": {
+        "attack_slope_per_s": 21.7640939,
+        "bar_centroid": 9.3869354,
+        "bar_flux": 17.4305148,
+        "bar_mean": 0.0687673,
+        "bar_peak": 0.4352819,
+        "beat_count": 1,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 6,
+        "decay_to_half_ms": 120.0,
+        "discontinuity_count": 1,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.032692,
+        "mode_summary": {
+          "sine_wave": {
+            "activity": 0.0687673,
+            "frames": 24
+          }
+        },
+        "onset_count": 1,
+        "overshoot_ratio": 0.7461975,
+        "response_frame": 8,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 13.0062379,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.5861591,
+        "waveform_rms": 0.0419898,
+        "waveform_zero_crossings": 7
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.9944088368597359,
+        "output_peak": 0.5967313044285598
+      },
+      "minimums": {
+        "bar_peak": 0.21764095,
+        "bar_flux": 8.7152574,
+        "integrated_bar_energy": 0.016346,
+        "attack_slope_per_s": 10.88204695,
+        "waveform_rms": 0.0209949,
+        "output_flux": 0.49720441842986796
+      },
+      "maximums": {}
+    },
+    "isolated_impulse__bubble": {
+      "reference_metrics": {
+        "attack_slope_per_s": 21.7640939,
+        "bar_centroid": 11.350245,
+        "bar_flux": 20.9091368,
+        "bar_mean": 0.0687427,
+        "bar_peak": 0.4352819,
+        "beat_count": 1,
+        "bubble_centroid_speed_peak": 0.6043552,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 49,
+        "bubble_radius_change_peak_per_s": 0.3195562,
+        "bubble_radius_excursion": 0.0063911,
+        "bubble_radius_overshoot_ratio": 0.364967,
+        "bubble_radius_peak": 0.0395463,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": 260.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 6,
+        "decay_to_half_ms": 120.0,
+        "discontinuity_count": 1,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.0326803,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.0687427,
+            "frames": 24
+          }
+        },
+        "onset_count": 1,
+        "overshoot_ratio": 0.7461975,
+        "response_frame": 8,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 12.9931573,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.5861591,
+        "waveform_rms": 0.0419898,
+        "waveform_zero_crossings": 7
+      },
+      "reference_mode_metrics": {
+        "output_flux": 24.32996088428633,
+        "output_peak": 0.9218010808601274
+      },
+      "minimums": {
+        "bar_peak": 0.21764095,
+        "bar_flux": 10.4545684,
+        "integrated_bar_energy": 0.01634015,
+        "attack_slope_per_s": 10.88204695,
+        "waveform_rms": 0.0209949,
+        "output_flux": 12.164980442143165,
+        "bubble_radius_excursion": 0.00319555,
+        "bubble_particle_peak": 24.5
+      },
+      "maximums": {}
+    },
+    "isolated_impulse__devcurve": {
+      "reference_metrics": {
+        "attack_slope_per_s": 21.7640939,
+        "bar_centroid": 8.1708889,
+        "bar_flux": 15.2646947,
+        "bar_mean": 0.0688259,
+        "bar_peak": 0.4352819,
+        "beat_count": 1,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 6,
+        "decay_to_half_ms": 120.0,
+        "discontinuity_count": 1,
+        "input_peak": 0.5833333,
+        "integrated_bar_energy": 0.0327199,
+        "mode_summary": {
+          "devcurve": {
+            "activity": 0.0688259,
+            "frames": 24
+          }
+        },
+        "onset_count": 1,
+        "overshoot_ratio": 0.7461975,
+        "response_frame": 8,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 13.0278552,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.5861591,
+        "waveform_rms": 0.0419898,
+        "waveform_zero_crossings": 7
+      },
+      "reference_mode_metrics": {
+        "output_flux": 16.184499871621362,
+        "output_peak": 0.6803088764140655
+      },
+      "minimums": {
+        "bar_peak": 0.21764095,
+        "bar_flux": 7.63234735,
+        "integrated_bar_energy": 0.01635995,
+        "attack_slope_per_s": 10.88204695,
+        "waveform_rms": 0.0209949,
+        "output_flux": 8.092249935810681
+      },
+      "maximums": {}
+    },
+    "mode_visibility_switch__spectrum": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.0310111,
+        "bar_centroid": 10.3878516,
+        "bar_flux": 0.0400037,
+        "bar_mean": 0.0004424,
+        "bar_peak": 0.0018607,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.4566667,
+        "integrated_bar_energy": 2.4e-05,
+        "mode_summary": {
+          "spectrum": {
+            "activity": 0.0004424,
+            "frames": 4
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 0.0040745,
+        "response_frame": -1,
+        "response_latency_ms": -1.0,
+        "settling_time_ms": 0.0,
+        "state_derivative_max_per_s": 0.0323378,
+        "time_to_peak_ms": 60.0,
+        "waveform_peak": 0.4660815,
+        "waveform_rms": 0.125548,
+        "waveform_zero_crossings": 25
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.08000733122310236,
+        "output_peak": 0.0018606674553323216
+      },
+      "minimums": {},
+      "maximums": {}
+    },
+    "mode_visibility_switch__oscilloscope": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.0310111,
+        "bar_centroid": 9.4576309,
+        "bar_flux": 0.0365776,
+        "bar_mean": 0.0004424,
+        "bar_peak": 0.0018607,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.4566667,
+        "integrated_bar_energy": 2.4e-05,
+        "mode_summary": {
+          "oscilloscope": {
+            "activity": 0.0004424,
+            "frames": 4
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 0.0040745,
+        "response_frame": -1,
+        "response_latency_ms": -1.0,
+        "settling_time_ms": 0.0,
+        "state_derivative_max_per_s": 0.0323568,
+        "time_to_peak_ms": 60.0,
+        "waveform_peak": 0.0816136,
+        "waveform_rms": 0.0250268,
+        "waveform_zero_crossings": 28
+      },
+      "reference_mode_metrics": {
+        "output_flux": 4.775485005497995,
+        "output_peak": 0.3591114678573266
+      },
+      "minimums": {},
+      "maximums": {}
+    },
+    "mode_visibility_switch__sine_wave": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.0310111,
+        "bar_centroid": 11.9288337,
+        "bar_flux": 0.0456879,
+        "bar_mean": 0.0004421,
+        "bar_peak": 0.0018607,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.4566667,
+        "integrated_bar_energy": 2.39e-05,
+        "mode_summary": {
+          "sine_wave": {
+            "activity": 0.0004421,
+            "frames": 4
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 0.0040745,
+        "response_frame": -1,
+        "response_latency_ms": -1.0,
+        "settling_time_ms": 0.0,
+        "state_derivative_max_per_s": 0.0323037,
+        "time_to_peak_ms": 60.0,
+        "waveform_peak": 0.4660815,
+        "waveform_rms": 0.125548,
+        "waveform_zero_crossings": 25
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.0001582892958895279,
+        "output_peak": 0.10001327190499709
+      },
+      "minimums": {},
+      "maximums": {}
+    },
+    "mode_visibility_switch__bubble": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.0310111,
+        "bar_centroid": 14.4030751,
+        "bar_flux": 0.0548043,
+        "bar_mean": 0.0004419,
+        "bar_peak": 0.0018607,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.4456772,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 49,
+        "bubble_radius_change_peak_per_s": 0.2955193,
+        "bubble_radius_excursion": 0.0102962,
+        "bubble_radius_overshoot_ratio": 0.0614793,
+        "bubble_radius_peak": 0.0395463,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": 20.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.4566667,
+        "integrated_bar_energy": 2.39e-05,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.0004419,
+            "frames": 4
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 0.0040745,
+        "response_frame": -1,
+        "response_latency_ms": -1.0,
+        "settling_time_ms": 0.0,
+        "state_derivative_max_per_s": 0.0322806,
+        "time_to_peak_ms": 60.0,
+        "waveform_peak": 0.4660815,
+        "waveform_rms": 0.125548,
+        "waveform_zero_crossings": 25
+      },
+      "reference_mode_metrics": {
+        "output_flux": 17.327143293903767,
+        "output_peak": 0.9440906961590556
+      },
+      "minimums": {},
+      "maximums": {}
+    },
+    "mode_visibility_switch__devcurve": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.0310111,
+        "bar_centroid": 10.3878516,
+        "bar_flux": 0.0400037,
+        "bar_mean": 0.0004424,
+        "bar_peak": 0.0018607,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.4566667,
+        "integrated_bar_energy": 2.4e-05,
+        "mode_summary": {
+          "devcurve": {
+            "activity": 0.0004424,
+            "frames": 4
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 0.0040745,
+        "response_frame": -1,
+        "response_latency_ms": -1.0,
+        "settling_time_ms": 0.0,
+        "state_derivative_max_per_s": 0.0323378,
+        "time_to_peak_ms": 60.0,
+        "waveform_peak": 0.4660815,
+        "waveform_rms": 0.125548,
+        "waveform_zero_crossings": 25
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.018632920183886847,
+        "output_peak": 0.5962147196499642
+      },
+      "minimums": {},
+      "maximums": {}
+    },
+    "mode_visibility_switch__control": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.0205996,
+        "bar_centroid": 13.3171314,
+        "bar_flux": 0.0349874,
+        "bar_mean": 0.0004301,
+        "bar_peak": 0.001236,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.349548,
+        "bubble_count_change_peak": 49,
+        "bubble_particle_peak": 49,
+        "bubble_radius_change_peak_per_s": 0.2955193,
+        "bubble_radius_excursion": 0.0187872,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0395463,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": 20.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.4566667,
+        "integrated_bar_energy": 2.57e-05,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.0004228,
+            "frames": 2
+          },
+          "spectrum": {
+            "activity": 0.0004374,
+            "frames": 2
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 0.0027065,
+        "response_frame": -1,
+        "response_latency_ms": -1.0,
+        "settling_time_ms": 0.0,
+        "state_derivative_max_per_s": 0.0267384,
+        "time_to_peak_ms": 60.0,
+        "waveform_peak": 0.4660815,
+        "waveform_rms": 0.125548,
+        "waveform_zero_crossings": 25
+      },
+      "reference_mode_metrics": {
+        "output_flux": 36.78654187740172,
+        "output_peak": 0.9218010808601274
+      },
+      "minimums": {},
+      "maximums": {}
+    },
+    "representative_music_features__spectrum": {
+      "reference_metrics": {
+        "attack_slope_per_s": 1.2074742,
+        "bar_centroid": 14.9823525,
+        "bar_flux": 78.3338411,
+        "bar_mean": 0.3607691,
+        "bar_peak": 0.6761855,
+        "beat_count": 6,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.4967455,
+        "integrated_bar_energy": 0.5133295,
+        "mode_summary": {
+          "spectrum": {
+            "activity": 0.3607691,
+            "frames": 72
+          }
+        },
+        "onset_count": 6,
+        "overshoot_ratio": 1.3612314,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 3.9432911,
+        "time_to_peak_ms": 560.0,
+        "waveform_peak": 0.5045514,
+        "waveform_rms": 0.1071085,
+        "waveform_zero_crossings": 466
+      },
+      "reference_mode_metrics": {
+        "output_flux": 104.12934803251682,
+        "output_peak": 0.6761855412058436
+      },
+      "minimums": {
+        "bar_peak": 0.33809275,
+        "bar_flux": 39.16692055,
+        "integrated_bar_energy": 0.25666475,
+        "attack_slope_per_s": 0.6037371,
+        "waveform_rms": 0.05355425,
+        "output_flux": 52.06467401625841
+      },
+      "maximums": {}
+    },
+    "representative_music_features__oscilloscope": {
+      "reference_metrics": {
+        "attack_slope_per_s": 1.2382389,
+        "bar_centroid": 13.5763673,
+        "bar_flux": 81.0845847,
+        "bar_mean": 0.3581623,
+        "bar_peak": 0.6934138,
+        "beat_count": 6,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.4967455,
+        "integrated_bar_energy": 0.5096317,
+        "mode_summary": {
+          "oscilloscope": {
+            "activity": 0.3581623,
+            "frames": 72
+          }
+        },
+        "onset_count": 6,
+        "overshoot_ratio": 1.3959136,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 4.3393597,
+        "time_to_peak_ms": 560.0,
+        "waveform_peak": 0.1492489,
+        "waveform_rms": 0.0407075,
+        "waveform_zero_crossings": 461
+      },
+      "reference_mode_metrics": {
+        "output_flux": 66.57058544992208,
+        "output_peak": 0.6692840129783048
+      },
+      "minimums": {
+        "bar_peak": 0.3467069,
+        "bar_flux": 40.54229235,
+        "integrated_bar_energy": 0.25481585,
+        "attack_slope_per_s": 0.61911945,
+        "waveform_rms": 0.02035375,
+        "output_flux": 33.28529272496104
+      },
+      "maximums": {}
+    },
+    "representative_music_features__sine_wave": {
+      "reference_metrics": {
+        "attack_slope_per_s": 1.2382389,
+        "bar_centroid": 17.1072484,
+        "bar_flux": 100.6702326,
+        "bar_mean": 0.3574058,
+        "bar_peak": 0.6934138,
+        "beat_count": 6,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.4967455,
+        "integrated_bar_energy": 0.5085502,
+        "mode_summary": {
+          "sine_wave": {
+            "activity": 0.3574058,
+            "frames": 72
+          }
+        },
+        "onset_count": 6,
+        "overshoot_ratio": 1.3959136,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 4.3042345,
+        "time_to_peak_ms": 560.0,
+        "waveform_peak": 0.5045514,
+        "waveform_rms": 0.1071085,
+        "waveform_zero_crossings": 466
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.5327131021166958,
+        "output_peak": 1.0
+      },
+      "minimums": {
+        "bar_peak": 0.3467069,
+        "bar_flux": 50.3351163,
+        "integrated_bar_energy": 0.2542751,
+        "attack_slope_per_s": 0.61911945,
+        "waveform_rms": 0.05355425,
+        "output_flux": 0.2663565510583479
+      },
+      "maximums": {}
+    },
+    "representative_music_features__bubble": {
+      "reference_metrics": {
+        "attack_slope_per_s": 1.2382389,
+        "bar_centroid": 20.6429738,
+        "bar_flux": 120.7984386,
+        "bar_mean": 0.357398,
+        "bar_peak": 0.6934138,
+        "beat_count": 6,
+        "bubble_centroid_speed_peak": 1.3671901,
+        "bubble_count_change_peak": 1,
+        "bubble_particle_peak": 63,
+        "bubble_radius_change_peak_per_s": 0.2418307,
+        "bubble_radius_excursion": 0.0234719,
+        "bubble_radius_overshoot_ratio": 0.7697077,
+        "bubble_radius_peak": 0.0776,
+        "bubble_radius_rebound_count": 8,
+        "bubble_radius_settling_time_ms": 1100.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.4967455,
+        "integrated_bar_energy": 0.5085328,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.357398,
+            "frames": 72
+          }
+        },
+        "onset_count": 6,
+        "overshoot_ratio": 1.3959136,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 4.2874744,
+        "time_to_peak_ms": 560.0,
+        "waveform_peak": 0.5045514,
+        "waveform_rms": 0.1071085,
+        "waveform_zero_crossings": 466
+      },
+      "reference_mode_metrics": {
+        "output_flux": 404.75823834317094,
+        "output_peak": 1.040811309175617
+      },
+      "minimums": {
+        "bar_peak": 0.3467069,
+        "bar_flux": 60.3992193,
+        "integrated_bar_energy": 0.2542664,
+        "attack_slope_per_s": 0.61911945,
+        "waveform_rms": 0.05355425,
+        "output_flux": 202.37911917158547,
+        "bubble_radius_excursion": 0.01173595,
+        "bubble_particle_peak": 31.5
+      },
+      "maximums": {}
+    },
+    "representative_music_features__devcurve": {
+      "reference_metrics": {
+        "attack_slope_per_s": 1.2382389,
+        "bar_centroid": 14.9026669,
+        "bar_flux": 88.4145232,
+        "bar_mean": 0.3579119,
+        "bar_peak": 0.6934138,
+        "beat_count": 6,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.4967455,
+        "integrated_bar_energy": 0.5092703,
+        "mode_summary": {
+          "devcurve": {
+            "activity": 0.3579119,
+            "frames": 72
+          }
+        },
+        "onset_count": 6,
+        "overshoot_ratio": 1.3959136,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 4.3182047,
+        "time_to_peak_ms": 560.0,
+        "waveform_peak": 0.5045514,
+        "waveform_rms": 0.1071085,
+        "waveform_zero_crossings": 466
+      },
+      "reference_mode_metrics": {
+        "output_flux": 152.14770954346596,
+        "output_peak": 0.8689223191098459
+      },
+      "minimums": {
+        "bar_peak": 0.3467069,
+        "bar_flux": 44.2072616,
+        "integrated_bar_energy": 0.25463515,
+        "attack_slope_per_s": 0.61911945,
+        "waveform_rms": 0.05355425,
+        "output_flux": 76.07385477173298
+      },
+      "maximums": {}
+    },
+    "silence__spectrum": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.0,
+        "bar_centroid": 0.0,
+        "bar_flux": 0.0,
+        "bar_mean": 0.0,
+        "bar_peak": 0.0,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.0,
+        "integrated_bar_energy": 0.0,
+        "mode_summary": {
+          "spectrum": {
+            "activity": 0.0,
+            "frames": 24
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 0.0,
+        "response_frame": -1,
+        "response_latency_ms": -1.0,
+        "settling_time_ms": 0.0,
+        "state_derivative_max_per_s": 0.0,
+        "time_to_peak_ms": -1.0,
+        "waveform_peak": 0.0,
+        "waveform_rms": 0.0,
+        "waveform_zero_crossings": 0
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.0,
+        "output_peak": 0.0
+      },
+      "minimums": {},
+      "maximums": {
+        "bar_peak": 1e-06,
+        "waveform_peak": 1e-06,
+        "onset_count": 1e-06
+      }
+    },
+    "silence__oscilloscope": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.0,
+        "bar_centroid": 0.0,
+        "bar_flux": 0.0,
+        "bar_mean": 0.0,
+        "bar_peak": 0.0,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.0,
+        "integrated_bar_energy": 0.0,
+        "mode_summary": {
+          "oscilloscope": {
+            "activity": 0.0,
+            "frames": 24
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 0.0,
+        "response_frame": -1,
+        "response_latency_ms": -1.0,
+        "settling_time_ms": 0.0,
+        "state_derivative_max_per_s": 0.0,
+        "time_to_peak_ms": -1.0,
+        "waveform_peak": 0.0,
+        "waveform_rms": 0.0,
+        "waveform_zero_crossings": 0
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.0,
+        "output_peak": 0.0
+      },
+      "minimums": {},
+      "maximums": {
+        "bar_peak": 1e-06,
+        "waveform_peak": 1e-06,
+        "onset_count": 1e-06
+      }
+    },
+    "silence__sine_wave": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.0,
+        "bar_centroid": 0.0,
+        "bar_flux": 0.0,
+        "bar_mean": 0.0,
+        "bar_peak": 0.0,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.0,
+        "integrated_bar_energy": 0.0,
+        "mode_summary": {
+          "sine_wave": {
+            "activity": 0.0,
+            "frames": 24
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 0.0,
+        "response_frame": -1,
+        "response_latency_ms": -1.0,
+        "settling_time_ms": 0.0,
+        "state_derivative_max_per_s": 0.0,
+        "time_to_peak_ms": -1.0,
+        "waveform_peak": 0.0,
+        "waveform_rms": 0.0,
+        "waveform_zero_crossings": 0
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.0,
+        "output_peak": 0.1
+      },
+      "minimums": {},
+      "maximums": {
+        "bar_peak": 1e-06,
+        "waveform_peak": 1e-06,
+        "onset_count": 1e-06
+      }
+    },
+    "silence__bubble": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.0,
+        "bar_centroid": 0.0,
+        "bar_flux": 0.0,
+        "bar_mean": 0.0,
+        "bar_peak": 0.0,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0538293,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 49,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0395463,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": 0.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.0,
+        "integrated_bar_energy": 0.0,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.0,
+            "frames": 24
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 0.0,
+        "response_frame": -1,
+        "response_latency_ms": -1.0,
+        "settling_time_ms": 0.0,
+        "state_derivative_max_per_s": 0.0,
+        "time_to_peak_ms": -1.0,
+        "waveform_peak": 0.0,
+        "waveform_rms": 0.0,
+        "waveform_zero_crossings": 0
+      },
+      "reference_mode_metrics": {
+        "output_flux": 16.256212252208588,
+        "output_peak": 0.9218010808601274
+      },
+      "minimums": {},
+      "maximums": {
+        "bar_peak": 1e-06,
+        "waveform_peak": 1e-06,
+        "onset_count": 1e-06
+      }
+    },
+    "silence__devcurve": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.0,
+        "bar_centroid": 0.0,
+        "bar_flux": 0.0,
+        "bar_mean": 0.0,
+        "bar_peak": 0.0,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.0,
+        "integrated_bar_energy": 0.0,
+        "mode_summary": {
+          "devcurve": {
+            "activity": 0.0,
+            "frames": 24
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 0.0,
+        "response_frame": -1,
+        "response_latency_ms": -1.0,
+        "settling_time_ms": 0.0,
+        "state_derivative_max_per_s": 0.0,
+        "time_to_peak_ms": -1.0,
+        "waveform_peak": 0.0,
+        "waveform_rms": 0.0,
+        "waveform_zero_crossings": 0
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.03480620535135409,
+        "output_peak": 0.5962419347882751
+      },
+      "minimums": {},
+      "maximums": {
+        "bar_peak": 1e-06,
+        "waveform_peak": 1e-06,
+        "onset_count": 1e-06
+      }
+    },
+    "sudden_volume_step__spectrum": {
+      "reference_metrics": {
+        "attack_slope_per_s": 0.9377783,
+        "bar_centroid": 14.5531536,
+        "bar_flux": 20.0830194,
+        "bar_mean": 0.363179,
+        "bar_peak": 0.8815116,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.66,
+        "integrated_bar_energy": 0.3419336,
+        "mode_summary": {
+          "spectrum": {
+            "activity": 0.363179,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.3356237,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 10.0598562,
+        "time_to_peak_ms": 940.0,
+        "waveform_peak": 0.6693966,
+        "waveform_rms": 0.1785977,
+        "waveform_zero_crossings": 311
+      },
+      "reference_mode_metrics": {
+        "output_flux": 40.166038875696394,
+        "output_peak": 0.8815116401580819
+      },
+      "minimums": {
+        "bar_peak": 0.4407558,
+        "bar_flux": 10.0415097,
+        "integrated_bar_energy": 0.1709668,
+        "attack_slope_per_s": 0.46888915,
+        "waveform_rms": 0.08929885,
+        "output_flux": 20.083019437848197
+      },
+      "maximums": {}
+    },
+    "sudden_volume_step__oscilloscope": {
+      "reference_metrics": {
+        "attack_slope_per_s": 1.1940656,
+        "bar_centroid": 13.2726996,
+        "bar_flux": 18.7891912,
+        "bar_mean": 0.3687336,
+        "bar_peak": 0.8836085,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 1,
+        "input_peak": 0.66,
+        "integrated_bar_energy": 0.3472463,
+        "mode_summary": {
+          "oscilloscope": {
+            "activity": 0.3687336,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.3388008,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 12.6665441,
+        "time_to_peak_ms": 740.0,
+        "waveform_peak": 0.2511451,
+        "waveform_rms": 0.0536927,
+        "waveform_zero_crossings": 316
+      },
+      "reference_mode_metrics": {
+        "output_flux": 43.933918464525526,
+        "output_peak": 1.1488517775323885
+      },
+      "minimums": {
+        "bar_peak": 0.44180425,
+        "bar_flux": 9.3945956,
+        "integrated_bar_energy": 0.17362315,
+        "attack_slope_per_s": 0.5970328,
+        "waveform_rms": 0.02684635,
+        "output_flux": 21.966959232262763
+      },
+      "maximums": {}
+    },
+    "sudden_volume_step__sine_wave": {
+      "reference_metrics": {
+        "attack_slope_per_s": 1.1940656,
+        "bar_centroid": 16.723664,
+        "bar_flux": 23.1796005,
+        "bar_mean": 0.3682412,
+        "bar_peak": 0.8836085,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 1,
+        "input_peak": 0.66,
+        "integrated_bar_energy": 0.346787,
+        "mode_summary": {
+          "sine_wave": {
+            "activity": 0.3682412,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.3388008,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 12.6609124,
+        "time_to_peak_ms": 740.0,
+        "waveform_peak": 0.6693966,
+        "waveform_rms": 0.1785977,
+        "waveform_zero_crossings": 311
+      },
+      "reference_mode_metrics": {
+        "output_flux": 1.1800286242174323,
+        "output_peak": 0.9999998350182474
+      },
+      "minimums": {
+        "bar_peak": 0.44180425,
+        "bar_flux": 11.58980025,
+        "integrated_bar_energy": 0.1733935,
+        "attack_slope_per_s": 0.5970328,
+        "waveform_rms": 0.08929885,
+        "output_flux": 0.5900143121087161
+      },
+      "maximums": {}
+    },
+    "sudden_volume_step__bubble": {
+      "reference_metrics": {
+        "attack_slope_per_s": 1.1940656,
+        "bar_centroid": 20.1695385,
+        "bar_flux": 27.834367,
+        "bar_mean": 0.3682786,
+        "bar_peak": 0.8836085,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 1.3340895,
+        "bubble_count_change_peak": 2,
+        "bubble_particle_peak": 57,
+        "bubble_radius_change_peak_per_s": 0.30726,
+        "bubble_radius_excursion": 0.0315982,
+        "bubble_radius_overshoot_ratio": 0.0098788,
+        "bubble_radius_peak": 0.1623173,
+        "bubble_radius_rebound_count": 3,
+        "bubble_radius_settling_time_ms": 0.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 1,
+        "input_peak": 0.66,
+        "integrated_bar_energy": 0.34682,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.3682786,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.3388008,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 12.6607456,
+        "time_to_peak_ms": 740.0,
+        "waveform_peak": 0.6693966,
+        "waveform_rms": 0.1785977,
+        "waveform_zero_crossings": 311
+      },
+      "reference_mode_metrics": {
+        "output_flux": 330.8246494853654,
+        "output_peak": 1.0363851087014915
+      },
+      "minimums": {
+        "bar_peak": 0.44180425,
+        "bar_flux": 13.9171835,
+        "integrated_bar_energy": 0.17341,
+        "attack_slope_per_s": 0.5970328,
+        "waveform_rms": 0.08929885,
+        "output_flux": 165.4123247426827,
+        "bubble_radius_excursion": 0.0157991,
+        "bubble_particle_peak": 28.5
+      },
+      "maximums": {}
+    },
+    "sudden_volume_step__devcurve": {
+      "reference_metrics": {
+        "attack_slope_per_s": 1.1940656,
+        "bar_centroid": 14.5666672,
+        "bar_flux": 20.2946161,
+        "bar_mean": 0.3686093,
+        "bar_peak": 0.8836085,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 1,
+        "input_peak": 0.66,
+        "integrated_bar_energy": 0.3471336,
+        "mode_summary": {
+          "devcurve": {
+            "activity": 0.3686093,
+            "frames": 48
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 1.3388008,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 12.6712628,
+        "time_to_peak_ms": 740.0,
+        "waveform_peak": 0.6693966,
+        "waveform_rms": 0.1785977,
+        "waveform_zero_crossings": 311
+      },
+      "reference_mode_metrics": {
+        "output_flux": 54.12909239709318,
+        "output_peak": 0.959945699818686
+      },
+      "minimums": {
+        "bar_peak": 0.44180425,
+        "bar_flux": 10.14730805,
+        "integrated_bar_energy": 0.1735668,
+        "attack_slope_per_s": 0.5970328,
+        "waveform_rms": 0.08929885,
+        "output_flux": 27.06454619854659
+      },
+      "maximums": {}
+    },
+    "sustained_bass__spectrum": {
+      "reference_metrics": {
+        "attack_slope_per_s": 4.7631502,
+        "bar_centroid": 10.5795988,
+        "bar_flux": 0.1855015,
+        "bar_mean": 0.4197443,
+        "bar_peak": 0.95263,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.47,
+        "integrated_bar_energy": 0.2938335,
+        "mode_summary": {
+          "spectrum": {
+            "activity": 0.4197443,
+            "frames": 36
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 2.0268724,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.0218808,
+        "time_to_peak_ms": 200.0,
+        "waveform_peak": 0.4799846,
+        "waveform_rms": 0.1661533,
+        "waveform_zero_crossings": 234
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.37100300109631235,
+        "output_peak": 0.9526300427244404
+      },
+      "minimums": {
+        "bar_peak": 0.476315,
+        "bar_flux": 0.09275075,
+        "integrated_bar_energy": 0.14691675,
+        "attack_slope_per_s": 2.3815751,
+        "waveform_rms": 0.08307665,
+        "output_flux": 0.18550150054815617
+      },
+      "maximums": {}
+    },
+    "sustained_bass__oscilloscope": {
+      "reference_metrics": {
+        "attack_slope_per_s": 9.5433817,
+        "bar_centroid": 9.6349671,
+        "bar_flux": 0.534486,
+        "bar_mean": 0.4212107,
+        "bar_peak": 0.9543382,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.47,
+        "integrated_bar_energy": 0.2948737,
+        "mode_summary": {
+          "oscilloscope": {
+            "activity": 0.4212107,
+            "frames": 36
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 2.0305068,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.1707173,
+        "time_to_peak_ms": 100.0,
+        "waveform_peak": 0.1899621,
+        "waveform_rms": 0.0668606,
+        "waveform_zero_crossings": 223
+      },
+      "reference_mode_metrics": {
+        "output_flux": 2.369644373642796,
+        "output_peak": 0.8701407785441246
+      },
+      "minimums": {
+        "bar_peak": 0.4771691,
+        "bar_flux": 0.267243,
+        "integrated_bar_energy": 0.14743685,
+        "attack_slope_per_s": 4.77169085,
+        "waveform_rms": 0.0334303,
+        "output_flux": 1.184822186821398
+      },
+      "maximums": {}
+    },
+    "sustained_bass__sine_wave": {
+      "reference_metrics": {
+        "attack_slope_per_s": 9.5433817,
+        "bar_centroid": 12.1841263,
+        "bar_flux": 0.3527831,
+        "bar_mean": 0.4200944,
+        "bar_peak": 0.9543382,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.47,
+        "integrated_bar_energy": 0.2940865,
+        "mode_summary": {
+          "sine_wave": {
+            "activity": 0.4200944,
+            "frames": 36
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 2.0305068,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.1379756,
+        "time_to_peak_ms": 100.0,
+        "waveform_peak": 0.4799846,
+        "waveform_rms": 0.1661533,
+        "waveform_zero_crossings": 234
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.16739034341228104,
+        "output_peak": 1.0
+      },
+      "minimums": {
+        "bar_peak": 0.4771691,
+        "bar_flux": 0.17639155,
+        "integrated_bar_energy": 0.14704325,
+        "attack_slope_per_s": 4.77169085,
+        "waveform_rms": 0.08307665,
+        "output_flux": 0.08369517170614052
+      },
+      "maximums": {}
+    },
+    "sustained_bass__bubble": {
+      "reference_metrics": {
+        "attack_slope_per_s": 9.5433817,
+        "bar_centroid": 14.7418011,
+        "bar_flux": 0.4623709,
+        "bar_mean": 0.4193889,
+        "bar_peak": 0.9543382,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 1.5428897,
+        "bubble_count_change_peak": 1,
+        "bubble_particle_peak": 52,
+        "bubble_radius_change_peak_per_s": 0.2505955,
+        "bubble_radius_excursion": 0.0319537,
+        "bubble_radius_overshoot_ratio": 0.0479573,
+        "bubble_radius_peak": 0.1232489,
+        "bubble_radius_rebound_count": 4,
+        "bubble_radius_settling_time_ms": 20.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.47,
+        "integrated_bar_energy": 0.2935918,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.4193889,
+            "frames": 36
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 2.0305068,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.1375159,
+        "time_to_peak_ms": 100.0,
+        "waveform_peak": 0.4799846,
+        "waveform_rms": 0.1661533,
+        "waveform_zero_crossings": 234
+      },
+      "reference_mode_metrics": {
+        "output_flux": 336.25031277413115,
+        "output_peak": 1.03519439117051
+      },
+      "minimums": {
+        "bar_peak": 0.4771691,
+        "bar_flux": 0.23118545,
+        "integrated_bar_energy": 0.1467959,
+        "attack_slope_per_s": 4.77169085,
+        "waveform_rms": 0.08307665,
+        "output_flux": 168.12515638706557,
+        "bubble_radius_excursion": 0.01597685,
+        "bubble_particle_peak": 26.0
+      },
+      "maximums": {}
+    },
+    "sustained_bass__devcurve": {
+      "reference_metrics": {
+        "attack_slope_per_s": 9.5433817,
+        "bar_centroid": 10.5915764,
+        "bar_flux": 0.2974819,
+        "bar_mean": 0.4202043,
+        "bar_peak": 0.9543382,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.47,
+        "integrated_bar_energy": 0.2941643,
+        "mode_summary": {
+          "devcurve": {
+            "activity": 0.4202043,
+            "frames": 36
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 2.0305068,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.1428836,
+        "time_to_peak_ms": 100.0,
+        "waveform_peak": 0.4799846,
+        "waveform_rms": 0.1661533,
+        "waveform_zero_crossings": 234
+      },
+      "reference_mode_metrics": {
+        "output_flux": 37.06864937157123,
+        "output_peak": 0.9599999839886999
+      },
+      "minimums": {
+        "bar_peak": 0.4771691,
+        "bar_flux": 0.14874095,
+        "integrated_bar_energy": 0.14708215,
+        "attack_slope_per_s": 4.77169085,
+        "waveform_rms": 0.08307665,
+        "output_flux": 18.534324685785617
+      },
+      "maximums": {}
+    },
+    "sustained_treble__spectrum": {
+      "reference_metrics": {
+        "attack_slope_per_s": 47.7414955,
+        "bar_centroid": 23.9328245,
+        "bar_flux": 0.1594999,
+        "bar_mean": 0.456519,
+        "bar_peak": 0.9548299,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.47,
+        "integrated_bar_energy": 0.3195687,
+        "mode_summary": {
+          "spectrum": {
+            "activity": 0.456519,
+            "frames": 36
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 2.031553,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.0165775,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.4798571,
+        "waveform_rms": 0.1662585,
+        "waveform_zero_crossings": 232
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.3189997234751071,
+        "output_peak": 0.9548299091963282
+      },
+      "minimums": {
+        "bar_peak": 0.47741495,
+        "bar_flux": 0.07974995,
+        "integrated_bar_energy": 0.15978435,
+        "attack_slope_per_s": 23.87074775,
+        "waveform_rms": 0.08312925,
+        "output_flux": 0.15949986173755354
+      },
+      "maximums": {}
+    },
+    "sustained_treble__oscilloscope": {
+      "reference_metrics": {
+        "attack_slope_per_s": 47.8346185,
+        "bar_centroid": 21.8418853,
+        "bar_flux": 0.5049256,
+        "bar_mean": 0.4577234,
+        "bar_peak": 0.9566924,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.47,
+        "integrated_bar_energy": 0.3204145,
+        "mode_summary": {
+          "oscilloscope": {
+            "activity": 0.4577234,
+            "frames": 36
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 2.0355157,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.1011568,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.1915698,
+        "waveform_rms": 0.066907,
+        "waveform_zero_crossings": 228
+      },
+      "reference_mode_metrics": {
+        "output_flux": 1.1986424557426802,
+        "output_peak": 0.8434774449734054
+      },
+      "minimums": {
+        "bar_peak": 0.4783462,
+        "bar_flux": 0.2524628,
+        "integrated_bar_energy": 0.16020725,
+        "attack_slope_per_s": 23.91730925,
+        "waveform_rms": 0.0334535,
+        "output_flux": 0.5993212278713401
+      },
+      "maximums": {}
+    },
+    "sustained_treble__sine_wave": {
+      "reference_metrics": {
+        "attack_slope_per_s": 47.7471894,
+        "bar_centroid": 27.4214275,
+        "bar_flux": 0.3010143,
+        "bar_mean": 0.4569864,
+        "bar_peak": 0.9549438,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.47,
+        "integrated_bar_energy": 0.3199015,
+        "mode_summary": {
+          "sine_wave": {
+            "activity": 0.4569864,
+            "frames": 36
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 2.0317953,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.0740757,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.4798571,
+        "waveform_rms": 0.1662585,
+        "waveform_zero_crossings": 232
+      },
+      "reference_mode_metrics": {
+        "output_flux": 0.0,
+        "output_peak": 1.0
+      },
+      "minimums": {
+        "bar_peak": 0.4774719,
+        "bar_flux": 0.15050715,
+        "integrated_bar_energy": 0.15995075,
+        "attack_slope_per_s": 23.8735947,
+        "waveform_rms": 0.08312925
+      },
+      "maximums": {}
+    },
+    "sustained_treble__bubble": {
+      "reference_metrics": {
+        "attack_slope_per_s": 47.7933835,
+        "bar_centroid": 32.9945393,
+        "bar_flux": 0.3847039,
+        "bar_mean": 0.4562442,
+        "bar_peak": 0.9558677,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 1.6422023,
+        "bubble_count_change_peak": 3,
+        "bubble_particle_peak": 57,
+        "bubble_radius_change_peak_per_s": 0.2223505,
+        "bubble_radius_excursion": 0.0161105,
+        "bubble_radius_overshoot_ratio": 0.3834594,
+        "bubble_radius_peak": 0.0484625,
+        "bubble_radius_rebound_count": 4,
+        "bubble_radius_settling_time_ms": 500.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.47,
+        "integrated_bar_energy": 0.3193777,
+        "mode_summary": {
+          "bubble": {
+            "activity": 0.4562442,
+            "frames": 36
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 2.033761,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.0694422,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.4798571,
+        "waveform_rms": 0.1662585,
+        "waveform_zero_crossings": 232
+      },
+      "reference_mode_metrics": {
+        "output_flux": 160.0952942812249,
+        "output_peak": 1.012425113514547
+      },
+      "minimums": {
+        "bar_peak": 0.47793385,
+        "bar_flux": 0.19235195,
+        "integrated_bar_energy": 0.15968885,
+        "attack_slope_per_s": 23.89669175,
+        "waveform_rms": 0.08312925,
+        "output_flux": 80.04764714061245,
+        "bubble_radius_excursion": 0.00805525,
+        "bubble_particle_peak": 28.5
+      },
+      "maximums": {}
+    },
+    "sustained_treble__devcurve": {
+      "reference_metrics": {
+        "attack_slope_per_s": 47.7414955,
+        "bar_centroid": 23.9282106,
+        "bar_flux": 0.2732844,
+        "bar_mean": 0.4567139,
+        "bar_peak": 0.9548299,
+        "beat_count": 0,
+        "bubble_centroid_speed_peak": 0.0,
+        "bubble_count_change_peak": 0,
+        "bubble_particle_peak": 0,
+        "bubble_radius_change_peak_per_s": 0.0,
+        "bubble_radius_excursion": 0.0,
+        "bubble_radius_overshoot_ratio": 0.0,
+        "bubble_radius_peak": 0.0,
+        "bubble_radius_rebound_count": 0,
+        "bubble_radius_settling_time_ms": -1.0,
+        "bubble_speed_peak": 0.0,
+        "decay_to_half_frames": 0,
+        "decay_to_half_ms": -1.0,
+        "discontinuity_count": 0,
+        "input_peak": 0.47,
+        "integrated_bar_energy": 0.3197079,
+        "mode_summary": {
+          "devcurve": {
+            "activity": 0.4567139,
+            "frames": 36
+          }
+        },
+        "onset_count": 0,
+        "overshoot_ratio": 2.031553,
+        "response_frame": 0,
+        "response_latency_ms": 0.0,
+        "settling_time_ms": -1.0,
+        "state_derivative_max_per_s": 0.0908982,
+        "time_to_peak_ms": 0.0,
+        "waveform_peak": 0.4798571,
+        "waveform_rms": 0.1662585,
+        "waveform_zero_crossings": 232
+      },
+      "reference_mode_metrics": {
+        "output_flux": 25.993072456072337,
+        "output_peak": 0.6755673526331064
+      },
+      "minimums": {
+        "bar_peak": 0.47741495,
+        "bar_flux": 0.1366422,
+        "integrated_bar_energy": 0.15985395,
+        "attack_slope_per_s": 23.87074775,
+        "waveform_rms": 0.08312925,
+        "output_flux": 12.996536228036168
+      },
+      "maximums": {}
+    }
+  }
+}

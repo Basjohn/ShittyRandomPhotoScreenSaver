@@ -8,6 +8,9 @@ The production Qt Quick cutover and caller-proven I cleanup are complete. M0 CUS
 
 Permanent destination guardrails include:
 
+- offline Visualizer reactivity floors (`tests/test_visualizer_replay.py`): current
+  authored tick/Quick snapshot output, immutable fixture integrity, presentation
+  independence, lane/travel contracts, zero-output and frozen-runtime negative controls;
 - native-QCursor Halo; no mouse-rate QML scene motion;
 - transactional image admission + generation/token prefetch wake;
 - R-63 non-exact-cover overscan with black=0 priority over harmless bounded mixed-DPR overshoot;
@@ -1157,4 +1160,3 @@ checks here are not substitutes for the button-hop/native-drag/Save/Cancel/slot-
 - `tests/test_qtquick_custom_layout_terminalization.py` — current-owner regression for the aggressive-edit half-CUSTOM failure. It proves `_finish()` continues across all displays when one scene cleanup raises and always clears shared owner state; healthy live Save requests no runtime replacement; proven cleanup corruption or failed Cancel baseline projection requests the explicit corruption-repair reload only after closure; and unexpected retained ordinary-item destruction is removed/recorded from the Qt `destroyed` edge without polling.
 - Re-run the reconciled `tests/test_qtquick_custom_layout_owner.py`, `tests/test_qtquick_custom_layout_overlay.py`, runtime-destruction/terminal-runtime-destruction tests, and context-menu activation tests in the target PySide6 environment. The physical stress gate is repeated side/corner/wheel resizing plus multi-display hops followed by Save, Cancel, context-menu action, Settings/`s`, and exit. No display may remain partially in Edit and diagnostics may not abort teardown over a deleted wrapper.
 - The old log does not identify which upstream owner killed the eventual `DisplayScene` root. New destruction-edge logging is intentionally part of the production diagnosis; a recurrence should identify the first screen/generation root loss before later stale-wrapper symptoms.
-
