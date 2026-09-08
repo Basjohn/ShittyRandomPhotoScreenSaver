@@ -55,11 +55,11 @@ retained for long-term use. Evidence under `logs/widget_resize_normalization/`:
   DPR 1.5 automated captures do not replace this physical gate.
 
 No timers, polling, additional geometry owners or Settings defaults were introduced.
-The deferred shrink feature below remains separate and unimplemented.
+The shrink feature below is explicitly activated by the user and is being implemented.
 
-## Deferred follow-up — bounded non-CUSTOM stacker auto-shrink (NOT C1–C4)
+## Active — bounded non-CUSTOM stacker auto-shrink
 
-Separate future feature; do not start with the tranche above. But it is the reason
+Activated implementation after the normalization prerequisite. This is the reason
 C1–C4 are worth doing: normalization produces the whole-card transform, and this
 feature is the consumer that makes that transform pay off. The two are a matched
 pair — a widget is only *eligible* to shrink cleanly once it scales as one whole
@@ -76,7 +76,7 @@ when **no** collision-free rectangle exists it *keeps the authored rectangle and
 records the widget in `unresolved`* (never overlaps, never shrinks today). That
 `unresolved` tuple is the exact, existing signal to hang shrink on.
 
-Desired later algorithm (a wrapper around the existing solver — add no second
+Implementation algorithm (a wrapper around the existing solver — add no second
 placement engine, no polling):
 
 1. Run `build_display_stack_plan` at scale 1.0.
@@ -124,3 +124,17 @@ logical geometry (`QScreen.geometry()`); useful test budgets: 3840×2160, 2560×
 Acceptance: 1.0 always preferred; no overlap when a solution above floor exists;
 deterministic placement for identical inputs; no Settings pollution; no CUSTOM
 pollution; no Visualizer reactivity/cadence change; mixed-DPR user validation.
+
+### Implementation checkpoints
+
+- [ ] Pure bounded wrapper: first full-size placement; then 1% descending trials
+  for unresolved eligible cards, then all eligible cards only if needed. Re-run the
+  existing solver on every trial; refine accepted results by restoring each card
+  toward 1.0 while retaining clearance. Use a conservative 80% automatic floor.
+- [ ] Presenter consumes accepted positions and dimensions together from authored
+  baselines; Clock and fixed Media/Visualizer obstacles remain unscaled. No new
+  Settings keys, polling or second placement solver.
+- [ ] Test full-size fast path, post-stack-only shrink, positive clearance,
+  restored unaffected cards, obstacle exclusions, bounded infeasible case,
+  event-driven growth/reflow and unchanged first Edit footprint.
+- [ ] Visually inspect real Quick shrunken cards/packing and record physical gates.

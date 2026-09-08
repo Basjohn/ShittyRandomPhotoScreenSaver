@@ -1407,14 +1407,12 @@ class QuickSceneController(QObject):
         root.setProperty("customLayoutWorkingVisible", False)
         root.setProperty("presentationActive", False)
         item.clear_render_source()
-        item.setParentItem(None)
-        item.setParent(None)
-        item.deleteLater()
-        loader.setProperty("active", False)
-        root.deleteLater()
-        self._visualizer_item = None
-        self._visualizer_content_host = None
-        self._visualizer_root = None
+        # Admission moves; the display-local shell/render item lives until its
+        # scene retires. Deleting this Python-created child mid-generation can
+        # invalidate unrelated Shiboken wrappers in the attached display tree
+        # (including its Edit overlay and QScreen) on a return hop. Clearing the
+        # source above releases render resources through its existing event path;
+        # a later hop reuses this one inactive shell, never another logical owner.
         self._visualizer_bridge = None
         self._visualizer_double_click_admission = None
         self._visualizer_middle_click_admission = None

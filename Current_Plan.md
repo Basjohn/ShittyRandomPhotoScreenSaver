@@ -33,7 +33,21 @@ and Quick snapshot path. Fixed floors, fixture integrity, presentation independe
 lane/travel contracts and production-seam negative controls pass 78 tests.
 [Harness contract](Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md).
 
-## 3. Ordinary widget resize normalization — Awaiting Validation
+## 3. Widget resize / Edit lifetime / non-CUSTOM auto-shrink
+
+Latest operator logs are preserved at `logs/edit_roundtrip_20260908_1522`.
+The two return-hop failures invalidate QScreen/Edit/ordinary wrappers after mid-scene
+Visualizer deletion. Transfer now moves admission between stable display-local shells;
+one logical owner remains, and render resources still retire on their existing event.
+A fresh-process return-hop/deferred-delete/GC regression passes; physical repeat is owed.
+
+- [ ] Physically repeat Visualizer display A -> B -> A twice in one Edit session;
+  all widget move/resize and guide actions must remain usable without re-entering Edit.
+- [ ] Implement activated non-CUSTOM stack -> shrink -> re-stack, including maximum
+  fitting size, restoration on increased space and preservation of the visible Edit footprint.
+  This is authorized current work, not deferred. See the focused decomposition.
+
+### Normalization — implementation landed, physical validation open
 
 C0–C4 are implemented: Abandonment/Achievement/Weather use one whole-card transform;
 CUSTOM replay no longer mutates their authored Settings. The permanent capture and
@@ -62,7 +76,7 @@ it after the above. **Not started.**
 First Edit-entry jump is repaired: quiesce authored placement without resetting
 visible geometry. Real started-owner regression and before/after OpenGL captures
 confirm the Visualizer stays at `(730,420)` as edit handles appear. Evidence:
-`logs/widget_resize_normalization/edit_entry_fixed`. Deferred shrink/stack ordering
+`logs/widget_resize_normalization/edit_entry_fixed`. Activated shrink/stack ordering
 is recorded in the resize decomposition: stack first, shrink unresolved collisions,
 then re-stack with the reduced footprints.
 
@@ -149,3 +163,16 @@ exact current source + current reconciled test tree
 - `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md`
 - `Docs/Historical_Bugs/Visualizer_Cross_Display_Split_Ownership_2026-09-05.md`
 - `Docs/TestSuite.md`, `Future_Cleanup.md`, `FWPlan.md`
+
+## Latest log audit / test inventory
+
+- 1,105 QML warnings in the preserved operator run all name deleted QScreen during
+  Edit movement; no Weather binding-loop warning occurs in that run.
+- Repeated overfull stacking reports name Reddit2/Gmail/Steam cards; the activated
+  shrink tranche owns these collisions.
+- Reddit public endpoints return 429/403 and enter the existing 900s cooldown;
+  this is external provider rejection, not a widget geometry failure.
+- One Bubble tick spike (70ms) and one slow Media refresh (2.1s elapsed, 47ms worker)
+  remain observations for a clean post-repair run; no cadence retuning is justified.
+- Scene-controller tests still omit 11 required style arguments in 21 cases;
+  reconcile fixtures against the current owner during the remaining test inventory.
