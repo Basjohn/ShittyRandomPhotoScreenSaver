@@ -140,10 +140,6 @@ All changes are applied immediately and persisted between runs.
 
 ---
 
-- **Docs**: `Spec.md` and `Index.md` are the canonical references for architecture/module mapping; `Docs/10_WIDGET_GUIDELINES.md` is the canonical new-widget creation guide, and `Docs/Custom_Style_Implementation.md` covers shared style/chrome rules.
-
-Keep contributions aligned with the centralized managers (ThreadManager, ResourceManager, SettingsManager) and the widget/theming policies documented above—rogue threads/shadows will be mocked relentlessly.
-
 ## Installation & Usage (Windows 10 / 11)
 
 Download a version, ideally the setup version if you want it to actually work.
@@ -183,13 +179,6 @@ In the **Screen Saver Settings** dialog:
   - When things look positioned like you'd like choose save in the context menu (or press enter like a bitch who cannot handle context menus) and it will apply.
   - Revert in Edit is for going back to non-custom mode or saving yourself from weird changes. Each widget has a reset button in Edit mode and the Spotify widget even has an extra one for if the visualizer gets lost.
   
-## Versioning
-
-Version information is centralised in `versioning.py` and used by both runtime and build tooling and Inno installer is used for this to actually fucking work.
-
-- Application name: `ShittyRandomPhotoScreenSaver`
-- Executable name: `SRPSS`
-- Version string: `APP_VERSION`
 
 ## Credits
 
