@@ -179,7 +179,7 @@ class RSSCoordinator:
             if on_images:
                 on_images(new_images)  # always call so engine can pre-load cache
 
-        self._thread_manager.submit_io_task(_task)
+        self._thread_manager.submit_io_task(_task, category="rss_startup_load")
 
     def load_sync(self) -> List[ImageMetadata]:
         """Synchronous load - blocks until complete. Returns new images."""

@@ -56,7 +56,7 @@ class RSSCache:
                 from core.resources.types import ResourceType
                 self._resource_id = resource_manager.register(
                     self,
-                    resource_type=ResourceType.CACHE,
+                    resource_type=ResourceType.IMAGE_CACHE,
                     description=f"RSSCache: {self.cache_dir}",
                 )
                 logger.debug(f"[RSS_CACHE] Registered with ResourceManager: {self._resource_id}")

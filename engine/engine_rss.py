@@ -332,7 +332,11 @@ def background_refresh_rss(engine: ScreensaverEngine) -> None:
                 logger.debug(f"Background RSS merge failed: {e}")
 
         try:
-            engine.thread_manager.submit_io_task(_refresh_task, callback=_on_done)
+            engine.thread_manager.submit_io_task(
+                _refresh_task,
+                callback=_on_done,
+                category="rss_background_refresh",
+            )
         except Exception as e:
             logger.debug(f"Background RSS submit failed: {e}")
     except Exception as e:
