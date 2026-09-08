@@ -1364,6 +1364,13 @@ class BuildRunnerApp:
             style="Foundry.TButton",
         )
         self._select_all_button.pack(side="right", padx=(6, 0))
+        self._regen_defaults_button = ttk.Button(
+            footer,
+            text="Regen Defaults",
+            command=self._on_regenerate_defaults,
+            style="Foundry.TButton",
+        )
+        self._regen_defaults_button.pack(side="right", padx=(6, 0))
 
     def _build_titlebar(self) -> None:
         if self._shell is None:
@@ -1676,6 +1683,37 @@ class BuildRunnerApp:
             if "disabled" not in widgets.checkbox.state():
                 widgets.variable.set(value)
 
+    def _on_regenerate_defaults(self) -> None:
+        # Explicit, user-initiated regeneration of the derived defaults artifacts
+        # (defaults_snapshot.json + both .sst documents) from canonical
+        # DEFAULT_SETTINGS. This turns a stale-artifact preflight blocker into a
+        # one-click fix. It is deliberately NOT automatic on build: a build must
+        # never silently rewrite tracked source artifacts (that would hide drift).
+        if self._running:
+            return
+        self._footer_status.configure(
+            text="Regenerating derived defaults artifacts…",
+            fg=COLORS["amber"],
+        )
+        self._regen_defaults_button.state(["disabled"])
+        threading.Thread(target=self._regenerate_defaults_worker, daemon=True).start()
+
+    def _regenerate_defaults_worker(self) -> None:
+        try:
+            from tools.regenerate_defaults_artifacts import (
+                regenerate_defaults_artifacts,
+            )
+
+            changed = regenerate_defaults_artifacts()
+            message = (
+                f"Regenerated defaults: {len(changed)} artifact(s) updated"
+                if changed
+                else "Defaults already in sync"
+            )
+            self._events.put(("defaults_regen", True, message))
+        except Exception as exc:  # noqa: BLE001 - surface any regen failure in the GUI
+            self._events.put(("defaults_regen", False, f"Defaults regeneration failed: {exc}"))
+
     def _on_start(self) -> None:
         if self._running:
             return
@@ -1722,6 +1760,7 @@ class BuildRunnerApp:
         self._start_button.state(state)
         self._select_all_button.state(state)
         self._select_none_button.state(state)
+        self._regen_defaults_button.state(state)
         self._auto_close_checkbox.state(state)
         for button in self._mode_buttons:
             button.configure(state="normal" if enabled else "disabled")
@@ -1806,6 +1845,24 @@ class BuildRunnerApp:
                     widgets.variable.set(False)
                     widgets.status.configure(text="Unavailable", fg=COLORS["red"])
             self._start_button.state(["!disabled"])
+            return
+
+        if kind == "defaults_regen":
+            _, ok, message = event
+            self._footer_status.configure(
+                text=message,
+                fg=COLORS["green"] if ok else COLORS["red"],
+            )
+            self._regen_defaults_button.state(["!disabled"])
+            # Re-run preflight so a now-cleared stale-artifact blocker updates
+            # immediately, without rebuilding rows (preserves job selections).
+            if not self._running:
+                self._start_button.state(["disabled"])
+                threading.Thread(
+                    target=self._preflight_worker,
+                    args=(normalize_mode(self._mode_var.get()),),
+                    daemon=True,
+                ).start()
             return
 
         if kind == "footer":
