@@ -17,6 +17,12 @@ explicitly requests it.
 
 ## 1. Targeted tests first
 
+Offline Visualizer reactivity: `python -m tools.visualizer_replay` verifies fixed
+floors through the authored logical/Quick snapshot seam without a window or live
+audio source. `python -m pytest tests/test_visualizer_replay.py -q` adds negative
+controls, fixture integrity and presentation-independence checks. Optional HTML and
+new calibration candidates are documented in `Future_Work/Visualizer_Replay_Reactivity_Floor.md`.
+
 Prefer the smallest test set that can falsify the current slice:
 
 ```powershell
