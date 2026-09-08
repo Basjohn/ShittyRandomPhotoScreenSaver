@@ -73,21 +73,6 @@ colours) into `SettingsThemeSpec`, so themes fully apply and the file can be del
 with zero dark-theme regression (byte-identity guarded). Large and independent; do
 it after the above. **Not started.**
 
-## 5. `fft_to_bars` fail-silent hardening (low priority, judgement call)
-
-Investigating the (now-resolved, stale) lane-energy test surfaced a real
-fail-silent hazard: `widgets/spotify_visualizer/bar_computation.py::fft_to_bars`
-wraps its whole compute body in `except Exception: return get_zero_bars(worker)`
-with only a DEBUG log. If any per-frame error occurs — e.g. a config attribute
-left `None` by a future wiring regression (`_transient_clamp`, `_energy_boost`,
-`_input_gain`, `_agc_strength`, …, each hard-`float()`d) — the **entire spectrum
-silently goes black** instead of failing loudly. Real playback always configures
-these, so there is no current misbehaviour; this is defensive only. Options: make
-the required-config read fail loudly (violates the render hot path's
-degrade-don't-crash stance), or upgrade the swallowed log to WARNING/once-per-cause
-so a config regression is visible without crashing rendering. **Judgement call —
-not started; do not add a shadow default literal to "fix" it.**
-
 ## Test reconciliation (small, ongoing — owned by `Docs/TestSuite.md` / `Future_Cleanup.md`)
 
 Concrete open items, do alongside the work above:
