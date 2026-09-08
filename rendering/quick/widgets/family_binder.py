@@ -530,7 +530,9 @@ class GmailFamilyAdapter:
 
         config = GmailPresentationConfig.from_widgets_mapping(widgets_config)
         style = GmailPresentationStyle.project(config, shadow_values)
-        model = GmailPresentationModel(config, style)
+        model = GmailPresentationModel(
+            config, style, runtime_generation=runtime_generation
+        )
         if not _attach_runtime_service(
             runtime_manager, widget_id, model, widgets_config
         ):

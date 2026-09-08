@@ -47,8 +47,13 @@ class OverlayTimerHandle:
                     "stop",
                     Qt.ConnectionType.QueuedConnection,
                 )
+            # This handle is terminal: callers replace it to restart cadence.
+            # Stopping alone retains the timeout closure (and its service owner)
+            # plus passive resource accounting. Qt owns deferred destruction and
+            # releases that accounting through the existing destroyed signal.
+            timer.deleteLater()
         except Exception as exc:
-            logger.debug("[OVERLAY_TIMER] Failed to stop timer: %s", exc, exc_info=True)
+            logger.error("[OVERLAY_TIMER] Failed to retire timer: %s", exc, exc_info=True)
         self._timer = None
 
     def is_active(self) -> bool:
