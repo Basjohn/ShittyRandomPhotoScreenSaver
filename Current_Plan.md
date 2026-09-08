@@ -212,6 +212,8 @@ exact current source + current reconciled test tree
   after later Saves. HUD repetition is the retained counter, not repeated new errors.
 - [ ] Diagnose Settings persistence's two failed attempts: final revision 26 is
   durable and queue empty, but the individual errors are absent from this run's logs.
+  The existing completion callback now emits a failure-edge warning with revision
+  and exception; the retry/flush behavior is unchanged. Check the next run for cause.
 - Reddit2 RSS 429 / HTML 403 enters the existing 900s cooldown; cached posts load.
 - Startup clock gap 2.31s; steady-state Visualizer events include a 62.05ms tick
   with 57.32ms publication and an 81.55ms interval. Attribution remains open; no
