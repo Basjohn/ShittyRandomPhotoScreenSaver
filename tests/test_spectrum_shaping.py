@@ -381,10 +381,23 @@ class TestLaneAwareSpectrumEnergy:
             wave_amplitude=0.9,
             profile_floor=0.05,
         )
-        worker._use_recommended = False
-        worker._user_sensitivity = 1.0
-        worker._use_dynamic_floor = False
-        worker._manual_floor = 0.12
+        worker.set_sensitivity_config(recommended=False, sensitivity=1.0)
+        worker.set_floor_config(dynamic_enabled=False, manual_floor=0.12)
+        # Transient-lane / gain / boost / AGC controls that real playback resolves
+        # from the model and installs (via these setters) before the first frame.
+        # fft_to_bars hard-float()s each of these; leaving them at their __init__
+        # None makes the transient block raise float(None), which the broad
+        # except in fft_to_bars swallows into all-zero bars. That -- not any DSP
+        # regression -- is why these lane assertions previously saw 0.0 lanes.
+        # The live pipeline is always configured, so its lane routing is correct.
+        worker.set_input_gain(1.0)
+        worker.set_agc_strength(0.5)
+        worker.set_energy_boost(1.0)
+        worker.set_transient_lane_config(
+            kick_lane_gain=1.0,
+            spectrum_lane_transient_mix=0.65,
+            transient_clamp=1.5,
+        )
         worker._applied_noise_floor = 0.12
         worker._raw_bass_avg = 0.12
         return worker

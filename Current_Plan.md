@@ -8,9 +8,9 @@ below). Everything here is ordinary post-migration product work. This file owns 
 focused docs, test/debris archaeology in `Docs/TestSuite.md` + `Future_Cleanup.md`,
 and deferred features in `FWPlan.md`.
 
-Order below is the recommended sequence (small isolated bugs → the reactivity
-safety net → reactivity fix under it → the big widget-resize feature → the large
-theming cleanup). Reorder freely; each item is self-contained unless noted.
+Order below is the recommended sequence (small isolated bug → the reactivity
+safety net → the big widget-resize feature → the large theming cleanup). Reorder
+freely; each item is self-contained unless noted.
 
 ---
 
@@ -37,19 +37,10 @@ quantitative metrics as a **minimum bar** (thresholds below current healthy
 reactivity, which per operator experience passes today). Floors only — it never
 constrains or re-blesses current behaviour, only catches a genuine reactivity
 regression or recovers from a mistake; no exact-pixel goldens, no runtime coupling.
-Done early on purpose: it becomes the safety net for item 3 and any later visualizer
+Done early on purpose: it becomes the safety net for any later visualizer/DSP
 tuning. **Not started.**
 
-## 3. Lane-aware spectrum energy computes 0.0 (DSP bug)
-
-`tests/test_spectrum_shaping.py::TestLaneAwareSpectrumEnergy` (missing-bass /
-missing-mid) fail with 0.0 lane energy — a live `audio_worker._fft_to_bars`
-regression, most likely a lane profile default dropped during the defaults
-sanitization (same family as the `_pre_agc_*` seed gap). Recover the correct value
-from git history and route it through canonical Settings — never a reintroduced
-local fallback. Validate the fix against the item-2 reactivity floor. **Not started.**
-
-## 4. Ordinary widget resize normalization → one uniform-transform seam
+## 3. Ordinary widget resize normalization → one uniform-transform seam
 
 [Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md](Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md).
 
@@ -72,7 +63,7 @@ scales as one whole card). **Not started; C0 evidence harness first.**
   runtime recreation must emit zero Weather binding-loop warnings while preserving the
   current Weather visual size, uniform scaling and stacking behaviour.
 
-## 5. dark.qss retirement → ThemeSpec sole authority
+## 4. dark.qss retirement → ThemeSpec sole authority
 
 [Docs/Settings_Dark_QSS_Retirement.md](Docs/Settings_Dark_QSS_Retirement.md).
 
@@ -81,6 +72,21 @@ of `themes/dark.qss` (a competing style authority: ~89 dark-only selectors, ~47
 colours) into `SettingsThemeSpec`, so themes fully apply and the file can be deleted
 with zero dark-theme regression (byte-identity guarded). Large and independent; do
 it after the above. **Not started.**
+
+## 5. `fft_to_bars` fail-silent hardening (low priority, judgement call)
+
+Investigating the (now-resolved, stale) lane-energy test surfaced a real
+fail-silent hazard: `widgets/spotify_visualizer/bar_computation.py::fft_to_bars`
+wraps its whole compute body in `except Exception: return get_zero_bars(worker)`
+with only a DEBUG log. If any per-frame error occurs — e.g. a config attribute
+left `None` by a future wiring regression (`_transient_clamp`, `_energy_boost`,
+`_input_gain`, `_agc_strength`, …, each hard-`float()`d) — the **entire spectrum
+silently goes black** instead of failing loudly. Real playback always configures
+these, so there is no current misbehaviour; this is defensive only. Options: make
+the required-config read fail loudly (violates the render hot path's
+degrade-don't-crash stance), or upgrade the swallowed log to WARNING/once-per-cause
+so a config regression is visible without crashing rendering. **Judgement call —
+not started; do not add a shadow default literal to "fix" it.**
 
 ## Test reconciliation (small, ongoing — owned by `Docs/TestSuite.md` / `Future_Cleanup.md`)
 
