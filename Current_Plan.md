@@ -35,6 +35,15 @@ lane/travel contracts and production-seam negative controls pass 78 tests.
 
 ## 3. Widget resize / Edit lifetime / non-CUSTOM auto-shrink
 
+Latest logs: `logs/live_edit_audit_20260908_1606`. Two healthy cross-display Saves
+rebuilt the generation solely because ordinary widgets crossed displays. The source
+binder/service records now move to the retained target on Save; providers/items and
+preferred-size subscriptions remain live. [Ownership and regression evidence](Docs/Future_Work/Edit_Layout_Live_Commit.md).
+
+- [ ] Repeat multi-widget cross-display Save/re-enter/return-Save; confirm no
+  `save_continue` / `custom_edit` replacement and all actions remain usable.
+- [ ] Confirm final exit and saved-slot load retire the transferred service/item once.
+
 Original failure logs are preserved at `logs/edit_roundtrip_20260908_1522`.
 Latest operator sessions are preserved at `logs/shrink_audit_20260908_1544`;
 both have zero Qt warnings, including the logged Visualizer return hop.
@@ -191,3 +200,22 @@ exact current source + current reconciled test tree
   Check fresh post-repair event timings before attributing these or retuning cadence.
 - Scene-controller tests still omit 11 required style arguments in 21 cases;
   reconcile fixtures against the current owner during the remaining test inventory.
+
+### 16:01–16:06 log audit follow-up
+
+- Shrink succeeds: 44 accepted fits, no unresolved report; final crowded cards are
+  56–79%. The 51 startup solves peak at 65.51ms. No later solves occur during CUSTOM.
+- Qt/QML and native logs are clean. Gmail has one owner per reconstructed generation;
+  no duplicate-owner evidence. Rebuilds cause repeated provider startup and temporary
+  memory pressure, not a demonstrated leak.
+- [ ] Follow up two cumulative stale Visualizer presentation rejections immediately
+  after later Saves. HUD repetition is the retained counter, not repeated new errors.
+- [ ] Diagnose Settings persistence's two failed attempts: final revision 26 is
+  durable and queue empty, but the individual errors are absent from this run's logs.
+- Reddit2 RSS 429 / HTML 403 enters the existing 900s cooldown; cached posts load.
+- Startup clock gap 2.31s; steady-state Visualizer events include a 62.05ms tick
+  with 57.32ms publication and an 81.55ms interval. Attribution remains open; no
+  cadence retuning is justified. RSS-cache resource registration failed once at
+  startup although 26 cached images loaded; record for focused resource follow-up.
+- [ ] Reconcile nine Clock presentation tests whose shadow fixtures omit current
+  required fields. Do not add production defaults to satisfy these old fixtures.

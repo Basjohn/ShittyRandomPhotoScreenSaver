@@ -1,71 +1,60 @@
-# Keep retained presentation alive after geometry-only Edit Save
+# Live Edit commit
 
-Status: **RETIRED / HISTORICAL REFERENCE — M0 live Save/cross-display CUSTOM terminalization was physically accepted. Preserve the resulting no-teardown Save contract; do not replay this as an implementation plan.**
+Implemented; physical cross-display Save validation remains open.
 
-The retained path now keeps ordinary same-display geometry Save in the current runtime generation. The operator reports
-that live visualizer adjustment and Save are flowing extremely well: no visible teardown/rebuild is required to commit the
-already-rendered rectangle/extent. Display ownership transfer remains a topology boundary and is separately under repair.
+## Contract
 
-## Owning seams and decision
+Healthy geometry-only Edit Save stays in the current runtime generation, including
+ordinary widgets and the Visualizer moved across displays. Save persists the working
+layout, promotes retained geometry/ownership, then closes all Edit overlays. Cancel
+restores the baseline without promotion. Saved-slot load keeps its explicit fenced
+replacement contract. A proven dead/incoherent retained graph remains a loud invariant
+repair case; a display crossing alone is not evidence that reconstruction is needed.
 
-`QuickCustomLayoutOwner.save` now persists first, classifies whether topology changed, promotes the already-retained
-working geometry when it did not, then ends CUSTOM. `QuickDisplayVisualizerOwner.commit_live_custom_layout` atomically
-promotes the current retained rectangle, viewport extent and controller committed metrics while the temporary CUSTOM
-override is still active. Clearing CUSTOM therefore changes **authority**, not the value consumed by the next logical step.
-Ordinary retained families promote through their existing presentation/binding owner as part of the same transaction.
+Family activation/presence changes and Reset have separate admission semantics; this
+geometry repair does not alter those paths or introduce a new restart requirement.
 
-Save order is now: persist successfully -> classify topology -> promote retained geometry -> end CUSTOM -> continue
-running. Cancel restores the baseline and ends CUSTOM without promotion. Invalid live promotion still fails loudly.
+## Existing owners, completed transfer
 
-The no-teardown admission remains explicit: same-display, enabled, non-removed items with geometry/scale/payload changes
-only. Family presence/removal, display transfer and monitor-route changes retain generation reconciliation. Reset and
-layout-slot topology semantics remain explicit. This is not a hidden fallback.
+`QuickCustomLayoutSceneCoordinator` already moves the same ordinary item, its shadow
+and parented model during the gesture. Before this repair, Save rebuilt merely because
+the source presenter still held family/binding/service records. Save now validates the
+exact target retained item against the source family, then moves those records through
+the existing presenter, family binder and WidgetRuntimeManager owners. The service is
+neither recreated, reinjected, activated nor retired during transfer.
 
-The 03:40-03:45 operator run exposed the remaining cross-display edge clearly: 432 QML warnings reported
-`CUSTOM Visualizer target already has a retained scene admission`, followed at shutdown by a destruction-barrier timeout
-retaining one `QuickDisplayVisualizerOwner`. Source tracing found that scene transfer moved `_presentation_runtime` but
-left the owner's active `_runtime`/frame-pacer/bind/retirement edge on the old display. A later mode/preset or retirement
-could therefore act on the wrong scene. The current source repair moves that runtime edge transactionally with the retained
-presentation and latches one visualizer display crossing per pointer gesture to prevent seam ping-pong. The CUSTOM
-Visualizer frame also exposes theme-palette left/right display-hop buttons. Those buttons carry only semantic direction into
-Python; `QuickCustomLayoutOwner` selects the nearest horizontal retained display, projects the current shape/relative position,
-and the existing scene coordinator performs the same single retained admission transfer. There is no second transfer owner and
-no fade/timer. Physical validation is still required; interactive display-transfer Save now live-commits when the transfer
-graph is coherent (fail-safe to reconciliation otherwise), while layout-slot save/load remain generation reconciliations.
+The existing preferred-size subscription is retargeted to the destination presenter;
+committed target geometry is applied before Edit ends. Clock's display context follows
+so variant lookup and semantic mode-toggle persistence use the destination. No second
+model, geometry owner, timer, polling loop or render/source subscription is introduced.
+Cancel before Save retains the established reverse pixel transfer; the source binding
+and service records have not moved yet. Subsequent Edit captures the destination's
+family registry, permitting repeated Save and return transfers in the same generation.
 
-## Live implementation checklist
+Visualizer remains its existing atomic scene/runtime/pacer/manager-unit transfer,
+including stable display-local shells. Its logical owner and authored cadence remain
+unchanged. The prior source/target corruption repair is not weakened.
 
-- [x] Trace Save/Cancel, controller metrics, committed layout owners and normal-frame publications.
-- [x] Implement the running-safe visualizer commit operation; stage/validate values before mutation.
-- [x] Promote ordinary retained geometry through its existing binding, including applied size payload semantics.
-- [x] Route geometry-only Save through promotion before session removal; retain explicit topology reconciliation.
-- [x] Prove all six modes retain rectangle/extent across the next normal publication, along with owner, source
-  identity, runtime generation and logical-state identity in focused production-chain coverage.
-- [x] Prove Cancel retains baseline committed state and failed persistence does not promote or end editing.
-- [x] Prove ordinary preferred-size events retain saved geometry and geometry-only Save requests no replacement.
-- [~] Interactive cross-display Save now live-commits: active retained runtime/pacer/manager-unit/retirement ownership
-  moves with the scene during the drag (both pointer drag and discrete theme-palette left/right hop), and
-  `QuickCustomLayoutOwner.save` promotes the retained geometry in place when `_cross_display_transfer_is_coherent()`
-  confirms a fully target-owned graph, logging `Save live-committed cross-display Visualizer transfer`. Any partial/
-  incoherent transfer, a non-Visualizer cross-display move, family presence/monitor-route change, or a layout-slot save
-  (`defer_topology_reconciliation`) still falls back to one explicit generation reconciliation. Layout-slot load stays a
-  fenced generation replacement. Awaiting the physical validation run below.
-- [ ] Awaiting physical validation: cross-display drag **and arrow hop** each move exactly one live visualizer, preserve the
-  intended shape/placement, leave no dead duplicate, produce no QML warning storm/destruction-barrier owner, and same-display
-  Save remains hitch-free at 60/165 Hz. Decide on any fade-out/fade-in only from this run.
+## Evidence and self-audit
 
-No timer, polling, render loop, source subscription, alternate persistence authority or new generation fence is added.
+`logs/live_edit_audit_20260908_1606` proves two unnecessary `display_transfer` Save
+rebuilds at 16:04:32 and 16:05:37, with 609/593ms destruction barriers and repeated
+provider startup. No Qt warning or corruption recovery caused either replacement.
 
-## 2026-09-05 cross-display lifecycle follow-up
+The real-Qt ordinary transfer regression now exercises move -> Cancel -> move -> Save
+-> re-enter -> move back -> Save. It retains the exact item/family/service, moves the
+preferred-size binding and service retirement authority, preserves committed geometry
+on content-size events, and requests no reload. A separate real-Qt Clock adapter test
+verifies mode actions read the live destination identity rather than the constructor's
+captured source identity. Existing owner gates pass 57 tests; five presenter/action
+gates also pass. The old Clock presentation suite has nine stale shadow fixtures
+missing current required fields; that reconciliation is tracked in Current_Plan.
 
-The first no-teardown geometry work exposed a separate display-transfer owner split. The retained scene and
-`QuickDisplayVisualizerOwner._runtime` moved, but `DisplayManager._quick_visualizer_unit` and the source
-`QuickDisplayUnit._visualizer_owner` retirement attachment did not. A later slot-load destruction barrier therefore
-retained only `QuickDisplayVisualizerOwner`, while Save after transfer could retire the target pacer through the owner and
-then make the target unit touch that already-closed pacer. The repair moves manager unit + exact unit retirement attachment
-in the same event transaction as the owner runtime/pacer edge. Geometry-only same-display Save remains no-teardown;
-layout-slot load and topology-changing Save remain fenced generation replacements pending further physical proof.
+## Awaiting Validation
 
-### Transaction hardening after WIP review
-
-The lifecycle repair is now intentionally **one Visualizer session callback**, not two ordered subscribers. The coordinator delegates the scene move to `QuickCustomLayoutOwner._transfer_visualizer_display_transaction()`, which performs retained-scene transfer and the manager/unit/pacer move before the session placement can commit. If manager-side transfer fails, the retained scene is transferred back first; only then may the coordinator restore the working item geometry. This closes the partial-commit hole identified in the interrupted WIP. See `Docs/Historical_Bugs/Visualizer_Cross_Display_Split_Ownership_2026-09-05.md`.
+- [ ] Repeat the operator's multi-widget cross-display edits and Save twice. Confirm
+  no `save_continue` / `custom_edit` runtime replacement for healthy geometry changes.
+- [ ] Confirm all retained actions, Clock variant switching, provider updates and
+  move/resize remain usable after each Save, including a return transfer.
+- [ ] Confirm saved-slot loads still retire/reconstruct cleanly and final exit retains
+  no ordinary service, Quick root or Visualizer lifecycle owner.

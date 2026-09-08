@@ -785,8 +785,8 @@ class OrdinaryWidgetPresentationHost:
         """Move one retained presentation to another live host without cloning it.
 
         The target becomes the presentation's scene/lifecycle host. The family
-        model and any neutral runtime-service owner remain unchanged; CUSTOM
-        Save rebuilds the generation on the newly persisted monitor route.
+        model and neutral service instances remain unchanged. CUSTOM Save moves
+        their presenter/binding/service retirement records to this host's display.
         """
 
         if target is self:

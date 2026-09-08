@@ -342,6 +342,13 @@ class OverlayGeometryBinding:
         self._preferred_size_signal = signal
         self._preferred_size_callback = callback
 
+    def retarget(self, display_bounds: OverlayWidgetGeometry, geometry_sink) -> None:
+        """Keep the size subscription while moving its existing display owner."""
+        if self._retired:
+            raise RuntimeError("cannot retarget a retired geometry binding")
+        self._display_bounds = display_bounds
+        self._geometry_sink = geometry_sink
+
     def retire(self) -> bool:
         """Disconnect QML size publication before the retained item retires."""
 

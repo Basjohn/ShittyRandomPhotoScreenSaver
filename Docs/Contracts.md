@@ -332,6 +332,10 @@ CUSTOM disables this derived planner; first Edit preserves the visible footprint
 `CustomLayoutSession` owns working geometry/state independent of QWidget. Geometry keys include display identity and
 variant. Save/Cancel and layout slots preserve ordinary ON/OFF semantics without crossing capability activation.
 Cross-display transfer has one live retained pixel owner and preserves logical runtime/model identity.
+Healthy Edit Save transfers ordinary family/binding/service retirement records to that target without
+reconstruction, reinjection or provider restart. Clock variant/action context follows the destination.
+A geometry display crossing alone never requires generation replacement; slot-load and proven-corruption
+repair boundaries remain explicit.
 
 CUSTOM layout admission is global. As soon as any effective family route is `Custom`, or the live Edit Layout
 transaction starts, generic authored stacking and the stronger ordinary Media/Visualizer adjacency owner are dormant

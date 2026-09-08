@@ -265,6 +265,18 @@ class WidgetRuntimeManager:
         self.retire_widget_service(widget_id)
         return None
 
+    def transfer_widget_service_to(self, widget_id: str, target: "WidgetRuntimeManager") -> None:
+        """Move retirement authority for the existing service without reinjection."""
+        if self._retired or target._retired:
+            raise RuntimeError("cannot transfer through retired runtime service owners")
+        if target is self:
+            return
+        if widget_id in target._services:
+            raise RuntimeError(f"target already owns widget service: {widget_id}")
+        entry = self._services.pop(widget_id, None)
+        if entry is not None:
+            target._services[widget_id] = entry
+
     def retire_widget_service(self, widget_id: str) -> bool:
         """Retire and drop the owned runtime service for a widget id.
 
