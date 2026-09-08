@@ -426,24 +426,55 @@ def _write_snapshot(request: _WriteRequest) -> None:
         raise
 
 
+# Windows can transiently deny replacement while another process/thread has the
+# JSON open without FILE_SHARE_DELETE (AV/indexers and a concurrent settings
+# reader are common examples).  Settings writes are already serialized onto the
+# process-owned persistence worker, so a tiny bounded retry here does not add a
+# timer/poller or block Qt.  The only accepted outcome remains the same atomic
+# durable replacement.
+_WINDOWS_ATOMIC_REPLACE_RETRY_DELAYS = (0.010, 0.025, 0.050, 0.100)
+_WINDOWS_TRANSIENT_REPLACE_ERRORS = {5, 32}  # ACCESS_DENIED, SHARING_VIOLATION
+
+
+def _windows_move_file_ex_durable_once(temp_path: Path, target_path: Path) -> None:
+    import ctypes
+
+    movefile_replace_existing = 0x00000001
+    movefile_write_through = 0x00000008
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    move_file_ex = kernel32.MoveFileExW
+    move_file_ex.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint]
+    move_file_ex.restype = ctypes.c_int
+    if not move_file_ex(
+        str(temp_path),
+        str(target_path),
+        movefile_replace_existing | movefile_write_through,
+    ):
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
+def _is_transient_windows_replace_error(exc: BaseException) -> bool:
+    return int(getattr(exc, "winerror", 0) or 0) in _WINDOWS_TRANSIENT_REPLACE_ERRORS
+
+
+def _atomic_replace_windows_durable(temp_path: Path, target_path: Path) -> None:
+    """Bounded Windows atomic replacement tolerant of transient sharing races."""
+
+    for retry_delay in (*_WINDOWS_ATOMIC_REPLACE_RETRY_DELAYS, None):
+        try:
+            _windows_move_file_ex_durable_once(temp_path, target_path)
+            return
+        except OSError as exc:
+            if retry_delay is None or not _is_transient_windows_replace_error(exc):
+                raise
+            time.sleep(retry_delay)
+
+
 def _atomic_replace_durable(temp_path: Path, target_path: Path) -> None:
     """Atomically replace *target_path* with platform durability semantics."""
 
     if os.name == "nt":
-        import ctypes
-
-        movefile_replace_existing = 0x00000001
-        movefile_write_through = 0x00000008
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        move_file_ex = kernel32.MoveFileExW
-        move_file_ex.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint]
-        move_file_ex.restype = ctypes.c_int
-        if not move_file_ex(
-            str(temp_path),
-            str(target_path),
-            movefile_replace_existing | movefile_write_through,
-        ):
-            raise ctypes.WinError(ctypes.get_last_error())
+        _atomic_replace_windows_durable(temp_path, target_path)
         return
 
     os.replace(temp_path, target_path)
@@ -514,6 +545,30 @@ def flush_and_close_settings_persistence(
             if controller is None or not controller.writer_thread.is_alive():
                 _CONTROLLER = None
                 _CONTROLLER_CLOSING = False
+
+
+def terminal_settings_durability_state(metrics: Mapping[str, Any]) -> str:
+    """Classify final settings durability independently of recovered history.
+
+    ``writes_failed`` is historical telemetry.  A failed intermediate revision
+    may be superseded by a later durable snapshot, so it must not by itself make
+    the terminal boundary look corrupt once the writer has fully caught up.
+    """
+
+    submitted = int(metrics.get("last_submitted_revision", 0) or 0)
+    durable = int(metrics.get("last_durable_revision", 0) or 0)
+    terminal_failure = (
+        bool(metrics.get("close_timed_out", False))
+        or bool(metrics.get("writer_alive", False))
+        or int(metrics.get("queue_depth", 0) or 0) > 0
+        or not bool(metrics.get("close_success", True))
+        or durable < submitted
+    )
+    if terminal_failure:
+        return "failed"
+    if int(metrics.get("writes_failed", 0) or 0) > 0:
+        return "recovered"
+    return "clean"
 
 
 def _empty_metrics() -> dict[str, Any]:

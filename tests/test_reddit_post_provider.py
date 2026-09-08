@@ -11,6 +11,8 @@ from core.reddit_post_provider import (
     RedditFetchRequest,
     RedditHtmlProvider,
     RedditProviderResult,
+    RedditProviderHttpError,
+    RedditProviderUnavailableError,
     RedditRssProvider,
     build_reddit_post_provider,
     normalize_reddit_provider_id,
@@ -231,6 +233,50 @@ def test_html_provider_maps_old_reddit_listing(monkeypatch: pytest.MonkeyPatch) 
         }
     ]
 
+
+def test_composite_provider_classifies_blocked_chain_as_expected_unavailability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class BlockedPrimary:
+        provider_id = "rss"
+
+        def fetch_posts(self, request):  # noqa: ANN001
+            raise RedditProviderHttpError(
+                self.provider_id,
+                request.subreddit,
+                429,
+                "https://www.reddit.com/r/python/.rss",
+            )
+
+    monkeypatch.setattr(
+        "core.reddit_post_provider._acquire_widget_reddit_request_slot",
+        lambda request, **kwargs: "acquired",
+    )
+    monkeypatch.setattr(
+        "core.reddit_post_provider.requests.get",
+        lambda *args, **kwargs: _StubResponse(status_code=403),
+    )
+
+    provider = FallbackRedditPostProvider(BlockedPrimary())
+    with pytest.raises(RedditProviderUnavailableError) as caught:
+        provider.fetch_posts(
+            RedditFetchRequest(
+                subreddit="python",
+                sort="hot",
+                limit=25,
+                cache_key="reddit",
+                shutdown_event=None,
+            )
+        )
+
+    assert caught.value.blocked is True
+    assert caught.value.attempted_sources == (
+        "rss",
+        RedditHtmlProvider.SOURCE_OLD,
+        RedditHtmlProvider.SOURCE_WWW,
+    )
+    assert "429" in str(caught.value)
+    assert "403" in str(caught.value)
 
 def test_composite_provider_tries_old_before_www_after_primary_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = []

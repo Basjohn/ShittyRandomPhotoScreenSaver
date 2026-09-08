@@ -25,7 +25,11 @@ from typing import Any, Mapping, Optional
 import weakref
 
 from core.logging.logger import get_logger
-from core.reddit_post_provider import RedditFetchRequest, RedditPostProvider
+from core.reddit_post_provider import (
+    RedditFetchRequest,
+    RedditPostProvider,
+    RedditProviderUnavailableError,
+)
 from core.reddit_preparation import (
     PreparedRedditFeed,
     RedditPost,
@@ -59,6 +63,12 @@ def normalize_subreddit(value: object) -> str:
     elif lowered.startswith("r/"):
         slug = slug[2:]
     return slug.strip("/ ")
+
+
+@dataclass(frozen=True)
+class _ExpectedRedditFetchFailure:
+    error: str
+    blocked: bool = False
 
 
 @dataclass(frozen=True)
@@ -342,7 +352,11 @@ class RedditRuntimeService:
 
         _on_result._srpss_runtime_generation = runtime_generation
         try:
-            tm.submit_io_task(_load, callback=_on_result)
+            tm.submit_io_task(
+                _load,
+                callback=_on_result,
+                category="reddit_startup_snapshot",
+            )
         except Exception as exc:
             self._commit_startup_error(request_id, accepted_revision, str(exc))
 
@@ -678,17 +692,23 @@ class RedditRuntimeService:
         runtime_generation = self._runtime_generation
         self_ref = weakref.ref(self)
 
-        def _do_fetch() -> PreparedRedditFeed:
-            result = provider.fetch_posts(
-                RedditFetchRequest(
-                    subreddit=config.subreddit,
-                    sort=config.sort,
-                    limit=LIST_WIDGET_MAX_CAPACITY,
-                    cache_key=config.cache_key,
-                    shutdown_event=shutdown_event,
-                    bypass_blocked_cooldown=bypass_blocked_cooldown,
+        def _do_fetch() -> PreparedRedditFeed | _ExpectedRedditFetchFailure:
+            try:
+                result = provider.fetch_posts(
+                    RedditFetchRequest(
+                        subreddit=config.subreddit,
+                        sort=config.sort,
+                        limit=LIST_WIDGET_MAX_CAPACITY,
+                        cache_key=config.cache_key,
+                        shutdown_event=shutdown_event,
+                        bypass_blocked_cooldown=bypass_blocked_cooldown,
+                    )
                 )
-            )
+            except RedditProviderUnavailableError as exc:
+                # Expected remote-service exhaustion is a successful IO task:
+                # ThreadManager did its job and must not report CORE THREADING
+                # failure merely because Reddit returned 403/429/no listing.
+                return _ExpectedRedditFetchFailure(str(exc), blocked=exc.blocked)
             if result.skip_reason:
                 return PreparedRedditFeed(
                     (), result.source_id, tuple(result.attempted_sources), 0,
@@ -710,10 +730,13 @@ class RedditRuntimeService:
         def _on_result(result: Any) -> None:
             prepared = None
             error = None
+            expected_failure = None
             if getattr(result, "success", False):
                 candidate = getattr(result, "result", None)
                 if isinstance(candidate, PreparedRedditFeed):
                     prepared = candidate
+                elif isinstance(candidate, _ExpectedRedditFetchFailure):
+                    expected_failure = candidate
                 else:
                     error = "No Reddit data returned"
             else:
@@ -725,6 +748,8 @@ class RedditRuntimeService:
                     return
                 if prepared is not None:
                     owner._commit_fetch(request_id, config, prepared)
+                elif expected_failure is not None:
+                    owner._commit_fetch_unavailable(request_id, config, expected_failure)
                 else:
                     owner._commit_fetch_error(request_id, config, str(error))
 
@@ -733,7 +758,11 @@ class RedditRuntimeService:
 
         _on_result._srpss_runtime_generation = runtime_generation
         try:
-            self._thread_manager.submit_io_task(_do_fetch, callback=_on_result)
+            self._thread_manager.submit_io_task(
+                _do_fetch,
+                callback=_on_result,
+                category="reddit_fetch",
+            )
             return True
         except Exception as exc:
             self._fetch_in_progress = False
@@ -781,6 +810,25 @@ class RedditRuntimeService:
             attempted_sources=tuple(prepared.attempted_sources),
         )
 
+    def _commit_fetch_unavailable(
+        self,
+        request_id: int,
+        config: RedditRuntimeConfig,
+        failure: _ExpectedRedditFetchFailure,
+    ) -> None:
+        if not self._fetch_is_current(request_id, config):
+            return
+        self._fetch_in_progress = False
+        self._deliver_refreshing(False)
+        if failure.blocked:
+            self._queue_service_gate_touch()
+        self._mark_periodic_terminal("all_sources_failed")
+        logger.warning(
+            "[REDDIT_RT] Reddit provider unavailable; retained current/cache state: %s",
+            failure.error,
+        )
+        self._deliver_error(failure.error)
+
     def _commit_fetch_error(
         self,
         request_id: int,
@@ -812,6 +860,7 @@ class RedditRuntimeService:
                 touch_reddit_marker,
                 path,
                 "reddit_startup_gate\n",
+                category="reddit_service_gate",
             )
         except Exception:
             logger.debug("[REDDIT_RT] blocked gate persistence failed", exc_info=True)

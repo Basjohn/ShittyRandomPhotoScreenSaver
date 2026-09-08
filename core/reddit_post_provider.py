@@ -113,6 +113,37 @@ class RedditProviderHttpError(RuntimeError):
         )
 
 
+class RedditProviderUnavailableError(RuntimeError):
+    """Expected remote/provider exhaustion, distinct from a worker/code failure."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        attempted_sources: tuple[str, ...] = (),
+        blocked: bool = False,
+    ) -> None:
+        self.attempted_sources = tuple(attempted_sources)
+        self.blocked = bool(blocked)
+        super().__init__(str(message or "Reddit provider chain unavailable"))
+
+
+class _RedditProviderEmptyResult(RuntimeError):
+    """A remote provider answered successfully but yielded no usable listing."""
+
+
+def _is_expected_provider_availability_error(error: BaseException) -> bool:
+    return isinstance(
+        error,
+        (
+            RedditProviderHttpError,
+            _RedditProviderEmptyResult,
+            requests.RequestException,
+            ET.ParseError,
+        ),
+    )
+
+
 def normalize_reddit_provider_id(raw: object) -> str:
     """Normalize persisted/provider input to a supported provider id."""
 
@@ -711,7 +742,7 @@ class RedditHtmlProvider:
                 source_id=source_id,
                 attempted_sources=(source_id,),
             )
-        raise RuntimeError(f"html:{label}: empty listing")
+        raise _RedditProviderEmptyResult(f"html:{label}: empty listing")
 
     def _parse_html(self, payload: bytes | str, subreddit: str, *, base_url: str) -> list[dict[str, Any]]:
         text = payload.decode("utf-8", errors="replace") if isinstance(payload, bytes) else str(payload or "")
@@ -768,7 +799,7 @@ class FallbackRedditPostProvider:
                         source_id=success_source,
                         attempted_sources=combined_attempts,
                     )
-                raise RuntimeError(f"{source_id} returned no posts")
+                raise _RedditProviderEmptyResult(f"{source_id} returned no posts")
             except Exception as exc:
                 errors.append(exc)
                 logger.warning(
@@ -785,7 +816,26 @@ class FallbackRedditPostProvider:
                 )
                 break
         if errors:
-            raise RuntimeError("; ".join(str(error) for error in errors))
+            summary = "; ".join(str(error) for error in errors)
+            blocked = any(
+                isinstance(error, RedditProviderHttpError)
+                and error.status_code in {403, 429}
+                for error in errors
+            )
+            if all(_is_expected_provider_availability_error(error) for error in errors):
+                logger.warning(
+                    "[CACHE][REDDIT] Provider chain unavailable cache_key=%s "
+                    "attempted=%s error=%s",
+                    request.cache_key,
+                    ",".join(attempted_sources),
+                    summary,
+                )
+                raise RedditProviderUnavailableError(
+                    summary,
+                    attempted_sources=tuple(attempted_sources),
+                    blocked=blocked,
+                )
+            raise RuntimeError(summary)
         raise RuntimeError("reddit provider chain had no sources")
 
     def _source_order(self, request: RedditFetchRequest) -> tuple[str, ...]:

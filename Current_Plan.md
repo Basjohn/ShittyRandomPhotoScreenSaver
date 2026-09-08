@@ -210,11 +210,15 @@ exact current source + current reconciled test tree
   memory pressure, not a demonstrated leak.
 - [ ] Follow up two cumulative stale Visualizer presentation rejections immediately
   after later Saves. HUD repetition is the retained counter, not repeated new errors.
-- [ ] Diagnose Settings persistence's two failed attempts: final revision 26 is
-  durable and queue empty, but the individual errors are absent from this run's logs.
-  The existing completion callback now emits a failure-edge warning with revision
-  and exception; the retry/flush behavior is unchanged. Check the next run for cause.
-- Reddit2 RSS 429 / HTML 403 enters the existing 900s cooldown; cached posts load.
+- [x] Settings persistence recurring Windows `WinError 5` is hardened at the actual
+  atomic-replace boundary: only transient access/sharing denials receive a tiny bounded
+  retry on the process-owned writer thread; Qt remains unblocked and the required result
+  is still the same atomic durable replacement. Terminal diagnostics now distinguish a
+  recovered historical write failure from genuinely undurable shutdown.
+- [x] Expected Reddit public-source exhaustion (429/403/empty authoritative listing)
+  remains WARNING-level provider/runtime telemetry and no longer escapes as a red
+  `CORE THREADING` task failure. Reddit IO now carries explicit `reddit_*` diagnostic
+  categories; unexpected worker/code exceptions still fail ThreadManager normally.
 - Startup clock gap 2.31s; steady-state Visualizer events include a 62.05ms tick
   with 57.32ms publication and an 81.55ms interval. Attribution remains open; no
   cadence retuning is justified. RSS-cache resource registration failed once at

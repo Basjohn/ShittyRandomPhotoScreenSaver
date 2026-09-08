@@ -599,3 +599,82 @@ def test_json_serialization_and_write_run_on_persistence_thread(
 
     assert writer_threads == ["SRPSSSettingsWriter"]
     assert writer_threads[0] != caller_thread
+
+
+def test_windows_atomic_replace_retries_transient_access_denied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts: list[tuple[Path, Path]] = []
+    sleeps: list[float] = []
+
+    class _TransientAccessDenied(OSError):
+        winerror = 5
+
+    def _replace_once(temp_path: Path, target_path: Path) -> None:
+        attempts.append((temp_path, target_path))
+        if len(attempts) < 3:
+            raise _TransientAccessDenied("injected WinError 5")
+
+    monkeypatch.setattr(
+        persistence_module,
+        "_windows_move_file_ex_durable_once",
+        _replace_once,
+    )
+    monkeypatch.setattr(persistence_module.time, "sleep", sleeps.append)
+
+    temp_path = Path("settings.tmp")
+    target_path = Path("settings.json")
+    persistence_module._atomic_replace_windows_durable(temp_path, target_path)
+
+    assert attempts == [(temp_path, target_path)] * 3
+    assert sleeps == list(persistence_module._WINDOWS_ATOMIC_REPLACE_RETRY_DELAYS[:2])
+
+
+def test_windows_atomic_replace_does_not_retry_non_transient_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+    sleeps: list[float] = []
+
+    class _PermanentError(OSError):
+        winerror = 87
+
+    def _replace_once(_temp_path: Path, _target_path: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        raise _PermanentError("injected permanent error")
+
+    monkeypatch.setattr(
+        persistence_module,
+        "_windows_move_file_ex_durable_once",
+        _replace_once,
+    )
+    monkeypatch.setattr(persistence_module.time, "sleep", sleeps.append)
+
+    with pytest.raises(_PermanentError):
+        persistence_module._atomic_replace_windows_durable(
+            Path("settings.tmp"),
+            Path("settings.json"),
+        )
+
+    assert attempts == 1
+    assert sleeps == []
+
+
+def test_terminal_durability_distinguishes_recovered_history_from_loss() -> None:
+    recovered = {
+        "close_success": True,
+        "close_timed_out": False,
+        "writer_alive": False,
+        "queue_depth": 0,
+        "writes_failed": 1,
+        "last_submitted_revision": 62,
+        "last_durable_revision": 62,
+    }
+    assert persistence_module.terminal_settings_durability_state(recovered) == "recovered"
+
+    undurable = dict(recovered, last_durable_revision=61)
+    assert persistence_module.terminal_settings_durability_state(undurable) == "failed"
+
+    clean = dict(recovered, writes_failed=0)
+    assert persistence_module.terminal_settings_durability_state(clean) == "clean"
