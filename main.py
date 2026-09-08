@@ -40,7 +40,10 @@ from core.build_profile import (
 )
 from core.source_head import log_source_head
 from core.settings.settings_manager import SettingsManager
-from core.settings.persistence import flush_and_close_settings_persistence
+from core.settings.persistence import (
+    flush_and_close_settings_persistence,
+    terminal_settings_durability_state,
+)
 from core.animation import AnimationManager
 from engine.screensaver_engine import ScreensaverEngine
 from ui.settings_dialog import SettingsDialog
@@ -865,10 +868,8 @@ def main(*, entrypoint: str = "main"):
         float(settings_persistence.get("close_duration_ms", 0.0)),
         bool(settings_persistence.get("close_timed_out", False)),
     )
-    if (
-        settings_persistence.get("close_timed_out")
-        or int(settings_persistence.get("writes_failed", 0)) > 0
-    ):
+    durability_state = terminal_settings_durability_state(settings_persistence)
+    if durability_state == "failed":
         logger.warning(
             "[SETTINGS_PERSIST] Terminal durability boundary was not clean: %r",
             settings_persistence,
@@ -879,7 +880,17 @@ def main(*, entrypoint: str = "main"):
                 queue_depth=settings_persistence.get("queue_depth", 0),
                 writes_failed=settings_persistence.get("writes_failed", 0),
                 close_timed_out=settings_persistence.get("close_timed_out", False),
+                last_submitted_revision=settings_persistence.get("last_submitted_revision", 0),
+                last_durable_revision=settings_persistence.get("last_durable_revision", 0),
             )
+    elif durability_state == "recovered":
+        logger.warning(
+            "[SETTINGS_PERSIST] Historical write failure recovered; final state is durable "
+            "(failed=%d submitted_revision=%d durable_revision=%d)",
+            int(settings_persistence.get("writes_failed", 0)),
+            int(settings_persistence.get("last_submitted_revision", 0)),
+            int(settings_persistence.get("last_durable_revision", 0)),
+        )
 
     # Cleanup pycache on exit (script mode only)
     if is_script_mode():

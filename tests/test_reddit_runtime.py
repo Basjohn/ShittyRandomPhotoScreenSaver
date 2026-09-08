@@ -355,3 +355,56 @@ def test_reddit_runtime_retirement_fences_work_and_clears_consumer() -> None:
     assert service.request_refresh() is False
     with pytest.raises(RuntimeError, match="retired"):
         service.attach_consumer(consumer)
+
+
+def test_expected_reddit_provider_unavailability_is_not_a_failed_thread_task(
+    monkeypatch, tmp_path
+) -> None:
+    import widgets.reddit_runtime as runtime_module
+    from core.reddit_post_provider import RedditProviderUnavailableError
+
+    monkeypatch.setattr(runtime_module, "_REDDIT_CACHE_DIR", tmp_path)
+    monkeypatch.setattr(runtime_module, "automatic_service_updates_enabled", lambda: False)
+
+    class _UnavailableProvider:
+        provider_id = "rss"
+
+        def fetch_posts(self, request):  # noqa: ANN001
+            raise RedditProviderUnavailableError(
+                "Reddit public sources returned HTTP 429/403",
+                attempted_sources=("rss", "html_old", "html_www"),
+                blocked=True,
+            )
+
+    class _RecordingThreadManager(_ImmediateThreadManager):
+        def __init__(self) -> None:
+            self.categories = []
+            self.failed_outcomes = 0
+
+        def submit_io_task(self, callback_fn, *args, callback=None, **kwargs):
+            self.categories.append(kwargs.get("category"))
+            try:
+                result = callback_fn(*args)
+            except Exception as exc:
+                self.failed_outcomes += 1
+                outcome = SimpleNamespace(success=False, result=None, error=str(exc))
+            else:
+                outcome = SimpleNamespace(success=True, result=result, error=None)
+            if callback is not None:
+                callback(outcome)
+            return "task"
+
+    service = _service(_UnavailableProvider())
+    service._schedule_timer = lambda: None
+    consumer = _Consumer()
+    threads = _RecordingThreadManager()
+    service.attach_consumer(consumer)
+    service.set_thread_manager(threads)
+    assert service.start()
+
+    assert service.fetch() is True
+    assert threads.failed_outcomes == 0
+    assert "reddit_fetch" in threads.categories
+    assert "reddit_service_gate" in threads.categories
+    assert consumer.errors == ["Reddit public sources returned HTTP 429/403"]
+    assert service._fetch_in_progress is False
