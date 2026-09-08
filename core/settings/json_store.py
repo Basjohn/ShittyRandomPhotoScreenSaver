@@ -248,7 +248,7 @@ class JsonSettingsStore:
     def _persistence_completed(
         self,
         state_revision: int,
-        _persistence_revision: int,
+        persistence_revision: int,
         success: bool,
         error: Optional[str],
     ) -> None:
@@ -264,6 +264,13 @@ class JsonSettingsStore:
             else:
                 self._dirty = True
                 self._last_persistence_error = error
+        if not success:
+            # Emit on the failure edge, outside the store lock. A later successful
+            # write clears last_error; without this event the cause disappears.
+            logger.warning(
+                "[SETTINGS_PERSIST] Write failed state_revision=%d persistence_revision=%d error=%s",
+                state_revision, persistence_revision, error,
+            )
 
     def _mark_changed_locked(self) -> None:
         self._state_revision += 1

@@ -142,6 +142,10 @@ def test_failed_write_remains_dirty_and_later_flush_retries(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from core.settings import json_store as store_module
+    warnings = []
+    monkeypatch.setattr(store_module.logger, "warning",
+                        lambda message, *args, **kwargs: warnings.append(message % args))
     store = _make_store(tmp_path)
     real_write = persistence_module._write_snapshot
     attempts = 0
@@ -164,6 +168,11 @@ def test_failed_write_remains_dirty_and_later_flush_retries(
     assert store.flush(timeout=2.0) is True
     assert attempts == 2
     assert _read_value(Path(store.fileName()), "retry", "value") == 7
+
+    assert len(warnings) == 1
+    assert "[SETTINGS_PERSIST] Write failed" in warnings[0]
+    assert "OSError: injected replace failure" in warnings[0]
+    assert "retry.value" not in warnings[0]
 
 
 def test_settings_manager_critical_mutation_is_immediate_but_io_is_async(
