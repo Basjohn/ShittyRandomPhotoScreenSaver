@@ -14,19 +14,17 @@ freely; each item is self-contained unless noted.
 
 ---
 
-## 1. Gmail `_SharedGmailRuntimeOwner` timer lifecycle leak (bug)
+## 1. Gmail timer lifecycle — Awaiting Logs
 
-Every Settings/runtime reconstruction leaves **another** `_SharedGmailRuntimeOwner`
-and its poll timer registered — the shared-owner registry (`_SHARED_GMAIL_OWNERS`
-in `widgets/gmail_runtime.py`) and its `create_overlay_timer`/`OverlayTimerHandle`
-accumulate across generations instead of the prior owner retiring.
+Generation propagation and terminal Qt timer destruction are repaired. The real-Qt
+reconstruction bar in `tests/test_gmail_runtime.py` verifies one shared owner/timer
+for two displays and zero owner/resource records after final retirement over three
+generations; the focused lifecycle gate passes 140 tests. Existing explicit lease
+retirement already removed the shared-owner registry entry; stopped QTimers retained
+their callbacks/resource records, and the family adapter omitted generation identity.
 
-Fix at the owning boundary: reconstruction must retire the previous shared owner
-(stop `_stop_poll_timer` and drop it from `_SHARED_GMAIL_OWNERS` / the overlay-timer
-registry) so timers do not stack — runtime-owned async work retires with its
-generation. See existing coverage `tests/test_gmail_retiring_runtime.py`; add a bar
-that fails when a reconstruction leaves a second live owner/timer. No timer/poller
-added. **Not started.**
+- [ ] Confirm fresh Settings/reconstruction lifecycle logs keep Gmail timer records
+  at one while admitted and zero after retirement, with the correct runtime generation.
 
 ## 2. Visualizer replay reactivity floor — recreate for this environment
 
@@ -77,6 +75,9 @@ it after the above. **Not started.**
 
 Concrete open items, do alongside the work above:
 
+- [ ] Reconcile incomplete shadow fixtures in `test_qtquick_family_binder.py` and
+  `test_qtquick_gmail_presentation.py` against the strict complete shadow snapshot
+  (`header_enabled` and other canonical fields); discovered by the Gmail lifecycle gate.
 - [ ] `tests/test_qtquick_ordinary_widget_host.py::test_host_module_is_presentation_only`
   — allow a legitimate `shiboken6` import (widget-glow work) like `PySide6`.
 - [ ] `tests/test_qtquick_ordinary_widget_host.py::test_scene_controller_owns_and_retires_ordinary_widget_host`

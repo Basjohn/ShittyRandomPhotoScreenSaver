@@ -1,9 +1,15 @@
 # SRPSS Specification
 
-Last updated: 2026-09-04
+Last updated: 2026-09-08
 
 Canonical durable architecture and product-behavior contracts. `Current_Plan.md` owns sequence; independent closure
 narrative belongs under `Docs/audits/` or historical evidence.
+
+Recurring service timer handles are terminal on stop: the owning handle stops and
+defers Qt destruction, which releases callbacks and passive resource registration.
+Gmail's retained family adapter carries the display generation into its shared
+runtime lease, including generation 0; final lease retirement removes the shared
+owner without shutting down the process-wide backend.
 
 ## Product priorities
 

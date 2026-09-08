@@ -78,6 +78,9 @@ class _Timer:
     def stop(self) -> None:
         self.active = False
 
+    def deleteLater(self) -> None:
+        self.callback = None
+
     def isActive(self) -> bool:
         return self.active
 
@@ -343,6 +346,73 @@ def test_first_and_last_lease_lifetime_preserves_remaining_display(
     assert owner.is_retired() is True
     assert shared_gmail_owner_count() == 0
     assert backend.shutdown_calls == 0
+
+
+def test_reconstruction_destroys_shared_timer_and_resource_record(qt_app):
+    from PySide6.QtCore import QCoreApplication, QEvent
+    import shiboken6
+    from core.resources.manager import ResourceManager
+
+    resources = ResourceManager()
+    scheduler = SimpleNamespace(_shutdown=False, _resource_manager=resources)
+    manager = _QueuedIoManager()
+    manager.schedule_recurring = lambda *args, **kwargs: ThreadManager.schedule_recurring(
+        scheduler, *args, **kwargs
+    )
+    for generation in range(3):
+        consumers = [_Consumer(manager, generation=generation) for _ in range(2)]
+        leases = [_lease(consumer) for consumer in consumers]
+        for lease in leases:
+            assert lease.start()
+        owner = leases[0].shared_owner
+        timer = owner.update_timer_handle._timer
+        assert shared_gmail_owner_count() == 1
+        assert len(resources.get_all_resources()) == 1
+        assert timer._runtime_generation == generation
+        leases[0].retire()
+        assert timer.isActive()
+        leases[1].retire()
+        assert owner.is_retired()
+        assert shared_gmail_owner_count() == 0
+        assert not timer.isActive()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        assert not shiboken6.isValid(timer)
+        assert resources.get_all_resources() == []
+        manager.tasks.clear()
+
+
+@pytest.mark.parametrize("generation", [0, 73])
+def test_family_adapter_carries_generation_into_shared_owner(monkeypatch, generation):
+    from rendering.quick.widgets import gmail
+    from rendering.quick.widgets.family_binder import GmailFamilyAdapter
+    from rendering.quick.widgets.host import OverlayWidgetGeometry
+    from rendering.widget_runtime_manager import WidgetRuntimeManager
+    from core.settings.default_contract import require_canonical_default
+
+    # Substitute only retained pixels; use the production adapter/model/service
+    # admission path that previously lost generation before timer registration.
+    monkeypatch.setattr(gmail, "RetainedGmailPresentation", lambda **kwargs: SimpleNamespace(**kwargs))
+    host = SimpleNamespace(get_runtime_widget_registry=lambda: {})
+    runtime = WidgetRuntimeManager(host)
+    bounds = OverlayWidgetGeometry(0, 0, 1920, 1080)
+    presentation = GmailFamilyAdapter().build(
+        widget_id="gmail", widgets_config={"gmail": {"enabled": True}},
+        host=None, geometry=bounds, display_bounds=bounds,
+        display_identity="test",
+        shadow_values=require_canonical_default("widgets.shadows"),
+        runtime_manager=runtime,
+        runtime_generation=generation,
+    )
+    try:
+        assert presentation.model.activate(_QueuedIoManager())
+        service = runtime.get_widget_service("gmail")
+        assert service.runtime_generation == generation
+        assert service.shared_owner._runtime_generation == generation
+        runtime.cleanup()
+        assert shared_gmail_owner_count() == 0
+    finally:
+        runtime.cleanup()
+        presentation.model.retire()
 
 
 def test_active_second_lease_replays_snapshot_without_duplicate_work(

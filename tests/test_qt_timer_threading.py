@@ -13,12 +13,16 @@ class _FakeTimer:
     def __init__(self, owner_thread: _FakeThread) -> None:
         self.owner_thread = owner_thread
         self.stop_calls = 0
+        self.delete_calls = 0
 
     def thread(self) -> _FakeThread:
         return self.owner_thread
 
     def stop(self) -> None:
         self.stop_calls += 1
+
+    def deleteLater(self) -> None:
+        self.delete_calls += 1
 
     def isActive(self) -> bool:
         return self.stop_calls == 0
@@ -47,6 +51,7 @@ def test_overlay_timer_stop_runs_directly_on_owner_thread(monkeypatch) -> None:
     handle.stop()
 
     assert timer.stop_calls == 1
+    assert timer.delete_calls == 1
     assert queued_calls == []
     assert not handle.is_active()
 
@@ -75,5 +80,6 @@ def test_overlay_timer_stop_queues_to_owner_thread_when_called_off_thread(monkey
     handle.stop()
 
     assert timer.stop_calls == 0
+    assert timer.delete_calls == 1
     assert queued_calls == [(timer, "stop", overlay_timers.Qt.ConnectionType.QueuedConnection)]
     assert not handle.is_active()

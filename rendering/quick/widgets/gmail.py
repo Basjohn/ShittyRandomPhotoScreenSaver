@@ -484,9 +484,11 @@ class GmailPresentationModel(QObject):
         style: GmailPresentationStyle,
         *,
         runtime_service: Any | None = None,
+        runtime_generation: int | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
+        self._runtime_generation = runtime_generation
         self._row_model = GmailRowListModel(self)
         self._runtime_service = runtime_service
         self._snapshot = GmailPresentationSnapshot(config=config, style=style)
