@@ -1,12 +1,20 @@
 # Test Suite Guide
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 
 ## Current authority
 
 The production Qt Quick cutover and caller-proven I cleanup are complete. M0 CUSTOM/lifecycle and M1 Bubble-reference parity are closed evidence; current maintained testing is migration-close/product-readiness plus any specifically admitted regression, build/install/physical acceptance, theme/runtime correctness and resource/lifecycle hardening. `Current_Plan.md` alone owns sequence; the exact current source/test tree and maintained `destination` profile own executable membership.
 
 Permanent destination guardrails include:
+
+- ordinary host/Media presentation fixtures use complete canonical shadows, current
+  two-phase scene retirement and QML-owned artwork rounding. Media volume RGBA
+  projects the authored config exactly; its retired hidden alpha conversion is not
+  restored. These two reconciled suites pass 32 tests.
+- normalized Weather/Steam CUSTOM replay crosses live Save/Cancel, serialized stale
+  hydration, repeated reconstruction and numbered slots without baseline mutation
+  or compounding (`tests/test_qtquick_resize_normalization.py`).
 
 - retained capture evidence comparisons (`tests/test_ordinary_widget_resize_capture.py`):
   detect alpha-only pixel drift, reject mismatched DPR and refuse evidence overwrite;
