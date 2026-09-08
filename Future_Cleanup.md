@@ -3,8 +3,9 @@
 Last updated: 2026-09-05
 
 This file contains only **surviving cleanup/deletion debt**. Completed migration history belongs in
-`Docs/QtQuick_Migration/`, historical bug records and source-control history; it must not remain here as
-a pseudo-task that a later agent can accidentally reopen. `Current_Plan.md` always outranks this file.
+`Docs/Fossils/`, historical bug records and source-control history (the Qt Quick migration is closed and its
+`Docs/QtQuick_Migration/` decomposition tree was deleted); it must not remain here as a pseudo-task that a
+later agent can accidentally reopen. `Current_Plan.md` always outranks this file.
 
 ## Rules
 
@@ -35,6 +36,27 @@ stale tests that still import/assert against deleted presentation owners such as
 - [ ] Reconcile Reddit helper recovery/installer/watcher tests separately from retained Reddit presentation.
 - [ ] Restore the broad whole-tree suite to useful signal without weakening the canonical `destination`
       profile or resurrecting museum architecture.
+
+## READY — caller-dead visualizer-renderer + image-processor islands
+
+Both are proven to have **no production importer** (exact import search, 2026-09-08); they survive only in
+mixed test files that also cover live behaviour, so they could not be deleted cleanly in the slice that
+retired `transition_worker.py`. Deleting each requires splitting its test file first, then removing the
+fossil, then restoring the two `test_defaults_schema_authority.py` removal assertions that were relaxed to
+avoid a false RED.
+
+- [ ] Delete the `widgets/spotify_visualizer/renderers/` island (pre-Quick QWidget GL uniform/upload
+      helpers — `get_uniform_names`/`upload_uniforms`/`compute_bar_layout` etc.). The Quick path renders via
+      `rendering/quick/visualizer/implementations/*` + `widgets/spotify_visualizer/shaders/*` and does not
+      import it. First rehome any still-live coverage: e.g. `tests/test_spectrum_shaping.py` mixes live
+      `audio_worker._fft_to_bars` assertions with dead `compute_bar_layout` ones — split before deleting.
+- [ ] Delete `rendering/image_processor.py` (`ImageProcessor`); production uses
+      `rendering/image_processor_async.py` (`AsyncImageProcessor`). `tests/test_image_processor.py` mixes
+      live `AsyncImageProcessor` coverage with dead `ImageProcessor` coverage — split before deleting;
+      `tests/test_lanczos_scaling.py` also imports `ImageProcessor`.
+- [ ] After each island is gone, re-add its removal assertion to
+      `test_dead_transition_precompute_worker_is_removed` / `test_resolved_runtime_consumers_do_not_rebuild_product_defaults`.
+- Never restore the QWidget renderer/GL upload path or the sync image processor to satisfy an old test.
 
 ## READY — Future Work destination gate reconciliation
 
