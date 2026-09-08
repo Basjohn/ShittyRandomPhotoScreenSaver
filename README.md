@@ -10,7 +10,8 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
 
 ---
 
-## Features (an extremely out of date readme mostly)
+## Features 
+(An extremely out of date readme mostly, might as well skip to the credits, I'm not touching this like I'm not getting touched.)
 
 - **Random Image Slideshow**
   - Local folders (recursive) as primary source
@@ -47,7 +48,11 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
   - **Layout Slots** Use Shift+1/2/3/4/5/6/7/8/9/0 to save your current layout and 1/2/3/4/5/6/7/8/9/0 to bring it back at any point.
 
 - **Settings dialog (config mode)**
-  - Dark, frameless UI
+  - Dark, fully themeable, frameless UI
+ 
+  ## This Sunvabitch Has No Business Being As Pretty As It Took Me Days To Get It Because UI Is The One Thing I Enjoy More Than Abusing Title Case.
+  <img width="2038" height="1247" alt="image" src="https://github.com/user-attachments/assets/cd84d3ca-b538-4044-9d80-602568a84df8" />
+
   - Tabs:
     - **Sources** – folders + RSS/JSON feeds
     - **Display** – mode, interval, sharpen, pan & scan, monitor selection
@@ -173,7 +178,7 @@ In the **Screen Saver Settings** dialog:
 
 ### 4. Layout
 
-  - Right Click (With CNTRL held or Interaction Mode on) to open your bethrothed context menu and choose Edit.
+  - Right Click (With CNTRL held or Interaction Mode on) to open your betrothed context menu and choose Edit.
   - In this sexy new mode drag around the widgets, resize them by the corners or your scroll wheel however you like, even across displays. 
   - When things look positioned like you'd like choose save in the context menu (or press enter like a bitch who cannot handle context menus) and it will apply.
   - Revert in Edit is for going back to non-custom mode or saving yourself from weird changes. Each widget has a reset button in Edit mode and the Spotify widget even has an extra one for if the visualizer gets lost.
@@ -187,6 +192,9 @@ Version information is centralised in `versioning.py` and used by both runtime a
 - Version string: `APP_VERSION`
 
 ## Credits
+
+Jayde Ver Elst/Basjohn
+Did you know I'm actually a published [author](https://www.goodreads.com/book/show/25006763-usu)? No? How could writing this cringe get published? I don't know either, and neither do most readers apparently.
 
 https://basmilius.github.io/ For the pillaged weather icons!
 
