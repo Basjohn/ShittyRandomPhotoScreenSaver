@@ -20,6 +20,7 @@ Reddit/Media/Gmail have operator acceptance; this file is the permanent determin
 from __future__ import annotations
 
 import pytest
+from core.settings.default_contract import require_canonical_default
 from PySide6.QtCore import QObject
 from PySide6.QtQuick import QQuickItem
 
@@ -36,6 +37,7 @@ from rendering.widget_descriptors import get_widget_runtime_descriptor
 
 def _shadow_values():
     return {
+        **require_canonical_default("widgets.shadows"),
         "enabled": True,
         "color": [0, 0, 0, 255],
         "blur_radius": 18,
@@ -146,11 +148,20 @@ def _geom(child: QQuickItem) -> tuple[float, float, float, float]:
 # Pure descriptor / payload contract (no Qt).                                 #
 # --------------------------------------------------------------------------- #
 def test_uniform_transform_scope_includes_reddit_media_and_gmail() -> None:
-    for widget_id in ("reddit", "reddit2", "media", "gmail"):
+    from rendering.widget_descriptors import get_widget_runtime_descriptors
+
+    assert is_uniform_transform_resize_mode("ordinary_uniform")
+    for descriptor in get_widget_runtime_descriptors():
+        if descriptor.supports_layout_resize_edit:
+            assert is_uniform_transform_resize_mode(descriptor.custom_layout_resize_mode) or (
+                descriptor.widget_id in {"clock", "clock2", "clock3", "spotify_visualizer"}
+                and descriptor.custom_layout_resize_mode in {"clock_font", "visualizer_rect"}
+            ), descriptor.widget_id
+    for widget_id in ("reddit", "reddit2", "media", "gmail", "abandonment_issues", "achievement_pulse", "weather"):
         mode = get_widget_runtime_descriptor(widget_id).custom_layout_resize_mode
         assert is_uniform_transform_resize_mode(mode), widget_id
     # Families deliberately left on their existing payload path (audited, inert).
-    for widget_id in ("clock", "weather", "steam"):
+    for widget_id in ("clock",):
         descriptor = get_widget_runtime_descriptor(widget_id)
         if descriptor is None:
             continue
@@ -176,12 +187,9 @@ def test_transform_family_resize_carries_no_settings_like_payload() -> None:
     assert scale_quick_size_payload(gmail, {}, 0.4) == {}
 
     # A payload family still scales its authored values (unchanged behaviour).
-    weather = get_widget_runtime_descriptor("weather")
-    scaled = scale_quick_size_payload(
-        weather, {"font_size": 20, "icon_size": 40}, 2.0
-    )
+    clock = get_widget_runtime_descriptor("clock")
+    scaled = scale_quick_size_payload(clock, {"font_size": 20}, 2.0)
     assert scaled["font_size"] == 40
-    assert scaled["icon_size"] == 80
 
 
 def test_visualizer_rect_payload_scaling_is_unchanged() -> None:
@@ -378,8 +386,8 @@ def test_non_transform_family_shell_change_is_inert(qt_app) -> None:
     factory = QuickSceneFactory()
     host = _host(factory, owner)
     try:
-        config = ClockPresentationConfig(
-            widget_id="clock", font_size=48, display_mode="digital"
+        config = ClockPresentationConfig.from_widgets_mapping(
+            "clock", {"clock": {"font_size": 48, "display_mode": "digital"}}
         )
         model = ClockPresentationModel(
             config, ClockPresentationStyle.project(config, _shadow_values())

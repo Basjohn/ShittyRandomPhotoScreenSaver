@@ -32,7 +32,8 @@ for diagnosis and must be rerun into a new directory.
 
 Comparison rejects environment, DPR and case mismatches or Qt messages. It reports
 exact RGBA changed-pixel counts, bounds and geometry equality, and writes opaque
-difference masks. Normal-size identity is reported separately. Pixel differences
+difference masks plus a side-by-side `review.html` linking the original PNGs.
+Normal-size identity is reported separately. Pixel differences
 are evidence for inspection, never automatic baseline acceptance. Inspect both
 original PNGs and the ledger; a tiny changed region can still be a meaningful defect.
 `--max-channel-delta N` additionally reports pixels exceeding an explicit per-channel

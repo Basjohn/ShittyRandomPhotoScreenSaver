@@ -619,16 +619,6 @@ class AbandonmentIssuesPresentationModel(QObject):
         self.stateChanged.emit()
         return True
 
-    def apply_custom_layout_config(
-        self,
-        config: AbandonmentIssuesPresentationConfig,
-    ) -> bool:
-        if self._retired or config == self.config:
-            return False
-        self._snapshot = replace(self._snapshot, config=config)
-        self.stateChanged.emit()
-        return True
-
     def apply_style(self, style: AbandonmentIssuesPresentationStyle) -> bool:
         if self._retired or style == self.style:
             return False
@@ -925,14 +915,9 @@ class RetainedAbandonmentIssuesPresentation:
         self,
         payload: Mapping[str, Any],
     ) -> None:
-        config = self._model.config
-        self._model.apply_custom_layout_config(
-            replace(
-                config,
-                font_size=int(payload.get("font_size", config.font_size)),
-                artwork_size=int(payload.get("artwork_size", config.artwork_size)),
-            )
-        )
+        # CUSTOM owns outer geometry only. Historical per-value entries must not
+        # mutate the Settings-authored baseline during committed layout replay.
+        del payload
 
     def apply_input_state(self, input_state: object) -> bool:
         if isinstance(input_state, Mapping):

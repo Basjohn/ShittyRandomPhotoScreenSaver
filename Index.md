@@ -59,10 +59,9 @@ operator explicitly asks for a repository handoff artifact.
 `Current_Plan.md` owns which portions are implemented/awaiting validation; these
 are the focused live-checklist decompositions it links:
 
-- `Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md` — move the remaining
-  per-value ordinary-widget CUSTOM resize families onto the single
-  `uniformScaleTransform` seam so resize is geometry-only, and make that the
-  default path for new widgets (+ the deferred non-CUSTOM stacker auto-shrink).
+- `Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md` — remaining physical
+  validation of geometry-only whole-card CUSTOM resize, plus the separate deferred
+  non-CUSTOM stacker auto-shrink contract. New-widget guidance lives in the authoring guide.
 - `Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md` — current offline replay
   harness and fixed reactivity floors; diagnostic artifacts and calibration review.
 - `Docs/Settings_Dark_QSS_Retirement.md` — retire `themes/dark.qss` so

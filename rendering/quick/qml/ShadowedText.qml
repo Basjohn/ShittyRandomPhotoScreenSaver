@@ -13,6 +13,7 @@ Item {
     objectName: "shadowedText"
 
     property string text: ""
+    property int textFormat: Text.AutoText
     property font font
     property color color: "#ffffffff"
     property int horizontalAlignment: Text.AlignLeft
@@ -42,6 +43,7 @@ Item {
         y: shadowedText.shadowOffsetY
         visible: shadowedText.shadowEnabled
         text: shadowedText.text
+        textFormat: shadowedText.textFormat
         font: shadowedText.font
         color: shadowedText.shadowColor
         horizontalAlignment: shadowedText.horizontalAlignment
@@ -60,6 +62,7 @@ Item {
         width: shadowedText.width
         height: shadowedText.height
         text: shadowedText.text
+        textFormat: shadowedText.textFormat
         font: shadowedText.font
         color: shadowedText.color
         horizontalAlignment: shadowedText.horizontalAlignment
