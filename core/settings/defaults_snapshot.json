@@ -251,7 +251,7 @@
       "media:artwork_header": false,
       "media:controls": false,
       "media:provider_layout": false,
-      "media:seek_bar": false,
+      "media:seek_bar": true,
       "media:volume_control": false,
       "reddit:interaction": false,
       "reddit:reddit1": false,

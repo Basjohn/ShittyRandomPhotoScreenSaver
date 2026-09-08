@@ -180,7 +180,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                  'media:artwork_header': False,
                                  'media:controls': False,
                                  'media:provider_layout': False,
-                                 'media:seek_bar': False,
+                                 'media:seek_bar': True,
                                  'media:volume_control': False,
                                  'reddit:interaction': False,
                                  'reddit:reddit1': False,
