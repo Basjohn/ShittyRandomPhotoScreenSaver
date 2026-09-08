@@ -132,14 +132,22 @@ Two facts an earlier handoff missed, both load-bearing:
 
 ### C0 — Baseline evidence harness (do first)
 
-- [ ] Stand up a deterministic retained-Quick capture (QuickSceneFactory / retained
+- [x] Stand up a deterministic retained-Quick capture (QuickSceneFactory / retained
       host, fixed family model fixture, fixed `QQuickWindow` logical geometry,
       `grabWindow()`/`grabToImage()` → PNG). If PySide6/Qt is unavailable in the
       agent environment, mark visual acceptance **OWED** rather than pretending
       static checks prove pixels.
-- [ ] Capture matrix per family at `1.00, 0.75, 0.50, 1.40, 2.00` and aspect
+- [x] Capture matrix per family at `1.00, 0.75, 0.50, 1.40, 2.00` and aspect
       envelopes `0.75w×1.00h, 1.00w×0.75h, 1.25w×0.80h`.
-- [ ] Record the geometry/property ledger (see Verification protocol) for each.
+- [x] Record the geometry/property ledger (see Verification protocol) for each.
+
+Maintained harness: [capture/compare contract](../Ordinary_Widget_Resize_Capture.md).
+The DPR 1.5 settled baseline/repeat in `logs/widget_resize_normalization/settled_*`
+has zero Qt messages and identical geometry for 112 cases. All 14 normal-size
+cases differ by at most 2 channel levels; non-1.0 repeats have 56 pixels exceeding
+that threshold (maximum 7), so do not apply a blanket tolerance to resized output.
+Normal populated cards were visually inspected. Tooltip/glow interaction and the
+physical CUSTOM/topology gates remain owed; C0 is not those gates' substitute.
 
 ### C1 + C2 — Abandonment Issues + Achievement Pulse (joint, `steam_card_scale`)
 

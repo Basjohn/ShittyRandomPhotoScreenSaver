@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from core.settings.default_contract import require_canonical_default
 from PySide6.QtCore import QObject, QUrl
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlComponent, QQmlEngine
@@ -66,6 +67,7 @@ def _config(**overrides) -> GmailPresentationConfig:
 
 def _style_values(**overrides):
     values = {
+        **require_canonical_default("widgets.shadows"),
         "enabled": True,
         "direction": "NW",
         "color": [0, 0, 0, 255],
