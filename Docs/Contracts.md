@@ -319,6 +319,14 @@ the replacement mode obtains a frame. Sync and pointer movement create no cleanu
 
 ## Geometry / CUSTOM
 
+Non-CUSTOM stacking first attempts full authored sizes, then bounded whole-card
+shrink/re-stack trials down to 80% only when placement remains unresolved. Each
+accepted scale carries its freshly solved placement and 10px clearance; growth
+restores authored size as space returns. Clock and fixed Media/Visualizer obstacles
+are excluded from shrink. No-fit remains an explicit overfull diagnostic. Global
+CUSTOM disables this derived planner; first Edit preserves the visible footprint.
+
+
 `CustomLayoutSession` owns working geometry/state independent of QWidget. Geometry keys include display identity and
 variant. Save/Cancel and layout slots preserve ordinary ON/OFF semantics without crossing capability activation.
 Cross-display transfer has one live retained pixel owner and preserves logical runtime/model identity.

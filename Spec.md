@@ -251,6 +251,14 @@ Settings-window theme/shadow ownership is separate from runtime overlay-widget s
 
 ## Geometry / CUSTOM
 
+Non-CUSTOM stacking first attempts full authored sizes, then bounded whole-card
+shrink/re-stack trials down to 80% only when placement remains unresolved. Each
+accepted scale carries its freshly solved placement and 10px clearance; growth
+restores authored size as space returns. Clock and fixed Media/Visualizer obstacles
+are excluded from shrink. No-fit remains an explicit overfull diagnostic. Global
+CUSTOM disables this derived planner; first Edit preserves the visible footprint.
+
+
 Ordinary card CUSTOM resize uses one retained whole-card transform, with Settings-authored baseline values unchanged. Clock retains variant-aware sizing; Visualizer retains separate viewport and visual-scale intents. New-widget implementation starts with the [authoring checklist](Docs/10_WIDGET_GUIDELINES.md#whole-card-custom-resize-default).
 
 Outer geometry is Python/session-owned. Variant key supports `(widget_id, display_identity, geometry_variant)`.

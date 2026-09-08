@@ -166,3 +166,65 @@ def test_two_live_saves_and_cancel_preserve_scale_and_identity(qt_app, family, t
         unit.retire()
         factory.deleteLater()
         qt_app.processEvents()
+
+
+def test_auto_shrink_restores_authored_size_and_transfers_visible_footprint_to_edit(qt_app, tmp_path):
+    from tests.test_qtquick_custom_layout_owner import _Settings
+    from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
+    from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
+    from rendering.quick.display_unit import create_quick_display_unit
+    from rendering.quick.state import QuickWindowPolicy
+    from rendering.quick.widgets.host import OverlayWidgetGeometry
+    from core.settings.default_contract import require_canonical_default
+
+    class SnapshotAdapter:
+        family_id = "weather"
+
+        def enabled_instance_ids(self, widgets_config):
+            return ("weather",)
+
+        def build(self, *, host, geometry, **kwargs):
+            card = build_card("weather", "base", host, tmp_path / "unused.png", QImage())
+            card.set_geometry(geometry)
+            return card
+
+    widgets = {"weather": {"enabled": True, "monitor": "ALL", "position": "Top Left"}}
+    settings = _Settings(widgets)
+    factory = QuickSceneFactory()
+    unit = create_quick_display_unit(screen=qt_app.primaryScreen(), screen_index=0,
+        runtime_generation=81, scene_factory=factory, adapters=(SnapshotAdapter(),),
+        ctrl_coordinator=SharedCtrlCoordinator(),
+        window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False))
+    owner = QuickCustomLayoutOwner(settings_manager=settings, participants_provider=lambda: (unit,),
+        visualizer_provider=lambda: (None, None), reload_request=lambda _: pytest.fail("unexpected rebuild"))
+    try:
+        unit.bind_families(widgets_config=widgets, shadow_values=require_canonical_default("widgets.shadows"))
+        presenter = unit.presenter
+        card = presenter.presentation_for_widget_id("weather")
+        config = card.model.config
+        baseline = presenter.authored_geometry_for("weather")
+        margin = presenter._geometry_bindings[0][1].policy.margin
+        narrow = OverlayWidgetGeometry(0., 0., round(baseline.width * .85) + 2 * margin,
+                                       baseline.height + 2 * margin + 100.)
+        presenter.set_display_bounds(narrow)
+        small = presenter.geometry_for("weather")
+        assert .8 <= small.width / baseline.width <= .86
+        assert card.model.config == config
+        presenter.set_display_bounds(OverlayWidgetGeometry(0., 0., baseline.width + 2 * margin + 100., narrow.height))
+        assert presenter.geometry_for("weather").width == baseline.width
+        presenter.set_display_bounds(narrow)
+        assert presenter.geometry_for("weather") == small
+        presenter.set_authored_layout_enabled(False, restore_base=False)
+        assert owner.start()
+        session_item = owner.session.items()[0]
+        assert session_item.current_global_rect.width() == round(small.width)
+        assert session_item.resize_scale == pytest.approx(card.item.property("presentationScale"), abs=.003)
+        assert presenter.geometry_for("weather") == small
+        assert owner.cancel()
+        assert card.model.config == config
+        assert settings.save_calls == 0
+    finally:
+        owner.retire()
+        unit.retire()
+        factory.deleteLater()
+        qt_app.processEvents()

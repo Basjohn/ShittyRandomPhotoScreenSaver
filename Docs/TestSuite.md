@@ -8,6 +8,11 @@ The production Qt Quick cutover and caller-proven I cleanup are complete. M0 CUS
 
 Permanent destination guardrails include:
 
+- auto-shrink (`test_widget_auto_shrink.py`) proves full-size-first packing,
+  selective/joint reduction, clearance and growth; the normalization suite verifies
+  real presenter reflow and unchanged visible first-Edit footprint. Presenter
+  fixtures now explicitly route to ALL monitors and supply complete canonical shadows.
+
 - `test_qtquick_visualizer_roundtrip_lifetime.py` is an isolated fresh-process
   target: repeated source/target admission transfer, deferred deletion and Python/QML
   GC preserve exact display roots, ordinary roots, Edit overlays, screens and

@@ -55,6 +55,8 @@ DESTINATION_PROFILE = (
     "test_qtquick_visualizer_roundtrip_lifetime.py",
     "test_qtquick_custom_layout_overlay.py",
     "test_qtquick_h9_uniform_resize.py",
+    "test_qtquick_resize_normalization.py",
+    "test_widget_auto_shrink.py",
     "test_qtquick_ordinary_widget_host.py",
     "test_qtquick_widget_glow.py",
     "test_widget_glow_settings.py",

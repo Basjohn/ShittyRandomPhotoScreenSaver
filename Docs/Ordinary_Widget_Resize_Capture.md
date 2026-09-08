@@ -44,3 +44,12 @@ This harness does not close real CUSTOM gestures, Save/Cancel/slot hydration,
 tooltips, animated glow, mixed-DPR movement, physical stacking or runtime recreation
 gates. Keep those explicitly awaiting their corresponding validation. Its bounded
 event-loop waits permit fixture rendering only; they add no production timer.
+
+## Whole-display packing companion
+
+`python -m tools.ordinary_widget_stack_capture --output NEW_DIRECTORY` reuses these
+fixed model fixtures and real Quick capture helpers. It records full-size, crowded
+stack-only, crowded auto-shrink/re-stack, and expanded/restored layouts with scales,
+geometry and Qt messages. It refuses existing directories and activates no providers.
+This is visual evidence for the shared pure planner; the retained-presenter/Edit
+integration is covered separately by `test_qtquick_resize_normalization.py`.
