@@ -122,9 +122,25 @@ OverlayWidget {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 2.0
 
+                    // Align visible glyph edges, not differing font side bearings.
+                    // Right-aligned text retains the existing icon-left layout.
+                    TextMetrics {
+                        id: locationInk
+                        font: locationText.font
+                        text: weatherRoot.weatherModel.locationText
+                    }
+                    TextMetrics {
+                        id: temperatureInk
+                        font.family: conditionText.font.family
+                        font.bold: conditionText.font.bold
+                        font.pointSize: weatherRoot.weatherModel.temperatureFontSize
+                        text: weatherRoot.weatherModel.temperatureText
+                    }
+
                     ShadowedText {
                         id: locationText
                         objectName: "weatherLocationText"
+                        x: leftConditionIcon.visible ? 0.0 : -locationInk.tightBoundingRect.x
                         width: primaryText.width
                         height: implicitHeight
                         text: weatherRoot.weatherModel.locationText
@@ -144,6 +160,7 @@ OverlayWidget {
                     ShadowedText {
                         id: conditionText
                         objectName: "weatherConditionText"
+                        x: leftConditionIcon.visible ? 0.0 : -temperatureInk.tightBoundingRect.x
                         width: primaryText.width
                         height: implicitHeight
                         text: weatherRoot.weatherModel.conditionMarkup
