@@ -1252,12 +1252,11 @@ class DisplayManager(QObject):
             )
 
         if not target:
-            # Adjacency is not merely paused: project the Visualizer back onto
-            # its plain authored Media slot so CUSTOM starts from overlap-legal
-            # authored geometry rather than carrying an ordinary adjacency
-            # displacement into the global CUSTOM mode. Committed Visualizer
-            # CUSTOM geometry rejects this projection inside its owner.
-            self._project_quick_visualizer_base_authored_origin()
+            # Slot transactions may explicitly restore authored geometry. Live
+            # Edit instead freezes the currently visible placement before the
+            # session captures it; detaching adjacency must not move the card.
+            if restore_base:
+                self._project_quick_visualizer_base_authored_origin()
             return
 
         owner = self._quick_visualizer_owner
@@ -1300,10 +1299,9 @@ class DisplayManager(QObject):
 
         if self._quick_custom_layout_owner.is_active:
             return True
-        # Disable before the owner captures session geometry. This removes any
-        # generic stack projection and prevents Media preferred-size callbacks
-        # from reasserting ordinary adjacency under the edit transaction.
-        self._set_quick_authored_layout_enabled(False, restore_base=True)
+        # Quiesce placement callbacks before capture, preserving the visible
+        # stacked/Media-relative rectangles as the initial edit geometry.
+        self._set_quick_authored_layout_enabled(False, restore_base=False)
         try:
             started = self._quick_custom_layout_owner.start()
         except Exception:
@@ -1320,9 +1318,8 @@ class DisplayManager(QObject):
     def _save_quick_custom_layout(self) -> bool:
         saved = self._quick_custom_layout_owner.save()
         if saved:
-            # Save requests a generation-fenced rebuild. Keep authored layout
-            # dormant in the retiring generation; the replacement generation
-            # derives its own global CUSTOM state from persisted settings.
+            # A geometry-only Save stays in this generation. Keep authored
+            # placement dormant now that persisted CUSTOM owns the geometry.
             self._refresh_all_quick_context_menus()
         return saved
 

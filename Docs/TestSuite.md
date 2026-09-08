@@ -11,6 +11,11 @@ Permanent destination guardrails include:
 - retained capture evidence comparisons (`tests/test_ordinary_widget_resize_capture.py`):
   detect alpha-only pixel drift, reject mismatched DPR and refuse evidence overwrite;
   the real-OpenGL capture matrix remains an explicit harness run, not a headless pixel claim;
+- first live Edit entry (`tests/test_qtquick_custom_layout_owner.py`): the manager
+  quiesces authored placement without resetting the started Visualizer's visible
+  origin. The same suite supplies complete canonical shadow/preset/technical
+  snapshots and tests the currently enabled modes; source configuration uses the
+  retained offline BeatEngine harness with audio admission disabled;
 
 - offline Visualizer reactivity floors (`tests/test_visualizer_replay.py`): current
   authored tick/Quick snapshot output, immutable fixture integrity, presentation

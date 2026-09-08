@@ -266,8 +266,9 @@ transferred cross-display Visualizer, is not a slot-load boundary and must not g
 CUSTOM is a **global layout mode**. If any effective widget route is `Custom`, ordinary authored stacking and the
 non-CUSTOM Media/Visualizer adjacency projection are disabled for the entire retained layout, not selectively per
 widget. The same subsystem switch is asserted before live Edit Layout captures geometry and before number-key layout
-slot loads rebuild the runtime. While dormant, ordinary cards use base/committed rectangles and overlap is legal; an
-uncommitted Visualizer uses Media's plain authored slot rather than the ordinary adjacent displacement. Cancel restores
+slot loads rebuild the runtime. Live Edit preserves the currently visible stacked/adjacent rectangles when capturing
+its initial session: disabling Follow Media or stacking changes authority without moving or resizing the cards.
+A newly constructed uncommitted Visualizer in global CUSTOM uses Media's plain authored slot. Cancel restores
 authored packing only when no effective route remains `Custom`. This boundary is event-driven and owns no cadence.
 
 CUSTOM terminalization is one **shared all-display transaction**. Save/Cancel may not clear one display and then throw before
