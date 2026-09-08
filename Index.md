@@ -41,6 +41,7 @@ tracked in `Current_Plan.md` / `Future_Cleanup.md` / `Docs/TestSuite.md`.
 | safety / guardrail router | `Docs/Guardrails.md` |
 | test inventory/retirement | `Docs/TestSuite.md` |
 | harness/command routing | `Docs/Harness_Index.md` |
+| retained widget pixel/resize comparison | `Docs/Ordinary_Widget_Resize_Capture.md` |
 | logging / Qt-QML observability | `Docs/Logging_Guide.md` + `Docs/Qt_QML_Observability.md` |
 | presentation change preflight | `Docs/Presentation_Change_Preflight.md` |
 | historical bug/failed-repair index | `Docs/Historical_Bugs.md` |

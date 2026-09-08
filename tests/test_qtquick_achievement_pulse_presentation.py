@@ -4,6 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from core.settings.default_contract import require_canonical_default
 from PySide6.QtCore import QUrl, Qt
 from PySide6.QtGui import QImage
 from PySide6.QtQml import QQmlComponent, QQmlEngine
@@ -39,6 +40,7 @@ QML_ROOT = ROOT / "rendering" / "quick" / "qml"
 
 def _shadow_values(**changes):
     values = {
+        **require_canonical_default("widgets.shadows"),
         "enabled": True,
         "text_enabled": True,
         "direction": "SE",
@@ -54,7 +56,7 @@ def _shadow_values(**changes):
 
 
 def _config(**changes) -> AchievementPulsePresentationConfig:
-    return replace(AchievementPulsePresentationConfig(), **changes)
+    return replace(AchievementPulsePresentationConfig.from_widgets_mapping({}), **changes)
 
 
 def _model(
@@ -452,12 +454,13 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app, tmp_path) 
         assert rarity is not None
         assert rarity_detail is not None
         assert float(item.property("contentScale")) == pytest.approx(1.0)
-        assert (header.x(), header.y(), header.width(), header.height()) == (
-            18.0,
-            14.0,
-            302.0,
-            38.0,
-        )
+        # The shared BrandedHeader owns content-driven dimensions; the named
+        # frame fills that owner, which sits at the family-authored anchor.
+        header_owner = header.parentItem()
+        assert (header_owner.x(), header_owner.y()) == (18.0, 14.0)
+        assert (header.x(), header.y()) == (0.0, 0.0)
+        assert header.width() == pytest.approx(header_owner.implicitWidth())
+        assert header.height() == pytest.approx(header_owner.implicitHeight())
         assert (artwork.x(), artwork.y(), artwork.width(), artwork.height()) == (
             421.0,
             14.0,
@@ -559,7 +562,7 @@ def test_qml_is_presentation_only_and_keeps_family_authored_capsule_shadow() -> 
     assert 'objectName: "achievementLatestArtworkBorder"' in qml
     assert 'uniformScaleTransform: true' in qml
     assert 'thirdFieldColumnCenter - artworkWidth / 2.0' in qml
-    assert 'x: 130.0' in qml
+    assert 'x: resolvedRailX()' in qml
     assert 'fontSizeMode: Text.HorizontalFit' in qml
     assert '+ ": " + achievementRoot.achievementModel.metricValue' in qml
     assert "latestArtworkBackground" not in qml

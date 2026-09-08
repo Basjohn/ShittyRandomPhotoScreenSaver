@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from core.settings.default_contract import require_canonical_default
 from PySide6.QtCore import QObject
 from PySide6.QtQml import QQmlEngine
 from PySide6.QtQuick import QQuickItem
@@ -131,6 +132,7 @@ def _weather_values(**overrides):
 
 def _shadow_values(**overrides):
     values = {
+        **require_canonical_default("widgets.shadows"),
         "enabled": True,
         "color": [0, 0, 0, 255],
         "blur_radius": 18,
@@ -483,6 +485,7 @@ def test_weather_family_uses_current_scene_host_and_mutates_without_recreation(q
 
 def test_weather_qml_and_registry_are_static_presentation_only() -> None:
     qml = (QML_ROOT / "WeatherPresentation.qml").read_text(encoding="utf-8")
+    executable_qml = "\n".join(line.split("//", 1)[0] for line in qml.splitlines())
     banned = (
         "Timer {",
         "SettingsManager",
@@ -493,7 +496,7 @@ def test_weather_qml_and_registry_are_static_presentation_only() -> None:
         "layer.enabled",
     )
     for marker in banned:
-        assert marker not in qml
+        assert marker not in executable_qml
     # Weather keeps native packaged texture resolution so high-DPI rendering does
     # not decode a 96 px source and then upscale it on a 150%/200% display.
     assert "sourceSize." not in qml

@@ -17,6 +17,11 @@ explicitly requests it.
 
 ## 1. Targeted tests first
 
+Ordinary widget pixels and resize geometry: `python -m tools.ordinary_widget_resize_capture
+--output logs/widget_resize_normalization/before`. The retained long-term harness,
+comparison command and evidence boundaries are documented in
+[Ordinary_Widget_Resize_Capture.md](Ordinary_Widget_Resize_Capture.md).
+
 Offline Visualizer reactivity: `python -m tools.visualizer_replay` verifies fixed
 floors through the authored logical/Quick snapshot seam without a window or live
 audio source. `python -m pytest tests/test_visualizer_replay.py -q` adds negative

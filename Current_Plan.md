@@ -42,7 +42,13 @@ shared `uniformScaleTransform` seam so CUSTOM resize is geometry-only for every
 ordinary widget — and make that seam the default path so new widgets are cheap to
 add (C4 + new-widget checklist). This is also the prerequisite for the deferred
 non-CUSTOM stacker auto-shrink (a widget is only eligible to shrink cleanly once it
-scales as one whole card). **Not started; C0 evidence harness first.**
+scales as one whole card). **C0 capture harness implemented; production normalization
+not yet applied.** The maintained [capture/compare harness](Docs/Ordinary_Widget_Resize_Capture.md)
+captures 112 states/envelopes and geometry ledgers on real OpenGL. Initial populated
+1.0 cards were visually inspected at DPR 1.5 with zero Qt messages. Settled repeated
+captures have identical geometry in all 112 cases; all 14 normal cases stay within
+2 channel levels of rendering variation. Evidence: `logs/widget_resize_normalization/settled_*`.
+Complete the remaining physical/interaction gates before claiming product parity.
 
 - [ ] **Weather `preferredContentHeight` binding loop:** the physical torture run
   produced repeated QML binding-loop warnings at `WeatherPresentation.qml`'s
@@ -70,9 +76,6 @@ it after the above. **Not started.**
 
 Concrete open items, do alongside the work above:
 
-- [ ] Reconcile incomplete shadow fixtures in `test_qtquick_family_binder.py` and
-  `test_qtquick_gmail_presentation.py` against the strict complete shadow snapshot
-  (`header_enabled` and other canonical fields); discovered by the Gmail lifecycle gate.
 - [ ] `tests/test_qtquick_ordinary_widget_host.py::test_host_module_is_presentation_only`
   — allow a legitimate `shiboken6` import (widget-glow work) like `PySide6`.
 - [ ] `tests/test_qtquick_ordinary_widget_host.py::test_scene_controller_owns_and_retires_ordinary_widget_host`

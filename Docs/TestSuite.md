@@ -8,6 +8,10 @@ The production Qt Quick cutover and caller-proven I cleanup are complete. M0 CUS
 
 Permanent destination guardrails include:
 
+- retained capture evidence comparisons (`tests/test_ordinary_widget_resize_capture.py`):
+  detect alpha-only pixel drift, reject mismatched DPR and refuse evidence overwrite;
+  the real-OpenGL capture matrix remains an explicit harness run, not a headless pixel claim;
+
 - offline Visualizer reactivity floors (`tests/test_visualizer_replay.py`): current
   authored tick/Quick snapshot output, immutable fixture integrity, presentation
   independence, lane/travel contracts, zero-output and frozen-runtime negative controls;

@@ -11,6 +11,7 @@ family effectiveness, and retirement drops every held item exactly once.
 from __future__ import annotations
 
 import pytest
+from core.settings.default_contract import require_canonical_default
 
 from rendering.quick.runtime import QuickDisplayRuntime
 from rendering.quick.scene_controller import QuickSceneFactory
@@ -69,7 +70,7 @@ def _binder(runtime, **overrides) -> OrdinaryFamilyPresentationBinder:
         display_bounds=_DISPLAY_BOUNDS,
         display_identity="screen:a",
         screen_index=runtime.screen_index,
-        shadow_values={"enabled": True, "direction": "SE"},
+        shadow_values={**require_canonical_default("widgets.shadows"), "enabled": True, "direction": "SE"},
     )
     kwargs.update(overrides)
     return OrdinaryFamilyPresentationBinder(**kwargs)

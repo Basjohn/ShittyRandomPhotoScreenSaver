@@ -4,6 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from core.settings.default_contract import require_canonical_default
 from PySide6.QtCore import QTimer, QUrl, Qt
 from PySide6.QtGui import QImage
 from PySide6.QtQml import QQmlComponent, QQmlEngine
@@ -36,6 +37,7 @@ QML_ROOT = Path(__file__).resolve().parents[1] / "rendering" / "quick" / "qml"
 
 def _shadow_values(**changes):
     values = {
+        **require_canonical_default("widgets.shadows"),
         "enabled": True,
         "text_enabled": True,
         "direction": "SE",
@@ -51,7 +53,7 @@ def _shadow_values(**changes):
 
 
 def _config(**changes) -> AbandonmentIssuesPresentationConfig:
-    return replace(AbandonmentIssuesPresentationConfig(), **changes)
+    return replace(AbandonmentIssuesPresentationConfig.from_widgets_mapping({}), **changes)
 
 
 def _model(
