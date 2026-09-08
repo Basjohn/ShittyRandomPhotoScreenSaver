@@ -67,13 +67,6 @@ then re-stack with the reduced footprints.
 
 Concrete open items, do alongside the work above:
 
-- [ ] `tests/test_qtquick_ordinary_widget_host.py::test_host_module_is_presentation_only`
-  — allow a legitimate `shiboken6` import (widget-glow work) like `PySide6`.
-- [ ] `tests/test_qtquick_ordinary_widget_host.py::test_scene_controller_owns_and_retires_ordinary_widget_host`
-  — branch on `window.isSceneGraphInitialized()` for the two-phase deferred-retirement
-  offscreen path (already reconciled for the overlay test).
-- [ ] `tests/test_qtquick_media_presentation.py` — reconcile the Media Volume
-  border/volume-colour/artwork presentation contract if that suite owns the seam.
 - [ ] Delete the caller-dead `widgets/spotify_visualizer/renderers/` island and
   `rendering/image_processor.py` (both proven no-production-importer) after splitting
   their mixed test files; then restore the two relaxed removal assertions in

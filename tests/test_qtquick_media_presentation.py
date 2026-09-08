@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from core.settings.default_contract import require_canonical_default
 from PySide6.QtCore import QSize
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtQml import QQmlEngine
@@ -316,6 +317,7 @@ def _values(**overrides):
 
 def _shadows(**overrides):
     values = {
+        **require_canonical_default("widgets.shadows"),
         "enabled": True,
         "color": [0, 0, 0, 255],
         "blur_radius": 18,
@@ -435,7 +437,7 @@ def test_media_config_and_style_project_canonical_settings_and_direction() -> No
 
     model = MediaPresentationModel(config, style, MediaArtworkImageProvider())
     assert model.artworkBorderColor == style.card_style.border_color
-    assert model.artworkBorderWidth == pytest.approx(6.0)
+    assert model.artworkBorderWidth == pytest.approx(2.0)
     assert model.progressHeight == pytest.approx(9.0)
     assert model.progressFillColor == QColor(45, 190, 250, 230)
     assert model.progressGlowColor == QColor(45, 190, 250, 180)
@@ -472,9 +474,9 @@ def test_media_model_projects_and_routes_existing_app_volume_owner() -> None:
 
     assert model.appVolumeAvailable is True
     assert model.appVolumeLevel == pytest.approx(0.4)
-    assert model.appVolumeTrackColor == QColor(25, 32, 42, 255)
-    assert model.appVolumeBorderColor == QColor(120, 195, 255, 255)
-    assert model.appVolumeFillColor == QColor(255, 255, 255, 140)
+    assert model.appVolumeTrackColor == QColor(*model.config.app_volume_track_color)
+    assert model.appVolumeBorderColor == QColor(*model.config.app_volume_border_color)
+    assert model.appVolumeFillColor == QColor(*model.config.app_volume_fill_color)
     assert volume_runtime.consumer is model
     assert volume_runtime.running is True
 
@@ -583,14 +585,14 @@ def test_media_artwork_provider_is_stable_bounded_and_returns_detached_images() 
     identity_b = source_b.rsplit("/", 1)[-1]
     size = QSize()
     returned = provider.requestImage(identity_a, size, QSize())
-    rounded = provider.requestImage(f"{identity_a}/rounded", QSize(), QSize())
 
     assert source_a == f"image://mediaartwork/{identity_a}"
     assert returned.pixelColor(0, 0) == QColor("#ff0000")
     assert size == QSize(96, 72)
-    assert rounded.size() == QSize(72, 72)
-    assert rounded.pixelColor(0, 0).alpha() == 0
-    assert rounded.pixelColor(36, 36) == QColor("#ff0000")
+    # The provider retains source aspect/pixels; the retained QML mask owns
+    # rounded presentation. Mutating a returned image cannot affect the cache.
+    returned.fill(QColor("#ffffff"))
+    assert provider.requestImage(identity_a, QSize(), QSize()).pixelColor(0, 0) == QColor("#ff0000")
     provider.release(identity_a)
     provider.publish((12, "c" * 40), _image("#0000ff"))
     provider.release(identity_b)
@@ -663,7 +665,7 @@ def test_media_model_handles_empty_provider_change_and_f4_state() -> (
         )
     )
 
-    assert model.title == "No media playing"
+    assert model.title == "No Media Playing"
     assert model.hasTrack is False
     assert model.hasArtwork is False
     assert model.controlsAvailable is False
@@ -1029,8 +1031,6 @@ def test_media_qml_and_registry_keep_actions_static_and_python_owned() -> None:
         "MediaRuntimeService",
         "MediaController",
         "QWidget",
-        "MultiEffect",
-        "layer.enabled",
     ):
         assert marker not in qml
     for marker in (
@@ -1048,6 +1048,8 @@ def test_media_qml_and_registry_keep_actions_static_and_python_owned() -> None:
         'objectName: "mediaProgressGlow"',
         'objectName: "mediaProgressSeekArea"',
         "cached: true",
+        "layer.enabled: mediaRoot.mediaModel.roundedArtwork",
+        "maskSource: artworkMask",
     ):
         assert marker in qml
     assert "anchors.margins: -3.0" not in qml

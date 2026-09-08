@@ -303,7 +303,7 @@ def test_shell_primitives_carry_no_per_frame_or_business_logic() -> None:
 
 def test_host_module_is_presentation_only() -> None:
     # Prove presentation-only by imports, not prose: the host may only depend on
-    # stdlib and PySide6, never on model/data/settings/QWidget subsystems. E1
+    # stdlib and Qt binding/lifetime utilities, never model/data/settings/QWidget. E1
     # closed that ownership boundary and E3 must not route it back through here.
     import ast
 
@@ -311,7 +311,7 @@ def test_host_module_is_presentation_only() -> None:
         encoding="utf-8"
     )
     allowed_from = {
-        "__future__", "collections.abc", "dataclasses", "rendering.quick.state"
+        "__future__", "collections.abc", "dataclasses", "rendering.quick.state", "shiboken6"
     }
     tree = ast.parse(source)
     for node in ast.walk(tree):
@@ -345,11 +345,18 @@ def test_scene_controller_owns_and_retires_ordinary_widget_host(qt_app) -> None:
         assert widget.is_retired is False
 
         controller.quiesce_for_retirement()
-        assert controller.readiness.qml_objects_retired is True
-        # The host is retired with the display generation and its item released.
-        assert widget.is_retired is True
-        with pytest.raises(RuntimeError):
-            _ = controller.ordinary_widget_host
+        assert controller.readiness.admission_open is False
+        if window.isSceneGraphInitialized():
+            assert controller.readiness.qml_objects_retired is False
+            with pytest.raises(RuntimeError, match="before scene invalidation"):
+                controller.finalize_retirement()
+            assert controller.ordinary_widget_host is host
+            assert widget.is_retired is False
+        else:
+            assert controller.readiness.qml_objects_retired is True
+            assert widget.is_retired is True
+            with pytest.raises(RuntimeError):
+                _ = controller.ordinary_widget_host
     finally:
         window.deleteLater()
         factory.deleteLater()
