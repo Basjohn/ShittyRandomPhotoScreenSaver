@@ -261,6 +261,34 @@ Ordinary placement is owned by the display presentation/orchestration layer, not
 
 Do not persist the stacker's projected collision-avoidance position as new authored user geometry. The authored slot remains the base policy.
 
+This shared path is the **preferred implementation for every new ordinary card**.
+The `ordinary_uniform` descriptor plus `uniformScaleTransform: true` opts the card
+into both CUSTOM whole-card sizing and non-CUSTOM auto-fit; do not add a second
+family-specific scaling implementation. Declare the adapter/binding's authored
+preferred outer size accurately and emit size changes only when that size changes.
+Provider text/artwork refreshes with unchanged dimensions must not request layout.
+
+The display presenter first stacks at full size. Only unresolved placement admits
+bounded shrink/re-stack trials, using the shared 40% whole-card limit and preserving
+10px outer-rectangle clearance. It grows cards back toward authored size when space
+allows. Clock and the fixed Media/Visualizer relationship remain explicit exceptions.
+A new card must not add itself to those exceptions for convenience. Global CUSTOM
+turns this machinery off; Edit captures visible geometry, while Save/Cancel use the
+existing shared absolute-scale/session contract without rewriting product Settings.
+
+Keep geometry computation event-owned: no resize timer, debounce, poller or per-frame
+layout callback. The presenter reuses its last identical solve and skips identical
+geometry writes; do not add per-family caches or schedulers. Changed crowded layouts
+still incur synchronous solve work, so measure those event tails as well as startup.
+
+Use `tests/test_widget_auto_shrink.py` for packing contracts and the real presenter /
+Edit test in `tests/test_qtquick_resize_normalization.py` as the integration pattern.
+Extend the retained capture harness with the new family's fixed snapshots; inspect
+normal, reduced, crowded and restored appearances plus actual hit/shadow/glow bounds.
+The harness's bounded settle/deadline timers are offline tooling only, not a runtime
+implementation template.
+
+
 ### Global CUSTOM hard boundary
 
 CUSTOM is a **global layout mode**, not a per-widget exception list. Authored stacking and Media↔Visualizer adjacency are completely dormant when any of these is true:

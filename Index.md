@@ -61,7 +61,8 @@ are the focused live-checklist decompositions it links:
 
 - `Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md` — remaining physical
   validation of geometry-only whole-card CUSTOM resize, plus the implemented
-  non-CUSTOM stack/shrink/re-stack contract. New-widget guidance lives in the authoring guide.
+  non-CUSTOM stack/shrink/re-stack contract with shared whole-card floor and event-cost checks.
+  New widgets use the preferred shared-transform integration in the authoring guide.
 - `Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md` — current offline replay
   harness and fixed reactivity floors; diagnostic artifacts and calibration review.
 - `Docs/Settings_Dark_QSS_Retirement.md` — retire `themes/dark.qss` so

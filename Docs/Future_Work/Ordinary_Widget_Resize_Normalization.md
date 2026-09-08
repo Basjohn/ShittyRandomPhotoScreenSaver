@@ -55,17 +55,19 @@ retained for long-term use. Evidence under `logs/widget_resize_normalization/`:
   DPR 1.5 automated captures do not replace this physical gate.
 
 No timers, polling, additional geometry owners or Settings defaults were introduced.
-The shrink feature below is explicitly activated by the user and is being implemented.
+The shrink feature below is implemented and remains under live operator validation.
 
 ## Non-CUSTOM auto-shrink â€” implemented, physical validation open
 
 `build_display_auto_scale_plan` wraps the existing display packer. Full-size stacking
-runs first and is returned unchanged whenever it fits. Otherwise the unresolved
-eligible cards get descending 1% size trials down to 80%, each through the same
-placement solver. If those cards alone cannot fit, all eligible cards participate.
-Once a fit exists, individual cards are restored toward 100%, accepting growth only
-with a newly proved collision-free placement. The deterministic search is bounded;
-it does not assume greedy packing success is monotonic or claim global optimality.
+runs first and is returned unchanged whenever it fits. Otherwise the solver samples
+5% reduction bands down to the shared 40% whole-card floor, then refines the first
+fitting band in 1% steps. At each tested scale, unresolved-only reductions precede
+joint eligible-card reductions. This avoids deeply shrinking one card before trying
+a modest reduction across several cards. Independent growth toward 100% follows,
+using bounded bands/refinement and accepting only a newly proved clear placement.
+Greedy packing is not monotonic: this is a bounded search, not an exhaustive/global
+optimality claim. A narrow feasible island between coarse samples can be missed.
 
 The presenter applies accepted positions and dimensions together. Geometry is
 recomputed from authored baselines on existing admission/size/topology/layout events;
@@ -73,11 +75,29 @@ no timer, Settings field, cadence owner or independent placement engine is added
 Clock remains ineligible, and fixed Media/Visualizer relationship obstacles retain
 their geometry. Whole-card families use their existing transform, shadow and glow.
 
-The automatic floor is 80%. When no complete fit above that floor is found, the
-original full-size plan and its explicit unresolved diagnostic are retained rather
-than shrinking unsuccessfully or clipping/hiding widgets. This limit needs operator
-review against real crowded layouts; it is not a promise that every possible widget
-set fits every screen.
+The previous independent 80% cutoff caused successful interim shrink to be discarded
+once larger provider content arrived. The preserved 15:41/15:44 operator logs
+(`logs/shrink_audit_20260908_1544`) show accepted 85–97% sizes followed by unresolved
+layouts. There were no final-footprint records, so those logs cannot prove which
+exact rectangles prevent the final fit. New solve diagnostics record display budget,
+authored participants, fixed obstacles and elapsed time at changed input events.
+No fit at the shared 40% floor still returns full-size geometry and an explicit
+warning; no invisible/overlapping partial shrink is presented as success.
+
+Identical solver inputs reuse only the last immutable input/result pair, scoped to
+the presenter generation. No hashing, polling, timer or background solver exists.
+Actual retained geometry is compared before replay, so cached plans still repair a
+legitimate external geometry reset. Canonical-slot success avoids edge-candidate
+construction; edge search filters occupied cells before sorting. A 300-case seeded
+comparison preserved exact full-size placements against the previous implementation.
+
+Performance audit: seven-card synthetic fixtures at 1707x960, 1300x850 and 1000x700
+measured final median/max solve costs of 11.2/12.7, 22.5/24.1 and 31.7/33.3 ms over
+20 iterations. These are event costs on the GUI thread, **not proof of latency
+neutrality**. The original 80%-floor representative solve took about 56 ms.
+Timing evidence: `logs/shrink_audit_20260908_1544/planner_final.json`; live provider
+geometry changes and mixed-display pacing still need fresh logs. Fixture-only
+capture settle/deadline timers are never imported into production.
 
 Global CUSTOM disables the planner. First Edit captures the actual retained outer
 rectangle (not the binding's authored-size cache), preserving both position and
@@ -94,3 +114,14 @@ crowding and after restoration. `logs/widget_auto_shrink/packing_v1` has zero Qt
 warnings: Abandonment stays 100%, Achievement fits at 83%, Weather at 88%; all return
 to 100% when the budget grows. Resulting card proportions and clearance were visually
 inspected. Mixed-DPR/live operator packing remains in the checklist above and Current_Plan.
+
+Current visual evidence: `logs/widget_auto_shrink/packing_floor40` includes a 900x550
+case that requires 69% Achievement/Weather and 83% Abandonment, with clear gaps and
+unchanged card proportions. Full-size restoration is captured in the same retained
+scene; all six cases emit zero Qt warnings.
+
+Self-audit gate: 97 focused tests pass, including below-80% real-Quick/Edit capture,
+identical-event solve/write suppression, larger joint-fit preference and full-size
+canonical-slot laziness. At 65%, Edit correctly trims a one-pixel rounded dead envelope
+to the pre-existing visible card width; the regression checks visible pixels rather
+than treating that dead margin as content. No owner/cadence change was needed.
