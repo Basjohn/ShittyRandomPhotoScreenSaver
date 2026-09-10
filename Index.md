@@ -150,6 +150,10 @@ authority.
 
 - `Docs/Historical_Bugs/Voxel_Sphere_Pseudo_Material_Contamination_2026-09-09.md`
   — Voxel Sphere fill/finish authority cleanup; forbids hidden pseudo-material recolouring before lighting.
+- `Docs/Historical_Bugs/Voxel_Sphere_Global_Intake_Decay_Was_Not_Velocity_2026-09-10.md`
+  — Voxel Sphere detached-flow lifetime contract; real bounded cohorts replace the old global decay masquerading as particle velocity.
+- `Docs/Historical_Bugs/Voxel_Sphere_Clamped_Event_Strength_Was_Not_Particle_Velocity_2026-09-10.md`
+  — Voxel Sphere travel-intensity contract; shared clamped event confidence admits cohorts but never directly owns particle speed.
 
 Closed rationale, failed-repair lessons and old owner maps live under
 `Docs/Historical_Bugs/` (index: `Docs/Historical_Bugs.md`), `Docs/Fossils/` and

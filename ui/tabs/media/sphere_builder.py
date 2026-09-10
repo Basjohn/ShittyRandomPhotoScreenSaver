@@ -164,9 +164,9 @@ def build_sphere_ui(tab, parent_layout) -> None:
         surface,
         "sphere_fade_incoming_blocks",
         "sphere_fade_incoming_blocks",
-        "Incoming Fade:",
-        "Fade distant returning blocks",
-        "Fades strongly detached outward blocks while they are far from the shell. The detached travel distance is unchanged.",
+        "Particle Flow:",
+        "Enable detached voxel intake/outtake",
+        "Master detached-voxel presentation. In Intake mode selected shell voxels begin outside and return to their canonical slots; Particle Outtake reverses newly launched cohorts so source voxels leave/fade while replacements fade into the canonical shell.",
     )
     toggle(
         surface,
@@ -240,6 +240,30 @@ def build_sphere_ui(tab, parent_layout) -> None:
         "Fragment Interpolation:",
         "Smooth fragment travel (visual only)",
         "Keeps audio/onset admission instantaneous but interpolates detached cube displacement over a few rendered frames. It does not smooth the audio signal, reduce packet strength, blur frames, or add motion blur.",
+    )
+    toggle(
+        motion,
+        "sphere_incoming_density_response_enabled",
+        "sphere_incoming_density_response_enabled",
+        "Intake Density:",
+        "Scale incoming voxel count with live energy",
+        "Keeps all four stable ingress quadrants participating, but quiet passages launch a smaller subset and strong passages approach the full 46/46/46/70 population. Playing-state silence still admits no new incoming voxels even when this option is off.",
+    )
+    toggle(
+        motion,
+        "sphere_incoming_transient_velocity_enabled",
+        "sphere_incoming_transient_velocity_enabled",
+        "Particle Velocity:",
+        "Use transient-responsive detached-voxel travel speed",
+        "Uses real cohort travel progress: ordinary cohorts move gently over about 1.45 s while the strongest qualified transient can shorten travel toward about 0.82 s. Speed is captured at launch; in-flight cohorts do not globally chase later audio.",
+    )
+    toggle(
+        motion,
+        "sphere_particle_outtake_enabled",
+        "sphere_particle_outtake_enabled",
+        "Particle Outtake:",
+        "Reverse detached voxel flow outward",
+        "New qualified cohorts shed stable shell voxels outward and fade them gently while replacement voxels fade into the canonical shell positions. Direction is captured at launch, so toggling this never reverses a cohort already in flight.",
     )
     slider(motion, "sphere_deformation", "sphere_deformation", "Deformation:", 450, "", 100.0)
     tab.sphere_deformation.setToolTip(

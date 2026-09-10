@@ -115,9 +115,11 @@ def capture_sphere(widget: Any, engine: Any, context: Any):
         tracer_phase=resolved.tracer_phase,
         section_drives=resolved.section_drives,
         incoming_drive=resolved.incoming_drive,
+        incoming_density=resolved.incoming_density,
         incoming_section=resolved.incoming_section,
         incoming_previous_section=resolved.incoming_previous_section,
         incoming_blend=resolved.incoming_blend,
+        particle_cohorts=resolved.particle_cohorts,
         parameters=resolved.parameters,
     ), extra
 

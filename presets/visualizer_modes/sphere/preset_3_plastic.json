@@ -41,7 +41,10 @@
                     48,
                     255
                 ],
-                "sphere_fragment_interpolation_enabled": false
+                "sphere_fragment_interpolation_enabled": false,
+                "sphere_incoming_density_response_enabled": false,
+                "sphere_incoming_transient_velocity_enabled": false,
+                "sphere_particle_outtake_enabled": false
             }
         }
     },
