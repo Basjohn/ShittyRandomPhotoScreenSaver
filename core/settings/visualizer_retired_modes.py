@@ -13,6 +13,19 @@ _RETIRED_VISUALIZER_KEYS = frozenset({
     "sphere_shadow_strength",
     "sphere_rainbow_enabled",
     "sphere_rainbow_speed",
+    # Rejected Voxel-Sphere history effect; superseded by no effect, not shared Rainbow.
+    "sphere_rainbow_ghosting",
+    "sphere_idle_motion",
+    "sphere_surface_detail",
+    "sphere_bass_response",
+    "sphere_mid_response",
+    "sphere_high_response",
+    "sphere_energy_curve",
+    # Superseded accepted-Voxel-Sphere response controls. Normal migration first
+    # maps these to Fragment Strength + Particle Distance; this retired-key seam
+    # then guarantees no old authority survives in canonical state.
+    "sphere_deformation",
+    "sphere_bump_reactivity",
 })
 _RETIRED_VISUALIZER_PREFIXES = ("blob_",)
 

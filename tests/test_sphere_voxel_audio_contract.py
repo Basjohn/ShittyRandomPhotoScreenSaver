@@ -62,7 +62,6 @@ def _params(
     render_state,
     *,
     vocal_response: float = 1.0,
-    reactivity: float = 1.0,
     base_rotation_speed: float = 0.026,
     rotation_speed: float = 0.32,
     size_response: float = 1.15,
@@ -73,7 +72,6 @@ def _params(
 ):
     values = {
         "sphere_vocal_response": vocal_response,
-        "sphere_bump_reactivity": reactivity,
         "sphere_base_rotation_speed": base_rotation_speed,
         "sphere_rotation_speed": rotation_speed,
         "sphere_size_response": size_response,
@@ -139,7 +137,7 @@ def test_voxel_renderer_is_sectional_audio_geometry_not_time_motion() -> None:
     assert "uSectionDrives[8]" in source.split("_FRAGMENT_SOURCE", 1)[0]
     assert "sectionField(direction)" in vertex
     assert "smoothstep(0.62, 0.95" in source
-    assert "0.68 * uDeformation" in vertex
+    assert "0.68 * uFragmentStrength" in vertex
     assert "uBars[64]" not in source.split("_FRAGMENT_SOURCE", 1)[0]
     assert "direction * radial" in vertex
     assert "aRadialPolarity" in vertex
@@ -154,12 +152,12 @@ def test_voxel_required_uniform_contract_matches_shader_declarations() -> None:
         ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py"
     ).read_text(encoding="utf-8")
     tree = ast.parse(source)
-    required = shadow_required = ghost_required = None
+    required = shadow_required = None
     for node in ast.walk(tree):
         if not isinstance(node, ast.Assign):
             continue
         targets = [target.id for target in node.targets if isinstance(target, ast.Name)]
-        for target_name in ("names", "shadow_names", "ghost_names"):
+        for target_name in ("names", "shadow_names"):
             if target_name in targets and isinstance(node.value, ast.Tuple):
                 values = {
                     element.value
@@ -168,23 +166,21 @@ def test_voxel_required_uniform_contract_matches_shader_declarations() -> None:
                 }
                 if target_name == "names":
                     required = values
-                elif target_name == "shadow_names":
-                    shadow_required = values
                 else:
-                    ghost_required = values
-    assert required is not None and shadow_required is not None and ghost_required is not None
+                    shadow_required = values
+    assert required is not None and shadow_required is not None
 
     vertex_shader = source.split('_VERTEX_SOURCE = f"""', 1)[1].split('_FRAGMENT_SOURCE', 1)[0]
     fragment_shader = source.split('_FRAGMENT_SOURCE = """', 1)[1].split('_SHADOW_VERTEX_SOURCE', 1)[0]
     shadow_vertex = source.split('_SHADOW_VERTEX_SOURCE = """', 1)[1].split('_SHADOW_FRAGMENT_SOURCE', 1)[0]
-    shadow_fragment = source.split('_SHADOW_FRAGMENT_SOURCE = """', 1)[1].split('_GHOST_FRAGMENT_SOURCE', 1)[0]
-    ghost_fragment = source.split('_GHOST_FRAGMENT_SOURCE = """', 1)[1].split('class QuickSphereVoxelRenderer', 1)[0]
+    shadow_fragment = source.split('_SHADOW_FRAGMENT_SOURCE = """', 1)[1].split('class QuickSphereVoxelRenderer', 1)[0]
 
     uniform_pattern = r"^\s*uniform\s+\w+\s+(u\w+)(?:\s*\[[^\]]+\])?\s*;"
     uniforms = lambda text: set(re.findall(uniform_pattern, text, flags=re.MULTILINE))
     assert required == uniforms(vertex_shader) | uniforms(fragment_shader)
     assert shadow_required == uniforms(shadow_vertex) | uniforms(shadow_fragment)
-    assert ghost_required == uniforms(vertex_shader) | uniforms(ghost_fragment)
+    assert "_GHOST_FRAGMENT_SOURCE" not in source
+    assert "ghost_names" not in source
 
 
 def test_audio_does_not_modulate_voxel_palette_during_reactivity_tuning() -> None:
@@ -196,8 +192,12 @@ def test_audio_does_not_modulate_voxel_palette_during_reactivity_tuning() -> Non
     assert "materialBase" not in fragment
     assert "uMaterial" not in fragment
     assert "uFillColor" in fragment
-    assert "vec3 base = max(uFillColor.rgb, vec3(0.001))" in fragment
     assert "uEdgeColor" in fragment
+    assert "uRainbowSurfaces" in fragment and "uRainbowEdges" in fragment
+    assert "uRainbowPhase" in fragment
+    assert "vDrive" not in fragment
+    assert "uSectionDrives" not in fragment
+    assert "rainbowHue = fract(uRainbowPhase + 0.22 * vRainbowCoordinate)" in fragment
     assert 'gl.glUniform1f(u["uBlockRelief"], 0.35)' in source
     assert "uMaterialFx" not in fragment
 
@@ -524,28 +524,31 @@ def test_sustained_growth_distinguishes_soft_and_heavy_without_pulsing() -> None
     assert max(heavy_frame.section_drives) < 0.10
 
 
-def test_interfering_experimental_controls_are_disabled_but_sustained_growth_is_live() -> None:
-    source = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
-    disabled_block = source.split("for control, explanation in (", 1)[1].split("):\n        control.setEnabled(False)", 1)[0]
-    for name in (
+def test_dead_experimental_controls_are_retired_and_sustained_growth_is_live() -> None:
+    builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
+    binding = (ROOT / "ui/tabs/media/sphere_settings_binding.py").read_text(encoding="utf-8")
+    config = (ROOT / "widgets/spotify_visualizer/config_applier.py").read_text(encoding="utf-8")
+    defaults = (ROOT / "core/settings/default_settings.py").read_text(encoding="utf-8")
+    model = (ROOT / "core/settings/models/_spotify_visualizer.py").read_text(encoding="utf-8")
+    dead = (
         "sphere_surface_detail",
         "sphere_bass_response",
         "sphere_mid_response",
         "sphere_high_response",
         "sphere_energy_curve",
         "sphere_idle_motion",
-    ):
-        assert f"tab.{name}" in disabled_block
-    for name in (
-        "sphere_size_response",
         "sphere_deformation",
-        "sphere_base_rotation_speed",
-        "sphere_rotation_speed",
         "sphere_bump_reactivity",
-        "sphere_vocal_response",
-    ):
-        assert f"tab.{name}" not in disabled_block
-    assert "sustained passage-weight growth" in source
+    )
+    for name in dead:
+        assert name not in builder
+        assert name not in binding
+        assert name not in config
+        assert name not in defaults
+        assert name not in model
+    assert "Inactive Compatibility Controls" not in builder
+    assert "sustained passage-weight growth" in builder
+    assert "Continuous authored rotation floor/idle velocity" in builder
 
 
 def test_quiet_background_contour_cannot_author_packets_without_presence() -> None:
@@ -756,23 +759,39 @@ def test_voxel_light_is_screen_anchored_and_cube_definition_is_independent() -> 
     assert "toonLighting < 0.46 ? 0.40" in fragment
     assert "toonLighting < 0.70 ? 0.68 : 1.04" in fragment
     assert "toonHighlight = step" in fragment
+    # Sphere-local Taste The Rainbow is presentation-only and deliberately does
+    # not reuse the shared per-mode Rainbow settings family. One partial-spectrum
+    # field drives surfaces and edges independently inside the existing draw.
+    assert "vRainbowCoordinate" in fragment
+    assert "0.22 * vRainbowCoordinate" in fragment
+    assert "uRainbowSurfaces" in fragment and "uRainbowEdges" in fragment
+    assert "uPerspectiveStrength" in source
+    assert "turnedPosition.z * uPerspectiveStrength" in source
+    assert "sphere_taste_the_rainbow_enabled" in source
+    assert "sphere_rainbow_enabled" not in source
 
 
-def test_reactive_voxel_curated_preset_exists() -> None:
-    preset = ROOT / "presets/visualizer_modes/sphere/preset_6_reactive_voxel.json"
+def test_voxel_bloom_curated_preset_exists() -> None:
+    preset = ROOT / "presets/visualizer_modes/sphere/preset_2_voxel_bloom.json"
     assert preset.exists()
     text = preset.read_text(encoding="utf-8")
+    assert '"name": "Voxel Bloom"' in text
     assert '"sphere_finish": "Neutral"' in text
     assert '"sphere_fill_color"' in text
     assert '"sphere_material"' not in text
-    assert '"preset_index": 5' in text
+    assert '"preset_index": 1' in text
     assert '"sphere_light_tracer_enabled": true' in text
     assert '"sphere_fragment_interpolation_enabled": true' in text
     assert '"sphere_incoming_density_response_enabled": true' in text
     assert '"sphere_incoming_transient_velocity_enabled": true' in text
-    assert '"sphere_rainbow_ghosting": false' in text
+    assert '"sphere_rainbow_ghosting"' not in text
     assert '"sphere_size_response": 2.25' in text
-    assert '"sphere_deformation": 2.45' in text
+    assert '"sphere_fragment_strength": 3.92' in text
+    assert '"sphere_particle_distance": 2.45' in text
+    assert '"sphere_particle_amount": 1.0' in text
+    assert '"sphere_perspective_strength": 1.0' in text
+    assert '"sphere_deformation"' not in text
+    assert '"sphere_bump_reactivity"' not in text
 
 
 def test_sphere_optional_presentation_features_are_mode_owned_and_default_off() -> None:
@@ -784,9 +803,14 @@ def test_sphere_optional_presentation_features_are_mode_owned_and_default_off() 
     assert config["sphere_cel_shading"] is False
     assert config["sphere_light_tracer_enabled"] is False
     assert config["sphere_fragment_interpolation_enabled"] is False
+    assert config["sphere_taste_the_rainbow_enabled"] is False
+    assert config["sphere_taste_the_rainbow_surfaces"] is True
+    assert config["sphere_taste_the_rainbow_edges"] is True
+    assert config["sphere_particle_amount"] == 1.0
+    assert config["sphere_perspective_strength"] == 1.0
     assert config["sphere_incoming_density_response_enabled"] is False
     assert config["sphere_incoming_transient_velocity_enabled"] is False
-    assert config["sphere_rainbow_ghosting"] is False
+    assert "sphere_rainbow_ghosting" not in config
     assert config["sphere_fade_incoming_blocks"] is False
     assert config["sphere_finish"] == "Neutral"
     assert config["sphere_fill_color"] == [95, 160, 190, 255]
@@ -867,30 +891,31 @@ def test_scene_shadow_cel_and_arrival_fade_are_sphere_renderer_only() -> None:
     assert "ground ellipse" not in source
 
 
-def test_toon_finish_colors_and_rainbow_ghosting_are_explicit_sphere_owned_features() -> None:
+def test_toon_finish_colors_remain_sphere_owned_and_rejected_rainbow_ghosting_is_retired() -> None:
     source = (ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py").read_text(encoding="utf-8")
     builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
     binding = (ROOT / "ui/tabs/media/sphere_settings_binding.py").read_text(encoding="utf-8")
     config_applier = (ROOT / "widgets/spotify_visualizer/config_applier.py").read_text(encoding="utf-8")
 
-    for key in ("sphere_fill_color", "sphere_edge_color", "sphere_rainbow_ghosting", "sphere_shadow_enabled"):
+    for key in ("sphere_fill_color", "sphere_edge_color", "sphere_shadow_enabled"):
         assert f'"{key}"' in config_applier
     assert "ColorSwatchButton" in builder
     assert "Finish Preset:" in builder and "Fill Color:" in builder and "Edge Color:" in builder
-    assert "Rainbow Ghosting:" in builder and "Drop Shadow:" in builder
-    assert "Toon Shading:" in builder
+    assert "Drop Shadow:" in builder and "Toon Shading:" in builder
     assert "sphere_finish" in binding and "sphere_fill_color" in binding and "sphere_edge_color" in binding
-    assert "_GHOST_FRAGMENT_SOURCE" in source
-    assert "_GHOST_MAX_SAMPLES = 6" in source
-    assert "_GHOST_MAX_AGE_S = 0.62" in source
-    assert "self._ghost_history.clear()" in source
-    assert "blur_offsets" in source
-    assert "uGhostHue" in source and "hsv2rgb" in source
-    assert "gl.GL_SRC_ALPHA,\n            gl.GL_ONE_MINUS_SRC_ALPHA," in source
-    # History must draw after the hero; pre-hero trails were hidden by the shell.
-    hero_draw = source.index("gl.glDrawArraysInstanced(\n                gl.GL_TRIANGLES")
-    ghost_call = source.index("self._draw_rainbow_ghosts(", hero_draw)
-    assert ghost_call > hero_draw
+    for rejected in (
+        "Rainbow Ghosting:",
+        "_GHOST_FRAGMENT_SOURCE",
+        "_ghost_program",
+        "_ghost_history",
+        "_draw_rainbow_ghosts",
+        "uGhostHue",
+    ):
+        assert rejected not in source
+        if rejected in {"sphere_rainbow_ghosting", "Rainbow Ghosting:"}:
+            assert rejected not in builder
+            assert rejected not in binding
+            assert rejected not in config_applier
     assert "uFillColor" in source and "uEdgeColor" in source
     assert "uMaterial" not in source and "materialBase" not in source
     assert "authoredAlpha = mix(uFillColor.a, uEdgeColor.a, alphaEdge)" in source
@@ -898,6 +923,22 @@ def test_toon_finish_colors_and_rainbow_ghosting_are_explicit_sphere_owned_featu
     assert "specLobe" in source
 
 
+def test_sphere_builder_uses_shared_circular_toggle_style_and_real_advanced_buckets() -> None:
+    builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
+    assert 'control.setProperty("circleIndicator", True)' in builder
+    assert 'scaffold.advanced_layout' in builder
+    for title in (
+        'title="Appearance"',
+        'title="Particle Flow"',
+        'title="Reactivity"',
+        'title="Rotation"',
+        'title="Effects"',
+    ):
+        assert title in builder
+    assert 'title="Inactive Compatibility Controls"' not in builder
+    assert "apply_flow_dependency" in builder
+    assert "RecommendedMarkSlider" in builder
+    assert "_RECOMMENDED_SLIDER_VALUES" in builder
 
 def test_light_tracer_is_optional_event_owned_and_uses_connected_ribbon() -> None:
     source = (ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py").read_text(encoding="utf-8")
@@ -1276,7 +1317,7 @@ def test_particle_outtake_direction_is_captured_at_launch_and_replacement_crossf
     assert "sphere_particle_outtake_enabled" not in shader
 
 
-def test_particle_outtake_is_optional_and_only_reactive_voxel_enables_it() -> None:
+def test_particle_outtake_is_optional_and_only_voxel_bloom_enables_it() -> None:
     import json
 
     defaults = (ROOT / "core/settings/default_settings.py").read_text(encoding="utf-8")
@@ -1286,17 +1327,15 @@ def test_particle_outtake_is_optional_and_only_reactive_voxel_enables_it() -> No
     assert "Reverse detached voxel flow outward" in builder
 
     preset_dir = ROOT / "presets/visualizer_modes/sphere"
-    for index, filename in enumerate((
-        "preset_1_neutral.json",
-        "preset_2_matte.json",
-        "preset_3_plastic.json",
-        "preset_4_polished.json",
-        "preset_5_transparent_react.json",
-        "preset_6_reactive_voxel.json",
-    ), start=1):
+    presets = (
+        ("preset_1_glass_current.json", False),
+        ("preset_2_voxel_bloom.json", True),
+    )
+    assert sorted(path.name for path in preset_dir.glob("preset_*.json")) == [name for name, _ in presets]
+    for filename, expected_outtake in presets:
         data = json.loads((preset_dir / filename).read_text(encoding="utf-8"))
         enabled = data["snapshot"]["widgets"]["spotify_visualizer"]["sphere_particle_outtake_enabled"]
-        assert enabled is (index == 6)
+        assert enabled is expected_outtake
 
 
 def test_real_particle_travel_replaces_global_decay_velocity_semantics() -> None:
@@ -1316,14 +1355,12 @@ def test_real_particle_travel_replaces_global_decay_velocity_semantics() -> None
     assert "uCohortVelocity" in shader
 
 
-def test_preset_5_is_operator_transparent_react_ab_authority() -> None:
+def test_glass_current_preserves_operator_transparent_react_golden() -> None:
     import json
 
-    data = json.loads((ROOT / "presets/visualizer_modes/sphere/preset_5_transparent_react.json").read_text(encoding="utf-8"))
+    data = json.loads((ROOT / "presets/visualizer_modes/sphere/preset_1_glass_current.json").read_text(encoding="utf-8"))
     config = data["snapshot"]["widgets"]["spotify_visualizer"]
-    assert data["name"] == "Preset 5 (Transparent React)"
-    assert (ROOT / "presets/visualizer_modes/sphere/preset_5_transparent_react.json").exists()
-    assert not (ROOT / "presets/visualizer_modes/sphere/preset_5_metallic.json").exists()
+    assert data["name"] == "Glass Current"
     assert config["sphere_fill_color"] == [4, 7, 8, 100]
     assert config["sphere_edge_color"] == [233, 248, 255, 255]
     assert config["sphere_finish"] == "Custom"
@@ -1338,18 +1375,17 @@ def test_preset_5_is_operator_transparent_react_ab_authority() -> None:
 
 def test_reactive_finish_presets_keep_overflow_and_incoming_fade_where_authored() -> None:
     import json
-    for name in ("preset_3_plastic.json", "preset_5_transparent_react.json", "preset_6_reactive_voxel.json"):
+    for name in ("preset_1_glass_current.json", "preset_2_voxel_bloom.json"):
         data = json.loads((ROOT / "presets/visualizer_modes/sphere" / name).read_text(encoding="utf-8"))
         config = data["snapshot"]["widgets"]["spotify_visualizer"]
         assert config["sphere_allow_overflow"] is True
         assert config["sphere_fade_incoming_blocks"] is True
 
 
-def test_new_sphere_finish_and_ghost_controls_do_not_enter_accepted_mode_implementations() -> None:
+def test_sphere_owned_controls_do_not_enter_accepted_mode_implementations() -> None:
     keys = (
         "sphere_fill_color",
         "sphere_edge_color",
-        "sphere_rainbow_ghosting",
         "sphere_shadow_enabled",
         "sphere_fragment_interpolation_enabled",
         "sphere_incoming_density_response_enabled",

@@ -17,6 +17,7 @@ from core.settings.visualizer_retired_modes import strip_retired_visualizer_sett
 from core.settings.visualizer_settings_contract import (
     migrate_legacy_global_visual_keys,
     migrate_legacy_sphere_finish_keys,
+    migrate_legacy_sphere_control_keys,
     strip_legacy_global_technical_keys,
 )
 
@@ -182,6 +183,7 @@ def normalize_visualizer_section_mapping(
         return {}
 
     migrated = migrate_legacy_sphere_finish_keys(data, prefix=prefix)
+    migrated = migrate_legacy_sphere_control_keys(migrated, prefix=prefix)
     migrated = strip_retired_visualizer_settings(migrated, prefix=prefix)
     # Per-mode card-height growth was pre-Quick geometry state. The current
     # retained geometry contract is viewport/aspect driven; strip shipped

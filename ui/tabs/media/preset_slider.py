@@ -43,6 +43,7 @@ from core.settings.visualizer_presets import (
     get_preset_count,
     get_preset_names,
     get_preset_file_path,
+    get_next_visualizer_preset_ordinal,
     get_visualizer_presets_dir,
     reload_presets,
 )
@@ -99,7 +100,7 @@ class VisualizerPresetSlider(QWidget):
 
     Signals:
         preset_changed(int): emitted when the user moves the slider.
-            Index 0..2 = named presets, 3 = Custom.
+            Indices 0..N-1 are authored presets; N is trailing Custom.
         advanced_toggled(bool): emitted when Advanced (Custom) is
             selected (True) or deselected (False).
     """
@@ -370,6 +371,12 @@ class VisualizerPresetSlider(QWidget):
         if path.suffix.lower() != ".json":
             path = path.with_suffix(".json")
 
+        # A user's authored filenames may be sparse. Numbered filenames own
+        # their explicit slot; unnumbered filenames get the next slot after the
+        # highest authored number so Save-As never collides with a surviving
+        # high-numbered preset after deletions.
+        if self._FILENAME_RE.match(path.stem) is None:
+            payload["preset_index"] = get_next_visualizer_preset_ordinal(self._mode) - 1
         self._apply_filename_metadata(path, payload)
         payload.setdefault("description", "Saved from current Settings state.")
 
@@ -398,7 +405,8 @@ class VisualizerPresetSlider(QWidget):
         self._reload_and_reapply_current_preset(self._slider.value(), force_custom=True)
 
     def _default_save_path(self, presets_dir: Path) -> Path:
-        base_stem = f"preset_{self._custom_index}_custom"
+        ordinal = get_next_visualizer_preset_ordinal(self._mode)
+        base_stem = f"preset_{ordinal}_custom"
         candidate = presets_dir / f"{base_stem}.json"
         counter = 1
         while candidate.exists():

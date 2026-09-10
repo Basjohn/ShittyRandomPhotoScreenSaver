@@ -25,11 +25,9 @@
     "spectrum/preset_2_Tetris.json",
     "spectrum/preset_3_Mono.json",
     "spectrum/preset_4_pillars.json",
-    "sphere/preset_1_neutral.json",
-    "sphere/preset_2_matte.json",
-    "sphere/preset_3_plastic.json",
-    "sphere/preset_4_polished.json",
-    "sphere/preset_5_transparent_react.json",
-    "sphere/preset_6_reactive_voxel.json"
+    "sphere/preset_1_glass_current.json",
+    "sphere/preset_2_voxel_bloom.json",
+    "sphere/preset_3_rainbow_intake.json",
+    "sphere/preset_4_rainbow_exhaust.json"
   ]
 }

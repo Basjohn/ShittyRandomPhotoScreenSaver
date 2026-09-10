@@ -66,7 +66,7 @@ unproven abstractions in the decomposition for a later second-consumer decision.
 ### Experimental isolation + Settings single-authority gate
 
 For a genuinely new experimental Visualizer mode, transition identity, widget family, or other independently removable
-feature, **plugin-shaped removability is mandatory until explicit product acceptance**. This is an ownership rule, not a
+feature, **plugin-shaped removability is mandatory until the operator explicitly authorizes architectural migration/promotion**. Product or visual acceptance alone does not end isolation. This is an ownership rule, not a
 second configuration system. Experiments may plug into generic hosts/registries, but they may not become permanent by
 scattering feature-specific branches across shared owners.
 
@@ -97,7 +97,7 @@ Mandatory contract:
 - removal must be bounded and mechanical: delete the owned implementation + descriptor/registration, delete its owned
   canonical Settings/default/preset block, add one explicit retired-key/mode migration if persisted state can survive in
   user profiles, and delete/update focused tests/docs. Do not retain compatibility sludge indefinitely;
-- before acceptance, searching the shared tree for the experiment ID/name should find only justified generic registry,
+- while experimental isolation remains active, searching the shared tree for the experiment ID/name should find only justified generic registry,
   canonical Settings/default ownership, retirement/migration, tests/docs and integration seams. Every other hit is suspect;
 - minimum lifecycle proof is both (a) disabled/default startup imports/constructs no meaningful experiment runtime/resources
   and (b) enable -> activate -> switch away/retire, including before a first source frame where applicable, releases all
@@ -184,16 +184,16 @@ Shared 3D infrastructure should therefore be dependency-light at import, while c
 costly assets belong to the admitted renderer and are released on retirement/context loss. There must never be a hidden
 "3D subsystem" ticking or holding heavy resources in the background when all of its real consumers are disabled/dormant.
 
-### Proven 3D seams, not a Sphere foundation — Block Spins + experimental Voxel Sphere
+### Proven 3D seams, not a Sphere foundation — Block Spins + accepted-experimental Voxel Sphere
 
-**Quick Block Spins** and the now-landed experimental **Voxel Sphere** are independent 3D consumers with different product owners:
+**Quick Block Spins** and the accepted-experimental **Voxel Sphere** are independent 3D consumers with different product owners:
 a finite transition run versus a persistent Visualizer logical/runtime path. They prove that context-local programs/buffers,
 real Z/depth, projection, GL-state hygiene and explicit retirement are recurring needs. They do **not** make Sphere itself a
 canonical 3D foundation or template. A future 3D experiment should compare both consumers, reuse already-neutral helpers,
 and extract only the smallest identical low-level seam that the new consumer actually needs. Do not subclass/copy Sphere
 wholesale and then inherit its feature-specific Settings/state/material/deformation assumptions.
 
-The instanced **voxel/block** representation is now the active Sphere experiment: hard block stepping is authored appearance rather than a failed smooth silhouette, while still exercising projection, depth, one static cube mesh + one instance buffer, context ownership and retirement. This checkpoint is not a reusable 3D-engine declaration. Keep the implementation local until another independent consumer (for example Exploding Tiles) proves an identical low-level seam worth extracting.
+The instanced **voxel/block** representation is the accepted experimental Sphere representation. Hard block stepping is authored appearance rather than a failed smooth silhouette, while still exercising projection, depth, one static cube mesh + one instance buffer, context ownership and retirement. The reusable architectural lesson is the experimental **host/isolation seam** (lazy descriptor wiring, dormancy/retirement, private namespace and shared-family opt-outs), not Sphere internals. Keep Sphere implementation local until the operator explicitly authorizes migration; a future independent consumer may separately prove small low-level 3D helpers worth extracting.
 
 Prefer shared, dependency-light primitives for the parts the two consumers have actually proven common:
 
@@ -465,78 +465,19 @@ logical steps or turn render refresh into simulation cadence.
 
 **Unique Mode means a real mode boundary.** Each experiment labelled `Unique Mode` gets one canonical descriptor plus its own lazy mode-local logical/runtime/renderer/Settings implementation. It may reuse shared analysis bands, direction vocabulary, shader utilities and proven math, but it must not parasitically run another mode's active runtime, install a second visualizer clock, or create an ad-hoc six-way switch outside the descriptor seam. A Bubble-derived or Spectrum-derived experiment may borrow contracts/equations while remaining independently dormant when disabled.
 
-## 7.1 Voxel Sphere experiment - Unique Mode
+## 7.1 Voxel Sphere — accepted experimental, isolated
 
-**Status:** direct replacement checkpoint landed; operator eyes-on acceptance decides keep vs retire.
+Sphere has passed the visual/product experimentation bar but remains **experimental architecture**. It is deliberately isolated and may not be promoted into shared/permanent visualizer owners until the operator explicitly activates migration. The focused authority is `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`; do not duplicate its control matrix, preset goldens or reaction formulas here.
 
-The rejected smooth icosphere implementation is gone. Do not restore or preserve it for comparison, and do not resume its derivative-AA, clipped cast-shadow, tangent-normal reconstruction, liquid/fire side systems, or smooth-material topology. Those mechanisms failed the visual/product bar and are useful only as a historical lesson about what not to generalize.
+Future value retained here is narrow:
 
-The current experiment intentionally keeps the existing canonical `sphere` mode/persistence boundary while replacing only the owned representation:
+- reuse the descriptor-driven experimental host boundary for future experimental modes: lazy Settings/runtime/renderer/capture resolution, private persisted prefix, explicit shared-family opt-outs, dormancy and normal retirement;
+- keep Sphere audio, voxel parameters, shader semantics and hard-coded capability memberships private; reusable isolation is **not** permission to make Sphere a base class;
+- before any permanent migration, capture deterministic pre/post goldens for both curated Sphere presets and the five accepted permanent modes, including the exact resolved hidden technical settings that reproduce current behaviour;
+- reject migration on any unapproved Sphere fidelity change or any permanent-mode reactivity, latency, fidelity, bleed/isolation, cadence, lifecycle, CPU/GPU or dormancy regression;
+- optional new presentation/control work requires explicit operator approval and remains Sphere-local while experimental. Sphere-local Taste The Rainbow exists independently; the generic/shared Rainbow family still does not own Sphere.
 
-```text
-one static cube mesh
-    +
-one static stepped shell instance buffer
-    +
-one instanced draw
-    +
-vertex-shader radial/block deformation from immutable authored state
-```
-
-The shell uses integer-lattice stepping so block discontinuities are authored appearance. Cubes rotate as one real 3D object, use the existing logical-frame authored time/energy/transient state, and may pulse/translate radially without any per-frame Python topology rebuild. Voxel colour is now literal Fill/Edge RGBA. The historical Chrome / Obsidian / Magma / Silver / Water pseudo-material branches and Palette Effects key are retired rather than carried forward as hidden renderer authority.
-
-### 7.1A Experimental isolation / Settings authority
-
-- `sphere` remains independently disabled by default and lazily resolves its Settings body, capture, frame runtime and renderer.
-- All persisted `sphere_*` values remain in the one canonical Settings/default authority. No plugin-private JSON/default store, second SettingsManager or fallback persistence path is allowed.
-- A mode with no technical-control UI may name a canonical technical profile in its descriptor. Sphere explicitly consumes the Spectrum technical profile; shared owners resolve that descriptor contract generically instead of assuming `technical_cache[mode]`.
-- Heavy GL resources exist only while Sphere is admitted and retire through the existing event-owned renderer/context lifecycle. No timer, worker or independent cadence is added.
-- Removal must remain mechanical: delete the owned mode implementation/builder/capture/runtime/preset/settings block and descriptor entry, then apply one explicit retired-mode/key migration.
-
-### 7.1B Reuse policy
-
-Do not build future 3D work *on Sphere*. Reuse already-neutral infrastructure and extract new shared code only after a second independent consumer proves the same seam. The current voxel implementation may later prove useful ideas for Exploding Tiles or another instanced effect (cube mesh, instance-buffer ownership, projection/depth state), but those remain Sphere-local until that second consumer exists.
-
-Transitions and visualizers may share low-level GPU primitives while keeping separate lifecycle owners: a finite two-image transition must never inherit the persistent Visualizer logical/audio runtime merely because both draw 3D geometry.
-
-### 7.1C Iteration / acceptance gate
-
-The voxel representation has passed the first operator bar: it is not worse than the rejected smooth Sphere and is worth
-iterating. Continue bounded voxel-only passes while each pass attacks an observed visual/reaction defect. Do not preserve or
-restore the rejected smooth representation, and do not invent a parallel third representation merely from sunk cost.
-
-Current reaction contract after the detached-packet pass established the first genuinely desirable visual floor. **The current local travel/fallout is now a minimum accepted reward: future audio-linkage work may change when/where packets fire, but must not quietly compress the detached-cube displacement back toward the shell.**
-
-1. treat the shell as a **sparse 3D Spectrum**, but never use shared Spectrum bar height as displacement authority: routine near-total `1.0` plateaus make both absolute height and recent-rise unusable for this mode;
-2. keep the audio authorities split by job: the existing support-aware Bubble energy feed is spatial/articulation context only; generic packet onset uses Sphere's demand-published pre-shape/pre-AGC analysis spectrum and sustained/intake activity uses the live pre-AGC energy seam. This is reuse of existing analysis work, not another worker/cadence/Settings authority;
-3. **detached block displacement is the visual reward.** Do not tune the mode as though it were preserving a smooth sphere surface. A strong local event must visibly separate cubes by a substantial fraction of the shell radius;
-4. use eight fixed 3D spatial sections with true angular fallout. A musical packet excites one local section; nearby blocks participate progressively less and remote blocks receive zero authority. Static local polarity permits both protrusion and recession;
-5. **punch events own detached displacement.** Generic spectral-shape/envelope change and baseline-relative crest are explicitly forbidden from packet authorship. A confirmed vocal/kick/snare/onset event or Sphere-local peak-picked half-wave spectral-flux onset over the existing unsmoothed pre-AGC analysis spectrum may earn one packet through the bounded admission gate; ordinary sustained band level does not detach geometry;
-6. all detached packets share the one Sphere-local admission path and a bounded minimum interval. Packet location is music-derived from current spectral balance/brightness plus bounded event classification, never round-robin/time/cursor progression; repeated similar material should reinforce a local region rather than mechanically fill all eight octants;
-7. section attack remains immediate/aggressive and release is long/gentle. Source loss/pause is decay-only and may never manufacture a packet from the collapse to zero. `sphere_size_response` instead owns only slow sustained passage-weight growth (~0.5 s attack / ~1 s release, small bounded maximum), never a beat pulse;
-8. rotation phase is integrated monotonically in the logical runtime. Canonical **Base Rotation** is the independent continuous floor; **Velocity Reaction** is an additive boost that follows **current articulation** with fast attack and short release. Spectral/envelope movement may articulate rotation and the tracer, but may not detach cubes;
-9. while the mapping is experimental, remaining interference-prone legacy motion controls stay disabled/inert, but pseudo-material settings do **not**: `sphere_material`, `sphere_material_color`, and `sphere_material_fx` forward-migrate to the clean `sphere_finish` / `sphere_fill_color` contract and are then removed. Deformation, **Size Response**, Base Rotation, Velocity Reaction, Block Reactivity and Vocal Response remain live;
-10. audio owns geometry only. Fill hue/alpha, edge hue/alpha, Toon, Gloss/Specular and Rainbow Ghosting are presentation controls and may not become a second audio-reactive colour/emission system;
-11. broad directional lighting is explicitly **screen-X/Y anchored**. Shell Z and rotating cube-face normals have no broad diffuse/specular authority. Cube face readability is a separate model layer whose face identity and bevel UVs come from each cube's **unrotated local face normal**; this accepted fix must not regress;
-12. **Toon means visibly hard toon**, not subtle quantization: hard diffuse plateaus, strong authored edge/ink colour, and a hard highlight patch. Normal finish uses the same stable face identity plus per-face sheen controlled explicitly by Gloss and Specular. A shell-space highlight lobe that picks one/few blocks is forbidden because it competes with the Light Tracer;
-13. the Sphere scene shadow is a **literal flat 2D** soft quad/disc, offset directly opposite the selected light, and gated by its own canonical Drop Shadow checkbox. Its radius/offset may grow modestly with staged sustained body growth. It has no voxel Z, cube faces, self-overlap, rigid-body rotation or detached-block geometry. The shared presentation layer must not gain a Sphere shadow escape hatch;
-14. canonical Sphere presentation includes independent literal **Fill Color** and **Edge Color** (including independent alpha), plus default-off **Rainbow Ghosting**. Historical Chrome/Obsidian/Magma/Silver/Water pseudo-material transforms are retired; `sphere_finish` is Settings-only convenience that writes Gloss/Specular and never reaches the renderer. Ghosting keeps only bounded reactive/moving history, draws after the hero with ordinary alpha blending, and must never redraw the whole shell additively into a white orb;
-15. current diagnostics emit `[SPHERE_AUDIO]` with crest components, shape/envelope articulation, typed events/onset, sustained/body/tracer/rotation state, section occupancy and packet-source counts in `vocal/crest/kick/snare/onset` order. There is no generic `change` packet source;
-16. Scene Overflow and Incoming Fade remain descriptor/Sphere-owned. The generic clip capability is opt-in and accepted modes retain their existing clip/shadow behavior;
-17. incoming admission is **not playback-state-owned**. A hysteretic live pre-AGC gate forbids new cohorts in true silence while allowing an already-authored cohort to finish landing. Optional Intake Density snapshots current live energy into stable-ranked cohort size and optional Intake Velocity gives only the newly qualified transient cohort a bounded fast-arrival accent; both are default-off globally and enabled in Reactive Voxel while evaluated. The accepted lively pass is calibrated ~20% less eager at the presentation layer (0.090/0.042 gate, 1.50 full-density endpoint, delayed optional velocity accent) while cohort event admission and the four-corner stable-rank + 46/46/46/70 full-density relationship remain binding;
-18. **Contingency only, not current behavior:** raw pre-AGC onset + four-corner ingress has now produced the first operator-described “reactive across the board / alive” run. Only if reactivity still needs another layer after continuity/intake acceptance may replacement/accretion be evaluated: event intensity could increase dominant ingress corners from one toward two/three/four at the absolute peak while existing shell voxels fade out as arrivals replace them. Keep it secondary to fragmentation, event-owned, bounded, and never an ambient particle fountain/private animation clock;
-19. operator acceptance now checks punch-linked local fragmentation, staged soft→heavy body growth, intentional tracer snake + gentle local selected-cube rotation, variable active shell rotation, fixed light quadrant + persistent cube detail, checkbox flat shadow with staged growth, independent edge alpha, obvious Toon, visible Gloss/Specular range, visible Rainbow Ghosting, quiet stability, the neutral Reactive Voxel validation preset, and ordinary/CUSTOM geometry.
-
-
-Deferred only after musical causality is accepted:
-
-- **true textured/reflective blocks** are technically viable through per-face UVs and/or a future environment/scene-texture reflection seam. Do not add that authority merely to imitate the retired pseudo-material names before the reaction contract is accepted.
-- **block dissolve/retirement/replacement** is also viable as event-owned per-instance lifecycle state: an aged/displaced cube can fade out while a replacement fades in from distance. It must use the existing logical cadence and remain event/state driven, never add a private timer or free-running movement source.
-
-Retire the mode only if the voxel concept stops earning further iteration; if retired, strip the remaining owned keys through
-one explicit retirement migration. Automated gates before any checkpoint remain: disabled mode imports/owns no heavy
-implementation resources; enable -> activate -> switch-away retires renderer resources through the existing event path;
-canonical Settings/default snapshot stays singular; no experiment-specific branch spreads into shared owners.
+Rainbow Ghosting is retired and forward-stripped. The rejected smooth icosphere and pseudo-material systems remain retired; historical evidence belongs in Historical Bugs/git history rather than this active future-work file.
 
 ## 7.2 Extruded Spectrum - Unique Mode
 
@@ -580,7 +521,7 @@ For a genuinely new transition/visualizer implementation:
 8. inspect visually;
 9. measure frame/GPU cost at representative resolution/refresh;
 10. if it looks poor, modify or delete the isolated implementation without preserving it for sunk cost;
-11. only after it is worth keeping, polish Settings/defaults/docs and explicitly review promotion from experimental isolation;
+11. after it is worth keeping, polish its isolated Settings/defaults/docs; **keep isolation** unless the operator separately and explicitly requests promotion/migration;
 12. commit + push bounded work.
 
 For an option inside an existing transition such as Slide Elastic/Wobble/Flex/Perspective, extend the

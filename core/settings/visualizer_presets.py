@@ -1,8 +1,9 @@
 """Per-visualizer-mode preset system.
 
-Each visualizer mode has a curated slot list loaded from disk plus a trailing
-Custom slot that reflects the user's live settings. Curated slot counts are
-mode-authored and may grow over time; callers must not assume a fixed count.
+Each visualizer mode has a user-authored preset catalogue loaded from disk plus
+a trailing Custom slot that reflects the user's live settings. Authored preset
+slot numbers may be sparse and counts may grow or shrink freely; callers must
+not assume a fixed count or contiguous filenames.
 
 Presets are orthogonal to the global widget presets in core/settings/presets.py.
 Global presets control *which widgets are visible*; visualizer presets control
@@ -47,6 +48,7 @@ from core.settings.visualizer_mode_registry import (
 from core.settings.visualizer_settings_contract import (
     LEGACY_GLOBAL_SHARED_VISUAL_KEYS,
     migrate_legacy_sphere_finish_keys,
+    migrate_legacy_sphere_control_keys,
     normalize_spectrum_render_mode,
     strip_legacy_global_technical_keys,
 )
@@ -192,7 +194,8 @@ def normalize_visualizer_custom_snapshot_cache(
         if mode_key not in nested:
             nested[mode_key] = payload
     for mode_key, payload in list(nested.items()):
-        nested[mode_key] = _filter_snapshot_payload_ownership(mode_key, payload)
+        owned = _filter_snapshot_payload_ownership(mode_key, payload)
+        nested[mode_key] = normalize_visualizer_mode_payload(mode_key, owned)
     return nested
 
 
@@ -306,12 +309,19 @@ def _custom_preset() -> VisualizerPreset:
     )
 
 
-# Registry: mode -> contiguous authored curated presets plus trailing Custom.
-# The temporary Custom-only seed avoids manufacturing fake curated slots while
+# Registry: mode -> user-authored preset catalogue plus trailing Custom.
+# Authored filename/payload slot numbers are ordering identities, not a
+# contiguity requirement: users may add arbitrary presets or delete any preset
+# while retaining at least one. Runtime slider positions are always compact.
+# The temporary Custom-only seed avoids manufacturing fake authored slots while
 # module import builds the real registry below.
 _PRESETS: Dict[str, List[VisualizerPreset]] = {
     mode: [_custom_preset()] for mode in MODES
 }
+# Compact runtime preset index -> authored source path/source slot.
+_PRESET_SOURCE_PATHS: Dict[str, List[Path]] = {mode: [] for mode in MODES}
+_PRESET_SOURCE_SLOTS: Dict[str, List[int]] = {mode: [] for mode in MODES}
+_LOADED_SOURCE_PATHS: Dict[str, Dict[int, Path]] = {mode: {} for mode in MODES}
 _CURATED_TREE_SYNCED = False
 
 
@@ -651,6 +661,7 @@ def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, A
     """Apply forward-migrations for removed/renamed settings keys."""
     if mode == "sphere":
         settings = migrate_legacy_sphere_finish_keys(settings)
+        settings = migrate_legacy_sphere_control_keys(settings)
 
     # Collapse accidental double-prefixed keys that older repair/tooling flows
     # allowed through.
@@ -849,6 +860,7 @@ def _load_mode_presets_from_disk(mode: str) -> Dict[int, VisualizerPreset]:
 
         logger.warning("[VIS_PRESETS] %s has no usable settings", json_path.name)
 
+    _LOADED_SOURCE_PATHS[mode] = dict(source_paths)
     return overrides
 
 
@@ -871,28 +883,37 @@ def _build_presets_for_mode(mode: str) -> List[VisualizerPreset]:
     )
 
     if not curated:
-        raise RuntimeError(f"visualizer mode {mode!r} has no authored curated presets")
-    expected = list(range(max(curated) + 1))
-    actual = sorted(curated)
-    if actual != expected:
-        raise RuntimeError(
-            f"visualizer mode {mode!r} curated slots are not contiguous: {actual}"
-        )
+        raise RuntimeError(f"visualizer mode {mode!r} has no authored presets")
 
+    # Authored slot numbers are stable ordering identities only. Users are free
+    # to delete arbitrary preset files, so gaps such as [0, 1, 4] are valid.
+    # Compact them into runtime slider positions without renaming/mutating files.
+    authored_slots = sorted(curated)
     combined: Dict[int, VisualizerPreset] = dict(curated)
-    for index, override in snapshot_overrides.items():
-        curated_base = combined.get(index)
+    for source_slot, override in snapshot_overrides.items():
+        curated_base = combined.get(source_slot)
         if curated_base is None:
-            raise RuntimeError(
-                f"visualizer snapshot override for {mode!r} targets missing authored slot {index}"
+            logger.warning(
+                "[VIS_PRESETS] Ignoring snapshot override for %s missing authored slot %d",
+                mode,
+                source_slot + 1,
             )
-        combined[index] = VisualizerPreset(
+            continue
+        combined[source_slot] = VisualizerPreset(
             name=curated_base.name,
             description=curated_base.description,
             settings=dict(override.settings),
         )
 
-    presets = [combined[index] for index in expected]
+    source_paths = _LOADED_SOURCE_PATHS.get(mode, {})
+    _PRESET_SOURCE_SLOTS[mode] = list(authored_slots)
+    _PRESET_SOURCE_PATHS[mode] = [
+        source_paths[source_slot]
+        for source_slot in authored_slots
+        if source_slot in source_paths
+    ]
+
+    presets = [combined[source_slot] for source_slot in authored_slots]
     presets.append(_custom_preset())
     return presets
 
@@ -910,40 +931,28 @@ def get_presets(mode: str) -> List[VisualizerPreset]:
 
 
 def get_preset_file_path(mode: str, preset_index: int) -> Path | None:
-    """Return the JSON file path for a curated preset, or None for Custom/missing."""
+    """Return the authored JSON backing one compact runtime preset position."""
     custom_idx = get_custom_preset_index(mode)
     if preset_index >= custom_idx or preset_index < 0:
         return None
-    root = _presets_root() / mode
-    if not root.is_dir():
-        return None
-    selected_path: Path | None = None
-    for json_path in sorted(root.glob("*.json")):
-        try:
-            payload = json.loads(json_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        parsed = _parse_preset_payload(
-            json_path,
-            payload,
-            mode,
-            prefer_filename_index=True,
-            prefer_filename_name=True,
-        )
-        if not parsed:
-            continue
-        index, _preset = parsed
-        if index == preset_index:
-            selected_path = json_path
-    if selected_path is not None:
-        return selected_path
-    pattern = f"preset_{preset_index + 1}_*"
-    matches = sorted(root.glob(pattern + ".json"))
-    if matches:
-        return matches[-1]
-    # Fallback: try exact name without suffix
-    exact = root / f"preset_{preset_index + 1}.json"
-    return exact if exact.is_file() else None
+    paths = _PRESET_SOURCE_PATHS.get(mode, [])
+    if preset_index < len(paths):
+        path = paths[preset_index]
+        return path if path.is_file() else None
+    return None
+
+
+def get_next_visualizer_preset_ordinal(mode: str) -> int:
+    """Return a collision-free 1-based authored slot number for Save-As.
+
+    Runtime slider positions are compact, while authored slot numbers may have
+    gaps. New presets therefore append after the highest existing authored slot
+    rather than assuming ``Custom``'s runtime index is also a file ordinal.
+    """
+    slots = _PRESET_SOURCE_SLOTS.get(mode, [])
+    if not slots:
+        return 1
+    return max(slots) + 2
 
 
 def get_preset_names(mode: str) -> List[str]:

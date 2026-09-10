@@ -446,3 +446,60 @@ def migrate_legacy_sphere_finish_keys(
     migrated.pop("sphere_material_fx", None)
     migrated.pop(f"{prefix}.sphere_material_fx", None)
     return migrated
+
+
+def migrate_legacy_sphere_control_keys(
+    data: Mapping[str, Any],
+    *,
+    prefix: str = "widgets.spotify_visualizer",
+) -> Dict[str, Any]:
+    """Forward-migrate the accepted Sphere response controls without retuning.
+
+    The old UI coupled local fragment displacement as
+    ``sphere_deformation * sphere_bump_reactivity`` while reusing Deformation
+    independently as detached-particle travel distance.  The accepted experimental
+    cleanup gives those two physical meanings separate canonical owners:
+
+    - ``sphere_fragment_strength`` receives the exact old product;
+    - ``sphere_particle_distance`` receives the exact old Deformation value.
+
+    Missing members of a partial legacy mapping use the historical canonical
+    defaults solely for migration arithmetic. Runtime leaves never read the old
+    keys.
+    """
+
+    migrated = dict(data)
+    dotted_prefix = f"{prefix}."
+    legacy_deformation_default = 1.35
+    legacy_reactivity_default = 0.85
+
+    for key_prefix in ("", dotted_prefix):
+        old_deformation_key = f"{key_prefix}sphere_deformation"
+        old_reactivity_key = f"{key_prefix}sphere_bump_reactivity"
+        fragment_key = f"{key_prefix}sphere_fragment_strength"
+        distance_key = f"{key_prefix}sphere_particle_distance"
+
+        old_deformation_present = old_deformation_key in migrated
+        old_reactivity_present = old_reactivity_key in migrated
+        if old_deformation_present or old_reactivity_present:
+            try:
+                deformation = float(
+                    migrated.get(old_deformation_key, legacy_deformation_default)
+                )
+            except (TypeError, ValueError):
+                deformation = legacy_deformation_default
+            try:
+                reactivity = float(
+                    migrated.get(old_reactivity_key, legacy_reactivity_default)
+                )
+            except (TypeError, ValueError):
+                reactivity = legacy_reactivity_default
+            if fragment_key not in migrated:
+                migrated[fragment_key] = deformation * reactivity
+            if distance_key not in migrated:
+                migrated[distance_key] = deformation
+
+        migrated.pop(old_deformation_key, None)
+        migrated.pop(old_reactivity_key, None)
+
+    return migrated

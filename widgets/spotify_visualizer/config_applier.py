@@ -33,24 +33,22 @@ _SPHERE_PARAMETER_KEYS = (
     "sphere_incoming_density_response_enabled",
     "sphere_incoming_transient_velocity_enabled",
     "sphere_particle_outtake_enabled",
-    "sphere_rainbow_ghosting",
     "sphere_shadow_enabled",
     "sphere_fade_incoming_blocks",
-    "sphere_deformation",
+    "sphere_fragment_strength",
+    "sphere_particle_distance",
+    "sphere_particle_amount",
+    "sphere_perspective_strength",
+    "sphere_taste_the_rainbow_enabled",
+    "sphere_taste_the_rainbow_surfaces",
+    "sphere_taste_the_rainbow_edges",
     "sphere_base_rotation_speed",
     "sphere_rotation_speed",
     "sphere_gloss",
     "sphere_specular",
     "sphere_light_direction",
-    "sphere_idle_motion",
-    "sphere_surface_detail",
-    "sphere_bass_response",
-    "sphere_mid_response",
-    "sphere_high_response",
     "sphere_vocal_response",
-    "sphere_bump_reactivity",
     "sphere_size_response",
-    "sphere_energy_curve",
 )
 
 
@@ -110,7 +108,7 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     """
 
     # The experimental Sphere keeps one configure-owned immutable parameter
-    for key in ('sphere_allow_overflow', 'sphere_cel_shading', 'sphere_light_tracer_enabled', 'sphere_fragment_interpolation_enabled', 'sphere_incoming_density_response_enabled', 'sphere_incoming_transient_velocity_enabled', 'sphere_particle_outtake_enabled', 'sphere_rainbow_ghosting', 'sphere_shadow_enabled', 'sphere_fade_incoming_blocks'):
+    for key in ('sphere_allow_overflow', 'sphere_cel_shading', 'sphere_light_tracer_enabled', 'sphere_fragment_interpolation_enabled', 'sphere_incoming_density_response_enabled', 'sphere_incoming_transient_velocity_enabled', 'sphere_particle_outtake_enabled', 'sphere_shadow_enabled', 'sphere_fade_incoming_blocks', 'sphere_taste_the_rainbow_enabled', 'sphere_taste_the_rainbow_surfaces', 'sphere_taste_the_rainbow_edges'):
         if key in kwargs:
             setattr(host, f"_{key}", bool(kwargs[key]))
     # bundle. The voxel renderer consumes that snapshot without a second
@@ -128,8 +126,14 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"{key} must contain numeric RGB/RGBA channels") from exc
             setattr(host, f"_{key}", rgba)
-    if 'sphere_deformation' in kwargs:
-        host._sphere_deformation = _sphere_bounded(kwargs['sphere_deformation'], 0.0, 4.5, 'sphere_deformation')
+    if 'sphere_fragment_strength' in kwargs:
+        host._sphere_fragment_strength = _sphere_bounded(kwargs['sphere_fragment_strength'], 0.0, 9.0, 'sphere_fragment_strength')
+    if 'sphere_particle_distance' in kwargs:
+        host._sphere_particle_distance = _sphere_bounded(kwargs['sphere_particle_distance'], 0.0, 4.5, 'sphere_particle_distance')
+    if 'sphere_particle_amount' in kwargs:
+        host._sphere_particle_amount = _sphere_bounded(kwargs['sphere_particle_amount'], 0.25, 1.75, 'sphere_particle_amount')
+    if 'sphere_perspective_strength' in kwargs:
+        host._sphere_perspective_strength = _sphere_bounded(kwargs['sphere_perspective_strength'], 0.0, 1.0, 'sphere_perspective_strength')
     if 'sphere_base_rotation_speed' in kwargs:
         host._sphere_base_rotation_speed = _sphere_bounded(kwargs['sphere_base_rotation_speed'], 0.0, 0.5, 'sphere_base_rotation_speed')
     if 'sphere_rotation_speed' in kwargs:
@@ -143,19 +147,12 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         if direction not in {'N','NE','E','SE','S','SW','W','NW'}:
             raise ValueError(f"invalid sphere light direction {direction!r}")
         host._sphere_light_direction = direction
-    if 'sphere_idle_motion' in kwargs:
-        host._sphere_idle_motion = _sphere_bounded(kwargs['sphere_idle_motion'], 0.0, 1.0, 'sphere_idle_motion')
-    if 'sphere_surface_detail' in kwargs:
-        host._sphere_surface_detail = _sphere_bounded(kwargs['sphere_surface_detail'], 0.0, 2.0, 'sphere_surface_detail')
     for key, maximum in (
-        ('sphere_bass_response', 2.0), ('sphere_mid_response', 2.0),
-        ('sphere_high_response', 2.0), ('sphere_vocal_response', 3.0),
-        ('sphere_bump_reactivity', 2.0),
-        ('sphere_size_response', 3.0),
-        ('sphere_energy_curve', 2.0),
+        ('sphere_vocal_response', 1.35),
+        ('sphere_size_response', 2.54),
     ):
         if key in kwargs:
-            setattr(host, f"_{key}", _sphere_bounded(kwargs[key], 0.2 if key == "sphere_energy_curve" else 0.0, maximum, key))
+            setattr(host, f"_{key}", _sphere_bounded(kwargs[key], 0.0, maximum, key))
     if any(key in kwargs for key in _SPHERE_PARAMETER_KEYS):
         host._sphere_parameters = freeze_render_fields({
             key: getattr(host, f"_{key}")

@@ -952,21 +952,48 @@ def _install_visualizer_body_host(tab, controls_layout, *, retire_body=None) -> 
 
     def _factory(mode_id):
         builder = load_mode_settings_builder(mode_id)
-        builder(tab, controls_layout)
         container_attr = _VIS_MODE_CONTAINER_ATTR.get(mode_id, "")
-        container = getattr(tab, container_attr, None) if container_attr else None
-        if container is None:
-            # Contract violation: the builder ran but did not create the mode's
-            # settings container. Fail loudly (and hydrate nothing) rather than
-            # returning a placeholder the host would cache as a real body.
-            raise RuntimeError(
-                f"Visualizer mode {mode_id!r} builder did not create its settings "
-                f"container attribute {container_attr!r}"
+        container = None
+        try:
+            builder(tab, controls_layout)
+            container = getattr(tab, container_attr, None) if container_attr else None
+            if container is None:
+                # Contract violation: the builder ran but did not create the mode's
+                # settings container. Fail loudly (and hydrate nothing) rather than
+                # returning a placeholder the host would cache as a real body.
+                raise RuntimeError(
+                    f"Visualizer mode {mode_id!r} builder did not create its settings "
+                    f"container attribute {container_attr!r}"
+                )
+            _hydrate_visualizer_mode_body(
+                tab, mode_id, getattr(tab, "_vis_loaded_config", None)
             )
-        _hydrate_visualizer_mode_body(
-            tab, mode_id, getattr(tab, "_vis_loaded_config", None)
-        )
-        return container
+            return container
+        except Exception:
+            # Body construction is transactional. Builders add their container to
+            # the live layout before hydration, so any exception after that point
+            # used to strand a partial body in Settings. Retrying then appended a
+            # second/third copy (preset row + bogus Advanced section). Tear the
+            # failed body down before propagating the original error. Persisted
+            # settings remain untouched and the host still does not cache failure.
+            failed = container
+            if failed is None and container_attr:
+                failed = getattr(tab, container_attr, None)
+            if failed is not None:
+                try:
+                    if retire_body is not None:
+                        retire_body(mode_id, failed)
+                    else:
+                        failed.hide()
+                        controls_layout.removeWidget(failed)
+                        failed.deleteLater()
+                except Exception:
+                    logger.debug(
+                        "[VIS_SETTINGS] Failed to clean partial mode body mode=%s",
+                        mode_id,
+                        exc_info=True,
+                    )
+            raise
 
     widgets_value = tab._settings.get("widgets") if hasattr(tab, "_settings") else {}
     section = widgets_value.get("spotify_visualizer", {}) if isinstance(widgets_value, dict) else {}

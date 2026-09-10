@@ -1,7 +1,8 @@
 """Shared visualizer preset-index resolution helpers.
 
 Missing/invalid persisted selection repairs to the canonical per-mode selection.
-The curated preset registry owns slot availability; there is no generic
+The user-authored preset registry owns runtime slot availability; authored file
+slot numbers may be sparse and are compacted for the slider. There is no generic
 "first preset" product-default authority.
 """
 from __future__ import annotations
@@ -38,9 +39,10 @@ def get_missing_preset_fallback_index(mode: str) -> int:
     )
     custom_idx = get_custom_preset_index(mode)
     if custom_idx <= 0:
-        raise RuntimeError(f"visualizer mode {mode!r} has no authored curated presets")
-    # Product defaults select curated authored content, never the user-owned
-    # trailing Custom slot. Registry construction guarantees contiguity.
+        raise RuntimeError(f"visualizer mode {mode!r} has no authored presets")
+    # Product defaults select authored content, never the user-owned trailing
+    # Custom slot. Runtime positions are compact even when authored file slot
+    # numbers are sparse.
     return max(0, min(custom_idx - 1, canonical))
 
 

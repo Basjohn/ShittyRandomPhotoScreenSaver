@@ -1,6 +1,6 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-09-08
+Last updated: 2026-09-10
 
 ## Start here
 
@@ -70,14 +70,11 @@ are the focused live-checklist decompositions it links:
 - `Docs/Future_Work/SST_9of10_Settings.md` — settings-migration closeout evidence.
 - `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md` — Bubble
   aspect response / bounded presentation-cost diagnosis.
-- `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md` — historical
-  live-geometry/Bubble evidence plus the retired smooth-Sphere material tranche.
-- `Docs/Future_Work/Sphere_Visualizer_Decomposition.md` — active experimental Voxel
-  Sphere ownership, isolation, keep/kill and validation contract.
+- `Docs/Future_Work/Sphere_Visualizer_Decomposition.md` — accepted-experimental Voxel
+  Sphere isolation, accepted-state hygiene and dormant permanent-migration golden gate.
 - `Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md` — recovered
   visualizer appearance and remaining Bubble validation.
 - `Docs/Future_Work/Widget_Interaction_Glow_Decomposition.md` — interaction glow.
-- `Docs/Future_Work/Slide_Motion_Options_Decomposition.md` — slide motion options.
 - `Docs/Future_Work/Edit_Layout_Live_Commit.md` — promote retained geometry before
   ending CUSTOM; avoid geometry-only Save teardown.
 
@@ -154,6 +151,10 @@ authority.
   — Voxel Sphere detached-flow lifetime contract; real bounded cohorts replace the old global decay masquerading as particle velocity.
 - `Docs/Historical_Bugs/Voxel_Sphere_Clamped_Event_Strength_Was_Not_Particle_Velocity_2026-09-10.md`
   — Voxel Sphere travel-intensity contract; shared clamped event confidence admits cohorts but never directly owns particle speed.
+- `Docs/Historical_Bugs/Visualizer_Preset_Sparse_Catalog_And_Failed_Body_Leak_2026-09-10.md`
+  — user-authored sparse preset catalogue contract and transactional lazy Settings-body cleanup.
+- `Docs/Historical_Bugs/Visualizer_Builder_Bucket_State_Schema_Drift_2026-09-10.md`
+  — persisted collapsible-bucket names are canonical UI schema; builder/default drift must fail the Qt-free contract gate.
 
 Closed rationale, failed-repair lessons and old owner maps live under
 `Docs/Historical_Bugs/` (index: `Docs/Historical_Bugs.md`), `Docs/Fossils/` and

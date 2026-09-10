@@ -367,25 +367,17 @@ Sine/Oscilloscope glow spreads perpendicular to the curve and scales with visibl
 420x280. A huge saved world at a small uniform scale must not weaken a halo on the same visible footprint.
 Glow size/intensity and line-core antialiasing remain independent.
 
-Sphere is an experimental, independently enabled sixth mode; existing profiles retain the original five enabled
-modes. The current representation is **Voxel Sphere (Experimental)**: the rejected smooth icosphere renderer has been
-removed. Its frameless transparent viewport owns one static cube mesh and one static stepped-shell instance buffer (278
-instances) rendered in one instanced draw. Integer-lattice stepping is authored appearance rather than failed smooth
-curvature. Vertex-shader motion consumes immutable authored time, common energy/transient state and the existing
-`SphereFrame.size_pulse`; Python never rebuilds per-frame voxel topology. Chrome, Obsidian, Magma, Silver and Water are
-bounded palette/material choices with curated presets plus Custom. Deformation, band/vocal response, Block Relief, Block
-Reactivity, whole-body size response, idle motion, rotation and lighting remain bounded experimental controls. The old
-Sphere-local derivative-AA, clipped cast-shadow, liquid/fire auxiliary mesh/program and unused Sphere-rainbow settings are
-not part of the current contract.
+Sphere is an **accepted experimental**, independently enabled sixth mode; existing profiles retain the original five enabled modes. The current representation is **Voxel Sphere (Experimental)**: a frameless transparent stepped-voxel shell using one static cube mesh and one static instance buffer with vertex-shader deformation. Its current musical behaviour—event-owned fragmentation/cohorts, stable four-corner population identity, sustained body growth, event-stepped tracer travel, continuous rotation and vocal-linked intake recoil—is a golden preservation target. Presentation or maintenance work may not reduce its reactivity/freshness or introduce ambient/private cadence.
 
-Sphere has no dedicated technical-control UI, but it still consumes deterministic BeatEngine configuration through the
-mode descriptor's canonical `technical_profile_mode`; it currently names Spectrum. Shared startup/mode-switch owners resolve
-that descriptor contract generically rather than assuming `technical_cache[mode]` or adding a Sphere-specific fallback.
-Settings/default/model authority remains singular and canonical; disabled Sphere lazily imports/constructs no heavy mode
-implementation resources. Inactive renderer resources retire on one-shot render-context events, including mode changes that
-never receive a first source frame. If the voxel representation fails operator eyes-on acceptance, retire the mode and strip
-its owned persisted namespace rather than starting another representation rescue campaign. Detail and validation:
-`Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
+Sphere remains architecturally isolated until the operator explicitly authorizes migration. Its descriptor lazily resolves its Settings builder, capture, frame runtime and renderer; heavy implementation resources stay dormant while disabled and retire through the normal render-context lifecycle. Canonical state remains in the `sphere_*` namespace, while shared technical/Rainbow/bar-appearance ownership is explicitly opted out. Sphere currently resolves its hidden technical profile through canonical Spectrum settings; those resolved values are behavioural input and must be recorded before any future migration. Sphere-local Taste The Rainbow is implemented independently inside the voxel renderer and does not make the shared Rainbow family an owner.
+
+The reusable architectural asset is the **experimental host/isolation seam**—descriptor-driven lazy wiring, independent dormancy/retirement, private setting prefix and explicit shared-family opt-outs. It is suitable for future experimental modes. Sphere audio logic, voxel settings, shader semantics and mode-specific capability memberships are not a shared foundation and must not be generalized merely to make that seam look cleaner. All experimental modes use isolation by default until the operator explicitly authorizes migration.
+
+The only curated Sphere presets are **Glass Current** (Preset 1; accepted intake/transparent snapshot) and **Voxel Bloom** (Preset 2; accepted outtake/opaque-shadow snapshot). Dead experimental-era controls Block Relief, Bass Response, Mid Response, High Response, Energy Curve and Idle Drift are retired and stale state is forward-stripped; Base Rotation owns continuous idle rotation. The former Deformation × Block Reactivity coupling is migrated exactly to one Fragment Strength control plus independent Particle Distance, while Particle Amount changes only post-admission cohort population. Rainbow Ghosting is retired; Sphere-local Taste The Rainbow can independently colour Surfaces and Edges without shared-family ownership. Perspective Strength is Sphere-local and bounded `0..1`, where `1.0` is the accepted projection exactly and lower values only flatten toward orthographic. Recommended slider marks remain UI guidance matching Glass Current, not defaults. The dormant pre/post migration golden gate lives in `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
+
+## Visualizer preset catalogue ownership
+
+Per-mode visualizer preset JSON files are **user-authored state**. Users may add arbitrary counts, delete presets down to one survivor, and leave sparse authored numbers such as `1, 5, 20`. Runtime compacts whatever authored presets exist into slider positions plus trailing Custom without renaming/deleting their files. Edit Preset resolves the real backing file; Save Preset As chooses a non-colliding authored number. Shipped preset manifests may support packaging/reconciliation but are never runtime authority over the user catalogue, and startup must never require authored numbers to be contiguous.
 
 ## Visualizer interactions
 
