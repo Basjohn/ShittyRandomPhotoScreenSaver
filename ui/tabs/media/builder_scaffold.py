@@ -165,7 +165,25 @@ def build_mode_scaffold(
     """Build the shared preset/normal/advanced/technical scaffold for a mode."""
     from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
+    body_object_name = f"visualizer_mode_body_{mode_key}"
+    # A failed lazy-body construction must never leave a visible orphan behind.
+    # Normal construction is cached by VisualizerModeBodyHost, so finding an
+    # existing direct child with this marker means a previous factory attempt
+    # failed before it could be committed. Remove that stale presentation body
+    # before trying again; authored settings/presets live outside the QWidget.
+    stale_bodies = []
+    for index in range(parent_layout.count()):
+        item = parent_layout.itemAt(index)
+        candidate = item.widget() if item is not None else None
+        if candidate is not None and candidate.objectName() == body_object_name:
+            stale_bodies.append(candidate)
+    for stale in stale_bodies:
+        parent_layout.removeWidget(stale)
+        stale.hide()
+        stale.deleteLater()
+
     container = QWidget()
+    container.setObjectName(body_object_name)
     layout = QVBoxLayout(container)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(12)
@@ -240,7 +258,12 @@ def build_mode_scaffold(
         advanced_host.setVisible(is_custom)
 
     preset_slider.advanced_toggled.connect(_handle_preset_visibility)
-    _handle_preset_visibility(True)
+    # The slider is born on its first authored preset, not Custom. Do not expose
+    # Custom-only controls even transiently before hydration finishes. This also
+    # keeps a failed construction from presenting a bogus "Advanced" body.
+    _handle_preset_visibility(
+        preset_slider.preset_index() == preset_slider.custom_index()
+    )
 
     if get_visualizer_mode_descriptor(mode_key).technical_controls:
         technical_host = build_per_mode_technical_group(tab, layout, mode_key)

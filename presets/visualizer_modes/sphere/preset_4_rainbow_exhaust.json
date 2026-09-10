@@ -1,0 +1,51 @@
+{
+  "mode": "sphere",
+  "name": "Preset 4 (Rainbow Exhaust)",
+  "preset_index": 3,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "sphere",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "sphere_finish": "Custom",
+        "sphere_fill_color": [
+          4,
+          7,
+          8,
+          100
+        ],
+        "sphere_edge_color": [
+          233,
+          248,
+          255,
+          255
+        ],
+        "sphere_allow_overflow": true,
+        "sphere_cel_shading": false,
+        "sphere_light_tracer_enabled": true,
+        "sphere_fragment_interpolation_enabled": true,
+        "sphere_incoming_density_response_enabled": true,
+        "sphere_incoming_transient_velocity_enabled": true,
+        "sphere_particle_outtake_enabled": false,
+        "sphere_shadow_enabled": true,
+        "sphere_fade_incoming_blocks": true,
+        "sphere_fragment_strength": 3.6,
+        "sphere_particle_distance": 2.25,
+        "sphere_particle_amount": 1.0,
+        "sphere_perspective_strength": 1.0,
+        "sphere_taste_the_rainbow_enabled": true,
+        "sphere_taste_the_rainbow_surfaces": false,
+        "sphere_taste_the_rainbow_edges": true,
+        "sphere_base_rotation_speed": 0.02,
+        "sphere_rotation_speed": 0.99,
+        "sphere_gloss": 0.95,
+        "sphere_specular": 1.08,
+        "sphere_light_direction": "NW",
+        "sphere_vocal_response": 1.35,
+        "sphere_size_response": 2.54,
+        "mode": "sphere"
+      }
+    }
+  },
+  "description": "Saved from current Settings state."
+}

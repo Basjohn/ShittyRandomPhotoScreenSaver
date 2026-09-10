@@ -29,6 +29,7 @@ from core.settings.visualizer_preset_indices import (
 from core.settings.visualizer_settings_contract import (
     migrate_legacy_global_visual_keys,
     migrate_legacy_sphere_finish_keys,
+    migrate_legacy_sphere_control_keys,
     normalize_sphere_finish,
     PER_MODE_BASELINE_KEYS,
     SPECIAL_PER_MODE_KEYS,
@@ -582,24 +583,22 @@ _SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'sphere_incoming_density_response_enabled': bool,
     'sphere_incoming_transient_velocity_enabled': bool,
     'sphere_particle_outtake_enabled': bool,
-    'sphere_rainbow_ghosting': bool,
     'sphere_shadow_enabled': bool,
     'sphere_fade_incoming_blocks': bool,
-    'sphere_deformation': float,
+    'sphere_fragment_strength': float,
+    'sphere_particle_distance': float,
+    'sphere_particle_amount': float,
+    'sphere_perspective_strength': float,
+    'sphere_taste_the_rainbow_enabled': bool,
+    'sphere_taste_the_rainbow_surfaces': bool,
+    'sphere_taste_the_rainbow_edges': bool,
     'sphere_base_rotation_speed': float,
     'sphere_rotation_speed': float,
     'sphere_gloss': float,
     'sphere_specular': float,
     'sphere_light_direction': str,
-    'sphere_idle_motion': float,
-    'sphere_surface_detail': float,
-    'sphere_bass_response': float,
-    'sphere_mid_response': float,
-    'sphere_high_response': float,
     'sphere_vocal_response': float,
-    'sphere_bump_reactivity': float,
     'sphere_size_response': float,
-    'sphere_energy_curve': float,
 }
 _SPHERE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_SPHERE_BUILD_SPECS)
 
@@ -1328,24 +1327,22 @@ class SpotifyVisualizerSettings:
     sphere_incoming_density_response_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_incoming_density_response_enabled'))
     sphere_incoming_transient_velocity_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_incoming_transient_velocity_enabled'))
     sphere_particle_outtake_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_particle_outtake_enabled'))
-    sphere_rainbow_ghosting: bool = field(default_factory=lambda: _visualizer_default('sphere_rainbow_ghosting'))
     sphere_shadow_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_shadow_enabled'))
     sphere_fade_incoming_blocks: bool = field(default_factory=lambda: _visualizer_default('sphere_fade_incoming_blocks'))
-    sphere_deformation: float = field(default_factory=lambda: _visualizer_default('sphere_deformation'))
+    sphere_fragment_strength: float = field(default_factory=lambda: _visualizer_default('sphere_fragment_strength'))
+    sphere_particle_distance: float = field(default_factory=lambda: _visualizer_default('sphere_particle_distance'))
+    sphere_particle_amount: float = field(default_factory=lambda: _visualizer_default('sphere_particle_amount'))
+    sphere_perspective_strength: float = field(default_factory=lambda: _visualizer_default('sphere_perspective_strength'))
+    sphere_taste_the_rainbow_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_enabled'))
+    sphere_taste_the_rainbow_surfaces: bool = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_surfaces'))
+    sphere_taste_the_rainbow_edges: bool = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_edges'))
     sphere_base_rotation_speed: float = field(default_factory=lambda: _visualizer_default('sphere_base_rotation_speed'))
     sphere_rotation_speed: float = field(default_factory=lambda: _visualizer_default('sphere_rotation_speed'))
     sphere_gloss: float = field(default_factory=lambda: _visualizer_default('sphere_gloss'))
     sphere_specular: float = field(default_factory=lambda: _visualizer_default('sphere_specular'))
     sphere_light_direction: str = field(default_factory=lambda: _visualizer_default('sphere_light_direction'))
-    sphere_idle_motion: float = field(default_factory=lambda: _visualizer_default('sphere_idle_motion'))
-    sphere_surface_detail: float = field(default_factory=lambda: _visualizer_default('sphere_surface_detail'))
-    sphere_bass_response: float = field(default_factory=lambda: _visualizer_default('sphere_bass_response'))
-    sphere_mid_response: float = field(default_factory=lambda: _visualizer_default('sphere_mid_response'))
-    sphere_high_response: float = field(default_factory=lambda: _visualizer_default('sphere_high_response'))
     sphere_vocal_response: float = field(default_factory=lambda: _visualizer_default('sphere_vocal_response'))
-    sphere_bump_reactivity: float = field(default_factory=lambda: _visualizer_default('sphere_bump_reactivity'))
     sphere_size_response: float = field(default_factory=lambda: _visualizer_default('sphere_size_response'))
-    sphere_energy_curve: float = field(default_factory=lambda: _visualizer_default('sphere_energy_curve'))
     # Visualizer presets (0=Preset 1/Default, 1=Preset 2, 2=Preset 3, 3=Custom)
     preset_spectrum: int = field(default_factory=lambda: _visualizer_default('preset_spectrum'))
     preset_oscilloscope: int = field(default_factory=lambda: _visualizer_default('preset_oscilloscope'))
@@ -1426,9 +1423,11 @@ class SpotifyVisualizerSettings:
         self.sphere_incoming_density_response_enabled = bool(self.sphere_incoming_density_response_enabled)
         self.sphere_incoming_transient_velocity_enabled = bool(self.sphere_incoming_transient_velocity_enabled)
         self.sphere_particle_outtake_enabled = bool(self.sphere_particle_outtake_enabled)
-        self.sphere_rainbow_ghosting = bool(self.sphere_rainbow_ghosting)
         self.sphere_shadow_enabled = bool(self.sphere_shadow_enabled)
         self.sphere_fade_incoming_blocks = bool(self.sphere_fade_incoming_blocks)
+        self.sphere_taste_the_rainbow_enabled = bool(self.sphere_taste_the_rainbow_enabled)
+        self.sphere_taste_the_rainbow_surfaces = bool(self.sphere_taste_the_rainbow_surfaces)
+        self.sphere_taste_the_rainbow_edges = bool(self.sphere_taste_the_rainbow_edges)
         self.sphere_finish = normalize_sphere_finish(self.sphere_finish)
         for attr in ("sphere_fill_color", "sphere_edge_color"):
             value = list(getattr(self, attr))
@@ -1445,7 +1444,7 @@ class SpotifyVisualizerSettings:
         self.sphere_light_direction = str(self.sphere_light_direction).strip().upper()
         if self.sphere_light_direction not in {"N", "NE", "E", "SE", "S", "SW", "W", "NW"}:
             raise ValueError(f"invalid sphere light direction {self.sphere_light_direction!r}")
-        for attr, low, high in (("sphere_deformation", 0.0, 4.5), ("sphere_base_rotation_speed", 0.0, 0.5), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_idle_motion", 0.0, 1.0), ("sphere_surface_detail", 0.0, 2.0), ("sphere_bass_response", 0.0, 2.0), ("sphere_mid_response", 0.0, 2.0), ("sphere_high_response", 0.0, 2.0), ("sphere_vocal_response", 0.0, 3.0), ("sphere_bump_reactivity", 0.0, 2.0), ("sphere_size_response", 0.0, 3.0), ("sphere_energy_curve", 0.2, 2.0)):
+        for attr, low, high in (("sphere_fragment_strength", 0.0, 9.0), ("sphere_particle_distance", 0.0, 4.5), ("sphere_particle_amount", 0.25, 1.75), ("sphere_perspective_strength", 0.0, 1.0), ("sphere_base_rotation_speed", 0.0, 0.5), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_vocal_response", 0.0, 1.35), ("sphere_size_response", 0.0, 2.54)):
             _clamp_attr_range(self, attr, low, high)
 
     @classmethod
@@ -1542,6 +1541,7 @@ class SpotifyVisualizerSettings:
         # values override the stored user values.  Custom (index 3) and empty
         # preset dicts are no-ops so existing behaviour is fully preserved.
         _raw = migrate_legacy_sphere_finish_keys(data, prefix=prefix)
+        _raw = migrate_legacy_sphere_control_keys(_raw, prefix=prefix)
         _raw = strip_retired_visualizer_settings(_raw, prefix=prefix)
         _raw = strip_legacy_global_technical_keys(_raw, prefix=prefix)
         _raw = migrate_legacy_global_visual_keys(_raw, prefix=prefix)

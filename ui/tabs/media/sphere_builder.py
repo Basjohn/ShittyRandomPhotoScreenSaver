@@ -1,4 +1,4 @@
-"""Lazy Settings body for the experimental voxel Sphere visualizer."""
+"""Lazy Settings body for the isolated experimental voxel Sphere visualizer."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
@@ -10,7 +10,7 @@ from ui.tabs.media.builder_scaffold import (
     build_collapsible_bucket,
     build_mode_scaffold,
 )
-from ui.tabs.shared_styles import NoWheelSlider, add_aligned_row_widget
+from ui.tabs.shared_styles import NoWheelSlider, RecommendedMarkSlider, add_aligned_row_widget
 from ui.widgets import StyledComboBox
 from ui.styled_popup import ColorSwatchButton
 
@@ -24,8 +24,31 @@ _FINISH_PRESETS: dict[str, tuple[float, float]] = {
     "Glassy": (0.95, 0.75),
 }
 
+# UI-only guidance markers matching the accepted Glass Current golden. These are
+# not defaults and do not alter saved/runtime values.
+_RECOMMENDED_SLIDER_VALUES: dict[str, float] = {
+    "sphere_gloss": 0.75,
+    "sphere_specular": 1.08,
+    "sphere_fragment_strength": 3.60,
+    "sphere_particle_distance": 2.25,
+    "sphere_particle_amount": 1.00,
+    "sphere_perspective_strength": 1.00,
+    "sphere_size_response": 2.25,
+    "sphere_vocal_response": 1.35,
+    "sphere_base_rotation_speed": 0.02,
+    "sphere_rotation_speed": 0.99,
+}
+
 
 def build_sphere_ui(tab, parent_layout) -> None:
+    """Build Sphere's Settings UI without changing its experimental ownership.
+
+    Sphere remains deliberately isolated from shared visualizer setting families.
+    This builder may reuse generic *UI widgets/scaffolding*, but all controls below
+    persist only canonical ``sphere_*`` state and may not silently acquire shared
+    Rainbow, technical-profile, or accepted-mode ownership.
+    """
+
     scaffold = build_mode_scaffold(
         tab,
         parent_layout,
@@ -38,34 +61,106 @@ def build_sphere_ui(tab, parent_layout) -> None:
         advanced_helper_attr="_sphere_adv_helper",
         advanced_attr="_sphere_advanced",
     )
-    _, surface = build_collapsible_bucket(
-        tab,
-        scaffold.normal_layout,
-        mode_key="sphere",
-        bucket_key="surface",
-        title="Surface",
-        helper_text=(
-            "Author voxel fill/edge colours and explicit finish controls. Finish Preset "
-            "only sets Gloss/Specular; the renderer has no hidden pseudo-material branch."
-        ),
-    )
-    _, motion = build_collapsible_bucket(
-        tab,
-        scaffold.normal_layout,
-        mode_key="sphere",
-        bucket_key="motion",
-        title="Motion",
-        helper_text=(
-            "Tune rotation and music-driven block movement. Positional deformation is "
-            "audio-causal; quiet-state drift is rotation-only."
-        ),
-    )
 
+    _, appearance = build_collapsible_bucket(
+        tab,
+        scaffold.normal_layout,
+        mode_key="sphere",
+        bucket_key="appearance",
+        title="Appearance",
+        helper_text=(
+            "Literal voxel colours, finish and fixed-light presentation. These are "
+            "Sphere-local presentation controls and do not author audio response."
+        ),
+    )
+    _, particle_flow = build_collapsible_bucket(
+        tab,
+        scaffold.normal_layout,
+        mode_key="sphere",
+        bucket_key="particle_flow",
+        title="Particle Flow",
+        helper_text=(
+            "Detached voxel intake/outtake options. Sub-options keep their authored "
+            "values when the master Particle Flow switch is off."
+        ),
+    )
+    _, reaction = build_collapsible_bucket(
+        tab,
+        scaffold.advanced_layout,
+        mode_key="sphere",
+        bucket_key="reaction",
+        title="Reactivity",
+        helper_text=(
+            "Music-driven geometry response. These controls affect the isolated Sphere "
+            "experiment only; they do not retune shared visualizer analysis."
+        ),
+    )
+    _, rotation = build_collapsible_bucket(
+        tab,
+        scaffold.advanced_layout,
+        mode_key="sphere",
+        bucket_key="rotation",
+        title="Rotation",
+        helper_text=(
+            "Base Rotation is the continuous floor; Velocity Reaction adds music-driven "
+            "speed without changing phase or direction."
+        ),
+    )
+    _, effects = build_collapsible_bucket(
+        tab,
+        scaffold.advanced_layout,
+        mode_key="sphere",
+        bucket_key="effects",
+        title="Effects",
+        helper_text=(
+            "Optional Sphere-only render effects. None may become a shared visualizer "
+            "setting family while Sphere remains experimental."
+        ),
+    )
     def row(layout, label):
         widget, content, _ = add_aligned_row_widget(layout, label, label_width=150)
         return widget, content
 
-    _widget, content = row(surface, "Finish Preset:")
+    def toggle(layout, attr, key, label, text, tooltip):
+        _widget, content = row(layout, label)
+        control = QCheckBox(text)
+        control.setProperty("circleIndicator", True)
+        control.setChecked(tab._default_bool("spotify_visualizer", key))
+        control.setToolTip(tooltip)
+        bind_setting_signal(tab, control.toggled, auto_switch=True)
+        setattr(tab, attr, control)
+        content.addWidget(control)
+        content.addStretch()
+        return control
+
+    def slider(layout, attr, key, label, maximum, suffix, divisor=100.0, minimum=0):
+        _widget, content = row(layout, label)
+        recommended = _RECOMMENDED_SLIDER_VALUES.get(key)
+        if recommended is None:
+            control = NoWheelSlider(Qt.Orientation.Horizontal)
+        else:
+            control = RecommendedMarkSlider(Qt.Orientation.Horizontal)
+        control.setRange(minimum, maximum)
+        control.setValue(round(float(tab._default_float("spotify_visualizer", key)) * divisor))
+        if recommended is not None:
+            control.set_recommended_value(round(float(recommended) * divisor))
+        value = QLabel()
+
+        def update(number):
+            value.setText(f"{number / divisor:.2f}{suffix}")
+
+        update(control.value())
+        control.valueChanged.connect(update)
+        bind_setting_signal(tab, control.valueChanged, auto_switch=True)
+        setattr(tab, attr, control)
+        content.addWidget(control)
+        content.addWidget(value)
+        return control
+
+    # ------------------------------------------------------------------
+    # Appearance
+    # ------------------------------------------------------------------
+    _widget, content = row(appearance, "Finish Preset:")
     tab.sphere_finish = StyledComboBox()
     tab.sphere_finish.addItems(["Custom", *_FINISH_PRESETS.keys()])
     tab.sphere_finish.setCurrentText(tab._default_str("spotify_visualizer", "sphere_finish"))
@@ -76,7 +171,7 @@ def build_sphere_ui(tab, parent_layout) -> None:
     content.addWidget(tab.sphere_finish)
     content.addStretch()
 
-    _widget, content = row(surface, "Fill Color:")
+    _widget, content = row(appearance, "Fill Color:")
     tab._sphere_fill_color = tab._color_from_default("spotify_visualizer", "sphere_fill_color")
     tab.sphere_fill_color_btn = ColorSwatchButton(title="Choose Sphere Fill Color")
     tab.sphere_fill_color_btn.setToolTip(
@@ -92,7 +187,7 @@ def build_sphere_ui(tab, parent_layout) -> None:
     content.addWidget(tab.sphere_fill_color_btn)
     content.addStretch()
 
-    _widget, content = row(surface, "Edge Color:")
+    _widget, content = row(appearance, "Edge Color:")
     tab._sphere_edge_color = tab._color_from_default("spotify_visualizer", "sphere_edge_color")
     tab.sphere_edge_color_btn = ColorSwatchButton(title="Choose Sphere Edge Color")
     tab.sphere_edge_color_btn.setToolTip(
@@ -108,7 +203,39 @@ def build_sphere_ui(tab, parent_layout) -> None:
     content.addWidget(tab.sphere_edge_color_btn)
     content.addStretch()
 
-    _widget, content = row(surface, "Light Direction:")
+    rainbow_master = toggle(
+        appearance,
+        "sphere_taste_the_rainbow_enabled",
+        "sphere_taste_the_rainbow_enabled",
+        "Taste The Rainbow:",
+        "Enable Sphere-local voxel rainbow",
+        "Sphere-only presentation effect. It uses the voxel renderer's own colour field and does not opt Sphere into the shared Rainbow settings family.",
+    )
+    rainbow_surfaces = toggle(
+        appearance,
+        "sphere_taste_the_rainbow_surfaces",
+        "sphere_taste_the_rainbow_surfaces",
+        "Rainbow Surfaces:",
+        "Apply rainbow to voxel surfaces",
+        "Replaces Fill RGB with one coherent moving partial-spectrum gradient across blocks while preserving the authored Fill alpha.",
+    )
+    rainbow_edges = toggle(
+        appearance,
+        "sphere_taste_the_rainbow_edges",
+        "sphere_taste_the_rainbow_edges",
+        "Rainbow Edges:",
+        "Apply rainbow to voxel edges",
+        "Replaces Edge RGB with the same coherent moving partial-spectrum gradient while preserving the independently authored Edge alpha.",
+    )
+
+    def apply_rainbow_dependency(enabled: bool) -> None:
+        for control in (rainbow_surfaces, rainbow_edges):
+            control.setEnabled(bool(enabled))
+
+    rainbow_master.toggled.connect(apply_rainbow_dependency)
+    apply_rainbow_dependency(rainbow_master.isChecked())
+
+    _widget, content = row(appearance, "Light Direction:")
     tab.sphere_light_direction = StyledComboBox()
     tab.sphere_light_direction.addItems(["N", "NE", "E", "SE", "S", "SW", "W", "NW"])
     tab.sphere_light_direction.setCurrentText(
@@ -118,87 +245,16 @@ def build_sphere_ui(tab, parent_layout) -> None:
     content.addWidget(tab.sphere_light_direction)
     content.addStretch()
 
-    def toggle(layout, attr, key, label, text, tooltip):
-        _widget, content = row(layout, label)
-        control = QCheckBox(text)
-        control.setChecked(tab._default_bool("spotify_visualizer", key))
-        control.setToolTip(tooltip)
-        bind_setting_signal(tab, control.toggled, auto_switch=True)
-        setattr(tab, attr, control)
-        content.addWidget(control)
-        content.addStretch()
-
-    toggle(
-        surface,
-        "sphere_shadow_enabled",
-        "sphere_shadow_enabled",
-        "Drop Shadow:",
-        "Enable flat Sphere drop shadow",
-        "Draws the Sphere-only flat 2D light-opposite shadow. It has no 3D voxel geometry, depth, or accepted-mode ownership.",
-    )
-    toggle(
-        surface,
-        "sphere_cel_shading",
-        "sphere_cel_shading",
-        "Toon Shading:",
-        "Enable hard toon bands + inked cube edges",
-        "Uses deliberately hard light bands and strong edge ink. It changes presentation only, never voxel motion or audio reactivity.",
-    )
-    toggle(
-        surface,
-        "sphere_light_tracer_enabled",
-        "sphere_light_tracer_enabled",
-        "Light Tracer:",
-        "Enable music-driven light snake",
-        "The sole moving bright-block effect. Each accepted audio onset queues one bounded step; travel is speed-capped and settles before fading. Gloss/Specular are per-face finish controls and cannot create a competing bright block.",
-    )
-    toggle(
-        surface,
-        "sphere_allow_overflow",
-        "sphere_allow_overflow",
-        "Scene Overflow:",
-        "Allow blocks outside the visualizer bounds",
-        "Sphere-only render capability. Other visualizer modes remain on the existing clipped path.",
-    )
-    toggle(
-        surface,
-        "sphere_fade_incoming_blocks",
-        "sphere_fade_incoming_blocks",
-        "Particle Flow:",
-        "Enable detached voxel intake/outtake",
-        "Master detached-voxel presentation. In Intake mode selected shell voxels begin outside and return to their canonical slots; Particle Outtake reverses newly launched cohorts so source voxels leave/fade while replacements fade into the canonical shell.",
-    )
-    toggle(
-        surface,
-        "sphere_rainbow_ghosting",
-        "sphere_rainbow_ghosting",
-        "Rainbow Ghosting:",
-        "Enable short rainbow trails",
-        "Draws a bounded renderer-local history of reactive/moving voxel ghosts only. It adds no timer/poller and has no audio-authoring authority.",
+    slider(appearance, "sphere_perspective_strength", "sphere_perspective_strength", "Perspective Strength:", 100, "x", 100.0)
+    tab.sphere_perspective_strength.setToolTip(
+        "Controls only the existing voxel camera perspective. 1.0 is the accepted current projection; lower values flatten toward orthographic. The range cannot exceed the current golden perspective."
     )
 
-    def slider(layout, attr, key, label, maximum, suffix, divisor=100.0, minimum=0):
-        _widget, content = row(layout, label)
-        control = NoWheelSlider(Qt.Orientation.Horizontal)
-        control.setRange(minimum, maximum)
-        control.setValue(round(float(tab._default_float("spotify_visualizer", key)) * divisor))
-        value = QLabel()
-
-        def update(number):
-            value.setText(f"{number / divisor:.2f}{suffix}")
-
-        update(control.value())
-        control.valueChanged.connect(update)
-        bind_setting_signal(tab, control.valueChanged, auto_switch=True)
-        setattr(tab, attr, control)
-        content.addWidget(control)
-        content.addWidget(value)
-
-    slider(surface, "sphere_gloss", "sphere_gloss", "Gloss:", 100, "")
+    slider(appearance, "sphere_gloss", "sphere_gloss", "Gloss:", 100, "")
     tab.sphere_gloss.setToolTip(
         "Controls per-face highlight width/smoothness. It does not select or brighten a special cube."
     )
-    slider(surface, "sphere_specular", "sphere_specular", "Specular:", 200, "", 100.0)
+    slider(appearance, "sphere_specular", "sphere_specular", "Specular:", 200, "", 100.0)
     tab.sphere_specular.setToolTip(
         "Controls per-face reflected sheen strength. Zero is matte; high values increase face shine without a shell-space glow lobe."
     )
@@ -229,88 +285,140 @@ def build_sphere_ui(tab, parent_layout) -> None:
     tab.sphere_gloss.valueChanged.connect(mark_finish_custom)
     tab.sphere_specular.valueChanged.connect(mark_finish_custom)
 
-    slider(surface, "sphere_surface_detail", "sphere_surface_detail", "Block Relief:", 200, "", 100.0)
-    tab.sphere_surface_detail.setToolTip(
-        "Experimental static: per-block relief is fixed while detached-cube movement is being evaluated."
+    # ------------------------------------------------------------------
+    # Particle Flow
+    # ------------------------------------------------------------------
+    flow_master = toggle(
+        particle_flow,
+        "sphere_fade_incoming_blocks",
+        "sphere_fade_incoming_blocks",
+        "Particle Flow:",
+        "Enable detached voxel intake/outtake",
+        "Master detached-voxel presentation. In Intake mode selected shell voxels begin outside and return to their canonical slots; Particle Outtake reverses newly launched cohorts so source voxels leave/fade while replacements fade into the canonical shell.",
     )
-    toggle(
-        motion,
-        "sphere_fragment_interpolation_enabled",
-        "sphere_fragment_interpolation_enabled",
-        "Fragment Interpolation:",
-        "Smooth fragment travel (visual only)",
-        "Keeps audio/onset admission instantaneous but interpolates detached cube displacement over a few rendered frames. It does not smooth the audio signal, reduce packet strength, blur frames, or add motion blur.",
-    )
-    toggle(
-        motion,
+    density_control = toggle(
+        particle_flow,
         "sphere_incoming_density_response_enabled",
         "sphere_incoming_density_response_enabled",
-        "Intake Density:",
-        "Scale incoming voxel count with live energy",
-        "Keeps all four stable ingress quadrants participating, but quiet passages launch a smaller subset and strong passages approach the full 46/46/46/70 population. Playing-state silence still admits no new incoming voxels even when this option is off.",
+        "Particle Density Response:",
+        "Scale detached voxel count with live energy",
+        "Keeps all four stable ingress quadrants participating, but quiet passages launch a smaller subset and strong passages approach the full 46/46/46/70 population. Playing-state silence still admits no new detached voxels even when this option is off.",
     )
-    toggle(
-        motion,
+    velocity_control = toggle(
+        particle_flow,
         "sphere_incoming_transient_velocity_enabled",
         "sphere_incoming_transient_velocity_enabled",
         "Particle Velocity:",
         "Use transient-responsive detached-voxel travel speed",
-        "Uses real cohort travel progress: ordinary cohorts move gently over about 1.45 s while the strongest qualified transient can shorten travel toward about 0.82 s. Speed is captured at launch; in-flight cohorts do not globally chase later audio.",
+        "Uses real cohort travel progress. Speed is captured from Sphere-local acoustic contrast at launch; in-flight cohorts do not globally chase later audio.",
     )
-    toggle(
-        motion,
+    outtake_control = toggle(
+        particle_flow,
         "sphere_particle_outtake_enabled",
         "sphere_particle_outtake_enabled",
         "Particle Outtake:",
         "Reverse detached voxel flow outward",
         "New qualified cohorts shed stable shell voxels outward and fade them gently while replacement voxels fade into the canonical shell positions. Direction is captured at launch, so toggling this never reverses a cohort already in flight.",
     )
-    slider(motion, "sphere_deformation", "sphere_deformation", "Deformation:", 450, "", 100.0)
-    tab.sphere_deformation.setToolTip(
-        "Controls the distance of mode-authored sectional in/out movement."
+    particle_amount_control = slider(
+        particle_flow,
+        "sphere_particle_amount",
+        "sphere_particle_amount",
+        "Particle Amount:",
+        175,
+        "x",
+        100.0,
+        25,
     )
-    slider(motion, "sphere_size_response", "sphere_size_response", "Size Response:", 300, "", 100.0)
+    particle_amount_control.setToolTip(
+        "Scales the number of voxels selected after a qualified cohort has already been admitted. It never changes onset thresholds, event qualification, acoustic impact or particle velocity."
+    )
+
+    def apply_flow_dependency(enabled: bool) -> None:
+        # UI dependency only: preserve authored sub-control state while the master
+        # is off. Runtime semantics remain exactly the existing Sphere-local gate.
+        for control in (density_control, velocity_control, outtake_control, particle_amount_control):
+            control.setEnabled(bool(enabled))
+
+    flow_master.toggled.connect(apply_flow_dependency)
+    apply_flow_dependency(flow_master.isChecked())
+
+    # ------------------------------------------------------------------
+    # Reactivity
+    # ------------------------------------------------------------------
+    toggle(
+        reaction,
+        "sphere_fragment_interpolation_enabled",
+        "sphere_fragment_interpolation_enabled",
+        "Fragment Interpolation:",
+        "Smooth fragment travel (visual only)",
+        "Keeps audio/onset admission instantaneous but interpolates detached cube displacement over a few rendered frames. It does not smooth the audio signal, reduce packet strength, blur frames, or add motion blur.",
+    )
+    slider(reaction, "sphere_fragment_strength", "sphere_fragment_strength", "Fragment Strength:", 900, "", 100.0)
+    tab.sphere_fragment_strength.setToolTip(
+        "Single authority for earned local sectional displacement. Existing settings migrate exactly from the former Deformation × Block Reactivity product."
+    )
+    slider(reaction, "sphere_particle_distance", "sphere_particle_distance", "Particle Distance:", 450, "", 100.0)
+    tab.sphere_particle_distance.setToolTip(
+        "Controls detached intake/outtake travel distance only. It no longer changes local fragment strength."
+    )
+    slider(reaction, "sphere_size_response", "sphere_size_response", "Size Response:", 254, "", 100.0)
     tab.sphere_size_response.setToolTip(
-        "Controls staged slow sustained passage-weight growth without beat-pulsing or flicker."
+        "Controls staged slow sustained passage-weight growth without beat-pulsing or flicker. The range stops where the existing growth equation saturates."
     )
-    slider(motion, "sphere_bass_response", "sphere_bass_response", "Bass Response:", 200, "", 100.0)
-    slider(motion, "sphere_mid_response", "sphere_mid_response", "Mid Response:", 200, "", 100.0)
-    slider(motion, "sphere_high_response", "sphere_high_response", "High Response:", 200, "", 100.0)
-    slider(motion, "sphere_vocal_response", "sphere_vocal_response", "Vocal Response:", 300, "", 100.0)
+    slider(reaction, "sphere_vocal_response", "sphere_vocal_response", "Vocal Response:", 135, "", 100.0)
     tab.sphere_vocal_response.setToolTip(
-        "Controls the dominant vocal/mid-high sectional event voice."
+        "Controls the dominant vocal/mid-high sectional event voice. The range ends at the existing effective maximum rather than exposing a dead tail."
     )
-    slider(motion, "sphere_bump_reactivity", "sphere_bump_reactivity", "Block Reactivity:", 200, "", 100.0)
-    tab.sphere_bump_reactivity.setToolTip(
-        "Scales how strongly an earned local section moves."
-    )
-    slider(motion, "sphere_energy_curve", "sphere_energy_curve", "Energy Curve:", 200, "", 100.0, minimum=20)
-    tab.sphere_energy_curve.setToolTip(
-        "Experimental static: the rejected absolute-level energy curve is no longer part of voxel motion."
-    )
-    slider(motion, "sphere_base_rotation_speed", "sphere_base_rotation_speed", "Base Rotation:", 50, "x", 100.0)
+
+    # ------------------------------------------------------------------
+    # Rotation
+    # ------------------------------------------------------------------
+    slider(rotation, "sphere_base_rotation_speed", "sphere_base_rotation_speed", "Base Rotation:", 50, "x", 100.0)
     tab.sphere_base_rotation_speed.setToolTip(
         "Continuous authored rotation floor/idle velocity."
     )
-    slider(motion, "sphere_rotation_speed", "sphere_rotation_speed", "Velocity Reaction:", 200, "x", 100.0)
+    slider(rotation, "sphere_rotation_speed", "sphere_rotation_speed", "Velocity Reaction:", 200, "x", 100.0)
     tab.sphere_rotation_speed.setToolTip(
         "Additional rotation velocity driven by current articulation; phase/direction remain continuous."
     )
-    slider(motion, "sphere_idle_motion", "sphere_idle_motion", "Idle Drift:", 100, "", 100.0)
-    tab.sphere_idle_motion.setToolTip(
-        "Experimental static: independent idle drift is disabled."
+
+    # ------------------------------------------------------------------
+    # Optional effects
+    # ------------------------------------------------------------------
+    toggle(
+        effects,
+        "sphere_shadow_enabled",
+        "sphere_shadow_enabled",
+        "Drop Shadow:",
+        "Enable flat Sphere drop shadow",
+        "Draws the Sphere-only flat 2D light-opposite shadow. It has no 3D voxel geometry, depth, or accepted-mode ownership.",
+    )
+    toggle(
+        effects,
+        "sphere_cel_shading",
+        "sphere_cel_shading",
+        "Toon Shading:",
+        "Enable hard toon bands + inked cube edges",
+        "Uses deliberately hard light bands and strong edge ink. It changes presentation only, never voxel motion or audio reactivity.",
+    )
+    toggle(
+        effects,
+        "sphere_light_tracer_enabled",
+        "sphere_light_tracer_enabled",
+        "Light Tracer:",
+        "Enable music-driven light snake",
+        "The sole moving bright-block effect. Each accepted audio onset queues one bounded step; travel is speed-capped and settles before fading. Gloss/Specular are per-face finish controls and cannot create a competing bright block.",
+    )
+    toggle(
+        effects,
+        "sphere_allow_overflow",
+        "sphere_allow_overflow",
+        "Scene Overflow:",
+        "Allow blocks outside the visualizer bounds",
+        "Sphere-only render capability. Other visualizer modes remain on the existing clipped path.",
     )
 
-    for control, explanation in (
-        (tab.sphere_surface_detail, "Block relief is fixed while displacement is the authored reward"),
-        (tab.sphere_bass_response, "Bass level is intentionally only a minimal implicit source; kicks own strong low-end motion"),
-        (tab.sphere_mid_response, "Section routing is mode-authored rather than a global mid gain"),
-        (tab.sphere_high_response, "Section routing is mode-authored rather than a global high gain"),
-        (tab.sphere_energy_curve, "Absolute-level energy shaping is not used by the voxel reaction contract"),
-        (tab.sphere_idle_motion, "No independent idle motion; Rotation is the sole time-authored movement"),
-    ):
-        control.setEnabled(False)
-        control.setToolTip(f"{control.toolTip()}\n\n{explanation}.")
 
 
 __all__ = ["build_sphere_ui"]

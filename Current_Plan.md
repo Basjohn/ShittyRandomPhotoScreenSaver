@@ -8,130 +8,32 @@ The Qt Quick migration is closed and operator-accepted. This file contains **act
 
 ---
 
-## 1. Voxel Sphere experimental acceptance pass
+## 1. Voxel Sphere accepted-experimental polish
 
 Execution authority: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
 
-The face/bevel stability fix remains physically accepted. The 2026-09-10 hardware runs
-after raw pre-AGC spectral onset, stable four-corner ingress, fragment interpolation and
-energy-gated intake are the first passes the operator described as **reactive across the
-board / alive** and then **a very good feeling place**. Protect that audio authority:
-presentation work may not reduce onset frequency, packet strength, raw-pre-AGC freshness,
-tracer travel or the accepted vocal-linked incoming bounce. The current narrow experiment
-is detached-voxel travel semantics: real bounded cohorts for visibly slower intake plus an
-optional reversed outtake/replacement presentation.
+Sphere is now **accepted experimental and deliberately isolated**. Its current reactivity/motion is a golden preservation target; acceptance does not authorize migration into permanent/shared visualizer architecture. All experimental modes remain isolated until the operator explicitly activates migration.
 
-- [x] Preserve stable cube face identity/bevel UV selection from the **unrotated local
-  face**. Broad light remains screen-X/Y anchored; no rotating normal regains face/UV
-  authority.
-- [x] Delete Sphere-local three-band `vocal_rise` / `bass_rise` fragmentation authority.
-  Those support-shaped lanes re-armed continuously under real playback and are forbidden
-  as generic packet sources.
-- [x] Generic fragmentation now uses a Sphere-only **half-wave spectral-flux onset
-  envelope over the existing temporally-unsmoothed pre-shape/pre-AGC analysis spectrum**,
-  adaptive thresholding and local peak-picking. The tuple is copied lazily at the verified
-  FFT commit boundary only while Sphere requests it; no second FFT/worker/timer/shared bus
-  is added and accepted modes do not pay the tuple-allocation cost.
-- [x] Typed vocal/kick/snare/onset events still outrank the generic spectral-onset path.
-  Generic transient crest remains rotation/diagnostic evidence only and cannot detach
-  cubes or spawn incoming particles.
-- [x] Make one accepted fragment event visibly legible: packet release is shortened,
-  admission remains sparse, and each event authors one strong region plus one weaker
-  companion region rather than disappearing inside one octant. Accepted radial travel is
-  not reduced.
-- [x] Preserve the physically-good vocal-linked incoming bounce. Incoming remains
-  independently typed/onset-owned. Distribution now uses four visible ingress quadrants:
-  three remain near a ~46% deterministic admission floor while one dominant quadrant
-  reaches ~70%; dominance walks on successive qualified events. This distribution layer
-  does not replace fragmentation as the primary reactive reward.
-- [x] Fix four-corner ingress population continuity. Stable voxel rank is now based only
-  on voxel seed + visible quadrant; changing the dominant quadrant cannot re-hash the
-  foundational ~46% population. Only the extra 24% fringe migrates, over a short ~110 ms
-  crossfade, with a narrow per-voxel rank feather. This is a bug fix, not a user option.
-- [x] Add canonical Sphere-only **Fragment Interpolation** option. Audio packet admission
-  and target amplitude remain instantaneous; rendered section displacement follows that
-  target through a ~30 ms critically-damped visual follower. No audio smoothing, frame
-  blending, ghosting or motion blur is introduced. Default off globally; **Preset 6 on**.
-- [x] Fix incoming admission so **playing state is never particle authority**. New incoming
-  cohorts require a hysteretic live pre-AGC energy gate; true live silence cannot author a
-  new cohort even if a stale/false typed event is present. Existing in-flight voxels are
-  allowed to finish landing naturally. This gate is a bug fix and is always active.
-- [x] Add optional Sphere-only **Intake Density** response. A qualified event snapshots the
-  current live pre-AGC activity into a cohort density target; quiet active passages launch a
-  smaller stable-ranked subset while strong passages approach the full 46/46/46/70
-  four-corner population. Density is cohort-owned rather than continuously jittering with
-  the energy lane. Default off globally; **Preset 6 on**.
-- [x] Replace the old fake **Intake Velocity** scalar-decay presentation with a bounded
-  four-slot Sphere-only **particle cohort** transport. Each qualified event captures stable
-  voxel population, quadrant/lane, density, direction and a real normalized travel progress.
-  New events do not globally reset in-flight cohorts; when all four slots are materially in
-  flight the secondary reward coalesces rather than teleporting them. No timer/poller/worker/
-  per-voxel Python objects.
-- [x] Fix the remaining **binary particle-velocity authority**. Shared typed transient
-  strength is retained for event admission only because it legitimately clamps strong events
-  to 1.0. Sphere now derives continuous cohort motion intensity from a positive live-pre-AGC
-  loudness jump plus raw-spectrum flux-over-threshold. A clamped event with flat local audio
-  therefore stays slow/modest, while a real kick/vocal/drum jump may reach full travel speed.
-  Ordinary intake is intentionally gentler (~1.90 s -> ~0.84 s across the continuous range)
-  than outtake (~1.45 s -> ~0.82 s). Velocity-off uses fixed ~1.42 s intake / ~1.12 s outtake.
-- [x] Keep optional Sphere-only **Particle Velocity** presentation. It changes captured
-  cohort travel duration/curve from Sphere-local acoustic contrast rather than shared clamped
-  event strength or exponential decay of one global incoming scalar. Event admission is
-  unchanged. Intake fade-in is also progress-continuous and gentler at low motion intensity;
-  recoil may still exceed the authored launch radius, but that over-launch tail fades through
-  a narrow radial field instead of presenting as a hard clip. Default off globally; Presets
-  **5 and 6 on** for operator A/B.
-- [x] Add optional Sphere-only **Particle Outtake**. Direction is captured per cohort at
-  launch. Intake cohorts begin detached and return to their own canonical shell slots.
-  Outtake cohorts instead move selected shell voxels outward and fade them while a canonical
-  replacement fades in underneath; renderer uses one optional second instanced draw of the
-  same static voxel buffer, not a new geometry owner. Default off globally/Presets 1-5;
-  **Preset 6 on** for physical A/B testing.
-- [x] Swelling now reads from the existing **unsmoothed live pre-AGC energy seam**, not
-  the dynamically-normalized 0..1 control lane or support-shaped Bubble motion feed.
-  Sphere maintains a very slow local floor/peak and
-  maps four visibly separated stages to a larger bounded body-growth range (up to ~42%
-  safety cap at extreme Size Response). This remains a slow envelope, never a beat pulse.
-- [x] Light Tracer is no longer free-running. Every accepted spectral/typed event queues
-  one bounded angular step; backlog is capped and the visible ribbon advances with an
-  explicit bounded phase velocity instead of asymptotic easing. While travel remains, its
-  brightness is held above a stable floor; only after it reaches the target may it fade.
-  Faster passages queue more distance and therefore move it faster within the cap, while
-  silence settles cleanly. Renderer ribbon geometry is nearly constant through drive fades
-  with broader cross-handoff to suppress the stationary-block flicker.
-- [x] Gloss/Specular remain light-directed per-face finish only; literal Fill/Edge RGBA,
-  independent edge alpha, Toon, reactive-only Rainbow Ghosting, flat Drop Shadow and
-  Settings-only Finish presets remain unchanged.
-- [x] **Reactive Voxel / Preset 6** remains the primary operator-validation authority.
-- [x] **Preset 5 is now the operator-supplied `Transparent React` A/B preset.** Preserve its
-  authored literal fill `[4,7,8,100]`, edge `[233,248,255,255]`, Custom finish and other
-  non-technical presentation values. It carries the current technical reactivity toggles but
-  keeps Particle Outtake OFF so Preset 5/6 provide a quick intake/outtake comparison.
-- [x] Isolation remains binding: no accepted visualizer renderer/runtime, transient bus,
-  timer or polling owner changed. `beat_engine.py` exposes two read-only seams only:
-  demand-published `get_pre_agc_analysis_spectrum()` and live-float
-  `get_live_pre_agc_energy_bands()`. The spectrum copy is skipped entirely unless a
-  consumer requests it.
-- [x] Operator reports the energy-gated four-corner pass is now in a **very good feeling
-  place**. Preserve the current fast musical reactivity/motion; do not retune onset,
-  fragmentation, tracer travel, stable ingress identity or vocal bounce while calibrating
-  intake presentation.
-- [x] Modest intake calibration: require roughly **20% more acoustic evidence** before the
-  recently-added intake layer reaches its strongest presentation. Gate open/close and typed
-  force floor remain 0.090/0.042/0.030 and full density remains 1.50 while the four-corner
-  minimum is unchanged. The superseded event-strength velocity gate is removed: it proved
-  insufficiently granular once hardware showed the shared event lane reaching 1.0 for both
-  modest and genuinely large attacks.
-- [x] Focused Sphere/technical gate: **72 passed** with explicit raw-spectrum publication,
-  live-pre-AGC swell, bounded tracer travel/settle, continuous acoustic-impact velocity,
-  intake over-launch fade field, Preset-5 A/B authority, direction capture and outtake/
-  replacement regressions.
-- [ ] Operator physically A/B **Preset 5 Transparent React (Intake)** against **Preset 6
-  Reactive Voxel (Outtake)**. Verify flat/low transients still author visible cohorts but move
-  substantially more gently than obvious vocal/kick/drum peaks; intake fades in more gently,
-  vocal recoil retains its full reactive push without hard clipping beyond launch radius,
-  outtake remains pleasant, and fragmentation/tracer/audio authority is unchanged.
+- [x] Consolidate the only useful Sphere presets: former 5 -> **Preset 1 / Glass Current**; former 6 -> **Preset 2 / Voxel Bloom**. Preserve their literal authored snapshots.
+- [x] Rebuild the Sphere Custom UI around shared themed circular checkboxes and real collapsible buckets while keeping every setting Sphere-owned.
+- [x] Trace and retire dead Sphere controls: Block Relief, Bass Response, Mid Response, High Response, Energy Curve and Idle Drift are removed from canonical UI/model/default/config state and forward-stripped. Base Rotation remains the sole idle rotation authority.
+- [x] Retire rejected **Rainbow Ghosting** completely: Settings/default/model/UI/binding/config/render-history path removed; stale imported state is forward-stripped. This does not wire Sphere into generic Taste The Rainbow.
+- [x] Record the reusable part of the experimental architecture: descriptor-driven lazy builder/runtime/renderer/capture resolution, independent dormancy/retirement, private settings prefix and explicit shared-family opt-outs. Preserve this host seam for future experiments; do not generalize Sphere internals.
+- [x] Record the permanent-migration gate as dormant future work. Both curated presets require pre/post deterministic replay/capture goldens, including the exact hidden technical-profile values that reproduce current behaviour. Any regression to permanent modes' reactivity, latency, fidelity, bleed/isolation, cadence, lifecycle or resource/dormancy behaviour rejects migration.
+- [x] Add themed recommended-position slider notches using the accepted Glass Current baseline as UI guidance only; no default/runtime authority.
+- [x] Split the overloaded Deformation × Block Reactivity contract without retuning: **Fragment Strength** owns the exact former product and **Particle Distance** owns the former Deformation travel-distance value. Visualizer schema v8 forward-migrates old Custom/persisted state before stripping the legacy keys.
+- [x] Add **Particle Amount** as a post-admission stable-population multiplier (`1.0` = accepted behaviour); rename the UI-only Intake Density label to **Particle Density Response**. No onset/admission/velocity threshold changes.
+- [x] Trim dead slider tails without changing resolved behaviour: Vocal Response max `1.35`; Size Response max `2.54` (existing growth saturation). Curated presets are rewritten to the equivalent resolved values.
+- [x] Add Sphere-local **Taste The Rainbow** with independent Surfaces/Edges sub-controls. It uses one moving partial-spectrum field in the existing voxel draw, preserves authored Fill/Edge alpha, and does not opt Sphere into the shared Rainbow family or add a timer/poller/worker/history pass.
+- [x] Add **Perspective Strength** as a Sphere-local presentation control constrained to `0..1`: `1.0` is the accepted projection exactly and lower values only flatten toward orthographic, so the control cannot exceed the current golden perspective/overflow envelope. Both curated presets remain `1.0`.
+- [x] Sweep active documentation for stale/duplicate Sphere-era authority; remove the two superseded Future Work documents while leaving Historical Bugs untouched.
+- [x] Preserve user-authored visualizer preset ownership: sparse authored slot numbers are valid, runtime compacts them without renaming/deleting files, Edit Preset retains the real backing path, and Save-As appends after the highest authored number rather than assuming contiguous slots. Shipped manifests are never runtime authority over user presets.
+- [x] Make lazy visualizer Settings-body construction transactional: a failed builder/hydration attempt removes its partial body before rethrow, stale retry bodies are de-duplicated by a mode marker, and non-Custom presets never transiently expose Custom/Advanced controls.
+- [x] Close Sphere bucket-state schema drift: the new appearance/particle-flow/reactivity/rotation/effects bucket identities are registered in canonical `ui.visualizer_bucket_states`; JSON/SST defaults are regenerated; a Qt-free builder/schema contract now prevents future bucket renames from escaping canonical defaults.
+- [x] Focused validation after approved control/rainbow cleanup + sparse-preset + bucket-schema regressions: Sphere/geometry/technical-profile/user-preset/body-transaction/bucket-contract gate **82 passed**; full Python source compile clean; canonical JSON/SST defaults match. Settings persistence collection remains blocked in this Linux workspace only by missing `PySide6`.
+- [ ] Deferred presentation-only candidates (Edge Weight, Voxel Size Variation, Shadow controls, Tracer Colour, Depth Cue) remain unimplemented pending operator decision; do not maintain a separate proposal specification in docs.
 
+Protected behaviour remains the 2026-09-10 accepted detached-cohort/onset/tracer/four-corner/vocal-recoil contract. Do not retune those mechanics during presentation polish.
 
 ## 2. `dark.qss` retirement → ThemeSpec sole authority
 
@@ -195,6 +97,7 @@ Owned in detail by `Docs/TestSuite.md` and `Future_Cleanup.md`.
   `Docs/Guardrails/Performance_Optimization_Contract.md`.
 - **Defaults SSOT:** `core/settings/default_settings.py` is the sole authority;
   `.json`/`.sst` are derived and audit-gated. Never add a second default authority.
+- **Visualizer preset ownership:** per-mode preset files are user-authored state. Users may add arbitrary counts, delete down to one, and leave sparse authored numbers. Runtime compacts them into slider positions without renaming/deleting files. A shipped preset manifest is packaging/reconciliation metadata, never runtime authority over user-authored presets.
 - **No fallback architecture:** failures should remain explicit and diagnosable; do
   not solve closeout work by adding silent fallback ownership, timers, or pollers.
 

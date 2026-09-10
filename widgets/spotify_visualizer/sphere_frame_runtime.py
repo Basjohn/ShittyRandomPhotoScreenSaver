@@ -1050,8 +1050,8 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                         self._transient_slow[idx], value, dt, _TRANSIENT_BASELINE_S
                     )
 
-            vocal_response = max(0.0, min(3.0, float(parameters["sphere_vocal_response"])))
-            response_scale = min(1.35, vocal_response)
+            vocal_response = max(0.0, min(1.35, float(parameters["sphere_vocal_response"])))
+            response_scale = vocal_response
             candidates: list[tuple[float, str, float]] = []
 
             if vocal_response > 0.0 and vocal_event_strength >= _TYPED_VOCAL_MIN_STRENGTH:
@@ -1265,7 +1265,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 dt,
                 sustained_tau,
             )
-            size_response = max(0.0, min(3.0, float(parameters["sphere_size_response"])))
+            size_response = max(0.0, min(2.54, float(parameters["sphere_size_response"])))
             max_growth = min(0.42, 0.040 + 0.150 * size_response)
             if active:
                 dynamic_span = max(

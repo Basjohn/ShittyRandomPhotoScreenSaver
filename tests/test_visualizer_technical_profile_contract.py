@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import pytest
 from pathlib import Path
 
 from core.settings.visualizer_mode_registry import (
@@ -66,6 +67,15 @@ def test_rejected_smooth_sphere_settings_are_not_canonical_defaults() -> None:
         "sphere_shadow_strength",
         "sphere_rainbow_enabled",
         "sphere_rainbow_speed",
+        "sphere_rainbow_ghosting",
+        "sphere_idle_motion",
+        "sphere_surface_detail",
+        "sphere_bass_response",
+        "sphere_mid_response",
+        "sphere_high_response",
+        "sphere_energy_curve",
+        "sphere_deformation",
+        "sphere_bump_reactivity",
     ):
         assert key not in sphere_defaults
 
@@ -77,14 +87,60 @@ def test_rejected_smooth_sphere_keys_are_forward_stripped() -> None:
         {
             "mode": "sphere",
             "sphere_deformation": 1.25,
+            "sphere_bump_reactivity": 1.4,
             "sphere_antialiasing": True,
             "sphere_shadow_enabled": True,
             "sphere_shadow_strength": 0.7,
             "sphere_rainbow_enabled": True,
             "sphere_rainbow_speed": 1.5,
+            "sphere_rainbow_ghosting": True,
+            "sphere_idle_motion": 0.7,
+            "sphere_surface_detail": 1.6,
+            "sphere_bass_response": 1.8,
+            "sphere_mid_response": 1.7,
+            "sphere_high_response": 1.5,
+            "sphere_energy_curve": 0.4,
         }
     )
-    assert cleaned == {"mode": "sphere", "sphere_deformation": 1.25, "sphere_shadow_enabled": True}
+    assert cleaned == {"mode": "sphere", "sphere_shadow_enabled": True}
+
+
+def test_legacy_sphere_response_controls_migrate_without_retuning() -> None:
+    from core.settings.visualizer_settings_contract import migrate_legacy_sphere_control_keys
+
+    migrated = migrate_legacy_sphere_control_keys({
+        "sphere_deformation": 2.25,
+        "sphere_bump_reactivity": 1.60,
+        "sphere_shadow_enabled": False,
+    })
+    assert migrated["sphere_fragment_strength"] == 3.60
+    assert migrated["sphere_particle_distance"] == 2.25
+    assert migrated["sphere_shadow_enabled"] is False
+    assert "sphere_deformation" not in migrated
+    assert "sphere_bump_reactivity" not in migrated
+
+    partial = migrate_legacy_sphere_control_keys({"sphere_deformation": 2.0})
+    assert partial["sphere_fragment_strength"] == 1.70
+    assert partial["sphere_particle_distance"] == 2.0
+
+
+def test_schema_v8_migrates_cached_custom_sphere_payload_too() -> None:
+    from core.settings.visualizer_presets import normalize_visualizer_custom_snapshot_cache
+
+    cache = normalize_visualizer_custom_snapshot_cache({
+        "sphere": {
+            "mode": "sphere",
+            "sphere_deformation": 2.45,
+            "sphere_bump_reactivity": 1.60,
+            "sphere_vocal_response": 1.45,
+        }
+    })
+    sphere = cache["sphere"]
+    assert sphere["sphere_fragment_strength"] == pytest.approx(3.92)
+    assert sphere["sphere_particle_distance"] == 2.45
+    assert sphere["sphere_vocal_response"] == 1.35
+    assert "sphere_deformation" not in sphere
+    assert "sphere_bump_reactivity" not in sphere
 
 
 def test_sphere_descriptor_points_only_at_voxel_renderer() -> None:
@@ -104,7 +160,11 @@ def test_canonical_defaults_normalize_without_synthesizing_retired_sphere_rainbo
     visualizer = CANONICAL_DEFAULTS["widgets"]["spotify_visualizer"]
     assert "sphere_rainbow_enabled" not in visualizer
     assert "sphere_rainbow_speed" not in visualizer
-    assert visualizer["sphere_deformation"] == 1.35
+    assert visualizer["sphere_fragment_strength"] == 1.1475
+    assert visualizer["sphere_particle_distance"] == 1.35
+    assert visualizer["sphere_particle_amount"] == 1.0
+    assert visualizer["sphere_perspective_strength"] == 1.0
+    assert visualizer["sphere_taste_the_rainbow_enabled"] is False
     assert get_default_settings() == CANONICAL_DEFAULTS
 
 

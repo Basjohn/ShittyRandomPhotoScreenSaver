@@ -36,9 +36,6 @@ SPHERE_RADIUS_FRACTION = 0.215
 
 _SPHERE_SECTION_COUNT = 8
 _PARTICLE_COHORT_COUNT = 4
-_GHOST_SAMPLE_INTERVAL_S = 0.055
-_GHOST_MAX_AGE_S = 0.62
-_GHOST_MAX_SAMPLES = 6
 
 logger = get_logger(__name__)
 
@@ -95,8 +92,8 @@ def _project_local_rect(
 def sphere_overflow_scissor(
     frame: QuickVisualizerRenderFrame,
     *,
-    deformation: float,
-    reactivity: float,
+    fragment_strength: float,
+    particle_distance: float,
 ) -> tuple[int, int, int, int]:
     """Return the Sphere-only depth-clear footprint for unclipped overflow.
 
@@ -107,7 +104,9 @@ def sphere_overflow_scissor(
 
     presentation = frame.snapshot.presentation
     cx, cy, radius = sphere_pixel_geometry(presentation)
-    max_radial = 0.68 * max(0.0, float(deformation)) * max(0.0, float(reactivity))
+    fragment_radial = 0.68 * max(0.0, float(fragment_strength))
+    particle_radial = 0.88 + 0.42 * max(0.0, float(particle_distance))
+    max_radial = max(fragment_radial, particle_radial)
     extent = radius * (1.22 + max_radial)
     return _project_local_rect(
         frame,
@@ -125,11 +124,13 @@ layout(location = 4) in float aRadialPolarity;
 uniform mat4 uMatrix;
 uniform vec3 uGeometry;
 uniform float uSectionDrives[8];
-uniform float uDeformation;
+uniform float uFragmentStrength;
+uniform float uParticleDistance;
+uniform float uParticleAmount;
+uniform float uPerspectiveStrength;
 uniform float uRotationPhase;
 uniform float uSizePulse;
 uniform float uBlockRelief;
-uniform float uBlockReactivity;
 uniform int uFadeIncoming;
 uniform float uIncomingDrive;
 uniform float uIncomingDensity;
@@ -146,8 +147,6 @@ uniform int uCohortSection[4];
 uniform int uCohortLane[4];
 uniform int uCohortOuttake[4];
 uniform int uRenderPass;
-uniform vec2 uScreenOffset;
-uniform float uGhostExpand;
 uniform float uTracerDrive;
 uniform float uTracerPhase;
 
@@ -158,7 +157,7 @@ flat out vec3 vLocalFaceNormal;
 flat out vec3 vWorldFaceNormal;
 out float vArrivalFade;
 out float vTracer;
-out float vGhostActivity;
+flat out float vRainbowCoordinate;
 
 mat3 rotation() {{
     vec3 angle = uRotationPhase * vec3(0.21, 0.57, 0.29);
@@ -209,6 +208,7 @@ float stableFlowSelection(vec3 direction, int dominant, int lane, float densityS
     int quadrant = (direction.x < 0.0 ? 1 : 0) | (direction.y < 0.0 ? 2 : 0);
     float admission = 0.46 + (quadrant == (dominant & 3) ? 0.24 : 0.0);
     admission *= clamp(densityScale, 0.0, 1.0);
+    admission = clamp(admission * clamp(uParticleAmount, 0.25, 1.75), 0.0, 1.0);
     float pick = fract(
         aInstanceSeed * 19.371
         + float(quadrant) * 0.271
@@ -229,8 +229,8 @@ float stableFlowSelection(vec3 direction, int dominant, int lane, float densityS
 }}
 
 float incomingField(vec3 direction) {{
-    // Legacy aggregate fallback retained only for bounded ghost/history
-    // compatibility. Live Sphere travel is cohort-authored below.
+    // Legacy aggregate fallback retained only for no-cohort compatibility.
+    // Live Sphere travel is cohort-authored below.
     int dominant = clamp(uIncomingSection, 0, 7) & 3;
     int previousDominant = clamp(uIncomingPreviousSection, 0, 7) & 3;
     int quadrant = (direction.x < 0.0 ? 1 : 0) | (direction.y < 0.0 ? 2 : 0);
@@ -239,6 +239,7 @@ float incomingField(vec3 direction) {{
     float currentBoost = quadrant == dominant ? 0.24 : 0.0;
     float admission = 0.46 + mix(previousBoost, currentBoost, dominanceBlend);
     admission *= clamp(uIncomingDensity, 0.0, 1.0);
+    admission = clamp(admission * clamp(uParticleAmount, 0.25, 1.75), 0.0, 1.0);
     float pick = fract(aInstanceSeed * 19.371 + float(quadrant) * 0.271 + 0.137);
     float threshold = 1.0 - admission;
     float selected = smoothstep(threshold - 0.028, threshold + 0.028, pick);
@@ -378,9 +379,8 @@ void main() {{
     vec3 direction = normalize(aInstanceCenter);
     float localDrive = sectionField(direction);
 
-    float reactivity = clamp(uBlockReactivity, 0.0, 2.0);
     float polarityScale = aRadialPolarity > 0.0 ? 1.12 : 0.72;
-    float radial = localDrive * (0.68 * uDeformation) * reactivity * aRadialPolarity * polarityScale;
+    float radial = localDrive * (0.68 * uFragmentStrength) * aRadialPolarity * polarityScale;
 
     float intakeRadial = 0.0;
     float baseAlpha = 1.0;
@@ -390,7 +390,7 @@ void main() {{
     particleFlow(
         direction, intakeRadial, baseAlpha, outtakeRadial, outtakeAlpha, flowActivity
     );
-    float flowScale = 0.88 + 0.42 * clamp(uDeformation, 0.0, 4.5);
+    float flowScale = 0.88 + 0.42 * clamp(uParticleDistance, 0.0, 4.5);
 
     float arrivalFade = 1.0;
     if (uRenderPass == 1) {{
@@ -410,8 +410,7 @@ void main() {{
     float blockGrowth = 1.0 + 0.28 * uSizePulse;
     float halfExtent = {VOXEL_HALF_EXTENT:.9f}
                      * max(0.58, 1.0 + seedVariation)
-                     * blockGrowth
-                     * (1.0 + max(0.0, uGhostExpand));
+                     * blockGrowth;
 
     // Intentional version of the useful "one bright block" accident.  Stronger
     // articulation extends the head into a short snake. Selected cubes rotate
@@ -440,14 +439,22 @@ void main() {{
     vWorldFaceNormal = normalize(turn * (localTurn * aNormal));
     vArrivalFade = arrivalFade;
     vTracer = tracer;
-    // Rainbow ghosts trail only blocks that actually have reactive motion/light
-    // authority. Re-rendering the entire shell was the cause of the white glow.
-    vGhostActivity = clamp(max(max(localDrive, flowActivity), tracer), 0.0, 1.0);
-
-    float cameraW = (4.8 - turnedPosition.z) / 4.8;
+    // A coherent shell-space coordinate gives neighbouring voxels neighbouring
+    // hues. Only ~22% of the spectrum is visible across the shell at once; the
+    // whole window drifts over time in the fragment stage.
+    // Cheap coherent shell-space plane gradient: no atan/trig and no extra
+    // per-voxel CPU state. Neighbouring voxels receive neighbouring hues.
+    vRainbowCoordinate = clamp(
+        0.5 + 0.5 * dot(direction, normalize(vec3(0.71, 0.46, 0.31))),
+        0.0,
+        1.0
+    );
+    // 1.0 is the accepted projection exactly; lower values only flatten it
+    // toward orthographic so this optional control can never exceed the golden
+    // perspective/overflow envelope.
+    float cameraW = (4.8 - turnedPosition.z * uPerspectiveStrength) / 4.8;
     vec2 local = uGeometry.xy * cameraW
-               + vec2(turnedPosition.x, -turnedPosition.y) * uGeometry.z
-               + uScreenOffset * cameraW;
+               + vec2(turnedPosition.x, -turnedPosition.y) * uGeometry.z;
     gl_Position = uMatrix * vec4(local, 0.0, cameraW);
     gl_Position.z = (-turnedPosition.z / 3.2) * gl_Position.w;
 }}
@@ -461,6 +468,7 @@ flat in vec3 vLocalFaceNormal;
 flat in vec3 vWorldFaceNormal;
 in float vArrivalFade;
 in float vTracer;
+flat in float vRainbowCoordinate;
 out vec4 fragColor;
 
 uniform vec3 uLight;
@@ -470,6 +478,15 @@ uniform vec4 uFillColor;
 uniform vec4 uEdgeColor;
 uniform float uFade;
 uniform int uCelShading;
+uniform int uRainbowSurfaces;
+uniform int uRainbowEdges;
+uniform float uRainbowPhase;
+
+vec3 rainbowRgb(float hue) {
+    vec3 p = abs(fract(hue + vec3(0.0, 0.6666667, 0.3333333)) * 6.0 - 3.0);
+    vec3 pure = clamp(p - 1.0, 0.0, 1.0);
+    return mix(vec3(1.0), pure, 0.82);
+}
 
 void main() {
     if (vArrivalFade <= 0.001) discard;
@@ -524,6 +541,12 @@ void main() {
 
     vec3 base = max(uFillColor.rgb, vec3(0.001));
     vec3 edgeColor = uEdgeColor.rgb;
+    if (uRainbowSurfaces != 0 || uRainbowEdges != 0) {
+        float rainbowHue = fract(uRainbowPhase + 0.22 * vRainbowCoordinate);
+        vec3 rainbowColor = rainbowRgb(rainbowHue);
+        if (uRainbowSurfaces != 0) base = max(rainbowColor, vec3(0.001));
+        if (uRainbowEdges != 0) edgeColor = rainbowColor;
+    }
     vec3 color;
 
     if (uCelShading != 0) {
@@ -605,40 +628,6 @@ void main() {
 }
 """
 
-_GHOST_FRAGMENT_SOURCE = """#version 410 core
-in vec3 vLocalPosition;
-flat in vec3 vLocalFaceNormal;
-in float vArrivalFade;
-in float vTracer;
-in float vGhostActivity;
-out vec4 fragColor;
-uniform float uGhostHue;
-uniform float uGhostAlpha;
-uniform float uFade;
-
-vec3 hsv2rgb(vec3 c) {
-    vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
-    return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
-}
-
-void main() {
-    vec3 absFace = abs(normalize(vLocalFaceNormal));
-    vec2 faceUV = absFace.x > 0.5
-                ? vLocalPosition.yz
-                : (absFace.y > 0.5 ? vLocalPosition.xz : vLocalPosition.xy);
-    float r = length(faceUV);
-    float softness = 1.0 - smoothstep(0.35, 1.34, r);
-    float activity = smoothstep(0.06, 0.30, vGhostActivity);
-    if (activity <= 0.002) discard;
-    vec3 rainbow = hsv2rgb(vec3(fract(uGhostHue), 0.88, 1.0));
-    rainbow = mix(rainbow, vec3(1.0), 0.08 * vTracer);
-    fragColor = vec4(
-        rainbow,
-        clamp(uGhostAlpha * uFade * vArrivalFade * softness * activity, 0.0, 1.0)
-    );
-}
-"""
-
 class QuickSphereVoxelRenderer:
     mode_id = "sphere"
 
@@ -646,9 +635,6 @@ class QuickSphereVoxelRenderer:
         self._program = 0
         self._shadow_program = 0
         self._shadow_uniforms: dict[str, int] = {}
-        self._ghost_program = 0
-        self._ghost_uniforms: dict[str, int] = {}
-        self._ghost_history: list[tuple] = []
         self._vao = 0
         self._mesh_vbo = 0
         self._instance_vbo = 0
@@ -662,7 +648,7 @@ class QuickSphereVoxelRenderer:
     @property
     def has_resources(self) -> bool:
         return bool(
-            self._program or self._shadow_program or self._ghost_program or self._vao
+            self._program or self._shadow_program or self._vao
             or self._mesh_vbo or self._instance_vbo
         )
 
@@ -716,7 +702,7 @@ class QuickSphereVoxelRenderer:
             if is_viz_diagnostics_enabled():
                 logger.debug(
                     "[SPHERE_RENDER] fill_rgba=%s edge_rgba=%s "
-                    "toon=%s tracer=%s gloss=%.3f specular=%.3f shadow=%s ghosts=%s light=%s",
+                    "toon=%s tracer=%s gloss=%.3f specular=%.3f shadow=%s rainbow=%s/%s/%s light=%s",
                     parameters["sphere_fill_color"],
                     parameters["sphere_edge_color"],
                     bool(parameters["sphere_cel_shading"]),
@@ -724,7 +710,9 @@ class QuickSphereVoxelRenderer:
                     float(parameters["sphere_gloss"]),
                     float(parameters["sphere_specular"]),
                     bool(parameters["sphere_shadow_enabled"]),
-                    bool(parameters["sphere_rainbow_ghosting"]),
+                    bool(parameters["sphere_taste_the_rainbow_enabled"]),
+                    bool(parameters["sphere_taste_the_rainbow_surfaces"]),
+                    bool(parameters["sphere_taste_the_rainbow_edges"]),
                     parameters["sphere_light_direction"],
                 )
 
@@ -741,8 +729,6 @@ class QuickSphereVoxelRenderer:
         allow_overflow = bool(parameters["sphere_allow_overflow"])
         fade_incoming = bool(parameters["sphere_fade_incoming_blocks"])
         cel_shading = bool(parameters["sphere_cel_shading"])
-        rainbow_ghosting = bool(parameters["sphere_rainbow_ghosting"])
-        self._update_ghost_history(state, enabled=rainbow_ghosting)
 
         previous_depth_enabled = bool(gl.glIsEnabled(gl.GL_DEPTH_TEST))
         previous_blend_enabled = bool(gl.glIsEnabled(gl.GL_BLEND))
@@ -762,8 +748,8 @@ class QuickSphereVoxelRenderer:
         if allow_overflow:
             left, bottom, width, height = sphere_overflow_scissor(
                 frame,
-                deformation=float(parameters["sphere_deformation"]),
-                reactivity=float(parameters["sphere_bump_reactivity"]),
+                fragment_strength=float(parameters["sphere_fragment_strength"]),
+                particle_distance=float(parameters["sphere_particle_distance"]),
             )
         else:
             left, bottom, width, height = sphere_depth_scissor(frame)
@@ -810,13 +796,15 @@ class QuickSphereVoxelRenderer:
             gl.glUniformMatrix4fv(u["uMatrix"], 1, False, frame.matrix_values)
             gl.glUniform3f(u["uGeometry"], *sphere_pixel_geometry(presentation))
             gl.glUniform1fv(u["uSectionDrives"], _SPHERE_SECTION_COUNT, section_drives)
-            gl.glUniform1f(u["uDeformation"], float(parameters["sphere_deformation"]))
+            gl.glUniform1f(u["uFragmentStrength"], float(parameters["sphere_fragment_strength"]))
+            gl.glUniform1f(u["uParticleDistance"], float(parameters["sphere_particle_distance"]))
+            gl.glUniform1f(u["uParticleAmount"], float(parameters["sphere_particle_amount"]))
+            gl.glUniform1f(u["uPerspectiveStrength"], float(parameters["sphere_perspective_strength"]))
             gl.glUniform1f(u["uRotationPhase"], state.rotation_phase)
             gl.glUniform1f(u["uSizePulse"], state.size_pulse)
             gl.glUniform1f(u["uTracerDrive"], state.tracer_drive)
             gl.glUniform1f(u["uTracerPhase"], state.tracer_phase)
             gl.glUniform1f(u["uBlockRelief"], 0.35)
-            gl.glUniform1f(u["uBlockReactivity"], float(parameters["sphere_bump_reactivity"]))
             gl.glUniform1i(u["uFadeIncoming"], 1 if fade_incoming else 0)
             gl.glUniform1f(u["uIncomingDrive"], float(state.incoming_drive))
             gl.glUniform1f(u["uIncomingDensity"], float(state.incoming_density))
@@ -825,8 +813,6 @@ class QuickSphereVoxelRenderer:
             gl.glUniform1f(u["uIncomingBlend"], float(state.incoming_blend))
             self._upload_particle_cohorts(u, state.particle_cohorts)
             gl.glUniform1i(u["uRenderPass"], 0)
-            gl.glUniform2f(u["uScreenOffset"], 0.0, 0.0)
-            gl.glUniform1f(u["uGhostExpand"], 0.0)
             gl.glUniform3f(u["uLight"], *self._light)
             gl.glUniform1f(u["uGloss"], float(parameters["sphere_gloss"]))
             gl.glUniform1f(u["uSpecular"], float(parameters["sphere_specular"]))
@@ -836,6 +822,20 @@ class QuickSphereVoxelRenderer:
             gl.glUniform4f(u["uEdgeColor"], *edge_color)
             gl.glUniform1f(u["uFade"], presentation.scene_fade * presentation.content_fade)
             gl.glUniform1i(u["uCelShading"], 1 if cel_shading else 0)
+            rainbow_enabled = bool(parameters["sphere_taste_the_rainbow_enabled"])
+            gl.glUniform1i(
+                u["uRainbowSurfaces"],
+                1 if rainbow_enabled and bool(parameters["sphere_taste_the_rainbow_surfaces"]) else 0,
+            )
+            gl.glUniform1i(
+                u["uRainbowEdges"],
+                1 if rainbow_enabled and bool(parameters["sphere_taste_the_rainbow_edges"]) else 0,
+            )
+            rainbow_phase = math.fmod(
+                max(0.0, float(frame.snapshot.logical.logical_timestamp)) * 0.05,
+                1.0,
+            )
+            gl.glUniform1f(u["uRainbowPhase"], rainbow_phase)
 
             gl.glEnable(gl.GL_CULL_FACE)
             gl.glCullFace(gl.GL_BACK)
@@ -875,16 +875,6 @@ class QuickSphereVoxelRenderer:
                 gl.glDepthMask(gl.GL_TRUE)
                 gl.glUniform1i(u["uRenderPass"], 0)
 
-            # Ghosts render after the hero so the current opaque/translucent shell
-            # cannot simply paint the trail away. This path is Sphere-only and
-            # default-off; accepted visualizers never pay these extra draws.
-            if rainbow_ghosting:
-                self._draw_rainbow_ghosts(
-                    frame,
-                    state=state,
-                    parameters=parameters,
-                    fade_incoming=fade_incoming,
-                )
         finally:
             gl.glBlendFuncSeparate(
                 previous_src_rgb,
@@ -914,143 +904,6 @@ class QuickSphereVoxelRenderer:
                 gl.glEnable(gl.GL_SCISSOR_TEST)
             else:
                 gl.glDisable(gl.GL_SCISSOR_TEST)
-
-    def _update_ghost_history(self, state: SphereFrame, *, enabled: bool) -> None:
-        if not enabled:
-            self._ghost_history.clear()
-            return
-        now = float(state.authored_time)
-        self._ghost_history = [
-            sample for sample in self._ghost_history
-            if 0.0 <= now - sample[0] <= _GHOST_MAX_AGE_S
-        ]
-        if (
-            not self._ghost_history
-            or now - self._ghost_history[-1][0] >= _GHOST_SAMPLE_INTERVAL_S
-        ):
-            self._ghost_history.append((
-                now,
-                float(state.rotation_phase),
-                float(state.size_pulse),
-                float(state.tracer_drive),
-                float(state.tracer_phase),
-                tuple(float(v) for v in state.section_drives[:_SPHERE_SECTION_COUNT]),
-                float(state.incoming_drive),
-                float(state.incoming_density),
-                int(state.incoming_section),
-                int(state.incoming_previous_section),
-                float(state.incoming_blend),
-                tuple(state.particle_cohorts),
-            ))
-            if len(self._ghost_history) > _GHOST_MAX_SAMPLES:
-                self._ghost_history = self._ghost_history[-_GHOST_MAX_SAMPLES:]
-
-    def _draw_rainbow_ghosts(
-        self,
-        frame: QuickVisualizerRenderFrame,
-        *,
-        state: SphereFrame,
-        parameters,
-        fade_incoming: bool,
-    ) -> None:
-        if not self._ghost_program or len(self._ghost_history) < 2:
-            return
-        presentation = frame.snapshot.presentation
-        now = float(state.authored_time)
-        radius = sphere_pixel_geometry(presentation)[2]
-        blur = radius * 0.036
-        # Nine samples per history copy give a broad soft trail without an FBO.
-        # This is explicit/default-off and bounded to five history states.
-        blur_offsets = (
-            (0.0, 0.0),
-            ( blur, 0.0), (-blur, 0.0), (0.0, blur), (0.0, -blur),
-            ( blur, blur), (-blur, blur), (blur, -blur), (-blur, -blur),
-        )
-        gl.glUseProgram(self._ghost_program)
-        gu = self._ghost_uniforms
-        gl.glDisable(gl.GL_DEPTH_TEST)
-        gl.glDepthMask(gl.GL_FALSE)
-        gl.glEnable(gl.GL_CULL_FACE)
-        gl.glCullFace(gl.GL_BACK)
-        gl.glFrontFace(
-            gl.GL_CW
-            if frame.matrix_values[0] * frame.matrix_values[5] > 0
-            else gl.GL_CCW
-        )
-        gl.glEnable(gl.GL_BLEND)
-        # Ghosts are translucent trails, not bloom. Standard alpha blending plus
-        # reactive-block gating prevents repeated history copies from whitening
-        # the complete sphere.
-        gl.glBlendFuncSeparate(
-            gl.GL_SRC_ALPHA,
-            gl.GL_ONE_MINUS_SRC_ALPHA,
-            gl.GL_ONE,
-            gl.GL_ONE_MINUS_SRC_ALPHA,
-        )
-        gl.glBindVertexArray(self._vao)
-        history = self._ghost_history[:-1]
-        for sample_index, sample in enumerate(history):
-            (
-                sample_time,
-                phase,
-                size_pulse,
-                tracer_drive,
-                tracer_phase,
-                section_values,
-                incoming_drive,
-                incoming_density,
-                incoming_section,
-                incoming_previous_section,
-                incoming_blend,
-                particle_cohorts,
-            ) = sample
-            age = max(0.0, now - sample_time)
-            if age <= 0.020 or age > _GHOST_MAX_AGE_S:
-                continue
-            life = max(0.0, 1.0 - age / _GHOST_MAX_AGE_S)
-            ghost_alpha = 0.18 * (life ** 1.12)
-            if ghost_alpha <= 0.004:
-                continue
-            section_drives = np.zeros(_SPHERE_SECTION_COUNT, dtype=np.float32)
-            count = min(_SPHERE_SECTION_COUNT, len(section_values))
-            if count:
-                section_drives[:count] = np.asarray(section_values[:count], dtype=np.float32)
-            gl.glUniformMatrix4fv(gu["uMatrix"], 1, False, frame.matrix_values)
-            gl.glUniform3f(gu["uGeometry"], *sphere_pixel_geometry(presentation))
-            gl.glUniform1fv(gu["uSectionDrives"], _SPHERE_SECTION_COUNT, section_drives)
-            gl.glUniform1f(gu["uDeformation"], float(parameters["sphere_deformation"]))
-            gl.glUniform1f(gu["uRotationPhase"], phase)
-            gl.glUniform1f(gu["uSizePulse"], size_pulse)
-            gl.glUniform1f(gu["uTracerDrive"], tracer_drive)
-            gl.glUniform1f(gu["uTracerPhase"], tracer_phase)
-            gl.glUniform1f(gu["uBlockRelief"], 0.35)
-            gl.glUniform1f(gu["uBlockReactivity"], float(parameters["sphere_bump_reactivity"]))
-            gl.glUniform1i(gu["uFadeIncoming"], 1 if fade_incoming else 0)
-            gl.glUniform1f(gu["uIncomingDrive"], incoming_drive)
-            gl.glUniform1f(gu["uIncomingDensity"], incoming_density)
-            gl.glUniform1i(gu["uIncomingSection"], incoming_section)
-            gl.glUniform1i(gu["uIncomingPreviousSection"], incoming_previous_section)
-            gl.glUniform1f(gu["uIncomingBlend"], incoming_blend)
-            self._upload_particle_cohorts(gu, particle_cohorts)
-            gl.glUniform1i(gu["uRenderPass"], 0)
-            gl.glUniform1f(gu["uGhostExpand"], 0.08 + 0.24 * (age / _GHOST_MAX_AGE_S))
-            gl.glUniform1f(gu["uGhostHue"], (sample_time * 0.43 + sample_index * 0.19) % 1.0)
-            gl.glUniform1f(
-                gu["uFade"],
-                float(presentation.scene_fade) * float(presentation.content_fade),
-            )
-            drift = (age / _GHOST_MAX_AGE_S) * radius * 0.040
-            base_dx = -self._light_xy[0] * drift + (sample_index - len(history) * 0.5) * radius * 0.004
-            base_dy = -self._light_xy[1] * drift
-            for dx, dy in blur_offsets:
-                gl.glUniform2f(gu["uScreenOffset"], base_dx + dx, base_dy + dy)
-                gl.glUniform1f(gu["uGhostAlpha"], ghost_alpha)
-                gl.glDrawArraysInstanced(
-                    gl.GL_TRIANGLES,
-                    0,
-                    self._vertex_count,
-                    self._instance_count,
-                )
 
     def _draw_scene_shadow(
         self,
@@ -1125,21 +978,18 @@ class QuickSphereVoxelRenderer:
                 _SHADOW_FRAGMENT_SOURCE,
                 label="Quick Sphere flat shadow",
             )
-            self._ghost_program = compile_program(
-                _VERTEX_SOURCE,
-                _GHOST_FRAGMENT_SOURCE,
-                label="Quick Sphere rainbow ghosts",
-            )
             names = (
                 "uMatrix", "uGeometry", "uSectionDrives",
-                "uDeformation", "uRotationPhase", "uSizePulse", "uBlockRelief",
-                "uBlockReactivity", "uFadeIncoming", "uIncomingDrive", "uIncomingDensity", "uIncomingSection",
+                "uFragmentStrength", "uParticleDistance", "uParticleAmount", "uPerspectiveStrength",
+                "uRotationPhase", "uSizePulse", "uBlockRelief",
+                "uFadeIncoming", "uIncomingDrive", "uIncomingDensity", "uIncomingSection",
                 "uIncomingPreviousSection", "uIncomingBlend", "uCohortCount", "uCohortProgress",
                 "uCohortStrength", "uCohortDensity", "uCohortVelocity", "uCohortBounce",
                 "uCohortSection", "uCohortLane", "uCohortOuttake", "uRenderPass",
-                "uScreenOffset", "uGhostExpand", "uTracerDrive", "uTracerPhase",
+                "uTracerDrive", "uTracerPhase",
                 "uLight", "uGloss", "uSpecular",
                 "uFillColor", "uEdgeColor", "uFade", "uCelShading",
+                "uRainbowSurfaces", "uRainbowEdges", "uRainbowPhase",
             )
             self._uniforms = {
                 name: int(
@@ -1178,38 +1028,6 @@ class QuickSphereVoxelRenderer:
                 raise RuntimeError(
                     "Quick Sphere shadow uniforms are incomplete: "
                     + ", ".join(shadow_missing)
-                )
-            ghost_names = (
-                "uMatrix", "uGeometry", "uSectionDrives", "uDeformation",
-                "uRotationPhase", "uSizePulse", "uBlockRelief", "uBlockReactivity",
-                "uFadeIncoming", "uIncomingDrive", "uIncomingDensity", "uIncomingSection", "uIncomingPreviousSection",
-                "uIncomingBlend", "uCohortCount", "uCohortProgress", "uCohortStrength",
-                "uCohortDensity", "uCohortVelocity", "uCohortBounce", "uCohortSection",
-                "uCohortLane", "uCohortOuttake", "uRenderPass", "uScreenOffset", "uGhostExpand", "uTracerDrive", "uTracerPhase",
-                "uGhostHue", "uGhostAlpha", "uFade",
-            )
-            self._ghost_uniforms = {
-                name: int(
-                    gl.glGetUniformLocation(
-                        self._ghost_program,
-                        (
-                            f"{name}[0]"
-                            if name in {
-                                "uSectionDrives", "uCohortProgress", "uCohortStrength",
-                                "uCohortDensity", "uCohortVelocity", "uCohortBounce",
-                                "uCohortSection", "uCohortLane", "uCohortOuttake",
-                            }
-                            else name
-                        ),
-                    )
-                )
-                for name in ghost_names
-            }
-            ghost_missing = [name for name, location in self._ghost_uniforms.items() if location < 0]
-            if ghost_missing:
-                raise RuntimeError(
-                    "Quick Sphere ghost uniforms are incomplete: "
-                    + ", ".join(ghost_missing)
                 )
 
             mesh = build_voxel_cube_mesh()
@@ -1263,7 +1081,6 @@ class QuickSphereVoxelRenderer:
             ("_instance_vbo", lambda resource: gl.glDeleteBuffers(1, [resource])),
             ("_mesh_vbo", lambda resource: gl.glDeleteBuffers(1, [resource])),
             ("_vao", lambda resource: gl.glDeleteVertexArrays(1, [resource])),
-            ("_ghost_program", gl.glDeleteProgram),
             ("_shadow_program", gl.glDeleteProgram),
             ("_program", gl.glDeleteProgram),
         ):
@@ -1278,8 +1095,6 @@ class QuickSphereVoxelRenderer:
         if not errors:
             self._uniforms.clear()
             self._shadow_uniforms.clear()
-            self._ghost_uniforms.clear()
-            self._ghost_history.clear()
             self._vertex_count = 0
             self._instance_count = 0
             self._parameters = None
