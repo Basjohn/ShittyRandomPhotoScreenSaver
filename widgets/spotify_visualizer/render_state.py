@@ -275,10 +275,23 @@ class SpectrumFrame:
 
 @dataclass(frozen=True, slots=True)
 class SphereFrame:
-    """Small immutable Sphere payload; reactive energy stays in ``common``."""
+    """Immutable authored Voxel Sphere payload.
+
+    ``section_drives`` are mode-owned 3D spatial reaction envelopes.  The renderer
+    consumes them passively; it does not derive motion from absolute audio levels.
+    """
 
     authored_time: float = 0.0
     size_pulse: float = 0.0
+    rotation_drive: float = 0.0
+    rotation_phase: float = 0.0
+    tracer_drive: float = 0.0
+    tracer_phase: float = 0.0
+    section_drives: tuple[float, ...] = ()
+    incoming_drive: float = 0.0
+    incoming_section: int = 0
+    incoming_previous_section: int = 0
+    incoming_blend: float = 1.0
     parameters: FrozenFields = FrozenFields()
 
     def __post_init__(self) -> None:
@@ -290,6 +303,41 @@ class SphereFrame:
         if size_pulse < 0.0:
             raise ValueError("sphere size pulse must be non-negative")
         object.__setattr__(self, "size_pulse", size_pulse)
+        rotation_drive = _finite(self.rotation_drive, name="sphere rotation drive")
+        if rotation_drive < 0.0 or rotation_drive > 1.0:
+            raise ValueError("sphere rotation drive must be within 0..1")
+        object.__setattr__(self, "rotation_drive", rotation_drive)
+        rotation_phase = _finite(self.rotation_phase, name="sphere rotation phase")
+        if rotation_phase < 0.0:
+            raise ValueError("sphere rotation phase must be non-negative")
+        object.__setattr__(self, "rotation_phase", rotation_phase)
+        tracer_drive = _finite(self.tracer_drive, name="sphere tracer drive")
+        if tracer_drive < 0.0 or tracer_drive > 1.0:
+            raise ValueError("sphere tracer drive must be within 0..1")
+        object.__setattr__(self, "tracer_drive", tracer_drive)
+        tracer_phase = _finite(self.tracer_phase, name="sphere tracer phase")
+        if tracer_phase < 0.0:
+            raise ValueError("sphere tracer phase must be non-negative")
+        object.__setattr__(self, "tracer_phase", tracer_phase)
+        object.__setattr__(
+            self, "section_drives", _float_tuple(self.section_drives, name="sphere section drive")
+        )
+        incoming_drive = _finite(self.incoming_drive, name="sphere incoming drive")
+        if incoming_drive < 0.0 or incoming_drive > 1.0:
+            raise ValueError("sphere incoming drive must be within 0..1")
+        object.__setattr__(self, "incoming_drive", incoming_drive)
+        incoming_section = int(self.incoming_section)
+        if incoming_section < 0 or incoming_section >= 8:
+            raise ValueError("sphere incoming section must be within 0..7")
+        object.__setattr__(self, "incoming_section", incoming_section)
+        incoming_previous_section = int(self.incoming_previous_section)
+        if incoming_previous_section < 0 or incoming_previous_section >= 8:
+            raise ValueError("sphere previous incoming section must be within 0..7")
+        object.__setattr__(self, "incoming_previous_section", incoming_previous_section)
+        incoming_blend = _finite(self.incoming_blend, name="sphere incoming blend")
+        if incoming_blend < 0.0 or incoming_blend > 1.0:
+            raise ValueError("sphere incoming blend must be within 0..1")
+        object.__setattr__(self, "incoming_blend", incoming_blend)
         object.__setattr__(
             self, "parameters", _coerce_frozen_fields(self.parameters, name="sphere parameters")
         )

@@ -791,8 +791,12 @@ class VisualizerSettingsContextMixin:
     def _update_rainbow_visibility(self) -> None:
         """Show/hide rainbow speed slider and apply rainbow text easter egg."""
         try:
+            from core.settings.visualizer_mode_registry import mode_has_rainbow_controls
+
             enabled = self.rainbow_enabled.isChecked()
-            custom_visible = self._active_visualizer_preset_is_custom()
+            current_mode = self._get_active_visualizer_mode()
+            supports_rainbow = mode_has_rainbow_controls(current_mode)
+            custom_visible = self._active_visualizer_preset_is_custom() and supports_rainbow
             bucket = getattr(self, '_rainbow_controls_container', None)
             if bucket is not None:
                 bucket.setVisible(custom_visible)

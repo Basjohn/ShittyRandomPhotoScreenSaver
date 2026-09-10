@@ -368,22 +368,24 @@ Sine/Oscilloscope glow spreads perpendicular to the curve and scales with visibl
 Glow size/intensity and line-core antialiasing remain independent.
 
 Sphere is an experimental, independently enabled sixth mode; existing profiles retain the original five enabled
-modes. Its frameless transparent viewport contains a static 3D mesh with authored-time deformation, reconstructed
-normals and material-specific bump/roughness. Chrome, Obsidian, Magma, Silver and Water have curated presets plus
-Custom. Independent controls shape band/vocal-range deformation, whole-body transient size response, base bump and
-reactive bump. Deformation allows 0.0-4.5; the complete <=3.0 authored domain is preserved and only the newly added negative
-3.0-4.5 tail is softened to protect positive radius. Vocal Response retains its already-expanded 0.0-3.0 range. Size Response
-allows 0.0-3.0 and the logical spring is bounded to +0.90 radius, 50% above the former +0.60 maximum-response ceiling; all
-default values remain unchanged. Magma adds diffuse fire/smoke/ash and real macro-fissure radius depressions; fine cracks
-remain filtered bump/emissive detail. Water/Magma liquid uses six fixed instanced meshes whose anchors resolve through the
-same rotating/deforming body surface: a body precursor bulge and embedded neck precede pinch-off/gravity fall. Water remains
-translucent. Optional Sphere-local derivative AA filters procedural/detail and silhouette coverage without global MSAA; an
-optional one-quad dark cast shadow projects opposite `sphere_light_direction`, with persisted preset/Custom strength and no
-shadow map/FBO/timer. Static effect geometry is allocated only for an admitted material that uses it. Settings normalize
-parameters once; current playing source identity gates both musical and transient energy, while idle motion continues on the
-existing logical clock. The fixed camera/common pixel scale preserves normal authored presentation; intentionally raised
-extreme response headroom is not compensated by shrinking the baseline Sphere. Inactive renderer resources retire on one-shot render-context events, including a
-mode change that never receives its first source frame. Detail and validation: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
+modes. The current representation is **Voxel Sphere (Experimental)**: the rejected smooth icosphere renderer has been
+removed. Its frameless transparent viewport owns one static cube mesh and one static stepped-shell instance buffer (278
+instances) rendered in one instanced draw. Integer-lattice stepping is authored appearance rather than failed smooth
+curvature. Vertex-shader motion consumes immutable authored time, common energy/transient state and the existing
+`SphereFrame.size_pulse`; Python never rebuilds per-frame voxel topology. Chrome, Obsidian, Magma, Silver and Water are
+bounded palette/material choices with curated presets plus Custom. Deformation, band/vocal response, Block Relief, Block
+Reactivity, whole-body size response, idle motion, rotation and lighting remain bounded experimental controls. The old
+Sphere-local derivative-AA, clipped cast-shadow, liquid/fire auxiliary mesh/program and unused Sphere-rainbow settings are
+not part of the current contract.
+
+Sphere has no dedicated technical-control UI, but it still consumes deterministic BeatEngine configuration through the
+mode descriptor's canonical `technical_profile_mode`; it currently names Spectrum. Shared startup/mode-switch owners resolve
+that descriptor contract generically rather than assuming `technical_cache[mode]` or adding a Sphere-specific fallback.
+Settings/default/model authority remains singular and canonical; disabled Sphere lazily imports/constructs no heavy mode
+implementation resources. Inactive renderer resources retire on one-shot render-context events, including mode changes that
+never receive a first source frame. If the voxel representation fails operator eyes-on acceptance, retire the mode and strip
+its owned persisted namespace rather than starting another representation rescue campaign. Detail and validation:
+`Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
 
 ## Visualizer interactions
 

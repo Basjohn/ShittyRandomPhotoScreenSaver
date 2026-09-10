@@ -7,7 +7,9 @@ from typing import Any
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
     get_default_visualizer_mode_id,
+    get_owned_mode_setting_keys,
     iter_visualizer_mode_descriptors,
+    mode_has_rainbow_controls,
 )
 from core.settings.visualizer_presets import (
     resolve_preset_index_from_mapping,
@@ -81,8 +83,14 @@ def load_visualizer_rainbow_state(tab, spotify_vis_config: Mapping[str, Any] | N
 
     rainbow_cache = {}
     for mode_id in VISUALIZER_MODE_IDS:
-        enabled_key = f"{mode_id}_rainbow_enabled"
-        speed_key = f"{mode_id}_rainbow_speed"
+        # Capability metadata only decides whether this mode participates in
+        # the shared Rainbow product surface. Persisted values/defaults remain
+        # exclusively owned by the canonical Settings defaults/schema.
+        rainbow_keys = get_owned_mode_setting_keys(mode_id, "rainbow")
+        if not rainbow_keys:
+            continue
+        enabled_key = rainbow_keys["rainbow_enabled"]
+        speed_key = rainbow_keys["rainbow_speed"]
         mode_enabled = config.get(enabled_key, None)
         mode_speed = config.get(speed_key, None)
         enabled = bool(mode_enabled) if mode_enabled is not None else global_enabled
@@ -97,11 +105,20 @@ def load_visualizer_rainbow_state(tab, spotify_vis_config: Mapping[str, Any] | N
 
     tab._rainbow_per_mode = rainbow_cache
     current_mode = collect_visualizer_mode_selection(tab)
+    if not mode_has_rainbow_controls(current_mode):
+        # An experimental mode may intentionally have no Rainbow persisted
+        # keys. Do not invent defaults or overwrite the shared presentation
+        # controls while that mode is selected; visibility owns hiding them.
+        if hasattr(tab, "_update_rainbow_visibility"):
+            tab._update_rainbow_visibility()
+        return
+
+    current_rainbow_keys = get_owned_mode_setting_keys(current_mode, "rainbow")
     current_enabled, current_speed = rainbow_cache.get(
         current_mode,
         (
-            tab._default_bool("spotify_visualizer", f"{current_mode}_rainbow_enabled"),
-            int(round(tab._default_float("spotify_visualizer", f"{current_mode}_rainbow_speed") * 100.0)),
+            tab._default_bool("spotify_visualizer", current_rainbow_keys["rainbow_enabled"]),
+            int(round(tab._default_float("spotify_visualizer", current_rainbow_keys["rainbow_speed"]) * 100.0)),
         ),
     )
 
@@ -117,9 +134,17 @@ def load_visualizer_rainbow_state(tab, spotify_vis_config: Mapping[str, Any] | N
 
 def collect_visualizer_rainbow_state(tab, spotify_vis_config: dict[str, Any]) -> None:
     """Write per-mode rainbow state from the active controls into the config mapping."""
-    rainbow_cache = dict(getattr(tab, "_rainbow_per_mode", {}))
+    rainbow_cache = {
+        mode_id: value
+        for mode_id, value in dict(getattr(tab, "_rainbow_per_mode", {})).items()
+        if mode_has_rainbow_controls(mode_id)
+    }
     current_mode = collect_visualizer_mode_selection(tab)
-    if hasattr(tab, "rainbow_enabled") and hasattr(tab, "rainbow_speed_slider"):
+    if (
+        mode_has_rainbow_controls(current_mode)
+        and hasattr(tab, "rainbow_enabled")
+        and hasattr(tab, "rainbow_speed_slider")
+    ):
         rainbow_cache[current_mode] = (
             tab.rainbow_enabled.isChecked(),
             tab.rainbow_speed_slider.value(),
@@ -127,12 +152,15 @@ def collect_visualizer_rainbow_state(tab, spotify_vis_config: dict[str, Any]) ->
     tab._rainbow_per_mode = rainbow_cache
 
     for mode_id in VISUALIZER_MODE_IDS:
-        default_enabled = tab._default_bool(
-            "spotify_visualizer", f"{mode_id}_rainbow_enabled"
-        )
+        rainbow_keys = get_owned_mode_setting_keys(mode_id, "rainbow")
+        if not rainbow_keys:
+            continue
+        enabled_key = rainbow_keys["rainbow_enabled"]
+        speed_key = rainbow_keys["rainbow_speed"]
+        default_enabled = tab._default_bool("spotify_visualizer", enabled_key)
         default_speed = int(round(
-            tab._default_float("spotify_visualizer", f"{mode_id}_rainbow_speed") * 100.0
+            tab._default_float("spotify_visualizer", speed_key) * 100.0
         ))
         enabled, speed = rainbow_cache.get(mode_id, (default_enabled, default_speed))
-        spotify_vis_config[f"{mode_id}_rainbow_enabled"] = enabled
-        spotify_vis_config[f"{mode_id}_rainbow_speed"] = speed / 100.0
+        spotify_vis_config[enabled_key] = enabled
+        spotify_vis_config[speed_key] = speed / 100.0

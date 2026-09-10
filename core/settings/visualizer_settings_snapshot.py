@@ -10,10 +10,13 @@ from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
     coerce_visualizer_mode_id,
     get_setting_prefixes,
+    get_owned_mode_setting_keys,
+    mode_has_rainbow_controls,
 )
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_settings_contract import (
     migrate_legacy_global_visual_keys,
+    migrate_legacy_sphere_finish_keys,
     strip_legacy_global_technical_keys,
 )
 
@@ -128,6 +131,11 @@ def _resolve_per_mode_rainbow_mapping(
     global_speed = float(normalized["rainbow_speed"])
 
     for mode in VISUALIZER_MODE_IDS:
+        rainbow_keys = get_owned_mode_setting_keys(mode, "rainbow")
+        if not rainbow_keys:
+            continue
+        enabled_key = rainbow_keys["rainbow_enabled"]
+        speed_key = rainbow_keys["rainbow_speed"]
         enabled_value = None
         speed_value = None
         for setting_prefix in get_setting_prefixes(mode):
@@ -139,12 +147,8 @@ def _resolve_per_mode_rainbow_mapping(
             if speed_value is not None:
                 break
 
-        enabled_default = require_canonical_default(
-            f"{prefix}.{mode}_rainbow_enabled"
-        )
-        speed_default = require_canonical_default(
-            f"{prefix}.{mode}_rainbow_speed"
-        )
+        enabled_default = require_canonical_default(f"{prefix}.{enabled_key}")
+        speed_default = require_canonical_default(f"{prefix}.{speed_key}")
         if enabled_value is None:
             # A legacy shared Rainbow value belonged to the then-active mode;
             # inactive modes inherit their own canonical baseline instead of a
@@ -153,11 +157,11 @@ def _resolve_per_mode_rainbow_mapping(
         if speed_value is None:
             speed_value = global_speed if mode == active_mode else speed_default
 
-        normalized[f"{mode}_rainbow_enabled"] = bool(enabled_value)
+        normalized[enabled_key] = bool(enabled_value)
         try:
-            normalized[f"{mode}_rainbow_speed"] = float(speed_value)
+            normalized[speed_key] = float(speed_value)
         except (TypeError, ValueError):
-            normalized[f"{mode}_rainbow_speed"] = float(speed_default)
+            normalized[speed_key] = float(speed_default)
 
     return normalized
 
@@ -177,7 +181,8 @@ def normalize_visualizer_section_mapping(
     if not isinstance(data, Mapping):
         return {}
 
-    migrated = strip_retired_visualizer_settings(data, prefix=prefix)
+    migrated = migrate_legacy_sphere_finish_keys(data, prefix=prefix)
+    migrated = strip_retired_visualizer_settings(migrated, prefix=prefix)
     # Per-mode card-height growth was pre-Quick geometry state. The current
     # retained geometry contract is viewport/aspect driven; strip shipped
     # growth leaves once here instead of teaching every consumer about them.

@@ -27,6 +27,7 @@ from core.settings.visualizer_presets import (
     apply_preset_to_config,
     resolve_preset_index_from_mapping,
 )
+from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
 from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
@@ -1200,13 +1201,19 @@ def load_shared_visualizer_appearance_settings(
     """Hydrate the stable SETUP-owned shared appearance controls for one mode.
 
     Fill/border/opacity are physically shared controls whose values are stored
-    per active mode.  V7 keeps the widgets under SETUP permanently and swaps only
-    their values when mode selection changes, so retiring a mode body can never
-    delete these controls.
+    per participating mode. V7 keeps the widgets under SETUP permanently and
+    swaps only their values when mode selection changes, so retiring a mode body
+    can never delete these controls. Modes that do not own the canonical shared
+    bar-appearance contract (for example experimental Voxel Sphere) are a true
+    no-op here: never request or invent absent defaults.
     """
-    fill_color_key = f'{active_vis_mode}_bar_fill_color'
-    border_color_key = f'{active_vis_mode}_bar_border_color'
-    border_opacity_key = f'{active_vis_mode}_bar_border_opacity'
+    shared_bar_keys = get_owned_mode_setting_keys(active_vis_mode, "shared_bar")
+    if not shared_bar_keys:
+        return
+
+    fill_color_key = shared_bar_keys["bar_fill_color"]
+    border_color_key = shared_bar_keys["bar_border_color"]
+    border_opacity_key = shared_bar_keys["bar_border_opacity"]
 
     fill_color_data = spotify_vis_config.get(
         fill_color_key,
@@ -1413,19 +1420,6 @@ def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
         ),
         'enabled': tab.vis_enabled_checkbox.isChecked(),
         'mode': current_mode,
-        f'{current_mode}_bar_fill_color': [
-            tab._spotify_vis_fill_color.red(),
-            tab._spotify_vis_fill_color.green(),
-            tab._spotify_vis_fill_color.blue(),
-            tab._spotify_vis_fill_color.alpha(),
-        ],
-        f'{current_mode}_bar_border_color': [
-            tab._spotify_vis_border_color.red(),
-            tab._spotify_vis_border_color.green(),
-            tab._spotify_vis_border_color.blue(),
-            tab._spotify_vis_border_color.alpha(),
-        ],
-        f'{current_mode}_bar_border_opacity': tab.vis_border_opacity.value() / 100.0,
         'rainbow_enabled': (
             tab.rainbow_enabled.isChecked()
             if hasattr(tab, 'rainbow_enabled')
@@ -1437,6 +1431,24 @@ def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
             else tab._default_float('spotify_visualizer', 'rainbow_speed')
         ),
     }
+    shared_bar_keys = get_owned_mode_setting_keys(current_mode, "shared_bar")
+    if shared_bar_keys:
+        spotify_vis_config.update({
+            shared_bar_keys["bar_fill_color"]: [
+                tab._spotify_vis_fill_color.red(),
+                tab._spotify_vis_fill_color.green(),
+                tab._spotify_vis_fill_color.blue(),
+                tab._spotify_vis_fill_color.alpha(),
+            ],
+            shared_bar_keys["bar_border_color"]: [
+                tab._spotify_vis_border_color.red(),
+                tab._spotify_vis_border_color.green(),
+                tab._spotify_vis_border_color.blue(),
+                tab._spotify_vis_border_color.alpha(),
+            ],
+            shared_bar_keys["bar_border_opacity"]: tab.vis_border_opacity.value() / 100.0,
+        })
+
     _host = getattr(tab, '_vis_body_host', None)
     if _host is not None:
         spotify_vis_config['enabled_modes'] = list(_host.enabled_modes)

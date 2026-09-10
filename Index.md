@@ -70,10 +70,10 @@ are the focused live-checklist decompositions it links:
 - `Docs/Future_Work/SST_9of10_Settings.md` — settings-migration closeout evidence.
 - `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md` — Bubble
   aspect response / bounded presentation-cost diagnosis.
-- `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md` — all-mode
-  live geometry, line-glow scaling, Bubble freeze/outline, Sphere material work.
-- `Docs/Future_Work/Sphere_Visualizer_Decomposition.md` — experimental Sphere
-  ownership/materials/validation.
+- `Docs/Future_Work/Visualizer_Edit_Geometry_And_Sphere_Materials.md` — historical
+  live-geometry/Bubble evidence plus the retired smooth-Sphere material tranche.
+- `Docs/Future_Work/Sphere_Visualizer_Decomposition.md` — active experimental Voxel
+  Sphere ownership, isolation, keep/kill and validation contract.
 - `Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md` — recovered
   visualizer appearance and remaining Bubble validation.
 - `Docs/Future_Work/Widget_Interaction_Glow_Decomposition.md` — interaction glow.
@@ -147,6 +147,9 @@ transition pixels are migration debris after caller proof, not new-work visual
 authority.
 
 ## Historical evidence
+
+- `Docs/Historical_Bugs/Voxel_Sphere_Pseudo_Material_Contamination_2026-09-09.md`
+  — Voxel Sphere fill/finish authority cleanup; forbids hidden pseudo-material recolouring before lighting.
 
 Closed rationale, failed-repair lessons and old owner maps live under
 `Docs/Historical_Bugs/` (index: `Docs/Historical_Bugs.md`), `Docs/Fossils/` and

@@ -28,6 +28,8 @@ from core.settings.visualizer_preset_indices import (
 )
 from core.settings.visualizer_settings_contract import (
     migrate_legacy_global_visual_keys,
+    migrate_legacy_sphere_finish_keys,
+    normalize_sphere_finish,
     PER_MODE_BASELINE_KEYS,
     SPECIAL_PER_MODE_KEYS,
     resolve_visualizer_active_mode_rainbow_state,
@@ -73,9 +75,11 @@ def _active_visualizer_default(key: str) -> Any:
     for per-mode attr resolution elsewhere in this model.
     """
 
-    mode = str(_visualizer_default("mode")).lower()
+    from core.settings.visualizer_mode_registry import get_technical_profile_mode
+
+    mode = get_technical_profile_mode(str(_visualizer_default("mode")).lower())
     if mode not in PER_MODE_TECHNICAL_MODES:
-        mode = PER_MODE_TECHNICAL_MODES[0]
+        raise ValueError(f"invalid canonical visualizer technical profile: {mode!r}")
     return _visualizer_default(f"{mode}_{key}")
 
 
@@ -568,8 +572,18 @@ _DEVCURVE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
 }
 
 _SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
-    'sphere_material': str,
+    'sphere_finish': str,
+    'sphere_fill_color': list,
+    'sphere_edge_color': list,
+    'sphere_allow_overflow': bool,
+    'sphere_cel_shading': bool,
+    'sphere_light_tracer_enabled': bool,
+    'sphere_fragment_interpolation_enabled': bool,
+    'sphere_rainbow_ghosting': bool,
+    'sphere_shadow_enabled': bool,
+    'sphere_fade_incoming_blocks': bool,
     'sphere_deformation': float,
+    'sphere_base_rotation_speed': float,
     'sphere_rotation_speed': float,
     'sphere_gloss': float,
     'sphere_specular': float,
@@ -583,10 +597,6 @@ _SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'sphere_bump_reactivity': float,
     'sphere_size_response': float,
     'sphere_energy_curve': float,
-    'sphere_material_fx': float,
-    'sphere_antialiasing': bool,
-    'sphere_shadow_enabled': bool,
-    'sphere_shadow_strength': float,
 }
 _SPHERE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_SPHERE_BUILD_SPECS)
 
@@ -1305,8 +1315,18 @@ class SpotifyVisualizerSettings:
     devcurve_foreground_specular_width: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_specular_width'))
     devcurve_foreground_specular_offset: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_specular_offset'))
     devcurve_foreground_specular_crest_bias: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_specular_crest_bias'))
-    sphere_material: str = field(default_factory=lambda: _visualizer_default('sphere_material'))
+    sphere_finish: str = field(default_factory=lambda: _visualizer_default('sphere_finish'))
+    sphere_fill_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('sphere_fill_color')))
+    sphere_edge_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('sphere_edge_color')))
+    sphere_allow_overflow: bool = field(default_factory=lambda: _visualizer_default('sphere_allow_overflow'))
+    sphere_cel_shading: bool = field(default_factory=lambda: _visualizer_default('sphere_cel_shading'))
+    sphere_light_tracer_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_light_tracer_enabled'))
+    sphere_fragment_interpolation_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_fragment_interpolation_enabled'))
+    sphere_rainbow_ghosting: bool = field(default_factory=lambda: _visualizer_default('sphere_rainbow_ghosting'))
+    sphere_shadow_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_shadow_enabled'))
+    sphere_fade_incoming_blocks: bool = field(default_factory=lambda: _visualizer_default('sphere_fade_incoming_blocks'))
     sphere_deformation: float = field(default_factory=lambda: _visualizer_default('sphere_deformation'))
+    sphere_base_rotation_speed: float = field(default_factory=lambda: _visualizer_default('sphere_base_rotation_speed'))
     sphere_rotation_speed: float = field(default_factory=lambda: _visualizer_default('sphere_rotation_speed'))
     sphere_gloss: float = field(default_factory=lambda: _visualizer_default('sphere_gloss'))
     sphere_specular: float = field(default_factory=lambda: _visualizer_default('sphere_specular'))
@@ -1320,10 +1340,6 @@ class SpotifyVisualizerSettings:
     sphere_bump_reactivity: float = field(default_factory=lambda: _visualizer_default('sphere_bump_reactivity'))
     sphere_size_response: float = field(default_factory=lambda: _visualizer_default('sphere_size_response'))
     sphere_energy_curve: float = field(default_factory=lambda: _visualizer_default('sphere_energy_curve'))
-    sphere_material_fx: float = field(default_factory=lambda: _visualizer_default('sphere_material_fx'))
-    sphere_antialiasing: bool = field(default_factory=lambda: _visualizer_default('sphere_antialiasing'))
-    sphere_shadow_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_shadow_enabled'))
-    sphere_shadow_strength: float = field(default_factory=lambda: _visualizer_default('sphere_shadow_strength'))
     # Visualizer presets (0=Preset 1/Default, 1=Preset 2, 2=Preset 3, 3=Custom)
     preset_spectrum: int = field(default_factory=lambda: _visualizer_default('preset_spectrum'))
     preset_oscilloscope: int = field(default_factory=lambda: _visualizer_default('preset_oscilloscope'))
@@ -1396,13 +1412,31 @@ class SpotifyVisualizerSettings:
         _normalize_ranked_attrs(self, _DEVCURVE_ORDER_ATTRS)
 
     def _apply_sphere_defaults(self) -> None:
-        self.sphere_material = str(self.sphere_material).strip().title()
-        if self.sphere_material not in {"Chrome", "Obsidian", "Magma", "Silver", "Water"}:
-            raise ValueError(f"invalid sphere material {self.sphere_material!r}")
+        _apply_canonical_list_defaults(self, _SPHERE_SERIALIZERS)
+        self.sphere_allow_overflow = bool(self.sphere_allow_overflow)
+        self.sphere_cel_shading = bool(self.sphere_cel_shading)
+        self.sphere_light_tracer_enabled = bool(self.sphere_light_tracer_enabled)
+        self.sphere_fragment_interpolation_enabled = bool(self.sphere_fragment_interpolation_enabled)
+        self.sphere_rainbow_ghosting = bool(self.sphere_rainbow_ghosting)
+        self.sphere_shadow_enabled = bool(self.sphere_shadow_enabled)
+        self.sphere_fade_incoming_blocks = bool(self.sphere_fade_incoming_blocks)
+        self.sphere_finish = normalize_sphere_finish(self.sphere_finish)
+        for attr in ("sphere_fill_color", "sphere_edge_color"):
+            value = list(getattr(self, attr))
+            fallback = list(_visualizer_default(attr))
+            if len(value) < 3:
+                value = fallback
+            while len(value) < 4:
+                value.append(255)
+            setattr(
+                self,
+                attr,
+                [max(0, min(255, int(round(float(channel))))) for channel in value[:4]],
+            )
         self.sphere_light_direction = str(self.sphere_light_direction).strip().upper()
         if self.sphere_light_direction not in {"N", "NE", "E", "SE", "S", "SW", "W", "NW"}:
             raise ValueError(f"invalid sphere light direction {self.sphere_light_direction!r}")
-        for attr, low, high in (("sphere_deformation", 0.0, 4.5), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_idle_motion", 0.0, 1.0), ("sphere_surface_detail", 0.0, 2.0), ("sphere_bass_response", 0.0, 2.0), ("sphere_mid_response", 0.0, 2.0), ("sphere_high_response", 0.0, 2.0), ("sphere_vocal_response", 0.0, 3.0), ("sphere_bump_reactivity", 0.0, 2.0), ("sphere_size_response", 0.0, 3.0), ("sphere_shadow_strength", 0.0, 1.0), ("sphere_energy_curve", 0.2, 2.0), ("sphere_material_fx", 0.0, 2.0)):
+        for attr, low, high in (("sphere_deformation", 0.0, 4.5), ("sphere_base_rotation_speed", 0.0, 0.5), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_idle_motion", 0.0, 1.0), ("sphere_surface_detail", 0.0, 2.0), ("sphere_bass_response", 0.0, 2.0), ("sphere_mid_response", 0.0, 2.0), ("sphere_high_response", 0.0, 2.0), ("sphere_vocal_response", 0.0, 3.0), ("sphere_bump_reactivity", 0.0, 2.0), ("sphere_size_response", 0.0, 3.0), ("sphere_energy_curve", 0.2, 2.0)):
             _clamp_attr_range(self, attr, low, high)
 
     @classmethod
@@ -1498,7 +1532,8 @@ class SpotifyVisualizerSettings:
         # For non-Custom presets with a non-empty settings dict, the preset
         # values override the stored user values.  Custom (index 3) and empty
         # preset dicts are no-ops so existing behaviour is fully preserved.
-        _raw = strip_retired_visualizer_settings(data, prefix=prefix)
+        _raw = migrate_legacy_sphere_finish_keys(data, prefix=prefix)
+        _raw = strip_retired_visualizer_settings(_raw, prefix=prefix)
         _raw = strip_legacy_global_technical_keys(_raw, prefix=prefix)
         _raw = migrate_legacy_global_visual_keys(_raw, prefix=prefix)
         _mode = coerce_visualizer_mode_id(
@@ -1604,10 +1639,12 @@ class SpotifyVisualizerSettings:
 
     @staticmethod
     def _normalize_mode_name(mode: str) -> str:
-        mode_key = str(mode).lower()
-        if mode_key in PER_MODE_TECHNICAL_MODES:
-            return mode_key
-        return PER_MODE_TECHNICAL_MODES[0]
+        from core.settings.visualizer_mode_registry import get_technical_profile_mode
+
+        profile = get_technical_profile_mode(str(mode).lower())
+        if profile not in PER_MODE_TECHNICAL_MODES:
+            raise ValueError(f"invalid visualizer technical profile: {profile!r}")
+        return profile
 
     def _mode_attr_name(self, mode: str, base_key: str) -> str:
         normalized = self._normalize_mode_name(mode)

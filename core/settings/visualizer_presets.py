@@ -42,9 +42,11 @@ from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
     get_preset_key,
     get_setting_prefixes,
+    get_owned_mode_setting_keys,
 )
 from core.settings.visualizer_settings_contract import (
     LEGACY_GLOBAL_SHARED_VISUAL_KEYS,
+    migrate_legacy_sphere_finish_keys,
     normalize_spectrum_render_mode,
     strip_legacy_global_technical_keys,
 )
@@ -647,6 +649,9 @@ def _filter_settings_for_mode(mode: str, sv_settings: Mapping[str, Any]) -> Dict
 
 def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, Any]:
     """Apply forward-migrations for removed/renamed settings keys."""
+    if mode == "sphere":
+        settings = migrate_legacy_sphere_finish_keys(settings)
+
     # Collapse accidental double-prefixed keys that older repair/tooling flows
     # allowed through.
     for _prefix in MODE_KEY_PREFIXES.get(mode, [""]):
@@ -740,15 +745,18 @@ def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, A
                     f"widgets.spotify_visualizer.{_key}"
                 )
 
-    # rainbow_enabled / rainbow_speed → per-mode keys
-    # Old presets stored these as global keys; convert to {mode}_rainbow_enabled.
-    _prefix = MODE_KEY_PREFIXES.get(mode, [""])[0]
-    _pm_re_key = f"{_prefix}rainbow_enabled"
-    _pm_rs_key = f"{_prefix}rainbow_speed"
-    if "rainbow_enabled" in settings and _pm_re_key not in settings:
-        settings[_pm_re_key] = settings["rainbow_enabled"]
-    if "rainbow_speed" in settings and _pm_rs_key not in settings:
-        settings[_pm_rs_key] = settings["rainbow_speed"]
+    # rainbow_enabled / rainbow_speed → per-mode keys for modes that actually
+    # own the shared Rainbow product surface. Experimental modes may opt out in
+    # their descriptor; never synthesize persisted keys that the canonical
+    # schema/defaults intentionally do not contain.
+    rainbow_keys = get_owned_mode_setting_keys(mode, "rainbow")
+    if rainbow_keys:
+        _pm_re_key = rainbow_keys["rainbow_enabled"]
+        _pm_rs_key = rainbow_keys["rainbow_speed"]
+        if "rainbow_enabled" in settings and _pm_re_key not in settings:
+            settings[_pm_re_key] = settings["rainbow_enabled"]
+        if "rainbow_speed" in settings and _pm_rs_key not in settings:
+            settings[_pm_rs_key] = settings["rainbow_speed"]
     settings.pop("rainbow_enabled", None)
     settings.pop("rainbow_speed", None)
 

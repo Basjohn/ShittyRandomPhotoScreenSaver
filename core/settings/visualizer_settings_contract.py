@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any, Dict
 
-from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
+from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_owned_mode_setting_keys
 
 _BASELINE_DEFAULTS: dict[str, Any] = {
     "bar_count": 32,
@@ -329,21 +329,18 @@ def migrate_legacy_global_visual_keys(
         return migrated
 
     for mode in VISUALIZER_MODE_IDS:
-        if "bar_fill_color" in shared_values:
-            mode_key = f"{mode}_bar_fill_color"
+        # Legacy shared bar styling may only migrate into modes that actually
+        # own those canonical persisted keys. Do not synthesize experimental
+        # keys merely because a mode id exists in the registry.
+        shared_bar_keys = get_owned_mode_setting_keys(mode, "shared_bar")
+        if not shared_bar_keys:
+            continue
+        for shared_key, mode_key in shared_bar_keys.items():
+            if shared_key not in shared_values:
+                continue
             dotted_mode_key = f"{scoped_prefix}{mode_key}"
             if mode_key not in migrated and dotted_mode_key not in migrated:
-                migrated[mode_key] = shared_values["bar_fill_color"]
-        if "bar_border_color" in shared_values:
-            mode_key = f"{mode}_bar_border_color"
-            dotted_mode_key = f"{scoped_prefix}{mode_key}"
-            if mode_key not in migrated and dotted_mode_key not in migrated:
-                migrated[mode_key] = shared_values["bar_border_color"]
-        if "bar_border_opacity" in shared_values:
-            mode_key = f"{mode}_bar_border_opacity"
-            dotted_mode_key = f"{scoped_prefix}{mode_key}"
-            if mode_key not in migrated and dotted_mode_key not in migrated:
-                migrated[mode_key] = shared_values["bar_border_opacity"]
+                migrated[mode_key] = shared_values[shared_key]
 
     ghost_mode_key_map = {
         "spectrum": ("spectrum_ghosting_enabled", "spectrum_ghost_alpha", "spectrum_ghost_decay"),
@@ -380,3 +377,72 @@ def resolve_visualizer_active_mode_rainbow_state(
         "rainbow_enabled": _coerce_bool(read_mode_value("rainbow_enabled", False)),
         "rainbow_speed": _coerce_float(read_mode_value("rainbow_speed", 0.5), 0.5),
     }
+
+SPHERE_FINISH_VALUES: tuple[str, ...] = (
+    "Custom",
+    "Neutral",
+    "Matte",
+    "Plastic",
+    "Polished",
+    "Metallic",
+    "Glassy",
+)
+
+_LEGACY_SPHERE_MATERIAL_TO_FINISH: dict[str, str] = {
+    "Chrome": "Polished",
+    "Obsidian": "Matte",
+    "Magma": "Plastic",
+    "Silver": "Metallic",
+    "Water": "Glassy",
+}
+
+
+def normalize_sphere_finish(value: Any) -> str:
+    """Return one canonical Sphere finish name.
+
+    Old material names are accepted only as forward-migration inputs. Runtime
+    renderers must never branch on these names; the Finish control is a Settings
+    convenience that authors the explicit Gloss/Specular controls.
+    """
+
+    resolved = str(value).strip().title()
+    resolved = _LEGACY_SPHERE_MATERIAL_TO_FINISH.get(resolved, resolved)
+    if resolved not in SPHERE_FINISH_VALUES:
+        raise ValueError(f"invalid sphere finish {resolved!r}")
+    return resolved
+
+
+def migrate_legacy_sphere_finish_keys(
+    data: Mapping[str, Any],
+    *,
+    prefix: str = "widgets.spotify_visualizer",
+) -> Dict[str, Any]:
+    """Forward-migrate retired Sphere material keys to the Finish contract.
+
+    ``sphere_material`` is renamed to ``sphere_finish`` and its five historical
+    pseudo-material values are mapped to the nearest curated finish. The retired
+    ``sphere_material_fx`` key is dropped outright. No runtime leaf is taught to
+    read either legacy key.
+    """
+
+    migrated = dict(data)
+    for legacy_key, canonical_key in (
+        ("sphere_material", "sphere_finish"),
+        (f"{prefix}.sphere_material", f"{prefix}.sphere_finish"),
+        ("sphere_material_color", "sphere_fill_color"),
+        (f"{prefix}.sphere_material_color", f"{prefix}.sphere_fill_color"),
+    ):
+        if legacy_key not in migrated:
+            continue
+        if canonical_key not in migrated:
+            value = migrated[legacy_key]
+            migrated[canonical_key] = (
+                normalize_sphere_finish(value)
+                if canonical_key.endswith("sphere_finish")
+                else value
+            )
+        migrated.pop(legacy_key, None)
+
+    migrated.pop("sphere_material_fx", None)
+    migrated.pop(f"{prefix}.sphere_material_fx", None)
+    return migrated
