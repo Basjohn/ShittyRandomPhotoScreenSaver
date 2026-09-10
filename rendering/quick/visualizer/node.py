@@ -11,6 +11,7 @@ from PySide6.QtQuick import QSGRenderNode
 from core.logging.logger import get_logger
 
 from widgets.spotify_visualizer.render_bridge import VisualizerRenderIdentity
+from widgets.spotify_visualizer import mode_capabilities
 from widgets.spotify_visualizer.render_state import VisualizerRenderSnapshot
 
 from .clip_host import VisualizerClipFrame, VisualizerClipHost
@@ -129,6 +130,12 @@ class VisualizerRenderNode(QSGRenderNode):
         return QRectF(0.0, 0.0, *self._logical_size)
 
     def flags(self) -> QSGRenderNode.RenderingFlag:
+        snapshot = self._snapshot
+        if snapshot is not None and mode_capabilities.requests_unclipped_renderer_overflow(snapshot):
+            # Sphere-only experimental overflow must not advertise bounded
+            # rendering to Qt's scene-graph damage tracker. Accepted modes
+            # retain the exact previous BoundedRectRendering contract.
+            return QSGRenderNode.RenderingFlag(0)
         return QSGRenderNode.RenderingFlag.BoundedRectRendering
 
     def changedStates(self) -> QSGRenderNode.StateFlag:
@@ -215,16 +222,29 @@ class VisualizerRenderNode(QSGRenderNode):
                 matrix_values=matrix_values,
                 viewport=viewport,
             )
-            clip_run = self._clip_host.begin(clip_frame, state)
-            try:
+            overflow = mode_capabilities.requests_unclipped_renderer_overflow(snapshot)
+            if overflow:
+                # Descriptor-gated experimental overflow bypasses only this
+                # render-node-local stencil. Qt/inherited scene state is still
+                # fenced/restored by QuickVisualizerRenderHost, and every
+                # accepted mode stays on the legacy clipped branch.
                 mode_id = self._render_host.render(
                     snapshot=snapshot,
                     viewport=viewport,
                     logical_size=self._logical_size,
                     matrix_values=matrix_values,
                 )
-            finally:
-                self._clip_host.end(clip_run)
+            else:
+                clip_run = self._clip_host.begin(clip_frame, state)
+                try:
+                    mode_id = self._render_host.render(
+                        snapshot=snapshot,
+                        viewport=viewport,
+                        logical_size=self._logical_size,
+                        matrix_values=matrix_values,
+                    )
+                finally:
+                    self._clip_host.end(clip_run)
             self._telemetry.note_draw(
                 mode_id,
                 logical_revision=snapshot.logical_revision,

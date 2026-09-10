@@ -18,13 +18,23 @@ from core.settings.bubble_gradient_semantics import (
     normalize_bubble_specular_direction,
 )
 from core.settings.visualizer_settings_contract import normalize_spectrum_render_mode
+from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
 from widgets.spotify_visualizer.render_state import FrozenFields, freeze_render_fields
 
 logger = get_logger(__name__)
 
 _SPHERE_PARAMETER_KEYS = (
-    "sphere_material",
+    "sphere_fill_color",
+    "sphere_edge_color",
+    "sphere_allow_overflow",
+    "sphere_cel_shading",
+    "sphere_light_tracer_enabled",
+    "sphere_fragment_interpolation_enabled",
+    "sphere_rainbow_ghosting",
+    "sphere_shadow_enabled",
+    "sphere_fade_incoming_blocks",
     "sphere_deformation",
+    "sphere_base_rotation_speed",
     "sphere_rotation_speed",
     "sphere_gloss",
     "sphere_specular",
@@ -38,10 +48,6 @@ _SPHERE_PARAMETER_KEYS = (
     "sphere_bump_reactivity",
     "sphere_size_response",
     "sphere_energy_curve",
-    "sphere_material_fx",
-    "sphere_antialiasing",
-    "sphere_shadow_enabled",
-    "sphere_shadow_strength",
 )
 
 
@@ -100,15 +106,29 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     in ``apply_presentation_vis_mode_kwargs``.
     """
 
-    # Sphere is fully logical-frame configuration. Normalize and freeze this
-    # once at configuration ownership; capture/runtime only transport it.
-    if 'sphere_material' in kwargs:
-        material = str(kwargs['sphere_material']).strip().title()
-        if material not in {'Chrome', 'Obsidian', 'Magma', 'Silver', 'Water'}:
-            raise ValueError(f"invalid sphere material {material!r}")
-        host._sphere_material = material
+    # The experimental Sphere keeps one configure-owned immutable parameter
+    for key in ('sphere_allow_overflow', 'sphere_cel_shading', 'sphere_light_tracer_enabled', 'sphere_fragment_interpolation_enabled', 'sphere_rainbow_ghosting', 'sphere_shadow_enabled', 'sphere_fade_incoming_blocks'):
+        if key in kwargs:
+            setattr(host, f"_{key}", bool(kwargs[key]))
+    # bundle. The voxel renderer consumes that snapshot without a second
+    # settings/runtime authority or per-frame Python geometry rebuild.
+    for key in ('sphere_fill_color', 'sphere_edge_color'):
+        if key in kwargs:
+            raw = kwargs[key]
+            if not isinstance(raw, (list, tuple)) or len(raw) < 3:
+                raise ValueError(f"{key} must be an RGB/RGBA sequence")
+            values = list(raw[:4])
+            while len(values) < 4:
+                values.append(255)
+            try:
+                rgba = tuple(max(0, min(255, int(round(float(v))))) for v in values)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{key} must contain numeric RGB/RGBA channels") from exc
+            setattr(host, f"_{key}", rgba)
     if 'sphere_deformation' in kwargs:
         host._sphere_deformation = _sphere_bounded(kwargs['sphere_deformation'], 0.0, 4.5, 'sphere_deformation')
+    if 'sphere_base_rotation_speed' in kwargs:
+        host._sphere_base_rotation_speed = _sphere_bounded(kwargs['sphere_base_rotation_speed'], 0.0, 0.5, 'sphere_base_rotation_speed')
     if 'sphere_rotation_speed' in kwargs:
         host._sphere_rotation_speed = _sphere_bounded(kwargs['sphere_rotation_speed'], 0.0, 2.0, 'sphere_rotation_speed')
     if 'sphere_gloss' in kwargs:
@@ -129,16 +149,10 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         ('sphere_high_response', 2.0), ('sphere_vocal_response', 3.0),
         ('sphere_bump_reactivity', 2.0),
         ('sphere_size_response', 3.0),
-        ('sphere_shadow_strength', 1.0),
         ('sphere_energy_curve', 2.0),
-        ('sphere_material_fx', 2.0),
     ):
         if key in kwargs:
             setattr(host, f"_{key}", _sphere_bounded(kwargs[key], 0.2 if key == "sphere_energy_curve" else 0.0, maximum, key))
-    if 'sphere_antialiasing' in kwargs:
-        host._sphere_antialiasing = bool(kwargs['sphere_antialiasing'])
-    if 'sphere_shadow_enabled' in kwargs:
-        host._sphere_shadow_enabled = bool(kwargs['sphere_shadow_enabled'])
     if any(key in kwargs for key in _SPHERE_PARAMETER_KEYS):
         host._sphere_parameters = freeze_render_fields({
             key: getattr(host, f"_{key}")
@@ -550,8 +564,13 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
     if not _mode_str:
         controller = getattr(host, 'runtime_controller', None)
         _mode_str = getattr(controller, 'mode_id', None) or ''
-    _pm_re = f'{_mode_str}_rainbow_enabled' if _mode_str else ''
-    _pm_rs = f'{_mode_str}_rainbow_speed' if _mode_str else ''
+    _rainbow_keys = (
+        get_owned_mode_setting_keys(_mode_str, "rainbow")
+        if _mode_str
+        else {}
+    )
+    _pm_re = _rainbow_keys.get("rainbow_enabled", "")
+    _pm_rs = _rainbow_keys.get("rainbow_speed", "")
     if _pm_re and _pm_re in kwargs:
         host._rainbow_enabled = bool(kwargs[_pm_re])
     elif 'rainbow_enabled' in kwargs:

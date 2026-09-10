@@ -51,7 +51,7 @@ class SettingsManager(QObject):
     settings_changed = Signal(str, object)  # key, new_value
     _STRUCTURED_ROOTS = STRUCTURED_SETTINGS_ROOTS
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
-    _VISUALIZER_SCHEMA_VERSION = 5
+    _VISUALIZER_SCHEMA_VERSION = 6
     _LEGACY_GLOBAL_PRESET_KEYS = frozenset({"preset", "custom_preset_backup"})
     _RETIRED_WIDGET_SHADOW_KEYS = frozenset({
         "intense_shadow",

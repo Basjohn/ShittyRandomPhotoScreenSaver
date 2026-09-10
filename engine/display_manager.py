@@ -2284,10 +2284,13 @@ class DisplayManager(QObject):
             owner.controller.settings_model = model
             owner.controller.record_resolved_activation(activation)
             owner.controller.technical_config_cache = technical_cache
+            from widgets.spotify_visualizer.technical_config import (
+                resolve_technical_config,
+            )
             owner.configure(
                 logical_kwargs=asdict(model),
                 presentation_kwargs=asdict(model),
-                technical_config=technical_cache[mode],
+                technical_config=resolve_technical_config(technical_cache, mode),
                 thread_manager=self._thread_manager,
                 process_supervisor=self._process_supervisor,
                 playing=False,

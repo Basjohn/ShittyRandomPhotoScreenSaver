@@ -10,6 +10,7 @@ from typing import Any, Dict
 
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.models._visualizer_helpers import PER_MODE_TECHNICAL_MODES
+from core.settings.visualizer_mode_registry import get_technical_profile_mode
 
 
 def build_technical_cache(
@@ -64,4 +65,26 @@ def build_technical_cache(
     return cache
 
 
-__all__ = ["build_technical_cache"]
+def resolve_technical_config(
+    cache: Dict[str, Dict[str, Any]],
+    mode_id: str,
+) -> Dict[str, Any]:
+    """Resolve a mode through its descriptor-owned canonical technical profile."""
+
+    if not isinstance(cache, dict):
+        raise TypeError("visualizer technical cache must be a dict")
+    profile = get_technical_profile_mode(mode_id)
+    try:
+        resolved = cache[profile]
+    except KeyError as exc:
+        raise KeyError(
+            f"visualizer technical profile {profile!r} for mode {mode_id!r} is unavailable"
+        ) from exc
+    if not isinstance(resolved, dict):
+        raise TypeError(
+            f"visualizer technical profile {profile!r} for mode {mode_id!r} is not a dict"
+        )
+    return resolved
+
+
+__all__ = ["build_technical_cache", "resolve_technical_config"]

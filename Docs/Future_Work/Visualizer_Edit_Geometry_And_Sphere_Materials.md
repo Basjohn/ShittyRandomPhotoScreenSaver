@@ -1,11 +1,10 @@
 # Visualizer Edit Layout geometry and Sphere materials
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 
-Status: **MIXED REFERENCE — E1 geometry, Bubble/glow recovery and live Edit work are CLOSED/HISTORICAL. Sphere material/representation fidelity remains future product work through the dedicated Sphere decomposition/FWPlan.**
+Status: **MIXED HISTORICAL REFERENCE — E1 geometry, Bubble/glow recovery and the smooth-Sphere material tranche are CLOSED/HISTORICAL. Active Sphere work is only the isolated Voxel Sphere eyes-on keep/kill gate in FWPlan + the dedicated Sphere decomposition.**
 
-The operator accepted the recovered colours/glows and the geometry tranche later closed through M0/M1. The completed sections below are historical evidence. Only unresolved Sphere fidelity/material/representation work remains future product work, admitted through `FWPlan.md` / `Sphere_Visualizer_Decomposition.md`. Preserve one logical clock, immutable
-publication, independent CUSTOM extent/whole-scale intents, source fences and context retirement.
+The operator accepted the recovered colours/glows and the geometry tranche later closed through M0/M1. The smooth-Sphere sections below are historical evidence only; they must not be reopened. Current Voxel Sphere work is admitted solely through `FWPlan.md` / `Sphere_Visualizer_Decomposition.md` and preserves one logical clock, immutable publication, independent CUSTOM extent/whole-scale intents, source fences and context retirement.
 Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_material_2026_09_05`.
 
 ## E1 — all six modes, source-to-visible geometry
@@ -52,40 +51,39 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
   1.5:1 to 3.0:1 height:width, reaching -1 big / -1 small and -30% stream cap only. No radius, Ghost/history, reaction
   amplitude, drift or logical cadence compression is used. Await physical validation of the new gradient curve.
 
-## E2 — richer customizable Sphere
+## E2 — historical smooth Sphere implementation — RETIRED
 
-> **Migration status:** closed/deferred. The operator considers the current visual fidelity insufficient despite the landed
-> 3D architecture/material work. Sphere is dormant-by-default and does not block migration closure. Future work is owned by
-> `FWPlan.md`: preserve reusable 3D architecture unless completely superseded and consider a higher-fidelity redesign,
-> including voxel/volumetric approaches. The checklist below remains historical implementation evidence, not an active gate.
+> **Status:** historical evidence only. The smooth icosphere renderer and its smooth-only AA/shadow/liquid/fire machinery were removed by the Voxel Sphere checkpoint. Do not execute or reopen the checklist below. Active keep/kill authority is `FWPlan.md` + `Sphere_Visualizer_Decomposition.md`.
 
 - [x] Inventory five material presets, current energy transfer/defaults/maxima and existing mesh/shader
   constraints. Identify why current live bands produce barely visible displacement.
 - [x] Define stronger independent bass/mid/high and vocal-range deformation, preserving a quiet/idle state and controls
   that can return to restraint. Derive a finite maximum envelope and fit/framing contract explicitly.
 - [x] Add independently adjustable whole-body transient growth/contraction, base bump and bump reactivity.
-- [~] Whole-body size response follow-up: `SphereFrameRuntime` owns one bounded near-critical spring on the sole authored
+- [x] Historical smooth representation — whole-body size response follow-up: `SphereFrameRuntime` owns one bounded near-critical spring on the sole authored
   logical cadence. Checkpoint 2 raises Size Response to 0..3 and the maximum target to +0.90 radius; render still consumes
   only immutable `SphereFrame.size_pulse`. Deformation is 0..4.5, preserving the complete <=3.0 domain and softening only
   the newly-added negative tail enough to prevent radius inversion. Defaults are unchanged. Await eyes-on amplitude acceptance.
-- [~] Magma fissure relief follow-up: major fissures are now genuine inward vertex-radius displacement, including the six
+- [x] Historical smooth representation — Magma fissure relief follow-up: major fissures are now genuine inward vertex-radius displacement, including the six
   lower-hemisphere liquid vents; fine branching remains filtered bump/emissive detail. Await eyes-on depth acceptance.
-- [~] Magma/Water attached-liquid follow-up: six fixed instanced meshes now derive real rotating/deforming body anchors. The
+- [x] Historical smooth representation — Magma/Water attached-liquid follow-up: six fixed instanced meshes now derive real rotating/deforming body anchors. The
   body forms a matching local bulge while each liquid mesh keeps an embedded neck/cap through roughly the first half of its
   life, then pinches off and falls under gravity. Magma is slower/narrower/viscous and its anchors are part of the fissure
   network; Water is rounder/more elastic. The old Water side lanes are gone. Await physical proof that attachment reads
   clearly rather than as intersecting detached particles.
-- [~] Optional Sphere local AA and lighting-derived cast shadow are persisted/preset-aware. AA is derivative-based and
-  Sphere-local; shadow is one analytical quad opposite the configured light direction with adjustable darkness. Await
-  physical edge/shadow-direction/strength acceptance.
+- [x] **Superseded smooth-only mechanism, historical evidence:** the current Sphere local AA is derivative fragment
+  filtering and cannot fully solve smooth triangle-silhouette coverage; the current analytical shadow is rendered inside the
+  clipped Visualizer item and therefore cannot prove a true shadow onto the surrounding scene. Do not keep tuning these two
+  mechanisms as if eyes-on acceptance alone can fix their ownership/raster limits. Revisit only after the Sphere
+  representation decision; a retained smooth-mesh mode needs a real local coverage-AA solution, while a true scene shadow
+  needs scene-owned compositing.
 - [x] Chrome/Silver/Obsidian: detailed material-specific relief with readable light on stronger deformation.
 - [x] Keep topology static and GPU-owned. Reuse authored time/energy for bounded analytical motion and
   any fixed-count instanced secondary geometry; no per-frame CPU topology, simulation timer or jobs.
 - [x] Add only settings with a real user-visible effect, shared through canonical schema, lazy builder,
   immutable frame/uniforms and curated preset/Custom round-trip. Preserve default dormancy.
 - [x] Historical real GL/Quick captures cover quiet/active/transient states and small/large/extreme extents.
-- [ ] Checkpoint 2 requires fresh GL/Quick captures for attached liquid, macro-fissure geometry, optional AA/shadow and the
-  4.5 Deformation / 3.0 Size Response extremes before those new visual contracts can be called automatically validated.
+- [x] Smooth-mesh representation did not survive FW3. It was removed; Voxel Sphere owns the current focused representation oracle and eyes-on keep/kill gate.
 - [x] Source/identity, zero controls, settings persistence, GL fence/retirement and amplitude tests.
 
 ## E3 — checkpoints and acceptance
@@ -94,8 +92,7 @@ Latest operator logs archived before testing: `logs/evidence_chest/fw_geo_materi
 - [ ] Focused tests and relevant shared destination gates; classify unrelated debris in Future_Cleanup.
 - [ ] Commit/push each validated slice. Keep physical 60/165Hz, mixed-DPR and installed tests explicit.
 - [ ] Awaiting operator validation: Bubble extreme-wide response, attached Water/Magma origin/neck/pinch-off, Magma macro
-  fissure depth, Sphere AA on/off, cast-shadow direction/darkness, 4.5 Deformation/3.0 Size Response extremes, and layout-slot
-  active-mode restoration. Automatic source contracts cannot close these perception gates.
+  fissure depth and layout-slot active-mode restoration. The former smooth-Sphere AA/shadow/material perception gates were superseded by direct voxel replacement. Automatic source contracts cannot close these perception gates.
 
 ## Discovered follow-ups (after active geometry/material work)
 

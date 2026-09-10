@@ -174,13 +174,22 @@ def _build_live_visualizer_mode_shared_visual_kwargs(
     return kwargs
 
 
+
+def _resolve_technical_profile_mode(mode_key: str) -> str:
+    from core.settings.visualizer_mode_registry import get_technical_profile_mode
+
+    profile = get_technical_profile_mode(str(mode_key).lower())
+    if profile not in PER_MODE_TECHNICAL_MODES:
+        raise ValueError(
+            f"visualizer technical profile {profile!r} is not a canonical technical mode"
+        )
+    return profile
+
 def _resolve_active_mode_technical_state(
     mode_key: str,
     per_mode_kwargs: Mapping[str, Any],
 ) -> Dict[str, Any]:
-    normalized_mode = str(mode_key).lower()
-    if normalized_mode not in PER_MODE_TECHNICAL_MODES:
-        normalized_mode = PER_MODE_TECHNICAL_MODES[0]
+    normalized_mode = _resolve_technical_profile_mode(mode_key)
 
     resolved: Dict[str, Any] = {}
     for key in _ACTIVE_MODE_TECHNICAL_KEYS:
@@ -192,13 +201,15 @@ def _resolve_active_mode_shared_visual_state(
     mode_key: str,
     per_mode_kwargs: Mapping[str, Any],
 ) -> Dict[str, Any]:
-    normalized_mode = str(mode_key).lower()
-    if normalized_mode not in PER_MODE_TECHNICAL_MODES:
-        normalized_mode = PER_MODE_TECHNICAL_MODES[0]
+    from core.settings.visualizer_mode_registry import get_resolved_mode_setting_profile
+
+    profile = get_resolved_mode_setting_profile(mode_key, "shared_bar")
+    if profile is None:
+        raise ValueError(f"visualizer mode {mode_key!r} has no resolved shared-bar profile")
 
     resolved: Dict[str, Any] = {}
     for key in _ACTIVE_MODE_SHARED_VISUAL_KEYS:
-        resolved[key] = deepcopy(per_mode_kwargs[f"{normalized_mode}_{key}"])
+        resolved[key] = deepcopy(per_mode_kwargs[f"{profile}_{key}"])
     return resolved
 
 

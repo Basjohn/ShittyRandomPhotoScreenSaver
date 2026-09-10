@@ -90,3 +90,36 @@ def widget_mode_key(widget: Any) -> str:
     """Convenience for the many call sites holding a widget rather than a name."""
 
     return mode_key(getattr(widget, "_vis_mode_str", ""))
+
+
+def requests_unclipped_renderer_overflow(snapshot: Any) -> bool:
+    """Return whether one immutable mode frame requests clip bypass.
+
+    The generic render node owns the decision, but the capability and setting
+    key are descriptor-declared. Accepted modes expose no overflow setting and
+    therefore remain on the existing local stencil path byte-for-byte. The
+    setting value itself comes only from the mode's canonical immutable
+    parameter snapshot; this helper invents no default or fallback value.
+    """
+
+    logical = getattr(snapshot, "logical", None)
+    mode_id = mode_key(getattr(logical, "mode_id", ""))
+    if not mode_id:
+        return False
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    key = str(descriptor.renderer_overflow_setting or "").strip()
+    if not key:
+        return False
+    mode_state = getattr(logical, "mode_state", None)
+    parameters = getattr(mode_state, "parameters", None)
+    if parameters is None:
+        return False
+    try:
+        return bool(parameters[key])
+    except (KeyError, TypeError) as exc:
+        raise KeyError(
+            f"visualizer mode {mode_id!r} declares renderer overflow setting {key!r} "
+            "but its immutable mode parameters do not contain that canonical key"
+        ) from exc

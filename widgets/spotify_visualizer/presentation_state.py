@@ -25,19 +25,21 @@ def install_default_presentation_state(state: VisualizerPresentationState) -> No
     """Initialize presentation config from the one canonical defaults source."""
 
     from core.settings.default_contract import get_raw_default_settings
+    from core.settings.visualizer_mode_registry import get_resolved_mode_setting_keys
     from widgets.spotify_visualizer.config_applier import (
         apply_presentation_vis_mode_kwargs,
     )
 
     defaults = dict(get_raw_default_settings()["widgets"]["spotify_visualizer"])
     mode_id = str(state.runtime_controller.mode_id)
-    for shared_key in ("bar_fill_color", "bar_border_color", "bar_border_opacity"):
-        mode_key = f"{mode_id}_{shared_key}"
-        if mode_key not in defaults:
+    shared_bar_keys = get_resolved_mode_setting_keys(mode_id, "shared_bar")
+    for shared_key, persisted_key in shared_bar_keys.items():
+        if persisted_key not in defaults:
             raise KeyError(
-                f"canonical Visualizer defaults missing active-mode key {mode_key!r}"
+                "canonical Visualizer defaults missing resolved shared-bar key "
+                f"{persisted_key!r} for mode {mode_id!r}"
             )
-        defaults[shared_key] = defaults[mode_key]
+        defaults[shared_key] = defaults[persisted_key]
     apply_presentation_vis_mode_kwargs(state, defaults)
 
 

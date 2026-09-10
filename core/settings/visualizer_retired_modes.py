@@ -5,7 +5,15 @@ from typing import Any, Dict, Mapping
 
 
 RETIRED_VISUALIZER_MODE_IDS = frozenset({"blob"})
-_RETIRED_VISUALIZER_KEYS = frozenset({"preset_blob"})
+_RETIRED_VISUALIZER_KEYS = frozenset({
+    "preset_blob",
+    # Rejected smooth-Sphere representation controls. The experimental mode
+    # survives as Voxel Sphere, but these owned keys do not.
+    "sphere_antialiasing",
+    "sphere_shadow_strength",
+    "sphere_rainbow_enabled",
+    "sphere_rainbow_speed",
+})
 _RETIRED_VISUALIZER_PREFIXES = ("blob_",)
 
 

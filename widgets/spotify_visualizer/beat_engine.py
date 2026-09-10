@@ -199,6 +199,14 @@ class _SpotifyBeatEngine(QObject):
         self._waveform_count: int = 256
 
         self._energy_bands: EnergyBands = EnergyBands()
+
+        # Lazy raw-analysis publication seam.  The FFT worker already computes
+        # logarithmically binned, temporally-unsmoothed frequency magnitudes
+        # before Spectrum shape, temporal bar smoothing and AGC.  Sphere may ask
+        # for an immutable copy of that analysis spectrum, but accepted modes
+        # must not pay a per-frame tuple-allocation cost when nobody consumes it.
+        self._pre_agc_analysis_spectrum: tuple[float, ...] = ()
+        self._pre_agc_analysis_spectrum_requested: bool = False
         
         # Smoothing state (moved from widget to reduce UI thread work)
         self._smoothed_bars: List[float] = [0.0] * self._bar_count
@@ -397,6 +405,8 @@ class _SpotifyBeatEngine(QObject):
         self._waveform_count = 0
         self._idle_wave_phase = 0.0
         self._energy_bands = EnergyBands()
+        self._pre_agc_analysis_spectrum = ()
+        self._pre_agc_analysis_spectrum_requested = False
         self._advance_activation_generation(reason="bar_count=%d" % new_count)
     
     def reset_smoothing_state(self) -> None:
@@ -411,6 +421,8 @@ class _SpotifyBeatEngine(QObject):
         self._smoothed_bars = [0.0] * self._bar_count
         self._last_smooth_ts = -1.0
         self._energy_bands = EnergyBands()
+        self._pre_agc_analysis_spectrum = ()
+        self._pre_agc_analysis_spectrum_requested = False
         self._waveform = [0.0] * 256
         self._waveform_count = 0
         self._idle_wave_phase = 0.0
@@ -595,6 +607,8 @@ class _SpotifyBeatEngine(QObject):
         self._replace_runtime_buffers()
         self._latest_bars = [0.0] * self._bar_count
         self._smoothed_bars = [0.0] * self._bar_count
+        self._pre_agc_analysis_spectrum = ()
+        self._pre_agc_analysis_spectrum_requested = False
         self._last_audio_ts = 0.0
         self._waveform = [0.0] * 256
         self._waveform_count = 0
@@ -870,6 +884,29 @@ class _SpotifyBeatEngine(QObject):
             samples, capture_ts=float(capture_ts or 0.0)
         )
 
+    def _publish_pre_agc_analysis_spectrum_if_requested(self, worker_state: object) -> None:
+        """Publish one immutable raw-spectrum snapshot only when requested.
+
+        ``worker_state._freq_values`` is the retained compute lane's mutable NumPy
+        buffer and will be reused by the next FFT.  Copy it only at a verified
+        commit boundary; otherwise Sphere could observe a partially rewritten
+        spectrum.  The request bit keeps this allocation dormant for accepted
+        visualizers and other modes.
+        """
+        if not self._pre_agc_analysis_spectrum_requested:
+            return
+        raw_spectrum = getattr(worker_state, "_freq_values", None)
+        if raw_spectrum is None:
+            self._pre_agc_analysis_spectrum = ()
+        else:
+            try:
+                self._pre_agc_analysis_spectrum = tuple(
+                    max(0.0, float(value)) for value in raw_spectrum
+                )
+            except Exception:
+                self._pre_agc_analysis_spectrum = ()
+        self._pre_agc_analysis_spectrum_requested = False
+
     def _commit_analysis_frame(
         self,
         *,
@@ -888,6 +925,7 @@ class _SpotifyBeatEngine(QObject):
             return False
 
         if worker_state is not None:
+            self._publish_pre_agc_analysis_spectrum_if_requested(worker_state)
             try:
                 self._audio_worker.commit_compute_snapshot(worker_state)
             except Exception:
@@ -1135,6 +1173,7 @@ class _SpotifyBeatEngine(QObject):
 
                     bars_inline = compute_bars_from_samples(worker_state, samples)
                     if isinstance(bars_inline, list):
+                        self._publish_pre_agc_analysis_spectrum_if_requested(worker_state)
                         self._audio_worker.commit_compute_snapshot(worker_state)
                         try:
                             self._bars_result_buffer.publish(bars_inline)
@@ -1207,6 +1246,32 @@ class _SpotifyBeatEngine(QObject):
         self._smoothed_bars = list(bars)
         self._energy_bands = extract_energy_bands(bars)
     
+    def get_pre_agc_analysis_spectrum(self) -> tuple[float, ...]:
+        """Return a lazy immutable pre-shape/pre-AGC analysis spectrum.
+
+        The data comes from the existing FFT band's ``_freq_values`` at the
+        verified analysis commit boundary: no second FFT, worker, timer or
+        polling owner is created.  Publication is demand-driven so accepted
+        visualizers pay no tuple-allocation cost when Sphere is inactive.
+        """
+        self._pre_agc_analysis_spectrum_requested = True
+        return self._pre_agc_analysis_spectrum
+
+    def get_live_pre_agc_energy_bands(self) -> EnergyBands:
+        """Return unsmoothed post-floor, pre-AGC live energy for causal controls.
+
+        Unlike ``get_pre_agc_energy_bands()``, this does not use the dynamically
+        normalized 0..1 control lane and does not apply the display play-ramp.
+        It is therefore suitable for Sphere's song-relative sustained swell.
+        Values are bounded by the worker's existing 0..2.5 live-energy contract.
+        """
+        w = self._audio_worker
+        bass = max(0.0, min(2.5, float(getattr(w, "_pre_agc_live_bass", 0.0) or 0.0)))
+        mid = max(0.0, min(2.5, float(getattr(w, "_pre_agc_live_mid", 0.0) or 0.0)))
+        high = max(0.0, min(2.5, float(getattr(w, "_pre_agc_live_treble", 0.0) or 0.0)))
+        overall = max(0.0, min(2.5, bass * 0.18 + mid * 0.58 + high * 0.24))
+        return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
+
     def get_smoothed_bars(self) -> List[float]:
         """Get pre-smoothed bars for UI display.
 

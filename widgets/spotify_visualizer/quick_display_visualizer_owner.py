@@ -243,7 +243,10 @@ class QuickDisplayVisualizerOwner:
             cache = controller.technical_config_cache
             if not isinstance(cache, dict):
                 raise RuntimeError("visualizer technical cache is unavailable")
-            resolved_technical = cache[controller.mode_id]
+            from widgets.spotify_visualizer.technical_config import (
+                resolve_technical_config,
+            )
+            resolved_technical = resolve_technical_config(cache, controller.mode_id)
         from widgets.spotify_visualizer.quick_technical_config import (
             apply_controller_technical_config,
         )
@@ -871,10 +874,15 @@ class QuickDisplayVisualizerOwner:
             controller.settings_model = pending["settings_model"]
             controller.record_resolved_activation(pending["resolved_activation"])
             controller.technical_config_cache = dict(pending["technical_cache"])
+            from widgets.spotify_visualizer.technical_config import (
+                resolve_technical_config,
+            )
             self._apply_configuration(
                 logical_kwargs=pending["logical_kwargs"],
                 presentation_kwargs=pending["presentation_kwargs"],
-                technical_config=controller.technical_config_cache.get(target),
+                technical_config=resolve_technical_config(
+                    controller.technical_config_cache, target
+                ),
                 thread_manager=controller.thread_manager,
                 process_supervisor=controller.process_supervisor,
                 playing=controller.playing,

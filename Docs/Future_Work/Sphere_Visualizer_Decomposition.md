@@ -1,211 +1,184 @@
-# Deformable Sphere visualizer
+# Voxel Sphere visualizer
 
-Status: **CURRENT FUTURE-WORK REFERENCE — implementation substrate exists and is dormant-by-default, but visual fidelity is not accepted. Preserve reusable lazy 3D architecture while reassessing representation/material quality through `FWPlan.md`.**
-Pre-implementation comparison/rollback HEAD: `f8def8ee8cbd99527b513494bb2068417144452c`.
-The operator explicitly requested an ambitious 3D item after Glow and Slide. This is a new experiment;
-it does not claim to reconstruct the lost historical Blob.
+Status: **ACTIVE EXPERIMENTAL ITERATION — smooth Sphere retired; voxel shell passed the first eyes-on bar and is now being tuned for causal musical response.**
 
-## Current foundation
+Working checkpoint baseline: GODZIP source HEAD `c45845d44d21537ca4c09be41f6decf4cde0d16a` plus the current Future Work isolation rules. The mode remains dormant-by-default and does not block migration closeout.
 
-The canonical mode descriptor owns default dormancy, lazy runtime/capture/renderer/builder resolution and
-FRAMELESS + VIEWPORT_RECT policy. The existing Quick display owner owns the shared BeatEngine lease and
-activation lifecycle. Capture publishes compact immutable Sphere state through the normal render bridge;
-no other mode is instantiated to support Sphere. Settings and curated presets use the shared normalization
-and Custom persistence path. The existing render host owns the GL fence and context retirement, with
-Sphere restoring its additional depth/scissor/cull state locally.
+## Decision that produced this checkpoint
 
-## State, cadence and lifetime
+The previous smooth deformable icosphere failed the visual bar. Obsidian was only marginally acceptable and the rest read as malformed smooth geometry. Its attempted fragment-derivative silhouette AA could not create triangle coverage outside the rasterized edge, and its analytical cast shadow lived inside the clipped Visualizer item rather than a true scene-owned shadow seam. Preserving that renderer for comparison or first polishing it into architectural purity would be sunk-cost work.
 
-Sphere is one canonical `sphere` descriptor, display name `Sphere (Experimental)`, independently disabled by default.
-Enable it deliberately through existing mode Setup; family activation and enabled-mode selection remain distinct.
-Its policy is FRAMELESS + VIEWPORT_RECT and supports the existing viewport resize/whole-scale contract.
+Therefore the smooth implementation was removed directly. There is no parallel old renderer, comparison toggle or rescue branch.
 
-`SphereFrameRuntime` owns activation-relative authored time and latest frozen Sphere state, driven only by the
-existing logical clock/capture callback. Common analysis supplies bass/mid/high/overall plus transient energy;
-stale generation/activation data cannot become fresh response. No FFT, source subscription, worker or timer is added.
-The renderer consumes immutable time/energy/configuration and never advances simulation or reads the engine. Whole-body
-transient growth is a bounded near-critical spring inside `SphereFrameRuntime`: one authored state owner, no render clock.
+## Current representation
 
-Payload interface: `SphereFrame(authored_time: float, size_pulse: float, parameters: FrozenFields)` under
-`logical.mode_state`; reactive inputs originate from `logical.common.energy` / `logical.common.transient`, while the mode
-runtime now resolves whole-body size into the immutable `size_pulse` so render owns no transient filter/history.
-Generation/source/fades stay on the enclosing established snapshot.
-Sphere parameters are bounded `sphere_*` values: material (Chrome/Obsidian/Magma/Silver/Water), deformation strength,
-rotation speed, gloss/specular and key-light direction. Initial defaults are feature-local and do not alter existing
-mode defaults, presets, shared colour controls or logical parameters.
+Sphere mode ID remains `sphere`, now displayed as **Voxel Sphere (Experimental)**.
 
-One modest static sphere mesh is generated/uploaded only at first admitted render/context creation. CPU topology
-is never rebuilt per frame. One vertex deformation pass and one lit fragment pass form a real three-dimensional
-surface; finite tangent samples reconstruct deformed normals. Broad bass breathing, low-order mid lobes and
-restrained high ripples remain independent and do not form an audio hedgehog. Arbitrary-axis rotation derives
-from authored time. Bounded specular/Fresnel/material treatment makes surface deformation readable.
+The renderer owns exactly one Sphere-local 3D geometry foundation plus optional Sphere-local presentation passes:
 
-Perspective uses a fixed camera distance in sphere-local units and scales into current content pixel geometry with
-one common X/Y pixel scale based on the shorter current content axis. Uniform resize changes object size;
-viewport-edge resize changes object size when it changes that shorter axis, otherwise framing/playroom,
-without ellipse distortion or viewport-dependent audio damping. Clip to the existing assigned viewport.
+- one static 36-vertex cube mesh;
+- one static stepped lattice shell instance buffer (radius-5 shell, 278 instances);
+- one primary instanced shell draw/program;
+- one flat 2D shadow program that uses the inherited shared quad only when Sphere's own Drop Shadow checkbox is on;
+- one bounded rainbow-ghost program/history path used only when the Sphere-owned checkbox is enabled; the ghost fragment path is gated to reactive/moving cubes so the full shell cannot accumulate into a white bloom;
+- the existing bounded depth/scissor state needed by the Quick Visualizer render item.
 
-Depth/cull/function/clear state is restored through the existing fence plus narrowly scoped Sphere-local state where
-needed. Clear depth only inside the admitted content scissor; never clear colour, overwrite stencil or create a
-second depth/window owner. Program, VAO and VBO retire through renderer `release_resources`, including allocation
-failure and context recreation. No meaningful 3D work survives retirement/deactivation.
+There is still no generic Sphere/3D subsystem: disabling/switching away from Sphere retires these renderer-owned resources through the existing mode renderer lifecycle. Accepted visualizers neither compile these programs nor retain the ghost history.
 
-## Primitive classification
+The shell intentionally preserves integer-lattice stepping. Each cube carries only a static centre/seed plus patch-local radial polarity. Musical locality is no longer stored as a fake per-cube Spectrum height. `SphereFrameRuntime` authors eight bounded spatial section envelopes and the vertex shader applies smooth angular distance falloff from those fixed 3D section centres, so nearby blocks move strongly and remote blocks receive zero authority.
 
-- **Feature-local:** Sphere mesh generator, deformation/normal equations, audio mappings, material palette,
-  perspective constants, settings controls and immutable mode frame/runtime.
-- **Justified reusable infrastructure:** cheap descriptor default-enabled and lazy-capture metadata needed by this
-  real sixth consumer; preserve existing mode behavior while replacing closed central dispatch where necessary.
-- **Reuse existing:** run/generation clock, source bands, immutable transport, presentation geometry/fades,
-  shader compilation, context release, GL fence, eight-way direction vocabulary and lazy Settings body host.
-- **Speculative reuse deferred:** general camera/MVP library, mesh/resource framework, lighting/material hierarchy,
-  scene graph, physics, 3D object manager. Extract only after a second real consumer proves identical requirements.
+The rejected smooth-only resource islands are gone: no icosphere topology, tangent-sampled deformed normals, liquid/fire auxiliary meshes/programs, derivative silhouette-AA path or clipped pseudo-shadow program/mesh.
 
-## Resumable checkpoints
+## Settings / single-authority contract
 
-- [x] Inventory current owners and commit decomposition before substantial coding.
-- [x] **S1 — admission/state:** descriptor default-enabled policy, frozen Sphere payload, lazy runtime/capture,
-  configure-owned immutable parameters, current playing source identity and independent dormancy tests.
-- [x] **S2 — geometry/render:** vectorized static 5,120-triangle icosphere, analytic deformation/deformed normals,
-  arbitrary-axis rotation, perspective, five materials, surface-gradient bump mapping and filtered microdetail.
-  Depth clears intersect projected viewport/inherited scissor; depth/cull/scissor state and partial resources restore.
-- [x] **S3 — real Quick prototype:** inspected five-material capture and separate 1080p/4K fixtures; all modes draw
-  and retire on the same legal context. Hidden items release mode resources before scene invalidation.
-- [x] **S4 — Settings:** isolated lazy body, material/lighting/motion/detail controls, five real curated presets,
-  Custom restore and zero-value/unbuilt-body preservation. Mode body hides/shows correctly after first construction.
-- [x] **S5 — integration:** focused contract gates and destination run completed; new-mode fixture closure and real
-  lifecycle fault fixed. Remaining unrelated destination failures are actionable in `Future_Cleanup.md`.
+Experimental isolation does **not** mean a second Settings authority.
 
-## Implementation evidence and boundaries
+All surviving Sphere values remain in the canonical `widgets.spotify_visualizer` settings/default/model path and save through the normal SettingsManager. The lazy Sphere Settings body merely edits that owned canonical block.
 
-`tools/qtquick_sphere_smoke.py` drives bounded fixture frames from swap events, captures asynchronously and checks
-inactive GL release before invalidation. `logs/evidence_chest/fw_sphere/materials_final.png` is the inspected capture
-(Chrome, Obsidian, Magma / Silver, Water). Probe callbacks are measurements, not physical-refresh acceptance. A fixed-size capture subtree preserves
-projection when Windows clamps an oversized native window; the report records actual native size/DPR separately.
-The corrected 4K Water capture is `logs/evidence_chest/fw_sphere/water_4k_final.png`.
-The only probe timer is a failure deadline; production adds no timer, poller, source lane or per-frame mesh upload.
+Surviving canonical values remain representation-owned, but several legacy experiment controls are temporarily disabled/inert while the voxel contract is proven. The live operator controls are now:
 
-The nominal radius is 0.245 of the shorter actual content axis, with fixed camera distance 4.6.
-This reserves the maximum combined size pulse/deformation envelope. The original canonical-height *
-uniform-scale defect produced ~13px radius inside the operator's ~1400x268 viewport; the resolved-content
-radius is now ~66px before musical expansion. Uniform resize enlarges the object independently of saved
-extent encoding. Real GL tests exercise that exact geometry and every mode's live edit projection.
+- Settings-only **Finish Preset** convenience: Custom / Neutral / Matte / Plastic / Polished / Metallic / Glassy. It only writes the visible Gloss/Specular sliders and is never sent to the renderer;
+- independent literal **Fill Color** and **Edge Color** swatches;
+- Deformation, Block Reactivity and **Size Response** (staged slow sustained growth only);
+- Vocal Response;
+- **Base Rotation** (`sphere_base_rotation_speed`) and **Velocity Reaction** (the existing `sphere_rotation_speed` persisted key);
+- light direction, materially visible Gloss/Specular;
+- optional **Toon Shading**, **Drop Shadow**, Scene Overflow, Incoming Fade and default-off **Rainbow Ghosting**.
 
-Chrome/Silver have restrained metal microdetail, Obsidian has fractured stone relief, Magma has recessed emissive
-fissures with authored-time flow, and Water has animated ripple bump, caustic accents and Fresnel transparency.
-Bump Strength controls base relief; Bump Reactivity controls added musical relief. These are procedural materials and studio reflections; Water does not sample
-or refract the live background. Its visible surface alone blends, with back-face culling and the existing depth target.
+Bass/Mid/High/Energy-Curve/Idle-Drift and Block Relief remain canonical persisted keys but are disabled/inert during this experiment. The old Palette Effects/material pseudo-shading keys were retired instead of preserved because they directly contaminated voxel finish diagnosis. **Size Response is live again** and owns only slow sustained passage-weight growth; it is not a transient pulse. The sustained owner is adaptive to the current song: it tracks a local quiet floor and recent peak, then maps their relative span through four ramped stages. A constant loud source therefore calibrates as baseline rather than pinning the shell swollen, while a genuine quiet→heavy transition can earn a distinct upper stage.
 
-## E2 material and reactivity contract
+The obsolete `sphere_antialiasing`, `sphere_shadow_strength`, `sphere_rainbow_enabled` and `sphere_rainbow_speed` keys remain retired. `sphere_shadow_enabled` has been deliberately reintroduced as a **Sphere-owned** canonical Drop Shadow checkbox; it is not a shared/card-shadow escape hatch.
+Sphere therefore advertises no per-mode Rainbow Settings capability and no owned shared bar-appearance key family. Descriptor flags are capability/routing metadata only: canonical defaults remain the sole persisted-value/key authority. The generic Settings UI skips those non-owned families, while the non-persisted runtime presentation mirror resolves the descriptor-declared canonical Spectrum shared-bar profile. No `sphere_bar_*` defaults are invented. Shared consumers must use the canonical family key/profile resolver rather than manufacturing `{mode}_...` keys, and focused coverage must fail if descriptor participation/profile routing and canonical key ownership ever diverge.
 
-Sphere consumes existing immutable bands, decaying transient envelopes and activation-relative authored time.
-It receives no waveform, audio job or source subscription. Current playing source identity gates both bands
-and transients, including valid generation/activation zero. Stale or stopped sources cannot retain a size pulse.
+## Technical-profile contract repair
 
-- Deformation (0..4.5, default 1.0) controls local musical displacement, independent of Idle Motion (0..1). The
-  accepted 0..3 domain keeps its complete authored positive/negative field. Only the *additional* 3..4.5 negative tail
-  is softened so the mesh cannot invert through its origin; the extra positive crest remains fully expressive.
-- Bass/Mid/High Response (0..2 each) shape independent bands. Vocal Response (0..3, default 1.4) adds
-  broad low-order lobes from the established 0.62 mid / 0.38 high frequency blend; it does not isolate voices.
-- Energy Curve (0.2..2, default 0.60) makes ordinary low bands visible without flattening combined lobes.
-- Size Response (0..3, default 1.5) adds uniform whole-body breathing independently of Deformation.
-  `SphereFrameRuntime` owns one bounded near-critical spring at the sole logical cadence. Its target is
-  `min(0.90, 0.30 * size_response * drive ** energy_curve)`, where drive is the maximum of the established
-  transient bands/onset, 0.25 overall energy and 0.35 bass energy. The renderer consumes only the immutable
-  `SphereFrame.size_pulse`; zero disables size response and no render-side filter/clock exists.
-- Bump Strength (0..2, default 1.15) controls base material relief. Bump Reactivity (0..2, default 0.65)
-  adds energy-driven relief without changing the broad silhouette; zero retains the configured base relief.
-- Material Effects (0..2) controls the bounded Magma/Water secondary geometry; zero omits its draws.
-- Anti-Aliasing is a persisted Sphere-local switch. It applies derivative-based filtering to the body/fissure/liquid
-  silhouettes and the analytical cast-shadow edge; it does not enable global multisampling.
-- Cast Shadow is independently persisted/enabled. Shadow Darkness is 0..1 (default 0.62). The shadow is one lazily
-  allocated analytical quad on the retained Visualizer plane, offset opposite the configured Sphere light direction.
-  It owns no FBO, texture, timer or cadence and retires through the same renderer resource fence.
+Sphere deliberately has no ordinary per-mode technical controls. The previous shared runtime nevertheless assumed every active mode had `technical_cache[mode]`, which made the experiment an unsafe template.
 
-The vertex shader applies `1-exp(-2.8*pow(band, curve)*response)` per independent field. The historical 0..3
-Deformation domain is preserved exactly. The new 3..4.5 extension keeps full positive crests but attenuates only its
-additional negative component to 25%; the explicit radius-safety oracle combines worst negative audio displacement,
-maximum idle contraction and maximum Magma fissure depth and proves the surface remains outside the origin. We do *not*
-shrink the accepted canonical Sphere merely to frame every simultaneous new positive maximum. Extreme CUSTOM extents
-still use the same 0.245 shorter-axis presentation metric and receive no viewport-dependent audio damping.
+The descriptor now owns an explicit `technical_profile_mode`. Empty means “this mode owns its own profile”; Sphere names `spectrum`. Shared startup/mode-switch configuration resolves the descriptor-owned profile generically. There is no `if sphere` fallback and no second technical/default authority.
 
-Magma and Water lazily create one 1,280-triangle effect mesh per GL context; Magma additionally creates one immutable
-six-vertex fire quad. Six fixed GPU instances derive lower-hemisphere anchors from the same deterministic object-space
-field as the body. Both effect and body shaders evaluate the same rotation/deformation `surface(anchor)` contract. During
-the attached phase the body develops a timed local bulge and the liquid mesh keeps a narrow cap embedded into that real
-rotating surface anchor; the hanging axis blends the outward normal toward gravity. A bounded pinch-off phase then opens
-a gap and the same fixed mesh falls under gravity. Water is rounder/more elastic; Magma is narrower/slower/more viscous.
-There are no artificial Water side lanes, CPU particle state, per-frame topology uploads, timers, workers or source
-subscriptions.
+This is the pattern future experimental modes may use when they have no dedicated technical-control UI but still need deterministic BeatEngine input configuration.
 
-Magma's large fissure network is now genuine radial vertex displacement, with the six lower-hemisphere drip vents folded
-into that same macro field. Fine branching remains derivative-filtered bump/emissive relief so mesh density need not rise
-again. Lava therefore originates from visibly recessed/bright vent regions rather than unrelated screen-space droplets.
-Magma retains its hot-core/cooling-skin liquid shading plus the one reused fire quad for bounded smoke/ash/flame passes.
-Water keeps Fresnel/specular/transmitted-cyan shading and ordinary alpha blending with no live-background refraction claim.
-Closed lava and Water meshes retain back-face culling; camera-facing atmospheric quad passes disable it. The renderer
-restores blend factors/enabled state, depth-write and cull state before returning.
+## Cadence / dormancy / lifetime
 
-At FX=2, the final warm-cloud world-Y bound is 1.526, smoke 1.588 and ash 1.287. With camera-Z at
-most 0.42, their projected upper extent is at most 1.747 base-radius units; maximum projected lateral
-extent is 1.339. Falling lava and rounded Water blobs remain within the same conservative 1.90 projected
-reserve. This fits the 0.245 shorter-axis framing without FBO clipping. The upper clouds were moved above
-the active growing body after actual preset captures exposed depth occlusion at the original positions.
-Real GL samples their finite lives at FX=2, compares against effects disabled, and checks visible pixels,
-colour, finite bounds, global fade/depth and unchanged upload count.
+`SphereFrameRuntime` remains the sole owner of activation-relative authored time, eight 3D spatial section envelopes, the staged slow sustained-growth envelope, optional tracer articulation, and monotonic rotation phase. `sphere_capture` reuses the existing public support-aware Bubble energy feed plus the existing consume-once event scheduler; it does not consume saturated Spectrum bar heights as displacement authority and creates no second audio worker/cadence. The renderer consumes immutable section drives passively, applies only spatial distance falloff, advances no simulation, and reads no live Settings/QObject/engine state.
 
-E2 evidence: `e2_presets_effects_raised.png` and `e2_presets_quiet.png` under
-`logs/evidence_chest/fw_sphere/` use actual normalized presets and a retained checkerboard. The background
-is visibly transmitted through Water and its rounded blobs; Magma's smoke/ash/fire blend over it. The 4K
-Water and exact 8240x1579 saved-world Magma captures also pass context retirement. Current local capture
-DPR is 1.5; physical mixed-DPR/60/165Hz checks remain open. Warm callback medians in the bounded single-mode
-fixtures were 2.47ms (4K Water) and 3.41ms (extreme Magma); these include Python/GL submission and are neither
-GPU-time measurements nor physical cadence acceptance. Captures ran alongside test work.
+Disabled/default startup must not import/construct the Sphere Settings body, capture/runtime implementation or renderer resources. Active renderer resources are context-local and retire through the existing event-owned visualizer renderer retirement path. No polling loop, worker or independent timer exists.
 
-215 focused rendering/settings/defaults/dormancy/preset tests passed. The silhouette test isolates size
-response from surface deformation: a maximum pure transient grows diameter by over 17%, intermediate
-transient decay gives an intermediate size, and zero returns exactly to rest. Vocal-range deformation
-and bump reactivity have separate pixel assertions. Canonical regeneration also corrected three preexisting
-missing defaults-snapshot fields (Spectrum rainbow fill and Sphere rainbow enable/speed).
+## What may be reused later
 
-Inactive resources retire on one-shot `beforeRendering` events, with invalidation as the context completion edge.
-Window rebind detaches the old node and leaves cleanup on its old window. Ordinary sync never schedules cleanup.
-A Qt-owned QRunnable prototype caused a reproducible native heap failure on the pinned binding; it was removed.
-The event equivalent is documented by [Qt's QQuickWindow contract](https://doc.qt.io/qtforpython-6/PySide6/QtQuick/QQuickWindow.html#PySide6.QtQuick.QQuickWindow.scheduleRenderJob).
-Real runtime-reality (4 tests), hotkey (12 tests), and retirement/item/runtime (18 tests) pass after that correction.
-The mesh/source/Settings/dormancy/packaging focused group passed 64 tests. The initial destination run executed all
-115 targets; new-feature fixture failures and native retirement faults were corrected with focused reruns. Nine
-unrelated existing targets remain red (see cleanup ledger); do not report the entire profile as green.
+Keep because it is already shared architecture, not because Sphere used it:
 
-## Acceptance bars
+- descriptor-driven lazy runtime/capture/renderer/Settings-body resolution;
+- immutable logical-frame transport;
+- context-owned renderer lifetime and explicit retirement;
+- Quick render fence / GL-state ownership;
+- existing viewport/projection ownership and bounded depth clear.
 
-- **Deterministic/source:** unit sphere topology/finite outward normals/real Z; same time+bands gives same payload;
-  distinct bass/mid/high influence; exact immutable generation identity; renderer cannot advance authored time.
-- **Lifecycle/resource:** disabled old/default profiles import no Sphere runtime/builder/renderer; first enable resolves
-  only Sphere; disable/mode switch/recreation retires its program/buffers; failure cleanup preserves recoverability.
-- **Geometry:** fixed pixel metric on both axes across wide/tall extents; whole-scale uniformity; viewport clipping;
-  no card fill/border ownership. Sphere may optionally cast its own lighting-derived analytical shadow onto that retained
-  plane; it is feature-local and not the shared widget-shadow system. Preserve the five established modes' R-69/BTF behavior exactly.
-- **Performance:** one body upload plus lazily bounded effect-mesh/fire-quad uploads per renderer/context lifetime,
-  constant bounded uniform transport and no per-frame topology/upload/source jobs. Measure 1080p/4K/extents separately;
-  callbacks are not physical cadence proof.
-- **Magma secondary-effects acceptance:** smoke/ash/leaking-lava must read as materially distinct phenomena. The current
-  implementation may not be accepted merely because droplets are fire-coloured; viscous lava body/shape variation and clear
-  smoke/ash separation remain a later visual-polish bar.
-- **Eyes-on/operator:** it reads as a deforming 3D body with normals/specular following dents/bulges; materials differ
-  meaningfully, no clipping surprises, responsive real music/idle, 60/165 Hz and mixed-DPR/recreation acceptance.
-  Retain this checklist as Awaiting Validation when automation cannot honestly close it.
+Potential second-consumer candidates, **not yet shared abstractions**:
 
-## Awaiting operator validation
+- one static cube mesh + one static instance buffer;
+- tiny instanced-mesh binding helpers;
+- identical 3D projection/depth helper math if another independent consumer actually matches it.
 
-- [ ] Inspect real music response and the five material presets at representative display sizes.
-- [ ] Verify physical 60/165 Hz, mixed-DPR transfer and installed/frozen context recreation.
+Exploding Tiles is the obvious future falsifying consumer. Extract only the smallest identical seam when it exists. Do not grow a generic SRPSS 3D engine, material hierarchy, camera tree or physics owner from this one experiment.
 
-## 2026-09-05 response/material follow-up
+## Transition boundary
 
-Physical feedback accepted the elastic/breathing whole-body size response as a major improvement. Preserve that logical
-clock-owned spring. Vocal Response remains expanded to 3.0. Checkpoint 2 subsequently extends Deformation from 3.0 to 4.5
-and Size Response from 2.0 to 3.0/+0.90 target ceiling, with unchanged defaults and no second analysis lane/cadence. It
-also adds persisted local AA and a lighting-opposed optional analytical shadow, gives Magma true macro-fissure geometry,
-and replaces detached/side-lane liquid staging with surface-owned bulge/neck/pinch-off/fall. Physical material appearance,
-shadow strength/direction, AA, new extreme ranges and attached-drip readability remain Awaiting Validation.
+3D transitions may reuse low-level GPU primitives but must keep finite transition lifecycle/source-texture ownership separate from the persistent Visualizer logical/audio runtime. Slide extras such as Elastic/Wobble/Flex remain accepted-owner modifiers and are not forced through experimental plugin isolation simply because they bolt onto Slide.
+
+## Acceptance / retirement gate
+
+The next work is deliberately eyes-on, not another architecture tranche:
+
+1. inspect the voxel Sphere physically under active audio and quiet/idle state;
+2. inspect ordinary and CUSTOM aspect/scale changes and all five palettes;
+3. confirm switching away retires the renderer cleanly and logs no new authority/lifecycle failures;
+4. if the voxel representation looks worth keeping, tune it only inside this owned boundary;
+5. if it still looks bad, retire `sphere` completely and strip its owned persisted namespace through one explicit retired-mode/key migration.
+
+The voxel representation may receive further bounded iterations while physical evidence continues to show useful progress. Do not revive the rejected smooth renderer or create a parallel representation merely to avoid fixing the current mapping.
+
+## Focused automated contracts
+
+- voxel geometry is deterministic, finite, stepped and symmetric;
+- one cube mesh is 36 vertices and one shell is 278 static instances;
+- Sphere descriptor exposes no technical controls but resolves the canonical Spectrum technical profile;
+- ordinary technical modes continue to resolve their own profiles;
+- canonical default snapshot matches the generated default authority;
+- changed Python compiles before checkpoint packaging.
+## Causal voxel reaction checkpoints — 2026-09-09
+
+Physical testing has rejected six audio mappings/iterations while retaining the voxel representation itself:
+
+1. **Free-running phase mapping:** time chose block movement and music only modulated unrelated procedural wriggle.
+2. **Global static-mask mapping:** every block still consumed the same global signals, producing larger flicker and near-uniform movement.
+3. **33-lane rise/event mapping:** the source Spectrum profile is routinely saturated near `1.0`, so recent-rise authority became nearly absent; consume-once kick/vocal events were also too sparse to provide continuous musical motion. The result was ~99% visually pinned blocks with only rare 1–2 px reactions.
+4. **First support-aware section mapping:** finally produced causal local movement, but physical acceptance found only ~20% of the required displacement, weak response during already-loud passages, and mild low-level jitter. The support-aware source is retained; the continuous-target/low-travel motion law is rejected.
+5. **Duration/round-robin packet mapping:** detached travel became desirable, but busy passages mechanically walked/fill-lit most octants; one diagnostic run averaged ~7.05/8 active sections and ~4.31 packets per 0.5 s. Round-robin authorship and duration-like packet accumulation are rejected.
+6. **First distinct-change/local routing pass:** occupancy improved, but real playback still averaged ~1.58 packets per 0.5 s and rotation remained effectively binary (0.933 mean drive, 0.952 median, >0.90 for 90.7% of active samples). The face-detail fix from this pass is retained; continuous fallback over-authoring and the peak-held rotation reservoir are rejected.
+
+Current reaction contract:
+
+- **Do not use saturated Spectrum height or sustained band level as fragmentation authority.** Sphere reuses the existing public support-aware Bubble energy seam and immutable transient/event snapshot; it does not invent another audio worker or alter the shared transient bus.
+- **Detached cubes are the punch reward.** Strong events may separate a local patch by a substantial fraction of the shell radius; over-authoring must be fixed by admission, never by shrinking the accepted travel.
+- **Fragmentation admission is strict:** generic transient crest, support-shaped three-band rise and generic envelope level have **zero packet authority**. Detached packets may be authored by typed `vocal_swell` / kick / snare / onset events or by Sphere-local **peak-picked half-wave spectral flux** over an immutable copy of the existing temporally-unsmoothed pre-shape/pre-AGC analysis spectrum. Flux uses positive log-ratio bin movement with a support gate, adaptive thresholding and a refractory window; held levels and tiny near-zero noise bins cannot keep firing.
+- **Packet placement is music-derived, never cursor-derived.** Current spectral balance/brightness plus bounded event classification resolves an octant. Similar material tends to reinforce one local region; round-robin progression is forbidden.
+- **Three response timescales are intentionally separate:** punch -> typed/peak-picked spectral-onset fragmentation; unsmoothed live pre-AGC loudness -> staged slow shell/block-size growth; accepted onset events -> optional tracer travel while broader crest/shape evidence may still influence whole-shell rotation. Generic crest/shape cannot detach geometry or keep the tracer alive. Fragment packets remain globally coalesced, but each accepted hit authors a strong region plus one weaker companion region so it reads as a visible event.
+- **Sustained growth is not a pulse.** `sphere_size_response` is live and scales only a Sphere-local envelope derived from the existing **pre-AGC** band feed (~0.5 s attack / ~1 s release). The local floor rises extremely slowly and the peak releases slowly so quiet/heavy contrast is not erased immediately. The geometry path has a larger experimental headroom (absolute safety cap near 42%) because the previous 5–10% body range was physically unreadable.
+- **Tracer is the intentional version of the useful bright-block accident.** It is rendered as one long/narrow connected spherical ribbon/tail. The tracer has **no free-running phase**: every accepted spectral/typed event queues one bounded angular step, queue backlog is capped, and visible phase advances with a bounded velocity until the target is actually reached. Brightness is held above a stable floor while travel remains and may fade only after settle, avoiding the old stationary flicker caused by decaying drive during unfinished movement. Event rate therefore owns travel demand without permitting runaway speed. Selected cubes may receive only a gentle local tilt before the rigid shell turn, while face/bevel identity remains anchored to the unrotated local face normal.
+- **Peak/drop temporal law:** a packet raises its authored section target immediately; targets then decay monotonically with the existing release. Optional `sphere_fragment_interpolation_enabled` changes only rendered displacement: a short critically-damped follower starts moving on the same event frame while keeping cube position/velocity continuous. It may not smooth audio, reduce packet amplitude, delay admission, or become whole-frame blur. Source loss/pause remains decay-only.
+- **Temporary statics rather than Settings churn:** Bass Response, Mid Response, High Response, Energy Curve, Idle Drift and Block Relief remain canonical persisted keys but disabled/inert. Palette Effects/material pseudo-shading was explicitly retired because it contaminated voxel finish diagnosis. Deformation, Size Response, Base Rotation, Velocity Reaction, Block Reactivity and Vocal Response remain live.
+- **Sustained growth mapping:** use the existing pre-AGC bass/mid/high snapshot with mid-weighted loudness, smooth it, and maintain a Sphere-local quiet floor / recent peak. Normalize inside that span and apply four relative ramps (~0.12..0.30, 0.30..0.48, 0.48..0.68, hard 0.76..0.94 top stage). The floor falls promptly but rises on a ~120 s scale; the peak learns highs promptly and releases slowly.
+- **Audio owns geometry only.** Fill colour, Edge colour, Toon, Gloss/Specular, Drop Shadow and Rainbow Ghosting are authored presentation controls and cannot become a second audio-reactive palette/emission owner.
+- **Continuity is geometry-local, never whole-frame blur.** The voxel corners are already intentionally soft; temporal frame blending/motion blur is rejected for this pass. Smooth the specific changing geometry state (fragment displacement / ingress fringe), not the finished image.
+- **Stable directional lighting + invariant cube definition:** broad diffuse/specular direction is screen-X/Y anchored. Shell Z and rotating cube-face normals have no broad-light authority. Each face carries its unrotated local identity for fixed face tone/bevel UV selection; this physically accepted detail/edge fix must not regress.
+- **Finish / bright-block separation:** Gloss/Specular are light-directed per-face finish and must not use a shell-space highlight lobe that selects one/few cubes. Stable unrotated local face identity still selects bevel/UV coordinates; a separately rotated face normal may affect continuous finish lighting only. Any gloss edge line must point toward the fixed authored light and be suppressed on the opposite shell side. `sphere_light_tracer_enabled` is a Sphere-only optional checkbox and is the sole authored moving bright-block snake when enabled.
+- **Toon:** hard banding/ink/highlight remains Sphere-only. The physical validation preset uses a neutral mid-tone literal Fill Color so Toon can be judged without any pseudo-material transform.
+- **Edge alpha:** edge alpha uses a stronger independent edge mask than the RGB edge mix so opaque edges can remain opaque around translucent fill.
+- **Independent fill/edge alpha:** final fragment alpha interpolates from Fill Color alpha toward Edge Color alpha according to edge coverage. A translucent block interior may not force a full-alpha edge transparent.
+- **Finish:** the renderer receives only literal Fill/Edge RGBA plus explicit Gloss/Specular/Toon. The historical Chrome/Obsidian/Magma/Silver/Water branches and seed-based per-cube brightness transforms are forbidden. Gloss/Specular operate only as stable per-face sheen whose axes are numerically substantial. Toon uses hard diffuse plateaus, strong edge/ink colour and a hard highlight patch. These remain **physically unaccepted** until an on/off hardware comparison shows an obvious difference.
+- **Rotation:** phase remains monotonically integrated. Base Rotation is the continuous floor; Velocity Reaction follows current articulation with fast attack and a short release so speed can rise/fall while playback remains active.
+- **Shadow:** literal flat 2D soft quad/disc, offset opposite the selected light and gated by canonical Sphere-only `sphere_shadow_enabled`. Its radius/offset/alpha may grow modestly with the staged sustained body envelope, but it has no voxel Z/cube faces/self-overlap. The prior experimental shared `authored_shadow_enabled` metadata has been removed; ordinary frameless/card shadow admission is untouched.
+- **Rainbow Ghosting:** default-off and Sphere-local. Renderer history is bounded and draws only reactive/moving blocks after the hero with ordinary alpha blending; it must never redraw the complete historical shell additively into a white orb. No timer/poller/worker/logical owner exists.
+- **Diagnostics:** `[SPHERE_AUDIO]` reports raw analysis-spectrum mean level + spectral flux + adaptive threshold + peak-picked spectral event/band, crest diagnostics, typed events/onset, live pre-AGC loudness, local floor/peak, relative sustained stage/body, tracer phase/queued target, rotation, occupancy and packet-source counts in `vocal/spectral/kick/snare/onset` order. Three-band rise counters are deliberately gone.
+- **Accepted visual floor:** detached local travel/fallout and unrotated-face detail remain protected. Causality/finish changes may not reduce that reward or reintroduce rotating face-axis lighting decisions.
+
+The generic Settings-family consumer checklist lives only in the top-level `Future_Work.md` **Experimental isolation + Settings single-authority gate**. Do not duplicate it here as Sphere archaeology.
+
+
+## Deferred texture / lifecycle concepts after reactivity acceptance
+
+- True textured/reflective voxels are feasible later through explicit per-face UVs or a future environment/scene-texture reflection seam. Do not reintroduce pseudo-fill colour transforms as a substitute for textures/reflections while reactivity is still being proven.
+- Event-owned block ageing is feasible: individual cubes can dissolve/fade after a bounded authored lifetime or event count while replacements fade in from distance. Any such lifecycle must stay on the existing logical cadence and must not become a private timer/free-running animation source.
+
+## Isolated presentation/arrival pass — 2026-09-09
+
+- **Lighting space:** broad illumination and the authored light vector are screen-X/Y anchored. Cube face tone/bevel/UV selection uses unrotated local face identity so block definition cannot snap when a rotated normal changes dominant axis. A separate smoothly rotated face normal is permitted only for continuous diffuse/specular incidence; it cannot choose UV planes or move the authored source. Gloss/Specular use light-facing per-face specular + source-edge sheen and remain static presentation only.
+- **Toon Shading:** optional Sphere-owned canonical checkbox; presentation-only/default off, using hard bands + strong edge ink + hard highlight rather than the rejected subtle cel approximation.
+- **Fill/Edge colour:** independent canonical Sphere swatches. Fill is literal base RGBA; Edge is literal bevel/ink RGBA. No finish preset may alter either in the renderer.
+- **Finish preset:** `sphere_finish` is Settings-only convenience metadata. Selecting one writes Gloss/Specular; touching either slider marks it Custom. It is deliberately absent from the renderer parameter bundle. Legacy `sphere_material`, `sphere_material_color`, and `sphere_material_fx` are migration inputs only.
+- **Rainbow Ghosting:** optional/default-off, renderer-local bounded history of reactive/moving blocks only, rendered after the hero with ordinary alpha blending plus bounded blur/drift. It must never redraw the complete historical shell additively into a white orb. No timer/poller/worker or shared visualizer history owner.
+- **Flat scene shadow:** a dedicated 2D shadow quad offset opposite the selected light, gated by Sphere's own Drop Shadow checkbox, with modest staged growth following the body swell. The rejected 3D duplicate-voxel shadow and shared shadow-admission escape hatch must not return.
+- **Scene Overflow:** optional Sphere-owned canonical checkbox. The shared render node bypasses its local visualizer stencil only when a descriptor explicitly names an overflow setting and the immutable mode snapshot has that setting enabled. All accepted modes expose no such capability and stay on the existing clipped path.
+- **Incoming Fade / arrival blocks:** optional Sphere-owned canonical checkbox. Curated Reactive/Plastic/Metallic presets may opt in. A sparse subset of shell cubes may be displaced farther outside and fade in while returning. Incoming is independently owned by sufficiently strong typed `vocal_swell` / kick / snare / onset events; generic crest/rise/shape cannot spawn it. Preserve the hardware-observed vocal-linked return/bounce. Successive episodes walk the octants with a coprime stride; each episode combines one broad primary region with a larger sparse whole-shell scatter so it retains focus without overloading one corner. No timer or free-running spawn cadence exists.
+- **Rotation split:** canonical `sphere_base_rotation_speed` is the continuous base velocity. Existing `sphere_rotation_speed` remains Velocity Reaction; the boost follows current change demand with fast attack/sub-second release rather than a peak-held multi-second reservoir.
+- **Hard isolation bar:** no accepted visualizer changes clip policy, shader, render ordering, geometry contract or Settings family because of these features. Generic seams must default to the pre-existing behavior unless an experimental descriptor explicitly opts in.
+
+### Experimental shared read-seam consumers
+
+The two shared BeatEngine read seams introduced for this experiment are intentionally
+consumer-limited:
+
+- `get_pre_agc_analysis_spectrum()` → **Voxel Sphere only**. Demand-published immutable
+  tuple from the already-computed `_freq_values`; no allocation occurs unless requested.
+- `get_live_pre_agc_energy_bands()` → **Voxel Sphere only** in current production code.
+  Reads committed `_pre_agc_live_*` floats; does not alter Bubble/Spectrum/accepted modes.
+
+If another experimental mode needs either seam later, it must consume the existing read
+contract rather than add another FFT/worker or a parallel smoothing/normalization owner.
+### Incoming distribution contract
+
+Incoming/returning blocks are a secondary event-owned response, not a substitute for fragmentation. The current visual distribution uses four screen-visible ingress quadrants. Three keep approximately a 46% admission floor while one reaches approximately 70%; dominance walks between events. **Voxel ingress rank is stable and may depend only on voxel seed + visible quadrant, never current dominant/event identity.** Dominance changes crossfade only the extra ~24% fringe over ~110 ms, with a narrow rank feather so individual blocks do not binary-pop. Quadrant selection intentionally ignores voxel Z so front/back depth participates in each visible corner. Preserve the accepted vocal-linked return/bounce behavior.
+
+Contingency only: if fragmentation still fails physical validation after the raw pre-AGC onset detector is evaluated, a stronger replacement/accretion layer may be explored where event intensity increases incoming velocity and the number of ~70% dominant corners while shell voxels fade as arrivals replace them. Do not implement that contingency as ambient activity, and do not let it displace fragmentation as the primary intended reactive reward without explicit operator acceptance.
+

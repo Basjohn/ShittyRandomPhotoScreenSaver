@@ -74,6 +74,29 @@ class VisualizerModeDescriptor:
     capture_module: str = ""
     capture_factory: str = ""
     technical_controls: bool = True
+    # Whether this mode participates in the shared per-mode Rainbow settings
+    # contract. Experimental modes may deliberately omit that product surface;
+    # callers must consult the descriptor rather than assume every mode owns
+    # rainbow_enabled/rainbow_speed persisted keys.
+    rainbow_controls: bool = True
+    # Whether this mode owns the canonical per-mode shared bar appearance keys
+    # (bar_fill_color / bar_border_color / bar_border_opacity). This is capability
+    # metadata only: it never supplies values. Canonical defaults remain the sole
+    # authority for persisted product values, and tests require descriptor/key
+    # ownership to agree exactly.
+    shared_bar_appearance: bool = True
+    # Modes that do not own shared bar-appearance settings may explicitly
+    # consume another canonical mode's persisted profile for internal runtime
+    # mirrors. This is routing metadata only; it never supplies values.
+    shared_bar_profile_mode: str = ""
+    # Modes without their own technical controls may explicitly borrow one
+    # canonical technical profile. Empty means the mode owns its own profile.
+    technical_profile_mode: str = ""
+    # Optional renderer-only overflow wiring. Empty means the mode can never
+    # bypass the canonical local visualizer clip. This is capability/routing
+    # metadata only; the boolean value itself remains a canonical persisted
+    # product setting carried in the mode's immutable parameter snapshot.
+    renderer_overflow_setting: str = ""
 
     @property
     def preset_key(self) -> str:
@@ -143,7 +166,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
     ),
     VisualizerModeDescriptor(
         "sphere",
-        "Sphere (Experimental)",
+        "Voxel Sphere (Experimental)",
         "_sphere_preset_slider",
         ("sphere_",),
         VisualizerModePresentationPolicy(
@@ -153,12 +176,17 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         ),
         frame_runtime_module="widgets.spotify_visualizer.sphere_frame_runtime",
         frame_runtime_class="SphereFrameRuntime",
-        renderer_module="rendering.quick.visualizer.implementations.sphere",
+        renderer_module="rendering.quick.visualizer.implementations.sphere_voxel",
         settings_builder_module="ui.tabs.media.sphere_builder",
         settings_builder_factory="build_sphere_ui",
         capture_module="widgets.spotify_visualizer.sphere_capture",
         capture_factory="capture_sphere",
         technical_controls=False,
+        rainbow_controls=False,
+        shared_bar_appearance=False,
+        shared_bar_profile_mode="spectrum",
+        technical_profile_mode="spectrum",
+        renderer_overflow_setting="sphere_allow_overflow",
     ),
 )
 
@@ -212,6 +240,122 @@ def load_mode_settings_builder(mode_id: str):
     module = import_module(descriptor.settings_builder_module)
     return getattr(module, descriptor.settings_builder_factory)
 
+
+
+def get_technical_profile_mode(mode_id: str) -> str:
+    """Return the canonical technical/DSP profile backing ``mode_id``.
+
+    Experimental/presentation modes may intentionally expose no technical
+    controls while still requiring a deterministic BeatEngine profile.  The
+    descriptor owns that relationship so runtime/settings callers never add a
+    mode-specific fallback branch.
+    """
+
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    profile = str(descriptor.technical_profile_mode or descriptor.mode_id).strip().lower()
+    if not profile:
+        raise ValueError(f"visualizer mode {mode_id!r} has no technical profile")
+    return profile
+
+
+
+
+_MODE_SETTING_FAMILY_SUFFIXES: dict[str, tuple[str, ...]] = {
+    "rainbow": ("rainbow_enabled", "rainbow_speed"),
+    "shared_bar": ("bar_fill_color", "bar_border_color", "bar_border_opacity"),
+}
+
+
+def mode_owns_setting_family(mode_id: str, family: str) -> bool:
+    """Return whether ``mode_id`` owns persisted keys for ``family``.
+
+    This is capability metadata only. Persisted values remain owned by the
+    canonical defaults/schema/SettingsManager authority.
+    """
+
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    if family == "rainbow":
+        return bool(descriptor.rainbow_controls)
+    if family == "shared_bar":
+        return bool(descriptor.shared_bar_appearance)
+    raise KeyError(f"Unknown visualizer setting family: {family!r}")
+
+
+def get_owned_mode_setting_keys(mode_id: str, family: str) -> dict[str, str]:
+    """Return canonical persisted keys owned directly by ``mode_id``.
+
+    Non-owning modes return an empty mapping. Generic callers should use this
+    rather than manufacturing ``{mode}_{suffix}`` keys independently.
+    """
+
+    suffixes = _MODE_SETTING_FAMILY_SUFFIXES.get(family)
+    if suffixes is None:
+        raise KeyError(f"Unknown visualizer setting family: {family!r}")
+    if not mode_owns_setting_family(mode_id, family):
+        return {}
+    normalized = get_visualizer_mode_descriptor(mode_id).mode_id
+    return {suffix: f"{normalized}_{suffix}" for suffix in suffixes}
+
+
+def get_resolved_mode_setting_profile(mode_id: str, family: str) -> str | None:
+    """Resolve the canonical persisted profile consumed by ``mode_id``.
+
+    Owning modes resolve to themselves. Shared-bar non-owners may explicitly
+    consume a descriptor-declared profile for non-persisted runtime mirrors.
+    Rainbow has no inherited profile: a mode that does not own Rainbow simply
+    does not participate in that product surface.
+    """
+
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    if mode_owns_setting_family(mode_id, family):
+        return descriptor.mode_id
+    if family == "rainbow":
+        return None
+    if family != "shared_bar":
+        raise KeyError(f"Unknown visualizer setting family: {family!r}")
+    profile = str(descriptor.shared_bar_profile_mode).strip().lower()
+    if not profile:
+        raise ValueError(
+            f"visualizer mode {mode_id!r} owns no shared-bar settings and declares no shared-bar profile"
+        )
+    if not mode_owns_setting_family(profile, "shared_bar"):
+        raise ValueError(
+            f"visualizer shared-bar profile {profile!r} for mode {mode_id!r} does not own canonical shared-bar settings"
+        )
+    return profile
+
+
+def get_resolved_mode_setting_keys(mode_id: str, family: str) -> dict[str, str]:
+    """Return canonical persisted keys backing ``mode_id`` for ``family``.
+
+    This function resolves only key ownership/routing; callers must still read
+    values from canonical defaults/SettingsManager.
+    """
+
+    profile = get_resolved_mode_setting_profile(mode_id, family)
+    if profile is None:
+        return {}
+    keys = get_owned_mode_setting_keys(profile, family)
+    if not keys:
+        raise ValueError(
+            f"visualizer setting profile {profile!r} for {family!r} exposes no canonical keys"
+        )
+    return keys
+
+def mode_has_rainbow_controls(mode_id: str) -> bool:
+    """Return whether ``mode_id`` owns canonical per-mode Rainbow settings."""
+
+    return mode_owns_setting_family(mode_id, "rainbow")
+
+
+def mode_has_shared_bar_appearance(mode_id: str) -> bool:
+    """Return whether ``mode_id`` owns canonical shared bar-appearance keys.
+
+    This is a capability query, not a defaults authority. Callers that need a
+    value must still resolve it from canonical Settings/defaults.
+    """
+
+    return mode_owns_setting_family(mode_id, "shared_bar")
 
 def get_default_visualizer_mode_id() -> str:
     """Return the canonical default active mode id.

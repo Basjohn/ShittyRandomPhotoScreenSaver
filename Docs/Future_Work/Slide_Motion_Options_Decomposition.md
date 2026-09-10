@@ -24,6 +24,13 @@ Pre-implementation comparison/rollback HEAD: `a90c0f0d26cc80e7739cc39fbe81e1c1d4
 defaults to `Linear`, preserving present behavior. Elastic, Wobble and Flex are options of Slide, never new IDs.
 One choice avoids speculative cross-product settings. The renderer consumes frozen per-run parameters only.
 
+These are an explicit **accepted-owner modifier exception** to the experimental-isolation rule in `Future_Work.md`. They
+are not standalone experiments and should not gain fake descriptors/plugin packages merely to make removal look tidy. Their
+Settings remain in the one canonical `transitions.slide` owner. The same applies to a future true Perspective option only
+while it remains a deterministic modifier of Slide's existing run/source/destination ownership. If Perspective would require
+an independent cadence, source owner, catalog identity or separately surviving GPU lifetime, stop and redesign the boundary
+instead of smuggling a second implementation through the Slide option seam.
+
 Elastic is deterministic bounded travel/overshoot/rebound from the existing eased run progress, with exact
 endpoints. Both image ownership and sampling derive from the same displaced coordinate. Overshoot
 past arrival retains full destination coverage and samples from the arrived destination coordinate, clamped only at

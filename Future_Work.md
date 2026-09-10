@@ -1,6 +1,6 @@
 # Future Work
 
-Last updated: 2026-09-04
+Last updated: 2026-09-09
 
 Long-horizon feature / new-implementation backlog.
 
@@ -57,11 +57,58 @@ At minimum it must:
    until another concrete consumer proves the abstraction;
 5. decompose the work into resumable checkpoints that leave the repository coherent whenever practical;
 6. define deterministic/source-level, lifecycle/resource, performance and eyes-on visual acceptance bars separately;
-7. keep an explicit landed/remaining status so partial completion is not mistaken for finished architecture.
+8. keep an explicit landed/remaining status so partial completion is not mistaken for finished architecture.
 
 Do not spend a first implementation pass building speculative infrastructure merely because later features might need it.
 Build the requested vertical feature, extract only reuse justified by the real implementation, and record attractive but
 unproven abstractions in the decomposition for a later second-consumer decision.
+
+### Experimental isolation + Settings single-authority gate
+
+For a genuinely new experimental Visualizer mode, transition identity, widget family, or other independently removable
+feature, **plugin-shaped removability is mandatory until explicit product acceptance**. This is an ownership rule, not a
+second configuration system. Experiments may plug into generic hosts/registries, but they may not become permanent by
+scattering feature-specific branches across shared owners.
+
+Mandatory contract:
+
+- one canonical descriptor/registration seam and one clearly owned implementation package/module set;
+- heavy runtime/capture/renderer/Settings body resolution stays lazy and dormant with the experiment disabled;
+- experiment-specific persisted keys live in one clearly owned canonical namespace/key block;
+- **Settings remains single-authority**: persisted keys/defaults still belong to the existing canonical Settings schema /
+  `default_settings.py` / SettingsManager path. Do **not** create a dynamic plugin schema, shadow defaults tree, private JSON,
+  second SettingsManager, or runtime-owned persistence merely to make an experiment removable;
+- descriptor capability metadata may say whether an experiment participates in a generic Settings surface, but it may **never**
+  provide persisted values or become a second schema/default authority. **Isolation does not require opting out of shared Settings
+  families**: when the ordinary family semantics fit, use the ordinary canonical participation/profile and add no redirect merely
+  for removability. If an experiment genuinely omits or aliases a generic persisted family (Rainbow, shared bar appearance,
+  technical controls, or a future family), that exception must have focused coverage proving descriptor participation/profile
+  routing matches canonical default-key ownership;
+- for such an omit/alias, the mandatory **generic-family consumer audit** is: canonical defaults/model/schema ownership;
+  normalization + retired-key/preset migration; Settings hydration/save/visibility; technical/config application; runtime
+  presentation/default-state + owner construction; and any preset/default tooling that enumerates the family. These consumers must
+  use the canonical mode-setting-family key/profile resolver rather than manufacturing `{mode}_...` persisted keys independently;
+  only bounded canonical model/schema construction may form those keys directly. Missing one of these consumers is a contract
+  failure, not a valid experimental shortcut;
+- the shared Settings UI may generically host a descriptor-provided lazy body, but after generic descriptor dispatch it
+  should not accumulate `if mode == <experiment>` branches or parallel save/hydration paths;
+- shared lifecycle/render/runtime owners may expose generic extension seams, but experiment-specific exceptions to their
+  contracts require explicit review and a focused regression test;
+- removal must be bounded and mechanical: delete the owned implementation + descriptor/registration, delete its owned
+  canonical Settings/default/preset block, add one explicit retired-key/mode migration if persisted state can survive in
+  user profiles, and delete/update focused tests/docs. Do not retain compatibility sludge indefinitely;
+- before acceptance, searching the shared tree for the experiment ID/name should find only justified generic registry,
+  canonical Settings/default ownership, retirement/migration, tests/docs and integration seams. Every other hit is suspect;
+- minimum lifecycle proof is both (a) disabled/default startup imports/constructs no meaningful experiment runtime/resources
+  and (b) enable -> activate -> switch away/retire, including before a first source frame where applicable, releases all
+  experiment-owned runtime/GPU resources without another cadence.
+
+**Accepted-owner modifier exception:** an option that literally bolts onto an already accepted owner and has no independent
+identity/lifecycle is not forced through experimental isolation. Slide Elastic/Wobble/Flex/Perspective are the canonical
+example: they stay options of the one Slide descriptor/implementation and use the canonical `transitions.slide` Settings
+owner. Do not manufacture a fake plugin/mode merely for removability. If an alleged modifier grows an independent cadence,
+resource lifetime, source owner, catalog identity, or substantial feature-specific shared branches, stop and reassess whether
+it has become a real standalone implementation boundary.
 
 Runtime Widget Themes, their semantic resolver/linking/Custom model and the shared Style Overrides surface
 are **landed current architecture**, not future work. Their durable contract belongs in `Spec.md` and the
@@ -137,13 +184,16 @@ Shared 3D infrastructure should therefore be dependency-light at import, while c
 costly assets belong to the admitted renderer and are released on retirement/context loss. There must never be a hidden
 "3D subsystem" ticking or holding heavy resources in the background when all of its real consumers are disabled/dormant.
 
-### Two-consumer 3D substrate — Block Spins + Sphere
+### Proven 3D seams, not a Sphere foundation — Block Spins + experimental Voxel Sphere
 
-This is no longer a one-off hypothesis. **Quick Block Spins** and the now-landed deformable **Sphere** are two independent
-3D consumers with different product owners: a finite transition run versus a persistent Visualizer logical/runtime path.
-They both require context-local programs/buffers, real Z/depth, projection, GL-state hygiene and explicit retirement. That
-is enough evidence to extract a **small low-level renderer substrate when the next relevant slice touches these seams**.
-It is not permission to merge transition and Visualizer lifecycle/state owners.
+**Quick Block Spins** and the now-landed experimental **Voxel Sphere** are independent 3D consumers with different product owners:
+a finite transition run versus a persistent Visualizer logical/runtime path. They prove that context-local programs/buffers,
+real Z/depth, projection, GL-state hygiene and explicit retirement are recurring needs. They do **not** make Sphere itself a
+canonical 3D foundation or template. A future 3D experiment should compare both consumers, reuse already-neutral helpers,
+and extract only the smallest identical low-level seam that the new consumer actually needs. Do not subclass/copy Sphere
+wholesale and then inherit its feature-specific Settings/state/material/deformation assumptions.
+
+The instanced **voxel/block** representation is now the active Sphere experiment: hard block stepping is authored appearance rather than a failed smooth silhouette, while still exercising projection, depth, one static cube mesh + one instance buffer, context ownership and retirement. This checkpoint is not a reusable 3D-engine declaration. Keep the implementation local until another independent consumer (for example Exploding Tiles) proves an identical low-level seam worth extracting.
 
 Prefer shared, dependency-light primitives for the parts the two consumers have actually proven common:
 
@@ -415,163 +465,77 @@ logical steps or turn render refresh into simulation cadence.
 
 **Unique Mode means a real mode boundary.** Each experiment labelled `Unique Mode` gets one canonical descriptor plus its own lazy mode-local logical/runtime/renderer/Settings implementation. It may reuse shared analysis bands, direction vocabulary, shader utilities and proven math, but it must not parasitically run another mode's active runtime, install a second visualizer clock, or create an ad-hoc six-way switch outside the descriptor seam. A Bubble-derived or Spectrum-derived experiment may borrow contracts/equations while remaining independently dormant when disabled.
 
-## 7.1 Deformable 3D Sphere / Blob Sphere experiment - Unique Mode
+## 7.1 Voxel Sphere experiment - Unique Mode
 
-The project once had a lost visualizer remembered as **Blob** that could never be rebuilt correctly.
-This is **not** a promise to reconstruct that historical effect from memory.
+**Status:** direct replacement checkpoint landed; operator eyes-on acceptance decides keep vs retire.
 
-Instead, experiment with a new real three-dimensional sphere/orb that rotates in 3D and continuously
-deforms its physical surface in response to music.
+The rejected smooth icosphere implementation is gone. Do not restore or preserve it for comparison, and do not resume its derivative-AA, clipped cast-shadow, tangent-normal reconstruction, liquid/fire side systems, or smooth-material topology. Those mechanisms failed the visual/product bar and are useful only as a historical lesson about what not to generalize.
 
-This is the primary planned consumer of the Phase-D **frameless visualizer shell** seam:
+The current experiment intentionally keeps the existing canonical `sphere` mode/persistence boundary while replacing only the owned representation:
 
 ```text
-shell_policy = FRAMELESS
-clip_policy  = VIEWPORT_RECT
+one static cube mesh
+    +
+one static stepped shell instance buffer
+    +
+one instanced draw
+    +
+vertex-shader radial/block deformation from immutable authored state
 ```
 
-It should appear as a free-standing 3D object with no rectangular card fill, frame/border or card
-shadow. It still renders inside the normal visualizer Quick item/QSGRenderNode, participates in the
-same fade/lifecycle/generation ownership, and stays inside its assigned transparent viewport.
+The shell uses integer-lattice stepping so block discontinuities are authored appearance. Cubes rotate as one real 3D object, use the existing logical-frame authored time/energy/transient state, and may pulse/translate radially without any per-frame Python topology rebuild. Voxel colour is now literal Fill/Edge RGBA. The historical Chrome / Obsidian / Magma / Silver / Water pseudo-material branches and Palette Effects key are retired rather than carried forward as hidden renderer authority.
 
-### 7.1A Existing foundation — inspect before inventing
+### 7.1A Experimental isolation / Settings authority
 
-The Sphere is deliberately ambitious, but it does **not** start from an empty renderer. Before designing new substrate,
-inspect the current architecture below. These are reconnaissance pointers, **not mandated reuse**: reuse current contracts
-that fit, extend them minimally where the Sphere proves a need, and do not cargo-cult transition-specific projection/math
-or distort an existing helper merely to claim reuse.
+- `sphere` remains independently disabled by default and lazily resolves its Settings body, capture, frame runtime and renderer.
+- All persisted `sphere_*` values remain in the one canonical Settings/default authority. No plugin-private JSON/default store, second SettingsManager or fallback persistence path is allowed.
+- A mode with no technical-control UI may name a canonical technical profile in its descriptor. Sphere explicitly consumes the Spectrum technical profile; shared owners resolve that descriptor contract generically instead of assuming `technical_cache[mode]`.
+- Heavy GL resources exist only while Sphere is admitted and retire through the existing event-owned renderer/context lifecycle. No timer, worker or independent cadence is added.
+- Removal must remain mechanical: delete the owned mode implementation/builder/capture/runtime/preset/settings block and descriptor entry, then apply one explicit retired-mode/key migration.
 
-1. **Static mesh allocation/lifetime** — start with
-   `rendering/quick/transitions/implementations/block_spins.py` and the OpenGL-free authored mesh/shader contract in
-   `rendering/gl_programs/blockspin_program.py`. Block Spins already proves static vertex data, VAO/VBO ownership and
-   explicit release inside the Quick scene.
-2. **Perspective / aspect-correct projection** — start with the current Visualizer presentation/geometry/render-frame
-   contract and `FRAMELESS + VIEWPORT_RECT`. Block Spins is a useful shallow-3D transform precedent, but the Sphere should
-   add only the minimal true-perspective/aspect-correct projection actually required rather than copying transition math.
-3. **Model/view/projection transforms** — inspect the current Quick matrix handoff in
-   `rendering/quick/visualizer/render_contract.py` and the transformed 3D geometry in
-   `rendering/gl_programs/blockspin_program.py`; introduce a reusable MVP helper only if the Sphere makes that boundary real.
-4. **Depth-state handling** — inspect `rendering/quick/visualizer/render_host.py`,
-   `rendering/quick/visualizer/clip_host.py`, and `rendering/quick/transitions/implementations/block_spins.py`. The common
-   Qt Quick GL-state fence already owns preservation/restoration of depth/cull/depth-write state.
-5. **Shader program/resource ownership** — follow the lazy Visualizer implementation contract in
-   `rendering/quick/visualizer/implementation_registry.py`, the render host, existing Visualizer implementation modules,
-   and `rendering/quick/render/gl_resources.py`. Shader programs/resources remain context-local renderer ownership.
-6. **Proper resource retirement/recreation** — reuse the renderer `release_resources()` contract and current lazy
-   implementation/context lifecycle. Retirement/context loss must leave no Sphere mesh/program resource behind.
-7. **Vertex-shader deformation** — new Sphere-local authored work initially. Reuse shader/program conventions, not a new
-   simulation owner; never upload rebuilt sphere topology every frame.
-8. **Deformed normals** — new Sphere-local shader work initially. Keep tangent-offset/normal reconstruction local unless a
-   later concrete deforming-mesh consumer proves a reusable primitive.
-9. **Directional lighting** — `rendering/gl_programs/blockspin_program.py` is a current normal/light/specular precedent.
-   Resolve the project's existing direction vocabulary into Sphere configuration rather than creating a live dependency on
-   Widget shadow state.
-10. **Fresnel/specular/material parameters** — Block Spins supplies only precedent for bounded lit 3D shader treatment.
-    Sphere material semantics remain Sphere-local initially; shared lighting helpers are justified only when they are truly
-    presentation-neutral.
-11. **Viewport resize behavior** — inspect `VisualizerModePresentationPolicy`, `VisualizerShellPolicy.FRAMELESS`,
-    `VisualizerClipPolicy.VIEWPORT_RECT`, `tests/test_qtquick_visualizer_geometry.py`, and
-    `tools/qtquick_visualizer_clip_smoke.py`. Preserve the existing whole-scale vs viewport-extent contract.
-12. **Deterministic authored-time animation rather than render-frame physics** — preserve `VisualizerLogicalRuntime` and
-    the isolated mode-owned logical/frame runtime as the clock/state authority. The Sphere renderer consumes authored
-    state/time; render refresh never advances simulation.
+### 7.1B Reuse policy
 
-### 7.1B Second-consumer reusable-infrastructure policy
+Do not build future 3D work *on Sphere*. Reuse already-neutral infrastructure and extract new shared code only after a second independent consumer proves the same seam. The current voxel implementation may later prove useful ideas for Exploding Tiles or another instanced effect (cube mesh, instance-buffer ownership, projection/depth state), but those remain Sphere-local until that second consumer exists.
 
-Sphere is the first **demanding Visualizer** consumer and the second independent Quick 3D consumer after Block Spins. Its
-landed implementation confirms the small shared-substrate candidates listed above, while also proving that transition and
-Visualizer ownership must remain separate. Do not turn that proof into a general-purpose 3D engine.
+Transitions and visualizers may share low-level GPU primitives while keeping separate lifecycle owners: a finite two-image transition must never inherit the persistent Visualizer logical/audio runtime merely because both draw 3D geometry.
 
-Reusable candidates justified by the two current consumers include:
+### 7.1C Iteration / acceptance gate
 
-- static mesh/buffer ownership and context-local release helpers;
-- aspect-correct perspective and small model/view/projection math helpers;
-- safe depth/cull/depth-write state handling that composes with the existing Quick fence;
-- common shader/program/resource lifetime helpers;
-- a bounded presentation-neutral lighting-direction resolver;
-- tiny lit-mesh shader/math utilities only where they do not encode Sphere semantics.
+The voxel representation has passed the first operator bar: it is not worse than the rejected smooth Sphere and is worth
+iterating. Continue bounded voxel-only passes while each pass attacks an observed visual/reaction defect. Do not preserve or
+restore the rejected smooth representation, and do not invent a parallel third representation merely from sunk cost.
 
-Keep Sphere-specific deformation fields, spherical-harmonic/lobe/noise choices, audio-to-deformation mapping,
-deformed-sphere normal strategy, material identities (**Chrome / Obsidian / Magma / Silver / Water**) and authored behavior local to
-the mode unless another concrete consumer proves that exact semantic primitive is genuinely shared.
+Current reaction contract after the detached-packet pass established the first genuinely desirable visual floor. **The current local travel/fallout is now a minimum accepted reward: future audio-linkage work may change when/where packets fire, but must not quietly compress the detached-cube displacement back toward the shell.**
 
-Do **not** pre-build a general scene graph, camera framework, material-class hierarchy, 3D object system or generic physics
-engine. When reuse looks plausible but is not yet justified, record the candidate in the Sphere decomposition rather than
-abstracting speculatively.
+1. treat the shell as a **sparse 3D Spectrum**, but never use shared Spectrum bar height as displacement authority: routine near-total `1.0` plateaus make both absolute height and recent-rise unusable for this mode;
+2. reuse the existing public support-aware Bubble energy feed for mode-local control. This is reuse of an existing analysis seam, not another worker/cadence/Settings authority;
+3. **detached block displacement is the visual reward.** Do not tune the mode as though it were preserving a smooth sphere surface. A strong local event must visibly separate cubes by a substantial fraction of the shell radius;
+4. use eight fixed 3D spatial sections with true angular fallout. A musical packet excites one local section; nearby blocks participate progressively less and remote blocks receive zero authority. Static local polarity permits both protrusion and recession;
+5. **punch events own detached displacement.** Generic spectral-shape/envelope change is explicitly forbidden from packet authorship. A Sphere-local baseline-relative transient crest, confirmed vocal/kick/snare event, or onset may earn one packet through the shared bounded admission gate. A held/pegged transient converges into the local baseline and cannot keep firing; ordinary unclassified bass level does not detach geometry;
+6. all detached packets share the one Sphere-local admission path and a bounded minimum interval. Packet location is music-derived from current spectral balance/brightness plus bounded event classification, never round-robin/time/cursor progression; repeated similar material should reinforce a local region rather than mechanically fill all eight octants;
+7. section attack remains immediate/aggressive and release is long/gentle. Source loss/pause is decay-only and may never manufacture a packet from the collapse to zero. `sphere_size_response` instead owns only slow sustained passage-weight growth (~0.5 s attack / ~1 s release, small bounded maximum), never a beat pulse;
+8. rotation phase is integrated monotonically in the logical runtime. Canonical **Base Rotation** is the independent continuous floor; **Velocity Reaction** is an additive boost that follows **current articulation** with fast attack and short release. Spectral/envelope movement may articulate rotation and the tracer, but may not detach cubes;
+9. while the mapping is experimental, remaining interference-prone legacy motion controls stay disabled/inert, but pseudo-material settings do **not**: `sphere_material`, `sphere_material_color`, and `sphere_material_fx` forward-migrate to the clean `sphere_finish` / `sphere_fill_color` contract and are then removed. Deformation, **Size Response**, Base Rotation, Velocity Reaction, Block Reactivity and Vocal Response remain live;
+10. audio owns geometry only. Fill hue/alpha, edge hue/alpha, Toon, Gloss/Specular and Rainbow Ghosting are presentation controls and may not become a second audio-reactive colour/emission system;
+11. broad directional lighting is explicitly **screen-X/Y anchored**. Shell Z and rotating cube-face normals have no broad diffuse/specular authority. Cube face readability is a separate model layer whose face identity and bevel UVs come from each cube's **unrotated local face normal**; this accepted fix must not regress;
+12. **Toon means visibly hard toon**, not subtle quantization: hard diffuse plateaus, strong authored edge/ink colour, and a hard highlight patch. Normal finish uses the same stable face identity plus per-face sheen controlled explicitly by Gloss and Specular. A shell-space highlight lobe that picks one/few blocks is forbidden because it competes with the Light Tracer;
+13. the Sphere scene shadow is a **literal flat 2D** soft quad/disc, offset directly opposite the selected light, and gated by its own canonical Drop Shadow checkbox. Its radius/offset may grow modestly with staged sustained body growth. It has no voxel Z, cube faces, self-overlap, rigid-body rotation or detached-block geometry. The shared presentation layer must not gain a Sphere shadow escape hatch;
+14. canonical Sphere presentation includes independent literal **Fill Color** and **Edge Color** (including independent alpha), plus default-off **Rainbow Ghosting**. Historical Chrome/Obsidian/Magma/Silver/Water pseudo-material transforms are retired; `sphere_finish` is Settings-only convenience that writes Gloss/Specular and never reaches the renderer. Ghosting keeps only bounded reactive/moving history, draws after the hero with ordinary alpha blending, and must never redraw the whole shell additively into a white orb;
+15. current diagnostics emit `[SPHERE_AUDIO]` with crest components, shape/envelope articulation, typed events/onset, sustained/body/tracer/rotation state, section occupancy and packet-source counts in `vocal/crest/kick/snare/onset` order. There is no generic `change` packet source;
+16. Scene Overflow and Incoming Fade remain descriptor/Sphere-owned. The generic clip capability is opt-in and accepted modes retain their existing clip/shadow behavior;
+17. **Contingency only, not current behavior:** raw pre-AGC onset + four-corner ingress has now produced the first operator-described “reactive across the board / alive” run. First resolve perceptual jerk with stable ingress population + optional geometry-only fragment interpolation. Only if reactivity still needs another layer after continuity acceptance may replacement/accretion be evaluated: event intensity could raise incoming velocity and increase dominant ingress corners from one toward two/three/four at the absolute peak while existing shell voxels fade out as arrivals replace them. Keep it secondary to fragmentation, event-owned, bounded, and never an ambient particle fountain/private animation clock;
+17. operator acceptance now checks punch-linked local fragmentation, staged soft→heavy body growth, intentional tracer snake + gentle local selected-cube rotation, variable active shell rotation, fixed light quadrant + persistent cube detail, checkbox flat shadow with staged growth, independent edge alpha, obvious Toon, visible Gloss/Specular range, visible Rainbow Ghosting, quiet stability, the neutral Reactive Voxel validation preset, and ordinary/CUSTOM geometry.
 
-The shared-3D dormancy rule above applies recursively: if Sphere and every other future consumer of an extracted 3D helper
-are dormant, any meaningful-cost helper-owned resources/work must also be absent. Cheap pure math/types may stay shared.
 
-Before implementation, if no current detailed Sphere implementation decomposition exists, create and commit one first per
-the decomposition rule above. It must include this foundation inventory, the rollback boundary, ownership/lifetime map,
-reusable-vs-local decisions, resumable checkpoints and separate deterministic/performance/eyes-on acceptance bars.
+Deferred only after musical causality is accepted:
 
-Visualizer viewport resizing is a current destination requirement. Any future sphere must therefore use aspect-correct
-projection so wider/taller viewports reveal or reframe more space without turning the sphere into an ellipse. Whole-size
-corner/scroll resize scales it uniformly; edge viewport resize changes framing/aspect.
+- **true textured/reflective blocks** are technically viable through per-face UVs and/or a future environment/scene-texture reflection seam. Do not add that authority merely to imitate the retired pseudo-material names before the reaction contract is accepted.
+- **block dissolve/retirement/replacement** is also viable as event-owned per-instance lifecycle state: an aged/displaced cube can fade out while a replacement fades in from distance. It must use the existing logical cadence and remain event/state driven, never add a private timer or free-running movement source.
 
-The sphere must expose bounded material/lighting options rather than baking one look into the mode. At minimum, preserve design space for **Chrome**, **Obsidian**, **Magma** (including bounded emissive/flow treatment) and **Silver**, plus gloss/specular controls. Material choice is presentation configuration only: it must not add another cadence, per-frame Python material rebuild, or independent resource owner.
-
-Cheap shape:
-
-```text
-one static sphere mesh
-    +
-one vertex-shader deformation pass
-    +
-one lit fragment shader
-    +
-one/few draw calls
-```
-
-Prefer an evenly distributed icosphere or similar modest static mesh. No per-vertex Python objects and
-no per-frame CPU topology rebuild.
-
-Each vertex begins at unit-sphere position `p`; the vertex shader computes:
-
-```text
-position' = p * (base_radius + displacement(p, audio_state, authored_time))
-```
-
-Possible audio/deformation layers:
-
-- bass -> broad bulges/global breathing;
-- low-mid -> several large lobes;
-- mids -> smaller moving surface forms;
-- highs -> restrained fine ripples;
-- very low-amplitude procedural noise -> organic continuity.
-
-Avoid an "audio hedgehog" where every bin becomes one spike.
-
-Potential fields: low-order spherical harmonics, directional lobe functions, 3D noise,
-domain-warped noise, driven by compact existing analysis bands.
-
-Rotation derives from authored time/state, never degrees-per-rendered-frame. Possibilities: slow base
-rotation, transient acceleration/twist, bounded drifting axis, preset-controlled amount.
-
-Lighting is essential. For a proper version derive deformed normals in the vertex shader by evaluating
-the deformation field at two small tangent offsets and crossing displaced tangents. This allows
-specular light to crawl over the actual changing dents/bulges without CPU normal rebuilds. Reuse the project's existing eight-way direction vocabulary/resolver for key-light direction, and it may default from the current global shadow direction when the mode/preset is resolved. Do **not** create a live per-frame dependency on Widget shadow state: the resolved Visualizer configuration/preset owns the light direction for the active mode.
-
-Candidate fragment stack:
-
-- restrained directional/key light;
-- body color/gradient;
-- specular;
-- Fresnel/rim;
-- optional subtle audio-driven emission;
-- correct depth.
-
-Later experiments may try gel/translucent/glass materials, but not before basic geometry is compelling.
-
-Goal: an organic deforming body, not an oscilloscope wrapped around a ball.
-
-Performance target: one sphere draw and no per-frame CPU vertex upload. Quality knobs are subdivision
-level, number of field layers, deformed-normal cost and fragment-lighting complexity.
-
-Validation: actual Z/depth geometry, deterministic deformation, independent band response, arbitrary
-3D rotation, normals/specular consistent with deformation, no render-frame-driven logical simulation,
-clean resource release/dormancy, and subjective confirmation it reads as a deforming 3D body.
+Retire the mode only if the voxel concept stops earning further iteration; if retired, strip the remaining owned keys through
+one explicit retirement migration. Automated gates before any checkpoint remain: disabled mode imports/owns no heavy
+implementation resources; enable -> activate -> switch-away retires renderer resources through the existing event path;
+canonical Settings/default snapshot stays singular; no experiment-specific branch spreads into shared owners.
 
 ## 7.2 Extruded Spectrum - Unique Mode
 
@@ -605,18 +569,18 @@ history into depth, a few thousand vertices, displacement from compact data/text
 
 For a genuinely new transition/visualizer implementation:
 
-1. record visual contract here or in a focused note;
-2. add cheap descriptor metadata with the capability **deactivated/dev-gated by default** during
-   development;
-3. implement one isolated lazy renderer;
-4. use deterministic input/seed;
-5. add endpoint/lifecycle/state tests;
-6. add production-shaped Quick GL smoke/capture oracle where useful;
-7. inspect visually;
-8. measure frame/GPU cost at representative resolution/refresh;
-9. if it looks poor, modify or delete the isolated implementation without preserving it for sunk cost;
-10. only after it is worth keeping, add polished Settings/defaults/docs;
-11. commit + push bounded work.
+1. record visual contract here or in a focused note and apply the **Experimental isolation + Settings single-authority gate** above;
+2. add cheap descriptor metadata with the capability **deactivated/dev-gated by default** during development;
+3. implement one isolated lazy renderer/runtime package using generic host seams rather than experiment-specific shared branches;
+4. declare any persisted options in one owned block of the canonical Settings/default authority; keep the Settings body lazy;
+5. use deterministic input/seed;
+6. add endpoint/lifecycle/state/dormancy/removal-boundary tests;
+7. add production-shaped Quick GL smoke/capture oracle where useful;
+8. inspect visually;
+9. measure frame/GPU cost at representative resolution/refresh;
+10. if it looks poor, modify or delete the isolated implementation without preserving it for sunk cost;
+11. only after it is worth keeping, polish Settings/defaults/docs and explicitly review promotion from experimental isolation;
+12. commit + push bounded work.
 
 For an option inside an existing transition such as Slide Elastic/Wobble/Flex/Perspective, extend the
 single existing implementation/descriptor rather than manufacturing a new transition identity.
