@@ -35,6 +35,7 @@ from .sphere_voxel_geometry import (
 SPHERE_RADIUS_FRACTION = 0.215
 
 _SPHERE_SECTION_COUNT = 8
+_PARTICLE_COHORT_COUNT = 4
 _GHOST_SAMPLE_INTERVAL_S = 0.055
 _GHOST_MAX_AGE_S = 0.62
 _GHOST_MAX_SAMPLES = 6
@@ -131,9 +132,20 @@ uniform float uBlockRelief;
 uniform float uBlockReactivity;
 uniform int uFadeIncoming;
 uniform float uIncomingDrive;
+uniform float uIncomingDensity;
 uniform int uIncomingSection;
 uniform int uIncomingPreviousSection;
 uniform float uIncomingBlend;
+uniform int uCohortCount;
+uniform float uCohortProgress[4];
+uniform float uCohortStrength[4];
+uniform float uCohortDensity[4];
+uniform float uCohortVelocity[4];
+uniform float uCohortBounce[4];
+uniform int uCohortSection[4];
+uniform int uCohortLane[4];
+uniform int uCohortOuttake[4];
+uniform int uRenderPass;
 uniform vec2 uScreenOffset;
 uniform float uGhostExpand;
 uniform float uTracerDrive;
@@ -190,10 +202,35 @@ float sectionField(vec3 direction) {{
     return clamp(drive, 0.0, 1.0);
 }}
 
+float stableFlowSelection(vec3 direction, int dominant, int lane, float densityScale) {{
+    // Every cohort reuses the same stable per-voxel rank. Event identity and
+    // current dominance never re-hash the foundational population. The selected
+    // quadrant receives the familiar +24% fringe while all four participate.
+    int quadrant = (direction.x < 0.0 ? 1 : 0) | (direction.y < 0.0 ? 2 : 0);
+    float admission = 0.46 + (quadrant == (dominant & 3) ? 0.24 : 0.0);
+    admission *= clamp(densityScale, 0.0, 1.0);
+    float pick = fract(
+        aInstanceSeed * 19.371
+        + float(quadrant) * 0.271
+        + 0.137
+    );
+    float threshold = 1.0 - admission;
+    float selected = smoothstep(threshold - 0.028, threshold + 0.028, pick);
+    // Four fixed cohort lanes partition the eligible population. Concurrent
+    // cohorts therefore travel independently instead of repeatedly resetting
+    // the same majority of shell voxels. The partition is spatially scrambled,
+    // so it cannot form visible quadrant/lattice seams.
+    float lanePick = fract(aInstanceSeed * 43.117 + float(quadrant) * 0.193 + 0.419);
+    int stableLane = int(floor(lanePick * 4.0)) & 3;
+    selected *= stableLane == (lane & 3) ? 1.0 : 0.0;
+    float axisDistance = min(abs(direction.x), abs(direction.y));
+    float seamFeather = smoothstep(0.00, 0.16, axisDistance);
+    return selected * mix(0.82, 1.0, seamFeather);
+}}
+
 float incomingField(vec3 direction) {{
-    // Four visible ingress quadrants always participate.  Crucially, voxel rank
-    // is stable for the life of the renderer: dominance must never re-hash the
-    // foundational ~46% population.  Only the extra 24% fringe migrates.
+    // Legacy aggregate fallback retained only for bounded ghost/history
+    // compatibility. Live Sphere travel is cohort-authored below.
     int dominant = clamp(uIncomingSection, 0, 7) & 3;
     int previousDominant = clamp(uIncomingPreviousSection, 0, 7) & 3;
     int quadrant = (direction.x < 0.0 ? 1 : 0) | (direction.y < 0.0 ? 2 : 0);
@@ -201,25 +238,108 @@ float incomingField(vec3 direction) {{
     float previousBoost = quadrant == previousDominant ? 0.24 : 0.0;
     float currentBoost = quadrant == dominant ? 0.24 : 0.0;
     float admission = 0.46 + mix(previousBoost, currentBoost, dominanceBlend);
-
-    // Stable rank depends only on the voxel and its visible quadrant. Z is not
-    // part of the quadrant classification, so every corner samples full depth.
-    // Removing dominant/event identity from this hash fixes the whole-shell
-    // population reshuffle that made corner changes perceptually violent.
-    float pick = fract(
-        aInstanceSeed * 19.371
-        + float(quadrant) * 0.271
-        + 0.137
-    );
-    // The narrow rank feather makes the 46<->70 fringe fade/move continuously
-    // instead of popping individual blocks at their threshold. This changes
-    // geometry/opacity continuity only; no frame blending or motion blur exists.
+    admission *= clamp(uIncomingDensity, 0.0, 1.0);
+    float pick = fract(aInstanceSeed * 19.371 + float(quadrant) * 0.271 + 0.137);
     float threshold = 1.0 - admission;
     float selected = smoothstep(threshold - 0.028, threshold + 0.028, pick);
-
     float axisDistance = min(abs(direction.x), abs(direction.y));
     float seamFeather = smoothstep(0.00, 0.16, axisDistance);
     return clamp(uIncomingDrive, 0.0, 1.0) * selected * mix(0.82, 1.0, seamFeather);
+}}
+
+float cohortTravel(float progress, float velocityAccent) {{
+    float p = clamp(progress, 0.0, 1.0);
+    float gentle = p * p * (3.0 - 2.0 * p);
+    // A strong transient may move faster early, but both curves decelerate to a
+    // true settle at p=1. This changes geometry only; cohort admission is already
+    // authored by the runtime.
+    float transientFast = 1.0 - pow(max(0.0, 1.0 - p), 1.70);
+    // Captured duration now carries most of the speed response. Keep only a small
+    // curve accent here so a strong hit feels eager without making the visual
+    // trajectory collapse back to the old near-binary fast path.
+    return mix(gentle, transientFast, 0.18 * clamp(velocityAccent, 0.0, 1.0));
+}}
+
+void particleFlow(
+    vec3 direction,
+    out float intakeRadial,
+    out float baseAlpha,
+    out float outtakeRadial,
+    out float outtakeAlpha,
+    out float flowActivity
+) {{
+    intakeRadial = 0.0;
+    baseAlpha = 1.0;
+    outtakeRadial = 0.0;
+    outtakeAlpha = 0.0;
+    flowActivity = 0.0;
+
+    if (uFadeIncoming == 0) return;
+
+    if (uCohortCount <= 0) {{
+        float legacy = incomingField(direction);
+        intakeRadial = legacy;
+        if (legacy > 0.0) {{
+            float incomingReturn = 1.0 - smoothstep(0.08, 0.92, legacy);
+            baseAlpha = min(baseAlpha, mix(0.08, 1.0, incomingReturn));
+            flowActivity = legacy;
+        }}
+        return;
+    }}
+
+    for (int i = 0; i < 4; ++i) {{
+        if (i >= uCohortCount) break;
+        float strength = clamp(uCohortStrength[i], 0.0, 1.0);
+        if (strength <= 0.001) continue;
+        float selected = stableFlowSelection(
+            direction, uCohortSection[i], uCohortLane[i], uCohortDensity[i]
+        );
+        if (selected <= 0.001) continue;
+
+        float progress = clamp(uCohortProgress[i], 0.0, 1.0);
+        float travel = cohortTravel(progress, uCohortVelocity[i]);
+        flowActivity = max(flowActivity, selected * strength * (1.0 - progress));
+
+        if (uCohortOuttake[i] != 0) {{
+            // Outtake: source voxel leaves the shell while its canonical
+            // replacement fades in underneath. The replacement is rendered in
+            // the base pass; the departing source is rendered by uRenderPass=1.
+            float radial = selected * strength * travel;
+            outtakeRadial = max(outtakeRadial, radial);
+            float sourceFade = 1.0 - smoothstep(0.16, 0.96, travel);
+            outtakeAlpha = max(outtakeAlpha, selected * sourceFade);
+            float replacementFade = smoothstep(0.08, 0.72, travel);
+            baseAlpha = min(baseAlpha, mix(1.0, replacementFade, selected));
+        }} else {{
+            // Intake: the actual shell voxel begins detached and returns to its
+            // own canonical slot. Vocal-owned cohorts retain a small late-flight
+            // outward recoil before the final settle.
+            float recoilX = (progress - 0.70) / 0.115;
+            float recoil = 0.15 * clamp(uCohortBounce[i], 0.0, 1.0)
+                         * exp(-recoilX * recoilX);
+            float remaining = clamp(1.0 - travel + recoil, 0.0, 1.20);
+            intakeRadial = max(intakeRadial, selected * strength * remaining);
+
+            // Intake fade is intentionally gentler than outtake and follows
+            // authored cohort time rather than the accelerated travel curve.
+            // Strong acoustic impacts may become visible sooner, while quiet/flat
+            // admitted events fade in across most of their longer journey.
+            float velocity = clamp(uCohortVelocity[i], 0.0, 1.0);
+            float fadeEnd = mix(0.96, 0.72, velocity);
+            float fadeFloor = mix(0.018, 0.060, velocity);
+            float arrival = mix(
+                fadeFloor, 1.0, smoothstep(0.02, fadeEnd, progress)
+            );
+
+            // Vocal recoil is allowed to push an intake voxel farther outward
+            // than its launch distance.  Instead of exposing a hard viewport/card
+            // clip when that happens, fade only the over-launch excursion through
+            // a small radial field; canonical travel/recoil amplitude is untouched.
+            float excursionFade = 1.0 - smoothstep(1.00, 1.18, remaining);
+            arrival *= excursionFade;
+            baseAlpha = min(baseAlpha, mix(1.0, arrival, selected));
+        }}
+    }}
 }}
 
 float wrappedAngle(float angle) {{
@@ -262,19 +382,25 @@ void main() {{
     float polarityScale = aRadialPolarity > 0.0 ? 1.12 : 0.72;
     float radial = localDrive * (0.68 * uDeformation) * reactivity * aRadialPolarity * polarityScale;
 
-    float incoming = uFadeIncoming != 0 ? incomingField(direction) : 0.0;
-    float incomingRadial = incoming * (0.88 + 0.42 * clamp(uDeformation, 0.0, 4.5));
-    radial += incomingRadial;
+    float intakeRadial = 0.0;
+    float baseAlpha = 1.0;
+    float outtakeRadial = 0.0;
+    float outtakeAlpha = 0.0;
+    float flowActivity = 0.0;
+    particleFlow(
+        direction, intakeRadial, baseAlpha, outtakeRadial, outtakeAlpha, flowActivity
+    );
+    float flowScale = 0.88 + 0.42 * clamp(uDeformation, 0.0, 4.5);
 
     float arrivalFade = 1.0;
-    if (uFadeIncoming != 0) {{
-        float outwardDetachment = max(radial, 0.0);
-        float returnMix = 1.0 - smoothstep(0.18, 1.05, outwardDetachment);
-        arrivalFade = mix(0.30, 1.0, returnMix);
-        if (incoming > 0.0) {{
-            float incomingReturn = 1.0 - smoothstep(0.08, 0.92, incoming);
-            arrivalFade = min(arrivalFade, mix(0.08, 1.0, incomingReturn));
-        }}
+    if (uRenderPass == 1) {{
+        // Dedicated outgoing-source overlay. The base pass has already rendered
+        // the canonical replacement geometry at its authored fade level.
+        radial += outtakeRadial * flowScale;
+        arrivalFade = outtakeAlpha;
+    }} else {{
+        radial += intakeRadial * flowScale;
+        arrivalFade = baseAlpha;
     }}
 
     float bodyScale = 1.0 + uSizePulse;
@@ -290,7 +416,7 @@ void main() {{
     // Intentional version of the useful "one bright block" accident.  Stronger
     // articulation extends the head into a short snake. Selected cubes rotate
     // around deterministic local axes before the rigid shell rotation.
-    float tracer = tracerField(direction);
+    float tracer = uRenderPass == 1 ? 0.0 : tracerField(direction);
     vec3 localAxis = normalize(vec3(
         fract(aInstanceSeed * 7.137 + 0.11) - 0.5,
         fract(aInstanceSeed * 11.731 + 0.37) - 0.5,
@@ -316,7 +442,7 @@ void main() {{
     vTracer = tracer;
     // Rainbow ghosts trail only blocks that actually have reactive motion/light
     // authority. Re-rendering the entire shell was the cause of the white glow.
-    vGhostActivity = clamp(max(max(localDrive, incoming), tracer), 0.0, 1.0);
+    vGhostActivity = clamp(max(max(localDrive, flowActivity), tracer), 0.0, 1.0);
 
     float cameraW = (4.8 - turnedPosition.z) / 4.8;
     vec2 local = uGeometry.xy * cameraW
@@ -346,6 +472,7 @@ uniform float uFade;
 uniform int uCelShading;
 
 void main() {
+    if (vArrivalFade <= 0.001) discard;
     vec3 light = normalize(uLight);
     vec2 lightXY = normalize(light.xy);
     vec2 lightPerp = vec2(-lightXY.y, lightXY.x);
@@ -521,7 +648,7 @@ class QuickSphereVoxelRenderer:
         self._shadow_uniforms: dict[str, int] = {}
         self._ghost_program = 0
         self._ghost_uniforms: dict[str, int] = {}
-        self._ghost_history: list[tuple[float, float, float, float, float, tuple[float, ...], float, int, int, float]] = []
+        self._ghost_history: list[tuple] = []
         self._vao = 0
         self._mesh_vbo = 0
         self._instance_vbo = 0
@@ -538,6 +665,38 @@ class QuickSphereVoxelRenderer:
             self._program or self._shadow_program or self._ghost_program or self._vao
             or self._mesh_vbo or self._instance_vbo
         )
+
+    @staticmethod
+    def _upload_particle_cohorts(uniforms: dict[str, int], cohorts) -> None:
+        """Upload at most four immutable Sphere travel cohorts to one program."""
+
+        items = tuple(cohorts[:_PARTICLE_COHORT_COUNT])
+        progress = np.ones(_PARTICLE_COHORT_COUNT, dtype=np.float32)
+        strength = np.zeros(_PARTICLE_COHORT_COUNT, dtype=np.float32)
+        density = np.zeros(_PARTICLE_COHORT_COUNT, dtype=np.float32)
+        velocity = np.zeros(_PARTICLE_COHORT_COUNT, dtype=np.float32)
+        bounce = np.zeros(_PARTICLE_COHORT_COUNT, dtype=np.float32)
+        section = np.zeros(_PARTICLE_COHORT_COUNT, dtype=np.int32)
+        lane = np.zeros(_PARTICLE_COHORT_COUNT, dtype=np.int32)
+        outtake = np.zeros(_PARTICLE_COHORT_COUNT, dtype=np.int32)
+        for index, cohort in enumerate(items):
+            progress[index] = max(0.0, min(1.0, float(cohort.progress)))
+            strength[index] = max(0.0, min(1.0, float(cohort.strength)))
+            density[index] = max(0.0, min(1.0, float(cohort.density)))
+            velocity[index] = max(0.0, min(1.0, float(cohort.velocity_accent)))
+            bounce[index] = max(0.0, min(1.0, float(cohort.vocal_bounce)))
+            section[index] = int(cohort.section) & 3
+            lane[index] = int(cohort.lane) & 3
+            outtake[index] = 1 if bool(cohort.outtake) else 0
+        gl.glUniform1i(uniforms["uCohortCount"], len(items))
+        gl.glUniform1fv(uniforms["uCohortProgress"], _PARTICLE_COHORT_COUNT, progress)
+        gl.glUniform1fv(uniforms["uCohortStrength"], _PARTICLE_COHORT_COUNT, strength)
+        gl.glUniform1fv(uniforms["uCohortDensity"], _PARTICLE_COHORT_COUNT, density)
+        gl.glUniform1fv(uniforms["uCohortVelocity"], _PARTICLE_COHORT_COUNT, velocity)
+        gl.glUniform1fv(uniforms["uCohortBounce"], _PARTICLE_COHORT_COUNT, bounce)
+        gl.glUniform1iv(uniforms["uCohortSection"], _PARTICLE_COHORT_COUNT, section)
+        gl.glUniform1iv(uniforms["uCohortLane"], _PARTICLE_COHORT_COUNT, lane)
+        gl.glUniform1iv(uniforms["uCohortOuttake"], _PARTICLE_COHORT_COUNT, outtake)
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         state = frame.snapshot.logical.mode_state
@@ -660,9 +819,12 @@ class QuickSphereVoxelRenderer:
             gl.glUniform1f(u["uBlockReactivity"], float(parameters["sphere_bump_reactivity"]))
             gl.glUniform1i(u["uFadeIncoming"], 1 if fade_incoming else 0)
             gl.glUniform1f(u["uIncomingDrive"], float(state.incoming_drive))
+            gl.glUniform1f(u["uIncomingDensity"], float(state.incoming_density))
             gl.glUniform1i(u["uIncomingSection"], int(state.incoming_section))
             gl.glUniform1i(u["uIncomingPreviousSection"], int(state.incoming_previous_section))
             gl.glUniform1f(u["uIncomingBlend"], float(state.incoming_blend))
+            self._upload_particle_cohorts(u, state.particle_cohorts)
+            gl.glUniform1i(u["uRenderPass"], 0)
             gl.glUniform2f(u["uScreenOffset"], 0.0, 0.0)
             gl.glUniform1f(u["uGhostExpand"], 0.0)
             gl.glUniform3f(u["uLight"], *self._light)
@@ -696,6 +858,22 @@ class QuickSphereVoxelRenderer:
                 self._vertex_count,
                 self._instance_count,
             )
+
+            # Outtake source voxels are an optional second draw of the same static
+            # instance buffer. The first pass rendered the canonical replacement
+            # fade; this overlay moves only departing cohort members outward and
+            # fades them away. No extra geometry owner or per-voxel Python state.
+            if fade_incoming and any(cohort.outtake for cohort in state.particle_cohorts):
+                gl.glUniform1i(u["uRenderPass"], 1)
+                gl.glDepthMask(gl.GL_FALSE)
+                gl.glDrawArraysInstanced(
+                    gl.GL_TRIANGLES,
+                    0,
+                    self._vertex_count,
+                    self._instance_count,
+                )
+                gl.glDepthMask(gl.GL_TRUE)
+                gl.glUniform1i(u["uRenderPass"], 0)
 
             # Ghosts render after the hero so the current opaque/translucent shell
             # cannot simply paint the trail away. This path is Sphere-only and
@@ -758,9 +936,11 @@ class QuickSphereVoxelRenderer:
                 float(state.tracer_phase),
                 tuple(float(v) for v in state.section_drives[:_SPHERE_SECTION_COUNT]),
                 float(state.incoming_drive),
+                float(state.incoming_density),
                 int(state.incoming_section),
                 int(state.incoming_previous_section),
                 float(state.incoming_blend),
+                tuple(state.particle_cohorts),
             ))
             if len(self._ghost_history) > _GHOST_MAX_SAMPLES:
                 self._ghost_history = self._ghost_history[-_GHOST_MAX_SAMPLES:]
@@ -818,9 +998,11 @@ class QuickSphereVoxelRenderer:
                 tracer_phase,
                 section_values,
                 incoming_drive,
+                incoming_density,
                 incoming_section,
                 incoming_previous_section,
                 incoming_blend,
+                particle_cohorts,
             ) = sample
             age = max(0.0, now - sample_time)
             if age <= 0.020 or age > _GHOST_MAX_AGE_S:
@@ -845,9 +1027,12 @@ class QuickSphereVoxelRenderer:
             gl.glUniform1f(gu["uBlockReactivity"], float(parameters["sphere_bump_reactivity"]))
             gl.glUniform1i(gu["uFadeIncoming"], 1 if fade_incoming else 0)
             gl.glUniform1f(gu["uIncomingDrive"], incoming_drive)
+            gl.glUniform1f(gu["uIncomingDensity"], incoming_density)
             gl.glUniform1i(gu["uIncomingSection"], incoming_section)
             gl.glUniform1i(gu["uIncomingPreviousSection"], incoming_previous_section)
             gl.glUniform1f(gu["uIncomingBlend"], incoming_blend)
+            self._upload_particle_cohorts(gu, particle_cohorts)
+            gl.glUniform1i(gu["uRenderPass"], 0)
             gl.glUniform1f(gu["uGhostExpand"], 0.08 + 0.24 * (age / _GHOST_MAX_AGE_S))
             gl.glUniform1f(gu["uGhostHue"], (sample_time * 0.43 + sample_index * 0.19) % 1.0)
             gl.glUniform1f(
@@ -948,8 +1133,11 @@ class QuickSphereVoxelRenderer:
             names = (
                 "uMatrix", "uGeometry", "uSectionDrives",
                 "uDeformation", "uRotationPhase", "uSizePulse", "uBlockRelief",
-                "uBlockReactivity", "uFadeIncoming", "uIncomingDrive", "uIncomingSection",
-                "uIncomingPreviousSection", "uIncomingBlend", "uScreenOffset", "uGhostExpand", "uTracerDrive", "uTracerPhase",
+                "uBlockReactivity", "uFadeIncoming", "uIncomingDrive", "uIncomingDensity", "uIncomingSection",
+                "uIncomingPreviousSection", "uIncomingBlend", "uCohortCount", "uCohortProgress",
+                "uCohortStrength", "uCohortDensity", "uCohortVelocity", "uCohortBounce",
+                "uCohortSection", "uCohortLane", "uCohortOuttake", "uRenderPass",
+                "uScreenOffset", "uGhostExpand", "uTracerDrive", "uTracerPhase",
                 "uLight", "uGloss", "uSpecular",
                 "uFillColor", "uEdgeColor", "uFade", "uCelShading",
             )
@@ -957,7 +1145,15 @@ class QuickSphereVoxelRenderer:
                 name: int(
                     gl.glGetUniformLocation(
                         self._program,
-                        "uSectionDrives[0]" if name == "uSectionDrives" else name,
+                        (
+                            f"{name}[0]"
+                            if name in {
+                                "uSectionDrives", "uCohortProgress", "uCohortStrength",
+                                "uCohortDensity", "uCohortVelocity", "uCohortBounce",
+                                "uCohortSection", "uCohortLane", "uCohortOuttake",
+                            }
+                            else name
+                        ),
                     )
                 )
                 for name in names
@@ -986,15 +1182,25 @@ class QuickSphereVoxelRenderer:
             ghost_names = (
                 "uMatrix", "uGeometry", "uSectionDrives", "uDeformation",
                 "uRotationPhase", "uSizePulse", "uBlockRelief", "uBlockReactivity",
-                "uFadeIncoming", "uIncomingDrive", "uIncomingSection", "uIncomingPreviousSection",
-                "uIncomingBlend", "uScreenOffset", "uGhostExpand", "uTracerDrive", "uTracerPhase",
+                "uFadeIncoming", "uIncomingDrive", "uIncomingDensity", "uIncomingSection", "uIncomingPreviousSection",
+                "uIncomingBlend", "uCohortCount", "uCohortProgress", "uCohortStrength",
+                "uCohortDensity", "uCohortVelocity", "uCohortBounce", "uCohortSection",
+                "uCohortLane", "uCohortOuttake", "uRenderPass", "uScreenOffset", "uGhostExpand", "uTracerDrive", "uTracerPhase",
                 "uGhostHue", "uGhostAlpha", "uFade",
             )
             self._ghost_uniforms = {
                 name: int(
                     gl.glGetUniformLocation(
                         self._ghost_program,
-                        "uSectionDrives[0]" if name == "uSectionDrives" else name,
+                        (
+                            f"{name}[0]"
+                            if name in {
+                                "uSectionDrives", "uCohortProgress", "uCohortStrength",
+                                "uCohortDensity", "uCohortVelocity", "uCohortBounce",
+                                "uCohortSection", "uCohortLane", "uCohortOuttake",
+                            }
+                            else name
+                        ),
                     )
                 )
                 for name in ghost_names

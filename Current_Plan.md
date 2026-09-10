@@ -12,12 +12,14 @@ The Qt Quick migration is closed and operator-accepted. This file contains **act
 
 Execution authority: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
 
-The face/bevel stability fix remains physically accepted. The 2026-09-10 hardware run
-after raw pre-AGC spectral onset + four-corner ingress is the first pass the operator
-described as **reactive across the board / alive**. Protect that audio authority: this
-continuity pass may not reduce onset frequency, packet strength, raw-pre-AGC freshness or
-the accepted vocal-linked incoming bounce. The current problem is perceptual jerk from
-hard geometry/population state changes, not insufficient musical detection.
+The face/bevel stability fix remains physically accepted. The 2026-09-10 hardware runs
+after raw pre-AGC spectral onset, stable four-corner ingress, fragment interpolation and
+energy-gated intake are the first passes the operator described as **reactive across the
+board / alive** and then **a very good feeling place**. Protect that audio authority:
+presentation work may not reduce onset frequency, packet strength, raw-pre-AGC freshness,
+tracer travel or the accepted vocal-linked incoming bounce. The current narrow experiment
+is detached-voxel travel semantics: real bounded cohorts for visibly slower intake plus an
+optional reversed outtake/replacement presentation.
 
 - [x] Preserve stable cube face identity/bevel UV selection from the **unrotated local
   face**. Broad light remains screen-X/Y anchored; no rotating normal regains face/UV
@@ -50,6 +52,41 @@ hard geometry/population state changes, not insufficient musical detection.
   and target amplitude remain instantaneous; rendered section displacement follows that
   target through a ~30 ms critically-damped visual follower. No audio smoothing, frame
   blending, ghosting or motion blur is introduced. Default off globally; **Preset 6 on**.
+- [x] Fix incoming admission so **playing state is never particle authority**. New incoming
+  cohorts require a hysteretic live pre-AGC energy gate; true live silence cannot author a
+  new cohort even if a stale/false typed event is present. Existing in-flight voxels are
+  allowed to finish landing naturally. This gate is a bug fix and is always active.
+- [x] Add optional Sphere-only **Intake Density** response. A qualified event snapshots the
+  current live pre-AGC activity into a cohort density target; quiet active passages launch a
+  smaller stable-ranked subset while strong passages approach the full 46/46/46/70
+  four-corner population. Density is cohort-owned rather than continuously jittering with
+  the energy lane. Default off globally; **Preset 6 on**.
+- [x] Replace the old fake **Intake Velocity** scalar-decay presentation with a bounded
+  four-slot Sphere-only **particle cohort** transport. Each qualified event captures stable
+  voxel population, quadrant/lane, density, direction and a real normalized travel progress.
+  New events do not globally reset in-flight cohorts; when all four slots are materially in
+  flight the secondary reward coalesces rather than teleporting them. No timer/poller/worker/
+  per-voxel Python objects.
+- [x] Fix the remaining **binary particle-velocity authority**. Shared typed transient
+  strength is retained for event admission only because it legitimately clamps strong events
+  to 1.0. Sphere now derives continuous cohort motion intensity from a positive live-pre-AGC
+  loudness jump plus raw-spectrum flux-over-threshold. A clamped event with flat local audio
+  therefore stays slow/modest, while a real kick/vocal/drum jump may reach full travel speed.
+  Ordinary intake is intentionally gentler (~1.90 s -> ~0.84 s across the continuous range)
+  than outtake (~1.45 s -> ~0.82 s). Velocity-off uses fixed ~1.42 s intake / ~1.12 s outtake.
+- [x] Keep optional Sphere-only **Particle Velocity** presentation. It changes captured
+  cohort travel duration/curve from Sphere-local acoustic contrast rather than shared clamped
+  event strength or exponential decay of one global incoming scalar. Event admission is
+  unchanged. Intake fade-in is also progress-continuous and gentler at low motion intensity;
+  recoil may still exceed the authored launch radius, but that over-launch tail fades through
+  a narrow radial field instead of presenting as a hard clip. Default off globally; Presets
+  **5 and 6 on** for operator A/B.
+- [x] Add optional Sphere-only **Particle Outtake**. Direction is captured per cohort at
+  launch. Intake cohorts begin detached and return to their own canonical shell slots.
+  Outtake cohorts instead move selected shell voxels outward and fade them while a canonical
+  replacement fades in underneath; renderer uses one optional second instanced draw of the
+  same static voxel buffer, not a new geometry owner. Default off globally/Presets 1-5;
+  **Preset 6 on** for physical A/B testing.
 - [x] Swelling now reads from the existing **unsmoothed live pre-AGC energy seam**, not
   the dynamically-normalized 0..1 control lane or support-shaped Bubble motion feed.
   Sphere maintains a very slow local floor/peak and
@@ -65,18 +102,35 @@ hard geometry/population state changes, not insufficient musical detection.
 - [x] Gloss/Specular remain light-directed per-face finish only; literal Fill/Edge RGBA,
   independent edge alpha, Toon, reactive-only Rainbow Ghosting, flat Drop Shadow and
   Settings-only Finish presets remain unchanged.
-- [x] **Reactive Voxel / Preset 6** remains the operator-validation authority.
+- [x] **Reactive Voxel / Preset 6** remains the primary operator-validation authority.
+- [x] **Preset 5 is now the operator-supplied `Transparent React` A/B preset.** Preserve its
+  authored literal fill `[4,7,8,100]`, edge `[233,248,255,255]`, Custom finish and other
+  non-technical presentation values. It carries the current technical reactivity toggles but
+  keeps Particle Outtake OFF so Preset 5/6 provide a quick intake/outtake comparison.
 - [x] Isolation remains binding: no accepted visualizer renderer/runtime, transient bus,
   timer or polling owner changed. `beat_engine.py` exposes two read-only seams only:
   demand-published `get_pre_agc_analysis_spectrum()` and live-float
   `get_live_pre_agc_energy_bands()`. The spectrum copy is skipped entirely unless a
   consumer requests it.
-- [x] Focused Sphere/technical gate: **62 passed** with explicit raw-spectrum publication,
-  live-pre-AGC swell and bounded tracer travel/settle regressions.
-- [ ] Operator physically validate Preset 6 with **Fragment Interpolation on**: preserve
-  the newly accepted fast musical reactivity while reducing whole-image jerk; dominant
-  ingress should migrate without global population swaps, fragment geometry should begin
-  on the event frame but travel continuously, and the vocal bounce must remain intact.
+- [x] Operator reports the energy-gated four-corner pass is now in a **very good feeling
+  place**. Preserve the current fast musical reactivity/motion; do not retune onset,
+  fragmentation, tracer travel, stable ingress identity or vocal bounce while calibrating
+  intake presentation.
+- [x] Modest intake calibration: require roughly **20% more acoustic evidence** before the
+  recently-added intake layer reaches its strongest presentation. Gate open/close and typed
+  force floor remain 0.090/0.042/0.030 and full density remains 1.50 while the four-corner
+  minimum is unchanged. The superseded event-strength velocity gate is removed: it proved
+  insufficiently granular once hardware showed the shared event lane reaching 1.0 for both
+  modest and genuinely large attacks.
+- [x] Focused Sphere/technical gate: **72 passed** with explicit raw-spectrum publication,
+  live-pre-AGC swell, bounded tracer travel/settle, continuous acoustic-impact velocity,
+  intake over-launch fade field, Preset-5 A/B authority, direction capture and outtake/
+  replacement regressions.
+- [ ] Operator physically A/B **Preset 5 Transparent React (Intake)** against **Preset 6
+  Reactive Voxel (Outtake)**. Verify flat/low transients still author visible cohorts but move
+  substantially more gently than obvious vocal/kick/drum peaks; intake fades in more gently,
+  vocal recoil retains its full reactive push without hard clipping beyond launch radius,
+  outtake remains pleasant, and fragmentation/tracer/audio authority is unchanged.
 
 
 ## 2. `dark.qss` retirement → ThemeSpec sole authority

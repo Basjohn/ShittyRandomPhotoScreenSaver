@@ -274,6 +274,41 @@ class SpectrumFrame:
 
 
 @dataclass(frozen=True, slots=True)
+class SphereParticleCohort:
+    """Immutable Sphere-only detached voxel travel cohort.
+
+    ``progress`` is normalized authored travel time (0 = launch, 1 = settled/expired).
+    Direction is captured at launch so toggling outtake never reverses an in-flight
+    cohort.  The renderer owns only presentation of this already-authored state.
+    """
+
+    progress: float = 1.0
+    strength: float = 0.0
+    density: float = 0.0
+    section: int = 0
+    lane: int = 0
+    velocity_accent: float = 0.0
+    vocal_bounce: float = 0.0
+    outtake: bool = False
+
+    def __post_init__(self) -> None:
+        for attr in ("progress", "strength", "density", "velocity_accent", "vocal_bounce"):
+            value = _finite(getattr(self, attr), name=f"sphere cohort {attr}")
+            if value < 0.0 or value > 1.0:
+                raise ValueError(f"sphere cohort {attr} must be within 0..1")
+            object.__setattr__(self, attr, value)
+        section = int(self.section)
+        if section < 0 or section >= 4:
+            raise ValueError("sphere cohort section must be within 0..3")
+        object.__setattr__(self, "section", section)
+        lane = int(self.lane)
+        if lane < 0 or lane >= 4:
+            raise ValueError("sphere cohort lane must be within 0..3")
+        object.__setattr__(self, "lane", lane)
+        object.__setattr__(self, "outtake", bool(self.outtake))
+
+
+@dataclass(frozen=True, slots=True)
 class SphereFrame:
     """Immutable authored Voxel Sphere payload.
 
@@ -289,9 +324,11 @@ class SphereFrame:
     tracer_phase: float = 0.0
     section_drives: tuple[float, ...] = ()
     incoming_drive: float = 0.0
+    incoming_density: float = 1.0
     incoming_section: int = 0
     incoming_previous_section: int = 0
     incoming_blend: float = 1.0
+    particle_cohorts: tuple[SphereParticleCohort, ...] = ()
     parameters: FrozenFields = FrozenFields()
 
     def __post_init__(self) -> None:
@@ -326,6 +363,10 @@ class SphereFrame:
         if incoming_drive < 0.0 or incoming_drive > 1.0:
             raise ValueError("sphere incoming drive must be within 0..1")
         object.__setattr__(self, "incoming_drive", incoming_drive)
+        incoming_density = _finite(self.incoming_density, name="sphere incoming density")
+        if incoming_density < 0.0 or incoming_density > 1.0:
+            raise ValueError("sphere incoming density must be within 0..1")
+        object.__setattr__(self, "incoming_density", incoming_density)
         incoming_section = int(self.incoming_section)
         if incoming_section < 0 or incoming_section >= 8:
             raise ValueError("sphere incoming section must be within 0..7")
@@ -338,6 +379,10 @@ class SphereFrame:
         if incoming_blend < 0.0 or incoming_blend > 1.0:
             raise ValueError("sphere incoming blend must be within 0..1")
         object.__setattr__(self, "incoming_blend", incoming_blend)
+        cohorts = tuple(self.particle_cohorts)
+        if len(cohorts) > 4 or any(not isinstance(item, SphereParticleCohort) for item in cohorts):
+            raise ValueError("sphere particle cohorts must contain at most four SphereParticleCohort values")
+        object.__setattr__(self, "particle_cohorts", cohorts)
         object.__setattr__(
             self, "parameters", _coerce_frozen_fields(self.parameters, name="sphere parameters")
         )

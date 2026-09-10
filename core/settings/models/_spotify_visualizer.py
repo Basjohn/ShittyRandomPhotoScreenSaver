@@ -579,6 +579,9 @@ _SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'sphere_cel_shading': bool,
     'sphere_light_tracer_enabled': bool,
     'sphere_fragment_interpolation_enabled': bool,
+    'sphere_incoming_density_response_enabled': bool,
+    'sphere_incoming_transient_velocity_enabled': bool,
+    'sphere_particle_outtake_enabled': bool,
     'sphere_rainbow_ghosting': bool,
     'sphere_shadow_enabled': bool,
     'sphere_fade_incoming_blocks': bool,
@@ -1322,6 +1325,9 @@ class SpotifyVisualizerSettings:
     sphere_cel_shading: bool = field(default_factory=lambda: _visualizer_default('sphere_cel_shading'))
     sphere_light_tracer_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_light_tracer_enabled'))
     sphere_fragment_interpolation_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_fragment_interpolation_enabled'))
+    sphere_incoming_density_response_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_incoming_density_response_enabled'))
+    sphere_incoming_transient_velocity_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_incoming_transient_velocity_enabled'))
+    sphere_particle_outtake_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_particle_outtake_enabled'))
     sphere_rainbow_ghosting: bool = field(default_factory=lambda: _visualizer_default('sphere_rainbow_ghosting'))
     sphere_shadow_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_shadow_enabled'))
     sphere_fade_incoming_blocks: bool = field(default_factory=lambda: _visualizer_default('sphere_fade_incoming_blocks'))
@@ -1417,6 +1423,9 @@ class SpotifyVisualizerSettings:
         self.sphere_cel_shading = bool(self.sphere_cel_shading)
         self.sphere_light_tracer_enabled = bool(self.sphere_light_tracer_enabled)
         self.sphere_fragment_interpolation_enabled = bool(self.sphere_fragment_interpolation_enabled)
+        self.sphere_incoming_density_response_enabled = bool(self.sphere_incoming_density_response_enabled)
+        self.sphere_incoming_transient_velocity_enabled = bool(self.sphere_incoming_transient_velocity_enabled)
+        self.sphere_particle_outtake_enabled = bool(self.sphere_particle_outtake_enabled)
         self.sphere_rainbow_ghosting = bool(self.sphere_rainbow_ghosting)
         self.sphere_shadow_enabled = bool(self.sphere_shadow_enabled)
         self.sphere_fade_incoming_blocks = bool(self.sphere_fade_incoming_blocks)

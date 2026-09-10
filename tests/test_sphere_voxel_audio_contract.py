@@ -5,6 +5,8 @@ import re
 import importlib.util
 import sys
 import types
+
+import pytest
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,6 +67,9 @@ def _params(
     rotation_speed: float = 0.32,
     size_response: float = 1.15,
     fragment_interpolation: bool = False,
+    incoming_density_response: bool = False,
+    incoming_transient_velocity: bool = False,
+    particle_outtake: bool = False,
 ):
     values = {
         "sphere_vocal_response": vocal_response,
@@ -74,6 +79,9 @@ def _params(
         "sphere_size_response": size_response,
         "sphere_light_tracer_enabled": True,
         "sphere_fragment_interpolation_enabled": fragment_interpolation,
+        "sphere_incoming_density_response_enabled": incoming_density_response,
+        "sphere_incoming_transient_velocity_enabled": incoming_transient_velocity,
+        "sphere_particle_outtake_enabled": particle_outtake,
     }
     return render_state.FrozenFields(tuple(sorted(values.items())))
 
@@ -760,6 +768,8 @@ def test_reactive_voxel_curated_preset_exists() -> None:
     assert '"preset_index": 5' in text
     assert '"sphere_light_tracer_enabled": true' in text
     assert '"sphere_fragment_interpolation_enabled": true' in text
+    assert '"sphere_incoming_density_response_enabled": true' in text
+    assert '"sphere_incoming_transient_velocity_enabled": true' in text
     assert '"sphere_rainbow_ghosting": false' in text
     assert '"sphere_size_response": 2.25' in text
     assert '"sphere_deformation": 2.45' in text
@@ -774,6 +784,8 @@ def test_sphere_optional_presentation_features_are_mode_owned_and_default_off() 
     assert config["sphere_cel_shading"] is False
     assert config["sphere_light_tracer_enabled"] is False
     assert config["sphere_fragment_interpolation_enabled"] is False
+    assert config["sphere_incoming_density_response_enabled"] is False
+    assert config["sphere_incoming_transient_velocity_enabled"] is False
     assert config["sphere_rainbow_ghosting"] is False
     assert config["sphere_fade_incoming_blocks"] is False
     assert config["sphere_finish"] == "Neutral"
@@ -904,19 +916,25 @@ def test_light_tracer_is_optional_event_owned_and_uses_connected_ribbon() -> Non
     assert "ribbonWidth" in source and "tailLength" in source
     assert "tracerHead" not in source
 
-def test_incoming_population_rank_is_stable_and_only_dominant_fringe_crossfades() -> None:
+def test_incoming_population_rank_is_stable_and_cohorts_partition_the_population() -> None:
     source = (ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py").read_text(encoding="utf-8")
-    incoming = source.split("float incomingField(vec3 direction)", 1)[1].split("float wrappedAngle", 1)[0]
-    assert "uIncomingPreviousSection" in incoming
-    assert "uIncomingBlend" in incoming
-    assert "float admission = 0.46 + mix(previousBoost, currentBoost, dominanceBlend)" in incoming
-    assert "+ float(dominant)" not in incoming
-    assert "float selected = smoothstep(threshold - 0.028, threshold + 0.028, pick)" in incoming
+    stable = source.split("float stableFlowSelection", 1)[1].split("float incomingField", 1)[0]
+    assert "float admission = 0.46 + (quadrant == (dominant & 3) ? 0.24 : 0.0)" in stable
+    assert "admission *= clamp(densityScale, 0.0, 1.0)" in stable
+    assert "aInstanceSeed * 19.371" in stable and "float(quadrant) * 0.271" in stable
+    assert "+ float(dominant)" not in stable
+    assert "uIncomingPreviousSection" not in stable
+    assert "uIncomingBlend" not in stable
+    assert "stableLane == (lane & 3)" in stable
+    assert "aInstanceSeed * 43.117" in stable
+    assert "float selected = smoothstep(threshold - 0.028, threshold + 0.028, pick)" in stable
 
+    # The legacy aggregate fallback retains the old dominance crossfade solely
+    # for bounded history compatibility. Live particle motion is cohort-owned.
     runtime_source = (ROOT / "widgets/spotify_visualizer/sphere_frame_runtime.py").read_text(encoding="utf-8")
-    assert "_SPHERE_INCOMING_DOMINANCE_BLEND_S = 0.11" in runtime_source
-    assert "self._incoming_previous_section = self._incoming_section" in runtime_source
-    assert "self._incoming_blend + dt / _SPHERE_INCOMING_DOMINANCE_BLEND_S" in runtime_source
+    assert "_PARTICLE_COHORT_COUNT = 4" in runtime_source
+    assert "slot.lane = slot_index & 3" in runtime_source
+    assert "_INCOMING_RECYCLE_PROGRESS = 0.90" in runtime_source
 
 
 def test_fragment_interpolation_is_visual_only_and_preset_enabled() -> None:
@@ -1021,10 +1039,306 @@ def test_typed_vocal_incoming_survives_fragmentation_cooldown() -> None:
     assert typed is not None
     assert typed.incoming_drive > 0.70
     assert 0 <= typed.incoming_section < 8
+    assert len(typed.particle_cohorts) == 1
+    assert typed.particle_cohorts[0].vocal_bounce > 0.70
+
+def test_playing_state_silence_cannot_author_new_incoming_voxels() -> None:
+    render_state, sphere_runtime = _load_plain_visualizer_modules()
+    runtime = sphere_runtime.SphereFrameRuntime()
+    silent = render_state.VisualizerEnergyState()
+    reactive = render_state.VisualizerEnergyState(bass=0.42, mid=0.52, high=0.28, overall=0.45)
+    params = _params(
+        render_state,
+        incoming_density_response=True,
+        incoming_transient_velocity=True,
+    )
+    _resolve(runtime, render_state, ts=50.0, reactive=reactive, presence=silent, params=params)
+    frame = _resolve(
+        runtime,
+        render_state,
+        ts=50.04,
+        reactive=reactive,
+        presence=silent,
+        scheduler=_Scheduler(vocal_swell=_Event(1.0), kick=_Event(1.0)),
+        params=params,
+    )
+    assert frame is not None
+    assert frame.incoming_drive == 0.0
+    assert frame.particle_cohorts == ()
+
+
+def test_incoming_density_response_scales_stable_four_corner_cohort_size() -> None:
+    render_state, sphere_runtime = _load_plain_visualizer_modules()
+    reactive = render_state.VisualizerEnergyState(bass=0.30, mid=0.46, high=0.24, overall=0.38)
+    params = _params(render_state, incoming_density_response=True)
+
+    quiet_runtime = sphere_runtime.SphereFrameRuntime()
+    quiet_presence = render_state.VisualizerEnergyState(bass=0.08, mid=0.09, high=0.06, overall=0.08)
+    _resolve(quiet_runtime, render_state, ts=51.0, reactive=reactive, presence=quiet_presence, params=params)
+    _resolve(
+        quiet_runtime,
+        render_state,
+        ts=51.04,
+        reactive=reactive,
+        presence=quiet_presence,
+        scheduler=_Scheduler(vocal_swell=_Event(0.92)),
+        params=params,
+    )
+    quiet = _resolve(
+        quiet_runtime,
+        render_state,
+        ts=51.10,
+        reactive=reactive,
+        presence=quiet_presence,
+        params=params,
+    )
+    assert quiet is not None and quiet.incoming_drive > 0.0
+
+    loud_runtime = sphere_runtime.SphereFrameRuntime()
+    loud_presence = render_state.VisualizerEnergyState(bass=1.7, mid=2.0, high=1.3, overall=1.8)
+    _resolve(loud_runtime, render_state, ts=52.0, reactive=reactive, presence=loud_presence, params=params)
+    _resolve(
+        loud_runtime,
+        render_state,
+        ts=52.04,
+        reactive=reactive,
+        presence=loud_presence,
+        scheduler=_Scheduler(vocal_swell=_Event(0.92)),
+        params=params,
+    )
+    loud = _resolve(
+        loud_runtime,
+        render_state,
+        ts=52.10,
+        reactive=reactive,
+        presence=loud_presence,
+        params=params,
+    )
+    assert loud is not None and loud.incoming_drive > 0.0
+    assert 0.28 <= quiet.incoming_density < loud.incoming_density <= 1.0
+
+
+def test_incoming_intensity_calibration_requires_about_twenty_percent_more_evidence() -> None:
+    _render_state, sphere_runtime = _load_plain_visualizer_modules()
+
+    # Preserve the accepted silence/density calibration from the previous pass.
+    assert sphere_runtime._INCOMING_GATE_OPEN == pytest.approx(0.090)
+    assert sphere_runtime._INCOMING_GATE_CLOSE == pytest.approx(0.042)
+    assert sphere_runtime._INCOMING_TYPED_FORCE_FLOOR == pytest.approx(0.030)
+    assert sphere_runtime._INCOMING_DENSITY_LOW == pytest.approx(0.096)
+    assert sphere_runtime._INCOMING_DENSITY_HIGH == pytest.approx(1.50)
+
+    # Event confidence is admission evidence, not travel power. Even a shared
+    # event clamped to 1.0 must remain well below maximum motion if the local
+    # acoustic contrast is flat; continuous contrast then owns the rest of 0..1.
+    flat = sphere_runtime._incoming_motion_intensity(1.0, 0.0)
+    medium = sphere_runtime._incoming_motion_intensity(1.0, 0.50)
+    peak = sphere_runtime._incoming_motion_intensity(1.0, 1.0)
+    assert flat == pytest.approx(0.26)
+    assert flat < medium < peak
+    assert peak == pytest.approx(1.0)
+
+
+def test_transient_particle_velocity_changes_real_cohort_travel_without_changing_gate() -> None:
+    render_state, sphere_runtime = _load_plain_visualizer_modules()
+    reactive = render_state.VisualizerEnergyState(bass=0.45, mid=0.52, high=0.28, overall=0.44)
+    presence = render_state.VisualizerEnergyState(bass=1.2, mid=1.4, high=0.9, overall=1.2)
+
+    def run(enabled: bool):
+        runtime = sphere_runtime.SphereFrameRuntime()
+        params = _params(render_state, incoming_transient_velocity=enabled)
+        _resolve(runtime, render_state, ts=53.0, reactive=reactive, presence=presence, params=params)
+        hit = _resolve(
+            runtime,
+            render_state,
+            ts=53.04,
+            reactive=reactive,
+            presence=presence,
+            scheduler=_Scheduler(kick=_Event(1.0)),
+            params=params,
+        )
+        assert hit is not None and hit.incoming_drive > 0.0
+        assert len(hit.particle_cohorts) == 1
+        assert hit.particle_cohorts[0].progress == pytest.approx(0.0)
+        later = _resolve(
+            runtime,
+            render_state,
+            ts=53.29,
+            reactive=reactive,
+            presence=presence,
+            params=params,
+        )
+        assert later is not None and len(later.particle_cohorts) == 1
+        return hit, later
+
+    fixed_hit, fixed_later = run(False)
+    accented_hit, accented_later = run(True)
+    assert fixed_hit.incoming_drive > 0.0 and accented_hit.incoming_drive > 0.0
+    assert 0.20 < accented_hit.particle_cohorts[0].velocity_accent < 0.35
+    assert fixed_hit.particle_cohorts[0].velocity_accent == 0.0
+    # Identical loudness before/after the event is a flat acoustic context. With
+    # Particle Velocity enabled, the admitted event intentionally travels more
+    # gently than the fixed-speed fallback instead of being treated as max power.
+    assert accented_later.particle_cohorts[0].progress < fixed_later.particle_cohorts[0].progress
+
+
+
+def test_real_acoustic_jump_granularises_particle_velocity_without_changing_admission() -> None:
+    render_state, sphere_runtime = _load_plain_visualizer_modules()
+    params = _params(render_state, incoming_transient_velocity=True)
+    reactive = render_state.VisualizerEnergyState(bass=0.30, mid=0.34, high=0.18, overall=0.28)
+
+    def launch(initial_presence, hit_presence):
+        runtime = sphere_runtime.SphereFrameRuntime()
+        _resolve(runtime, render_state, ts=54.0, reactive=reactive, presence=initial_presence, params=params)
+        hit = _resolve(
+            runtime, render_state, ts=54.05, reactive=reactive, presence=hit_presence,
+            scheduler=_Scheduler(kick=_Event(1.0)), params=params,
+        )
+        assert hit is not None and len(hit.particle_cohorts) == 1
+        return hit.particle_cohorts[0]
+
+    flat_presence = render_state.VisualizerEnergyState(bass=1.1, mid=1.1, high=0.7, overall=1.0)
+    quiet_presence = render_state.VisualizerEnergyState(bass=0.05, mid=0.05, high=0.04, overall=0.05)
+    peak_presence = render_state.VisualizerEnergyState(bass=2.2, mid=2.3, high=1.6, overall=2.1)
+    flat = launch(flat_presence, flat_presence)
+    peak = launch(quiet_presence, peak_presence)
+
+    # Same clamped event confidence, radically different local acoustic contrast.
+    assert flat.velocity_accent < 0.35
+    assert peak.velocity_accent > 0.95
+    assert peak.strength > flat.strength
+
+
+
+def test_particle_cohorts_are_bounded_independent_and_keep_progress_when_new_events_arrive() -> None:
+    render_state, sphere_runtime = _load_plain_visualizer_modules()
+    reactive = render_state.VisualizerEnergyState(bass=0.38, mid=0.52, high=0.31, overall=0.43)
+    presence = render_state.VisualizerEnergyState(bass=1.0, mid=1.2, high=0.8, overall=1.0)
+    params = _params(render_state, incoming_transient_velocity=True)
+    runtime = sphere_runtime.SphereFrameRuntime()
+    _resolve(runtime, render_state, ts=60.0, reactive=reactive, presence=presence, params=params)
+
+    frame = None
+    first_progress_before_second = None
+    for index in range(4):
+        ts = 60.30 + index * 0.30
+        if index == 1 and frame is not None:
+            first_progress_before_second = frame.particle_cohorts[0].progress
+        frame = _resolve(
+            runtime, render_state, ts=ts, reactive=reactive, presence=presence,
+            scheduler=_Scheduler(kick=_Event(0.78)), params=params,
+        )
+        assert frame is not None
+        assert 1 <= len(frame.particle_cohorts) <= 4
+
+    assert frame is not None
+    assert len(frame.particle_cohorts) >= 2
+    assert len({cohort.lane for cohort in frame.particle_cohorts}) == len(frame.particle_cohorts)
+    if first_progress_before_second is not None:
+        assert frame.particle_cohorts[0].progress > first_progress_before_second
+    assert len(frame.particle_cohorts) <= sphere_runtime._PARTICLE_COHORT_COUNT == 4
+
+
+def test_particle_outtake_direction_is_captured_at_launch_and_replacement_crossfade_is_renderer_owned() -> None:
+    render_state, _sphere_runtime = _load_plain_visualizer_modules()
+    from widgets.spotify_visualizer import sphere_frame_runtime
+
+    reactive = render_state.VisualizerEnergyState(bass=0.40, mid=0.56, high=0.33, overall=0.46)
+    presence = render_state.VisualizerEnergyState(bass=1.1, mid=1.3, high=0.9, overall=1.1)
+    runtime = sphere_frame_runtime.SphereFrameRuntime()
+    out_params = _params(render_state, incoming_transient_velocity=True, particle_outtake=True)
+    in_params = _params(render_state, incoming_transient_velocity=True, particle_outtake=False)
+    _resolve(runtime, render_state, ts=62.0, reactive=reactive, presence=presence, params=out_params)
+    first = _resolve(
+        runtime, render_state, ts=62.04, reactive=reactive, presence=presence,
+        scheduler=_Scheduler(vocal_swell=_Event(0.92)), params=out_params,
+    )
+    assert first is not None and len(first.particle_cohorts) == 1
+    assert first.particle_cohorts[0].outtake is True
+
+    second = _resolve(
+        runtime, render_state, ts=62.36, reactive=reactive, presence=presence,
+        scheduler=_Scheduler(kick=_Event(0.92)), params=in_params,
+    )
+    assert second is not None and len(second.particle_cohorts) >= 2
+    assert second.particle_cohorts[0].outtake is True
+    assert any(not cohort.outtake for cohort in second.particle_cohorts[1:])
+
+    shader = (ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py").read_text(encoding="utf-8")
+    assert "float cohortTravel(float progress, float velocityAccent)" in shader
+    assert "float replacementFade = smoothstep(0.08, 0.72, travel)" in shader
+    assert "uRenderPass == 1" in shader
+    assert "radial += outtakeRadial * flowScale" in shader
+    assert "arrivalFade = outtakeAlpha" in shader
+    assert "float fadeEnd = mix(0.96, 0.72, velocity)" in shader
+    assert "float excursionFade = 1.0 - smoothstep(1.00, 1.18, remaining)" in shader
+    assert "sphere_particle_outtake_enabled" not in shader
+
+
+def test_particle_outtake_is_optional_and_only_reactive_voxel_enables_it() -> None:
+    import json
+
+    defaults = (ROOT / "core/settings/default_settings.py").read_text(encoding="utf-8")
+    builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
+    assert "'sphere_particle_outtake_enabled': False" in defaults
+    assert "Particle Outtake:" in builder
+    assert "Reverse detached voxel flow outward" in builder
+
+    preset_dir = ROOT / "presets/visualizer_modes/sphere"
+    for index, filename in enumerate((
+        "preset_1_neutral.json",
+        "preset_2_matte.json",
+        "preset_3_plastic.json",
+        "preset_4_polished.json",
+        "preset_5_transparent_react.json",
+        "preset_6_reactive_voxel.json",
+    ), start=1):
+        data = json.loads((preset_dir / filename).read_text(encoding="utf-8"))
+        enabled = data["snapshot"]["widgets"]["spotify_visualizer"]["sphere_particle_outtake_enabled"]
+        assert enabled is (index == 6)
+
+
+def test_real_particle_travel_replaces_global_decay_velocity_semantics() -> None:
+    runtime_source = (ROOT / "widgets/spotify_visualizer/sphere_frame_runtime.py").read_text(encoding="utf-8")
+    shader = (ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py").read_text(encoding="utf-8")
+    assert "_INCOMING_TRAVEL_NORMAL_S = 1.90" in runtime_source
+    assert "_INCOMING_TRAVEL_FAST_S = 0.84" in runtime_source
+    assert "_OUTTAKE_TRAVEL_NORMAL_S = 1.45" in runtime_source
+    assert "_OUTTAKE_TRAVEL_FAST_S = 0.82" in runtime_source
+    assert "speed_mix = pow(velocity, 1.35)" in runtime_source
+    assert "cohort.progress + dt / max(1.0e-6, cohort.duration)" in runtime_source
+    assert "_SPHERE_INCOMING_RELEASE_S" not in runtime_source
+    assert "_INCOMING_RELEASE_SLOW_S" not in runtime_source
+    assert "_INCOMING_RELEASE_FAST_S" not in runtime_source
+    assert "particleFlow(" in shader
+    assert "uCohortProgress" in shader
+    assert "uCohortVelocity" in shader
+
+
+def test_preset_5_is_operator_transparent_react_ab_authority() -> None:
+    import json
+
+    data = json.loads((ROOT / "presets/visualizer_modes/sphere/preset_5_transparent_react.json").read_text(encoding="utf-8"))
+    config = data["snapshot"]["widgets"]["spotify_visualizer"]
+    assert data["name"] == "Preset 5 (Transparent React)"
+    assert (ROOT / "presets/visualizer_modes/sphere/preset_5_transparent_react.json").exists()
+    assert not (ROOT / "presets/visualizer_modes/sphere/preset_5_metallic.json").exists()
+    assert config["sphere_fill_color"] == [4, 7, 8, 100]
+    assert config["sphere_edge_color"] == [233, 248, 255, 255]
+    assert config["sphere_finish"] == "Custom"
+    assert config["sphere_shadow_enabled"] is False
+    assert config["sphere_light_tracer_enabled"] is True
+    assert config["sphere_fragment_interpolation_enabled"] is True
+    assert config["sphere_incoming_density_response_enabled"] is True
+    assert config["sphere_incoming_transient_velocity_enabled"] is True
+    assert config["sphere_particle_outtake_enabled"] is False
+
+
 
 def test_reactive_finish_presets_keep_overflow_and_incoming_fade_where_authored() -> None:
     import json
-    for name in ("preset_3_plastic.json", "preset_5_metallic.json", "preset_6_reactive_voxel.json"):
+    for name in ("preset_3_plastic.json", "preset_5_transparent_react.json", "preset_6_reactive_voxel.json"):
         data = json.loads((ROOT / "presets/visualizer_modes/sphere" / name).read_text(encoding="utf-8"))
         config = data["snapshot"]["widgets"]["spotify_visualizer"]
         assert config["sphere_allow_overflow"] is True
@@ -1038,6 +1352,9 @@ def test_new_sphere_finish_and_ghost_controls_do_not_enter_accepted_mode_impleme
         "sphere_rainbow_ghosting",
         "sphere_shadow_enabled",
         "sphere_fragment_interpolation_enabled",
+        "sphere_incoming_density_response_enabled",
+        "sphere_incoming_transient_velocity_enabled",
+        "sphere_particle_outtake_enabled",
     )
     accepted_mode_ids = (
         "bubble",

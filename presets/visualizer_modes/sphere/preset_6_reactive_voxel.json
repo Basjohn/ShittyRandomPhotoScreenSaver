@@ -42,9 +42,12 @@
                     158,
                     255
                 ],
-                "sphere_fragment_interpolation_enabled": true
+                "sphere_fragment_interpolation_enabled": true,
+                "sphere_incoming_density_response_enabled": true,
+                "sphere_incoming_transient_velocity_enabled": true,
+                "sphere_particle_outtake_enabled": true
             }
         }
     },
-    "description": "Canonical Sphere validation preset: neutral literal voxel colours, restrained finish, visible event fragmentation, staged sustained growth, optional tracer, flat shadow, and ghosts off."
+    "description": "Canonical Sphere validation preset: neutral literal voxel colours, visible event fragmentation, stable four-corner detached flow with energy-scaled cohort density + real transient-responsive travel velocity, optional outward shedding/replacement mode, staged sustained growth, optional tracer, flat shadow, and ghosts off."
 }

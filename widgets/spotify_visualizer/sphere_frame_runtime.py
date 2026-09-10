@@ -34,6 +34,7 @@ from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from widgets.spotify_visualizer.frame_runtime_lifecycle import RetirableFrameRuntime, retirement_fenced
 from widgets.spotify_visualizer.render_state import (
     FrozenFields,
+    SphereParticleCohort,
     VisualizerEnergyState,
     VisualizerTransientState,
 )
@@ -46,8 +47,48 @@ SECTION_COUNT = 8
 # Packet reward/fallout remains generous; this pass changes who may author a
 # packet, not the accepted detached travel once one is earned.
 _SPHERE_SECTION_RELEASE_S = 0.34
-_SPHERE_INCOMING_RELEASE_S = 0.72
 _SPHERE_INCOMING_MIN_INTERVAL_S = 0.26
+# Playing-state silence is not permission to author new incoming voxels.  This
+# hysteretic gate uses the same live pre-AGC lane that already owns Sphere
+# fullness; it is a bug fix/guardrail and is always active.  The accepted
+# four-corner pass was subsequently calibrated ~20% less eager without changing
+# event ownership or the four-corner participation floor.
+_INCOMING_GATE_OPEN = 0.090
+_INCOMING_GATE_CLOSE = 0.042
+_INCOMING_TYPED_FORCE_FLOOR = 0.030
+# Optional energy-scaled cohort density changes only how many members of each
+# stable four-corner population launch for a qualified event.  Its full-density
+# endpoint is deliberately ~20% higher than the initially accepted calibration.
+_INCOMING_DENSITY_MIN_ACTIVE = 0.28
+_INCOMING_DENSITY_LOW = 0.096
+_INCOMING_DENSITY_HIGH = 1.50
+# Optional transient velocity is a cohort accent, not a continuously modulated
+# global particle speed.  Strong events return faster initially, then settle
+# toward the existing comfortable landing speed.
+# Preserve admission at the existing typed-event thresholds, but make the
+# optional speed accent wait until ~20% farther through each event's usable
+# strength range. This is presentation calibration only: it does not suppress
+# the event/cohort itself.
+# Real Sphere-local travel cohorts replace the old single exponential
+# ``incoming_drive`` decay. Event strength is admission/confidence, not travel
+# authority: the shared transient bus legitimately clamps strong events to 1.0,
+# so Sphere derives a separate continuous *motion intensity* from local acoustic
+# contrast (positive live pre-AGC jump + raw-spectrum flux-over-threshold).
+# Intake intentionally has a gentler ordinary return than outtake; strong real
+# attacks may still earn the same fast endpoint.
+_PARTICLE_COHORT_COUNT = 4
+_INCOMING_TRAVEL_FIXED_S = 1.42
+_INCOMING_TRAVEL_NORMAL_S = 1.90
+_INCOMING_TRAVEL_FAST_S = 0.84
+_OUTTAKE_TRAVEL_FIXED_S = 1.12
+_OUTTAKE_TRAVEL_NORMAL_S = 1.45
+_OUTTAKE_TRAVEL_FAST_S = 0.82
+_INCOMING_RECYCLE_PROGRESS = 0.90
+_INTAKE_IMPACT_BASELINE_S = 0.48
+_INTAKE_IMPACT_ENERGY_LOW = 0.040
+_INTAKE_IMPACT_ENERGY_HIGH = 0.62
+_INTAKE_IMPACT_FLUX_RATIO_LOW = 0.88
+_INTAKE_IMPACT_FLUX_RATIO_HIGH = 2.20
 # Ingress dominance is visual state, not a new audio authority.  The stable
 # 46% population never changes identity; only the 24% dominant fringe crosses
 # between corners over this short presentation interval.
@@ -147,9 +188,11 @@ class SphereResolvedFrame:
     tracer_phase: float
     section_drives: tuple[float, ...]
     incoming_drive: float
+    incoming_density: float
     incoming_section: int
     incoming_previous_section: int
     incoming_blend: float
+    particle_cohorts: tuple[SphereParticleCohort, ...]
     parameters: FrozenFields
     energy: VisualizerEnergyState
     transient: VisualizerTransientState
@@ -231,6 +274,22 @@ def _smooth_gate(value: float, low: float, high: float) -> float:
     return x * x * (3.0 - 2.0 * x)
 
 
+def _incoming_motion_intensity(event_strength: float, acoustic_impact: float) -> float:
+    """Continuous cohort motion authority, deliberately separate from admission.
+
+    The shared transient/event lanes clamp sufficiently strong events to 1.0.  A
+    clamped event is still excellent evidence that *something happened*, but it
+    cannot tell Sphere whether that event was a mild flat-passage transient or a
+    large kick/vocal jump.  Keep only a modest event-confidence floor and let the
+    Sphere-local acoustic contrast own the rest of the 0..1 travel range.
+    """
+
+    event = _clamp01(event_strength)
+    impact = _clamp01(acoustic_impact)
+    confidence_floor = 0.07 + 0.19 * event
+    return _clamp01(confidence_floor + (1.0 - confidence_floor) * pow(impact, 1.16))
+
+
 def _motion_activity(fast: float, slow: float, gain: float) -> float:
     raw = abs(float(fast) - float(slow)) * float(gain)
     if raw <= _ACTIVITY_DEAD_ZONE:
@@ -261,6 +320,20 @@ def _event_packet(strength: float, *, floor: float = 0.0) -> float:
     return _clamp01(float(floor) + (1.0 - float(floor)) * math.sqrt(s))
 
 
+@dataclass(slots=True)
+class _ParticleCohort:
+    active: bool = False
+    progress: float = 1.0
+    duration: float = _INCOMING_TRAVEL_NORMAL_S
+    strength: float = 0.0
+    density: float = 0.0
+    section: int = 0
+    lane: int = 0
+    velocity_accent: float = 0.0
+    vocal_bounce: float = 0.0
+    outtake: bool = False
+
+
 class SphereFrameRuntime(RetirableFrameRuntime):
     """Own Sphere-only packet, sustained, tracer and rotation envelopes."""
 
@@ -279,11 +352,16 @@ class SphereFrameRuntime(RetirableFrameRuntime):
         self._section_drives = [0.0] * SECTION_COUNT
         self._section_velocities = [0.0] * SECTION_COUNT
         self._incoming_drive = 0.0
+        self._incoming_density = 1.0
+        self._incoming_gate_open = False
         self._incoming_section = 0
         self._incoming_previous_section = 0
         self._incoming_blend = 1.0
         self._incoming_sequence = 0
         self._last_incoming_ts = -1.0e9
+        self._intake_energy_slow = 0.0
+        self._last_intake_motion_intensity = 0.0
+        self._particle_cohorts = [_ParticleCohort() for _ in range(_PARTICLE_COHORT_COUNT)]
 
         self._bass_fast = 0.0
         self._bass_slow = 0.0
@@ -329,9 +407,11 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             0.0,
             tuple(0.0 for _ in range(SECTION_COUNT)),
             0.0,
+            1.0,
             0,
             0,
             1.0,
+            (),
             FrozenFields(),
             VisualizerEnergyState(),
             VisualizerTransientState(),
@@ -402,24 +482,132 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             self._packet_sources_since_diag[source] += 1
         return True
 
-    def _author_incoming(self, *, now: float, section: int, strength: float) -> None:
+    def _advance_particle_cohorts(self, dt: float) -> None:
+        """Advance bounded detached-voxel cohorts without changing audio authority."""
+
+        if dt <= 0.0:
+            return
+        for cohort in self._particle_cohorts:
+            if not cohort.active:
+                continue
+            cohort.progress = min(1.0, cohort.progress + dt / max(1.0e-6, cohort.duration))
+            if cohort.progress >= 1.0:
+                cohort.active = False
+                cohort.progress = 1.0
+
+        active = [cohort for cohort in self._particle_cohorts if cohort.active]
+        if active:
+            # Retain the legacy aggregate fields only as diagnostics/backward
+            # compatibility for renderer history; cohort progress is the actual
+            # travel authority.
+            self._incoming_drive = max(
+                cohort.strength * (1.0 - cohort.progress) for cohort in active
+            )
+            newest = min(active, key=lambda cohort: cohort.progress)
+            self._incoming_density = newest.density
+        else:
+            self._incoming_drive = 0.0
+
+    def _particle_cohort_snapshot(self) -> tuple[SphereParticleCohort, ...]:
+        return tuple(
+            SphereParticleCohort(
+                progress=_clamp01(cohort.progress),
+                strength=_clamp01(cohort.strength),
+                density=_clamp01(cohort.density),
+                section=int(cohort.section) & 3,
+                lane=int(cohort.lane) & 3,
+                velocity_accent=_clamp01(cohort.velocity_accent),
+                vocal_bounce=_clamp01(cohort.vocal_bounce),
+                outtake=bool(cohort.outtake),
+            )
+            for cohort in self._particle_cohorts
+            if cohort.active
+        )
+
+    def _author_incoming(
+        self,
+        *,
+        now: float,
+        section: int,
+        strength: float,
+        density: float,
+        velocity_accent: float,
+        velocity_response_enabled: bool,
+        source: str,
+        outtake: bool,
+    ) -> None:
         if now - self._last_incoming_ts < _SPHERE_INCOMING_MIN_INTERVAL_S:
             return
         value = _clamp01(strength)
         if value <= 0.0:
             return
+
+        # Reuse an inactive slot first. If all four are still travelling, only
+        # recycle only a cohort already visually at the settle boundary. Otherwise
+        # the detached layer is visibly full and this secondary reward may coalesce
+        # rather than teleport an in-flight population.
+        slot = next((item for item in self._particle_cohorts if not item.active), None)
+        if slot is None:
+            oldest = max(self._particle_cohorts, key=lambda item: item.progress)
+            if oldest.progress < _INCOMING_RECYCLE_PROGRESS:
+                self._last_incoming_ts = now
+                return
+            slot = oldest
+
+        velocity = _clamp01(velocity_accent) if velocity_response_enabled else 0.0
+        # Duration carries the primary velocity semantics.  Curve velocity rather
+        # than linearly mapping it so moderate events occupy the middle of the
+        # range instead of visually collapsing toward the fast endpoint.
+        speed_mix = pow(velocity, 1.35)
+        if outtake:
+            duration = (
+                _OUTTAKE_TRAVEL_NORMAL_S
+                + (_OUTTAKE_TRAVEL_FAST_S - _OUTTAKE_TRAVEL_NORMAL_S) * speed_mix
+                if velocity_response_enabled
+                else _OUTTAKE_TRAVEL_FIXED_S
+            )
+            minimum_duration = _OUTTAKE_TRAVEL_FAST_S
+        else:
+            duration = (
+                _INCOMING_TRAVEL_NORMAL_S
+                + (_INCOMING_TRAVEL_FAST_S - _INCOMING_TRAVEL_NORMAL_S) * speed_mix
+                if velocity_response_enabled
+                else _INCOMING_TRAVEL_FIXED_S
+            )
+            minimum_duration = _INCOMING_TRAVEL_FAST_S
+
         # Incoming fallout uses four visible ingress quadrants rather than one
-        # 3D octant.  A qualified event nominates one dominant quadrant while the
-        # shader keeps the other three at their distributed admission floor.
-        # A coprime stride makes dominance walk 0->3->2->1 (offset by source
-        # region) before repeating, so no corner can monopolize the intake.
+        # 3D octant. Each cohort captures one dominant quadrant while all four
+        # retain the accepted distributed participation floor.
         next_section = (int(section) + self._incoming_sequence * 3) % 4
         self._incoming_sequence = (self._incoming_sequence + 1) % 4
         if next_section != self._incoming_section:
             self._incoming_previous_section = self._incoming_section
             self._incoming_section = next_section
             self._incoming_blend = 0.0
+
+        slot_index = self._particle_cohorts.index(slot)
+        slot.active = True
+        slot.progress = 0.0
+        slot.duration = max(minimum_duration, float(duration))
+        # Keep every admitted event visibly reactive, but let flat transients use
+        # modestly less travel amplitude than a genuine acoustic jump.  Bounce is
+        # intentionally independent below so vocal recoil keeps its full reward.
+        slot.strength = value * (0.76 + 0.24 * velocity) if velocity_response_enabled else value
+        slot.density = _clamp01(density)
+        slot.section = next_section
+        # Fixed lane partitions make overlapping cohorts genuinely independent:
+        # each active cohort owns a disjoint quarter of the stable eligible
+        # population instead of repeatedly resetting the same 46% foundation.
+        slot.lane = slot_index & 3
+        slot.velocity_accent = velocity
+        # Preserve the physically liked vocal return: a vocal-owned incoming
+        # cohort gets one modest late-flight outward recoil before settling.
+        slot.vocal_bounce = _clamp01(value if source == "vocal" else 0.0)
+        slot.outtake = bool(outtake)
+
         self._incoming_drive = max(self._incoming_drive, value)
+        self._incoming_density = slot.density
         self._last_incoming_ts = now
 
     def _transient_crest(self, transient: VisualizerTransientState) -> tuple[float, tuple[float, float, float]]:
@@ -621,11 +809,14 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             self._section_drives = [0.0] * SECTION_COUNT
             self._section_velocities = [0.0] * SECTION_COUNT
             self._incoming_drive = 0.0
+            self._incoming_density = 1.0
+            self._incoming_gate_open = False
             self._incoming_section = 0
             self._incoming_previous_section = 0
             self._incoming_blend = 1.0
             self._incoming_sequence = 0
             self._last_incoming_ts = -1.0e9
+            self._particle_cohorts = [_ParticleCohort() for _ in range(_PARTICLE_COHORT_COUNT)]
 
             bass_now = _clamp01(reactive_energy.bass) if active else 0.0
             mid_now = _clamp01(reactive_energy.mid) if active else 0.0
@@ -653,11 +844,21 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             self._tracer_target_phase = 0.0
             self._tracer_impulse = 0.0
             self._last_tracer_event_ts = -1.0e9
+            initial_live_bass = _bounded_nonnegative(presence_energy.bass, 2.5) if active else 0.0
+            initial_live_mid = _bounded_nonnegative(presence_energy.mid, 2.5) if active else 0.0
+            initial_live_high = _bounded_nonnegative(presence_energy.high, 2.5) if active else 0.0
             initial_fullness = (
-                _bounded_nonnegative(presence_energy.bass, 2.5) * 0.18
-                + _bounded_nonnegative(presence_energy.mid, 2.5) * 0.58
-                + _bounded_nonnegative(presence_energy.high, 2.5) * 0.24
+                initial_live_bass * 0.18
+                + initial_live_mid * 0.58
+                + initial_live_high * 0.24
             ) if active else 0.0
+            self._intake_energy_slow = max(
+                initial_fullness,
+                initial_live_bass * 0.55,
+                initial_live_mid * 0.70,
+                initial_live_high * 0.70,
+            ) if active else 0.0
+            self._last_intake_motion_intensity = 0.0
             self._fullness_floor = initial_fullness
             self._fullness_peak = initial_fullness
             self._fullness_initialized = bool(active)
@@ -671,6 +872,11 @@ class SphereFrameRuntime(RetirableFrameRuntime):
         else:
             dt = max(0.0, min(_SPHERE_MAX_STEP_S, now - self._last_ts))
             self._last_ts = now
+
+        # Existing detached cohorts are presentation state and finish naturally
+        # even when the source becomes quiet or inactive. Playback state only
+        # controls whether another cohort may be authored.
+        self._advance_particle_cohorts(dt)
 
         bass_now = _clamp01(reactive_energy.bass) if active else 0.0
         mid_now = _clamp01(reactive_energy.mid) if active else 0.0
@@ -693,11 +899,26 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             _VOCAL_PRESENCE_LOW,
             _VOCAL_PRESENCE_HIGH,
         )
+        # Intake authority is intentionally separate from playback state.  The
+        # max-lane term keeps a real isolated kick/vocal eligible while true PCM
+        # silence (all live pre-AGC lanes ~0) closes the gate deterministically.
+        intake_energy = max(
+            loudness_now,
+            live_bass * 0.55,
+            live_mid * 0.70,
+            live_high * 0.70,
+        ) if active else 0.0
+        if not active:
+            self._incoming_gate_open = False
+        elif self._incoming_gate_open:
+            if intake_energy <= _INCOMING_GATE_CLOSE:
+                self._incoming_gate_open = False
+        elif intake_energy >= _INCOMING_GATE_OPEN:
+            self._incoming_gate_open = True
 
         if dt > 0.0:
             for index, current in enumerate(self._section_targets):
                 self._section_targets[index] = _decay(current, dt, _SPHERE_SECTION_RELEASE_S)
-            self._incoming_drive = _decay(self._incoming_drive, dt, _SPHERE_INCOMING_RELEASE_S)
             if self._incoming_blend < 1.0:
                 self._incoming_blend = min(
                     1.0,
@@ -715,6 +936,9 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             self._flux_dev = 0.0
             self._tracer_impulse = 0.0
             self._tracer_target_phase = self._tracer_phase
+            self._incoming_gate_open = False
+            self._intake_energy_slow = 0.0
+            self._last_intake_motion_intensity = 0.0
             self._fullness_floor = 0.0
             self._fullness_peak = 0.0
             self._fullness_initialized = False
@@ -735,6 +959,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             relative_fullness = 0.0
             staged_growth = 0.0
             rotation_target = 0.0
+            acoustic_impact = 0.0
         else:
             if not self._source_active:
                 self._bass_fast = self._bass_slow = bass_now
@@ -749,6 +974,8 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 self._flux_mean = 0.0
                 self._flux_dev = 0.0
                 initial_fullness = loudness_now
+                self._intake_energy_slow = intake_energy
+                self._last_intake_motion_intensity = 0.0
                 self._fullness_floor = initial_fullness
                 self._fullness_peak = initial_fullness
                 self._fullness_initialized = True
@@ -867,44 +1094,101 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 )
                 _ = emitted
 
+            # Density and velocity are captured per cohort on its event frame.
+            # They do not continuously modulate already travelling voxels.
+            density_enabled = bool(parameters["sphere_incoming_density_response_enabled"])
+            velocity_enabled = bool(parameters["sphere_incoming_transient_velocity_enabled"])
+            outtake_enabled = bool(parameters["sphere_particle_outtake_enabled"])
+
             # Incoming fallout is independently owned by strong typed/onset
             # events. A rise packet winning the fragmentation race must not hide a
             # real vocal/kick arrival, and generic crest/shape activity can never
             # turn this into an ambient particle emitter.
-            incoming_candidates: list[tuple[float, int, float]] = []
+            #
+            # Crucially, event strength is *not* velocity strength. The shared
+            # transient bus clamps large events to 1.0, which is correct for event
+            # confidence but previously made quiet/flat and huge attacks travel at
+            # effectively the same speed. Derive a continuous Sphere-local acoustic
+            # impact from positive live-pre-AGC jump plus raw-spectrum flux ratio.
+            positive_jump = max(0.0, intake_energy - self._intake_energy_slow)
+            jump_impact = _smooth_gate(
+                positive_jump, _INTAKE_IMPACT_ENERGY_LOW, _INTAKE_IMPACT_ENERGY_HIGH
+            )
+            flux_ratio = spectral_flux / max(_FLUX_MIN_THRESHOLD, spectral_threshold)
+            flux_impact = _smooth_gate(
+                flux_ratio, _INTAKE_IMPACT_FLUX_RATIO_LOW, _INTAKE_IMPACT_FLUX_RATIO_HIGH
+            )
+            acoustic_impact = _clamp01(max(jump_impact, flux_impact))
+            if dt > 0.0:
+                self._intake_energy_slow = _ema(
+                    self._intake_energy_slow, intake_energy, dt, _INTAKE_IMPACT_BASELINE_S
+                )
+
+            incoming_candidates: list[tuple[float, str, int, float, float]] = []
             if vocal_event_strength >= _INCOMING_VOCAL_MIN:
                 incoming_candidates.append((
                     vocal_event_strength + 0.08,
+                    "vocal",
                     self._section_for_change(bass=bass_now, mid=mid_now, high=high_now, source="vocal"),
                     0.34 + 0.46 * math.sqrt(vocal_event_strength),
+                    vocal_event_strength,
                 ))
             if kick_event_strength >= _INCOMING_KICK_MIN:
                 incoming_candidates.append((
                     kick_event_strength + 0.12,
+                    "kick",
                     self._section_for_change(bass=bass_now, mid=mid_now, high=high_now, source="kick"),
                     0.38 + 0.42 * math.sqrt(kick_event_strength),
+                    kick_event_strength,
                 ))
             if snare_event_strength >= _INCOMING_SNARE_MIN:
                 incoming_candidates.append((
                     snare_event_strength + 0.10,
+                    "snare",
                     self._section_for_change(bass=bass_now, mid=mid_now, high=high_now, source="snare"),
                     0.30 + 0.38 * math.sqrt(snare_event_strength),
+                    snare_event_strength,
                 ))
             if onset_strength >= _INCOMING_ONSET_MIN:
                 incoming_candidates.append((
                     onset_strength + 0.06,
+                    "onset",
                     self._section_for_change(bass=bass_now, mid=mid_now, high=high_now, source="onset"),
                     0.26 + 0.38 * math.sqrt(onset_strength),
+                    onset_strength,
                 ))
-            if incoming_candidates:
-                _incoming_priority, incoming_section, incoming_strength = max(
+            typed_force_gate = bool(
+                incoming_candidates and intake_energy >= _INCOMING_TYPED_FORCE_FLOOR
+            )
+            if incoming_candidates and (self._incoming_gate_open or typed_force_gate):
+                _incoming_priority, incoming_source, incoming_section, incoming_strength, event_confidence = max(
                     incoming_candidates, key=lambda item: item[0]
                 )
+                motion_intensity = _incoming_motion_intensity(event_confidence, acoustic_impact)
+                self._last_intake_motion_intensity = motion_intensity
+                if density_enabled:
+                    density_activity = _smooth_gate(
+                        intake_energy, _INCOMING_DENSITY_LOW, _INCOMING_DENSITY_HIGH
+                    )
+                    incoming_density = (
+                        _INCOMING_DENSITY_MIN_ACTIVE
+                        + (1.0 - _INCOMING_DENSITY_MIN_ACTIVE)
+                        * math.sqrt(density_activity)
+                    )
+                else:
+                    incoming_density = 1.0
                 self._author_incoming(
                     now=now,
                     section=incoming_section,
                     strength=incoming_strength,
+                    density=incoming_density,
+                    velocity_accent=motion_intensity if velocity_enabled else 0.0,
+                    velocity_response_enabled=velocity_enabled,
+                    source=incoming_source,
+                    outtake=outtake_enabled,
                 )
+            elif not incoming_candidates:
+                self._last_intake_motion_intensity = 0.0
 
             # Sustained passage weight uses the existing PRE-AGC loudness seam.
             # The support-shaped Bubble feed is intentionally excellent for
@@ -1072,6 +1356,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
 
         authored_time = max(0.0, now - self._started_at)
         section_tuple = tuple(self._section_drives)
+        particle_cohorts = self._particle_cohort_snapshot()
         resolved = SphereResolvedFrame(
             authored_time,
             self._size_pulse,
@@ -1081,9 +1366,11 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             self._tracer_phase,
             section_tuple,
             self._incoming_drive,
+            self._incoming_density,
             self._incoming_section,
             self._incoming_previous_section,
             self._incoming_blend,
+            particle_cohorts,
             parameters,
             energy,
             transient,
@@ -1097,9 +1384,11 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 self._tracer_phase,
                 section_tuple,
                 self._incoming_drive,
+                self._incoming_density,
                 self._incoming_section,
                 self._incoming_previous_section,
                 self._incoming_blend,
+                particle_cohorts,
                 parameters,
                 energy,
                 transient,
@@ -1111,7 +1400,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             logger.debug(
                 "[SPHERE_AUDIO] active=%s reactive=%.3f/%.3f/%.3f live=%.3f/%.3f/%.3f presence=%.3f/%.3f "
                 "activity=%.3f/%.3f spectrum=%.5f flux=%.4f threshold=%.4f spectral_evt=%.3f/%d crest=%.3f crest_bmh=%.3f/%.3f/%.3f shape=%.3f envelope=%.3f "
-                "events=%.3f/%.3f/%.3f onset=%.3f loudness=%.3f floor=%.3f peak=%.3f sustained=%.3f relative=%.3f stage=%.3f body=%.3f tracer=%.3f tracer_phase=%.3f tracer_target=%.3f tracer_remaining=%.3f rotation=%.3f target=%.3f velocity=%.4f phase=%.3f incoming=%.3f/%d<-%d@%.2f section_target=%.3f section_visual=%.3f active_sections=%d packets=%d packet_src=%d/%d/%d/%d/%d",
+                "events=%.3f/%.3f/%.3f onset=%.3f loudness=%.3f floor=%.3f peak=%.3f sustained=%.3f relative=%.3f stage=%.3f body=%.3f tracer=%.3f tracer_phase=%.3f tracer_target=%.3f tracer_remaining=%.3f rotation=%.3f target=%.3f velocity=%.4f phase=%.3f intake=%.3f gate=%s density=%.3f impact=%.3f motion=%.3f cohorts=%d in/out=%d/%d progress=%.3f-%.3f cohort_v=%.3f-%.3f incoming=%.3f/%d<-%d@%.2f section_target=%.3f section_visual=%.3f active_sections=%d packets=%d packet_src=%d/%d/%d/%d/%d",
                 active,
                 bass_now,
                 mid_now,
@@ -1153,6 +1442,18 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 rotation_target,
                 rotation_velocity,
                 self._rotation_phase,
+                intake_energy,
+                self._incoming_gate_open,
+                self._incoming_density,
+                acoustic_impact,
+                self._last_intake_motion_intensity,
+                len(particle_cohorts),
+                sum(1 for cohort in particle_cohorts if not cohort.outtake),
+                sum(1 for cohort in particle_cohorts if cohort.outtake),
+                min((cohort.progress for cohort in particle_cohorts), default=1.0),
+                max((cohort.progress for cohort in particle_cohorts), default=1.0),
+                min((cohort.velocity_accent for cohort in particle_cohorts), default=0.0),
+                max((cohort.velocity_accent for cohort in particle_cohorts), default=0.0),
                 self._incoming_drive,
                 self._incoming_section,
                 self._incoming_previous_section,
@@ -1185,9 +1486,11 @@ def resolved_differs(
     tracer_phase: float,
     section_drives: tuple[float, ...],
     incoming_drive: float,
+    incoming_density: float,
     incoming_section: int,
     incoming_previous_section: int,
     incoming_blend: float,
+    particle_cohorts: tuple[SphereParticleCohort, ...],
     parameters: FrozenFields,
     energy: VisualizerEnergyState,
     transient: VisualizerTransientState,
@@ -1201,9 +1504,11 @@ def resolved_differs(
         or previous.tracer_phase != tracer_phase
         or previous.section_drives != section_drives
         or previous.incoming_drive != incoming_drive
+        or previous.incoming_density != incoming_density
         or previous.incoming_section != incoming_section
         or previous.incoming_previous_section != incoming_previous_section
         or previous.incoming_blend != incoming_blend
+        or previous.particle_cohorts != particle_cohorts
         or previous.parameters != parameters
         or previous.energy != energy
         or previous.transient != transient
