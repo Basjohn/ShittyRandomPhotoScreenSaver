@@ -533,7 +533,7 @@ class DisplayTab(QWidget):
         )
         shared_styles.bind_shared_styles(
             self.widget_glow_use_theme_btn,
-            "GHOST_ACTION_BUTTON_STYLE",
+            "COMPACT_ACTION_BUTTON_STYLE",
             base_style="",
         )
         self.widget_glow_use_theme_btn.clicked.connect(

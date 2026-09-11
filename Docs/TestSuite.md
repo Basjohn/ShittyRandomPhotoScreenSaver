@@ -123,7 +123,17 @@ One new Qt-free/source-level test covers the launch-intent seam without editing 
 tests/test_startup_source_onboarding_resume.py
 ```
 
-Direct execution in the current Linux workspace: **4/4 assertions PASS**. The contract protects normal RUN resumption after missing-source onboarding, preserves `/c`, `-c`, `-s` and `--s` as CONFIG-only invocations, verifies the same Settings manager is reused and `quitOnLastWindowClosed` is restored, and requires startup-dependent Interaction Mode resolution to occur after onboarding. Physical Windows/PySide validation remains **NEEDS RUN VALIDATION** for the real dialog/process lifetime.
+Direct execution in the current Linux workspace: **4/4 assertions PASS**. The contract protects normal RUN resumption after missing-source onboarding, preserves `/c`, `-c`, `-s` and `--s` as CONFIG-only invocations, verifies the same Settings manager is reused and `quitOnLastWindowClosed` is restored, and requires startup-dependent Interaction Mode resolution to occur after onboarding. Operator-installed launch validation is accepted as of 2026-09-11; only automated test execution debt remains.
+
+## 0.9 2026-09-11 Widget Glow Use Theme button style
+
+One new Qt-free/source-level contract covers the tiny style correction without editing a pre-existing test module:
+
+```text
+tests/test_widget_glow_use_theme_button_style.py
+```
+
+Direct execution in the Linux workspace: **2/2 assertions PASS**. The Display -> Widget Glow `Use Theme` action now consumes the canonical `COMPACT_ACTION_BUTTON_STYLE`/`control.button.*` ThemeSpec semantics instead of the special ghost-action style. Its existing 30 px height, click behavior and `None` = Use Theme settings semantics are unchanged.
 
 ---
 
@@ -323,15 +333,9 @@ The following are current/recent and could not collect here because PySide6 is u
 - `test_widgets_tab_current.py`, `test_widgets_tab_general_current.py`, and `test_visualizer_settings_lazy_bodies_current.py`
   - current replacements for mixed modules whose surviving assertions were useful but whose bucket expectations were obsolete;
   - require the intended PySide environment for actual Widget/Visualizer construction and reload behavior.
-- Settings bucket physical interaction
-  - Spectrum Custom Bar Appearance/Rainbow must render as normal collapsible buckets;
-  - opening a peer must close the prior bucket without flash/artifacting;
-  - lazy page/mode changes must restore only the remembered local open bucket and never collapse a required parent card;
-  - Visualizer Technical must keep its outer parent open while AGC/Transient behave as one-open per-mode child buckets;
-  - Advanced must likewise remain an independent parent while an Advanced child bucket is open;
-  - Spectrum Bar Appearance/Rainbow must remain reachable after mode switches/body retirement/reconstruction.
+Operator-installed Settings bucket interaction is accepted as of 2026-09-11, including Spectrum Custom Bar Appearance/Rainbow rendering, no-flash sibling closure, lazy page/mode restoration, parent-disclosure reachability, and mode-switch/body-reconstruction reachability. Automated PySide coverage for the same paths remains outstanding where listed above.
 
-Do not change these entries to PASS until they have actually run on the intended environment.
+Do not change environment-blocked automated entries to PASS until they have actually run on the intended environment.
 
 ---
 
@@ -518,7 +522,7 @@ tests/test_weather_settings_target_contract.py
 
 Direct execution in the Linux workspace: **8/8 assertions PASS**. Visualizer coverage requires the canonical per-mode dormancy authority to be the explicit `mode_activation` boolean map, protects registry ordering/the last-mode recovery invariant, verifies the typed model serializes no retired `enabled_modes` key, and proves the one temporary legacy reader converts/removes the old list while emitting warning feedback when relied upon. Weather coverage protects the semantic `weather_location` target, retained family callback injection, generation-checked DisplayManager/engine Settings lifecycle route, Widgets -> Weather lazy navigation and synchronous Location focus without a target-specific timer.
 
-Defaults regeneration and authority checking are required for this schema change. Physical Windows/PySide validation remains **NEEDS RUN VALIDATION** for real Visualizer enable/disable persistence and the retained Weather missing-location SETTINGS click -> modal Settings -> runtime restart path.
+Defaults regeneration and authority checking are required for this schema change. Operator-installed validation is accepted as of 2026-09-11 for real Visualizer enable/disable persistence and the retained Weather missing-location SETTINGS click -> modal Settings -> runtime restart path; only automated test execution debt remains.
 
 ## 0.8 2026-09-11 Achievement Pulse post-fit percentage scale
 
@@ -528,5 +532,5 @@ One new Qt-free/source-level contract covers the installed visual follow-up with
 tests/test_achievement_pulse_progress_text_visual_scale_contract.py
 ```
 
-Direct execution in the Linux workspace: **2/2 assertions PASS**. The contract requires the 0.90 reduction to occur as a final presentation transform after `Text.HorizontalFit`, where it cannot be masked by the fitter's existing point-size choice. It separately protects the existing 108x108 pulse geometry and 4 px lift and verifies that the Total parsing/model and authored-size normalization remain in their existing Python owners. Physical installed confirmation of the visibly smaller percentage remains **NEEDS RUN VALIDATION**.
+Direct execution in the Linux workspace: **2/2 assertions PASS**. The contract requires the 0.90 reduction to occur as a final presentation transform after `Text.HorizontalFit`, where it cannot be masked by the fitter's existing point-size choice. It separately protects the existing 108x108 pulse geometry and 4 px lift and verifies that the Total parsing/model and authored-size normalization remain in their existing Python owners. Operator-installed visual confirmation is accepted as of 2026-09-11; only automated test execution debt remains.
 
