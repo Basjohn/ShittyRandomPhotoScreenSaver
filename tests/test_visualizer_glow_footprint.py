@@ -12,7 +12,7 @@ from PySide6.QtGui import QColor
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
 from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
+from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
 from widgets.spotify_visualizer.render_state import (
     OscilloscopeFrame,
     SineFrame,

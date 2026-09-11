@@ -25,9 +25,7 @@ from widgets.spotify_visualizer.config_applier import (
     apply_logical_vis_mode_kwargs,
     apply_presentation_vis_mode_kwargs,
 )
-from widgets.spotify_visualizer.presentation_geometry import (
-    resolve_visualizer_presentation,
-)
+from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
 from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
     VisualizerCommonState,

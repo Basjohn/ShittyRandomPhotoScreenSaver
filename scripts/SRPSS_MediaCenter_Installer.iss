@@ -13,7 +13,7 @@
 [Setup]
 AppId={{31A3E38F-0A6C-46CF-8934-9EB8A42F0463}
 AppName=SRPSS - Media Center
-AppVersion=5.0.0
+AppVersion=5.0.1
 AppPublisher=Jayde Ver Elst
 AppPublisherURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 AppSupportURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
@@ -31,16 +31,15 @@ ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
 WizardSmallImageFile=..\images\LogoBMP.bmp
-VersionInfoVersion=5.0.0
+VersionInfoVersion=5.0.1
 AllowUNCPath=False
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-; 5.0.0 ONLY: default this migration reset ON because v5 replaced the settings/runtime architecture massively.
-; Reconsider/remove the default-on policy after the 5.0.0 migration release; the task itself remains useful manually.
-Name: "resetsettings"; Description: "Revert Settings To Defaults"; GroupDescription: "Settings:"
+; 5.0.0 migration reset remains available manually, but defaults OFF.
+Name: "resetsettings"; Description: "Revert Settings To Defaults"; GroupDescription: "Settings:"; Flags: unchecked
 Name: "startmenu"; Description: "Create Start Menu Shortcuts"; GroupDescription: "Additional options:"
 Name: "desktop"; Description: "Create Desktop Shortcuts"; GroupDescription: "Additional options:"
 Name: "runafter"; Description: "Run After Install"; GroupDescription: "Post-install option:"; Flags: unchecked
