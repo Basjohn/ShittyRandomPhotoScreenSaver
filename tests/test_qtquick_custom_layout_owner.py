@@ -51,7 +51,10 @@ def _configure_visualizer(owner, *, playing=False):
     from dataclasses import asdict
     from core.settings.models import SpotifyVisualizerSettings
     from core.settings.visualizer_presets import resolve_visualizer_activation_payload
-    from widgets.spotify_visualizer.technical_config import build_technical_cache
+    from widgets.spotify_visualizer.technical_config import (
+        build_technical_cache,
+        resolve_technical_config,
+    )
 
     mode = owner.controller.mode_id
     activation = resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": 0})
@@ -61,7 +64,7 @@ def _configure_visualizer(owner, *, playing=False):
     owner.controller.record_resolved_activation(activation)
     owner.controller.technical_config_cache = build_technical_cache(None, model)
     owner.configure(playing=playing, logical_kwargs=asdict(model), presentation_kwargs=asdict(model),
-        technical_config=owner.controller.technical_config_cache[mode])
+        technical_config=resolve_technical_config(owner.controller.technical_config_cache, mode))
 
 
 class _Settings:
