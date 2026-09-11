@@ -27,6 +27,10 @@ from widgets.spotify_visualizer.quick_display_visualizer_owner import (
     QuickDisplayVisualizerOwner,
 )
 
+# Construct owners the way the display owner does (card kwargs + technical cache).
+from tests._visualizer_presentation import make_visualizer_owner as _make_owner
+
+
 _ENGINE_GEN = 5
 _ACT_ID = 7
 
@@ -75,6 +79,32 @@ class _Engine:
 
     def get_perf_diagnostics(self):
         return {}
+
+    # Technical-config application authority (floor/sensitivity/transient/gain).
+    # Signature-agnostic no-ops: these tests assert snapshot publication, not the
+    # engine's DSP response to resolved technical config.
+    _audio_worker = SimpleNamespace(set_audio_block_size=lambda *a, **k: None)
+
+    def set_floor_config(self, *args, **kwargs):
+        pass
+
+    def set_sensitivity_config(self, *args, **kwargs):
+        pass
+
+    def set_transient_lane_config(self, *args, **kwargs):
+        pass
+
+    def set_agc_strength(self, *args, **kwargs):
+        pass
+
+    def set_energy_boost(self, *args, **kwargs):
+        pass
+
+    def set_input_gain(self, *args, **kwargs):
+        pass
+
+    def reconfigure_bar_count(self, *args, **kwargs):
+        pass
 
 
 # Resolved canonical settings per mode: authored-logical + presentation styling.
@@ -137,7 +167,7 @@ def test_owner_publishes_complete_snapshot_for_every_mode(qt_app, monkeypatch, m
     logical_kwargs, presentation_kwargs = _MODE_CASES[mode]
     runtime, factory = _make_runtime(qt_app, 50)
     try:
-        owner = QuickDisplayVisualizerOwner(
+        owner = _make_owner(
             runtime, bar_count=32, initial_mode=mode,
             engine_factory=lambda _bc: _Engine(),
         )
@@ -186,7 +216,7 @@ def test_sync_rejects_stale_identity(qt_app, monkeypatch) -> None:
     _quiet(monkeypatch)
     runtime, factory = _make_runtime(qt_app, 51)
     try:
-        owner = QuickDisplayVisualizerOwner(
+        owner = _make_owner(
             runtime, bar_count=32, initial_mode="bubble",
             engine_factory=lambda _bc: _Engine(),
         )

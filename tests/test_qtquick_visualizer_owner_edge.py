@@ -20,6 +20,10 @@ from widgets.spotify_visualizer.quick_display_visualizer_owner import (
     QuickDisplayVisualizerOwner,
 )
 
+# Construct owners the way the display owner does (card kwargs + technical cache).
+from tests._visualizer_presentation import make_visualizer_owner as _make_owner
+
+
 
 class _Engine:
     """Production-shaped fake engine (energy/transient snapshots)."""
@@ -55,6 +59,30 @@ class _Engine:
 
     def release(self) -> None:
         self.release_count += 1
+
+    # Technical-config application authority (signature-agnostic no-ops).
+    _audio_worker = SimpleNamespace(set_audio_block_size=lambda *a, **k: None)
+
+    def reconfigure_bar_count(self, *args, **kwargs):
+        pass
+
+    def set_floor_config(self, *args, **kwargs):
+        pass
+
+    def set_sensitivity_config(self, *args, **kwargs):
+        pass
+
+    def set_transient_lane_config(self, *args, **kwargs):
+        pass
+
+    def set_agc_strength(self, *args, **kwargs):
+        pass
+
+    def set_energy_boost(self, *args, **kwargs):
+        pass
+
+    def set_input_gain(self, *args, **kwargs):
+        pass
 
 
 _BUBBLE_CONFIG = {
@@ -96,7 +124,7 @@ def test_edge_constructs_configures_binds_starts_and_retires(qt_app, monkeypatch
     runtime, factory = _make_runtime(qt_app, 40)
     try:
         engine = _Engine()
-        owner = QuickDisplayVisualizerOwner(
+        owner = _make_owner(
             runtime,
             bar_count=32,
             initial_mode="bubble",
@@ -144,7 +172,7 @@ def test_generation_replacement_builds_fresh_owner_no_duplicate(qt_app, monkeypa
     _quiet_tick(monkeypatch)
     first_runtime, first_factory = _make_runtime(qt_app, 41)
     try:
-        first = QuickDisplayVisualizerOwner(
+        first = _make_owner(
             first_runtime, bar_count=32, initial_mode="bubble",
             engine_factory=lambda _bc: _Engine(),
         )
@@ -164,7 +192,7 @@ def test_generation_replacement_builds_fresh_owner_no_duplicate(qt_app, monkeypa
 
     second_runtime, second_factory = _make_runtime(qt_app, 42)
     try:
-        second = QuickDisplayVisualizerOwner(
+        second = _make_owner(
             second_runtime, bar_count=32, initial_mode="bubble",
             engine_factory=lambda _bc: _Engine(),
         )
@@ -221,7 +249,7 @@ def test_display_transfer_moves_pacer_and_retirement_edge_without_recreating_con
         return runtime
 
     source, target = _runtime(), _runtime()
-    owner = QuickDisplayVisualizerOwner(source, bar_count=8, initial_mode="bubble")
+    owner = _make_owner(source, bar_count=8, initial_mode="bubble")
     controller = owner.controller
     owner._bound = True
     owner._started = True

@@ -36,6 +36,10 @@ from widgets.spotify_visualizer import tick_pipeline
 from widgets.spotify_visualizer.quick_display_visualizer_owner import (
     QuickDisplayVisualizerOwner,
 )
+
+# Construct owners the way the display owner does (card kwargs + technical cache).
+from tests._visualizer_presentation import make_visualizer_owner as _make_owner
+
 from widgets.spotify_visualizer.technical_config import build_technical_cache
 
 
@@ -49,10 +53,14 @@ class _TechnicalWorker:
         self.audio_block_size = int(value)
 
     def set_transient_lane_config(
-        self, kick_lane_gain: float, spectrum_lane_transient_mix: float
+        self,
+        kick_lane_gain: float,
+        spectrum_lane_transient_mix: float,
+        transient_clamp: float = 0.0,
     ) -> None:
         self._kick_lane_gain = float(kick_lane_gain)
         self._spectrum_lane_transient_mix = float(spectrum_lane_transient_mix)
+        self._transient_clamp = float(transient_clamp)
 
 
 class _TechnicalEngine:
@@ -86,10 +94,13 @@ class _TechnicalEngine:
         self.input_gains.append(float(value))
 
     def set_transient_lane_config(
-        self, kick_lane_gain: float, spectrum_lane_transient_mix: float
+        self,
+        kick_lane_gain: float,
+        spectrum_lane_transient_mix: float,
+        transient_clamp: float = 0.0,
     ) -> None:
         self._audio_worker.set_transient_lane_config(
-            kick_lane_gain, spectrum_lane_transient_mix
+            kick_lane_gain, spectrum_lane_transient_mix, transient_clamp
         )
 
 
@@ -148,7 +159,7 @@ def _owner_with_cached_model(
 ) -> tuple[QuickDisplayVisualizerOwner, _TechnicalEngine, dict[str, object]]:
     mode = str(model.mode)
     engine = engine or _TechnicalEngine()
-    owner = QuickDisplayVisualizerOwner(
+    owner = _make_owner(
         SimpleNamespace(runtime_generation=31),
         bar_count=32,
         initial_mode=mode,
@@ -320,6 +331,30 @@ class _CaptureEngine:
     def get_perf_diagnostics(self):
         return {}
 
+    # Technical-config application authority (signature-agnostic no-ops).
+    _audio_worker = SimpleNamespace(set_audio_block_size=lambda *a, **k: None)
+
+    def reconfigure_bar_count(self, *args, **kwargs):
+        pass
+
+    def set_floor_config(self, *args, **kwargs):
+        pass
+
+    def set_sensitivity_config(self, *args, **kwargs):
+        pass
+
+    def set_transient_lane_config(self, *args, **kwargs):
+        pass
+
+    def set_agc_strength(self, *args, **kwargs):
+        pass
+
+    def set_energy_boost(self, *args, **kwargs):
+        pass
+
+    def set_input_gain(self, *args, **kwargs):
+        pass
+
 
 def _make_runtime(qt_app, generation: int):
     screen = qt_app.primaryScreen()
@@ -353,7 +388,7 @@ def test_sync_commits_same_presentation_to_retained_item_and_item_consumes_snaps
     _quiet(monkeypatch)
     runtime, factory = _make_runtime(qt_app, 72)
     try:
-        owner = QuickDisplayVisualizerOwner(
+        owner = _make_owner(
             runtime,
             bar_count=32,
             initial_mode="spectrum",
