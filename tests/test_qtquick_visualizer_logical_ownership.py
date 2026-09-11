@@ -84,6 +84,11 @@ def test_fresh_controller_configured_started_advanced_without_widget(
     # Construct: install the authored runtime defaults on the controller-owned
     # state (no widget).
     install_default_logical_tick_state(state, bar_count=32)
+    from widgets.spotify_visualizer.presentation_state import (
+        install_default_presentation_state,
+    )
+
+    install_default_presentation_state(controller.presentation_state)
     # Configure: apply the authored logical (Bubble physics) config from canonical
     # settings through the single neutral authority.
     apply_logical_vis_mode_kwargs(state, _CANONICAL_BUBBLE_CONFIG)
@@ -166,6 +171,11 @@ def test_devcurve_diagnostics_do_not_cross_into_bubble_geometry(monkeypatch) -> 
     )
     state = controller.logical_tick_state
     install_default_logical_tick_state(state, bar_count=32)
+    from widgets.spotify_visualizer.presentation_state import (
+        install_default_presentation_state,
+    )
+
+    install_default_presentation_state(controller.presentation_state)
     controller.enabled = True
     controller.playing = True
     controller.engine = _Engine()
