@@ -100,6 +100,12 @@ def _manager(position: str) -> DisplayManager:
     manager._quick_visualizer_diag_last_playing = None
     manager._thread_manager = None
     manager._process_supervisor = None
+    # __new__ bypasses __init__, so provide the resolved shadow snapshot the
+    # visualizer card-style path now reads (production fills this from settings).
+    from dataclasses import asdict
+    from core.settings.models import ShadowSettings
+
+    manager._shadow_values_snapshot = asdict(ShadowSettings())
     manager.displays = []
     manager._widgets_config_snapshot = {
         "family_activation": {"media": True, "visualizers": True},
