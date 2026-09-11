@@ -131,12 +131,18 @@ def test_fresh_profile_widget_sections_are_well_formed_and_architecture_safe() -
         if "monitor" in section:
             assert str(section["monitor"]).strip() != "", widget_id
 
-    # Architecture: Sphere is deliberately excluded from the per-mode technical
-    # modes, so it must never appear in the enabled-modes list regardless of the
-    # operator's chosen default mode/order.
+    # Schema: per-mode dormancy is the explicit mode_activation boolean map (the
+    # retired enabled_modes list is gone). Every registered mode -- including the
+    # accepted-experimental sphere, whose isolation lives in the technical
+    # profile rather than in mode exclusion -- carries an explicit bool.
     visualizer = widgets["spotify_visualizer"]
-    assert isinstance(visualizer["enabled_modes"], list)
-    assert "sphere" not in visualizer["enabled_modes"]
+    mode_activation = visualizer["mode_activation"]
+    assert isinstance(mode_activation, dict)
+    assert {"spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve"}.issubset(
+        mode_activation
+    )
+    assert all(isinstance(flag, bool) for flag in mode_activation.values())
+    assert "enabled_modes" not in visualizer
 
     # Architecture: "Random" is the separate random_always authority, never a
     # concrete transition type sentinel.
@@ -229,8 +235,9 @@ def test_visualizer_literal_and_derived_snapshot_have_identical_schema() -> None
     assert set(snapshot_vis) == set(literal_vis)
     for retired in ("osc_glow_size", "sine_glow_size", "sine_line1_color"):
         assert retired not in literal_vis
-    assert literal_vis["sphere_rainbow_enabled"] is False
-    assert literal_vis["sphere_rainbow_speed"] == 0.5
+    assert literal_vis["sphere_taste_the_rainbow_enabled"] is False
+    assert literal_vis["sphere_taste_the_rainbow_surfaces"] is True
+    assert literal_vis["sphere_taste_the_rainbow_edges"] is True
 
 
 def test_curated_visualizer_preset_assets_remain_separate_authored_inputs() -> None:
@@ -241,7 +248,7 @@ def test_curated_visualizer_preset_assets_remain_separate_authored_inputs() -> N
         "oscilloscope": 4,
         "sine_wave": 6,
         "spectrum": 4,
-        "sphere": 5,
+        "sphere": 4,
     }
 
     for mode, count in expected_counts.items():
@@ -445,7 +452,7 @@ def test_resolved_runtime_consumers_do_not_rebuild_product_defaults() -> None:
     assert 'canonical_widgets = get_default_settings()["widgets"]' in display_manager
     assert 'QuickShadowSnapshot.from_mapping(self._shadow_values_snapshot)' in display_manager
     assert 'canonical_global = canonical_widgets["global"]' in display_manager
-    assert "technical_config=technical_cache[mode]" in display_manager
+    assert "technical_config=resolve_technical_config(technical_cache, mode)" in display_manager
     assert "_DEFAULT_BACKGROUND_COLOR" not in presentation
     assert "_DEFAULT_BORDER_COLOR" not in presentation
     assert "_DEFAULT_SHADOW_COLOR" not in presentation
@@ -590,7 +597,7 @@ def test_profile_layering_contains_only_real_behavioral_differences() -> None:
         "widgets.steam_progress.monitor": ("1", "ALL"),
     }
     assert collect_diff(normal, mc) == {
-        "display.show_on_monitors": ("ALL", [1]),
+        "display.show_on_monitors": ("ALL", [2]),
         "input.interaction_mode": (False, True),
         "mc": (None, {"always_on_top": True}),
         **expected_monitor_diffs,
@@ -655,7 +662,16 @@ def test_fresh_reset_and_sst_replace_share_canonical_projection_and_custom_owner
             assert isinstance(value, dict)
             return deepcopy(value), False
 
-    existing_custom = {"bubble": {"bubble_size": 1.23}}
+    # The import/replace projection normalizes custom presets through the one
+    # canonical cache authority (full-materialized, mode-scoped, retired keys
+    # stripped) rather than storing the raw authored diff or wiping ownership.
+    from core.settings.visualizer_presets import (
+        normalize_visualizer_custom_snapshot_cache,
+    )
+
+    existing_custom = {"bubble": {"bubble_growth": 7.5}}
+    normalized_existing = normalize_visualizer_custom_snapshot_cache(existing_custom)
+    assert normalized_existing["bubble"]["bubble_growth"] == 7.5
     mgr = _Manager({
         "timing.interval": 99,
         "visualizer_custom_presets": existing_custom,
@@ -663,7 +679,7 @@ def test_fresh_reset_and_sst_replace_share_canonical_projection_and_custom_owner
 
     replaced = _project_import_state(mgr, {}, merge=False)
     assert replaced["timing.interval"] == fresh["timing.interval"] == 40
-    assert replaced["visualizer_custom_presets"] == existing_custom
+    assert replaced["visualizer_custom_presets"] == normalized_existing
 
     incoming_custom = {"sine_wave": {"sine_wave_sensitivity": 1.5}}
     replaced_explicit = _project_import_state(
@@ -672,11 +688,13 @@ def test_fresh_reset_and_sst_replace_share_canonical_projection_and_custom_owner
         merge=False,
     )
     assert replaced_explicit["timing.interval"] == fresh["timing.interval"]
-    assert replaced_explicit["visualizer_custom_presets"] == incoming_custom
+    assert replaced_explicit["visualizer_custom_presets"] == (
+        normalize_visualizer_custom_snapshot_cache(incoming_custom)
+    )
 
     merged = _project_import_state(mgr, {}, merge=True)
     assert merged["timing.interval"] == 99
-    assert merged["visualizer_custom_presets"] == existing_custom
+    assert merged["visualizer_custom_presets"] == normalized_existing
 
     # Reset uses the identical canonical store projection and restores the
     # declared authored/user-specific state afterwards.
